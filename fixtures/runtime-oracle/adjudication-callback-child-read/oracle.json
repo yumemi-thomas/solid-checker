@@ -1,0 +1,16 @@
+{
+  "note": "Corpus adjudication 2026-10-23: SC1001 reads in the body of a control-flow function child (ai-memory-ui Show dialogs, workspace-cascader and graph For mappers; probus-hk Chrome, Starred, Search keypad; kui FeatureGate Match; solid-groove LoopInfo; app-game cube). rc.17 opens a \"<Show>\", \"<Match>\" or \"<For>\" strict-read window there. StaleLabel is the probus-hk Starred.tsx:298 defect: the non-keyed Show keeps its child while the condition stays truthy, so the label computed in the body does not follow the new value.",
+  "scenario": "constructed-misuse",
+  "requires": ["each component rendered by a tag"],
+  "reaches": "STRICT_READ_UNTRACKED at each callback read; the tick click and the text observation for StaleLabel",
+  "behaviour": [
+    {
+      "rule": "strict-read-untracked",
+      "site": "App.tsx:37",
+      "act": [{ "click": "[data-probe=tick]" }],
+      "observe": { "text": "[data-probe=label]" },
+      "defect": "5 min",
+      "correct": "4 min"
+    }
+  ]
+}

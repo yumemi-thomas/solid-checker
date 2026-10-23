@@ -1,0 +1,6 @@
+{
+  "note": "Corpus adjudication 2026-10-23: SC1001 body reads that seed state once (probus-hk Plan, Search; kui App via createHealth; app-game TestCube store paths). Each warns STRICT_READ_UNTRACKED in the component's strict-read window, directly or through a helper.",
+  "scenario": "constructed-misuse",
+  "requires": ["each component rendered by a tag"],
+  "reaches": "STRICT_READ_UNTRACKED at each body read when the component renders"
+}

@@ -1,0 +1,6 @@
+{
+  "note": "Corpus adjudication 2026-10-23: SC1001 prop reads in a body whose caller passes a signal (viviana-ui-web ColorKnob/ColorControl, kui TopicListPage/EditSettingDialog/BrokersScreen, donegeon-client WaitlistCard, inferay DirectoryResult/SelectedDirectoryChip). The prop getter reads the signal in the body's strict-read window, including an event handler bound in the body.",
+  "scenario": "constructed-misuse",
+  "requires": ["the components are not exported; ReactiveProps renders each with a signal-backed prop"],
+  "reaches": "STRICT_READ_UNTRACKED at each prop read (frame: the ReactiveProps attribute)"
+}

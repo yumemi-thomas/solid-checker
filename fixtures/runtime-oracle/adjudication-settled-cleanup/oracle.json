@@ -1,0 +1,6 @@
+{
+  "note": "Corpus adjudication 2026-10-23: SC3001 viviana-ui-web Header.tsx:26, an onCleanup in an onSettled callback a component body calls. rc.17 binds the callback to a children-forbidden tracked effect, so the dev build reports and throws CLEANUP_IN_FORBIDDEN_SCOPE.",
+  "scenario": "constructed-misuse",
+  "requires": ["Header rendered by a tag, so the onSettled is owner-backed"],
+  "reaches": "the CLEANUP_IN_FORBIDDEN_SCOPE dev diagnostic at the onCleanup"
+}

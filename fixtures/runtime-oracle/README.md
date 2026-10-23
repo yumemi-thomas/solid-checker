@@ -68,6 +68,11 @@ A static violation no dev diagnostic covers is classified by the observations of
 | `oracle-behaviour-components-return-once` | SC1004 | text: the early return stays on screen after the write (`logged out`) | `covered-violation` (dev `STRICT_READ_UNTRACKED` covers the finding); behaviour rows confirmed and clean |
 | `oracle-dispatch-type-sets` | SC4001 | window: no dispatching-member family fires an event outside the checker's set (ADR 0361) and none fires `scroll` | `covered-violation`; both rows confirmed |
 | `oracle-frame-covered-sc1004` | SC1004 | none: the frame pin (below) | `covered-violation`, empty `staticOnly` |
+| `adjudication-effect-apply-read` | SC1001 | text: a helper's subscription read in an apply never subscribes, so the layer stays `empty` after the data lands | `covered-violation`; behaviour confirmed |
+| `adjudication-callback-child-read` | SC1001 | text: a label computed in a non-keyed `Show` callback stays `5 min` after the value changes | `covered-violation`; behaviour confirmed |
+| `adjudication-props-spread-options` | SC1001 | text: the flagged "props spread" listing follows the switched prop; no dev diagnostic | `behaviour-refuted`: a known false positive |
+
+The `adjudication-*` cases reproduce the corpus violations adjudicated in `scripts/corpus/reviewed-findings.json` (2026-10-23), one per recurring shape.
 
 The `StaticText` site (static `textContent` beside children) has no write to show a loss, so it stays static-only.
 

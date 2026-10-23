@@ -1,0 +1,16 @@
+{
+  "note": "Corpus adjudication 2026-10-23, false positive: kui ConnectRoute.tsx:103 and KsqlRoute.tsx:164,170 (6 corpus findings across two projects). The checker reports SC1001 \"props spread\" at the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`. No caller passes `queries` as a getter, so the spread evaluates `{}` or a plain value and reads no signal: the dev build emits no STRICT_READ_UNTRACKED there (static-only), and the listing follows the switched cluster (behaviour-refuted), against the message's \"never updates\".",
+  "scenario": "constructed-misuse",
+  "requires": ["Screen is not exported; one caller passes a signal-backed clusterId and no queries, the other a plain queries value"],
+  "reaches": "the switch click and the text observation: the product listing renders and follows clusterId",
+  "behaviour": [
+    {
+      "rule": "strict-read-untracked",
+      "site": "App.tsx:18",
+      "act": [{ "click": "[data-probe=switch]" }],
+      "observe": { "text": "[data-probe=listing]" },
+      "defect": "connect:c1",
+      "correct": "connect:c9"
+    }
+  ]
+}

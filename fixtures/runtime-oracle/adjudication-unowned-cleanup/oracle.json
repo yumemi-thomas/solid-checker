@@ -1,0 +1,6 @@
+{
+  "note": "Corpus adjudication 2026-10-23: SC4001 onCleanup with no owner (probus-hk ref callbacks in Layout, RailDiagram, SwipeActions, VirtualRows; app-game rotating-cube-2 after an await; kui session.ts from module-scope story args). Each warns NO_OWNER_CLEANUP and the cleanup never runs.",
+  "scenario": "constructed-misuse",
+  "requires": ["each component rendered by a tag"],
+  "reaches": "NO_OWNER_CLEANUP at each onCleanup: module load, each ref application, and the continuation after the await"
+}

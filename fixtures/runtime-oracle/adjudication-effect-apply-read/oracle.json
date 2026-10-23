@@ -1,0 +1,16 @@
+{
+  "note": "Corpus adjudication 2026-10-23: SC1001 reads in a createEffect apply (probus-hk, compass-ui, error-menu-web, inferay, kui). rc.17 runEffect wraps the apply in an \"an effect callback\" strict-read window, so a direct read, a read through a local or module helper, and a reactive prop read there each warn STRICT_READ_UNTRACKED. LostSubscription is the probus-hk RouteMap.tsx:1333 defect: the helper's `loaded` read never subscribes, so the layer stays empty after the shapes land.",
+  "scenario": "constructed-misuse",
+  "requires": ["each component rendered by a tag", "Sheet's caller passes a signal-backed prop"],
+  "reaches": "STRICT_READ_UNTRACKED at each apply read; the land click and the text observation for LostSubscription",
+  "behaviour": [
+    {
+      "rule": "strict-read-untracked",
+      "site": "App.tsx:58",
+      "act": [{ "click": "[data-probe=land]" }],
+      "observe": { "text": "[data-probe=layer]" },
+      "defect": "empty",
+      "correct": "drawn 2"
+    }
+  ]
+}

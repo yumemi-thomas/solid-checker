@@ -216,6 +216,1014 @@
       "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
       "date": "2026-10-23",
       "evidence": "seed 20261019 limit 5 (mutants-final src/editor/EditorView.tsx:102): EditorView is rendered by the tag at Project.tsx:27 (route component, router.tsx:58 lazy); the escape is the test alias EditorViewModule.default (EditorView.test.tsx:165); the seeded read is top-level body code; oracle withheld-component-value-reference App.tsx:40"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/components/workspace-cascader.tsx|8470|8482",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "snapshot: the virtual-row For mapper reads searchHits()[vItem.index] once (workspace-cascader.tsx:189); a reused virtual item keeps the old hit for its click; rc.17 For maps under setStrictRead(\"<For>\") (signals dist/dev.js:3093-3099); oracle adjudication-callback-child-read App.tsx:54"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/access.tsx|8346|8355",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: `const d = current()` in a dialog's non-keyed Show callback (access.tsx:233), reached when the dialog opens; rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/access.tsx|9483|9492",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: `const d = current()` in a dialog's non-keyed Show callback (access.tsx:264), reached when the dialog opens; rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/access.tsx|10439|10448",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: `const d = current()` in a dialog's non-keyed Show callback (access.tsx:291), reached when the dialog opens; rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/consumers.tsx|7705|7714",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: `const d = current()` in a dialog's non-keyed Show callback (consumers.tsx:179), reached when the dialog opens; rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/consumers.tsx|8803|8812",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: `const d = current()` in a dialog's non-keyed Show callback (consumers.tsx:210), reached when the dialog opens; rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/consumers.tsx|9519|9528",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: `const d = current()` in a dialog's non-keyed Show callback (consumers.tsx:233), reached when the dialog opens; rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/graph.tsx|9117|9125",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: the graph For mapper reads nodeOf() (graph.tsx:269); a relayout makes new link objects, so rows are rebuilt; rc.17 For maps under setStrictRead(\"<For>\") (signals dist/dev.js:3093-3099); oracle adjudication-callback-child-read App.tsx:54"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/graph.tsx|9174|9182",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: nodeOf() in the graph For mapper (graph.tsx:270); rc.17 For maps under setStrictRead(\"<For>\") (signals dist/dev.js:3093-3099); oracle adjudication-callback-child-read App.tsx:54"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/graph.tsx|9298|9307",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: reverse() in the graph For mapper (graph.tsx:272); rc.17 For maps under setStrictRead(\"<For>\") (signals dist/dev.js:3093-3099); oracle adjudication-callback-child-read App.tsx:54"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/scope-pending.tsx|13213|13221",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: `const value = result()` in a non-keyed Show callback (scope-pending.tsx:359); rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/server-ops.tsx|10552|10560",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: `const value = result()` in a non-keyed Show callback (server-ops.tsx:313); rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/users.tsx|11964|11973",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: `const d = current()` in a dialog's non-keyed Show callback (users.tsx:348); rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/users.tsx|12513|12522",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: `const d = current()` in a dialog's non-keyed Show callback (users.tsx:366); rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/users.tsx|13837|13846",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: `const d = current()` in a dialog's non-keyed Show callback (users.tsx:402); rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/users.tsx|14771|14780",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: `const d = current()` in a dialog's non-keyed Show callback (users.tsx:429); rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|SC1001|violation|src/screens/users.tsx|15709|15718",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: `const d = current()` in a dialog's non-keyed Show callback (users.tsx:456); rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1001|violation|apps/browser-atlas/src/App.tsx|100236|100243",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: createSignal({x: props.x, y: props.y}) (App.tsx:2802); App.tsx:1146 passes x={menu().x}; rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1001|violation|apps/browser-atlas/src/App.tsx|100248|100255",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: props.y in the same position seed (App.tsx:2802); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1001|violation|packages/math-examples/camera-projection-svg/cube.tsx|1392|1398",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "snapshot: the Show callback's `item()[indexs[i + 1]] && <line/>` test runs once (cube.tsx:44; route /camera-projection-svg); rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1001|violation|packages/math-examples/rapier-2d-physics-engine/index.tsx|1154|1177",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: a store path read in TestCube's body to build the Rapier descriptors (rapier-2d-physics-engine/index.tsx:40); TestCube is lazy's default, rendered by createComponent; the store Get trap warns in a strict window (signals dist/dev.js:5536-5548); oracle adjudication-setup-read App.tsx:34"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1001|violation|packages/math-examples/rapier-2d-physics-engine/index.tsx|1179|1202",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: a store path read in TestCube's body to build the Rapier descriptors (rapier-2d-physics-engine/index.tsx:40); TestCube is lazy's default, rendered by createComponent; the store Get trap warns in a strict window (signals dist/dev.js:5536-5548); oracle adjudication-setup-read App.tsx:34"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1001|violation|packages/math-examples/rapier-2d-physics-engine/index.tsx|1367|1396",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: a store path read in TestCube's body to build the Rapier descriptors (rapier-2d-physics-engine/index.tsx:45); TestCube is lazy's default, rendered by createComponent; the store Get trap warns in a strict window (signals dist/dev.js:5536-5548); oracle adjudication-setup-read App.tsx:34"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1001|violation|packages/math-examples/rapier-2d-physics-engine/index.tsx|1398|1427",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: a store path read in TestCube's body to build the Rapier descriptors (rapier-2d-physics-engine/index.tsx:45); TestCube is lazy's default, rendered by createComponent; the store Get trap warns in a strict window (signals dist/dev.js:5536-5548); oracle adjudication-setup-read App.tsx:34"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1001|violation|packages/math-examples/rapier-2d-physics-engine/index.tsx|1448|1472",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: a store path read in TestCube's body to build the Rapier descriptors (rapier-2d-physics-engine/index.tsx:46); TestCube is lazy's default, rendered by createComponent; the store Get trap warns in a strict window (signals dist/dev.js:5536-5548); oracle adjudication-setup-read App.tsx:34"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1001|violation|packages/math-examples/rapier-2d-physics-engine/index.tsx|1655|1673",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: a store path read in TestCube's body to build the Rapier descriptors (rapier-2d-physics-engine/index.tsx:50); TestCube is lazy's default, rendered by createComponent; the store Get trap warns in a strict window (signals dist/dev.js:5536-5548); oracle adjudication-setup-read App.tsx:34"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1001|violation|packages/math-examples/rapier-2d-physics-engine/index.tsx|1675|1693",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: a store path read in TestCube's body to build the Rapier descriptors (rapier-2d-physics-engine/index.tsx:50); TestCube is lazy's default, rendered by createComponent; the store Get trap warns in a strict window (signals dist/dev.js:5536-5548); oracle adjudication-setup-read App.tsx:34"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1004|violation|packages/spector/solid/spector-result-view.tsx|32813|32848",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: MeshCaptureResult's return shape is chosen once from props.result.status (spector-result-view.tsx:796); :784 passes result={result()} from a non-keyed Show, so a new capture with another status keeps the old branch; oracle oracle-behaviour-components-return-once App.tsx:8 behaviour-confirmed"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1004|violation|packages/spector/solid/spector-result-view.tsx|33830|33865",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: SceneCaptureResult, same return-shape-once shape (spector-result-view.tsx:819, caller :779); oracle oracle-behaviour-components-return-once App.tsx:8 behaviour-confirmed"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1001|violation|packages/typegpu-examples/typegpu-draw-app-example/ui/PointerDebugOverlay.tsx|18477|18489",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: props.stroke.points read in the body (PointerDebugOverlay.tsx:541); :274 passes stroke={lastStroke()!} inside a tracked expression that recreates the component on change; debug overlay toggle; rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:16"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1001|violation|packages/typegpu-examples/typegpu-draw-app-example/ui/PointerDebugOverlay.tsx|18571|18583",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: props.stroke.pointerType in the body (PointerDebugOverlay.tsx:543); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:16"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC1001|violation|packages/ui-components-examples/solid-props-proxy/example-3.tsx|3153|3163",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: combinedProps spreads overlays() once in ProxyTarget's body (example-3.tsx:105); PropsProxy adds overlays after mount, so they never reach the input; rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-setup-read App.tsx:13"
+    },
+    {
+      "key": "app-game|apps/web/tsconfig.json|SC4001|violation|packages/webgpu-examples/rotating-cube-2/rotating-cube-2.tsx|10213|10222",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: onCleanup after `await navigator.gpu?.requestAdapter()` in main(), started by onSettled (rotating-cube-2.tsx:40,303): no owner, so the RAF loop and GPU device outlive the route; oracle adjudication-unowned-cleanup App.tsx:40 fires NO_OWNER_CLEANUP"
+    },
+    {
+      "key": "compass-ui|apps/ui/tsconfig.json|SC1001|violation|apps/ui/src/components/Bridge.tsx|14173|14180",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: apply of the cursorId effect reads stops() to find the cursor stop (Bridge.tsx:393); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); runs on mount of route / (Bridge, see the Bridge entries above); oracle adjudication-effect-apply-read App.tsx:27 fires STRICT_READ_UNTRACKED"
+    },
+    {
+      "key": "donegeon-client|web/apps/client/tsconfig.json|SC1001|violation|web/apps/client/src/components/auth/WaitlistCard.tsx|805|824",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "snapshot: the plan label is computed once from props.requestedPlan (WaitlistCard.tsx:25); LoginRoute.tsx:173 and WaitlistRoute.tsx:82 pass requestedPlan={preferredPlan()}; rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:16"
+    },
+    {
+      "key": "donegeon-client|web/apps/client/tsconfig.json|SC1001|violation|web/apps/client/src/components/auth/WaitlistCard.tsx|854|873",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "snapshot: props.requestedPlan passed to workspacePlanLabel when set (WaitlistCard.tsx:25); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:16"
+    },
+    {
+      "key": "error-menu-web|web/tsconfig.json|SC1001|violation|web/src/components/IconPicker.tsx|4892|4904",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: the isPicking apply guards on candidates().length (IconPicker.tsx:135), reached when the Light/Dark picker opens (ProjectSettingsModal.tsx:191); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27 fires STRICT_READ_UNTRACKED"
+    },
+    {
+      "key": "error-menu-web|web/tsconfig.json|SC1001|violation|web/src/pages/OrganizationsPage.tsx|3266|3272",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: the account-state apply calls load(), whose first line reads account.user() -> AccountProvider's state() before any await (OrganizationsPage.tsx:61,84; account.tsx:41); route /orgs, signed in; rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:43 (helper read) fires STRICT_READ_UNTRACKED"
+    },
+    {
+      "key": "error-menu-web|web/tsconfig.json|SC1001|violation|web/src/pages/ProjectsPage.tsx|6718|6724",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: same load() shape as OrganizationsPage, route / (ProjectsPage.tsx:170,193; account.tsx:41); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:43 fires STRICT_READ_UNTRACKED"
+    },
+    {
+      "key": "inferay|tsconfig.json|SC1001|violation|src/modules/conversation/components/ChatComposer/QueuedMessageRow.tsx|1023|1039",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless, redundant: _props.isEditing re-read in the apply whose compute reads it (QueuedMessageRow.tsx:31-33); QueuedMessages.tsx:28 passes isEditing={_props.editingQueueId === qm().id}; rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:78"
+    },
+    {
+      "key": "inferay|tsconfig.json|SC1001|violation|src/modules/onboarding/hooks/useOnboardingTour.tsx|2703|2721",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: openedRepository() picks start or dismiss on first launch (useOnboardingTour.tsx:97); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "inferay|tsconfig.json|SC1001|violation|src/modules/repository/components/changes/components/ChangesPanel/FileGroup.tsx|2047|2062",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless, redundant: _props.selected guard in the apply keyed on selectionKey (FileGroup.tsx:69-70); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:78"
+    },
+    {
+      "key": "inferay|tsconfig.json|SC1001|violation|src/modules/workspace/components/InlineDirectoryPicker/DirectoryResult.tsx|762|773",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: onClick={_props.onSelect.bind(null, _props.pick.path)} is evaluated in the body (DirectoryResult.tsx:31); index.tsx:153 passes pick={pick()} from a For keyed by path, so the bound path never changes; rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:23 (frame :34)"
+    },
+    {
+      "key": "inferay|tsconfig.json|SC1001|violation|src/modules/workspace/components/InlineDirectoryPicker/SelectedDirectoryChip.tsx|882|893",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: onClick bound to _props.path in the body (SelectedDirectoryChip.tsx:28); index.tsx:171 passes path={p()} from a For keyed by the path; rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:23"
+    },
+    {
+      "key": "inferay|tsconfig.json|SC1001|violation|src/shared/ui/DropdownButton/DropdownCustomOption.tsx|979|989",
+      "source": "corpus-sweep",
+      "class": "valid-for-claim",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "FALSE POSITIVE for this app (unreachable): DropdownCustomOption renders only under <Show when={_props.renderOption}> (DropdownOptions.tsx:40,90), and no DropdownButton caller passes renderOption (the 3 calls in SettingsModalContent/index.tsx:141,185,201 do not); the runtime never runs the body; claim shape per oracle adjudication-reactive-prop-read App.tsx:23"
+    },
+    {
+      "key": "kui|frontend/packages/feature-clusters/tsconfig.json|SC1001|violation|frontend/packages/feature-clusters/src/BrokersScreen.tsx|5741|5756",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed, documented: createSignal({clusterId: props.clusterId, ids: []}) (BrokersScreen.tsx:127); ClustersRoute.tsx:105 renders BrokersRoute with clusterId={clusterId()}, which forwards props.clusterId (:304); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10"
+    },
+    {
+      "key": "kui|frontend/packages/feature-connect/tsconfig.json|SC1001|violation|frontend/packages/feature-connect/src/ConnectRoute.tsx|4876|4943",
+      "source": "corpus-sweep",
+      "class": "valid-for-claim",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "FALSE POSITIVE: the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (ConnectRoute.tsx:103; caller :68)"
+    },
+    {
+      "key": "kui|frontend/packages/feature-consumers/tsconfig.json|SC1001|violation|frontend/packages/feature-consumers/src/GroupRoute.tsx|4977|4991",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless, redundant (one span, two findings: props.clusterId and props.groupId): refresh(false) passes props.clusterId and props.groupId to fetchGroup synchronously in the apply whose compute reads both (GroupRoute.tsx:70,80,95); GroupRoute.tsx:26 passes accessors; rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:78"
+    },
+    {
+      "key": "kui|frontend/packages/feature-ksql/tsconfig.json|SC1001|violation|frontend/packages/feature-ksql/src/KsqlRoute.tsx|7041|7108",
+      "source": "corpus-sweep",
+      "class": "valid-for-claim",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "FALSE POSITIVE: the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (KsqlRoute.tsx:164; caller :121)"
+    },
+    {
+      "key": "kui|frontend/packages/feature-ksql/tsconfig.json|SC1001|violation|frontend/packages/feature-ksql/src/KsqlRoute.tsx|7295|7362",
+      "source": "corpus-sweep",
+      "class": "valid-for-claim",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "FALSE POSITIVE: the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (KsqlRoute.tsx:170; caller :121)"
+    },
+    {
+      "key": "kui|frontend/packages/feature-messages/tsconfig.json|SC1001|violation|frontend/packages/feature-messages/src/MessagesRoute.tsx|5814|5825",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot, documented (\"one session for the life of this screen\"): streamUrl() reads props.clusterId (MessagesRoute.tsx:132,138); :82 passes clusterId={clusterId()}; rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10"
+    },
+    {
+      "key": "kui|frontend/packages/feature-messages/tsconfig.json|SC1001|violation|frontend/packages/feature-messages/src/MessagesRoute.tsx|10258|10273",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: readPresets(props.clusterId) (MessagesRoute.tsx:229); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10"
+    },
+    {
+      "key": "kui|frontend/packages/feature-messages/tsconfig.json|SC4001|violation|frontend/packages/feature-messages/src/session.ts|31791|31800",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "story path: createBrowseSession registers onCleanup (session.ts:749); MessagesTab.stories.tsx:40-121 calls it through startedSession/scriptedSession in module-scope story args, so loading the stories in Storybook warns NO_OWNER_CLEANUP (the app and tests call it under render's root); harmless there; oracle adjudication-unowned-cleanup App.tsx:55"
+    },
+    {
+      "key": "kui|frontend/packages/feature-topics/tsconfig.json|SC1001|violation|frontend/packages/feature-topics/src/TopicListPage.tsx|13460|13471",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed, documented: createSignal(props.query.search) for the typing draft (TopicListPage.tsx:298); TopicsRoute.tsx:630 passes query={query()}; rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10"
+    },
+    {
+      "key": "kui|frontend/packages/feature-topics/tsconfig.json|SC1001|violation|frontend/packages/feature-topics/src/TopicListPage.tsx|14238|14245",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: typed() compared in the query->draft apply (TopicListPage.tsx:314); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "kui|frontend/packages/feature-topics/tsconfig.json|SC1001|violation|frontend/packages/feature-topics/src/TopicSettings.tsx|9819|9830",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: createSignal(props.entry.value ?? \"\") (TopicSettings.tsx:246); :221 passes entry={entry()}; rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10"
+    },
+    {
+      "key": "kui|frontend/packages/feature-topics/tsconfig.json|SC1001|violation|frontend/packages/feature-topics/src/TopicsRoute.tsx|22551|22558",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: query() compared in the address apply (TopicsRoute.tsx:522); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "kui|frontend/packages/feature-topics/tsconfig.json|SC1001|violation|frontend/packages/feature-topics/src/TopicsRoute.tsx|22585|22592",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: query() compared in the address apply (TopicsRoute.tsx:522); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-clusters/src/BrokersScreen.tsx|5741|5756",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed, documented: createSignal({clusterId: props.clusterId, ids: []}) (BrokersScreen.tsx:127); ClustersRoute.tsx:105 renders BrokersRoute with clusterId={clusterId()}, which forwards props.clusterId (:304); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-connect/src/ConnectRoute.tsx|4876|4943",
+      "source": "corpus-sweep",
+      "class": "valid-for-claim",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "FALSE POSITIVE: the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (ConnectRoute.tsx:103; caller :68)"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-consumers/src/GroupRoute.tsx|4977|4991",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless, redundant (one span, two findings: props.clusterId and props.groupId): refresh(false) passes props.clusterId and props.groupId to fetchGroup synchronously in the apply whose compute reads both (GroupRoute.tsx:70,80,95); GroupRoute.tsx:26 passes accessors; rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:78"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-ksql/src/KsqlRoute.tsx|7041|7108",
+      "source": "corpus-sweep",
+      "class": "valid-for-claim",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "FALSE POSITIVE: the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (KsqlRoute.tsx:164; caller :121)"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-ksql/src/KsqlRoute.tsx|7295|7362",
+      "source": "corpus-sweep",
+      "class": "valid-for-claim",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "FALSE POSITIVE: the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (KsqlRoute.tsx:170; caller :121)"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-messages/src/MessagesRoute.tsx|5814|5825",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot, documented (\"one session for the life of this screen\"): streamUrl() reads props.clusterId (MessagesRoute.tsx:132,138); :82 passes clusterId={clusterId()}; rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-messages/src/MessagesRoute.tsx|10258|10273",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: readPresets(props.clusterId) (MessagesRoute.tsx:229); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-topics/src/TopicListPage.tsx|13460|13471",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed, documented: createSignal(props.query.search) for the typing draft (TopicListPage.tsx:298); TopicsRoute.tsx:630 passes query={query()}; rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-topics/src/TopicListPage.tsx|14238|14245",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: typed() compared in the query->draft apply (TopicListPage.tsx:314); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-topics/src/TopicSettings.tsx|9819|9830",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: createSignal(props.entry.value ?? \"\") (TopicSettings.tsx:246); :221 passes entry={entry()}; rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-topics/src/TopicsRoute.tsx|22551|22558",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: query() compared in the address apply (TopicsRoute.tsx:522); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-topics/src/TopicsRoute.tsx|22585|22592",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: query() compared in the address apply (TopicsRoute.tsx:522); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/shell/src/App.tsx|5094|5238",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless: createHealth reads the connectivity signal it has just created (health.ts:86) from App's body (App.tsx:154); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-setup-read App.tsx:23"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/shell/src/features/FeatureGate.tsx|4981|4992",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: `const Feature = component()` in a Match callback (FeatureGate.tsx:121); rc.17 Match runs it under untrack(..., \"<Match>\") (solid.dev.js:1635); oracle adjudication-callback-child-read App.tsx:72"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/components/Chrome.tsx|15040|15046",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: Segmented's <Show when={option.Icon}>{(Icon) => Icon()({size:14})} reads the Show accessor in the callback body (Chrome.tsx:371); TabBar.tsx:459 passes theme options with Icon; rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:22 fires STRICT_READ_UNTRACKED; the icons are static, so nothing goes stale"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/components/GroupSheet.tsx|2064|2077",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: the open apply seeds picked from props.current (GroupSheet.tsx:50); Starred.tsx:1006 passes current={ask().current}; rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:78 (frame :89) fires STRICT_READ_UNTRACKED"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC4001|violation|src/components/Layout.tsx|3215|3224",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: onCleanup in the ref callback watchDock (Layout.tsx:73, ref at :108 under <Show when={props.dock}>, Search.tsx:520 passes a dock); @solidjs/web rc.17 ref() applies the callback under runWithOwner(null) (web.dev.js:1019-1022), so NO_OWNER_CLEANUP and the ResizeObserver is never disconnected; oracle adjudication-unowned-cleanup App.tsx:13 fires NO_OWNER_CLEANUP"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC4001|violation|src/components/RailDiagram.tsx|7586|7595",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: onCleanup in ref callback watch (RailDiagram.tsx:211, ref at :408; RailMap.tsx:226 renders it); @solidjs/web rc.17 ref() applies the callback under runWithOwner(null) (web.dev.js:1019-1022): NO_OWNER_CLEANUP, the ResizeObserver is never disconnected; oracle adjudication-unowned-cleanup App.tsx:13"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC4001|violation|src/components/RailDiagram.tsx|11624|11633",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: onCleanup in ref callback bindWheel (RailDiagram.tsx:325, ref at :412); @solidjs/web rc.17 ref() applies the callback under runWithOwner(null) (web.dev.js:1019-1022): NO_OWNER_CLEANUP, the non-passive wheel listener is never removed; oracle adjudication-unowned-cleanup App.tsx:13"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/components/RailDiagram.tsx|12632|12640",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: placed() one-shot guard in the first-view apply (RailDiagram.tsx:349), runs once box().w > 0; rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/components/RailDiagram.tsx|12718|12732",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: centreOn(here) reads box() in the first-view apply (RailDiagram.tsx:334,353), when the rider's station is known; rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:43 (helper read)"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/components/RailDiagram.tsx|13086|13091",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot, redundant: box() in the apply whose compute also reads box() (RailDiagram.tsx:347,363); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/components/RailDiagram.tsx|13171|13205",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: centreOn(HOME_STATION) reads box() in the first-view apply (RailDiagram.tsx:365); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:43"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/components/RailDiagram.tsx|13793|13801",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: placed() guard in the selected-station apply (RailDiagram.tsx:382), on selecting a station; rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/components/RailDiagram.tsx|13892|13898",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: view() read to pan minimally in the selected-station apply (RailDiagram.tsx:386); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/components/RollingNumber.tsx|7378|7389",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: props.place (RollingNumber.tsx:76 passes digits().length - 1 - index) read at roll time in Digit's apply (:194); RouteDetail.tsx:500 renders live minutes; rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:78"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/components/RouteMap.tsx|52597|52612",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: the traffic apply calls trafficShapes(), whose loaded() read exists to re-run callers when the shapes land (traffic.ts:54-73); read in the apply it never subscribes, so the layer waits for the next speeds poll (RouteMap.tsx:1333); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:58 fires STRICT_READ_UNTRACKED and its behaviour row is behaviour-confirmed (layer stays empty)"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC4001|violation|src/components/SwipeActions.tsx|5979|5988",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: onCleanup in ref callback watchFace (SwipeActions.tsx:195, ref at :250; Starred.tsx:179); @solidjs/web rc.17 ref() applies the callback under runWithOwner(null) (web.dev.js:1019-1022): NO_OWNER_CLEANUP, the capture click listener is never removed; oracle adjudication-unowned-cleanup App.tsx:13"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/components/VirtualRows.tsx|4595|4602",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: the place() helper reads list() in an apply whose compute also reads list() (VirtualRows.tsx:65,119-121); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:43"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC4001|violation|src/components/VirtualRows.tsx|7158|7167",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: onCleanup in each row's inline ref arrow (VirtualRows.tsx:175-185; Browse.tsx:324, Search.tsx:229); @solidjs/web rc.17 ref() applies the callback under runWithOwner(null) (web.dev.js:1019-1022): NO_OWNER_CLEANUP per row, every row's ResizeObserver outlives the row; oracle adjudication-unowned-cleanup App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|9733|9753",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: createSignal(endOf(search().from)) where endOf reads db() -> DbProvider's live() (Plan.tsx:244,254; context.tsx:19,28) for ?from=<stop>; Plan renders through lazyRouteComponent -> lazy -> createComponent (solid.dev.js:1398), so rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-setup-read App.tsx:12 (frame :13)"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|9739|9747",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: search() (useSearch memo, @tanstack/solid-router rc.9 useMatch.jsx:36) read in Plan's body (Plan.tsx:254); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66) via lazy; oracle adjudication-setup-read App.tsx:13"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|9826|9844",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: endOf(search().to) reads db() -> live() for ?to=<stop> (Plan.tsx:255); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-setup-read App.tsx:12 (frame :14)"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|9832|9840",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: search() read in Plan's body (Plan.tsx:255); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-setup-read App.tsx:14"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|9914|9918",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: to() decides the initial picking (Plan.tsx:256); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-setup-read App.tsx:15"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|19977|19997",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: the URL apply calls endOf -> db() -> live() (Plan.tsx:526); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:43"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|19983|19991",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: search() in the URL apply (Plan.tsx:526); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|20017|20035",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: endOf -> db() in the URL apply (Plan.tsx:527); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:43"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|20023|20031",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: search() in the URL apply (Plan.tsx:527); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|20083|20089",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: from() compared in the URL apply when ?from names a stop (Plan.tsx:528); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:44"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|20150|20154",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: to() compared in the URL apply (Plan.tsx:529); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:44"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|20730|20738",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: search().from compared in the ends->URL apply (Plan.tsx:547); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|20768|20776",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: search().to compared in the ends->URL apply, past the from test (Plan.tsx:547); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|21702|21710",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: search().j compared in the choice apply (Plan.tsx:572); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|21982|21992",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot, redundant: journeys() in the apply whose compute reads it (Plan.tsx:568,576); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Plan.tsx|22009|22017",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: search().j when no journeys yet (Plan.tsx:576); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/RouteDetail.tsx|28657|28668",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot, documented (\"settled once rather than followed\"): StopRow reads props.route, passed route={r()} from the Show accessor (RouteDetail.tsx:728,2248); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10 (frame :32)"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/RouteDetail.tsx|92703|92714",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: pickedSeq() guard in the nearest-stop apply, once a position fix lands (RouteDetail.tsx:2172); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/RouteDetail.tsx|93848|93855",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: stops().length bound in the ?stop= apply (RouteDetail.tsx:2211); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/RouteDetail.tsx|93966|93977",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: pickedSeq() in the ?stop= apply (RouteDetail.tsx:2213); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/RouteDetail.tsx|93993|94006",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: openStop -> pickStop reads params().key for navigate (RouteDetail.tsx:1661,2214); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:43"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/RouteDetail.tsx|94173|94180",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: route() guard in the ?preview= apply (RouteDetail.tsx:2222); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/RouteDetail.tsx|94200|94207",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: stops() in the ?preview= apply (RouteDetail.tsx:2223); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/RouteDetail.tsx|94240|94247",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: stops() in the ?preview= apply (RouteDetail.tsx:2224); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/RouteDetail.tsx|94362|94370",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: params().key evaluated synchronously for navigate in the ?preview= apply (RouteDetail.tsx:2227); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Search.tsx|11296|11306",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: createSignal(urlQuery()) reads params() in Search's body (Search.tsx:301-302); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66) via lazy; oracle adjudication-setup-read App.tsx:12 (helper)"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Search.tsx|11652|11662",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: urlQuery() in the query->URL apply (Search.tsx:317); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:43"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Search.tsx|12145|12152",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional snapshot: query() compared in the URL->field apply (Search.tsx:334); rc.17 runEffect opens an \"an effect callback\" strict window (signals dist/dev.js:1993); oracle adjudication-effect-apply-read App.tsx:27"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC4001|violation|src/routes/Search.tsx|23209|23221",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: createEffect in the input's inline ref arrow (Search.tsx:586) has no owner: NO_OWNER_EFFECT, never disposed, it re-runs on a later DbProvider live() write after the screen leaves; oracle oracle-behaviour-primitive-in-directive App.tsx:13 fires NO_OWNER_EFFECT and is behaviour-confirmed (runs again after its element is gone)"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC6001|violation|src/routes/Search.tsx|23209|23221",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: same call as the SC4001 finding (Search.tsx:586), the effect created in a ref application leaks per element; oracle oracle-behaviour-primitive-in-directive App.tsx:13 behaviour-confirmed"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Search.tsx|57470|57477",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "harmless snapshot: the keypad For mapper reads index() for a pop-in animation delay (Search.tsx:1216,1296); rc.17 For maps under setStrictRead(\"<For>\") (signals dist/dev.js:3093-3099); oracle adjudication-callback-child-read App.tsx:53"
+    },
+    {
+      "key": "probus-hk|tsconfig.json|SC1001|violation|src/routes/Starred.tsx|10986|10989",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: the leave label is computed once in the non-keyed Show callback from a() (Starred.tsx:298); advice() changes with now() but stays truthy, so the label never counts down; rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:37 fires STRICT_READ_UNTRACKED and its behaviour row is behaviour-confirmed (label stays \"5 min\")"
+    },
+    {
+      "key": "solid-groove|tsconfig.json|SC1001|violation|src/editor/LoopInfo.tsx|2598|2607",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "snapshot: content().sourceTempo read once in the Show callback (LoopInfo.tsx:59); stale if the clip's loop content changes while it stays an audio loop; rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "solid-groove|tsconfig.json|SC1001|violation|src/editor/LoopInfo.tsx|2673|2688",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: the stretch ratio is computed once from props.songTempo in the Show callback (LoopInfo.tsx:60); EditorView.tsx:579 passes songTempo={tempo()}, so a BPM change while the loop panel is open leaves the displayed ratio and \"stretched\" stale; rc.17 non-keyed Show runs its function child under untrack(..., \"<Show>\") (solid.dev.js:1588); oracle adjudication-reactive-prop-read App.tsx:10, oracle adjudication-callback-child-read App.tsx:17"
+    },
+    {
+      "key": "viviana-ui-web|apps/web/tsconfig.json|SC3001|violation|apps/web/src/components/Header.tsx|971|980",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "real defect: onCleanup in onSettled inside useScrollDirection, called from Header's body (Header.tsx:26,93; Header rendered on every route): rc.17 binds the callback to a children-forbidden tracked effect and throws CLEANUP_IN_FORBIDDEN_SCOPE in dev (signals dist/dev.js:2390-2402); oracle adjudication-settled-cleanup App.tsx:12 fires CLEANUP_IN_FORBIDDEN_SCOPE"
+    },
+    {
+      "key": "viviana-ui-web|apps/web/tsconfig.json|SC1001|violation|apps/web/src/components/ThemeCreator.tsx|2027|2038",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: createSignal(props.value) with a tracked effect re-syncing it (ThemeCreator.tsx:63-66); playground.tsx:434 renders ThemeCreator, which passes value={primaryColor()} (:192); rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10"
+    },
+    {
+      "key": "viviana-ui-web|apps/web/tsconfig.json|SC1001|violation|apps/web/src/components/theme/ColorKnob.tsx|1277|1288",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "intentional seed: createSignal(props.value) (ColorKnob.tsx:34); ThemeStudio.tsx:55 passes value={inputs()[fam]}, route /theme; rc.17 observedComponent runs the body under untrack(..., \"<Name>\") (solid.dev.js:44-66); oracle adjudication-reactive-prop-read App.tsx:10"
+    },
+    {
+      "key": "viviana-ui-web|apps/web/tsconfig.json|SC3001|violation|apps/web/src/lib/glasselated.ts|2241|2250",
+      "source": "corpus-sweep",
+      "class": "valid-for-claim",
+      "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "FALSE POSITIVE for this app (unreachable): createMeshField's onCleanup in onSettled (glasselated.ts:48) would throw CLEANUP_IN_FORBIDDEN_SCOPE under an owned caller, but its only caller GlasselatedShell (GlasselatedShell.tsx:24) is rendered nowhere (no tag, no route, no import of it); the runtime never runs it; claim shape per oracle adjudication-settled-cleanup"
     }
   ]
 }
