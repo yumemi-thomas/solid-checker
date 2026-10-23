@@ -1,0 +1,125 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-alias-entries/App.tsx",
+      "start": 368,
+      "end": 375,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-alias-entries/App.tsx",
+      "start": 559,
+      "end": 566,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-alias-entries/Escapes.tsx",
+      "start": 236,
+      "end": 243,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-alias-entries/Escapes.tsx",
+      "start": 374,
+      "end": 381,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-alias-entries/Escapes.tsx",
+      "start": 558,
+      "end": 565,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-alias-entries/Escapes.tsx",
+      "start": 768,
+      "end": 775,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-alias-entries/Exported.tsx",
+      "start": 258,
+      "end": 265,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-alias-entries/Exported.tsx",
+      "start": 433,
+      "end": 440,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-alias-entries/Kept.tsx",
+      "start": 269,
+      "end": 276,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-alias-entries/Kept.tsx",
+      "start": 348,
+      "end": 354,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-alias-entries/Kept.tsx",
+      "start": 486,
+      "end": 498,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/component-alias-entries/Kept.tsx",
+      "start": 670,
+      "end": 681,
+      "fixes": 0
+    }
+  ]
+}

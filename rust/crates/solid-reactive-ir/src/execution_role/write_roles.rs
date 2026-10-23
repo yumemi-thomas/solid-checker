@@ -365,7 +365,13 @@ pub(super) fn semantic_write_execution_role_within(
     {
         return unknown;
     }
-    if direct != ExecutionRole::Unknown {
+    // ADR 0331: in a function its calls enter but some unfollowed entry may
+    // render, the rendering role is only a possibility. A call that proves a
+    // disallowed write still proves it; otherwise no role is proven.
+    let possible_render = direct == ExecutionRole::UntrackedRendering
+        && !lookup.inside_component(file, span)
+        && lookup.inside_possible_component(file, span);
+    if direct != ExecutionRole::Unknown && !possible_render {
         return direct;
     }
     let Some(function) = crate::owners::containing_ast_function(&file.ast, span) else {
@@ -401,6 +407,9 @@ pub(super) fn semantic_write_execution_role_within(
         }
     }
     visiting.remove(&key);
+    if possible_render {
+        return unknown;
+    }
     imperative.unwrap_or(unknown)
 }
 
