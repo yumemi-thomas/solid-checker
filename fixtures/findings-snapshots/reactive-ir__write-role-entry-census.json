@@ -94,11 +94,11 @@
     {
       "rule": "reactive-write-in-owned-scope",
       "code": "SC2001",
-      "kind": "uncertifiable",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-role-entry-census/Review.tsx",
-      "start": 1387,
-      "end": 1394,
+      "start": 1445,
+      "end": 1452,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-role-entry-census/Review.tsx",
-      "start": 1781,
-      "end": 1788,
+      "start": 1839,
+      "end": 1846,
       "fixes": 0
     }
   ]

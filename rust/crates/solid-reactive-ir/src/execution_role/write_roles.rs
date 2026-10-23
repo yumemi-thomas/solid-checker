@@ -380,7 +380,12 @@ pub(super) fn semantic_write_execution_role_within(
     let named = named_callback.filter(|callback| {
         innermost.is_some_and(|innermost| runs_inline_within(file, innermost, callback, lookup))
     });
-    if direct != ExecutionRole::Unknown && named_callback.is_none() {
+    // ADR 0331: in a function its calls enter but some unfollowed entry may
+    // render, the rendering role is only a possibility. A call that proves a
+    // disallowed write still proves it; otherwise no role is proven.
+    let possible_render = direct == ExecutionRole::UntrackedRendering
+        && innermost_identity_is_possible(file, span, lookup);
+    if direct != ExecutionRole::Unknown && named_callback.is_none() && !possible_render {
         return direct;
     }
     let Some(innermost) = innermost else {
@@ -459,6 +464,9 @@ pub(super) fn semantic_write_execution_role_within(
         }
     }
     visiting.remove(&key);
+    if possible_render {
+        return unknown;
+    }
     let Some(role) = imperative.filter(|_| !unplaced) else {
         return unknown;
     };
@@ -493,10 +501,9 @@ fn entry_census_complete(
     // as well as through its own name; with no such binding it is a value
     // handed wherever it is written.
     let mut bindings = Vec::new();
-    if function.kind == solid_facts::ast::FunctionKind::Expression {
-        let Some(own) = function.name.as_ref() else {
-            return false;
-        };
+    if function.kind == solid_facts::ast::FunctionKind::Expression
+        && let Some(own) = function.name.as_ref()
+    {
         let Some(outer) = file
             .ast
             .bindings_initializer_containing(function.span)
@@ -725,4 +732,20 @@ pub(super) fn attribute_function_within(
             && (jsx_attribute_value_function(file, function.span)
                 || call_argument_invocation_unproven(file, function, lookup))
     })
+}
+
+/// ADR 0331: whether the innermost function around `span` that has a
+/// component identity at all is a possible component rather than a proven
+/// one. An enclosing component renders its own body, not a function nested
+/// in it, so it proves nothing about how that function is entered.
+fn innermost_identity_is_possible(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .functions_body_containing(span)
+        .filter(|function| lookup.function_component_status(file, function) != ComponentStatus::No)
+        .min_by_key(|function| function.body.end - function.body.start)
+        .is_some_and(|function| !lookup.function_is_component(file, function))
 }

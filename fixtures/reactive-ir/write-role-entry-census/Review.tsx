@@ -35,8 +35,9 @@ export function NamedFunctionExpression() {
   );
 }
 
-// Not clean: `<Reset />` renders the handler under a fresh component owner,
-// where the write throws. A recursive render is no call in the caller's role.
+// Violation: `<Reset />` renders the handler as a component, under a fresh
+// component owner, where the write throws (ADR 0331 proves the component; a
+// recursive render is no call in the caller's role either).
 let again = false;
 export function RecursiveRender() {
   const [n, setN] = createSignal(0);
@@ -80,4 +81,14 @@ export function NestedTimer() {
     setTimeout(() => setN(0), 10);
   };
   return <button onClick={click}>{n()}</button>;
+}
+
+// Clean: an anonymous function expression is entered through its binding,
+// whose only use is the click handler's call.
+export function AnonymousExpression() {
+  const [n, setN] = createSignal(0);
+  const reset = function () {
+    setN(1);
+  };
+  return <button onClick={() => reset()}>{n()}</button>;
 }

@@ -420,6 +420,12 @@ pub(crate) fn named_callback_execution_role(
 ) -> Option<ExecutionRole> {
     let roles = lookup.named_callback_roles(file);
     let callback = named_callback_containing(file, span, lookup)?;
+    // ADR 0331: a callback position is one entry of the function. A function
+    // a tag renders (or that some unfollowed entry may render) is also
+    // entered as a component, which this role does not describe.
+    if lookup.function_component_status(file, callback) != ComponentStatus::No {
+        return None;
+    }
     let owner = containing_ast_function(&file.ast, span)?;
     if owner.span != callback.span {
         return Some(ExecutionRole::DeferredCallback);

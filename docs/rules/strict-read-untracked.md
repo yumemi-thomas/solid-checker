@@ -81,6 +81,15 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   **uncertifiable**, never dropped. A read past the strict-read window (after
   an unconditional `await`) or in several non-reporting roles (ADR 0323) is
   proven silent.
+- **A rendered function's body is a component body, however else it is
+  called.** `const P2 = Plain; <P2 />` renders `Plain` as `<Plain />` would,
+  so a body read in `Plain` is a violation even beside a tracked `{Plain()}`
+  or a handler position (`onClick={Plain}`). An alias of a binding that is
+  ever written renders nothing proven.
+  A visible call clears a function only when every other reference is
+  followed (ADR 0331): one passed, stored, aliased by a written `let`, or
+  exported from an open program leaves its body reads uncertifiable, beside
+  whatever its calls prove.
 - **A named local handler can forward a callback prop.** A project component
   may invoke a callback prop from a synchronous immutable local arrow bound
   only to intrinsic event attributes or exact component props that themselves
