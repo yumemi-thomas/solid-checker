@@ -83,14 +83,31 @@ export function wrap${n}() {
   return make${n}();
 }
 
+export function wrapTwice${n}() {
+  return wrap${n}();
+}
+
+export function wrapThrice${n}() {
+  return wrapTwice${n}();
+}
+
 export function project${n}() {
-  const { count } = make${n}();
-  return { count };
+  const made = make${n}();
+  return { count: made.count };
+}
+
+export function projectWrapped${n}() {
+  const made = wrapTwice${n}();
+  return { count: made.count, setCount: made.setCount };
 }
 
 export function nested${n}() {
   const inner = wrap${n}();
   return { outer: { inner, again: project${n}() } };
+}
+
+export function nestedDeep${n}() {
+  return { level: { inner: { wrapped: wrapThrice${n}(), projected: projectWrapped${n}() } } };
 }
 
 export function pair${n}() {

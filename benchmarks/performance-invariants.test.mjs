@@ -126,6 +126,11 @@ test("a gate that counted no work, or counted inconsistently, fails instead of p
   const none = { ...healthy, exportSmallSamples: exportWorkAt(healthy.exportSmallSamples, 0) };
   assert.deepEqual(assessPerformance(none).violations.map(finding => finding.id), ["export-scaling"]);
   assert.match(assessPerformance(none).violations[0].message, /counted no work/);
+  const noneLarge = { ...healthy, exportLargeSamples: exportWorkAt(healthy.exportLargeSamples, 0) };
+  assert.deepEqual(assessPerformance(noneLarge).violations.map(finding => finding.id), ["export-scaling"]);
+  assert.match(assessPerformance(noneLarge).violations[0].message, /counted no work/);
+  const fractional = { ...healthy, exportLargeSamples: exportWorkAt(healthy.exportLargeSamples, 23_000.5) };
+  assert.deepEqual(assessPerformance(fractional).violations.map(finding => finding.id), ["export-scaling"]);
   const [one] = healthy.exportLargeSamples;
   const disagree = { ...healthy, exportLargeSamples: [...exportWorkAt([one], 23_000), ...exportWorkAt([one], 23_001)] };
   assert.deepEqual(assessPerformance(disagree).violations.map(finding => finding.id), ["export-scaling"]);

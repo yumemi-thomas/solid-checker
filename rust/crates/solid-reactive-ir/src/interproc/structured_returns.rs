@@ -11,7 +11,8 @@ pub(super) struct StructuredReturnDiscovery<'a, 'facts> {
     pub(super) returned: &'a [SummaryReads],
     pub(super) structured_returns: &'a [Option<ReturnSummary>],
     /// Deterministic work units, one per node visited in a
-    /// discovery round, per `leaf` evaluation, and per exported node and
+    /// discovery round, per `leaf`, `instantiate_return` and `projection`
+    /// evaluation (wrapper, projection and nested propagation), and per exported node and
     /// returned property examined for an unresolved shorthand.
     pub(super) work: &'a AtomicU64,
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
@@ -176,6 +177,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         fallback_label: &str,
         depth: usize,
     ) -> Option<ReturnSummary> {
+        self.work.fetch_add(1, Ordering::Relaxed);
         if depth == 0 {
             return None;
         }
@@ -541,6 +543,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         fallback_label: &str,
         depth: usize,
     ) -> Option<ReturnSummary> {
+        self.work.fetch_add(1, Ordering::Relaxed);
         if depth == 0 {
             return None;
         }
