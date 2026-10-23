@@ -63,22 +63,12 @@ pub struct Group {
 }
 
 /// One file's contribution to the reference index: every resolvable
-/// non-declaration identifier in the file, grouped by the durable id of its
-/// alias-canonicalized symbol, each group in ascending byte order. `durable`
-/// reports whether every grouped id is durable; an entry with
-/// generation-scoped counter ids cannot outlive its generation.
+/// non-declaration identifier in the file, grouped by the id of its
+/// alias-canonicalized symbol, each group in ascending byte order.
 #[derive(Clone, Debug)]
 pub struct FileReferences {
     pub refs: Vec<Group>,
     spaces: Vec<(SymbolId, u8)>,
-    pub durable: bool,
-    /// The spans were moved into a merged index and cleared. Such an entry
-    /// still carries exact symbol evidence but cannot rebuild a dropped
-    /// index; `build` rescans it.
-    merged: bool,
-    /// Which scan produced this entry; tests use it to tell a retained
-    /// contribution from a replaced one (Go compares the pointers).
-    pub serial: u64,
 }
 
 /// How much of a build's binder-level work was reused (ADR 0369).
@@ -306,13 +296,8 @@ pub struct ReferenceIndex {
     /// are rescanned lazily at the established reference closure point so
     /// symbol counter minting retains its order.
     refresh_paths: HashSet<String>,
-    /// The exact union removed from and added to refreshed contributions.
-    /// `delta_exact` distinguishes known-empty from unavailable.
-    changed_symbols: HashSet<SymbolId>,
-    delta_exact: bool,
     /// This generation's per-file contributions.
     files: HashMap<String, FileReferences>,
-    next_serial: u64,
     /// Binder-level answers kept across generations (ADR 0369): slots, and
     /// the slot of each clean path. A departed file's slot is emptied and
     /// the slots are compacted between tables.
@@ -897,17 +882,6 @@ impl ReferenceIndex {
         self.merged.is_some()
     }
 
-    /// Whether the changed-symbol set is an exact delta (tests).
-    #[must_use]
-    pub fn delta_exact(&self) -> bool {
-        self.delta_exact
-    }
-
-    #[must_use]
-    pub fn changed_symbol_set(&self) -> &HashSet<SymbolId> {
-        &self.changed_symbols
-    }
-
     /// The paths with retained binder-level answers (tests).
     #[must_use]
     pub fn retained_paths(&self) -> Vec<&str> {
@@ -927,8 +901,6 @@ impl ReferenceIndex {
         self.merged = None;
         self.spaces = None;
         self.refresh_paths.clear();
-        self.changed_symbols.clear();
-        self.delta_exact = false;
         self.files.clear();
         self.paths.clear();
         self.used.clear();
@@ -1100,9 +1072,6 @@ impl ReferenceIndex {
             let entry = self.files.get_mut(&path).expect("just inserted");
             for group in &mut entry.refs {
                 touched.insert(group.id.clone());
-                if self.delta_exact {
-                    self.changed_symbols.insert(group.id.clone());
-                }
                 let references = merged.entry(group.id.clone()).or_default();
                 for span in std::mem::take(&mut group.spans) {
                     references.push(Indexed {
@@ -1112,7 +1081,6 @@ impl ReferenceIndex {
                     });
                 }
             }
-            entry.merged = true;
         }
         if let Some(merged) = &mut self.merged {
             for id in touched {
@@ -1138,11 +1106,6 @@ impl ReferenceIndex {
             let path = clean(file.file_name());
             paths.push(path.clone());
             let entry = self.contribution(env, *file);
-            if self.delta_exact {
-                for group in &entry.refs {
-                    self.changed_symbols.insert(group.id.clone());
-                }
-            }
             self.files.insert(path, entry);
         }
         // A departed file's retained answers go with it.
@@ -1173,7 +1136,6 @@ impl ReferenceIndex {
                     });
                 }
             }
-            entry.merged = true;
             for (id, bits) in &entry.spaces {
                 *spaces.entry(id.clone()).or_default() |= *bits;
             }
@@ -1216,8 +1178,6 @@ impl ReferenceIndex {
     /// One file's contribution: the retained binder-resolved half with the
     /// type-resolved half resolved now, or a whole scan.
     fn contribution(&mut self, env: &mut Env<'_>, file: P<SourceFile>) -> FileReferences {
-        self.next_serial += 1;
-        let serial = self.next_serial;
         if !self.retaining {
             self.retention.scanned_reference_files += 1;
             let aliases = self.no_aliases.get_or_insert_with(|| AliasNames {
@@ -1225,19 +1185,13 @@ impl ReferenceIndex {
                 global: std::sync::Arc::new(HashSet::new()),
             });
             let walk = Walk::run(env, file, aliases, None);
-            let (binder_groups, binder_spaces, binder_durable) = walk.binder.finish();
-            let (typed_groups, typed_spaces, typed_durable) = walk.typed.finish();
+            let (binder_groups, binder_spaces, _) = walk.binder.finish();
+            let (typed_groups, typed_spaces, _) = walk.typed.finish();
             let (refs, spaces) = merge_halves(
                 (&binder_groups, &binder_spaces),
                 (typed_groups, typed_spaces),
             );
-            return FileReferences {
-                refs,
-                spaces,
-                durable: binder_durable && typed_durable,
-                merged: false,
-                serial,
-            };
+            return FileReferences { refs, spaces };
         }
         let slot = self.binder_file(env, file);
         let record = self.records[slot]
@@ -1248,25 +1202,18 @@ impl ReferenceIndex {
             let walk = Walk::run(env, file, &aliases, Some(&retained.targets));
             if !walk.failed {
                 let typed = walk.typed.finish();
-                let typed_durable = typed.2;
                 let (refs, spaces) =
                     merge_halves((&retained.groups, &retained.spaces), (typed.0, typed.1));
                 record.refs = Some(retained);
                 self.retention.reused_reference_files += 1;
-                return FileReferences {
-                    refs,
-                    spaces,
-                    durable: typed_durable,
-                    merged: false,
-                    serial,
-                };
+                return FileReferences { refs, spaces };
             }
         }
         self.retention.scanned_reference_files += 1;
         let walk = Walk::run(env, file, &aliases, None);
         let targets = walk.targets;
         let (binder_groups, binder_spaces, binder_durable) = walk.binder.finish();
-        let (typed_groups, typed_spaces, typed_durable) = walk.typed.finish();
+        let (typed_groups, typed_spaces, _) = walk.typed.finish();
         let (refs, spaces) = merge_halves(
             (&binder_groups, &binder_spaces),
             (typed_groups, typed_spaces),
@@ -1287,13 +1234,7 @@ impl ReferenceIndex {
                 targets,
             });
         }
-        FileReferences {
-            refs,
-            spaces,
-            durable: binder_durable && typed_durable,
-            merged: false,
-            serial,
-        }
+        FileReferences { refs, spaces }
     }
 
     /// The retained entity symbol at `[start, end)` of `file`, if one was
@@ -1393,18 +1334,6 @@ impl ReferenceIndex {
         self.used.insert(id.clone());
     }
 
-    /// Go: `ChangedReferences` after `ensure`: the sorted changed symbols, or
-    /// `None` when the delta is not exact.
-    #[must_use]
-    pub fn changed(&self) -> Option<Vec<SymbolId>> {
-        if !self.delta_exact {
-            return None;
-        }
-        let mut ids: Vec<SymbolId> = self.changed_symbols.iter().cloned().collect();
-        ids.sort();
-        Some(ids)
-    }
-
     /// Go: `spaceFor`.
     pub fn space_for(&mut self, env: &mut Env<'_>, id: &SymbolId) -> ReferenceSpace {
         self.ensure(env);
@@ -1426,25 +1355,18 @@ impl ReferenceIndex {
     /// A whole scan of one file, retaining nothing (tests).
     #[cfg(test)]
     fn scan(&mut self, env: &mut Env<'_>, file: P<SourceFile>) -> FileReferences {
-        self.next_serial += 1;
         let aliases = AliasNames {
             file: std::sync::Arc::new(file_alias_names(file)),
             global: env.inputs.global_aliases(env.checker),
         };
         let walk = Walk::run(env, file, &aliases, None);
-        let (binder_groups, binder_spaces, binder_durable) = walk.binder.finish();
-        let (typed_groups, typed_spaces, typed_durable) = walk.typed.finish();
+        let (binder_groups, binder_spaces, _) = walk.binder.finish();
+        let (typed_groups, typed_spaces, _) = walk.typed.finish();
         let (refs, spaces) = merge_halves(
             (&binder_groups, &binder_spaces),
             (typed_groups, typed_spaces),
         );
-        FileReferences {
-            refs,
-            spaces,
-            durable: binder_durable && typed_durable,
-            merged: false,
-            serial: self.next_serial,
-        }
+        FileReferences { refs, spaces }
     }
 }
 
@@ -1461,7 +1383,6 @@ impl ReferenceIndex {
             references: HashMap<SymbolId, Vec<Span>>,
             spaces: HashMap<SymbolId, u8>,
             unordered: HashSet<SymbolId>,
-            durable: bool,
         }
 
         fn visit(env: &mut Env<'_>, text: &str, node: P<Node>, scan: &mut Scan) {
@@ -1486,9 +1407,6 @@ impl ReferenceIndex {
                     let reference_id = env.id_for(symbol);
                     let canonical = env.canonical_symbol(symbol);
                     let id = env.id_for(canonical);
-                    if !durable_symbol_id(&id) || !durable_symbol_id(&reference_id) {
-                        scan.durable = false;
-                    }
                     let start = skip_trivia(text, node.pos().source_offset().unwrap_or(0));
                     let end = node.end().source_offset().unwrap_or(start);
                     let spans = scan.references.entry(id.clone()).or_default();
@@ -1514,7 +1432,6 @@ impl ReferenceIndex {
             references: HashMap::new(),
             spaces: HashMap::new(),
             unordered: HashSet::new(),
-            durable: true,
         };
         let text = file.text();
         file.as_node().for_each_child(&mut |child| {
@@ -1534,21 +1451,12 @@ impl ReferenceIndex {
         refs.sort_by(|left, right| left.id.cmp(&right.id));
         let mut spaces: Vec<(SymbolId, u8)> = scan.spaces.into_iter().collect();
         spaces.sort_by(|left, right| left.0.cmp(&right.0));
-        self.next_serial += 1;
-        FileReferences {
-            refs,
-            spaces,
-            durable: scan.durable,
-            merged: false,
-            serial: self.next_serial,
-        }
+        FileReferences { refs, spaces }
     }
 
-    /// Everything but the serial: the same groups, spans, spaces and
-    /// durability.
+    /// The same groups, spans and spaces.
     pub(crate) fn same_content(left: &FileReferences, right: &FileReferences) -> bool {
-        left.durable == right.durable
-            && left.spaces == right.spaces
+        left.spaces == right.spaces
             && left.refs.len() == right.refs.len()
             && left
                 .refs

@@ -1,7 +1,7 @@
 //! The demand closure (Go: `closure.go` and `semantic_demand.go`): one
-//! generation's fact table from a demand set, reusing every per-file
-//! contribution whose file stayed outside the affected set and whose demand
-//! run is unchanged (ADR 0001).
+//! generation's fact table from a demand set. Every table is computed afresh
+//! from the program and its demands (ADR 0364, 0367); only the backend's
+//! binder-level answers outlive it (ADR 0369).
 //!
 //! The table it returns is transport-only: it exists to be converted to the
 //! wire shape or diffed against its predecessor, and answers no per-location
@@ -18,34 +18,28 @@ use crate::contributions::RetainedContributionStore;
 use crate::demands::{DemandGroup, canonical_demand_run};
 use crate::gocompat::clean;
 use crate::model::SymbolId;
-use crate::symbols::intern::{INTERNER_RESET_SLACK, SharedInterner, SymbolInterner};
 use crate::trace::SharedTrace;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
+use typefacts::SymbolFact;
 use typefacts::producer::ProducerTable;
 use typefacts::v3::{EntityDemand, FileChange, ModuleGraphRequest, SymbolQuery};
-use typefacts::{AsyncFunctionFact, Location, SymbolFact};
 
 pub const ERR_GENERATION_MISMATCH: &str = "type facts generation mismatch";
 const ERR_CLOSED: &str = "closure project is closed";
 
-/// How much of a generation's demand closure was carried over from retained
-/// per-file contributions (Go: `ClosureRetention`).
+/// How much of a generation's table was carried over (Go: `ClosureRetention`).
+/// No demand contribution is (ADR 0364): `retained_files` stays on the wire at
+/// zero. The cached counts are the backend's binder-level reuse (ADR 0369).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ClosureRetention {
     pub retained_files: usize,
     pub recomputed_files: usize,
-    pub retained_async_files: usize,
-    pub recomputed_async_files: usize,
     pub non_durable_files: usize,
-    pub suppression_recompute: bool,
     pub cached_symbol_facts: usize,
     pub recomputed_symbol_facts: usize,
     pub cached_reference_facts: usize,
     pub recomputed_references: usize,
-    pub patched_symbol_rows: usize,
-    pub shared_symbol_chunks: usize,
-    pub stable_symbol_closure: bool,
 }
 
 /// The cost of one generation's closed fact table (Go: `ClosureStats`).
@@ -97,38 +91,13 @@ pub struct DemandClosure {
     /// automatically take the full diff path.
     pub(crate) previous_table: Option<ProducerTable>,
     pub(crate) transport_changed_paths: Option<HashSet<String>>,
-    /// Assigns every symbol this session reaches a dense stable handle, and
-    /// the seed snapshots indexed by those handles.
-    pub(crate) interner: Option<SharedInterner>,
-    pub(crate) last_roots: Option<Vec<bool>>,
-    pub(crate) last_full_roots: Option<Vec<bool>>,
-    pub(crate) last_full_tier: Option<Vec<bool>>,
     pub(crate) stats: ClosureStats,
     pub(crate) generation: u64,
     pub(crate) next_table_state_id: u64,
     pub(crate) closed: bool,
-    /// Immutable per-file contributions and the reverse indexes used to
-    /// invalidate exact dependents and structural-descriptor users.
+    /// The published contributions, until the packed transition owns their
+    /// rows.
     pub(crate) retained: RetainedContributionStore,
-    /// The preceding generation's structural-accessor union. A changed union
-    /// refreshes only paths named by the retained descriptor users.
-    pub(crate) last_suppression: Option<HashSet<SymbolId>>,
-    /// Reference lists whose presence is known (including known-empty lists).
-    pub(crate) symbol_references: Option<HashMap<SymbolId, Vec<Location>>>,
-    /// Durable canonical facts by clean declaring path, so `update` evicts an
-    /// affected set by looking up its paths instead of scanning every retained
-    /// fact. Every canonical-store change goes through `index_symbol_fact` /
-    /// `unindex_symbol_fact`.
-    pub(crate) symbols_by_path: HashMap<String, Vec<SymbolId>>,
-    /// Every previously reached durable fact evicted by accepted source
-    /// updates, and whether that evidence covered the entire preceding
-    /// canonical store.
-    pub(crate) invalidated_symbols: HashSet<SymbolId>,
-    pub(crate) symbol_memo_complete: bool,
-    /// Complete durable async-function contributions by demand path. Exact
-    /// changed-path manifests let ordinary edits query only changed files;
-    /// cross-file selections fall back to a full async batch.
-    pub(crate) async_files: Option<HashMap<String, Vec<AsyncFunctionFact>>>,
 }
 
 impl DemandClosure {
@@ -142,21 +111,11 @@ impl DemandClosure {
             table: None,
             previous_table: None,
             transport_changed_paths: None,
-            interner: None,
-            last_roots: None,
-            last_full_roots: None,
-            last_full_tier: None,
             stats: ClosureStats::default(),
             generation: 1,
             next_table_state_id: 0,
             closed: false,
             retained: RetainedContributionStore::default(),
-            last_suppression: None,
-            symbol_references: None,
-            symbols_by_path: HashMap::new(),
-            invalidated_symbols: HashSet::new(),
-            symbol_memo_complete: false,
-            async_files: None,
         }
     }
 
@@ -207,47 +166,15 @@ impl DemandClosure {
         self.reset_analysis_state();
     }
 
-    /// Records a retained fact under each clean declaring path. Callers pair
-    /// it with every durable insert into the canonical symbol store.
-    pub fn index_symbol_fact(&mut self, fact: &SymbolFact) {
-        for declaration in fact.declarations.iter() {
-            let ids = self
-                .symbols_by_path
-                .entry(declaration.location.path.to_string())
-                .or_default();
-            if !ids.contains(&fact.id) {
-                ids.push(fact.id.clone());
-            }
-        }
-    }
-
-    /// Removes a retained fact from the path index. Callers must pair it with
-    /// every canonical deletion, passing the fact being removed.
-    pub fn unindex_symbol_fact(&mut self, fact: &SymbolFact) {
-        for declaration in fact.declarations.iter() {
-            let path = declaration.location.path.as_ref();
-            let Some(ids) = self.symbols_by_path.get_mut(path) else {
-                continue;
-            };
-            if let Some(index) = ids.iter().position(|existing| *existing == fact.id) {
-                ids.remove(index);
-            }
-            if ids.is_empty() {
-                self.symbols_by_path.remove(path);
-            }
-        }
-    }
-
     /// Applies editor overlays and advances exactly one generation, even when
     /// the backend reports no affected source files.
     ///
     /// Every type-derived answer is recomputed: a retained answer is reusable
     /// only if everything it read is unchanged, and an answer computed
     /// through the checker's types can depend on what the checker computed
-    /// before (ADR 0364). So the demand contributions, async facts, suppression
-    /// union and the backend's source-fact memo and identity maps are
-    /// discarded, and the next table is computed as a fresh program would
-    /// compute it. What stays is the program itself (incremental reuse inside
+    /// before (ADR 0364). So the demand contributions and the backend's
+    /// source-fact memo and identity maps are discarded, and the next table is
+    /// computed as a fresh program would compute it. What stays is the program itself (incremental reuse inside
     /// the backend), the previous table, which only the transport delta
     /// compares against, and the backend's binder-level answers, each with the
     /// digests it read (ADR 0369). Every changed path plus the affected set is
@@ -272,18 +199,12 @@ impl DemandClosure {
     }
 
     /// Drops what earlier analysis left behind and a table could otherwise
-    /// reuse: demand contributions, async facts, the suppression union, and the
-    /// backend's memo, reference index and id maps. The previous table stays
-    /// (it only feeds the transport delta), and so do the backend's binder-level
-    /// answers, which check their own dependencies (ADR 0369).
+    /// reuse: demand contributions, and the backend's memo, reference index and
+    /// id maps. The previous table stays (it only feeds the transport delta),
+    /// and so do the backend's binder-level answers, which check their own
+    /// dependencies (ADR 0369).
     fn discard_derived_state(&mut self) {
-        self.symbols_by_path = HashMap::new();
-        self.symbol_references = None;
-        self.invalidated_symbols = HashSet::new();
-        self.symbol_memo_complete = false;
         self.retained.reset();
-        self.async_files = None;
-        self.last_suppression = None;
         self.backend.discard_derived_state();
     }
 
@@ -297,17 +218,7 @@ impl DemandClosure {
         self.table = None;
         self.previous_table = None;
         self.transport_changed_paths = None;
-        self.symbol_references = None;
-        self.symbols_by_path = HashMap::new();
         self.retained.reset();
-        self.last_suppression = None;
-        self.async_files = None;
-        self.interner = None;
-        self.last_roots = None;
-        self.last_full_roots = None;
-        self.last_full_tier = None;
-        self.invalidated_symbols = HashSet::new();
-        self.symbol_memo_complete = false;
     }
 
     /// Drops every derived analysis cache after a materialized table failed to
@@ -390,26 +301,6 @@ impl DemandClosure {
         self.backend.changed_references(ctx)
     }
 
-    /// Replaces the interner once dead identities outnumber the live symbol
-    /// universe, using the preceding table's canonical symbol count as the
-    /// liveness estimate. A session that keeps minting identities the closure
-    /// never sees again would otherwise grow it without bound; handles carry
-    /// no meaning across generations. Called between generations only, never
-    /// while a build holds handles (Go: `maybeResetInterner`).
-    pub fn maybe_reset_interner(&mut self, live_symbols: usize) {
-        let stale = self.interner.as_ref().is_none_or(|interner| {
-            interner.borrow().size() > 2 * live_symbols + INTERNER_RESET_SLACK
-        });
-        if stale {
-            self.interner = Some(SymbolInterner::new_shared());
-            // Seed snapshots are indexed by this interner's handles and cannot
-            // cross an interner replacement.
-            self.last_roots = None;
-            self.last_full_roots = None;
-            self.last_full_tier = None;
-        }
-    }
-
     /// The retained-v3 interface. `changed_paths` must name every run replaced
     /// or removed since the preceding successful call. `update` contributes
     /// source-affected paths independently, so callers only add demand-set
@@ -465,7 +356,6 @@ impl DemandClosure {
             }
             let invalidated: HashSet<String> =
                 changed_paths.iter().map(|path| clean(path)).collect();
-            self.retained.discard(&invalidated);
             self.transport_changed_paths
                 .get_or_insert_with(|| HashSet::with_capacity(invalidated.len()))
                 .extend(invalidated);
@@ -556,8 +446,6 @@ impl DemandClosure {
                         "recomputedReferences",
                         count(retention.recomputed_references),
                     ),
-                    ("patchedSymbolRows", count(retention.patched_symbol_rows)),
-                    ("sharedSymbolChunks", count(retention.shared_symbol_chunks)),
                 ],
             );
             trace.metrics(
@@ -565,10 +453,6 @@ impl DemandClosure {
                 &[
                     ("retained", count(retention.retained_files)),
                     ("recomputed", count(retention.recomputed_files)),
-                    (
-                        "suppressionRecompute",
-                        i64::from(retention.suppression_recompute),
-                    ),
                 ],
             );
         }

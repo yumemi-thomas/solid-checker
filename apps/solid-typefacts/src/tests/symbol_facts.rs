@@ -13,7 +13,7 @@ use super::project_support::{
 };
 use crate::backend::ClosureBackend;
 use crate::context::Context;
-use crate::model::{SemanticDemandRun, SemanticScope, durable_symbol_id};
+use crate::model::{SemanticDemandRun, durable_symbol_id};
 use std::collections::HashSet;
 use typefacts::v3::EntityDemand;
 use typefacts::{ReferenceSpace, SymbolClaim};
@@ -96,10 +96,6 @@ fn semantic_demand_runs_reject_a_cross_file_query_location() {
         symbol: true,
         ..EntityDemand::default()
     }];
-    let suppression = HashSet::new();
-    let scope = SemanticScope {
-        suppression: &suppression,
-    };
     let error = project
         .semantic_demand_runs(
             &Context::new(),
@@ -107,7 +103,6 @@ fn semantic_demand_runs_reject_a_cross_file_query_location() {
                 path: &run_path,
                 demands: &demands,
             }],
-            &scope,
         )
         .unwrap_err();
     assert!(
@@ -184,27 +179,23 @@ fn every_demanded_family_is_answered_and_none_is_counted_unavailable() {
     assert!(facts[1].call_result_domain.is_some());
 }
 
-/// A suppressed structural symbol keeps no descriptor; any other entity's
-/// descriptor is its own location's type.
+/// A structural accessor the batch itself demands keeps no descriptor; any
+/// other entity's descriptor is its own location's type.
 #[test]
-fn the_scope_suppresses_structural_symbols() {
+fn a_batch_structural_accessor_keeps_no_descriptor() {
     let source = "export const value = 1;\nexport const other = 2;\n";
     let scratch = Scratch::new(&[("tsconfig.json", STRICT), ("a.ts", source)]);
     let path = scratch.path("a.ts");
     let mut project = scratch.open();
     let value = find(&path, source, "value");
     let other = find(&path, source, "other");
-    let other_id = project.symbol_at(&Context::new(), &other).unwrap();
-    let suppression = HashSet::from([other_id]);
-    let scope = SemanticScope {
-        suppression: &suppression,
-    };
     let demands: Vec<EntityDemand> = [&value, &other]
         .into_iter()
         .map(|location| EntityDemand {
             location: location.clone(),
             symbol: true,
             type_descriptor: true,
+            structural_accessor: *location == other,
             ..EntityDemand::default()
         })
         .collect();
@@ -215,7 +206,6 @@ fn the_scope_suppresses_structural_symbols() {
                 path: &path,
                 demands: &demands,
             }],
-            &scope,
         )
         .unwrap();
     let result = &results[0];
@@ -250,10 +240,6 @@ fn a_descriptor_depends_on_its_location_only() {
         type_descriptor: true,
         ..EntityDemand::default()
     };
-    let suppression = HashSet::new();
-    let scope = SemanticScope {
-        suppression: &suppression,
-    };
     for order in [[narrowed, declared], [declared, narrowed]] {
         let mut project = scratch.open();
         let demands: Vec<EntityDemand> = order.iter().map(|&start| at(start)).collect();
@@ -264,7 +250,6 @@ fn a_descriptor_depends_on_its_location_only() {
                     path: &path,
                     demands: &demands,
                 }],
-                &scope,
             )
             .unwrap();
         let entities = &results[0].entities;

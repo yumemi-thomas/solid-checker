@@ -11,7 +11,6 @@
 //! "cycling" and answers unknown), keyed by type address.
 
 use crate::project::declarations_for_symbol;
-use crate::semantic_runs::Evidence;
 use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -599,18 +598,9 @@ pub fn array_shape_of_type(checker: &mut Checker, value: P<Type>) -> ArrayShape 
     }
 }
 
-/// Go: `arrayShapeAtLocked`: the type of exactly the demanded expression. The
-/// classification can turn on a type declared in another file (an imported
-/// tuple alias), so the descriptor's alias declarations are recorded as
-/// dependencies.
-pub fn array_shape_at(
-    checker: &mut Checker,
-    memo: &mut DescriptorMemo,
-    evidence: &mut Evidence,
-    node: P<Node>,
-) -> ArrayShape {
+/// Go: `arrayShapeAtLocked`: the type of exactly the demanded expression.
+pub fn array_shape_at(checker: &mut Checker, node: P<Node>) -> ArrayShape {
     let value = checker.get_type_at_location(node);
-    evidence.descriptor(Some(&memo.descriptor(checker, value)));
     array_shape_of_type(checker, value)
 }
 
@@ -628,12 +618,7 @@ struct Tuple {
 /// `None` when that type does not resolve to one. A union answers when every
 /// constituent that can hold a value is a tuple; the result is their
 /// conservative meet. Nullish constituents carry no structure and are skipped.
-pub fn tuple_shape_at(
-    checker: &mut Checker,
-    memo: &mut DescriptorMemo,
-    evidence: &mut Evidence,
-    node: P<Node>,
-) -> Option<TupleShape> {
+pub fn tuple_shape_at(checker: &mut Checker, node: P<Node>) -> Option<TupleShape> {
     let value = checker.get_type_at_location(node);
     if value.flags().intersects(OPEN_ARRAY_SHAPE) {
         return None;
@@ -656,7 +641,6 @@ pub fn tuple_shape_at(
         });
     }
     let merged = merged?;
-    evidence.descriptor(Some(&memo.descriptor(checker, value)));
     TupleShape::for_producer(
         merged.fixed_length,
         merged.has_rest,
@@ -750,8 +734,6 @@ fn minimum_parameter_count(checker: &mut Checker, value: P<Type>) -> u32 {
 pub fn library_types_at(
     checker: &mut Checker,
     program: &Program,
-    memo: &mut DescriptorMemo,
-    evidence: &mut Evidence,
     node: P<Node>,
 ) -> Option<Vec<Arc<str>>> {
     let value = checker.get_type_at_location(node);
@@ -762,7 +744,6 @@ pub fn library_types_at(
     if names.is_empty() {
         return None;
     }
-    evidence.descriptor(Some(&memo.descriptor(checker, value)));
     Some(names.into_iter().map(Arc::from).collect())
 }
 

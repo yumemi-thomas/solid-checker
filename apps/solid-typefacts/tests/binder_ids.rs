@@ -10,7 +10,12 @@ use solid_typefacts::project::Project;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use typefacts::Location;
+
+/// Fixtures alive in the process: the shared root is removed when the last one
+/// drops, also when its test panics.
+static LIVE: AtomicUsize = AtomicUsize::new(0);
 
 /// Serialises the tests: the private-name test counts process-wide symbols.
 static SERIAL: Mutex<()> = Mutex::new(());
@@ -127,6 +132,7 @@ impl Fixture {
         {
             std::fs::write(root.join(name), text).unwrap();
         }
+        LIVE.fetch_add(1, Ordering::SeqCst);
         Self { root }
     }
 
@@ -397,4 +403,12 @@ fn private_name_ids_survive_the_checker_counters() {
         assert_eq!(got[label], base[label], "{label}");
     }
     assert_eq!(got, base);
+}
+
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        if LIVE.fetch_sub(1, Ordering::SeqCst) == 1 {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
 }

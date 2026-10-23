@@ -119,7 +119,7 @@ fn session_transfers_expanded_rows_and_keeps_sparse_incremental_proof() {
         let contribution = session.closure().retained().get(SOURCE).expect("retained");
         let contribution = contribution.borrow();
         assert!(
-            contribution.entities.is_none() && !contribution.roots.is_empty(),
+            contribution.entities.is_none(),
             "retained contribution did not transfer rows: {contribution:?}"
         );
     }
