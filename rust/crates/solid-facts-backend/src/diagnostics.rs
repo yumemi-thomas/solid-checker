@@ -454,6 +454,7 @@ impl DiagnosticSession {
                     })
             {
                 finding.kind = "uncertifiable".into();
+                soften_strict_read_hint(&mut finding.hint);
                 finding.message.push_str(
                     "; this code is in an instance field initializer, which runs when an instance is constructed, so where it runs is not proven",
                 );
@@ -474,6 +475,7 @@ impl DiagnosticSession {
                 )
             {
                 finding.kind = "uncertifiable".into();
+                soften_strict_read_hint(&mut finding.hint);
                 finding.message.push_str(
                     "; this code is in a function that returns JSX but is also handed to code that may call it as a plain function, so whether it runs as a component is not proven",
                 );
@@ -495,6 +497,7 @@ impl DiagnosticSession {
                 )
             {
                 finding.kind = "uncertifiable".into();
+                soften_strict_read_hint(&mut finding.hint);
                 finding.message.push_str(
                     "; this code runs in a component only `Dynamic` renders, which calls it with no strict-read window, so the claim is not proven",
                 );
@@ -606,6 +609,20 @@ pub fn analyze_project_inputs_measured_with_enablement(
 /// Drops the findings of disabled rules. Returns the dropped findings of
 /// coverage rules (`RuleMetadata::uncertifiable`: SC9005, SC9011, SC9012),
 /// which report where the analysis is incomplete rather than a defect.
+
+/// A finding demoted to uncertifiable keeps its rule's hint, whose last
+/// sentence asserts the dev warning fires. The may-warn wording the rule
+/// uses for its own uncertifiable findings replaces it, so a demoted hint
+/// does not contradict the demotion (`strict_read_hint` in
+/// `rust/dialects/solid-v2/rules/src/lib.rs` owns both sentences).
+fn soften_strict_read_hint(hint: &mut String) {
+    const WARNS: &str = "Solid warns STRICT_READ_UNTRACKED here in dev.";
+    const MAY_WARN: &str = "If this read executes untracked in dev, Solid warns STRICT_READ_UNTRACKED for it; this finding does not establish that it does, so confirm the read's actual execution and tracking status before relying on that warning.";
+    if hint.contains(WARNS) {
+        *hint = hint.replace(WARNS, MAY_WARN);
+    }
+}
+
 fn retain_enabled(
     dialect: &Dialect,
     options: &RuleOptions,

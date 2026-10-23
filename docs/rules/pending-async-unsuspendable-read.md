@@ -28,6 +28,13 @@ body's strict-read window it throws `PENDING_ASYNC_UNTRACKED_READ` in dev, and
 invoked later it throws a plain `NotReadyError` (probed on rc.3 and rc.9), and
 the checker does not prove which.
 
+A component only `Dynamic` renders has no strict-read window: rc.17's
+`dynamicCore` calls it as `untrack(() => component(props))` with no label, and
+only a labeled `untrack` installs the window (ADR 0138, 0334). A TanStack route
+component renders that way too. A pending read directly in such a body cannot
+throw `PENDING_ASYNC_UNTRACKED_READ`, so the claim there is uncertifiable unless a
+tag also renders the component (fixture `component-identity-renders`).
+
 A callback stored by assignment inside a component also has an open invocation
 context. Lexical nesting alone does not prove it runs during the component's
 strict-read window. These reads are uncertifiable; their wording does not
