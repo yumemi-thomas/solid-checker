@@ -57,7 +57,7 @@ not-found until a location scan mints it. Module-visible target symbols use a
 canonical declaring-path/name identity; other durable symbols include their
 declaration span. Within one generation the first symbol to claim a declaration
 takes its hash ID and later ones (instantiations, copies) get counters, so
-answers are reused only inside a generation and never across an update. The
+a table build discards earlier answers, so none are reused inside a generation or across an update. The
 compiler's incremental program is still reused.
 
 ## Native integration pins

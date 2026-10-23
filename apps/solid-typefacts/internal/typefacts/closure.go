@@ -328,6 +328,41 @@ func (p *DemandClosure) Close() error {
 	return p.backend.Close()
 }
 
+// derivedStateDiscarder is implemented by backends that keep answers or id
+// claims derived from earlier queries (the source-fact memo, reference
+// contributions, the claims of symbol ids). The program and its checker stay.
+type derivedStateDiscarder interface {
+	DiscardDerivedState()
+}
+
+// discardDerivedStateLocked drops what earlier analysis left behind and a
+// table could otherwise reuse: demand contributions, async facts, the
+// suppression union, root sets, the symbol maps and the backend's memo,
+// reference contributions and id claims (ADR 0364). A table is built from
+// nothing but the program and its demands, so ids that two symbols contend for
+// (a declaration hash, a transient copy of a member) go to whichever symbol the
+// table's own demands reach first, however earlier tables were ordered. The
+// previous table stays: it is only the transport's diff base.
+func (p *DemandClosure) discardDerivedStateLocked() {
+	p.symbolReferences = nil
+	p.symbolsByPath = nil
+	p.symbolScratch = nil
+	p.retained.reset()
+	p.retainedPathScratch = nil
+	p.lastSuppression = nil
+	p.suppressionScratch = nil
+	p.descriptorSeedScratch = nil
+	p.asyncFiles = nil
+	p.lastRoots = nil
+	p.lastFullRoots = nil
+	p.lastFullTier = nil
+	p.invalidatedSymbols = nil
+	p.symbolMemoComplete = false
+	if discarder, ok := p.backend.(derivedStateDiscarder); ok {
+		discarder.DiscardDerivedState()
+	}
+}
+
 func (p *DemandClosure) resetAnalysisStateLocked() {
 	p.table = nil
 	p.previousTable = nil

@@ -155,11 +155,10 @@ func TestSuppressionFlipReachesTheTransportDelta(t *testing.T) {
 		t.Fatal(err)
 	}
 	stats := incremental.Stats()
-	if !stats.Retention.SuppressionRecompute {
-		t.Fatalf("the flip did not trigger a suppression recompute; retention = %+v", stats.Retention)
-	}
-	if stats.Retention.RetainedFiles == 0 {
-		t.Fatalf("the flip retained no files, so nothing was at risk; retention = %+v", stats.Retention)
+	// ADR 0364: every table build discards derived state, so the flip is
+	// answered by a whole recompute, not a suppression refresh of retained files.
+	if stats.Retention.RetainedFiles != 0 || stats.Retention.SuppressionRecompute {
+		t.Fatalf("the flip reused retained state; retention = %+v", stats.Retention)
 	}
 
 	// A fresh whole-batch run at the same generation with the same demands.

@@ -306,6 +306,31 @@ func (p *project) ReleaseAnalysisState() {
 	p.referenceIndex.releaseAnalysisState()
 }
 
+// DiscardDerivedState forgets every answer and identity claim derived from
+// earlier queries: the source-fact memo, the reference contributions, the
+// claims of symbol ids and the durable declaration refs they recorded. The
+// program, its checker and the exported identities of the update stay, so the
+// next table mints ids from the demands it is given and nothing else (ADR 0364).
+func (p *project) DiscardDerivedState() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return
+	}
+	clear(p.idsBySymbol)
+	clear(p.symbolsByID)
+	clear(p.durableRefs)
+	clear(p.sourceFactsMemo)
+	p.referenceIndex.reset()
+	// Resolved-call declarations, parameters and descriptors embed the ids
+	// they were first answered with.
+	p.resolvedDeclarations = nil
+	p.resolvedParameters = nil
+	p.callDiagnostics = nil
+	p.typeDescriptors = nil
+	p.nextSymbol = 0
+}
+
 func buildProgram(ctx context.Context, configPath string, fs vfs.FS) (*compiler.Program, *checker.Checker, func(), error) {
 	cwd := typeScriptPathDir(configPath)
 	host := compiler.NewCompilerHost(cwd, fs, bundled.LibPath(), nil, nil)

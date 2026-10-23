@@ -411,3 +411,72 @@ func TestReferenceSpaceAfterSpanShiftMatchesFresh(t *testing.T) {
 		}
 	}
 }
+
+// Within one generation the ids a table carries must not depend on the order
+// the demands arrived in: a demand set that grows (b.ts joins) is answered as
+// a fresh closure answers the whole set, durable ids exactly. Mirrors the Rust
+// producer's ids_within_a_generation_do_not_depend_on_demand_order.
+func TestIDsWithinAGenerationDoNotDependOnDemandOrder(t *testing.T) {
+	ctx := context.Background()
+	files := map[string]string{
+		"tsconfig.json": strictConfig,
+		"a.ts":          "declare const xs: string[];\nexport const ma = xs.map((x) => x);\n",
+		"b.ts":          "declare const ys: number[];\nexport const mb = ys.map((y) => y);\n",
+		"c.ts":          "export const c = 1;\n",
+	}
+	root, _ := writeAdversarialProject(t, files)
+	projectID := filepath.Join(root, "tsconfig.json")
+	for _, families := range []demandFamilies{allFamilies, symbolsOnly} {
+		for _, first := range []string{"a.ts", "b.ts"} {
+			t.Run(fmt.Sprintf("families%d/%s", families, first), func(t *testing.T) {
+				fresh := openRetentionSession(t, projectID).closure
+				all := textDemands(t, fresh, families)
+				whole, err := fresh.DemandTableForGroups(ctx, 1, canonicalDemandGroups(all), nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := renameCounters(describeEntities(whole))
+
+				growing := openRetentionSession(t, projectID).closure
+				all = textDemands(t, growing, families)
+				firstPath := filepath.Join(root, first)
+				var only, rest []typefacts.EntityDemand
+				for _, demand := range all {
+					if filepath.Clean(demand.Location.Path) == filepath.Clean(firstPath) {
+						only = append(only, demand)
+					} else {
+						rest = append(rest, demand)
+					}
+				}
+				if _, err := growing.DemandTableForGroups(ctx, 1, groupedDemands(only), demandPaths(only)); err != nil {
+					t.Fatal(err)
+				}
+				grown, err := growing.DemandTableForGroups(ctx, 1, groupedDemands(all), demandPaths(rest))
+				if err != nil {
+					t.Fatal(err)
+				}
+				got := renameCounters(describeEntities(grown))
+				if report := reportDifference("entity rows", got, want); report != "" {
+					t.Fatalf("a demand set that grew within the generation differs from a fresh whole batch\n%s", report)
+				}
+
+				reversed := openRetentionSession(t, projectID).closure
+				rev := textDemands(t, reversed, families)
+				for i, j := 0, len(rev)-1; i < j; i, j = i+1, j-1 {
+					rev[i], rev[j] = rev[j], rev[i]
+				}
+				table, err := reversed.DemandTableForGroups(ctx, 1, groupedDemands(rev), nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				rows := describeEntities(table)
+				expected := describeEntities(whole)
+				sort.Strings(rows)
+				sort.Strings(expected)
+				if report := reportDifference("reversed-order rows", renameCounters(rows), renameCounters(expected)); report != "" {
+					t.Fatalf("demand order changed the ids of a generation\n%s", report)
+				}
+			})
+		}
+	}
+}

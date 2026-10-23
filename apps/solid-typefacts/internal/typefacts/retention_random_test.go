@@ -798,11 +798,36 @@ func runSeed(t *testing.T, seed uint64, steps, modules int, plain bool) int {
 		if kept := incremental.closure.Stats().Retention.RetainedFiles; kept != 0 {
 			t.Fatalf("seed %d step %d: an update retained %d files", seed, step, kept)
 		}
-		// Within one generation, answers may be reused: a second analyze that
-		// names only one path as changed (the rest reuse this generation's
-		// contributions) must still equal a whole-batch run.
+		// Within one generation a second analyze that names only one path as
+		// changed must still equal a whole-batch run (and reuses nothing).
 		demands := textDemands(t, incremental.closure, allFamilies)
 		paths := demandPaths(demands)
+		var grown []string
+		if len(paths) > 1 {
+			// The demand set shrinks to a random subset and grows back within
+			// the generation: each table is a function of its demands alone,
+			// so the grown table's durable ids equal a fresh whole batch's
+			// exactly (counters up to renaming).
+			subset := demands[:0:0]
+			skipped := paths[r.below(len(paths))]
+			for _, demand := range demands {
+				if filepath.Clean(demand.Location.Path) != skipped {
+					subset = append(subset, demand)
+				}
+			}
+			if _, err := incremental.closure.DemandTableForGroups(ctx, generation, groupedDemands(subset), paths); err != nil {
+				t.Fatalf("seed %d step %d: subset analyze: %v", seed, step, err)
+			}
+			regrown, err := incremental.closure.DemandTableForGroups(ctx, generation, groupedDemands(demands), []string{skipped})
+			if err != nil {
+				t.Fatalf("seed %d step %d: regrown analyze: %v", seed, step, err)
+			}
+			retainedTotal += incremental.closure.Stats().Retention.RetainedFiles
+			renamer := counterRenamer{}
+			for _, line := range describeEntities(regrown) {
+				grown = append(grown, renamer.apply(line))
+			}
+		}
 		if len(paths) != 0 {
 			again, err := incremental.closure.DemandTableForGroups(
 				ctx, generation, groupedDemands(demands), []string{paths[r.below(len(paths))]})
@@ -844,6 +869,11 @@ func runSeed(t *testing.T, seed uint64, steps, modules int, plain bool) int {
 				failures = append(failures, report)
 			}
 		}
+		if grown != nil {
+			if report := reportDifference("regrown-demand entity rows", grown, whole.lines); report != "" {
+				failures = append(failures, report)
+			}
+		}
 		if retained.modules != whole.modules {
 			failures = append(failures, "module graph differs")
 		}
@@ -871,7 +901,9 @@ func TestSeededRandomEditSequencesOverRetainableFilesMatchFresh(t *testing.T) {
 	for seed := from; seed < to; seed++ {
 		retained += runSeed(t, seed, randomSteps(t), 8, true)
 	}
-	if retained == 0 {
-		t.Fatal("no same-generation analyze reused a file; the within-generation oracle is vacuous")
+	// ADR 0364: every table build discards derived state, so no same-generation
+	// analyze reuses a file.
+	if retained != 0 {
+		t.Fatalf("same-generation analyzes reused %d files; each table build discards derived state", retained)
 	}
 }
