@@ -449,6 +449,7 @@ fn rust_pipeline_breakdown(
         "interproceduralGraphReusedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.interprocedural_graph_reused_files).collect()),
         "interproceduralGraphRecomputedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.interprocedural_graph_recomputed_files).collect()),
         "interproceduralResultReusedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.interprocedural_result_reused_files).collect()),
+        "interproceduralExportWork": distribution(samples.iter().map(|timing| timing.reactive_ir.interprocedural_export_work).collect()),
         "interproceduralResultRecomputedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.interprocedural_result_recomputed_files).collect()),
         "reactiveIr": {
             "indexesAndReachability": durations(|timing| timing.reactive_ir.indexes_and_reachability),

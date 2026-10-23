@@ -1311,6 +1311,11 @@ pub struct BuildTimings {
     pub interprocedural_graph_recomputed_files: u64,
     pub interprocedural_result_reused_files: u64,
     pub interprocedural_result_recomputed_files: u64,
+    /// Deterministic work units of export aggregation (node visits per
+    /// discovery round, leaf evaluations, exported properties examined): a
+    /// count, so unlike the phase's wall time it does not depend on the
+    /// machine. See `StructuredReturnDiscovery::work`.
+    pub interprocedural_export_work: u64,
     pub typescript_indexes_reused: bool,
     pub reachability_reused: bool,
     pub reachability_reused_files: u64,
