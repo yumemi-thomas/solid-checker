@@ -9,7 +9,7 @@ declare const api: Api;
 
 // Each helper hands its parameter on to a callee with no analyzed body:
 // `observe(count)` or `fn(count)` written here is SC9011, and so is the call
-// through the helper (ADR 0369).
+// through the helper (ADR 0370).
 function watch(source: () => number): void {
   observe(source);
 }

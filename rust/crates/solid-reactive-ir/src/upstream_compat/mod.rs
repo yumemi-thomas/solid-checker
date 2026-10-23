@@ -669,7 +669,7 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// reactive behaviour nothing in the analysis knows.
     pub(super) prefer_for_enabled: bool,
     pub(super) prefer_show_enabled: bool,
-    /// ADR 0369: analyzed functions' parameters that reach an undescribed
+    /// ADR 0370: analyzed functions' parameters that reach an undescribed
     /// callee, for `reactive-source-uncaptured` at their callers.
     pub(super) forwarded_uncaptured: shared_reactivity::ForwardedUncaptured,
 }

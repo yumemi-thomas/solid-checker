@@ -769,7 +769,7 @@ pub enum StaticDefectKind {
     ReactiveSourceUncaptured {
         source: String,
         callee: String,
-        /// ADR 0369: the analyzed function the source is passed to, when
+        /// ADR 0370: the analyzed function the source is passed to, when
         /// that function hands its parameter on to `callee`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         through: Option<String>,

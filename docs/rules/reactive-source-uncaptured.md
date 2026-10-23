@@ -20,7 +20,7 @@ nothing has been proven wrong — not an exemption from the certification gate.
 A source passed to an analyzed function (project code or a package analyzed
 from source) is reported at that argument when the function hands its
 parameter, or a binding initialized with it, to such a callee: directly, in a
-closure, or through further analyzed functions (ADR 0369). The message names
+closure, or through further analyzed functions (ADR 0370). The message names
 both functions. A destructured parameter or a callback parameter called with
 the source is SC9012 instead.
 

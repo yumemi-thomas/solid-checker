@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import { exact, forwarded, shadowed } from "dep-run";
 
-// Negative for ADR 0369: each package function's callee is exactly resolved
+// Negative for ADR 0370: each package function's callee is exactly resolved
 // or receives another binding; nothing is reported.
 export function Panel() {
   const [count] = createSignal(1);

@@ -126,7 +126,7 @@ fn reactive_source_uncaptured(
         }
         // A call the engine resolved into the project has a body it already
         // walked; that body is reported here only where it hands the
-        // parameter on to an undescribed callee (ADR 0369).
+        // parameter on to an undescribed callee (ADR 0370).
         if let Some((callee_file, callee)) = context
             .lookup
             .function_called_at(file.path.as_str(), call.callee)
@@ -239,7 +239,7 @@ fn may_invoke_argument(resolved_call: &typefacts::ResolvedCall, argument_index: 
         != Some(RuntimeArgumentBehavior::ValueOnly)
 }
 
-/// ADR 0369: a proven source passed to an analyzed function (project or
+/// ADR 0370: a proven source passed to an analyzed function (project or
 /// selected package source) whose parameter at that position reaches, as a
 /// bare reference, the argument of an undescribed callee. Written in the
 /// caller, that inner call is this rule's finding; one function in between
@@ -289,7 +289,7 @@ fn forwarded_source_uncaptured(
 
 const FORWARDED_PARAMETER: &str = "forwarded-parameter";
 
-/// ADR 0369: the parameters of analyzed functions (project files and
+/// ADR 0370: the parameters of analyzed functions (project files and
 /// selected package source alike) that reach an undescribed callee.
 ///
 /// A parameter is reached when a bare reference to it or to a binding
