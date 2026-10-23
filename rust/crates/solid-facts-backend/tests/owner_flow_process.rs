@@ -93,14 +93,15 @@ fn helper_event_edits_match_cold() {
     let first = session.analyze().unwrap();
     check("initial", &first, true);
     // The helper stops returning an event handler, calls the callback in its
-    // own body as well (an owned run: mixed, refused), and goes back.
+    // own body as well (an owned run beside the event run: ADR 0363 reports
+    // the event run), and goes back.
     for (version, (text, expected)) in [
         (LIB_NOT_EVENT, false),
         (LIB_EVENT, true),
         (LIB_DISPATCH, false),
         (LIB_EVENT, true),
         (LIB_HOMONYM, true),
-        (LIB_BODY, false),
+        (LIB_BODY, true),
         (LIB_EVENT, true),
     ]
     .into_iter()

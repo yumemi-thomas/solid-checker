@@ -770,6 +770,8 @@ pub(super) struct SemanticLookup<'a> {
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
+    /// ADR 0363: the literals with an event edge and a non-event invocation.
+    mixed_event_literals: OnceLock<HashMap<(String, Span), crate::execution_role::EventEdge>>,
     /// ADR 0361: what the project's synchronous DOM dispatches can reach.
     event_delivery: OnceLock<event_delivery::EventDelivery>,
     /// ADR 0362: whether a call may run `flush` from an owned scope.
@@ -1003,6 +1005,7 @@ impl<'a> SemanticLookup<'a> {
             identity_wrappers: OnceLock::new(),
             invocation_flow_answers: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
+            mixed_event_literals: OnceLock::new(),
             event_delivery: OnceLock::new(),
             flush_may_run_applies_owned: OnceLock::new(),
             objects_assigned_into: OnceLock::new(),
@@ -1429,11 +1432,15 @@ impl<'a> SemanticLookup<'a> {
                 if let Some(targets) = targets {
                     let mut targets = targets.iter().collect::<Vec<_>>();
                     targets.sort_unstable();
-                    for (path, span) in targets {
-                        hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                        hasher.update(path.as_bytes());
-                        hasher.update(span.start.to_le_bytes());
-                        hasher.update(span.end.to_le_bytes());
+                    for held in targets {
+                        for value in [&held.key, &held.path] {
+                            hasher.update(
+                                u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes(),
+                            );
+                            hasher.update(value.as_bytes());
+                        }
+                        hasher.update(held.span.start.to_le_bytes());
+                        hasher.update(held.span.end.to_le_bytes());
                     }
                 }
             }
@@ -1490,6 +1497,19 @@ impl<'a> SemanticLookup<'a> {
                     hasher.update(path.as_bytes());
                     hasher.update(span.start.to_le_bytes());
                     hasher.update(span.end.to_le_bytes());
+                }
+                // ADR 0363: and the mixed-invocation seeds, with the edge each
+                // finding is worded by.
+                let mut mixed = self.mixed_event_literals().iter().collect::<Vec<_>>();
+                mixed.sort_unstable_by(|left, right| left.0.cmp(right.0));
+                hasher.update(b"mixed-event-literals\0");
+                for ((path, span), edge) in mixed {
+                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(path.as_bytes());
+                    hasher.update(span.start.to_le_bytes());
+                    hasher.update(span.end.to_le_bytes());
+                    hasher.update(edge.describe().as_bytes());
+                    hasher.update([0]);
                 }
             }
             for (path, span) in component_keys {
@@ -1742,6 +1762,15 @@ impl<'a> SemanticLookup<'a> {
     pub(crate) fn event_invoked_literals(&self) -> &HashSet<(String, Span)> {
         self.event_invoked_literals
             .get_or_init(|| crate::execution_role::event_invoked_literals(self))
+    }
+
+    /// ADR 0363: the literals run both as a proven event handler and some other
+    /// way, for the owner seeds; see [`crate::execution_role::mixed_event_literals`].
+    pub(crate) fn mixed_event_literals(
+        &self,
+    ) -> &HashMap<(String, Span), crate::execution_role::EventEdge> {
+        self.mixed_event_literals
+            .get_or_init(|| crate::execution_role::mixed_event_literals(self))
     }
 
     pub(super) fn tuple_iteration_may_be_mutated(&self) -> bool {

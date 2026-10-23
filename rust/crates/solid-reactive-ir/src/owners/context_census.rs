@@ -197,7 +197,7 @@ pub(crate) fn provider_free_contexts(
 
 /// Whether an owner context holds an owner on every path: an owned bit, and no
 /// unowned bit (ADR 0352). A context with any unowned bit may run with no owner.
-pub(crate) const fn owned_on_every_path(context: u8) -> bool {
+pub(crate) const fn owned_on_every_path(context: u16) -> bool {
     context & OWNER_CONTEXT_UNOWNED == 0
         && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
 }

@@ -246,6 +246,7 @@ fn a_census_gap_makes_an_owner_requirement_uncertifiable_not_a_violation() {
         later_run_unowned: false,
         component_uncertain: false,
         after_await: false,
+        event_path: None,
         missing_jsx_census: false,
         through_dependency: None,
         report: true,
@@ -299,4 +300,63 @@ fn a_census_gap_makes_an_owner_requirement_uncertifiable_not_a_violation() {
     assert!(later.evidence[0].message.contains("only on its first run"));
     assert!(!later.message.contains("runWithOwner"));
     assert!(!later.message.contains("is exported"));
+}
+
+/// ADR 0363: a violation of a mixed-invocation callback's event run names the
+/// run, and never says the owner is unproven.
+#[test]
+fn a_mixed_invocation_violation_names_its_event_run() {
+    let metadata = RuleMetadata {
+        code: "SC4001",
+        name: "missing-owner",
+        severity: "error",
+        uncertifiable: false,
+        default_enabled: true,
+        presets: &[],
+    };
+    let requirement = OwnerRequirement {
+        operation: crate::OwnerRequirementOperation::Cleanup,
+        location: location(20),
+        uncertain: false,
+        runtime_uncertain: false,
+        caller_uncertain: false,
+        conditional_owner: false,
+        later_run_unowned: false,
+        component_uncertain: false,
+        after_await: false,
+        event_path: Some(
+            crate::execution_role::EventEdge {
+                attribute: "onClick".into(),
+                element: "button".into(),
+            }
+            .describe(),
+        ),
+        missing_jsx_census: false,
+        through_dependency: None,
+        report: true,
+    };
+    let finding = Finding::for_owner_requirement(
+        metadata,
+        &requirement,
+        "onCleanup is called without a reactive owner",
+        "Register it under a component or root.",
+    );
+    assert_eq!(finding.kind, "violation");
+    assert!(
+        finding
+            .message
+            .contains("when run as the `onClick` handler of `<button>`"),
+        "{}",
+        finding.message
+    );
+    assert!(
+        finding.evidence[0]
+            .message
+            .contains("the `onClick` handler of `<button>`")
+    );
+    assert!(
+        crate::execution_role::EventEdge::default()
+            .describe()
+            .contains("an event handler")
+    );
 }

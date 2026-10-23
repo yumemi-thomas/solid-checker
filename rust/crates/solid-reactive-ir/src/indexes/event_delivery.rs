@@ -83,6 +83,46 @@ impl SemanticLookup<'_> {
                 || delivery.reaches(file.path.as_str(), file.ast.peel_ts_sugar_span(handler)))
     }
 
+    /// ADR 0364: whether the event attribute whose value is `handler` may be
+    /// replaced by a later attribute or spread of its element, so that the host
+    /// never runs the value as the handler (`event_key_may_be_replaced`).
+    pub(crate) fn event_attribute_may_be_replaced(&self, file: &FileFacts, handler: Span) -> bool {
+        let handler = file.ast.peel_ts_sugar_span(handler);
+        file.ast
+            .jsx_containing(handler)
+            .filter(|element| crate::object_members::intrinsic_element(file, element))
+            .any(|element| {
+                element.attributes.iter().any(|attribute| {
+                    attribute.namespace.is_none()
+                        && attribute
+                            .expression
+                            .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == handler)
+                        && file.source_text(attribute.name).is_some_and(|name| {
+                            self.dialect.compiler_lowers_event_attribute(name)
+                                && crate::object_members::event_key_may_be_replaced(
+                                    self,
+                                    file,
+                                    element,
+                                    attribute.span,
+                                    name,
+                                )
+                        })
+                })
+            })
+    }
+
+    /// Whether the host's run of the handler written as `handler` is unproven:
+    /// a synchronous dispatch may run it on its caller's stack (ADR 0361), or a
+    /// later attribute or spread may replace it (ADR 0364).
+    pub(crate) fn event_handler_unowned_run_unproven(
+        &self,
+        file: &FileFacts,
+        handler: Span,
+    ) -> bool {
+        self.event_handler_may_run_on_a_dispatcher_stack(file, handler)
+            || self.event_attribute_may_be_replaced(file, handler)
+    }
+
     /// [`Self::event_handler_may_run_on_a_dispatcher_stack`] for code at `site`
     /// that has the event role. Only code written directly in the function
     /// literal of an element's own event attribute names its handler; any other
@@ -307,7 +347,7 @@ fn supported_site(
     for spread in &element.spreads {
         let key = crate::location(file.path.shared(), spread.argument);
         let targets = lookup.spread_handler_targets().get(&key)?.as_ref()?;
-        handlers.extend(targets.iter().cloned());
+        handlers.extend(targets.iter().map(|held| (held.path.clone(), held.span)));
     }
     Some(handlers)
 }

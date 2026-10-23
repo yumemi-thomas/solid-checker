@@ -239,34 +239,42 @@ pub(crate) fn written_directly_in(
             .any(|nested| nested.span != function.span && nested.span.contains(span))
 }
 
-pub(crate) const OWNER_CONTEXT_OWNED: u8 = 1;
-pub(crate) const OWNER_CONTEXT_UNOWNED: u8 = 2;
-pub(crate) const OWNER_CONTEXT_LEAF: u8 = 4;
+pub(crate) const OWNER_CONTEXT_OWNED: u16 = 1;
+pub(crate) const OWNER_CONTEXT_UNOWNED: u16 = 2;
+pub(crate) const OWNER_CONTEXT_LEAF: u16 = 4;
 /// The owned/unowned split originates in a function whose Solid component
 /// identity is only conventional. Preserve this provenance through inheriting
 /// callback edges so diagnostics do not misdescribe it as nullable
 /// `runWithOwner` state.
-pub(crate) const OWNER_CONTEXT_COMPONENT_UNCERTAIN: u8 = 8;
+pub(crate) const OWNER_CONTEXT_COMPONENT_UNCERTAIN: u16 = 8;
 /// At least one concrete execution path is proved unowned. This differs from
 /// the possible-unowned half of a conditional owner or ambiguous component:
 /// one proven unowned invocation is enough to prove an ownership defect even
 /// when other invocations may be owned.
-pub(crate) const OWNER_CONTEXT_PROVEN_UNOWNED: u8 = 16;
+pub(crate) const OWNER_CONTEXT_PROVEN_UNOWNED: u16 = 16;
 /// The possible-unowned half of this context comes from a callback that runs
 /// under its caller's owner only on its first run
 /// ([`solid_dialect::CallbackOwner::InheritsFirstRun`]): a later run, from the
 /// scheduler's flush, runs with no owner. Kept as its own bit so the finding
 /// names that reason instead of a nullable `runWithOwner` owner.
-pub(crate) const OWNER_CONTEXT_LATER_RUN_UNOWNED: u8 = 32;
+pub(crate) const OWNER_CONTEXT_LATER_RUN_UNOWNED: u16 = 32;
 /// The leaf body ([`OWNER_CONTEXT_LEAF`]) is created under a children-capable
 /// owner, so the body's own owner is the children-forbidden leaf owner: an
 /// `onCleanup` there throws (SC3001's claim) and a nested `onSettled` is queued
 /// out of band. A run-owned path ([`OWNER_CONTEXT_OWNED`]) is children-capable
 /// and carries no leaf shape, so the owner gate can tell a conditional leaf
 /// body from a plain one. A leaf body created unowned never carries this bit.
-pub(crate) const OWNER_CONTEXT_LEAF_OWNED: u8 = 64;
+pub(crate) const OWNER_CONTEXT_LEAF_OWNED: u16 = 64;
 /// A synchronous owner may have been left by an await on the call path.
-pub(crate) const OWNER_CONTEXT_MAY_RESUME_UNOWNED: u8 = 128;
+pub(crate) const OWNER_CONTEXT_MAY_RESUME_UNOWNED: u16 = 128;
+/// ADR 0363: the function is also run as a proven unowned event dispatch, and
+/// nothing between that dispatch and this context restores an owner. Unlike
+/// [`OWNER_CONTEXT_PROVEN_UNOWNED`] it sits beside owned contexts the same
+/// callback has from its other invocations, and a site that carries it is a
+/// violation of the event run alone. Set by the seed of a callback with a proven
+/// event edge and a non-event invocation (`mixed_event_literals`); a plain call
+/// forwards it, and every owner-restoring or owner-uncertain edge clears it.
+pub(crate) const OWNER_CONTEXT_EVENT_PATH_UNOWNED: u16 = 256;
 
 /// Whether a node's unowned context is *only* the open-world assumption an
 /// exported non-component entry seeds ([`owner_node`]), carried to this node
@@ -283,7 +291,7 @@ pub(crate) const OWNER_CONTEXT_MAY_RESUME_UNOWNED: u8 = 128;
 /// proven violation one call-edge away. A leaf body the open-world bit creates
 /// keeps the bare bit (`LEAF` is the leaf's shape, not a proof), so `LEAF` is
 /// not part of the test; a creation-owned leaf body is not open-world.
-const fn open_world_unowned_only(context: u8, node: &OwnerNode) -> bool {
+const fn open_world_unowned_only(context: u16, node: &OwnerNode) -> bool {
     !node.component
         && !node.component_uncertain
         && context
@@ -381,7 +389,7 @@ pub(crate) struct OwnerNode {
     pub(crate) generator: bool,
     pub(crate) component: bool,
     pub(crate) component_uncertain: bool,
-    pub(crate) seed_context: u8,
+    pub(crate) seed_context: u16,
     /// An exported, named, non-component function of a closed program. Its
     /// unknown-caller seed waits for the namespace census
     /// ([`seed_namespace_hand_outs`], ADR 0347), which is not cached per file.

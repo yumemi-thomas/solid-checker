@@ -205,6 +205,10 @@ impl Finding {
             } else if requirement.after_await {
                 "this call runs after an `await`, from a promise continuation: the owner current before the `await` is not current after it, and no other owner is"
                     .into()
+            } else if let Some(run) = &requirement.event_path {
+                format!(
+                    "when run as {run}, no owner is current: the host runs it with none, and the owned invocations of this callback do not give that run one"
+                )
             } else if component_uncertain {
                 "component identity is unresolved, so this operation may execute with or without a reactive owner"
                     .into()
@@ -257,6 +261,14 @@ impl Finding {
                 message: "the operation, in the package's source".into(),
                 location: Some(operation.clone()),
             });
+        }
+        if let Some(run) = requirement.event_path.as_ref().filter(|_| !uncertain) {
+            message.push_str(&format!(
+                "; when run as {run} this callback has no owner, though it is also invoked where one is current"
+            ));
+            hint.push_str(
+                " Register the work from the owned invocation only, or run it inside an owner of its own (`createRoot`) so the handler run has one.",
+            );
         }
         if runtime_uncertain {
             let (clause, guidance, evidence_message) = match requirement.operation {

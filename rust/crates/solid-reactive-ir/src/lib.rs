@@ -1090,6 +1090,12 @@ pub struct OwnerRequirement {
     /// function was entered with.
     #[serde(default, skip_serializing_if = "is_false")]
     pub after_await: bool,
+    /// ADR 0363: the callback is run both as a proven unowned event handler and
+    /// some way that may supply an owner, and this operation is a violation of
+    /// the event run alone. Holds how the run is named: "the `onClick` handler
+    /// of `<button>`".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_path: Option<String>,
     /// The operation sits in a source-level JSX region for which the compiler
     /// emitted no execution census. The absence of an owner region is not a
     /// proof that a live operation runs unowned: the compiler may have deleted

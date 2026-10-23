@@ -770,3 +770,94 @@ fn a_renderer_declaration_must_sit_in_a_dialect_package() {
         assert!(!declared_in_package(outside, &packages), "{outside}");
     }
 }
+
+/// Whether a later attribute or spread of the first element replaces the key
+/// defined at `defined` (the text of the attribute or spread), under `dialect`.
+fn event_key_replaced(
+    dialect: &solid_dialect::Solid2,
+    source: &str,
+    defined: &str,
+    key: &str,
+) -> bool {
+    let facts = project(source);
+    let entities = entity_symbols(&[]);
+    let ast_indexes = HashMap::default();
+    let symbol_names = HashMap::default();
+    let lookup = SemanticLookup::new(
+        &facts,
+        &ast_indexes,
+        &entities,
+        &symbol_names,
+        dialect,
+        false,
+    );
+    let file = &facts.files[0];
+    let element = file.ast.jsx_elements.first().expect("an element");
+    crate::object_members::event_key_may_be_replaced(
+        &lookup,
+        file,
+        element,
+        span_of(source, defined, 0),
+        key,
+    )
+}
+
+#[test]
+fn a_later_attribute_or_spread_may_replace_an_event_key() {
+    let rc17 = solid_dialect::Solid2::RC17;
+    let replaced =
+        |source: &str, defined: &str| event_key_replaced(&rc17, source, defined, "onClick");
+    // Nothing follows, or only things that cannot hold the key.
+    assert!(!replaced("<button {...h}>x</button>", "{...h}"));
+    assert!(!replaced(
+        "<button {...h} title=\"t\" ref={r}>x</button>",
+        "{...h}"
+    ));
+    assert!(!replaced(
+        "<button {...h} on:click={b}>x</button>",
+        "{...h}"
+    ));
+    assert!(!replaced(
+        "<button {...h} {...{ title: 't' }}>x</button>",
+        "{...h}"
+    ));
+    assert!(!replaced(
+        "<button {...h} {...{ onScroll: () => {} }}>x</button>",
+        "{...h}"
+    ));
+    // A later `onClick` attribute, even a valueless or `undefined` one.
+    assert!(replaced("<button {...h} onClick={b}>x</button>", "{...h}"));
+    assert!(replaced(
+        "<button {...h} onClick={undefined}>x</button>",
+        "{...h}"
+    ));
+    // An earlier attribute is the earlier source.
+    assert!(!replaced("<button onClick={b} {...h}>x</button>", "{...h}"));
+    // A later exact holder with the key, and one the checker cannot resolve.
+    assert!(replaced(
+        "<button {...h} {...{ onClick: () => {} }}>x</button>",
+        "{...h}"
+    ));
+    assert!(replaced("<button {...h} {...rest}>x</button>", "{...h}"));
+    assert!(replaced(
+        "<button onClick={cb} {...rest}>x</button>",
+        "onClick={cb}"
+    ));
+    // rc.17 sets `onclick` as an attribute; rc.13 installs a listener of the
+    // same type, which replaces a delegated one.
+    let lower = "<button {...h} onclick={b}>x</button>";
+    assert!(!replaced(lower, "{...h}"));
+    assert!(event_key_replaced(
+        &solid_dialect::Solid2::RC13,
+        lower,
+        "{...h}",
+        "onClick"
+    ));
+    // An unaudited release states no grammar: a later `on…` or spread may hold it.
+    assert!(event_key_replaced(
+        &solid_dialect::Solid2::CONSERVATIVE,
+        "<button {...h} title=\"t\">x</button>",
+        "{...h}",
+        "onClick"
+    ));
+}

@@ -537,3 +537,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/compiler-accepted-dependents/node_modules/**
 !fixtures/reactive-ir/dependency-source-compiler-refused/node_modules/
 !fixtures/reactive-ir/dependency-source-compiler-refused/node_modules/**
+!fixtures/reactive-ir/owner-mixed-invocation/node_modules/
+!fixtures/reactive-ir/owner-mixed-invocation/node_modules/**
+!fixtures/reactive-ir/owner-mixed-invocation/variants/*/node_modules/
+!fixtures/reactive-ir/owner-mixed-invocation/variants/*/node_modules/**

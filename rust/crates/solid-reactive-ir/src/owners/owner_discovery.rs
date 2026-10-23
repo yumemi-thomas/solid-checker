@@ -86,22 +86,23 @@ pub(crate) fn discover_owner_file(
             let Some(Some(targets)) = lookup.spread_handler_targets().get(&key) else {
                 continue;
             };
-            for (path, span) in targets {
+            for held in targets {
+                let kind = match lookup.file_by_path(&held.path) {
+                    Some(holder) => event_owner_edge(
+                        lookup,
+                        holder,
+                        held.span,
+                        holder
+                            .ast
+                            .function_at(held.span)
+                            .is_some_and(|function| function.generator),
+                    ),
+                    None => OwnerEdgeKind::Conditional,
+                };
                 edges.push(SymbolicOwnerEdge {
                     source: None,
-                    target: OwnerTarget::Function(path.clone(), *span),
-                    kind: match lookup.file_by_path(path) {
-                        Some(holder) => event_owner_edge(
-                            lookup,
-                            holder,
-                            *span,
-                            holder
-                                .ast
-                                .function_at(*span)
-                                .is_some_and(|function| function.generator),
-                        ),
-                        None => OwnerEdgeKind::Conditional,
-                    },
+                    target: OwnerTarget::Function(held.path.clone(), held.span),
+                    kind: spread_key_edge(lookup, file, element, spread.span, &held.key, kind),
                 });
             }
         }
@@ -264,7 +265,7 @@ pub(crate) fn discover_owner_file(
                 solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
                     OwnerEdgeKind::RefApplied
                 }
-                _ if lookup.event_handler_may_run_on_a_dispatcher_stack(file, callback.span) => {
+                _ if lookup.event_handler_unowned_run_unproven(file, callback.span) => {
                     OwnerEdgeKind::Conditional
                 }
                 _ => OwnerEdgeKind::Unowned,
@@ -578,7 +579,11 @@ pub(crate) fn find_missing_owners_incremental(
                     CleanupReturnProof::Unresolved => continue,
                 }
             }
-            let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
+            // ADR 0363: an event run no owner reaches proves the violation of the
+            // event run alone, beside owned runs the same callback has.
+            let event_path = context & OWNER_CONTEXT_PROVEN_UNOWNED == 0
+                && context & OWNER_CONTEXT_EVENT_PATH_UNOWNED != 0;
+            let proven_unowned = event_path || context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
             let component_uncertain = !proven_unowned
                 && (context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
                     || owner_index.is_some_and(|index| nodes[index].component_uncertain));
@@ -642,6 +647,7 @@ pub(crate) fn find_missing_owners_incremental(
                     later_run_unowned,
                     component_uncertain,
                     after_await,
+                    event_path,
                     // The batch pass's cleanup rule (ADR 0347 amendment): a cleanup in a
                     // leaf that is not owned is reported; in an owned leaf it is
                     // SC3001's claim.

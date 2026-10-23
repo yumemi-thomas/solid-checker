@@ -4,7 +4,8 @@ use super::*;
 
 /// The owner context bits that take a function out of the synchronous extent
 /// of an owner-providing region written around it. See [`root_owned_at`].
-pub(super) const OWNER_CONTEXT_LEAVES_REGION: u8 = OWNER_CONTEXT_PROVEN_UNOWNED
+pub(super) const OWNER_CONTEXT_LEAVES_REGION: u16 = OWNER_CONTEXT_PROVEN_UNOWNED
+    | OWNER_CONTEXT_EVENT_PATH_UNOWNED
     | OWNER_CONTEXT_LATER_RUN_UNOWNED
     | OWNER_CONTEXT_LEAF
     | OWNER_CONTEXT_MAY_RESUME_UNOWNED;
@@ -88,7 +89,7 @@ pub(crate) fn providing_region_chain<K>(
 /// all (one handed to an unmodelled function, or to a scheduler through a
 /// wrapper call) carries neither bit and is still answered by the region: a
 /// pre-existing approximation this does not widen.
-pub(crate) fn root_owned_at<K>(chain: Option<&[K]>, context_of: impl Fn(&K) -> u8) -> bool {
+pub(crate) fn root_owned_at<K>(chain: Option<&[K]>, context_of: impl Fn(&K) -> u16) -> bool {
     chain.is_some_and(|chain| {
         chain
             .iter()
@@ -204,7 +205,7 @@ pub(crate) fn owner_callback_index(
 /// callback runs under its leaf owner, [`OWNER_CONTEXT_LEAF_OWNED`]; with no
 /// owner it keeps the unowned bits, which make its cleanup SC4001's claim.
 /// Inside a leaf body the queue applies instead.
-const fn leaf_body_context(source: u8) -> u8 {
+const fn leaf_body_context(source: u16) -> u16 {
     let unowned = source & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED);
     if source & OWNER_CONTEXT_OWNED != 0 {
         OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED | unowned
@@ -220,7 +221,7 @@ const fn leaf_body_context(source: u8) -> u8 {
 /// not `NO_OWNER_CLEANUP`. It is dead only when every path to its creation is
 /// inside an owned leaf body: the effect throws before its callback runs, so it
 /// carries no context and nothing it contains is claimed (ADR 0347).
-const fn tracked_leaf_body_context(source: u8) -> u8 {
+const fn tracked_leaf_body_context(source: u16) -> u16 {
     let live = source & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED) != 0
         || source & OWNER_CONTEXT_LEAF_OWNED == 0;
     if live {
@@ -230,10 +231,15 @@ const fn tracked_leaf_body_context(source: u8) -> u8 {
     }
 }
 
-pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
+pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u16) -> u16 {
     match kind {
-        OwnerEdgeKind::Preserve | OwnerEdgeKind::EagerCall => source,
+        OwnerEdgeKind::Preserve => source,
+        // ADR 0363: an eager call, a possible suspension (ADR 0357) and a first
+        // run end the event path's claim: what follows runs on the path's
+        // unowned half or not, and nothing proves which.
+        OwnerEdgeKind::EagerCall => source & !OWNER_CONTEXT_EVENT_PATH_UNOWNED,
         OwnerEdgeKind::MayResumeUnowned => {
+            let source = source & !OWNER_CONTEXT_EVENT_PATH_UNOWNED;
             if source == 0 || source & OWNER_CONTEXT_PROVEN_UNOWNED != 0 {
                 source
             } else {
@@ -251,7 +257,9 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
         // source that is itself proven unowned stays proven: then every run,
         // first or later, is unowned.
         OwnerEdgeKind::InheritsFirstRun => {
-            source | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED
+            (source & !OWNER_CONTEXT_EVENT_PATH_UNOWNED)
+                | OWNER_CONTEXT_UNOWNED
+                | OWNER_CONTEXT_LATER_RUN_UNOWNED
         }
         // A createTrackedEffect callback runs under the tracked node whatever
         // its creation owner, so its onCleanup is SC3001's claim. See
@@ -282,7 +290,7 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
 }
 
 /// The edge from the host to the handler written as `handler` in `file` (an
-/// event attribute's value, or a function a spread supplies; ADR 0361).
+/// event attribute's value, or a function a spread supplies; ADR 0361, 0364).
 pub(super) fn event_owner_edge(
     lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
@@ -291,10 +299,30 @@ pub(super) fn event_owner_edge(
 ) -> OwnerEdgeKind {
     if generator {
         OwnerEdgeKind::MayBeUnowned
-    } else if lookup.event_handler_may_run_on_a_dispatcher_stack(file, handler) {
+    } else if lookup.event_handler_unowned_run_unproven(file, handler) {
         OwnerEdgeKind::Conditional
     } else {
         OwnerEdgeKind::Unowned
+    }
+}
+
+/// ADR 0364: `kind`, the edge from the host to the handler a spread holds under
+/// `key`, unless a later attribute or spread of `element` may replace the key:
+/// the host then may never run it, so the edge is conditional.
+pub(super) fn spread_key_edge(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    spread: solid_facts::core::Span,
+    key: &str,
+    kind: OwnerEdgeKind,
+) -> OwnerEdgeKind {
+    if kind == OwnerEdgeKind::Unowned
+        && crate::object_members::event_key_may_be_replaced(lookup, file, element, spread, key)
+    {
+        OwnerEdgeKind::Conditional
+    } else {
+        kind
     }
 }
 
@@ -344,14 +372,15 @@ impl<'a> AwaitContinuations<'a> {
 /// The owner context of an operation that runs after an `await`
 /// ([`AwaitContinuations`]): proven unowned on every run, whatever context
 /// the enclosing function was entered with.
-pub(super) const fn await_continuation_context(context: u8) -> u8 {
+pub(super) const fn await_continuation_context(context: u16) -> u16 {
     (context | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED)
         & !(OWNER_CONTEXT_OWNED
             | OWNER_CONTEXT_LEAF
             | OWNER_CONTEXT_LEAF_OWNED
             | OWNER_CONTEXT_COMPONENT_UNCERTAIN
             | OWNER_CONTEXT_LATER_RUN_UNOWNED
-            | OWNER_CONTEXT_MAY_RESUME_UNOWNED)
+            | OWNER_CONTEXT_MAY_RESUME_UNOWNED
+            | OWNER_CONTEXT_EVENT_PATH_UNOWNED)
 }
 
 /// ADR 0357: a skippable suspension adds an unowned possibility; it does not
@@ -361,8 +390,8 @@ pub(super) const fn await_continuation_context(context: u8) -> u8 {
 pub(super) fn possible_await_continuation_context(
     file: &solid_facts::FileFacts,
     span: Span,
-    context: u8,
-) -> Option<u8> {
+    context: u16,
+) -> Option<u16> {
     (context != 0 && crate::execution_role::may_follow_own_await(file, span))
         .then_some(owner_edge_context(OwnerEdgeKind::MayResumeUnowned, context))
 }
@@ -393,10 +422,10 @@ pub(super) fn callback_call_owner_edge(
 pub(crate) fn owner_context_at(
     nodes: &[OwnerNode],
     nodes_by_path: &HashMap<String, Vec<usize>>,
-    contexts: &[u8],
+    contexts: &[u16],
     path: &str,
     span: Span,
-) -> u8 {
+) -> u16 {
     containing_function_indexed(nodes, nodes_by_path, path, span)
         .map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index])
 }
@@ -539,12 +568,35 @@ pub(crate) fn push_owner_requirement(
             later_run_unowned: status.later_run_unowned,
             component_uncertain: status.component_uncertain,
             after_await: status.after_await,
+            event_path: status
+                .event_path
+                .then(|| event_path_wording(file, span, lookup)),
             missing_jsx_census,
             through_dependency: None,
             report: status.report,
         });
     }
 }
+/// ADR 0363: how a finding names the event run it proves. A site written
+/// directly in a mixed-invocation callback names that callback's handler; one
+/// reached through the helpers it calls only says the run is an event's.
+fn event_path_wording(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> String {
+    containing_ast_function(&file.ast, span)
+        .and_then(|function| {
+            lookup
+                .mixed_event_literals()
+                .get(&(file.path.to_string(), function.span))
+        })
+        .map_or_else(
+            || "an event handler".into(),
+            crate::execution_role::EventEdge::describe,
+        )
+}
+
 /// Which callback arguments of a call get an owner edge, and of what kind.
 ///
 /// Shared by both owner passes on purpose: each used to keep its own literal

@@ -58,7 +58,7 @@ export function UnderRoot() {
   return <button {...h}>e</button>;
 }
 
-// Negative (not proven, silent as before): the handler is also called in
+// Mixed (ADR 0363): a click-run violation; the handler is also called in
 // the component body, which has an owner.
 export function AlsoInBody() {
   const h = handlers(() => {

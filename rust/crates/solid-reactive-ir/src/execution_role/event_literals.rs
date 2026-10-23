@@ -37,6 +37,7 @@ pub(crate) fn event_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(St
                 frames: Vec::new(),
                 props_stack: Vec::new(),
                 owner_mode: true,
+                mixed_mode: false,
             };
             if flow.function_role(file, literal) == Some(Some(ExecutionRole::EventCallback)) {
                 literals.insert((file.path.to_string(), literal.span));
@@ -44,6 +45,88 @@ pub(crate) fn event_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(St
         }
     }
     literals
+}
+
+/// ADR 0363: every function literal of a closed program that has a proven
+/// event edge beside invocations that are not event runs, with the edge it is
+/// named by. The literal is run by the host as an intrinsic element's handler
+/// (or by a call written directly in one that is), and also from somewhere that
+/// may supply an owner: a `runWithOwner` callback slot, a plain call in a
+/// component's setup. [`event_invoked_literals`] takes the literals with no such
+/// invocation, so the two sets are disjoint. Whether the event run reaches the
+/// literal with no owner is the owner graph's question, asked with ADR 0356's
+/// dispatch veto.
+pub(crate) fn mixed_event_literals(
+    lookup: &SemanticLookup<'_>,
+) -> HashMap<(String, Span), EventEdge> {
+    let mut literals = HashMap::default();
+    if !lookup.program_closed
+        || lookup.files().iter().any(|file| {
+            file.ast
+                .module_hazards
+                .iter()
+                .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
+        })
+    {
+        return literals;
+    }
+    let event_only = lookup.event_invoked_literals();
+    for file in lookup.files() {
+        for literal in &file.ast.functions {
+            if literal.generator
+                || lookup.function_component_status(file, literal) != ComponentStatus::No
+                || event_only.contains(&(file.path.to_string(), literal.span))
+            {
+                continue;
+            }
+            let mut classifying = HashSet::default();
+            let mut flow = InvocationFlow {
+                lookup,
+                classifying: &mut classifying,
+                budget: FLOW_BUDGET,
+                seen: HashSet::default(),
+                frames: Vec::new(),
+                props_stack: Vec::new(),
+                owner_mode: true,
+                mixed_mode: true,
+            };
+            if let Some(edge) = flow.function_event_edge(file, literal) {
+                literals.insert((file.path.to_string(), literal.span), edge);
+            }
+        }
+    }
+    literals
+}
+
+/// The attribute and intrinsic element a compiler event handler's value is
+/// written on; empty when no attribute names it exactly.
+fn handler_edge(file: &solid_facts::FileFacts, handler: Span) -> EventEdge {
+    let handler = file.ast.peel_ts_sugar_span(handler);
+    file.ast
+        .jsx_elements
+        .iter()
+        .filter(|element| intrinsic_element(file, element))
+        .find_map(|element| {
+            element
+                .attributes
+                .iter()
+                .find(|attribute| {
+                    attribute
+                        .expression
+                        .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == handler)
+                })
+                .map(|attribute| EventEdge {
+                    attribute: file
+                        .source_text(attribute.name)
+                        .unwrap_or_default()
+                        .to_owned(),
+                    element: file
+                        .source_text(element.name.span)
+                        .unwrap_or_default()
+                        .to_owned(),
+                })
+        })
+        .unwrap_or_default()
 }
 
 impl<'a> InvocationFlow<'a, '_, '_> {
@@ -59,6 +142,10 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         for invocation in invocations {
             let here = match invocation {
                 Invocation::Role(role) => role,
+                Invocation::Event(_) => ExecutionRole::EventCallback,
+                // Only the mixed-invocation census produces these, and it asks
+                // for event edges, not for the one role of every invocation.
+                Invocation::Other => return None,
                 // A call written in a function nothing invokes never runs.
                 Invocation::Call(call_file, call, frames) => {
                     match self.site_role(call_file, call, frames)? {
@@ -183,10 +270,18 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         {
             return None;
         }
-        if file.compiler.callback_roles.iter().any(|callback| {
+        if let Some(callback) = file.compiler.callback_roles.iter().find(|callback| {
             callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
                 && file.ast.peel_ts_sugar_span(callback.span) == owner.span
         }) {
+            // ADR 0364: a handler a later attribute or spread may replace is
+            // not proven to run.
+            if self
+                .lookup
+                .event_attribute_may_be_replaced(file, callback.span)
+            {
+                return None;
+            }
             return Some(Some(ExecutionRole::EventCallback));
         }
         let key = (format!("\0owner-flow:{}", file.path.as_str()), owner.span);
@@ -198,6 +293,153 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         self.frames = outer;
         self.classifying.remove(&key);
         role
+    }
+
+    /// The host's event run of the tracked value, as the walk reports it.
+    ///
+    /// ADR 0364: `None` when a later attribute or spread of the element may
+    /// replace the key defined at `defined` (`event_key_may_be_replaced`): the
+    /// host may never run the value, so the walk cannot name the invocation and
+    /// the claim is withheld, in both censuses.
+    fn event_invocation(
+        &self,
+        file: &'a solid_facts::FileFacts,
+        element: &solid_facts::ast::JsxElementFact,
+        defined: Span,
+        attribute: &str,
+    ) -> Option<Invocation<'a>> {
+        if crate::object_members::event_key_may_be_replaced(
+            self.lookup,
+            file,
+            element,
+            defined,
+            attribute,
+        ) {
+            return None;
+        }
+        if !self.mixed_mode {
+            return Some(Invocation::Role(ExecutionRole::EventCallback));
+        }
+        Some(Invocation::Event(EventEdge {
+            attribute: attribute.to_owned(),
+            element: file
+                .source_text(element.name.span)
+                .unwrap_or_default()
+                .to_owned(),
+        }))
+    }
+
+    /// The invocation a returning function has when it is the callback of an
+    /// owner-supplying call whose callback runs, and returns its value, inside
+    /// the call (`createRoot`, `runWithOwner`): the call itself. The value
+    /// the callback returns is the call's value, and that is what the walk
+    /// follows; who owns the callback's own body is not asked here. Owner
+    /// walks only: the read walk reaches the same call through the primitive's
+    /// callback slot.
+    fn root_pass_through(
+        &self,
+        file: &'a solid_facts::FileFacts,
+        function: &'a solid_facts::ast::FunctionFact,
+    ) -> Option<Invocation<'a>> {
+        if !self.owner_mode {
+            return None;
+        }
+        let (call, index) =
+            file.ast
+                .arguments_containing(function.span)
+                .find(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+                })?;
+        let primitive = self.lookup.primitive_at_call(file, call.span)?;
+        (!call.construct
+            && call
+                .arguments
+                .iter()
+                .take(index + 1)
+                .all(|argument| !argument.spread)
+            && self
+                .lookup
+                .dialect
+                .callback_inherits_calling_window(primitive, index)
+            && callback_execution_at_call(file, call, primitive, index, self.lookup).is_some())
+        .then(|| Invocation::Call(file, call.span, self.frames.clone()))
+    }
+
+    /// ADR 0363: the proven event edge of the function the walk finds, if any
+    /// invocation of it is the host's event run, or a call written directly in
+    /// a function that has one. `None` when the walk cannot follow every holder
+    /// of the value (an unresolved holder withholds the whole claim).
+    pub(super) fn function_event_edge(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        function: &'a solid_facts::ast::FunctionFact,
+    ) -> Option<EventEdge> {
+        let invocations = self.function_invocations(file, function)?;
+        let mut found = None;
+        for invocation in invocations {
+            let edge = match invocation {
+                Invocation::Event(edge) => Some(edge),
+                Invocation::Call(call_file, call, frames) => {
+                    self.call_event_edge(call_file, call, frames)
+                }
+                Invocation::Role(_) | Invocation::Other => None,
+            };
+            if found.is_none() {
+                found = edge;
+            }
+        }
+        found
+    }
+
+    /// The event edge of a call that runs the tracked value: the call is written
+    /// directly in a compiler event handler, or in a plain function that has an
+    /// event edge itself. The eligibility is [`Self::owner_site_role`]'s.
+    fn call_event_edge(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        call: Span,
+        frames: Vec<FlowFrame<'a>>,
+    ) -> Option<EventEdge> {
+        let owner = containing_ast_function(&file.ast, call)?;
+        if !owner.body.contains(call)
+            || (owner.r#async && may_follow_suspension(file, call))
+            || owner.generator
+            || self.lookup.function_component_status(file, owner) != ComponentStatus::No
+            || !crate::owners::written_directly_in(&file.ast, owner, call)
+            || class_within(file, owner.span, call)
+            || file
+                .ast
+                .jsx_containing(call)
+                .any(|element| owner.body.contains(element.span))
+            || file
+                .ast
+                .jsx_fragments
+                .iter()
+                .any(|fragment| owner.body.contains(*fragment) && fragment.contains(call))
+        {
+            return None;
+        }
+        if let Some(callback) = file.compiler.callback_roles.iter().find(|callback| {
+            callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                && file.ast.peel_ts_sugar_span(callback.span) == owner.span
+        }) {
+            if self
+                .lookup
+                .event_attribute_may_be_replaced(file, callback.span)
+            {
+                return None;
+            }
+            return Some(handler_edge(file, callback.span));
+        }
+        let key = (format!("\0mixed-flow:{}", file.path.as_str()), owner.span);
+        if !self.classifying.insert(key.clone()) {
+            return None;
+        }
+        let outer = std::mem::replace(&mut self.frames, frames);
+        let edge = self.function_event_edge(file, owner);
+        self.frames = outer;
+        self.classifying.remove(&key);
+        edge
     }
 
     /// The context the walk is in, as a `seen` key component: the callee
@@ -404,6 +646,13 @@ impl<'a> InvocationFlow<'a, '_, '_> {
             // slot, a slot that stores the function or runs it on result
             // access, and every unmodelled slot refuse.
             if let Some(primitive) = self.lookup.primitive_at_call(file, call.span) {
+                // ADR 0363: the function itself in a primitive's slot is one more
+                // invocation, not an event edge and not a reason to refuse the
+                // others; a container holding it still refuses.
+                if self.mixed_mode && path.is_empty() {
+                    out.push(Invocation::Other);
+                    return Some(());
+                }
                 if !path.is_empty() || self.owner_mode {
                     return None;
                 }
@@ -450,11 +699,13 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 }
                 let name = file.source_text(attribute.name)?;
                 if intrinsic_element(file, element) {
-                    return (path.is_empty()
-                        && self.lookup.dialect.compiler_lowers_event_attribute(name))
-                    .then(|| {
-                        out.push(Invocation::Role(ExecutionRole::EventCallback));
-                    });
+                    if !path.is_empty()
+                        || !self.lookup.dialect.compiler_lowers_event_attribute(name)
+                    {
+                        return None;
+                    }
+                    out.push(self.event_invocation(file, element, attribute.span, name)?);
+                    return Some(());
                 }
                 let mut prop_path = vec![name.to_owned()];
                 prop_path.extend(path);
@@ -466,16 +717,16 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                     out,
                 );
             }
-            if element
+            if let Some(spread) = element
                 .spreads
                 .iter()
-                .any(|spread| peel(spread.argument) == expr)
+                .find(|spread| peel(spread.argument) == expr)
             {
                 if intrinsic_element(file, element) {
                     return match path.as_slice() {
                         [] => Some(()),
                         [key] if self.lookup.dialect.spread_key_is_event(key) == Some(true) => {
-                            out.push(Invocation::Role(ExecutionRole::EventCallback));
+                            out.push(self.event_invocation(file, element, spread.span, key)?);
                             Some(())
                         }
                         _ => None,
@@ -626,12 +877,22 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 self.frames.extend(saved);
                 return result;
             }
-            for invocation in self.function_invocations(file, function)? {
-                if let Invocation::Call(call_file, call, frames) = invocation {
-                    let outer = std::mem::replace(&mut self.frames, frames);
-                    let result = self.uses(call_file, call, path.clone(), origin.clone(), out);
-                    self.frames = outer;
-                    result?;
+            let invocations = match self.root_pass_through(file, function) {
+                Some(invocation) => vec![invocation],
+                None => self.function_invocations(file, function)?,
+            };
+            for invocation in invocations {
+                match invocation {
+                    Invocation::Call(call_file, call, frames) => {
+                        let outer = std::mem::replace(&mut self.frames, frames);
+                        let result = self.uses(call_file, call, path.clone(), origin.clone(), out);
+                        self.frames = outer;
+                        result?;
+                    }
+                    // The value this function returns goes into a primitive's
+                    // slot: the walk does not follow it there.
+                    Invocation::Other => return None,
+                    Invocation::Role(_) | Invocation::Event(_) => {}
                 }
             }
             return Some(());
