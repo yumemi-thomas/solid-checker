@@ -124,7 +124,7 @@ Known false-positive shapes left open (fire today, wanted gone):
 ## 4. Open questions and live approximations
 
 - Type Facts producer (ADR 0365): tsrs is an unpublished fork pinned by rev (a bump re-baselines coverage); builds are slower than Go's and need CMake; WASM memory after open and compass-ui incremental updates are larger.
-- Type Facts retention (ADR 0364): every update discards derived state, so a 1000-file chain edit costs about 180 ms (50 ms before). Follow-up: instantiation-stable symbol ids with recorded dependencies, then retain analysis again (the differential harness compares the two builds).
+- Type Facts retention (ADR 0364, 0369): only binder-level answers are reused across updates; type-derived facts are recomputed after check-first every update, so a 1000-file chain body edit's producer analyze is 72 ms (79 ms under ADR 0364 alone; the full edit wall was 50 ms before it). Reusing them needs a proof they do not depend on checker history (tsrs canonical base constraints or a cache-taint facility, STABLE-IDS 14.5). The exact reference delta (`changedReferences`) stays off: its base must be the client's acknowledged table.
 - ESLint adapter: native analyzes the file on disk, while the adapter maps byte offsets onto ESLint's in-memory text. An unsaved buffer, or a later `--fix` pass, places findings wrongly.
 - `feedback run` with an application `vite.config` on `@solidjs/vite-plugin` next.51+ refuses unless `performanceTracks` and `diagnostics` are off: their module scripts run before the collector. The collector default turns both off.
 - WASM adapter: the request carries no package files, so every package import keeps an open SC9005 requirement; package source analysis is native only.

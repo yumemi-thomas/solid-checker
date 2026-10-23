@@ -30,6 +30,7 @@ use crate::identity::{CurrentExports, Env, Identities, Preserved};
 use crate::import_graph::{
     ImportGraph, affected_from_reverse_deps, every_source_path, global_scope_change,
 };
+use crate::inputs::ProgramInputs;
 use crate::model::{
     SemanticDemandRun, SemanticDemandRunResult, SemanticScope, SymbolId, blank_symbol,
 };
@@ -57,7 +58,6 @@ use tsrs_core::{CompilerOptions, P};
 use tsrs_scanner::skip_trivia;
 use tsrs_tsoptions::{ParseConfigHost, get_parsed_command_line_of_config_file};
 use tsrs_vfs::{Entries, FS, FileInfo, bundled, osvfs};
-use typefacts::producer::source_digest;
 use typefacts::v3::{FileChange, ModuleGraphRequest, SourceFile, SymbolQuery};
 use typefacts::{
     AsyncFunctionFact, Declaration, Location, SourceBinding, SourceCall, SourceDigest,
@@ -158,6 +158,8 @@ pub struct UpdateMetrics {
     pub semantic_cutoff: bool,
     pub affected: Duration,
     pub invalidation: Duration,
+    /// The identity state's rebuild (the exports scan) after the commit.
+    pub identities: Duration,
     /// How the candidate program was made (`None` for a no-op update).
     pub kind: Option<UpdateKind>,
     /// Whether the chain was rebuilt after this update (the rebase policy).
@@ -182,8 +184,11 @@ pub struct Project {
     /// Symbol identity (Go: `idsBySymbol`, `symbolsByID`, `durableRefs`,
     /// `exportedIdentities`).
     pub(crate) ids: Identities,
-    /// The reference index (Go: `referenceIndex`).
+    /// The reference index (Go: `referenceIndex`), with the binder-level
+    /// answers it retains across updates (ADR 0369).
     pub(crate) references: ReferenceIndex,
+    /// Digests of the accepted program's inputs (ADR 0369).
+    pub(crate) inputs: ProgramInputs,
     /// Demanded facts left absent because their family is not ported yet.
     pub unavailable: Unavailable,
     /// Per-file `Source*` facts across generations (Go: `sourceFactsMemo`).
@@ -230,6 +235,7 @@ impl Project {
             last_update: UpdateMetrics::default(),
             ids: Identities::new(1),
             references: ReferenceIndex::default(),
+            inputs: ProgramInputs::default(),
             unavailable: Unavailable::default(),
             source_memo: HashMap::new(),
         };
@@ -259,13 +265,14 @@ impl Project {
             .as_ref()
             .ok_or_else(|| BackendError(ERR_CLOSED.to_owned()))?;
         let program = generation.program();
-        let (ids, references) = (&mut self.ids, &mut self.references);
+        let (ids, references, inputs) = (&mut self.ids, &mut self.references, &mut self.inputs);
         Ok(generation.with_checker(|checker| {
             f(
                 &mut Env {
                     checker,
                     program,
                     ids,
+                    inputs,
                 },
                 references,
             )
@@ -472,6 +479,21 @@ pub(crate) fn compiler_host(
     )
 }
 
+/// [`source_digest`] from a SHA-256 already computed.
+fn source_digest_of(path: &str, sha256: &crate::inputs::Digest) -> SourceDigest {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut hash = String::with_capacity(7 + 64);
+    hash.push_str("sha256:");
+    for byte in sha256 {
+        hash.push(char::from(HEX[usize::from(byte >> 4)]));
+        hash.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    SourceDigest {
+        path: path.into(),
+        sha256: typefacts::SourceHash::parse(hash).expect("a SHA-256 digest is canonical"),
+    }
+}
+
 fn lossy(source: &[u8]) -> String {
     String::from_utf8_lossy(source).into_owned()
 }
@@ -502,13 +524,19 @@ impl ClosureBackend for Project {
     /// there is no pointer-keyed memo).
     fn source_digests(&mut self, ctx: &Context) -> Result<Vec<SourceDigest>, BackendError> {
         check(ctx)?;
-        let generation = self.live()?;
+        let generation = self
+            .generation
+            .as_ref()
+            .ok_or_else(|| BackendError(ERR_CLOSED.to_owned()))?;
+        // `Text(file)` is the SHA-256 the digest spells, memoized while the
+        // file's parse is reused (ADR 0369).
+        let inputs = &mut self.inputs;
         let mut digests: Vec<SourceDigest> = generation
             .program()
             .source_files()
             .iter()
             .filter(|file| !file.is_declaration_file())
-            .map(|file| source_digest(&clean(file.file_name()), file.text().as_bytes()))
+            .map(|file| source_digest_of(&clean(file.file_name()), &inputs.text(*file)))
             .collect();
         digests.sort_by(|left, right| left.path.cmp(&right.path));
         Ok(digests)
@@ -546,7 +574,8 @@ impl ClosureBackend for Project {
         }
         // The identity maps hold handles into the generation about to go.
         self.ids.close();
-        self.references.reset();
+        self.references.forget();
+        self.inputs = ProgramInputs::default();
         self.source_memo.clear();
         self.generation = None;
         self.graph = ImportGraph::default();
@@ -717,6 +746,10 @@ impl ClosureBackend for Project {
         self.references.release_analysis_state();
         generation.release_checker();
     }
+
+    fn binder_retention(&mut self) -> crate::references::BinderRetention {
+        self.references.take_retention()
+    }
 }
 
 impl SymbolEvidence for Project {
@@ -729,7 +762,9 @@ impl SymbolEvidence for Project {
         queries: &[SymbolQuery],
     ) -> Result<Vec<SymbolFact>, BackendError> {
         check(ctx)?;
-        self.with_env(|env, references| {
+        let started = Instant::now();
+        let mut reused = 0_usize;
+        let outcome = self.with_env(|env, references| {
             if queries.iter().any(|query| query.references) {
                 references.ensure(env);
             }
@@ -737,6 +772,20 @@ impl SymbolEvidence for Project {
             for query in queries {
                 check(ctx)?;
                 let mut fact = blank_symbol(query.id.clone());
+                // A binder-level, non-alias symbol's facts from an earlier
+                // generation (ADR 0369): its declarations, and its references
+                // under its own id, which is its canonical id.
+                if let Some(declarations) = references.retained_symbol_fact(env, &query.id) {
+                    reused += 1;
+                    if !query.references_only {
+                        fact.declarations = declarations;
+                    }
+                    if query.references {
+                        fact.references = references.query(env, &query.id).into();
+                    }
+                    facts.push(fact);
+                    continue;
+                }
                 let Some(symbol) = env.symbol_for(&query.id) else {
                     facts.push(fact);
                     continue;
@@ -747,6 +796,7 @@ impl SymbolEvidence for Project {
                         fact.alias_target = env.id_for(original);
                     }
                     fact.declarations = declarations_for_symbol(symbol).into();
+                    references.retain_symbol_fact(env, &query.id, symbol, &fact.declarations);
                 }
                 if query.references {
                     let canonical = env.canonical_symbol(symbol);
@@ -756,7 +806,22 @@ impl SymbolEvidence for Project {
                 facts.push(fact);
             }
             Ok(facts)
-        })?
+        })?;
+        if let Some(trace) = &self.trace {
+            let count = |value: usize| i64::try_from(value).unwrap_or(i64::MAX);
+            trace.metrics(
+                "symbols",
+                &[
+                    ("queries", count(queries.len())),
+                    ("retainedFacts", count(reused)),
+                    (
+                        "elapsedNs",
+                        i64::try_from(started.elapsed().as_nanos()).unwrap_or(i64::MAX),
+                    ),
+                ],
+            );
+        }
+        outcome
     }
 }
 
@@ -950,6 +1015,15 @@ impl Project {
         // Commit: nothing below can fail.
         let generation = self.generation.as_mut().expect("checked live above");
         generation.commit(candidate);
+        // Only a parse-reusing update keeps every other file's text and
+        // module resolution as read (ADR 0369).
+        let reused = candidate_kind == UpdateKind::Reused;
+        self.inputs
+            .program_changed(reused.then_some(incremental_path.as_str()));
+        self.references.start_retaining();
+        if !reused {
+            self.ids.forget_runtime_paths();
+        }
         self.fs = candidate_fs;
         self.versions = candidate_versions;
         self.update_count += 1;
@@ -960,6 +1034,7 @@ impl Project {
         // restart from the candidate's own symbols (Go: the `currentExports`
         // re-keying) before anything can read them.
         let ids = &mut self.ids;
+        let identities_started = Instant::now();
         accepted.with_checker(|checker| {
             ids.after_update(
                 generation_number,
@@ -969,6 +1044,7 @@ impl Project {
                 current_exports,
             );
         });
+        let identities_duration = identities_started.elapsed();
 
         // The retained graph must advance on every accepted update, even ones
         // whose affected set is decided without a walk, or a later generation
@@ -1009,14 +1085,13 @@ impl Project {
         let affected_duration = stage.elapsed();
 
         let stage = Instant::now();
-        // Nothing derived from the preceding generation's analysis survives
-        // an update: not the source-fact memo, not the reference
-        // contributions or merged buckets (their ids and the spaces of
-        // references into other files are claim-order and cross-file facts),
-        // and not the identity maps (`Identities::after_update`). Only the
-        // program's own incremental reuse and the declaration shapes that
-        // decide the affected set carry over. A full rebuild also sweeps the
-        // durable identities of files that left the program.
+        // No type-derived answer survives an update (ADR 0364): not the
+        // source-fact memo, not this generation's reference index, and not the
+        // identity maps (`Identities::after_update`). What carries over is the
+        // program's own incremental reuse, the declaration shapes that decide
+        // the affected set, and binder-level answers kept with the digests
+        // they read (`references`, `inputs`; ADR 0369), which are checked
+        // before any reuse.
         ClosureBackend::discard_derived_state(self);
         if incremental {
             for path in &affected {
@@ -1043,6 +1118,7 @@ impl Project {
             semantic_cutoff,
             affected: affected_duration,
             invalidation: invalidation_duration,
+            identities: identities_duration,
             kind: Some(candidate_kind),
             rebased,
         };
@@ -1061,6 +1137,7 @@ impl Project {
                     ("leafCutoff", i64::from(metrics.leaf_cutoff)),
                     ("affectedNs", nanos(metrics.affected)),
                     ("invalidationNs", nanos(metrics.invalidation)),
+                    ("identitiesNs", nanos(metrics.identities)),
                 ],
             );
         }
@@ -1097,7 +1174,9 @@ impl Project {
         // The identity maps and the generation-scoped reference ids name the
         // chain about to be freed.
         self.ids.release_pointers();
+        self.ids.forget_runtime_paths();
         generation.commit(fresh);
+        self.inputs.program_changed(None);
         true
     }
 }
@@ -1201,4 +1280,22 @@ pub fn opener(trace: SharedTrace) -> OpenBackend {
         Project::open(ctx, project_id, config_source, trace)
             .map(|project| Box::new(project) as Box<dyn crate::backend::Backend>)
     })
+}
+
+#[cfg(test)]
+mod digest_tests {
+    use sha2::{Digest as _, Sha256};
+
+    /// A memoized `Text` digest spells the same source digest as hashing the
+    /// text again.
+    #[test]
+    fn source_digest_from_a_memoized_text_digest_is_the_same() {
+        for text in ["", "export const a = 1;\n", "\u{65e5}\u{672c}"] {
+            let digest: crate::inputs::Digest = Sha256::digest(text.as_bytes()).into();
+            assert_eq!(
+                super::source_digest_of("/p/a.ts", &digest),
+                typefacts::producer::source_digest("/p/a.ts", text.as_bytes())
+            );
+        }
+    }
 }

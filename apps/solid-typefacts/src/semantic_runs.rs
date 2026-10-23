@@ -25,6 +25,7 @@
 //! at zero (the precondition for making this producer the default).
 
 use crate::backend::BackendError;
+use crate::binder_resolution::entity_resolves_without_types;
 use crate::constants::constant_value_at;
 use crate::context::Context;
 use crate::gocompat::{absolute, quote};
@@ -295,36 +296,70 @@ pub fn run(
             let location = entity.location.clone();
             let result_node = nodes[run_index][index];
             let mut result_symbol: Option<P<Symbol>> = None;
+            // A binder-resolved symbol answered from an earlier generation
+            // (ADR 0369): its id, empty when it did not resolve.
+            let mut retained_id: Option<SymbolId> = None;
             if let Some(node) = result_node
                 && (demand.symbol || demand.reference_space || demand.runtime_identity)
             {
                 let tag = jsx_tag_name_at(node, location.start_byte, location.end_byte);
                 result_symbol = symbols[run_index][index];
-                if result_symbol.is_none() {
-                    result_symbol = env.checker.get_symbol_at_location_exported(tag);
-                }
-                if demand.symbol && entity.symbol.is_empty() {
-                    if let Some(symbol) = result_symbol {
-                        entity.symbol = env.id_for(symbol);
-                        entity.symbol_claim = if symbol_span_covers(
-                            file,
-                            tag,
-                            location.start_byte,
-                            location.end_byte,
-                        ) {
-                            SymbolClaim::Covering
-                        } else {
-                            SymbolClaim::Partial
-                        };
-                    } else {
-                        entity.symbol_claim = SymbolClaim::Unresolved;
+                // Retention needs neither the live symbol (a runtime identity
+                // does) nor a type: only a scope-lookup answer is kept.
+                let span = (location.start_byte, location.end_byte);
+                let binder = references.retaining()
+                    && result_symbol.is_none()
+                    && !demand.runtime_identity
+                    && entity_resolves_without_types(tag)
+                    && references.may_retain_symbol(env, file, tag);
+                let retained = if binder {
+                    references.retained_symbol(env, file, span)
+                } else {
+                    None
+                };
+                if let Some((id, claim)) = retained {
+                    if demand.symbol && entity.symbol.is_empty() {
+                        entity.symbol = id.clone();
+                        entity.symbol_claim = claim;
+                    }
+                    retained_id = Some(id);
+                } else {
+                    if result_symbol.is_none() {
+                        result_symbol = env.checker.get_symbol_at_location_exported(tag);
+                    }
+                    let answer = match result_symbol {
+                        Some(symbol) => {
+                            let claim = if symbol_span_covers(
+                                file,
+                                tag,
+                                location.start_byte,
+                                location.end_byte,
+                            ) {
+                                SymbolClaim::Covering
+                            } else {
+                                SymbolClaim::Partial
+                            };
+                            (env.id_for(symbol), claim)
+                        }
+                        None => ("".into(), SymbolClaim::Unresolved),
+                    };
+                    if demand.symbol && entity.symbol.is_empty() {
+                        entity.symbol = answer.0.clone();
+                        entity.symbol_claim = answer.1;
+                    }
+                    if binder {
+                        references.retain_symbol(env, file, span, answer);
                     }
                 }
             }
             evidence[run_index].symbol(&entity.symbol);
             if demand.reference_space {
                 entity.reference_space = Some(ReferenceSpace::Neither);
-                if let Some(symbol) = result_symbol {
+                if let Some(id) = &retained_id {
+                    if !id.is_empty() {
+                        entity.reference_space = Some(references.space_for(env, id));
+                    }
+                } else if let Some(symbol) = result_symbol {
                     let id = env.id_for(symbol);
                     entity.reference_space = Some(references.space_for(env, &id));
                 }

@@ -2,9 +2,10 @@
 //! `symbol_integration`: a session driven through seeded random edit
 //! sequences, every generation byte-compared with a session that replays the
 //! same updates and materializes the whole batch from a program that never
-//! saw the earlier generations. Updates retain no answer, so the two must be
-//! equal for every family, including the cross-file ones (the reference space
-//! and the runtime identity).
+//! saw the earlier generations. Updates retain only binder-level answers under
+//! recorded dependencies (ADR 0369), so the two must be equal for every
+//! family, including the cross-file ones (the reference space and the runtime
+//! identity).
 
 use super::project_support::Scratch;
 use super::symbol_integration::{
@@ -73,6 +74,9 @@ fn text_demands_with(closure: &mut DemandClosure, families: bool) -> Vec<EntityD
             if numeric || !(declares || member || calls) || !seen.insert((start, index)) {
                 continue;
             }
+            // Every other demand leaves the runtime identity out: only those
+            // can take a retained binder-level symbol (ADR 0369).
+            let runtime_identity = families && seen.len() % 2 == 0;
             demands.push(EntityDemand {
                 location: Location {
                     path: path.as_str().into(),
@@ -86,7 +90,7 @@ fn text_demands_with(closure: &mut DemandClosure, families: bool) -> Vec<EntityD
                 callability: families,
                 runtime_value_domain: families,
                 reference_space: families,
-                runtime_identity: families,
+                runtime_identity,
                 ..EntityDemand::default()
             });
         }
@@ -306,8 +310,30 @@ impl World {
             .collect()
     }
 
-    /// `(module, exported name, kind)` for every export of every module.
+    /// `(module, exported name, kind)` for every export of every module,
+    /// then the names a module re-exports with `export * from` (one hop).
     fn exports(&self) -> Vec<(String, String, &'static str)> {
+        let direct = self.direct_exports();
+        let mut found = direct.clone();
+        for (file, lines) in &self.files {
+            for line in lines {
+                let Some(source) = line
+                    .strip_prefix("export * from \"./")
+                    .and_then(|rest| rest.strip_suffix("\";"))
+                else {
+                    continue;
+                };
+                for (module, name, kind) in &direct {
+                    if module == source {
+                        found.push((file.trim_end_matches(".ts").to_owned(), name.clone(), kind));
+                    }
+                }
+            }
+        }
+        found
+    }
+
+    fn direct_exports(&self) -> Vec<(String, String, &'static str)> {
         let mut found = Vec::new();
         for (file, lines) in &self.files {
             if !file.starts_with('m') {
@@ -351,8 +377,13 @@ impl World {
         let selector = if self.plain {
             [0, 1, 2, 3, 4, 99, 99, 99][rng.below(8)]
         } else {
-            rng.below(24)
+            rng.below(28)
         };
+        let others: Vec<String> = self
+            .module_names()
+            .into_iter()
+            .filter(|module| module != owner)
+            .collect();
         match selector {
             0 => format!("export const {name} = {};", rng.below(1000)),
             1 => format!("export const {name} = \"s{}\";", rng.below(100)),
@@ -399,6 +430,23 @@ impl World {
             ),
             16 => format!("export const {name} = (null as unknown as Partial<{{ a: number }}>).a;"),
             17 => format!("export interface {name} {{ plain: number; call(a: string): void }}"),
+            // Alias chains: a star re-export, a namespace import's member, a
+            // global declared from a module, a use of such a global.
+            18 if !others.is_empty() => {
+                format!(
+                    "export * from \"./{}\";",
+                    rng.pick(&others).trim_end_matches(".ts")
+                )
+            }
+            19 if !exports.is_empty() => {
+                let (module, target, _) = rng.pick(&exports).clone();
+                format!("export const {name} = ns_{module}.{target};")
+            }
+            20 => format!("declare global {{ var GM{}: number }}", rng.below(4)),
+            21 => format!(
+                "export const {name} = typeof GM{} === \"number\";",
+                rng.below(4)
+            ),
             _ => {
                 // A use of another module's export.
                 let Some((module, target, kind)) =
@@ -417,22 +465,24 @@ impl World {
         let lines = &self.files[file];
         let mut wanted: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
             Default::default();
+        let mut provided = std::collections::BTreeSet::new();
         for (module, name, _) in self.exports() {
-            if format!("{module}.ts") == file {
+            if format!("{module}.ts") == file || provided.contains(&name) {
                 continue;
             }
             let used = lines.iter().any(|line| {
                 !line.starts_with("import ")
                     && line
-                        .split(|c: char| !c.is_alphanumeric())
+                        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
                         .any(|word| word == name)
                     && !line.contains(&format!("export const {name} ="))
             });
             if used {
+                provided.insert(name.clone());
                 wanted.entry(module).or_default().insert(name);
             }
         }
-        wanted
+        let mut imports: Vec<String> = wanted
             .into_iter()
             .map(|(module, names)| {
                 format!(
@@ -440,7 +490,18 @@ impl World {
                     names.into_iter().collect::<Vec<_>>().join(", ")
                 )
             })
-            .collect()
+            .collect();
+        for module in self.module_names() {
+            let module = module.trim_end_matches(".ts");
+            if format!("{module}.ts") != file
+                && lines.iter().any(|line| {
+                    !line.starts_with("import ") && line.contains(&format!("ns_{module}."))
+                })
+            {
+                imports.push(format!("import * as ns_{module} from \"./{module}\";"));
+            }
+        }
+        imports
     }
 
     fn normalize_imports(&mut self, file: &str) {
@@ -509,13 +570,18 @@ fn use_statement(rng: &mut Rng, name: &str, target: &str, kind: &str) -> String 
             "export const {name} = new {target}<{}>().get();",
             rng.pick(&["number", "string"])
         ),
+        "class" if rng.chance(30) => format!("export class {name} extends {target} {{}}"),
         "class" => format!(
             "export const {name} = new {target}().method({});",
             rng.below(9)
         ),
         "ginterface" => format!("export const {name}: {target}<string> | undefined = undefined;"),
         "interface" => format!("export const {name}: {target} | undefined = undefined;"),
-        _ => format!("export const {name} = {target};"),
+        _ => match rng.below(4) {
+            0 => format!("export const {name} = {{ {target} }};"),
+            1 => format!("export type {name} = typeof {target};"),
+            _ => format!("export const {name} = {target};"),
+        },
     }
 }
 
@@ -786,7 +852,7 @@ fn step_count() -> usize {
 }
 
 /// Every symbol id named in a row's debug text.
-fn ids_in(lines: &[String]) -> Vec<std::sync::Arc<str>> {
+pub(super) fn ids_in(lines: &[String]) -> Vec<std::sync::Arc<str>> {
     let mut seen = std::collections::HashSet::new();
     let mut ids = Vec::new();
     for line in lines {
@@ -839,21 +905,31 @@ impl Renamer {
     }
 }
 
-struct Probe {
-    table: typefacts::producer::ProducerTable,
-    lines: Vec<String>,
-    symbols: Vec<String>,
-    files: Vec<String>,
-    modules: String,
-    source_facts: Vec<String>,
+pub(super) struct Probe {
+    pub(super) table: typefacts::producer::ProducerTable,
+    pub(super) lines: Vec<String>,
+    pub(super) symbols: Vec<String>,
+    pub(super) files: Vec<String>,
+    pub(super) modules: String,
+    pub(super) source_facts: Vec<String>,
 }
 
 /// Everything the producer answers for a generation, as comparable text:
 /// the entity table, the symbol evidence for every id it names, the file rows,
 /// the module graph and the per-file source facts.
-fn probe(closure: &mut DemandClosure, generation: u64, retained: bool) -> Probe {
+pub(super) fn probe(closure: &mut DemandClosure, generation: u64, retained: bool) -> Probe {
+    probe_with(closure, generation, retained, text_demands)
+}
+
+/// [`probe`] over the demands `demands_of` derives.
+pub(super) fn probe_with(
+    closure: &mut DemandClosure,
+    generation: u64,
+    retained: bool,
+    demands_of: fn(&mut DemandClosure) -> Vec<EntityDemand>,
+) -> Probe {
     let ctx = Context::new();
-    let demands = text_demands(closure);
+    let demands = demands_of(closure);
     let table = closure
         .demand_table_for_groups(
             &ctx,
@@ -929,7 +1005,7 @@ fn probe(closure: &mut DemandClosure, generation: u64, retained: bool) -> Probe 
     }
 }
 
-fn first_difference(what: &str, left: &[String], right: &[String]) -> Option<String> {
+pub(super) fn first_difference(what: &str, left: &[String], right: &[String]) -> Option<String> {
     if left == right {
         return None;
     }
@@ -984,10 +1060,24 @@ fn first_difference(what: &str, left: &[String], right: &[String]) -> Option<Str
 /// One seeded run: a retained closure follows `steps` random edits; after each,
 /// every family is compared with a closure that replays the same updates and
 /// materializes the whole batch.
-fn run_seed(seed: u64, steps: usize, modules: usize, plain: bool) -> usize {
+/// What one seeded run reused: demand contributions (never, ADR 0364), and
+/// binder-level reference files and entity symbols (ADR 0369).
+#[derive(Default)]
+struct Reuse {
+    contributions: usize,
+    reference_files: usize,
+    symbols: usize,
+}
+
+fn run_seed(seed: u64, steps: usize, modules: usize, plain: bool) -> Reuse {
     let ctx = Context::new();
     let mut rng = Rng::new(seed);
     let mut world = World::initial(&mut rng, modules, plain);
+    if std::env::var_os("TSRS_RANDOM_DUMP").is_some() {
+        for (name, lines) in &world.files {
+            eprintln!("--- {name}\n{}", World::render(lines));
+        }
+    }
     let mut files: Vec<(String, String)> =
         vec![("tsconfig.json".to_owned(), CONFIGS[0].to_owned())];
     for (name, lines) in &world.files {
@@ -1004,7 +1094,7 @@ fn run_seed(seed: u64, steps: usize, modules: usize, plain: bool) -> usize {
     let mut log: Vec<String> = Vec::new();
     let mut history: Vec<Vec<FileChange>> = Vec::new();
     let mut versions: std::collections::HashMap<String, u64> = Default::default();
-    let mut retained_total = 0usize;
+    let mut reuse = Reuse::default();
     drop(initial);
     for step in 0..steps {
         // An update that changes no file is not sent by the client, and the
@@ -1016,6 +1106,12 @@ fn run_seed(seed: u64, steps: usize, modules: usize, plain: bool) -> usize {
             }
         };
         log.push(format!("step {step}: {description}"));
+        if std::env::var_os("TSRS_RANDOM_DUMP").is_some() {
+            eprintln!("=== step {step}: {description}");
+            for (name, lines) in &world.files {
+                eprintln!("--- {name}\n{}", World::render(lines));
+            }
+        }
         let mut changes = Vec::new();
         for (name, content) in edits {
             let version = versions.entry(name.clone()).or_default();
@@ -1034,7 +1130,14 @@ fn run_seed(seed: u64, steps: usize, modules: usize, plain: bool) -> usize {
         history.push(changes);
         let generation = step as u64 + 2;
         let retained = probe(&mut incremental, generation, true);
-        retained_total += incremental.stats().retention.retained_files;
+        let stats = incremental.stats().retention;
+        reuse.contributions += stats.retained_files;
+        reuse.reference_files += stats.cached_reference_facts
+            + incremental
+                .backend_mut()
+                .binder_retention()
+                .reused_reference_files;
+        reuse.symbols += stats.cached_symbol_facts;
 
         // The oracle replays every edit so far as its own update, as the
         // retained side saw them, and then materializes the whole batch.
@@ -1081,26 +1184,46 @@ fn run_seed(seed: u64, steps: usize, modules: usize, plain: bool) -> usize {
             );
         }
     }
-    eprintln!("seed {seed}: {steps} steps, {retained_total} retained file-generations");
-    retained_total
+    eprintln!(
+        "seed {seed}: {steps} steps, {} retained contributions, {} reused reference files, {} reused entity symbols",
+        reuse.contributions, reuse.reference_files, reuse.symbols
+    );
+    reuse
 }
 
+/// V4 (STABLE-IDS 9, ADR 0369): binder-level answers are reused across
+/// updates, and every generation equals a fresh whole-batch one.
 #[test]
 fn seeded_random_edit_sequences_match_fresh() {
+    let (mut files, mut symbols) = (0, 0);
     for seed in seed_range() {
-        run_seed(seed, step_count(), 5, false);
+        let reuse = run_seed(seed, step_count(), 5, false);
+        assert_eq!(reuse.contributions, 0, "an update reused a contribution");
+        files += reuse.reference_files;
+        symbols += reuse.symbols;
     }
+    assert!(
+        files > 0 && symbols > 0,
+        "nothing was reused ({files} reference files, {symbols} entity symbols): the comparison is vacuous"
+    );
 }
 
 /// The same edit kinds over files whose ids are all declaration hashes (the
-/// shape that used to be retained), with nothing reused across updates.
+/// shape that used to be retained): no demand contribution is reused, binder
+/// answers are (ADR 0369).
 #[test]
 fn seeded_random_edit_sequences_over_retainable_files_match_fresh() {
-    let mut retained = 0;
+    let (mut retained, mut files) = (0, 0);
     for seed in seed_range() {
-        retained += run_seed(seed, step_count(), 8, true);
+        let reuse = run_seed(seed, step_count(), 8, true);
+        retained += reuse.contributions;
+        files += reuse.reference_files;
     }
     assert_eq!(retained, 0, "an update reused a contribution");
+    assert!(
+        files > 0,
+        "no reference file was reused: the comparison is vacuous"
+    );
 }
 
 /// A mapped type over a namespace object copies its functions into transient

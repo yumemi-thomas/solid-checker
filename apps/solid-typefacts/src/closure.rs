@@ -241,17 +241,17 @@ impl DemandClosure {
     /// Applies editor overlays and advances exactly one generation, even when
     /// the backend reports no affected source files.
     ///
-    /// Nothing derived from the preceding generation's analysis survives: a
-    /// retained answer is reusable only if everything it read is unchanged,
-    /// and that took a record of dependencies (claim-order ids, configuration,
-    /// reference space across files, runtime identity) this producer does not
-    /// keep. So the demand contributions, async facts, suppression union and
-    /// the backend's source-fact memo, reference contributions and identity
-    /// maps are all discarded, and the next table is computed as a fresh
-    /// program would compute it. What stays is the program itself (incremental
-    /// reuse inside the backend) and the previous table, which only the
-    /// transport delta compares against. Every changed path plus the affected
-    /// set is named as changed, and the recompute names every demanded path.
+    /// Every type-derived answer is recomputed: a retained answer is reusable
+    /// only if everything it read is unchanged, and an answer computed
+    /// through the checker's types can depend on what the checker computed
+    /// before (ADR 0364). So the demand contributions, async facts, suppression
+    /// union and the backend's source-fact memo and identity maps are
+    /// discarded, and the next table is computed as a fresh program would
+    /// compute it. What stays is the program itself (incremental reuse inside
+    /// the backend), the previous table, which only the transport delta
+    /// compares against, and the backend's binder-level answers, each with the
+    /// digests it read (ADR 0369). Every changed path plus the affected set is
+    /// named as changed, and the recompute names every demanded path.
     pub fn update(
         &mut self,
         ctx: &Context,
@@ -273,8 +273,9 @@ impl DemandClosure {
 
     /// Drops what earlier analysis left behind and a table could otherwise
     /// reuse: demand contributions, async facts, the suppression union, and the
-    /// backend's memo, reference contributions and id claims. The previous
-    /// table stays (it only feeds the transport delta).
+    /// backend's memo, reference index and id maps. The previous table stays
+    /// (it only feeds the transport delta), and so do the backend's binder-level
+    /// answers, which check their own dependencies (ADR 0369).
     fn discard_derived_state(&mut self) {
         self.symbols_by_path = HashMap::new();
         self.symbol_references = None;
