@@ -60,6 +60,12 @@ impl<'a> SemanticLookup<'a> {
         if self.function_is_component(file, function) {
             return ComponentStatus::Proven;
         }
+        if self
+            .possible_component_functions()
+            .contains(&(file.path.as_str(), function.span))
+        {
+            return ComponentStatus::Uncertain;
+        }
         let possible = crate::owners::component_binding_name(file, function).is_some_and(|name| {
             self.dialect
                 .component_name_may_be_component(file.source_text(name.span).unwrap_or_default())
@@ -91,42 +97,58 @@ impl<'a> SemanticLookup<'a> {
         &self.component_statuses().1
     }
 
+    /// Functions a resolved call enters as plain calls, whose other entries
+    /// the census cannot follow, so one of them may render the function
+    /// (ADR 0331). Neither execution model is selected for them: they answer
+    /// [`ComponentStatus::Uncertain`] from
+    /// [`Self::function_component_status`] without being components, so the
+    /// call model keeps its findings and each consumer keeps the ambiguity.
+    pub(super) fn possible_component_functions(&self) -> &HashSet<(&'a str, Span)> {
+        &self.component_statuses().2
+    }
+
     fn component_statuses(&self) -> &ComponentSets<'a> {
         self.component_functions.get_or_init(|| {
             let mut proven = HashSet::default();
             let mut escaped = HashSet::default();
+            let mut possible = HashSet::default();
             for file in &self.facts.files {
                 for function in &file.ast.functions {
+                    let key = (file.path.as_str(), function.span);
                     match self.compute_function_component_status(file, function) {
-                        ComponentStatus::Proven => {
-                            proven.insert((file.path.as_str(), function.span));
+                        Identity::Proven => {
+                            proven.insert(key);
                         }
                         // Analyzed as a component, as before; findings in
                         // its own body are obligations (`UndecidedRegion`).
-                        ComponentStatus::Uncertain => {
-                            proven.insert((file.path.as_str(), function.span));
-                            escaped.insert((file.path.as_str(), function.span));
+                        Identity::Escaped => {
+                            proven.insert(key);
+                            escaped.insert(key);
                         }
-                        ComponentStatus::No => {}
+                        Identity::Possible => {
+                            possible.insert(key);
+                        }
+                        Identity::No => {}
                     }
                 }
             }
-            (proven, escaped)
+            (proven, escaped, possible)
         })
     }
 
-    /// `Proven` or `No`, or `Uncertain` when only an escaping reference
-    /// withholds the direct-JSX-return proof.
+    /// `Proven` or `No`; `Escaped` when only an escaping reference withholds
+    /// the direct-JSX-return proof; `Possible` when a call would make it `No`
+    /// but the census of its entries is incomplete.
     fn compute_function_component_status(
         &self,
         file: &FileFacts,
         function: &solid_facts::ast::FunctionFact,
-    ) -> ComponentStatus {
+    ) -> Identity {
         if self
             .jsx_call_site_loading(file.path.as_str(), function.span)
             .any
         {
-            return ComponentStatus::Proven;
+            return Identity::Proven;
         }
         // ADR 0334/0335: a function written as an audited router's component
         // value is rendered there, and an anonymous inline value has no other
@@ -134,12 +156,12 @@ impl<'a> SemanticLookup<'a> {
         // body, which can hand it on: `invoke = Inline`).
         if function.name.is_none() && self.route_component_value(file.path.as_str(), function.span)
         {
-            return ComponentStatus::Proven;
+            return Identity::Proven;
         }
         // ADR 0342: an anonymous function stored in a compound component that
         // some JSX member tag renders has no other reference.
         if function.name.is_none() && self.compound_value(file.path.as_str(), function.span) {
-            return ComponentStatus::Proven;
+            return Identity::Proven;
         }
         let binding_name = crate::owners::component_binding_name(file, function);
         let directly_contains_jsx = |span: Span| {
@@ -171,9 +193,9 @@ impl<'a> SemanticLookup<'a> {
             return if self.project_has_component_type()
                 && self.binding_has_component_type(file, binding_name)
             {
-                ComponentStatus::Proven
+                Identity::Proven
             } else {
-                ComponentStatus::No
+                Identity::No
             };
         }
         // Component identity is about the function value itself, not anything
@@ -306,6 +328,25 @@ impl<'a> SemanticLookup<'a> {
         // undecided rather than proven.
         let method =
             function.name.is_none() && crate::owners::own_method_name(file, function).is_some();
+        let directly_called = !self
+            .function_call_sites(file.path.as_str(), function.span)
+            .is_empty();
+        // ADR 0331: a visible call proves the function is not a component
+        // only when it is every entry. So a called function's references are
+        // a census too: each must be a resolved call site, a reference the
+        // test above accounts for, a type query, or an exact alias whose own
+        // references are calls, tags, type queries or surface. Anything
+        // else (an argument, a store, a method's receiver, a dotted tag) is
+        // an entry nobody enumerated, which may render it.
+        let call_references = if directly_called {
+            self.function_call_site_references(file.path.as_str(), function.span)
+                .into_iter()
+                .map(|(caller, span)| (caller.path.as_str(), span))
+                .collect::<HashSet<_>>()
+        } else {
+            HashSet::default()
+        };
+        let mut alias_entries = AliasEntries::default();
         let mut reference_escapes = true;
         if !method
             && let Some(symbol) = binding_name
@@ -324,28 +365,53 @@ impl<'a> SemanticLookup<'a> {
                 })
         {
             reference_escapes = false;
+            alias_entries.unfollowed = false;
             for reference in symbol.references() {
                 let Some((candidate, span)) = reference_span(reference) else {
                     reference_escapes = true;
+                    alias_entries.unfollowed = true;
                     continue;
                 };
                 let callback = reference_is_callback_value(candidate, span);
                 let component_value = component_value_operation(candidate, span);
                 referenced_as_callback |= callback;
                 referenced_as_component_property |= component_value;
-                reference_escapes |= !(callback && !component_value)
+                let escapes = !(callback && !component_value)
                     && !rendered_by_dialect_prop(candidate, span)
                     && !reference_is_declaration_or_module_surface(candidate, span)
                     && !self.lazy_default_value(candidate, function, span)
                     && !self.route_component_value(candidate.path.as_str(), span)
                     && !self.compound_value(candidate.path.as_str(), span);
+                reference_escapes |= escapes;
+                if !escapes
+                    || call_references.contains(&(candidate.path.as_str(), span))
+                    || reference_in_type_query(candidate, span)
+                {
+                    continue;
+                }
+                match self.exact_alias_of_reference(candidate, span) {
+                    Some(alias) => self.alias_entries(alias, ALIAS_DEPTH, &mut alias_entries),
+                    None => alias_entries.unfollowed = true,
+                }
             }
+        } else {
+            alias_entries.unfollowed = true;
+        }
+        // An open program's unseen importers of an exported function are
+        // entries no census enumerates (ADR 0331 treats the module surface as
+        // no entry only for the proof that it *is* a component). A closed
+        // program has none, but a visible namespace read can still hand the
+        // export out with no reference naming it (ADR 0347): a computed or
+        // otherwise unnamed escape, or a named member or dynamic-import read.
+        if directly_called
+            && (binding_name.is_some_and(|name| binding_exported(file, name.span))
+                && (!self.program_closed || self.escapes_unnamed(file.path.as_str()))
+                || self.hands_out_by_name(file.path.as_str(), function.span))
+        {
+            alias_entries.unfollowed = true;
         }
         let hoc_bound = binding_name.is_some()
             && crate::owners::function_binding_name(file, function).is_none();
-        let directly_called = !self
-            .function_call_sites(file.path.as_str(), function.span)
-            .is_empty();
         let direct_return_proof = directly_returns_jsx
             && (self.dialect.direct_jsx_return_is_component()
                 || hoc_bound
@@ -358,11 +424,16 @@ impl<'a> SemanticLookup<'a> {
         if direct_return_proof && !reference_escapes
             || self.binding_has_component_type(file, binding_name)
         {
-            ComponentStatus::Proven
+            Identity::Proven
         } else if direct_return_proof {
-            ComponentStatus::Uncertain
+            Identity::Escaped
+        } else if directly_called && (alias_entries.unfollowed || alias_entries.rendered) {
+            // ADR 0331: called, but entered some way the census cannot
+            // follow, so the call is no proof of every entry. (An alias tag
+            // made it a component above, through `jsx_call_site_loading`.)
+            Identity::Possible
         } else {
-            ComponentStatus::No
+            Identity::No
         }
     }
 
@@ -851,7 +922,9 @@ impl<'a> SemanticLookup<'a> {
     /// render edges are invisible to component identity only because a
     /// rendered function is already `jsx_call_site_loading(..).any`. Two copies
     /// of the resolution could drift apart on the next filter added to either;
-    /// one iterator cannot.
+    /// one iterator cannot. The one asymmetry is deliberate: a tag naming an
+    /// exact alias ([`Self::alias_rendered_function`]) proves identity only,
+    /// and the graph, lacking its edge, keeps the alias as an escape.
     fn jsx_rendered_functions(
         &self,
     ) -> impl Iterator<
@@ -889,8 +962,129 @@ impl<'a> SemanticLookup<'a> {
                     .or_default();
                 entry.any = true;
             }
+            // ADR 0331: `const P2 = Plain; <P2/>` renders `Plain` as a
+            // component, as `<Plain/>` does. Identity only: the call graph
+            // keeps no edge for it, so its consumers still see the alias as
+            // an unaccounted reference and fail closed.
+            for file in &self.facts.files {
+                for element in &file.ast.jsx_elements {
+                    if self
+                        .function_called_at(file.path.as_str(), element.name.span)
+                        .is_some()
+                    {
+                        continue;
+                    }
+                    if let Some((target_file, target)) =
+                        self.alias_rendered_function(file, element.name.span)
+                    {
+                        map.entry((target_file.path.as_str(), target.span))
+                            .or_default()
+                            .any = true;
+                    }
+                }
+            }
             map
         })
+    }
+
+    /// The project function a tag name holds through exact aliases: the tag
+    /// names a binding [`exact_alias_initializer`] accepts, whose initializer
+    /// names a project function or, transitively, another such binding.
+    fn alias_rendered_function(
+        &self,
+        file: &FileFacts,
+        name: Span,
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+        let mut symbol = self.entities.value_symbol(file, name)?.as_str();
+        for _ in 0..ALIAS_DEPTH {
+            let (binding_file, binding) = self.binding_for_symbol(symbol)?;
+            let initializer = exact_alias_initializer(binding_file, binding)?;
+            symbol = self
+                .entities
+                .value_symbol(binding_file, initializer)?
+                .as_str();
+            if let Some((target_file, target)) = self.function_for_symbol(symbol) {
+                // The alias holds what its initializer's binding held when it
+                // ran; that is this function only if nothing writes it.
+                return function_holds_its_binding(target_file, target)
+                    .then_some((target_file, target));
+            }
+        }
+        None
+    }
+
+    /// How the references of an exact alias binding enter the value it holds
+    /// (ADR 0331), transitively through aliases of the alias.
+    fn alias_entries(&self, alias: &str, depth: usize, entries: &mut AliasEntries) {
+        let Some(symbol) = self.symbols_by_id().get(alias).copied() else {
+            entries.unfollowed = true;
+            return;
+        };
+        if depth == 0 {
+            entries.unfollowed = true;
+            return;
+        }
+        for reference in symbol.references() {
+            let Some((candidate, span)) = self.reference_location(reference) else {
+                entries.unfollowed = true;
+                continue;
+            };
+            if reference_is_declaration_or_module_surface(candidate, span)
+                || reference_in_type_query(candidate, span)
+            {
+                continue;
+            }
+            if candidate
+                .ast
+                .jsx_elements
+                .iter()
+                .any(|element| element.name.span == span || element.closing_name == Some(span))
+            {
+                entries.rendered = true;
+                continue;
+            }
+            if self
+                .call_by_callee(candidate, span)
+                .is_some_and(|call| call.callee == span)
+            {
+                continue;
+            }
+            if let Some(next) = self.exact_alias_of_reference(candidate, span) {
+                self.alias_entries(next, depth - 1, entries);
+                continue;
+            }
+            entries.unfollowed = true;
+        }
+    }
+
+    /// The symbol of the exact alias binding whose initializer is the
+    /// reference at `span`: `const Alias = Value`.
+    fn exact_alias_of_reference(&self, file: &FileFacts, span: Span) -> Option<&'a str> {
+        let binding = file.ast.bindings.iter().find(|binding| {
+            binding
+                .initializer_identifier
+                .as_ref()
+                .is_some_and(|identifier| identifier.span == span)
+        })?;
+        exact_alias_initializer(file, binding)?;
+        // An open program's unseen importers may use an exported alias any
+        // way at all; that is no exact alias of anything we can follow.
+        if !self.program_closed && binding_exported(file, binding.names[0].span) {
+            return None;
+        }
+        let symbol = self
+            .entities
+            .at(file.path.as_str(), binding.names[0].span)?;
+        self.symbols_by_id()
+            .get_key_value(symbol.as_str())
+            .map(|(id, _)| *id)
+    }
+
+    fn reference_location(&self, reference: &typefacts::Location) -> Option<(&'a FileFacts, Span)> {
+        let candidate = self.file_by_path(reference.path.as_ref())?;
+        let start = u32::try_from(reference.start_byte).ok()?;
+        let end = u32::try_from(reference.end_byte).ok()?;
+        Some((candidate, Span::new(start, end)))
     }
 
     /// Every entry the graph can name for each project function.
@@ -978,18 +1172,94 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
-    pub(super) fn entities_by_location(&self) -> &HashMap<(&'a str, u64, u64), &'a EntityFact> {
-        self.entities_by_location.get_or_init(|| {
-            let mut map = HashMap::default();
-            for entity in self.facts.typescript.entities() {
-                map.entry((
-                    entity.location.path.as_ref(),
-                    entity.location.start_byte,
-                    entity.location.end_byte,
-                ))
-                .or_insert(entity);
-            }
-            map
-        })
+    pub(crate) fn entities_by_location(&self) -> &HashMap<(&'a str, u64, u64), &'a EntityFact> {
+        self.entities_by_location
+            .get_or_init(|| super::first_entity_by_location(self.facts.typescript.entities()))
     }
+}
+
+/// How far a chain of aliases (`const A = Plain; const B = A`) is followed.
+const ALIAS_DEPTH: usize = 8;
+
+/// The entries an exact alias's references give the value it holds.
+#[derive(Default)]
+struct AliasEntries {
+    /// A JSX tag names the alias: a component render.
+    rendered: bool,
+    /// Some reference is none of these, nor a call whose whole callee is the
+    /// alias (read attribution follows those calls), a declaration, module
+    /// surface, type query or a further exact alias.
+    unfollowed: bool,
+}
+
+/// The identifier initializing `binding` when the binding is an exact alias
+/// of it: one plain name, bound by `const` or by a `let` nothing writes, to
+/// an identifier (parentheses and TypeScript wrappers aside), so the binding
+/// holds that value whenever it is read after its declarator.
+fn exact_alias_initializer(
+    file: &FileFacts,
+    binding: &solid_facts::ast::BindingFact,
+) -> Option<Span> {
+    let identifier = binding.initializer_identifier.as_ref()?;
+    let [name] = binding.names.as_slice() else {
+        return None;
+    };
+    (binding.shape == solid_facts::ast::BindingShape::Identifier
+        && (binding.immutable || binding.runtime_let && !binding_written(file, name.span)))
+    .then_some(identifier.span)
+}
+
+/// A reference inside a TypeScript type query (`typeof Plain`) is erased.
+fn reference_in_type_query(file: &FileFacts, span: Span) -> bool {
+    file.ast
+        .type_queries
+        .iter()
+        .any(|query| query.contains(span))
+}
+
+/// Whether the module exports the binding declared at `name` itself: an
+/// exported declaration, `export { name }` or `export default name`.
+/// Re-exports elsewhere need this export first.
+fn binding_exported(file: &FileFacts, name: Span) -> bool {
+    file.ast
+        .exports
+        .iter()
+        .filter(|export| export.module.is_none())
+        .flat_map(|export| export.declarations.iter().chain(export.specifiers.iter()))
+        .any(|specifier| {
+            specifier.local.span == name
+                || file.ast.reference_declaration(specifier.local.span) == Some(name)
+        })
+}
+
+/// What [`SemanticLookup::compute_function_component_status`] decides.
+enum Identity {
+    Proven,
+    Escaped,
+    Possible,
+    No,
+}
+
+/// Whether the binding that names `function` holds it whenever it is read: a
+/// function declaration nothing writes, or a `const` (or a `let` nothing
+/// writes) initialized with the function itself. A call's result
+/// (`withX(() => ...)`), a method, or a written binding holds no proven value.
+fn function_holds_its_binding(file: &FileFacts, function: &solid_facts::ast::FunctionFact) -> bool {
+    if let Some(name) = function.name.as_ref()
+        && function.kind == solid_facts::ast::FunctionKind::Declaration
+    {
+        return !binding_written(file, name.span);
+    }
+    let Some(name) = crate::owners::function_binding_name(file, function) else {
+        return false;
+    };
+    file.ast.bindings.iter().any(|binding| {
+        binding.initializer_function
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && matches!(binding.names.as_slice(), [only] if only.span == name.span)
+            && binding.initializer.is_some_and(|initializer| {
+                file.ast.peel_ts_sugar_span(initializer) == function.span
+            })
+            && (binding.immutable || binding.runtime_let && !binding_written(file, name.span))
+    })
 }

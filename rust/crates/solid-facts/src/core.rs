@@ -187,6 +187,62 @@ pub fn resolve_relative_module_path<'a, I>(
 where
     I: IntoIterator<Item = &'a str>,
 {
+    let candidates = relative_module_candidates(source, module)?;
+    let mut resolved = None;
+    for path in project_paths {
+        if !candidates
+            .iter()
+            .any(|candidate| equivalent_project_path(path, candidate))
+        {
+            continue;
+        }
+        if resolved.is_some() {
+            return None;
+        }
+        resolved = Some(path);
+    }
+    resolved
+}
+
+/// [`resolve_relative_module_path`] against a prebuilt path index instead of a
+/// scan of every project path: `lookup` answers, for an exact path string, the
+/// stored path and how many project entries carry it (`None`: no entry). The
+/// answer is the scan's: a path is a match when it is equivalent to any
+/// candidate, a path matching several candidates counts once, a path listed
+/// twice counts twice, and more than one match fails closed.
+#[must_use]
+pub fn resolve_relative_module_path_indexed<'a>(
+    source: &str,
+    module: &str,
+    lookup: impl Fn(&str) -> Option<(&'a str, usize)>,
+) -> Option<&'a str> {
+    let candidates = relative_module_candidates(source, module)?;
+    let mut matched: Vec<(&'a str, usize)> = Vec::new();
+    for candidate in &candidates {
+        // The exact path, the same path under the `/private` alias, and the
+        // path the alias names: the three spellings `equivalent_project_path`
+        // accepts for one candidate.
+        let aliased = format!("/private{candidate}");
+        let unaliased = candidate.strip_prefix("/private");
+        for probe in [Some(candidate.as_str()), Some(aliased.as_str()), unaliased]
+            .into_iter()
+            .flatten()
+        {
+            if let Some((path, count)) = lookup(probe)
+                && equivalent_project_path(path, candidate)
+                && !matched.iter().any(|(seen, _)| *seen == path)
+            {
+                matched.push((path, count));
+            }
+        }
+    }
+    match matched.as_slice() {
+        [(path, 1)] => Some(path),
+        _ => None,
+    }
+}
+
+fn relative_module_candidates(source: &str, module: &str) -> Option<HashSet<String>> {
     if !module.starts_with("./") && !module.starts_with("../") {
         return None;
     }
@@ -212,20 +268,7 @@ where
     for extension in MODULE_EXTENSIONS {
         candidates.insert(format!("{normalized}/index{extension}"));
     }
-    let mut resolved = None;
-    for path in project_paths {
-        if !candidates
-            .iter()
-            .any(|candidate| equivalent_project_path(path, candidate))
-        {
-            continue;
-        }
-        if resolved.is_some() {
-            return None;
-        }
-        resolved = Some(path);
-    }
-    resolved
+    Some(candidates)
 }
 
 fn equivalent_project_path(left: &str, right: &str) -> bool {
@@ -315,6 +358,52 @@ mod tests {
     fn rejects_invalid_ranges_and_generation() {
         assert!(Span::new(4, 2).validate(8).is_err());
         assert_eq!(Generation::new(0), Err(FactIdentityError::ZeroGeneration));
+    }
+
+    #[test]
+    fn the_indexed_relative_module_resolver_answers_what_the_scan_answers() {
+        let path_sets: [&[&str]; 8] = [
+            &["src/App.tsx", "src/values.ts", "src/values/index.ts"],
+            &["src/App.tsx", "src/values.ts"],
+            &["src/App.tsx", "src/values.ts", "src/values.ts"],
+            &["src/App.tsx", "src/values.ts", "src/values.tsx"],
+            &["/private/tmp/p/src/App.tsx", "/tmp/p/src/values.ts"],
+            &["/tmp/p/src/App.tsx", "/private/tmp/p/src/values.ts"],
+            &["/tmp/p/src/values.ts", "/private/tmp/p/src/values.ts"],
+            &["src/App.tsx"],
+        ];
+        let sources = [
+            "src/App.tsx",
+            "/tmp/p/src/App.tsx",
+            "/private/tmp/p/src/App.tsx",
+        ];
+        let modules = [
+            "./values",
+            "./values.js",
+            "./values.ts",
+            "../values",
+            "./values/index",
+            "solid-js",
+            "./missing",
+        ];
+        for paths in path_sets {
+            let lookup = |probe: &str| {
+                let count = paths.iter().filter(|path| **path == probe).count();
+                paths
+                    .iter()
+                    .find(|path| **path == probe)
+                    .map(|path| (*path, count))
+            };
+            for source in sources {
+                for module in modules {
+                    assert_eq!(
+                        resolve_relative_module_path_indexed(source, module, lookup),
+                        resolve_relative_module_path(source, module, paths.iter().copied()),
+                        "{source} {module} {paths:?}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
