@@ -1982,6 +1982,10 @@ struct StructuredReturnInputs<'a> {
     returned: &'a [SummaryReads],
 }
 
+/// Files with at most this many returns filter them per exported function;
+/// larger ones group them by owner once.
+const SMALL_RETURN_COUNT: usize = 16;
+
 fn export_structured_return_obligations(
     context: &InterproceduralContext<'_, '_>,
     inputs: &StructuredReturnInputs<'_>,
@@ -2080,26 +2084,40 @@ fn export_structured_return_obligations(
         let Some(function) = file.ast.function_at(node.span) else {
             continue;
         };
-        // The returns each function owns, in source order, grouped once per
-        // file: filtering every return of the file per exported function was
-        // quadratic in a module with many functions.
-        let owned_returns = returns_by_owner
-            .entry(file.path.as_str())
-            .or_insert_with(|| {
-                let mut owned: HashMap<Span, Vec<usize>> = HashMap::default();
-                for (index, returned) in file.ast.returns.iter().enumerate() {
-                    if let Some(owner) = containing_ast_function(&file.ast, returned.span) {
-                        owned.entry(owner.span).or_default().push(index);
+        // The returns this function owns, in source order. A file with many
+        // returns groups them by owner once: filtering every return per
+        // exported function was quadratic in a module with many functions.
+        // Exactly one of the two chained iterators is non-empty.
+        let small = file.ast.returns.len() <= SMALL_RETURN_COUNT;
+        let grouped = (!small).then(|| {
+            returns_by_owner
+                .entry(file.path.as_str())
+                .or_insert_with(|| {
+                    let mut owned: HashMap<Span, Vec<usize>> = HashMap::default();
+                    for (index, returned) in file.ast.returns.iter().enumerate() {
+                        if let Some(owner) = containing_ast_function(&file.ast, returned.span) {
+                            owned.entry(owner.span).or_default().push(index);
+                        }
                     }
-                }
-                owned
-            });
+                    owned
+                })
+        });
         for property in function
             .expression_return
             .iter()
             .chain(
-                owned_returns
-                    .get(&function.span)
+                file.ast
+                    .returns
+                    .iter()
+                    .take(if small { usize::MAX } else { 0 })
+                    .filter(|returned| {
+                        containing_ast_function(&file.ast, returned.span)
+                            .is_some_and(|owner| owner.span == function.span)
+                    }),
+            )
+            .chain(
+                grouped
+                    .and_then(|grouped| grouped.get(&function.span))
                     .into_iter()
                     .flatten()
                     .map(|index| &file.ast.returns[*index]),
