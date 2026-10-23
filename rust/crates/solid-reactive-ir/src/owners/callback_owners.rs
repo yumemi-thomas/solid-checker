@@ -243,7 +243,7 @@ pub(crate) fn returned_callback_result_is_invoked(
     factory_call: &solid_facts::ast::CallFact,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    !returned_callback_invocation_sites(file, factory_call, lookup).is_empty()
+    !returned_callback_invocation_sites_memo(file, factory_call, lookup).is_empty()
 }
 
 /// Proven project invocations of the function returned by `factory_call`.
@@ -258,6 +258,29 @@ pub(crate) fn returned_callback_invocation_sites(
     factory_call: &solid_facts::ast::CallFact,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<ReturnedCallbackInvocationSite> {
+    returned_callback_invocation_sites_memo(file, factory_call, lookup)
+        .as_ref()
+        .clone()
+}
+
+/// [`returned_callback_invocation_sites`], computed once per factory call: the
+/// compute scans every file's calls, and execution, owner and standing passes
+/// each ask about the same call.
+fn returned_callback_invocation_sites_memo(
+    file: &solid_facts::FileFacts,
+    factory_call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> std::sync::Arc<Vec<ReturnedCallbackInvocationSite>> {
+    lookup.returned_invocation_sites_memo(file.path.as_str(), factory_call.span, || {
+        compute_returned_callback_invocation_sites(file, factory_call, lookup)
+    })
+}
+
+fn compute_returned_callback_invocation_sites(
+    file: &solid_facts::FileFacts,
+    factory_call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<ReturnedCallbackInvocationSite> {
     let direct_factory_value = |argument: Span| {
         file.ast
             .calls_within(argument)
@@ -265,9 +288,11 @@ pub(crate) fn returned_callback_invocation_sites(
             .is_some_and(|nested| nested.span == factory_call.span)
     };
     let mut sites = Vec::new();
-    for outer in file.ast.calls.iter().filter(|outer| {
-        outer.span != factory_call.span
-            && outer.callee.contains(factory_call.span)
+    for outer in file
+        .ast
+        .calls_with_callee_containing(factory_call.span)
+        .filter(|outer| {
+            outer.span != factory_call.span
             && file
                 .ast
                 .calls_within(outer.callee)
@@ -281,7 +306,8 @@ pub(crate) fn returned_callback_invocation_sites(
             && lookup
                 .member_property_at(file, outer.callee)
                 .is_none_or(|property| file.source_text(property) == Some("preload"))
-    }) {
+        })
+    {
         sites.push(ReturnedCallbackInvocationSite {
             path: file.path.to_string(),
             span: outer.span,
@@ -376,16 +402,29 @@ pub(crate) fn returned_callback_invocation_sites(
         }
     }
 
+    // Group the reference locations by file once, so each file's test of a
+    // span is two lookups with no allocation (`returned_binding_reference`
+    // builds an owned path key for every span it is asked about).
+    let mut references_by_path: HashMap<&str, HashSet<(u64, u64)>> = HashMap::default();
     let references = returned_binding_references(lookup, &factory_bindings);
+    for (path, start, end) in &references {
+        references_by_path
+            .entry(path.as_str())
+            .or_default()
+            .insert((*start, *end));
+    }
     for use_file in lookup.files() {
+        let file_entities = lookup.entities().by_path.get(use_file.path.as_str());
+        let file_references = references_by_path.get(use_file.path.as_str());
+        let returned = |span: Span| {
+            let key = (u64::from(span.start), u64::from(span.end));
+            file_entities
+                .and_then(|entities| entities.get(&key))
+                .is_some_and(|symbol| factory_bindings.contains(symbol))
+                || file_references.is_some_and(|references| references.contains(&key))
+        };
         for outer in &use_file.ast.calls {
-            if returned_binding_reference(
-                use_file,
-                outer.callee,
-                lookup,
-                &factory_bindings,
-                &references,
-            ) {
+            if returned(outer.callee) {
                 sites.push(ReturnedCallbackInvocationSite {
                     path: use_file.path.to_string(),
                     span: outer.span,
@@ -393,15 +432,12 @@ pub(crate) fn returned_callback_invocation_sites(
                     inherited_owner: OwnerEdgeKind::Preserve,
                 });
             }
-            let primitive = lookup.primitive_at_call(use_file, outer.span);
             for (index, argument) in outer.arguments.iter().enumerate() {
-                if returned_binding_reference(
-                    use_file,
-                    argument.span,
-                    lookup,
-                    &factory_bindings,
-                    &references,
-                ) && primitive.is_some_and(|primitive| {
+                if !returned(argument.span) {
+                    continue;
+                }
+                let primitive = lookup.primitive_at_call(use_file, outer.span);
+                if primitive.is_some_and(|primitive| {
                     lookup
                         .dialect
                         .callback_semantics_at(primitive, index, outer.arguments.len())
@@ -430,16 +466,8 @@ pub(crate) fn returned_callback_invocation_sites(
 
             // `lazyResult.preload()` resolves the property as a distinct
             // method; prove the receiver from the member-expression AST.
-            if use_file.ast.members.iter().any(|member| {
-                outer.callee.contains(member.span)
-                    && use_file.source_text(member.property) == Some("preload")
-                    && returned_binding_reference(
-                        use_file,
-                        member.object,
-                        lookup,
-                        &factory_bindings,
-                        &references,
-                    )
+            if use_file.ast.members_within(outer.callee).any(|member| {
+                use_file.source_text(member.property) == Some("preload") && returned(member.object)
             }) {
                 sites.push(ReturnedCallbackInvocationSite {
                     path: use_file.path.to_string(),
@@ -451,13 +479,7 @@ pub(crate) fn returned_callback_invocation_sites(
         }
 
         for element in &use_file.ast.jsx_elements {
-            if returned_binding_reference(
-                use_file,
-                element.name.span,
-                lookup,
-                &factory_bindings,
-                &references,
-            ) {
+            if returned(element.name.span) {
                 sites.push(ReturnedCallbackInvocationSite {
                     path: use_file.path.to_string(),
                     span: element.span,

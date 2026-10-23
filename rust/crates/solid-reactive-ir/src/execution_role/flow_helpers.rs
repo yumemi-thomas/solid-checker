@@ -220,18 +220,18 @@ pub(super) fn member_static_key(
 /// The objects an origin names, innermost first: a `seen` key component, so
 /// a holder reached with a different origin is followed (and its receiver
 /// proofs run) again.
-pub(super) fn origin_identity(origin: &FlowOrigin<'_>) -> Vec<(String, Span)> {
+pub(super) fn origin_identity<'a>(origin: &FlowOrigin<'a>) -> Vec<(&'a str, Span)> {
     let mut identity = Vec::new();
     let mut origin = origin;
     loop {
         match origin {
             FlowOrigin::Unknown => return identity,
             FlowOrigin::Object(file, span) => {
-                identity.push((file.path.to_string(), *span));
+                identity.push((file.path.as_str(), *span));
                 return identity;
             }
             FlowOrigin::Element(file, span, enclosing) => {
-                identity.push((file.path.to_string(), *span));
+                identity.push((file.path.as_str(), *span));
                 origin = enclosing;
             }
         }

@@ -527,40 +527,87 @@ impl<'a> SemanticLookup<'a> {
     /// computed or missing key, `defineProperties`, `__defineGetter__` with
     /// this name -- may define `name`.
     pub(crate) fn property_may_be_defined_reflectively_as(&self, name: &str) -> bool {
-        use solid_facts::ast::ArgumentLiteralFact;
-        const NAMES: [&str; 3] = ["defineProperty", "defineProperties", "__defineGetter__"];
         if !self.property_may_be_defined_reflectively() {
             return false;
         }
-        self.files().iter().any(|file| {
+        let names = self
+            .reflective_definition_names
+            .get_or_init(|| self.reflective_definition_names());
+        names.any || names.sole_keys.contains(name)
+    }
+
+    /// The per-name answer of
+    /// [`Self::property_may_be_defined_reflectively_as`] as data. A definer
+    /// spelled as a member is safe for `name` when some call of it passes a
+    /// string-literal key other than `name`; it therefore blocks `name` only
+    /// when every such call's key is `name` (or none passes a literal key), so
+    /// the members that block a single name are collected by that name and the
+    /// rest block every name. Every other spelling blocks every name.
+    fn reflective_definition_names(&self) -> super::ReflectiveDefinitionNames {
+        use solid_facts::ast::ArgumentLiteralFact;
+        const NAMES: [&str; 3] = ["defineProperty", "defineProperties", "__defineGetter__"];
+        let mut result = super::ReflectiveDefinitionNames::default();
+        for file in self.files() {
             let spelled = |text: &str| NAMES.contains(&text.trim_matches(['\'', '"', '`']));
-            file.ast.bindings.iter().any(|binding| {
+            if file.ast.bindings.iter().any(|binding| {
                 binding
                     .object_slots
                     .iter()
                     .any(|slot| NAMES.contains(&slot.property.as_str()))
-            }) || file.ast.members.iter().any(|member| {
-                file.source_text(member.property).is_some_and(spelled)
-                    && !file.ast.calls.iter().any(|call| {
-                        file.ast.peel_ts_sugar_span(call.callee) == member.span
-                            && file.source_text(member.property).is_some_and(|text| {
-                                text.trim_matches(['\'', '"', '`']) != "defineProperties"
-                            })
-                            && matches!(
-                                call.arguments.get(1).map(|key| (&key.literal_value, key.spread)),
-                                Some((ArgumentLiteralFact::String(key), false)) if key.as_str() != name
-                            )
-                            && !call.arguments.first().is_some_and(|target| target.spread)
-                    })
-            }) || file.ast.calls.iter().any(|call| {
-                file.source_text(call.callee).is_some_and(|callee| {
-                    NAMES.iter().any(|definer| callee.ends_with(definer))
-                }) && !file
-                    .ast
-                    .members
-                    .iter()
-                    .any(|member| file.ast.peel_ts_sugar_span(call.callee) == member.span)
-            })
-        })
+            }) {
+                result.any = true;
+            }
+            // For each definer-spelled member: whether it is `defineProperties`
+            // (which never names one key) and the keys its calls pass.
+            let mut definers: HashMap<Span, (bool, HashSet<&str>)> = HashMap::default();
+            for member in &file.ast.members {
+                if let Some(text) = file.source_text(member.property)
+                    && spelled(text)
+                {
+                    definers.entry(member.span).or_insert_with(|| {
+                        (
+                            text.trim_matches(['\'', '"', '`']) != "defineProperties",
+                            HashSet::default(),
+                        )
+                    });
+                }
+            }
+            let member_spans = file
+                .ast
+                .members
+                .iter()
+                .map(|member| member.span)
+                .collect::<HashSet<_>>();
+            for call in &file.ast.calls {
+                let callee = file.ast.peel_ts_sugar_span(call.callee);
+                if let Some((names_one_key, keys)) = definers.get_mut(&callee)
+                    && *names_one_key
+                    && let Some((ArgumentLiteralFact::String(key), false)) = call
+                        .arguments
+                        .get(1)
+                        .map(|key| (&key.literal_value, key.spread))
+                    && !call.arguments.first().is_some_and(|target| target.spread)
+                {
+                    keys.insert(key.as_str());
+                }
+                if !member_spans.contains(&callee)
+                    && file
+                        .source_text(call.callee)
+                        .is_some_and(|callee| NAMES.iter().any(|definer| callee.ends_with(definer)))
+                {
+                    result.any = true;
+                }
+            }
+            for (_, keys) in definers.into_values() {
+                match keys.len() {
+                    0 => result.any = true,
+                    1 => {
+                        result.sole_keys.extend(keys.into_iter().map(str::to_owned));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        result
     }
 }

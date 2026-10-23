@@ -248,10 +248,10 @@ fn getter_reads(
 pub(crate) fn direct_eval_in(file: &solid_facts::FileFacts, within: Span) -> bool {
     file.ast.module_hazards.iter().any(|hazard| {
         hazard.kind == solid_facts::ast::ModuleHazardKind::Eval && within.contains(hazard.span)
-    }) || file.ast.calls.iter().any(|call| {
-        within.contains(call.span)
-            && file.source_text(file.ast.peel_ts_sugar_span(call.callee)) == Some("eval")
-    })
+    }) || file
+        .eval_call_spans()
+        .iter()
+        .any(|call| within.contains(*call))
 }
 
 /// Whether `span` lies in a class or JSX element written inside `within`. A

@@ -348,17 +348,19 @@ pub(super) fn literal_use_site<'a>(
         return Some((callee_file, callee, index, None, Siblings::None));
     }
     // A property of an options object that is the argument.
-    let property = file.ast.object_properties.iter().find(|property| {
-        !property.computed && file.ast.peel_ts_sugar_span(property.value) == literal.span
-    });
+    let property = file
+        .ast
+        .object_properties_containing(literal.span)
+        .find(|property| {
+            !property.computed && file.ast.peel_ts_sugar_span(property.value) == literal.span
+        });
     let key = match (property, crate::owners::own_method_name(file, literal)) {
         (Some(property), _) => property.key,
         // An object literal's own method, not a class's.
         (None, Some(name))
             if file
                 .ast
-                .object_properties
-                .iter()
+                .object_properties_containing(name.span)
                 .any(|property| property.key == name.span) =>
         {
             name.span
@@ -411,10 +413,11 @@ pub(super) fn literal_use_site<'a>(
     }
     // A method or function expression in the literal receives the object as
     // `this` and could run a property out of the callee's sight.
-    if file.ast.object_properties.iter().any(|property| {
-        object.span.contains(property.span)
-            && (property.method || receiver_function_at(file, property.value))
-    }) {
+    if file
+        .ast
+        .object_properties_within(object.span)
+        .any(|property| property.method || receiver_function_at(file, property.value))
+    {
         return None;
     }
     let (callee_file, callee, index) = at_argument(object.span)?;

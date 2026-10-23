@@ -16,12 +16,13 @@
 // Ceiling overrides, for exercising the gate: SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE,
 // SOLID_CHECKER_MAX_INCREMENTAL_NS.
 
-import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import {
+  COLD_SAMPLES,
   DEFAULT_CEILINGS,
   WALL_TIME_GATES,
   assessPerformance,
@@ -66,7 +67,8 @@ function run(command, arguments_) {
 
 function measure(files, options = {}) {
   const corpus = join(directory, options.corpus ?? String(files));
-  run(process.execPath, ["benchmarks/generate-bench-corpus.mjs", String(files), corpus]);
+  // Generation is deterministic, so cold samples of one size share a corpus.
+  if (!existsSync(corpus)) run(process.execPath, ["benchmarks/generate-bench-corpus.mjs", String(files), corpus]);
   return JSON.parse(
     run(benchmark, [
       "--project",
@@ -85,12 +87,14 @@ function measure(files, options = {}) {
 }
 
 try {
-  // Three independent cold processes per corpus size; the gates take the best,
-  // since shared scheduling slows one sample while a real regression slows
-  // every one.
-  const smallSamples = Array.from({ length: 3 }, (_, index) => measure(500, { corpus: `small-${index}` }));
+  // Independent cold processes per corpus size; the gates take the best, since
+  // shared scheduling slows one sample while a real regression slows every
+  // one. The export phase is 0.1-0.6 ms, so a ratio of three-sample minima
+  // swung from 2.2x to 3.4x on one tree; best of nine on both sides is stable
+  // (see COLD_SAMPLES in benchmarks/lib/performance-invariants.mjs).
+  const smallSamples = Array.from({ length: COLD_SAMPLES }, () => measure(500));
   const small = smallSamples[0];
-  const largeSamples = Array.from({ length: 3 }, (_, index) => measure(1000, { corpus: `large-${index}` }));
+  const largeSamples = Array.from({ length: COLD_SAMPLES }, () => measure(1000));
   const incremental = measure(1000, { iterations: 10, warmups: 2, edit: "mod0001.tsx" });
 
   const assessment = assessPerformance({ small, smallSamples, largeSamples, incremental }, { wallTimeGate, ceilings });

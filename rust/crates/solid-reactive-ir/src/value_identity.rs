@@ -14,6 +14,21 @@ fn symbol_at<'a>(
         .or_else(|| entities.at(file.path.as_str(), span))
 }
 
+/// The symbols some assignment in `file` writes: exactly those
+/// [`binding_has_write`] answers `true` for.
+pub(crate) fn written_symbols<'a>(
+    file: &FileFacts,
+    entities: &'a EntitySymbols,
+) -> impl Iterator<Item = &'a SymbolId> {
+    file.ast.assignments.iter().filter_map(|assignment| {
+        symbol_at(
+            file,
+            entities,
+            file.ast.peel_ts_sugar_span(assignment.target),
+        )
+    })
+}
+
 pub(crate) fn binding_has_write(
     file: &FileFacts,
     entities: &EntitySymbols,
