@@ -256,6 +256,14 @@ fn supported_site(
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
 ) -> Option<Vec<(String, Span)>> {
+    // The path of a `window` or `document` dispatch holds no element, whatever
+    // the event is: it needs no argument analysis (ADR 0361).
+    if global_event_target(lookup, file, call.callee) {
+        return lookup
+            .dialect
+            .global_dispatch_reaches_no_element_handler()
+            .then(Vec::new);
+    }
     let [argument] = call.arguments.as_slice() else {
         return None;
     };
@@ -302,6 +310,44 @@ fn supported_site(
         handlers.extend(targets.iter().cloned());
     }
     Some(handlers)
+}
+
+/// Whether the receiver of `callee` is the `lib.dom` global `window` or
+/// `document`: an unshadowed, unwritten identifier that resolves to that
+/// declaration alone, never the spelling.
+fn global_event_target(lookup: &SemanticLookup<'_>, file: &FileFacts, callee: Span) -> bool {
+    let callee = file.ast.peel_ts_sugar_span(callee);
+    if file.ast.computed_members.contains(&callee) {
+        return false;
+    }
+    let Some(member) = file.ast.member_at(callee) else {
+        return false;
+    };
+    let receiver = file.ast.peel_ts_sugar_span(member.object);
+    let Some(name) = file
+        .source_text(receiver)
+        .filter(|name| matches!(*name, "window" | "document"))
+    else {
+        return false;
+    };
+    if file.ast.reference_declaration(receiver).is_some()
+        || global_identifier_written(lookup.facts, name)
+    {
+        return false;
+    }
+    let Some(symbol) = lookup
+        .entity_at(file.path.as_str(), receiver)
+        .filter(|entity| !entity.symbol.is_empty())
+        .and_then(|entity| lookup.facts.typescript.symbol(&entity.symbol))
+    else {
+        return false;
+    };
+    let declarations = symbol.declarations();
+    !declarations.is_empty()
+        && declarations.iter().all(|declaration| {
+            declaration.name.as_ref() == name
+                && declaration_in_lib_dom(declaration.location.path.as_ref())
+        })
 }
 
 /// Whether `event` constructs the `lib.dom` global `Event` or `CustomEvent`:

@@ -95,6 +95,15 @@ unresolved receiver spelled like one of them (an exactly resolved project
 method of that spelling is no dispatch), and `dispatchEvent`, `click` or
 `focus` taken as a value (`Reflect.apply(EventTarget.prototype.dispatchEvent,
 …)`, `el.dispatchEvent.call(…)`). No unsupported dispatch edge is guessed.
+A `window.dispatchEvent(…)` or `document.dispatchEvent(…)` of the unshadowed
+global, whatever the event, reaches no compiler handler: its path
+(`[window]`, `[document, window]`) holds no element, and an element handler is
+a listener on its element or a property the delegated walk finds from
+`e.target` (web rc.13 and rc.17). It joins nothing and withholds nothing, so
+the corpus's `window.dispatchEvent(new CustomEvent(…))` no longer conditions
+every handler; a callback registered with `window.addEventListener` stays
+conditional (ADR 0319), and a function that is also an element handler keeps the
+violation its element's own events prove.
 An object handler (`onScroll={{ handleEvent, capture: true }}`) can be a
 capture listener and is not a proof site: it is neither joined nor proven
 unowned, and the delivery reasoning above depends on that.

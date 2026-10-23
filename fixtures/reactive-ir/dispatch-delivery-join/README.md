@@ -32,4 +32,13 @@ This root holds the supported shapes (`App.tsx`: an unrelated handler's `onClean
 | `check-validity` | `input.checkValidity()` fires `invalid` synchronously (ADR 0329): a dispatch no site models |
 | `object-handler` | not a dispatch: an object handler (`{ handleEvent, capture: true }`) is a capture listener and no proof site; its body has no finding while the function handler beside it keeps its violation |
 
+A dispatch on the global `window` or `document` is supported with any argument and an empty delivery set: the event's path holds no element, so no compiler handler is reached (web rc.13 and rc.17; `Dialect::global_dispatch_reaches_no_element_handler`). Its variants:
+
+| variant | what it pins |
+| --- | --- |
+| `window-dispatch` | a `window.dispatchEvent(new CustomEvent(…))` in a component: every element handler keeps its violation and the unrelated write stays quiet |
+| `document-dispatch` | the same for `document.dispatchEvent` |
+| `shadowed-window` | `window` is a parameter, not the global: the dispatch is unsupported, everything conditional |
+| `shared-handler` | a function that is an element handler and a `window` listener keeps the `onCleanup` violation its element's own events prove (as the root's `SharedHandler`); a `window` listener no element names stays conditional |
+
 Stub: rc.17 typings transcribed in `solid-js.d.ts`; the rc.13 and rc.9 variants carry their own `node_modules` package files and reuse the declarations (nothing they use differs). `check-validity` and `object-handler` merge the extra intrinsic elements they need (`input`, `section`) through a local `elements.d.ts`.

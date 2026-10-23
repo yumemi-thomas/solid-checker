@@ -385,6 +385,15 @@ impl Dialect for Solid2 {
             }
         }
     }
+    fn global_dispatch_reaches_no_element_handler(&self) -> bool {
+        // The web releases whose `addEvent` and `eventHandler` were read (rc.13
+        // `dist/web.dev.js:714-739`, `:1825-1890`; rc.17 `:806-831`,
+        // `:1969-2032`): the same structure in both.
+        match self.spread_event_keys {
+            releases::SpreadEventKeys::Unaudited => false,
+            releases::SpreadEventKeys::AnyOn | releases::SpreadEventKeys::OnUppercase => true,
+        }
+    }
     fn spread_key_is_event(&self, key: &str) -> Option<bool> {
         match self.spread_event_keys {
             releases::SpreadEventKeys::Unaudited => None,

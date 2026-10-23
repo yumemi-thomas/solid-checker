@@ -1039,6 +1039,19 @@ fn delegated_event_types_follow_the_read_web_release() {
     assert!(Solid2::CONSERVATIVE.event_type_is_delegated("scroll"));
 }
 
+/// ADR 0361: a `window` or `document` dispatch reaches no element handler on
+/// the web releases whose `addEvent` and `eventHandler` were read.
+#[test]
+fn a_global_dispatch_reaches_no_element_handler_on_the_read_web_releases() {
+    for web in [Release::Read(13), Release::Read(RC17)] {
+        let read = vocabulary_for(Release::Read(RC17), Release::Read(RC17), web);
+        assert!(read.global_dispatch_reaches_no_element_handler());
+    }
+    let unread = vocabulary_for(Release::Read(RC17), Release::Read(RC17), Release::Read(9));
+    assert!(!unread.global_dispatch_reaches_no_element_handler());
+    assert!(!Solid2::CONSERVATIVE.global_dispatch_reaches_no_element_handler());
+}
+
 /// The rc.17 review: `on` + an uppercase letter is a spread listener on web
 /// rc.17, `createOptimistic`'s setter is unguarded and `latest` absorbs a
 /// pending read on signals rc.17, `hydrate` may defer `code` on web rc.17,

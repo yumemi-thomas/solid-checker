@@ -1480,6 +1480,17 @@ pub trait Dialect: Sync {
         true
     }
 
+    /// Whether an event dispatched on `window` or `document` reaches no handler
+    /// the compiler installs on an element. A non-delegated handler is a
+    /// listener on the element itself; a delegated one is a property of the
+    /// element, found by a walk from `e.target` through the event's path, and
+    /// run from a listener on the render container, an element: neither is on
+    /// the path `[window]` or `[document, window]`. The default says no (a
+    /// release whose web runtime was not read), which only withholds proofs.
+    fn global_dispatch_reaches_no_element_handler(&self) -> bool {
+        false
+    }
+
     /// Whether a statically known string/number in a native `on*` JSX
     /// position is emitted as an attribute instead of installed as a listener.
     /// Solid 1.x's compiler makes that node/value distinction; the shared
