@@ -33,6 +33,7 @@ pub use compact::{
 pub use encoder::{
     EncodeError, EncodedTransition, TransitionEncoder, TransitionInput, TransitionSink,
     TransitionSummary, inspect_table_transition, reencode_table_transition,
+    symbol_facts_of_full_transition,
 };
 pub use manifest::{
     ChangedClosure, TransportChanges, retained_symbol_candidates, rust_owned_transport_manifest,

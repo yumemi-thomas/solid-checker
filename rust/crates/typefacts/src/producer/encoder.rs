@@ -403,6 +403,26 @@ pub struct TransitionSummary {
     pub entity_symbol_ids: Vec<String>,
 }
 
+/// The symbol rows of a full transition (a `symbols` answer), decoded and
+/// materialized with the client's own decoder; for tests, not for applying
+/// a transition.
+pub fn symbol_facts_of_full_transition(input: &[u8]) -> Result<Vec<crate::SymbolFact>, String> {
+    let transition = v3::decode_table_transition(input)?;
+    if transition.mode != TransitionMode::Full {
+        return Err("transition is not a full table".into());
+    }
+    let table = crate::FactTable::materialize_full(transition);
+    Ok(table
+        .symbols()
+        .map(|symbol| crate::SymbolFact {
+            id: symbol.id().into(),
+            references: symbol.references().cloned().collect::<Vec<_>>().into(),
+            alias_target: symbol.alias_target().into(),
+            declarations: symbol.declarations().to_vec().into(),
+        })
+        .collect())
+}
+
 /// Fully decodes `input` with the client's own decoder and reports its header
 /// and operation counts; for tests and tracing, not for applying a transition.
 pub fn inspect_table_transition(input: &[u8]) -> Result<TransitionSummary, String> {

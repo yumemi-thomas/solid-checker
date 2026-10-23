@@ -16,6 +16,7 @@ use std::sync::Arc;
 use typefacts::Location;
 use typefacts::producer::{
     TransitionMode, TransitionSummary, inspect_table_transition, reencode_table_transition,
+    symbol_facts_of_full_transition,
 };
 use typefacts::v3::{EntityDemand, FileChange, Operation, Request, Response, SymbolQuery};
 
@@ -314,32 +315,69 @@ fn symbols_pack_into_a_full_transition_or_stay_inline() {
     let _ = std::fs::remove_file(path);
 }
 
+/// Queries naming one id merge before resolution: references if any query
+/// asks, the declaration half unless every query is references-only. The
+/// row is decodable and carries the union, whatever the order.
 #[test]
-fn duplicate_symbol_ids_pack_one_decodable_row() {
-    let mut session = session_over(FakeBackend::default());
-    let first = ask(&mut session, analyze(1, 1, "", vec![demand("/p/a.ts", 1)]));
-    assert!(first.ok, "{:?}", first.error);
-    let id = symbol_id(&Location {
+fn duplicate_symbol_ids_merge_into_one_row_with_the_union_of_evidence() {
+    let id: std::sync::Arc<str> = symbol_id(&Location {
         path: "/p/a.ts".into(),
         start_byte: 1,
         end_byte: 4,
     })
-    .to_string();
-    let query = |references_only| SymbolQuery {
-        id: id.clone().into(),
-        references: true,
+    .to_string()
+    .into();
+    let query = |references, references_only| SymbolQuery {
+        id: id.clone(),
+        references,
         references_only,
     };
-    let mut symbols = request(2, Operation::Symbols, 1);
-    symbols.state_token = "1".to_owned();
-    symbols.symbol_queries = vec![query(false), query(false), query(true)];
-    let packed = ask(&mut session, symbols);
-    assert!(packed.ok, "{:?}", packed.error);
-    // The response must stay decodable and carry the id once.
-    assert!(
-        reencode_table_transition(&packed.table_transition).unwrap() == packed.table_transition
-    );
-    assert_eq!(summary(&packed).symbol_operations, 1);
+    // (queries, wants declarations, wants references)
+    let cases: Vec<(Vec<SymbolQuery>, bool, bool)> = vec![
+        // controls: a single query is unchanged
+        (vec![query(false, false)], true, false),
+        (vec![query(true, true)], false, true),
+        // declarations-only then references: both survive, in either order
+        (vec![query(false, false), query(true, false)], true, true),
+        (vec![query(true, false), query(false, false)], true, true),
+        // references-only then full, in either order
+        (vec![query(true, true), query(false, false)], true, true),
+        (vec![query(false, false), query(true, true)], true, true),
+        // two references-only queries stay references-only
+        (vec![query(true, true), query(true, true)], false, true),
+        // an exact repeat
+        (vec![query(true, false), query(true, false)], true, true),
+    ];
+    for (index, (queries, declarations, references)) in cases.into_iter().enumerate() {
+        let mut session = session_over(FakeBackend::default());
+        let first = ask(&mut session, analyze(1, 1, "", vec![demand("/p/a.ts", 1)]));
+        assert!(first.ok, "{:?}", first.error);
+        let mut symbols = request(2, Operation::Symbols, 1);
+        symbols.state_token = "1".to_owned();
+        symbols.symbol_queries = queries;
+        let packed = ask(&mut session, symbols);
+        assert!(packed.ok, "case {index}: {:?}", packed.error);
+        assert!(
+            reencode_table_transition(&packed.table_transition).unwrap() == packed.table_transition,
+            "case {index}"
+        );
+        assert_eq!(summary(&packed).symbol_operations, 1, "case {index}");
+        let rows = symbol_facts_of_full_transition(&packed.table_transition).unwrap();
+        let [row] = &rows[..] else {
+            panic!("case {index}: expected one row, got {rows:?}");
+        };
+        assert_eq!(row.id, id, "case {index}");
+        assert_eq!(
+            !row.declarations.is_empty(),
+            declarations,
+            "case {index}: {row:?}"
+        );
+        assert_eq!(
+            !row.references.is_empty(),
+            references,
+            "case {index}: {row:?}"
+        );
+    }
 }
 
 #[test]
