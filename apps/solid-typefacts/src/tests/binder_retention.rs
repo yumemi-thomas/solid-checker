@@ -407,3 +407,54 @@ fn retained_symbol_facts_answer_merged_duplicate_queries() {
     assert_eq!(retained.len(), ids.len());
     assert_eq!(format!("{retained:?}"), format!("{whole:?}"));
 }
+
+/// A namespace merged into the global scope from another file can carry an
+/// alias (`declare global { namespace N { export import x = M.x } }`): a
+/// lookup inside another file's `namespace N` meets it with no import of
+/// its own, and its answer follows the alias target (PR #73 review). The
+/// target moves behind a re-export, then becomes a type the value use cannot
+/// see: reference lists and entity facts must follow.
+#[test]
+fn an_alias_in_a_namespace_merged_from_another_file_is_rechecked() {
+    let g = "import * as M from \"./m\";\ndeclare global { namespace N { export import x = M.x; } }\nexport {};\n";
+    retained_matches_fresh(
+        &[
+            ("tsconfig.json", STRICT_CONFIG),
+            ("m.ts", "export const x = 1;\n"),
+            ("other.ts", "export const x = 2;\n"),
+            ("g.ts", g),
+            ("u.ts", "namespace N { export const y = x; }\n"),
+        ],
+        &[
+            &[("m.ts", Some("export { x } from \"./other\";\n"))],
+            &[("m.ts", Some("export interface x { a: number }\n"))],
+            &[("m.ts", Some("export const x = 1;\n"))],
+        ],
+    );
+}
+
+/// The same alias reaches a script namespace merged across two scripts, and
+/// a global enum and class merged across files: every scope a merge spans is
+/// recomputed.
+#[test]
+fn scopes_merged_across_files_are_recomputed() {
+    let g = "import * as M from \"./m\";\ndeclare global { namespace N { export import x = M.x; } enum E { A = 1 } }\nexport {};\n";
+    retained_matches_fresh(
+        &[
+            ("tsconfig.json", STRICT_CONFIG),
+            ("m.ts", "export const x = 1;\n"),
+            ("other.ts", "export const x = 2;\n"),
+            ("g.ts", g),
+            ("s1.ts", "namespace N { export const z = 3; }\n"),
+            (
+                "u.ts",
+                "namespace N { export const y = x + z; }\nenum E { B = A }\n",
+            ),
+        ],
+        &[
+            &[("m.ts", Some("export { x } from \"./other\";\n"))],
+            &[("other.ts", Some("export type x = number;\n"))],
+            &[("m.ts", Some("export interface x { a: number }\n"))],
+        ],
+    );
+}

@@ -377,7 +377,7 @@ impl World {
         let selector = if self.plain {
             [0, 1, 2, 3, 4, 99, 99, 99][rng.below(8)]
         } else {
-            rng.below(28)
+            rng.below(30)
         };
         let others: Vec<String> = self
             .module_names()
@@ -443,6 +443,16 @@ impl World {
                 format!("export const {name} = ns_{module}.{target};")
             }
             20 => format!("declare global {{ var GM{}: number }}", rng.below(4)),
+            // A global namespace merged across files carrying an alias whose
+            // target can move or change meaning (PR #73 review).
+            22 if !exports.is_empty() => {
+                let (module, target, _) = rng.pick(&exports).clone();
+                let alias = self.fresh_name("a");
+                format!(
+                    "declare global {{ namespace NS {{ export import {alias} = ns_{module}.{target}; }} }}"
+                )
+            }
+            23 => format!("declare global {{ namespace NS {{ export const {name} = base; }} }}"),
             21 => format!(
                 "export const {name} = typeof GM{} === \"number\";",
                 rng.below(4)
@@ -542,6 +552,15 @@ impl World {
         let mut globals = vec!["declare var G0: number;".to_owned()];
         if !plain {
             globals.push("interface Array<T> { firstOr(d: T): T }".to_owned());
+        }
+        if !plain {
+            // `NS` is declared in two scripts and from modules (`declare
+            // global`): every scope inside it spans files.
+            globals.push("namespace NS { export const fromBase = base; }".to_owned());
+            world.files.insert(
+                "g1.ts".to_owned(),
+                vec!["namespace NS { export const base = 1; }".to_owned()],
+            );
         }
         world.files.insert("g0.ts".to_owned(), globals);
         let file = "m0.ts".to_owned();
@@ -783,8 +802,42 @@ impl World {
                 // Global scope or tsconfig.
                 _ => {
                     if rng.chance(50) {
+                        let aliases: Vec<String> = self
+                            .files
+                            .values()
+                            .flatten()
+                            .filter_map(|line| {
+                                let rest = line.split("export import ").nth(1)?;
+                                Some(rest.split(' ').next()?.to_owned())
+                            })
+                            .collect();
+                        let plain = self.plain;
+                        let fresh = self.fresh_name("w");
                         let lines = self.files.get_mut("g0.ts").unwrap();
-                        match rng.below(3) {
+                        match rng.below(if plain { 3 } else { 5 }) {
+                            3 => {
+                                let used = if aliases.is_empty() {
+                                    "base".to_owned()
+                                } else {
+                                    rng.pick(&aliases).clone()
+                                };
+                                lines.push(format!(
+                                    "namespace NS {{ export const {fresh} = {used}; }}"
+                                ));
+                                break format!("global namespace use {used}");
+                            }
+                            4 => {
+                                let Some(g1) = self.files.get_mut("g1.ts") else {
+                                    continue;
+                                };
+                                let flipped = if g1[0].contains("const base") {
+                                    "namespace NS { export type base = number; }"
+                                } else {
+                                    "namespace NS { export const base = 1; }"
+                                };
+                                g1[0] = flipped.to_owned();
+                                break format!("global namespace flip: {flipped}");
+                            }
                             0 => {
                                 let name = format!("G{}", rng.below(5));
                                 lines.push(format!("declare var {name}: {};", rng.pick(&TYPES)));

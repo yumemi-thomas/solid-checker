@@ -334,6 +334,9 @@ pub struct ReferenceIndex {
     retaining: bool,
     /// The alias names of a run that retains nothing: none is recorded.
     no_aliases: Option<AliasNames>,
+    /// [`in_merged_scope`] per container node, for entity positions; node
+    /// addresses are generation-scoped, so it is cleared with the index.
+    scopes: HashMap<usize, bool>,
 }
 
 fn space_from_bits(bits: u8) -> ReferenceSpace {
@@ -455,6 +458,67 @@ fn retainable(env: &mut Env<'_>, file: P<SourceFile>) -> bool {
     merged.declarations().iter().all(|declaration| {
         tsrs_ast::get_source_file_of_node(*declaration)
             .is_some_and(|other| other.addr() == file.addr())
+    })
+}
+
+/// Whether a scope around `node` reaches declarations of other files: a
+/// namespace, enum, class or interface that is global (in a script or a
+/// `declare global` block) or merged with a declaration in another file.
+/// Scope lookup inside it reads the merged symbol's exports or members,
+/// which other files' declarations (aliases among them) join. Such a lookup
+/// is recomputed on every build (PR #73 review), not retained. `memo` caches
+/// the answer per container node for one generation.
+fn in_merged_scope(env: &mut Env<'_>, node: P<Node>, memo: &mut HashMap<usize, bool>) -> bool {
+    let mut current = node.parent();
+    while let Some(container) = current {
+        if matches!(
+            container.kind(),
+            Kind::ModuleDeclaration
+                | Kind::EnumDeclaration
+                | Kind::ClassDeclaration
+                | Kind::ClassExpression
+                | Kind::InterfaceDeclaration
+        ) {
+            let merged = match memo.get(&container.addr()) {
+                Some(merged) => *merged,
+                None => {
+                    let merged = container_spans_files(env, container);
+                    memo.insert(container.addr(), merged);
+                    merged
+                }
+            };
+            if merged {
+                return true;
+            }
+        }
+        current = container.parent();
+    }
+    false
+}
+
+fn container_spans_files(env: &mut Env<'_>, container: P<Node>) -> bool {
+    let Some(file) = tsrs_ast::get_source_file_of_node(container) else {
+        return true;
+    };
+    if !tsrs_ast::is_external_module(file) {
+        return true;
+    }
+    let mut ancestor = Some(container);
+    while let Some(node) = ancestor {
+        if tsrs_ast::is_global_scope_augmentation(node)
+            || tsrs_ast::is_external_module_augmentation(node)
+        {
+            return true;
+        }
+        ancestor = node.parent();
+    }
+    let Some(symbol) = container.symbol() else {
+        return true;
+    };
+    let merged = env.checker.get_merged_symbol(symbol);
+    merged.declarations().iter().any(|declaration| {
+        tsrs_ast::get_source_file_of_node(*declaration)
+            .is_none_or(|other| other.addr() != file.addr())
     })
 }
 
@@ -619,6 +683,8 @@ struct Walk<'r> {
     /// Full mode: what a reuse must resolve again.
     targets: Vec<Target>,
     failed: bool,
+    /// [`in_merged_scope`] per container node.
+    scopes: HashMap<usize, bool>,
 }
 
 /// A symbol's identities, resolved the first time the file names it: later
@@ -665,7 +731,7 @@ impl<'r> Walk<'r> {
         span: Span,
         bits: u8,
     ) {
-        if !binder_resolved {
+        if !binder_resolved || in_merged_scope(env, node, &mut self.scopes) {
             self.targets.push(Target {
                 start: span.start,
                 binder: None,
@@ -729,7 +795,9 @@ impl<'r> Walk<'r> {
         else {
             // Not a target: only a binder-resolved identifier no alias can
             // answer may be skipped.
-            return binder_resolved && !self.aliases.may_answer(node.text());
+            return binder_resolved
+                && !self.aliases.may_answer(node.text())
+                && !in_merged_scope(env, node, &mut self.scopes);
         };
         self.expected = Some((targets, next + 1));
         match &target.binder {
@@ -802,6 +870,7 @@ impl<'r> Walk<'r> {
             expected: expected.map(|targets| (targets, 0)),
             targets: Vec::new(),
             failed: false,
+            scopes: HashMap::new(),
         };
         let text = file.text();
         file.as_node()
@@ -865,6 +934,7 @@ impl ReferenceIndex {
         self.used.clear();
         self.complete = None;
         self.current = None;
+        self.scopes.clear();
         let epoch = self.symbol_epoch;
         self.symbol_facts
             .retain(|_, fact| fact.epoch + SYMBOL_FACT_EPOCHS >= epoch);
@@ -982,6 +1052,7 @@ impl ReferenceIndex {
     /// restored from the per-file entries; a later query in the same generation
     /// rebuilds the index from the program (reusing the retained halves).
     pub fn release_analysis_state(&mut self) {
+        self.scopes.clear();
         self.merged = None;
         self.spaces = None;
         self.refresh_paths.clear();
@@ -1253,7 +1324,7 @@ impl ReferenceIndex {
         file: P<SourceFile>,
         node: P<Node>,
     ) -> bool {
-        if !self.retaining {
+        if !self.retaining || in_merged_scope(env, node, &mut self.scopes) {
             return false;
         }
         let slot = self.binder_file(env, file);
