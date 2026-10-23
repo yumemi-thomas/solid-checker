@@ -15,6 +15,8 @@ Strict read in a setup body (`strict-read-untracked`, SC1001):
 - `r6-b6-classmethodopaque` (App.tsx:13): an opaque consumer invokes a class method during setup.
 - `r9-b3-childrenreadinbody` (App.tsx:14): the accessor returned by `children()` is called in the component body.
 - `r9-d1-mixmemoslotreadinbody` (App.tsx:7): a helper builds a memo from a callback and reads `m()` in the helper body.
+- `review-opus2-c04-ctor-body` (App.tsx:12): a constructor read, class instantiated in the body.
+- `review-opus3-g06-yield-star-spread-body` (App.tsx:13): a read in a generator reached through `yield*` and spread in the body. Delegation is not followed.
 - `precision-ref-callback-read` (App.tsx:4): a read in an intrinsic `ref` callback runs untracked in the apply phase; the read rule places nothing in the `DirectiveApply` role.
 
 - `@solid-primitives/utils` helpers over a getter, beyond `access(getter)` and `accessWith(getter)` (ADR 0338): `accessArray([getter])`, `withAccess(getter, fn)`, and `access` reached through another project helper's call hop are undecided, so they stay silent or uncertifiable. An alias (`const alias = count`), a function literal (`access(() => count())`) or a props value is arity-unknown and uncertifiable. A getter passed to a helper that reads its parameter in a hoisted function it calls is silent (fixture `package-access-helper`, `MissedHoistedCallee`).
