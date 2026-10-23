@@ -43,7 +43,9 @@ mod event_literals;
 pub(crate) use event_literals::*;
 mod flow_helpers;
 pub(crate) use flow_helpers::*;
+mod unplaced;
 pub(crate) use project_consumer::ReadConsumerSummaries;
+use unplaced::*;
 
 use crate::indexes::ComponentStatus;
 use crate::owners::{
@@ -140,7 +142,7 @@ fn execution_role_where(
 ) -> ExecutionRole {
     // ADR 0360: a file the compiler refused has no facts to place anything.
     if facts.withheld() {
-        return ExecutionRole::Unknown;
+        return crate::placement::unplaced(crate::PlacementBlocker::RefusedFile);
     }
     // Only facts strictly inside `within` place `span`, when given.
     let inside =

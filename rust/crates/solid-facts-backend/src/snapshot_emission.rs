@@ -104,8 +104,17 @@ pub(crate) fn emit(
             let mut output = format!("{project_id}: {status}\n").into_bytes();
             output.extend_from_slice(&render_premises(snapshot));
             for finding in &snapshot.findings {
+                let blocker = if finding.blocker.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (placement blocker: {})", finding.blocker)
+                };
                 output.extend_from_slice(
-                    format!("{} [{}] {}\n", finding.id, finding.kind, finding.message).as_bytes(),
+                    format!(
+                        "{} [{}] {}{blocker}\n",
+                        finding.id, finding.kind, finding.message
+                    )
+                    .as_bytes(),
                 );
             }
             output
@@ -412,6 +421,11 @@ fn render_diagnostics(
                 let mut help = Vec::new();
                 if !finding.hint.is_empty() {
                     help.push(finding.hint.clone());
+                }
+                // Only uncertifiable findings carry one, and the user view
+                // shows none of those but project notices.
+                if !finding.blocker.is_empty() {
+                    help.push(format!("placement blocker: {}", finding.blocker));
                 }
                 if !finding.related_locations.is_empty() {
                     help.push(format!(

@@ -2494,3 +2494,82 @@ fn default_output_groups_coverage_gaps_after_findings_to_review() {
     );
     assert!(!closed.contains("SC9005"), "{closed}");
 }
+
+/// ADR 0367: each placement blocker on one fixture shape that produces it, and
+/// a blocker only ever on an uncertifiable finding. `role-mix` has no shape in
+/// the fixtures or the rc.17 corpus: a read in a literal invocation flow
+/// refuses is reported at its calls, not where it is written.
+#[test]
+fn placement_blockers_name_the_missing_proof() {
+    let cases = [
+        ("compiler-refused-file", "refused-file"),
+        ("dispatch-delivery-join", "dispatch-conditional-handler"),
+        ("strict-read-maybe-suspended", "possible-suspension"),
+        ("placement-blockers", "component-children"),
+        ("fp-exec-handler-writes", "prop-callback"),
+        ("read-after-await-premise", "callback-unknown-consumer"),
+        ("arrow-bound-helper-reachability", "no-resolved-caller"),
+        ("setter-in-render-root-rc9", "unplaced-caller"),
+        ("interprocedural-methods-v2", "open-program"),
+        (
+            "read-after-await-reach/variants/member-helpers",
+            "caller-flow-unresolved",
+        ),
+        (
+            "read-after-await-reach/variants/nested-after-await",
+            "instance-field",
+        ),
+        ("rc9-omit-predicate", "view-callback"),
+        ("setter-in-render-root-rc9", "unaudited-release"),
+        ("render-effect-apply-timing", "first-run-timing"),
+        ("placement-blockers", "deferred-apply"),
+        ("component-identity-escapes", "undecided-component"),
+        ("route-components", "windowless-component"),
+    ];
+    for (fixture, blocker) in cases {
+        let Some(findings) = diagnostic_fixture(fixture) else {
+            return;
+        };
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding["blocker"] == blocker && finding["kind"] == "uncertifiable"),
+            "{fixture}: no uncertifiable finding with blocker {blocker}: {findings:#?}"
+        );
+        for finding in &findings {
+            assert!(
+                finding.get("blocker").is_none() || finding["kind"] == "uncertifiable",
+                "{fixture}: a blocker on a proven finding: {finding:#?}"
+            );
+        }
+    }
+    // The controls: the same call outside a component's children, and an
+    // apply with no options, carry no blocker.
+    let findings = diagnostic_fixture("placement-blockers").unwrap();
+    let blockers = findings
+        .iter()
+        .map(|finding| {
+            (
+                finding["id"].as_str().unwrap().to_owned(),
+                finding["kind"].as_str().unwrap().to_owned(),
+                finding["blocker"].as_str().map(str::to_owned),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        blockers,
+        [
+            (
+                "SC1001".to_owned(),
+                "uncertifiable".to_owned(),
+                Some("component-children".to_owned())
+            ),
+            ("SC1001".to_owned(), "violation".to_owned(), None),
+            (
+                "SC2001".to_owned(),
+                "uncertifiable".to_owned(),
+                Some("deferred-apply".to_owned())
+            ),
+        ]
+    );
+}

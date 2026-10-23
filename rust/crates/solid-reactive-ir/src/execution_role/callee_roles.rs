@@ -29,7 +29,7 @@ pub(super) fn semantic_role_before_awaits(
     // here places. (A static field or block runs where the class is
     // evaluated, in that function, so it keeps its placement.)
     if inside_instance_field(file, span) {
-        return ExecutionRole::Unknown;
+        return crate::placement::unplaced(crate::PlacementBlocker::InstanceField);
     }
     // Also ahead of every semantic path, for the mirror-image reason: code
     // inside a callback that runs on reads of a returned view (rc.9's `omit`
@@ -38,7 +38,7 @@ pub(super) fn semantic_role_before_awaits(
     // enclosing component body, the one place it is least likely to run --
     // so the role is left unknown and projection claims nothing about it.
     if result_access_callback_contains(file, span, lookup) {
-        return ExecutionRole::Unknown;
+        return crate::placement::unplaced(crate::PlacementBlocker::ViewCallback);
     }
     // A function argument the primitive wraps in a memo of its own (2.0's
     // `merge`) runs inside that computation, not in the caller's body.
@@ -62,7 +62,7 @@ pub(super) fn semantic_role_before_awaits(
                     })
             })
     }) {
-        return ExecutionRole::Unknown;
+        return crate::placement::unplaced(crate::PlacementBlocker::ViewCallback);
     }
     if let Some(role) = context_provider_value_role(file, span, lookup) {
         return role;
@@ -188,7 +188,12 @@ pub(super) fn semantic_role_before_awaits(
             {
                 ExecutionRole::TrackedJsx
             } else {
-                ExecutionRole::Unknown
+                unplaced_site(
+                    file,
+                    span,
+                    lookup,
+                    !classifying.contains(&write_classification_marker()),
+                )
             };
         }
     }
@@ -214,7 +219,12 @@ pub(super) fn semantic_role_before_awaits(
         // attribute value, runs when something calls it, not in the
         // callback's tracking pass (`client.subscribe(() => setX(..))`).
         return if attribute_function_within(file, call.arguments[index].span, span, lookup) {
-            ExecutionRole::Unknown
+            unplaced_site(
+                file,
+                span,
+                lookup,
+                !classifying.contains(&write_classification_marker()),
+            )
         } else {
             ExecutionRole::TrackedJsx
         };
@@ -228,6 +238,10 @@ pub(super) fn semantic_role_before_awaits(
         return role;
     }
     if let Some(role) = invocation_flow_role(file, span, lookup, classifying) {
+        // Every invocation was followed, and one runs in code nothing places.
+        if role == ExecutionRole::Unknown {
+            crate::placement::note(crate::PlacementBlocker::UnplacedCaller);
+        }
         return role;
     }
     let compiler_role = source_execution_role(file, span, allowed);
@@ -255,7 +269,12 @@ pub(super) fn semantic_role_before_awaits(
     if !file.ast.any_function_body_containing(span) {
         return ExecutionRole::ModuleInitialization;
     }
-    ExecutionRole::Unknown
+    unplaced_site(
+        file,
+        span,
+        lookup,
+        !classifying.contains(&write_classification_marker()),
+    )
 }
 
 /// The `classifying` entry that marks a write-legality classification, which
@@ -870,7 +889,7 @@ pub(super) fn forwarded_tracked_compute_role(
     }
     Some(
         if attribute_function_within(file, call.arguments[index].span, span, lookup) {
-            ExecutionRole::Unknown
+            unplaced_site(file, span, lookup, false)
         } else {
             ExecutionRole::TrackedJsx
         },

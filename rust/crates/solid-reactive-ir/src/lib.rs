@@ -72,6 +72,8 @@ pub type HashSet<T> = std::collections::HashSet<T, rustc_hash::FxBuildHasher>;
 
 pub mod package_boundary;
 mod pipeline;
+mod placement;
+pub use placement::PlacementBlocker;
 mod projection;
 mod reachability;
 mod reactive_analysis;
@@ -509,6 +511,11 @@ pub struct ReactiveRead {
     /// dependency; ordinary summary hops must preserve the distinction.
     #[serde(default, skip_serializing_if = "is_false")]
     pub transported: bool,
+    /// Why no fact places the read, when [`Self::execution`] is
+    /// [`ExecutionRole::Unknown`]: an annotation the finding carries, never
+    /// part of its proof.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocker: Option<PlacementBlocker>,
 }
 
 impl ReactiveRead {
@@ -554,6 +561,9 @@ pub struct ReactiveWrite {
     pub execution: ExecutionRole,
     pub allowed_by_option: bool,
     pub context: Arc<str>,
+    /// See [`ReactiveRead::blocker`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocker: Option<PlacementBlocker>,
 }
 
 impl ReactiveWrite {
@@ -582,6 +592,9 @@ pub struct ActionInvocation {
     pub declaration: Location,
     pub execution: ExecutionRole,
     pub context: Arc<str>,
+    /// See [`ReactiveRead::blocker`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocker: Option<PlacementBlocker>,
 }
 
 impl ActionInvocation {

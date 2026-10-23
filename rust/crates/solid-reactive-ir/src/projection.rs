@@ -833,6 +833,20 @@ fn collapse_unanalyzed_package_defects(
 /// Projects one seed. Used by the backend for package-behavior issues that
 /// are discovered after the reactive [`Program`] has been built.
 #[must_use]
+/// Why no fact places an unplaced read, write or action: the annotation its
+/// uncertifiable finding carries. An unplaced site with no recorded blocker
+/// is [`crate::PlacementBlocker::Other`].
+fn placement_blocker(seed: FindingSeed<'_>) -> Option<crate::PlacementBlocker> {
+    let (execution, blocker) = match seed {
+        FindingSeed::StrictRead { read, .. } => (read.execution, read.blocker),
+        FindingSeed::OwnedWrite(write) => (write.execution, write.blocker),
+        FindingSeed::Action(action) => (action.execution, action.blocker),
+        _ => return None,
+    };
+    (execution == crate::ExecutionRole::Unknown)
+        .then(|| blocker.unwrap_or(crate::PlacementBlocker::Other))
+}
+
 pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> Finding {
     let wording = catalog.wording(seed);
     let location = primary_location(seed);
@@ -970,6 +984,9 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             }
         }
         FindingSeed::DirectiveCreation(_) | FindingSeed::OwnerRequirement(_) => {}
+    }
+    if let Some(blocker) = placement_blocker(seed) {
+        finding.blocker = blocker.as_str().into();
     }
     if let Some((family, subject)) = coverage_group(seed) {
         finding.coverage_family = family.into();

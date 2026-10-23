@@ -38,6 +38,7 @@ pub(crate) fn event_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(St
                 props_stack: Vec::new(),
                 owner_mode: true,
                 mixed_mode: false,
+                refused_mix: false,
             };
             if flow.function_role(file, literal) == Some(Some(ExecutionRole::EventCallback)) {
                 literals.insert((file.path.to_string(), literal.span));
@@ -89,6 +90,7 @@ pub(crate) fn mixed_event_literals(
                 props_stack: Vec::new(),
                 owner_mode: true,
                 mixed_mode: true,
+                refused_mix: false,
             };
             if let Some(edge) = flow.function_event_edge(file, literal) {
                 literals.insert((file.path.to_string(), literal.span), edge);
@@ -171,6 +173,7 @@ pub(crate) fn event_terminals(
             props_stack: Vec::new(),
             owner_mode: true,
             mixed_mode: true,
+            refused_mix: false,
         };
         if let Some(mut found) = flow.function_event_terminals(file, literal) {
             found.event_only = only;
@@ -279,7 +282,10 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                         ExecutionRole::Unreported
                     }
                 }
-                Some(_) => return None,
+                Some(_) => {
+                    self.refused_mix = true;
+                    return None;
+                }
             });
         }
         Some(role)

@@ -374,7 +374,9 @@ pub(crate) fn named_callback_execution_role(
     }
     let role = roles.get(callback.span);
     if role.result_access {
-        return Some(ExecutionRole::Unknown);
+        return Some(crate::placement::unplaced(
+            crate::PlacementBlocker::ViewCallback,
+        ));
     }
     if role.untracked_callback {
         return Some(ExecutionRole::UntrackedCallback);

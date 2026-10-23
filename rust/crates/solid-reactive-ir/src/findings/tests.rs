@@ -29,6 +29,7 @@ fn read(missing_jsx_census: bool) -> ReactiveRead {
         project_consumer_non_strict: false,
         callback_invocation_unproven: false,
         callee_callback_timing: false,
+        blocker: None,
     }
 }
 

@@ -556,6 +556,17 @@ impl StaticApiContext<'_> {
             let Some((name, declaration)) = self.accessors.get(symbol) else {
                 continue;
             };
+            let (execution, blocker) = crate::placement::traced(|| {
+                semantic_write_execution_role(
+                    file,
+                    call.callee,
+                    &allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    RootBodyGuard::Rejects,
+                )
+            });
             for _ in 0..multiplicity {
                 result.writes.push(ReactiveWrite {
                     setter: format!("refresh({name})").into(),
@@ -573,15 +584,8 @@ impl StaticApiContext<'_> {
                     declaration: declaration.clone(),
                     // `refresh`'s guard has no root exemption on any release
                     // (probed rc.0-rc.9, dev).
-                    execution: semantic_write_execution_role(
-                        file,
-                        call.callee,
-                        &allowed,
-                        self.entities,
-                        self.symbol_names,
-                        self.lookup,
-                        RootBodyGuard::Rejects,
-                    ),
+                    execution,
+                    blocker,
                     allowed_by_option: self
                         .source_owned_write
                         .get(symbol)
