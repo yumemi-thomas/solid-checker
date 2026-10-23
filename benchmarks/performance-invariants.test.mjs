@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 
 import {
+  COLD_SAMPLES,
   DEFAULT_CEILINGS,
   assessPerformance,
   renderPerformanceFindings
@@ -110,6 +111,10 @@ test("export scaling uses the best cold sample on both sides", () => {
   const assessment = assessPerformance(superLinear, { wallTimeGate: "enforce" });
   assert.equal(assessment.ok, false);
   assert.match(assessment.violations[0].message, /export aggregation scales 3\.\d+x/);
+});
+
+test("the export ratio is taken over enough cold samples to ride out scheduling noise", () => {
+  assert.ok(COLD_SAMPLES >= 9);
 });
 
 test("ceilings can be overridden and unknown gates are refused", () => {
