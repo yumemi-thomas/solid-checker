@@ -9,11 +9,11 @@ import (
 	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
 )
 
-// A deleted file's identities can never re-resolve, and re-entry re-mints
-// them through location scans — so the full-rebuild update path must drop
-// them instead of letting a long session accrete every file it ever saw.
-// Identities of files still in the program must survive the same sweep.
-func TestFullRebuildSweepsDepartedFilesDurableIdentities(t *testing.T) {
+// ADR 0364: no identity bookkeeping survives an update. A held ID of any file,
+// departed or living, stops resolving until a location scan re-mints it, so a
+// stale answer cannot be matched to a new generation and a long session
+// cannot accrete every file it ever saw.
+func TestUpdateDropsDurableIdentities(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, source string) string {
 		t.Helper()
@@ -56,15 +56,18 @@ func TestFullRebuildSweepsDepartedFilesDurableIdentities(t *testing.T) {
 		t.Fatalf("identities were not minted for both files: %v", before)
 	}
 
-	// A delete forces the full-rebuild update path, which sweeps.
+	// A delete forces the full-rebuild update path.
 	if _, err := backend.Update(ctx, []typefacts.FileChange{{Path: doomedPath, Version: 1, Deleted: true}}); err != nil {
 		t.Fatal(err)
 	}
-	after := refPaths()
-	if after[filepath.Clean(doomedPath)] {
-		t.Fatal("the deleted file's durable identities survived the sweep")
+	if after := refPaths(); len(after) != 0 {
+		t.Fatalf("durable identities survived the update: %v", after)
 	}
-	if !after[filepath.Clean(keptPath)] {
-		t.Fatal("a living file's durable identities were swept")
+	// A living file re-mints its identity through a location scan.
+	if _, err := backend.SymbolAt(ctx, typefacts.Location{Path: keptPath, StartByte: 13, EndByte: 17}); err != nil {
+		t.Fatal(err)
+	}
+	if !refPaths()[filepath.Clean(keptPath)] {
+		t.Fatal("a living file could not re-mint its durable identity")
 	}
 }

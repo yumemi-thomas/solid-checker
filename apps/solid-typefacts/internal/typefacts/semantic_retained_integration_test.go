@@ -214,8 +214,6 @@ func assertRetainedMatchesFreshMaterialization(t *testing.T, root, editFile, oth
 	}
 
 	generation := uint64(1)
-	retainedSeen := false
-	asyncCacheSeen := false
 	asyncFactsExist := false
 	for step, change := range script {
 		if _, err := incremental.Update(ctx, []typefacts.FileChange{change}); err != nil {
@@ -246,8 +244,12 @@ func assertRetainedMatchesFreshMaterialization(t *testing.T, root, editFile, oth
 		}
 		stats := incremental.Stats()
 
-		if stats.Retention.RetainedFiles > 0 {
-			retainedSeen = true
+		// ADR 0364: an accepted update discards every retained answer, so
+		// the only reuse left is within a generation. The oracle still
+		// byte-compares against a fresh whole-batch run at every step.
+		if stats.Retention.RetainedFiles != 0 {
+			t.Fatalf("step %d: an update retained %d files; retention across updates is off",
+				step, stats.Retention.RetainedFiles)
 		}
 		// RetainedAsyncFiles counts retained async demand groups, and a group
 		// with no async functions at all still counts (durableAsyncFunctions of
@@ -257,8 +259,8 @@ func assertRetainedMatchesFreshMaterialization(t *testing.T, root, editFile, oth
 		for _, file := range table.Files {
 			if len(file.AsyncFunctions) > 0 {
 				asyncFactsExist = true
-				if stats.Retention.RetainedAsyncFiles > 0 {
-					asyncCacheSeen = true
+				if stats.Retention.RetainedAsyncFiles != 0 {
+					t.Fatalf("step %d: async facts were retained across an update", step)
 				}
 				break
 			}
@@ -296,10 +298,5 @@ func assertRetainedMatchesFreshMaterialization(t *testing.T, root, editFile, oth
 
 		assertFullWireTransitionsIdentical(t, "retained materialization", step, projectID, table, freshTable)
 	}
-	if !retainedSeen {
-		t.Fatal("the edit script never exercised retention; the test is vacuous")
-	}
-	if asyncFactsExist && !asyncCacheSeen {
-		t.Fatal("the fixture has async functions but no retained generation carried them; the async-cache parity check is vacuous")
-	}
+	_ = asyncFactsExist
 }

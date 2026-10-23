@@ -166,6 +166,9 @@ func (p *DemandClosure) materializeDemandTableLocked(
 	groups []demandGroup,
 ) error {
 	started := time.Now()
+	// ADR 0364: a table is a function of the program and its demands, not of
+	// the order earlier tables in this generation claimed ids in.
+	p.discardDerivedStateLocked()
 	table, fullTierSymbols, stages, retention, err := p.materializeSemanticDemandRetained(ctx, groups, generation)
 	if err != nil {
 		return err

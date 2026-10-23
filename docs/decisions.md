@@ -544,3 +544,7 @@ Native `tsc` 7.1.0-dev.20260930.4 via `typescript/unstable/sync` (Node), pinned 
 <a id="adr-0363"></a>
 ## ADR 0363 — Go producer fixes from the Rust port
 `go-symbol-name-0xfe` (692fc7747): every wire symbol name goes through `wireSymbolName`. `go-reference-index-retained` (349fc4c9c): the reference index never answers a retained or pruned symbol as empty. `go-stale-type-descriptor` (3991f6919): a file entering the program invalidates importers with an unresolved import.
+
+<a id="adr-0364"></a>
+## ADR 0364 — No retained analysis across updates until instantiation-stable ids and recorded dependencies
+Every update, and every table build within a generation, discards the Go Type Facts producer's derived state: retained contributions, async facts, the source-fact memo, reference-index entries, symbol and identity maps. The transport names every path, so the client compares replacement rows with its own by value. Only the compiler's incremental program survives. Closes five staleness causes: claim-order ids, tsconfig changes, a stale type descriptor, stale reference space after a referencing file is deleted, and runtimeIdentity hashing another file's span with no recorded dependency. A table depends on the program and its demands, not on earlier tables' claim order. It returns with instantiation-stable ids and recorded dependencies. Owners: `closure.go` (`Update`, `discardDerivedStateLocked`), `tsgo/project.go`.

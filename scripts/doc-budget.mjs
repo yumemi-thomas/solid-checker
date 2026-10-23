@@ -22,7 +22,7 @@ export const FILE_BUDGETS = {
   "AGENTS.md": 8_000,
   "CLAUDE.md": 1_000,
   "docs/open-work.md": 25_000,
-  "docs/decisions.md": 101_000,
+  "docs/decisions.md": 102_000,
 };
 
 export const GROUP_BUDGETS = [

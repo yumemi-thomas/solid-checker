@@ -494,7 +494,9 @@ func (s *Session) populateSymbolEvidence(
 			}
 		}
 	}
-	if request.ReleaseAnalysis {
+	// An inexact reference delta leaves the client to ask for the references it
+	// needs next, in the same generation: its request carries the release.
+	if request.ReleaseAnalysis && !(request.ReferenceChanges && !response.ReferenceChangesExact) {
 		s.closure.releaseBackendAnalysisState()
 		// ReleaseAnalysis marks a cold materialization boundary: the immutable
 		// transport table now belongs to the client and checker-expanded query

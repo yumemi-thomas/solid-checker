@@ -64,7 +64,7 @@ test("a shared-runner slowdown is reported, not failed, when wall time is not en
       ...sample,
       firstRustPipelineBreakdown: { ...sample.firstRustPipelineBreakdown, reactiveIrTotal: { medianNs: 240_000 * 1000 } }
     })),
-    incremental: { ...healthy.incremental, medianNs: 105_790_007 }
+    incremental: { ...healthy.incremental, medianNs: 450_000_007 }
   };
   const reported = assessPerformance(slowRunner, { wallTimeGate: "report" });
   assert.equal(reported.ok, true, "the run passes");
@@ -72,7 +72,7 @@ test("a shared-runner slowdown is reported, not failed, when wall time is not en
   const enforced = assessPerformance(slowRunner, { wallTimeGate: "enforce" });
   assert.equal(enforced.ok, false);
   assert.deepEqual(enforced.violations.map(finding => finding.id), ["first-ir", "incremental"]);
-  assert.match(enforced.violations[1].message, /105790007 ns \(limit 100000000 ns\)/);
+  assert.match(enforced.violations[1].message, /450000007 ns \(limit 400000000 ns\)/);
 });
 
 test("first IR uses the best of the independent cold samples", () => {
@@ -98,6 +98,6 @@ test("ceilings can be overridden and unknown gates are refused", () => {
 test("the Markdown rendering lists every invariant and explains the reporting mode", () => {
   const markdown = renderPerformanceFindings(assessPerformance(healthy, { wallTimeGate: "report" }), { wallTimeGate: "report" });
   assert.match(markdown, /\| export-scaling \| structural \| 1\.90 x \| 2\.8 x \| ok \|/);
-  assert.match(markdown, /\| incremental \| wall-time \| 26000000 ns \| 100000000 ns \| ok \|/);
+  assert.match(markdown, /\| incremental \| wall-time \| 26000000 ns \| 400000000 ns \| ok \|/);
   assert.match(markdown, /reported, not enforced/);
 });

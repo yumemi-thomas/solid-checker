@@ -365,8 +365,9 @@ func TestSessionAnalysisTraversesTheRetainedPath(t *testing.T) {
 	}
 
 	retention := session.closure.Stats().Retention
-	if retention.RetainedFiles == 0 {
-		t.Fatalf("no file was retained across the update; retention = %+v", retention)
+	// ADR 0364: nothing is retained across an update; every file recomputes.
+	if retention.RetainedFiles != 0 || retention.RecomputedFiles == 0 {
+		t.Fatalf("retention across updates is off, but retention = %+v", retention)
 	}
 	// The active V1 session always uses the latest semantic transport path;
 	// retention may legitimately recompute symbol rows when the compiler

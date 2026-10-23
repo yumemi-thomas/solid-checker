@@ -307,6 +307,31 @@ func (p *project) ReleaseAnalysisState() {
 	p.referenceIndex.releaseAnalysisState()
 }
 
+// DiscardDerivedState forgets every answer and identity claim derived from
+// earlier queries: the source-fact memo, the reference contributions, the
+// claims of symbol ids and the durable declaration refs they recorded. The
+// program, its checker and the exported identities of the update stay, so the
+// next table mints ids from the demands it is given and nothing else (ADR 0364).
+func (p *project) DiscardDerivedState() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return
+	}
+	clear(p.idsBySymbol)
+	clear(p.symbolsByID)
+	clear(p.durableRefs)
+	clear(p.sourceFactsMemo)
+	p.referenceIndex.reset()
+	// Resolved-call declarations, parameters and descriptors embed the ids
+	// they were first answered with.
+	p.resolvedDeclarations = nil
+	p.resolvedParameters = nil
+	p.callDiagnostics = nil
+	p.typeDescriptors = nil
+	p.nextSymbol = 0
+}
+
 func buildProgram(ctx context.Context, configPath string, fs vfs.FS) (*compiler.Program, *checker.Checker, func(), error) {
 	cwd := typeScriptPathDir(configPath)
 	host := compiler.NewCompilerHost(cwd, fs, bundled.LibPath(), nil, nil, nil)
@@ -599,6 +624,7 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	}
 	clear(p.idsBySymbol)
 	clear(p.symbolsByID)
+	clear(p.durableRefs)
 	for symbol, preserved := range currentExports {
 		p.idsBySymbol[symbol] = preserved.id
 		p.symbolsByID[preserved.id] = symbol
@@ -657,38 +683,14 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	sort.Strings(affected)
 	affectedDuration := time.Since(stageStarted)
 	stageStarted = time.Now()
-	if incremental && incrementalPath != "" {
-		// Source facts and reference contributions of files outside the
-		// affected set survive the generation: their text is unchanged and
-		// every durable identity they reference declares in an unchanged
-		// file (a changed declaring file would have put the referencing
-		// file in the affected set). Files that left the program are
-		// evicted now, not when they are next queried, so an entry cannot
-		// go stale while its file is outside the program and be reused if
-		// the file later re-enters.
-		dropped := make(map[string]struct{}, len(affected))
-		for _, path := range affected {
-			dropped[path] = struct{}{}
-		}
-		retained := func(path string) bool {
-			if _, hit := dropped[path]; hit {
-				return false
-			}
-			return program.GetSourceFile(path) != nil
-		}
-		for key, memo := range p.sourceFactsMemo {
-			if !retained(memo.absPath) {
-				delete(p.sourceFactsMemo, key)
-			}
-		}
-		p.referenceIndex.invalidate(program, affected, retained)
-	} else {
-		// Full rebuilds (deletes, tsconfig changes, multi-file updates) can
-		// change resolution outside the module graph; fail closed.
-		clear(p.sourceFactsMemo)
-		p.referenceIndex.reset()
-		p.sweepDurableIdentities(program)
-	}
+	// ADR 0364: nothing derived from the previous generation's analysis is
+	// reused. Source-fact memo entries and reference-index contributions embed
+	// ids and answers (reference space, runtime identity) whose dependence on
+	// other files the affected set cannot bound, so both are rebuilt lazily
+	// from the new program. The program itself stays incremental.
+	clear(p.sourceFactsMemo)
+	p.referenceIndex.reset()
+	p.sweepDurableIdentities(program)
 	if p.declarationShapes == nil {
 		p.declarationShapes = make(map[string]declarationShape)
 	}

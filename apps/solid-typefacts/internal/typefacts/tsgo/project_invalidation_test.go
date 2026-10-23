@@ -2,6 +2,7 @@ package tsgo
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -227,12 +228,26 @@ func TestSemanticAffectedSetCutoff(t *testing.T) {
 				if afterExportID != beforeExportID {
 					t.Fatalf("export ID after span shift = %q, want preserved %q", afterExportID, beforeExportID)
 				}
-				target, err := opened.ResolveAlias(ctx, importerAliasID)
+				// ADR 0364: the held alias ID does not outlive the update; the
+				// re-minted alias resolves to the preserved export.
+				if _, err := opened.ResolveAlias(ctx, importerAliasID); !errors.Is(err, typefacts.ErrNotFound) {
+					t.Fatalf("held alias ID after update: err = %v, want ErrNotFound", err)
+				}
+				importStart := strings.Index(importerSource, "value")
+				reminted, err := opened.SymbolAt(ctx, typefacts.Location{
+					Path:      importerPath,
+					StartByte: importStart,
+					EndByte:   importStart + len("value"),
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				target, err := opened.ResolveAlias(ctx, reminted)
 				if err != nil {
 					t.Fatal(err)
 				}
 				if target != beforeExportID {
-					t.Fatalf("retained import target after span shift = %q, want export %q", target, beforeExportID)
+					t.Fatalf("import target after span shift = %q, want export %q", target, beforeExportID)
 				}
 
 				affected, err := opened.Update(ctx, []typefacts.FileChange{{

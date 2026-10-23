@@ -401,26 +401,19 @@ func (r *referenceIndex) markUsed(id typefacts.SymbolID) {
 	r.used[id] = struct{}{}
 }
 
+// releaseAnalysisState drops the whole index. Merging moves each file's spans
+// into the merged buckets, so a pruned bucket cannot be restored from the
+// per-file entries; keeping the entries would answer a later query with an
+// empty list. Nothing survives an update (ADR 0364), so the only later reader
+// is the same generation, and it rebuilds the index from the program.
 func (r *referenceIndex) releaseAnalysisState() {
-	pruned := false
-	for id := range r.merged {
-		if _, retained := r.used[id]; !retained {
-			delete(r.merged, id)
-			pruned = true
-		}
-	}
-	if pruned || r.complete != nil {
-		// Buckets kept before this release but unused since are pruned now,
-		// so only the ids used since the last release remain whole.
-		r.complete = make(map[typefacts.SymbolID]struct{}, len(r.used))
-		for id := range r.used {
-			r.complete[id] = struct{}{}
-		}
-	}
-	clear(r.used)
-	// Reference-space rows are cheap to rebuild from the compact per-file
-	// entries and otherwise duplicate that complete union between analyses.
+	r.merged = nil
+	r.complete = nil
 	r.spaces = nil
+	r.refreshPaths = nil
+	r.files = nil
+	r.paths = nil
+	r.used = nil
 }
 
 // scan resolves every non-declaration identifier in one file.

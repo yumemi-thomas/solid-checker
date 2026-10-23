@@ -326,14 +326,14 @@ func TestRetainedContributionCommitIsTransactional(t *testing.T) {
 		t.Fatalf("backend calls after failure = semantic:%d references:%d, want 1 and 0",
 			backend.semanticCalls, backend.referenceCalls)
 	}
-	if closure.retained.get(oldPath) != oldContribution || closure.retained.get(path) != nil {
-		t.Fatal("failed materialization changed installed contributions")
+	// ADR 0364: a table build discards the derived state it started from, so
+	// the failed attempt left neither the old contributions nor a partial new
+	// one installed.
+	if closure.retained.get(oldPath) != nil || closure.retained.get(path) != nil {
+		t.Fatal("failed materialization left contributions installed")
 	}
-	if len(closure.lastSuppression) != 1 {
-		t.Fatalf("last suppression after failure = %#v, want original set", closure.lastSuppression)
-	}
-	if _, ok := closure.lastSuppression[oldSuppress]; !ok {
-		t.Fatalf("last suppression advanced after failure: %#v", closure.lastSuppression)
+	if len(closure.lastSuppression) != 0 {
+		t.Fatalf("last suppression after failure = %#v, want none", closure.lastSuppression)
 	}
 
 	table, err := closure.DemandTableForGroups(context.Background(), 1, groups, nil)
