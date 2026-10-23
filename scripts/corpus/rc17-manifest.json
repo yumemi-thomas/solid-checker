@@ -1,5 +1,6 @@
 {
   "corpus": "solid-checker-rc17-corpus/apps",
+  "holdoutRule": "Holdout apps are every third distinct app name (positions 3, 6, 9, ... 24, 1-based) in plain code-point alphabetical order; all of an app's projects share its flag. Chosen by position only, never by content or findings. Re-derive: [...new Set(apps)].sort().filter((_, i) => i % 3 === 2).",
   "configuration": {
     "runtimeTarget": "browser",
     "runtimeBuild": "development",
@@ -9,196 +10,212 @@
     {
       "app": "ai-memory-ui",
       "root": "ai-memory-ui",
-      "project": "tsconfig.app.json"
+      "project": "tsconfig.app.json",
+      "holdout": false
     },
     {
       "app": "app-game",
       "root": "app-game",
-      "project": "apps/web/tsconfig.json"
+      "project": "apps/web/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "compass-ui",
       "root": "compass-ui",
-      "project": "apps/ui/tsconfig.json"
+      "project": "apps/ui/tsconfig.json",
+      "holdout": true
     },
     {
       "app": "dashiboard-ui",
       "root": "dashiboard-ui",
-      "project": "dashiboard-ui/tsconfig.json"
+      "project": "dashiboard-ui/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "donegeon-client",
       "root": "donegeon-client",
-      "project": "web/apps/client/tsconfig.json"
+      "project": "web/apps/client/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "error-menu-web",
       "root": "error-menu-web",
-      "project": "web/tsconfig.json"
+      "project": "web/tsconfig.json",
+      "holdout": true
     },
     {
       "app": "every-deck-of-cards",
       "root": "every-deck-of-cards",
-      "project": "tsconfig.json"
+      "project": "tsconfig.json",
+      "holdout": false
     },
     {
       "app": "expenses-app",
       "root": "expenses-app",
-      "project": "tsconfig.json"
+      "project": "tsconfig.json",
+      "holdout": false
     },
     {
       "app": "helge-dev",
       "root": "helge-dev",
-      "project": "tsconfig.json"
+      "project": "tsconfig.json",
+      "holdout": true
     },
     {
       "app": "hoxxes-briefing",
       "root": "hoxxes-briefing",
-      "project": "apps/web/tsconfig.app.json"
+      "project": "apps/web/tsconfig.app.json",
+      "holdout": false
     },
     {
       "app": "hoxxes-briefing",
       "root": "hoxxes-briefing",
-      "project": "apps/web/tsconfig.sw.json"
+      "project": "apps/web/tsconfig.sw.json",
+      "holdout": false
     },
     {
       "app": "inferay",
       "root": "inferay",
-      "project": "tsconfig.json"
+      "project": "tsconfig.json",
+      "holdout": false
     },
     {
       "app": "jandibat-web",
       "root": "jandibat-web",
-      "project": "apps/web/tsconfig.json"
+      "project": "apps/web/tsconfig.json",
+      "holdout": true
     },
     {
       "app": "jar-hell-web",
       "root": "jar-hell-web",
-      "project": "web/tsconfig.json"
+      "project": "web/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "kui",
       "root": "kui",
-      "project": "frontend/packages/api/tsconfig.json"
+      "project": "frontend/packages/api/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "kui",
       "root": "kui",
-      "project": "frontend/packages/feature-alerts/tsconfig.json"
+      "project": "frontend/packages/feature-alerts/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "kui",
       "root": "kui",
-      "project": "frontend/packages/feature-clusters/tsconfig.json"
+      "project": "frontend/packages/feature-clusters/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "kui",
       "root": "kui",
-      "project": "frontend/packages/feature-connect/tsconfig.json"
+      "project": "frontend/packages/feature-connect/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "kui",
       "root": "kui",
-      "project": "frontend/packages/feature-consumers/tsconfig.json"
+      "project": "frontend/packages/feature-consumers/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "kui",
       "root": "kui",
-      "project": "frontend/packages/feature-ksql/tsconfig.json"
+      "project": "frontend/packages/feature-ksql/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "kui",
       "root": "kui",
-      "project": "frontend/packages/feature-messages/tsconfig.json"
+      "project": "frontend/packages/feature-messages/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "kui",
       "root": "kui",
-      "project": "frontend/packages/feature-schemas/tsconfig.json"
+      "project": "frontend/packages/feature-schemas/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "kui",
       "root": "kui",
-      "project": "frontend/packages/feature-topics/tsconfig.json"
+      "project": "frontend/packages/feature-topics/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "kui",
       "root": "kui",
-      "project": "frontend/packages/kernel/tsconfig.json"
+      "project": "frontend/packages/kernel/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "kui",
       "root": "kui",
-      "project": "frontend/packages/shell/tsconfig.json"
+      "project": "frontend/packages/shell/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "lutra-console",
       "root": "lutra-console",
-      "project": "console/tsconfig.json"
+      "project": "console/tsconfig.json",
+      "holdout": true
     },
     {
       "app": "oscartbeaumont-website",
       "root": "oscartbeaumont-website",
-      "project": "tsconfig.app.json"
+      "project": "tsconfig.app.json",
+      "holdout": false
     },
     {
       "app": "pekochan-blog",
       "root": "pekochan-blog",
-      "project": "tsconfig.json"
+      "project": "tsconfig.json",
+      "holdout": false
     },
     {
       "app": "probus-hk",
       "root": "probus-hk",
-      "project": "tsconfig.json"
+      "project": "tsconfig.json",
+      "holdout": true
     },
     {
       "app": "sensor-sim",
       "root": "sensor-sim",
-      "project": "packages/frontend/tsconfig.json"
+      "project": "packages/frontend/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "skyjtx-website",
       "root": "skyjtx-website",
-      "project": "apps/skyjt-website/tsconfig.json"
+      "project": "apps/skyjt-website/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "solid-groove",
       "root": "solid-groove",
-      "project": "tsconfig.json"
+      "project": "tsconfig.json",
+      "holdout": true
     },
     {
       "app": "spookysoftware-www",
       "root": "spookysoftware-www",
-      "project": "domains/www/tsconfig.json"
+      "project": "domains/www/tsconfig.json",
+      "holdout": false
     },
     {
       "app": "spotify-desk-thing",
       "root": "spotify-desk-thing",
-      "project": "tsconfig.json"
+      "project": "tsconfig.json",
+      "holdout": false
     },
     {
       "app": "viviana-ui-web",
       "root": "viviana-ui-web",
-      "project": "apps/web/tsconfig.json"
+      "project": "apps/web/tsconfig.json",
+      "holdout": true
     }
-  ],
-  "excluded": {
-    "reason": "depends directly on solid-js 1.x or a Solid-1-only package (owner decision, 2026-10-22); directories moved to solid-checker-rc17-corpus/removed-solid1/",
-    "apps": [
-      "a-worse-ereader",
-      "beacon-web",
-      "civil",
-      "derp-media-server",
-      "en-passant",
-      "finds-team",
-      "jibe-run",
-      "kobalte-docs",
-      "openbot",
-      "queue-management-ui",
-      "raybend-website",
-      "readingroom",
-      "sefer",
-      "solid-validation-site"
-    ]
-  }
+  ]
 }

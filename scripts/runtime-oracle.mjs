@@ -22,6 +22,9 @@
 // case's known open sites (each an unproven clean claim with its reason):
 //   { "note": "what the case pins", "steps": [ ... ],
 //     "open": [{ "code": "NO_OWNER_CLEANUP", "site": "App.tsx:13", "reason": "..." }] }
+// Optional descriptive fields `scenario` (application, api-example or
+// constructed-misuse), `requires` (list) and `reaches` (text) say what execution
+// the case stands for; they change no verdict (fixtures/runtime-oracle/README.md).
 // The run exits 1 on an unlisted unproven-clean site, a listed site that no
 // longer fires, a TypeScript error, or a harness error.
 // A case may also observe the page for a static finding that no dev diagnostic
@@ -54,6 +57,7 @@ import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { contextSpec, scenarioCounts } from "./oracle-context.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const options = {
@@ -488,6 +492,7 @@ async function runCase(id) {
   const files = sourceFiles(source);
   assert(files.includes("App.tsx"), `${id}: no App.tsx`);
   const observations = behaviourSpec(id, spec, source, files);
+  const context = contextSpec(id, spec);
   for (const file of files) cpSync(join(source, file), join(dir, file));
   writeFileSync(join(dir, "main.tsx"), mainSource);
   writeFileSync(join(dir, "driver.ts"), driverSource(observations));
@@ -645,7 +650,7 @@ async function runCase(id) {
     : behaviour.some((row) => row.verdict === "behaviour-confirmed") ? "behaviour-confirmed"
     : behaviour.length ? "behaviour-clean" : "quiet";
   return {
-    id, verdict, note: spec.note ?? null, wallMs, typingErrors, failure, stale: [...stale, ...staleBehaviour], diagnostics, behaviour, staticOnly, findings,
+    id, verdict, note: spec.note ?? null, ...context, wallMs, typingErrors, failure, stale: [...stale, ...staleBehaviour], diagnostics, behaviour, staticOnly, findings,
     unattributed: (report.execution?.diagnostics ?? []).filter((row) => !caseFile(row.site?.location?.path)).map((row) => row.code),
     pageErrors: (report.execution?.pageErrors ?? []).map((error) => error.message.slice(0, 200)),
   };
@@ -671,8 +676,10 @@ async function worker() {
 await Promise.all(Array.from({ length: Number(options.concurrency) }, worker));
 results.sort((left, right) => left.id.localeCompare(right.id));
 const tally = results.reduce((counts, row) => ({ ...counts, [row.verdict]: (counts[row.verdict] ?? 0) + 1 }), {});
-writeFileSync(output, `${JSON.stringify({ solid: solidVersion, install, browser, cases: results.length, tally, results }, null, 2)}\n`);
+const scenarios = scenarioCounts(results);
+writeFileSync(output, `${JSON.stringify({ solid: solidVersion, install, browser, cases: results.length, tally, scenarios, results }, null, 2)}\n`);
 console.log(JSON.stringify(tally));
+console.log(`scenarios ${JSON.stringify(scenarios)}`);
 const failing = results.filter((row) => ["unproven-clean", "stale-open", "type-error", "harness-error"].includes(row.verdict));
 for (const row of failing) {
   console.error(`${row.id}: ${row.verdict}`);

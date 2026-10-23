@@ -3,6 +3,8 @@
 // and, optionally, a runtime-oracle report:
 //
 //   node scripts/corpus-metrics.mjs <sweep.json> [--oracle <oracle.json>] [--json]
+//     [--manifest <manifest.json>] [--ledger <reviewed-findings.json>]
+//   node scripts/corpus-metrics.mjs --check-ledger [--ledger <reviewed-findings.json>]
 //
 // 1. Unproven clean claims: runtime diagnostics the checker is silent on, from
 //    the oracle report (`unproven-clean`, plus `known-open` debt). Target 0.
@@ -17,17 +19,45 @@
 // playgrounds, docs sites), `config` (*.config.*), and `app` for the rest.
 // The heuristic is coarse and stated; it only splits the share, it never
 // drops a finding.
+//
+// The share is also printed per split (dev / holdout, scripts/corpus-sweep.mjs
+// --split): a row's split is its own `holdout` flag, else the manifest's.
+//
+// Reviewed precision (scripts/corpus/reviewed-findings.json, an independent
+// classification): confirmed / adjudicated violations, from ledger entries
+// that classify a violation of this sweep. Unreviewed violations are counted
+// apart and never enter the ratio; an unresolved-review entry is not a
+// decision; an entry whose project ran but whose key is gone is reported as
+// stale. --check-ledger validates the ledger file and exits 1 if malformed.
 import { readFileSync } from "node:fs";
-import { relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { bucketOf, decidedShare, holdoutIndex, reviewedPrecision, shareBySplit, validateLedger } from "./corpus-lib.mjs";
 
+const here = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
-const sweepPath = argv.find(argument => !argument.startsWith("--") && argv[argv.indexOf(argument) - 1] !== "--oracle");
-if (!sweepPath) throw new Error("usage: corpus-metrics.mjs <sweep.json> [--oracle <oracle.json>] [--json]");
-const oracleIndex = argv.indexOf("--oracle");
-const oraclePath = oracleIndex >= 0 ? argv[oracleIndex + 1] : undefined;
+const valueOptions = ["--oracle", "--manifest", "--ledger"];
+const optionValue = name => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
+const ledgerPath = resolve(optionValue("--ledger") ?? join(here, "corpus/reviewed-findings.json"));
+const manifestPath = resolve(optionValue("--manifest") ?? join(here, "corpus/rc17-manifest.json"));
+
+const ledger = JSON.parse(readFileSync(ledgerPath, "utf8"));
+if (argv.includes("--check-ledger")) {
+  const errors = validateLedger(ledger);
+  for (const error of errors) console.error(`${ledgerPath}: ${error}`);
+  if (!errors.length) console.log(`${ledgerPath}: ${ledger.entries.length} entries, well formed`);
+  process.exit(errors.length ? 1 : 0);
+}
+const ledgerErrors = validateLedger(ledger);
+if (ledgerErrors.length) throw new Error(`malformed ledger ${ledgerPath}: ${ledgerErrors.join("; ")}`);
+
+const sweepPath = argv.find((argument, index) => !argument.startsWith("--") && !valueOptions.includes(argv[index - 1]));
+if (!sweepPath) throw new Error("usage: corpus-metrics.mjs <sweep.json> [--oracle <oracle.json>] [--json] | --check-ledger");
+const oraclePath = optionValue("--oracle");
 const asJson = argv.includes("--json");
 
 const sweep = JSON.parse(readFileSync(sweepPath, "utf8"));
+const index = holdoutIndex(JSON.parse(readFileSync(manifestPath, "utf8")));
 
 function category(path) {
   const lower = path.toLowerCase();
@@ -45,19 +75,15 @@ for (const result of sweep.results) {
   for (const finding of result.findings ?? []) {
     const path = finding.primaryLocation?.path ?? "";
     const where = category(relative(result.root, path));
-    const slot =
-      finding.subjectKind === "project" ? "notice"
-        : /^SC80/.test(finding.id) ? "style"
-          : finding.kind === "violation" ? "violation" : "uncertifiable";
+    const slot = bucketOf(finding);
     for (const bucket of [total, (byCategory[where] ??= empty()), (byApp[result.app] ??= empty())]) {
       bucket[slot] += 1;
     }
   }
 }
-const share = bucket => {
-  const decided = bucket.violation + bucket.uncertifiable;
-  return decided === 0 ? null : bucket.violation / decided;
-};
+const share = decidedShare;
+const splitShares = shareBySplit(sweep.results, index);
+const reviewed = reviewedPrecision(sweep.results, ledger, index);
 
 let oracle;
 if (oraclePath) {
@@ -75,7 +101,12 @@ if (oraclePath) {
 
 const metrics = {
   sweep: sweepPath,
+  split: sweep.split ?? "unrecorded",
   total: { ...total, decidedShare: share(total) },
+  bySplit: Object.fromEntries(
+    ["dev", "holdout"].map(name => [name, { ...splitShares[name], decidedShare: share(splitShares[name]) }])
+  ),
+  reviewed,
   byCategory: Object.fromEntries(
     Object.entries(byCategory).sort().map(([name, bucket]) => [name, { ...bucket, decidedShare: share(bucket) }])
   ),
@@ -96,9 +127,22 @@ if (asJson) {
     `uncertifiable ${String(bucket.uncertifiable).padStart(5)}  style ${String(bucket.style).padStart(4)}  notice ${bucket.notice}`;
   console.log("decided share (violation / (violation + uncertifiable))");
   console.log(line("total", metrics.total));
+  console.log(`by split (sweep ran: ${metrics.split})`);
+  for (const [name, bucket] of Object.entries(metrics.bySplit)) console.log(line(`  ${name}`, bucket));
+  console.log("by category");
   for (const [name, bucket] of Object.entries(metrics.byCategory)) console.log(line(`  ${name}`, bucket));
   console.log("by app");
   for (const [name, bucket] of Object.entries(metrics.byApp)) console.log(line(`  ${name}`, bucket));
+  const precision = value => (value === null ? "n/a" : `${(value * 100).toFixed(1)}%`);
+  const reviewLine = (name, bucket) =>
+    `${name.padEnd(24)} ${precision(bucket.precision).padStart(6)}  confirmed ${bucket.confirmed}/${bucket.adjudicated} adjudicated  ` +
+    `unresolved ${bucket.unresolved}  unreviewed ${bucket.unreviewed}`;
+  console.log("reviewed precision (confirmed / adjudicated violations; unreviewed are not counted in it)");
+  console.log(reviewLine("total", reviewed.total));
+  console.log(reviewLine("  dev", reviewed.dev));
+  console.log(reviewLine("  holdout", reviewed.holdout));
+  if (reviewed.otherKind) console.log(`ledger entries on non-violation findings (not counted): ${reviewed.otherKind}`);
+  for (const key of reviewed.stale) console.log(`  stale ledger entry ${key}`);
   if (oracle) {
     console.log(`oracle: ${oracle.cases} cases, unproven clean ${oracle.unprovenClean.length}, known open ${oracle.knownOpen.length}, static-only ${oracle.staticOnly.length}`);
     for (const site of oracle.unprovenClean) console.log(`  unproven-clean ${site}`);

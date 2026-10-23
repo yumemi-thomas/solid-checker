@@ -1,3 +1,9 @@
 {
-  "note": "Precision probe 2026-10-23 (ADR 0361): a supported scroll dispatch on a local intrinsic element reaches only that element's scroll handler. The unrelated click handler runs from the harness with no owner, so its onCleanup is a proven SC4001 violation (NO_OWNER_CLEANUP). Before ADR 0361 any dispatch made every handler uncertifiable. The harness's own events are sent from driver.ts, which is not in the checked program. Counterparts: review-r7-sync-scroll and review-r7-sync-child-scroll, where the handler is reached."
+  "note": "Precision probe 2026-10-23 (ADR 0361): a supported scroll dispatch on a local intrinsic element reaches only that element's scroll handler. The unrelated click handler runs from the harness with no owner, so its onCleanup is a proven SC4001 violation (NO_OWNER_CLEANUP). Before ADR 0361 any dispatch made every handler uncertifiable. The harness's own events are sent from driver.ts, which is not in the checked program. Counterparts: review-r7-sync-scroll and review-r7-sync-child-scroll, where the handler is reached.",
+  "scenario": "constructed-misuse",
+  "requires": [
+    "a local intrinsic div with onScroll and a synthetic scroll dispatchEvent in the component body",
+    "a separate button whose onClick calls onCleanup with no owner"
+  ],
+  "reaches": "no step asserts it: driver.ts dispatches click on every element, and the NO_OWNER_CLEANUP dev diagnostic from button#oracle-unrelated's handler shows the handler ran; the dispatch call runs on App's body stack during the settle step"
 }
