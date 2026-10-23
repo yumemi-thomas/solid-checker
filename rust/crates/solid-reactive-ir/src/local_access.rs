@@ -254,21 +254,24 @@ fn is_view_argument(
     span: solid_facts::core::Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    file.ast.calls.iter().any(|call| {
-        call.arguments
-            .iter()
-            .position(|argument| {
-                !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == span
-            })
-            .is_some_and(|index| {
-                call_builds_view(file, call, lookup, 0)
-                    && (index == 0
-                        || lookup
-                            .primitive_at_call(file, call.span)
-                            .is_some_and(|primitive| {
-                                lookup.dialect.merges_props_reactivity(primitive)
-                            }))
-            })
+    // An argument that peels to `span` lies inside the argument's own span, so
+    // only the arguments containing `span` can match. They arrive ordered by
+    // (call, argument); the first match of each call decides that call.
+    let mut decided: Option<&solid_facts::ast::CallFact> = None;
+    file.ast.arguments_containing(span).any(|(call, index)| {
+        let argument = &call.arguments[index];
+        if argument.spread
+            || file.ast.peel_ts_sugar_span(argument.span) != span
+            || decided.is_some_and(|seen| std::ptr::eq(seen, call))
+        {
+            return false;
+        }
+        decided = Some(call);
+        call_builds_view(file, call, lookup, 0)
+            && (index == 0
+                || lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| lookup.dialect.merges_props_reactivity(primitive)))
     })
 }
 
@@ -345,10 +348,9 @@ pub(super) fn props_root_unaccounted_uses(
                 .any(|parameter| parameter.pattern.contains(declaration_span))
         })
         .any(|function| {
-            file.ast.identifiers.iter().any(|identifier| {
-                function.span.contains(identifier.span)
-                    && file.source_text(identifier.span) == Some("arguments")
-            })
+            file.ast
+                .identifiers_within(function.span)
+                .any(|identifier| file.source_text(identifier.span) == Some("arguments"))
         })
     {
         return None;
@@ -359,12 +361,10 @@ pub(super) fn props_root_unaccounted_uses(
     let aliases = props_root_aliases(file, symbol, entities);
     let names_root = |span| {
         let span = file.ast.peel_ts_sugar_span(span);
-        file.ast.identifiers.iter().any(|identifier| {
-            identifier.span == span
-                && identifier.role == solid_facts::ast::IdentifierRole::Reference
-        }) && entities
-            .at(file.path.as_str(), span)
-            .is_some_and(|named| named == symbol || aliases.iter().any(|(alias, _)| alias == named))
+        file.ast.has_reference_identifier_at(span)
+            && entities.at(file.path.as_str(), span).is_some_and(|named| {
+                named == symbol || aliases.iter().any(|(alias, _)| alias == named)
+            })
     };
     let member_written = file
         .ast
@@ -375,9 +375,8 @@ pub(super) fn props_root_unaccounted_uses(
         .chain(file.ast.iteration_targets.iter().copied())
         .any(|target| {
             file.ast
-                .members
-                .iter()
-                .any(|member| target.contains(member.span) && names_root(member.object))
+                .members_within(target)
+                .any(|member| names_root(member.object))
         });
     // Every unaccounted use of the object can alias or escape it, including
     // shorthand properties, returns and nested parameter defaults. Erased
@@ -385,6 +384,9 @@ pub(super) fn props_root_unaccounted_uses(
     if member_written {
         return None;
     }
+    // The spans some member access takes as its (peeled) object, built when a
+    // root use first needs it.
+    let mut member_objects: Option<HashSet<solid_facts::core::Span>> = None;
     let escapes = file
         .ast
         .identifiers
@@ -395,11 +397,15 @@ pub(super) fn props_root_unaccounted_uses(
                     wrapper.span.contains(identifier.span)
                         && !wrapper.inner.contains(identifier.span)
                 })
-                && !file
-                    .ast
-                    .members
-                    .iter()
-                    .any(|member| file.ast.peel_ts_sugar_span(member.object) == identifier.span)
+                && !member_objects
+                    .get_or_insert_with(|| {
+                        file.ast
+                            .members
+                            .iter()
+                            .map(|member| file.ast.peel_ts_sugar_span(member.object))
+                            .collect()
+                    })
+                    .contains(&identifier.span)
                 && !is_view_argument(file, identifier.span, lookup)
                 && !aliases
                     .iter()

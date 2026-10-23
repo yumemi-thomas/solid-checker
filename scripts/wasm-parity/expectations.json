@@ -1074,14 +1074,14 @@
       "native": {
         "status": 2,
         "notes": [
-          "solid-typefacts: open TS-Go project: parse tsconfig: 1 configuration error(s)",
-          "solid-typefacts: open TS-Go project: parse tsconfig: 1 configuration error(s)",
+          "solid-typefacts: open TypeScript project: parse tsconfig: 1 configuration error(s)",
+          "solid-typefacts: open TypeScript project: parse tsconfig: 1 configuration error(s)",
           "solid-checker-rust: TypeFacts session error: Type Facts process failed: I/O error: failed to fill whole buffer"
         ]
       },
       "wasi": {
         "status": 1,
-        "error": "open TS-Go project: parse tsconfig: 1 configuration error(s)",
+        "error": "open TypeScript project: parse tsconfig: 1 configuration error(s)",
         "host": {
           "opened": [],
           "closed": [],

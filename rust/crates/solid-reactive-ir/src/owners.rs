@@ -218,8 +218,7 @@ pub(crate) fn containing_ast_function(
     ast: &solid_facts::ast::AstFacts,
     span: Span,
 ) -> Option<&solid_facts::ast::FunctionFact> {
-    ast.functions_body_containing(span)
-        .min_by_key(|function| function.body.end - function.body.start)
+    ast.innermost_function_body_containing(span)
 }
 
 /// Whether `span` is written directly in `function`'s own body: inside the

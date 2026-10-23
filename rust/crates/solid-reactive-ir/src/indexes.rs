@@ -33,6 +33,26 @@ pub(crate) use intrinsics::mentions_word;
 
 /// Functions by `(path, span)`: the proven components, then the escaped ones
 /// among them ([`SemanticLookup::escaped_component_functions`]).
+/// What every reflective definer spelling in the project says about the key
+/// it defines: `any` when some spelling may define any name, otherwise only
+/// the names in `sole_keys`.
+#[derive(Default)]
+pub(super) struct ReflectiveDefinitionNames {
+    any: bool,
+    sole_keys: HashSet<String>,
+}
+
+#[derive(Default)]
+pub(super) struct BindingDeclarations<'a> {
+    initialized_by_symbol: HashMap<(&'a str, &'a SymbolId), &'a solid_facts::ast::BindingFact>,
+    by_name_span: HashMap<(&'a str, Span), &'a solid_facts::ast::BindingFact>,
+}
+
+/// Memo of `returned_callback_invocation_sites` per factory call.
+pub(super) type ReturnedInvocationSites = std::sync::Mutex<
+    HashMap<(String, Span), std::sync::Arc<Vec<crate::owners::ReturnedCallbackInvocationSite>>>,
+>;
+
 pub(super) type ComponentSets<'a> = (HashSet<(&'a str, Span)>, HashSet<(&'a str, Span)>);
 
 /// Whether the reference at `span` is the declaration that introduces a
@@ -149,6 +169,16 @@ pub(super) fn binding_written_through_wrappers(file: &FileFacts, declaration: Sp
 }
 
 fn binding_written_by(file: &FileFacts, declaration: Span, through_wrappers: bool) -> bool {
+    // Asked again and again for the same declaration, and each answer reads
+    // the whole file, so it is remembered with the file's span index.
+    file.ast
+        .span_index()
+        .flag(u8::from(through_wrappers), declaration, || {
+            compute_binding_written_by(file, declaration, through_wrappers)
+        })
+}
+
+fn compute_binding_written_by(file: &FileFacts, declaration: Span, through_wrappers: bool) -> bool {
     // A direct `eval` reaches every binding visible where it is written and
     // can rebind it (`eval("go = () => {}")`) with no static reference.
     if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
@@ -160,49 +190,41 @@ fn binding_written_by(file: &FileFacts, declaration: Span, through_wrappers: boo
     let name = file.source_text(declaration);
     let scope = file
         .ast
-        .functions
-        .iter()
-        .filter(|function| function.span.contains(declaration))
-        .min_by_key(|function| function.span.end - function.span.start)
+        .innermost_function_containing(declaration)
         .map_or(Span::new(0, u32::MAX), |function| function.span);
-    let redeclared = file.ast.bindings.iter().any(|binding| {
-        scope.contains(binding.declaration)
-            && binding
-                .names
-                .iter()
-                .any(|other| other.span != declaration && file.source_text(other.span) == name)
-    }) || file.ast.functions.iter().any(|function| {
-        scope.contains(function.span)
-            && function.kind == solid_facts::ast::FunctionKind::Declaration
-            && function.name.as_ref().is_some_and(|other| {
-                other.span != declaration && file.source_text(other.span) == name
-            })
-    });
+    // `bindings` is sorted by declaration span, so those inside `scope` start
+    // at the first declaration that does not start before it.
+    let first_in_scope = file
+        .ast
+        .bindings
+        .partition_point(|binding| binding.declaration.start < scope.start);
+    let redeclared = file.ast.bindings[first_in_scope..]
+        .iter()
+        .take_while(|binding| binding.declaration.start <= scope.end)
+        .any(|binding| {
+            scope.contains(binding.declaration)
+                && binding
+                    .names
+                    .iter()
+                    .any(|other| other.span != declaration && file.source_text(other.span) == name)
+        })
+        || file.ast.functions_within(scope).any(|function| {
+            function.kind == solid_facts::ast::FunctionKind::Declaration
+                && function.name.as_ref().is_some_and(|other| {
+                    other.span != declaration && file.source_text(other.span) == name
+                })
+        });
     if redeclared {
         return true;
     }
-    let targets = file
-        .ast
-        .assignments
-        .iter()
-        .map(|assignment| assignment.target)
-        .chain(file.ast.iteration_targets.iter().copied())
-        .collect::<Vec<_>>();
-    file.ast
-        .reference_declarations
-        .iter()
-        .filter(|(_, declared)| *declared == declaration)
-        .any(|(reference, _)| {
-            targets.iter().any(|target| target.contains(*reference))
-                && !file.ast.members.iter().any(|member| {
-                    let object = if through_wrappers {
-                        file.ast.peel_ts_sugar_span(member.object)
-                    } else {
-                        member.object
-                    };
-                    object == *reference
-                })
-        })
+    file.ast.references_to(declaration).iter().any(|reference| {
+        file.ast.any_write_target_containing(*reference)
+            && !if through_wrappers {
+                file.ast.member_with_peeled_object(*reference).is_some()
+            } else {
+                file.ast.any_member_with_object(*reference)
+            }
+    })
 }
 
 /// ADR 0209, 0314: the members assignments write, by name, and the
@@ -773,6 +795,15 @@ pub(super) struct SemanticLookup<'a> {
     /// Review round 1 of ADR 0293: whether some file may define a property
     /// reflectively ([`Self::property_may_be_defined_reflectively`]).
     reflective_property_definition: OnceLock<bool>,
+    /// [`Self::property_may_be_defined_reflectively_as`], summarised once
+    /// over the project so each per-name query is a set lookup.
+    reflective_definition_names: OnceLock<ReflectiveDefinitionNames>,
+    /// Per file path: the first binding with an initializer that declares each
+    /// symbol, and the first binding declaring a name at each span.
+    binding_declarations: OnceLock<BindingDeclarations<'a>>,
+    /// The invocation sites of each factory call's returned function, by
+    /// file path and call span. Several passes ask the same factory call.
+    returned_invocation_sites: ReturnedInvocationSites,
     /// ADR 0349: the Promise and array-iteration premises, by their tripwires.
     intrinsics: OnceLock<intrinsics::Intrinsics>,
     /// ADR 0351: each member read that names a closed object literal's function.
@@ -985,6 +1016,9 @@ impl<'a> SemanticLookup<'a> {
             route_component_values: OnceLock::new(),
             assigned_member_names: OnceLock::new(),
             reflective_property_definition: OnceLock::new(),
+            reflective_definition_names: OnceLock::new(),
+            returned_invocation_sites: ReturnedInvocationSites::default(),
+            binding_declarations: OnceLock::new(),
             intrinsics: OnceLock::new(),
             closed_members: OnceLock::new(),
             entities_by_location: OnceLock::new(),
@@ -1845,6 +1879,85 @@ impl<'a> SemanticLookup<'a> {
             .map(|declaration| declaration.location.path.as_ref())
             .collect::<Vec<&'a str>>();
         (!paths.is_empty()).then_some(paths)
+    }
+
+    fn binding_declarations(&self) -> &BindingDeclarations<'a> {
+        self.binding_declarations.get_or_init(|| {
+            let entities = self.entities();
+            let mut declarations = BindingDeclarations::default();
+            for file in self.files() {
+                let path = file.path.as_str();
+                for binding in &file.ast.bindings {
+                    for name in &binding.names {
+                        declarations
+                            .by_name_span
+                            .entry((path, name.span))
+                            .or_insert(binding);
+                        if binding.initializer.is_some()
+                            && let Some(symbol) = entities.at(path, name.span)
+                        {
+                            declarations
+                                .initialized_by_symbol
+                                .entry((path, symbol))
+                                .or_insert(binding);
+                        }
+                    }
+                }
+            }
+            declarations
+        })
+    }
+
+    /// The first binding of `path`, in file order, that has an initializer and
+    /// a name whose entity is `symbol`.
+    pub(crate) fn initialized_binding_of_symbol(
+        &self,
+        path: &str,
+        symbol: &SymbolId,
+    ) -> Option<&'a solid_facts::ast::BindingFact> {
+        self.binding_declarations()
+            .initialized_by_symbol
+            .get(&(path, symbol))
+            .copied()
+    }
+
+    /// The first binding of `path`, in file order, with a name written at
+    /// exactly `span`.
+    pub(crate) fn binding_named_at(
+        &self,
+        path: &str,
+        span: Span,
+    ) -> Option<&'a solid_facts::ast::BindingFact> {
+        self.binding_declarations()
+            .by_name_span
+            .get(&(path, span))
+            .copied()
+    }
+
+    /// The memoised result for the factory call at `span` in `path`.
+    pub(crate) fn returned_invocation_sites_memo(
+        &self,
+        path: &str,
+        span: Span,
+        compute: impl FnOnce() -> Vec<crate::owners::ReturnedCallbackInvocationSite>,
+    ) -> std::sync::Arc<Vec<crate::owners::ReturnedCallbackInvocationSite>> {
+        let key = (path.to_owned(), span);
+        if let Some(found) = self
+            .returned_invocation_sites
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&key)
+        {
+            return found.clone();
+        }
+        // Computed outside the lock: the computation re-enters the lookup.
+        let computed = std::sync::Arc::new(compute());
+        self.returned_invocation_sites
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(key)
+            .or_insert(computed)
+            .clone()
     }
 
     pub(super) fn symbol_references(&self, symbol: &str) -> Vec<Location> {

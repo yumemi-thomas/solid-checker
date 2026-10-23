@@ -357,7 +357,25 @@ impl DemandClosure {
         if self.closed {
             return Err(BackendError(ERR_CLOSED.to_owned()));
         }
-        self.backend.symbol_evidence(ctx, queries)
+        // One row per id: queries naming the same id are merged before the
+        // backend answers, so no requested evidence is dropped. References
+        // are wanted if any query wants them; the declaration and alias half
+        // is skipped only if every query skips it.
+        let mut merged: Vec<SymbolQuery> = Vec::with_capacity(queries.len());
+        let mut position: HashMap<std::sync::Arc<str>, usize> = HashMap::new();
+        for query in queries {
+            match position.get(&query.id) {
+                Some(&at) => {
+                    merged[at].references |= query.references;
+                    merged[at].references_only &= query.references_only;
+                }
+                None => {
+                    position.insert(query.id.clone(), merged.len());
+                    merged.push(query.clone());
+                }
+            }
+        }
+        self.backend.symbol_evidence(ctx, &merged)
     }
 
     pub fn release_backend_analysis_state(&mut self) {

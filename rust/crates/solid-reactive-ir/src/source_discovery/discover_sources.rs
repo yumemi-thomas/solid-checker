@@ -106,17 +106,18 @@ pub(crate) fn discover_sources(
         runtime,
         ..
     } = *ctx;
-    runtime_sources.retain(|symbol| {
-        !facts.files.iter().any(|file| {
-            crate::value_identity::binding_has_write(file, entities, symbol)
-                || file.ast.iteration_targets.iter().any(|target| {
-                    file.ast.identifiers.iter().any(|identifier| {
-                        target.contains(identifier.span)
-                            && entities.at(file.path.as_str(), identifier.span) == Some(symbol)
-                    })
-                })
-        })
-    });
+    // A runtime source stays only while no file writes it. Collect every
+    // written symbol once rather than asking each source of each file.
+    let mut written: HashSet<&SymbolId> = HashSet::default();
+    for file in &facts.files {
+        written.extend(crate::value_identity::written_symbols(file, entities));
+        for target in &file.ast.iteration_targets {
+            for identifier in file.ast.identifiers_within(*target) {
+                written.extend(entities.at(file.path.as_str(), identifier.span));
+            }
+        }
+    }
+    runtime_sources.retain(|symbol| !written.contains(symbol));
     let props_reactivity = classify_component_props(
         runtime,
         facts,

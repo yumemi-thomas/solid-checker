@@ -29,6 +29,11 @@ export const DEFAULT_CEILINGS = Object.freeze({
   incrementalNs: 400_000_000
 });
 
+// Cold processes per corpus size for the export-scaling ratio. The phase takes
+// 0.1-0.6 ms, so single samples scatter widely (2.2x-3.4x between processes on
+// one tree); the minimum over this many is what the ratio uses.
+export const COLD_SAMPLES = 9;
+
 export const WALL_TIME_GATES = Object.freeze(["enforce", "report"]);
 
 function exportTime(report) {
@@ -49,8 +54,9 @@ export function assessPerformance(
     throw new Error(`wall-time gate must be one of ${WALL_TIME_GATES.join(", ")}, got ${JSON.stringify(wallTimeGate)}`);
   }
   // The export phase is sub-millisecond, so one sample per side made the
-  // ratio jitter by +-0.4x on shared runners. Best of the independent cold
-  // processes on BOTH sides: scheduling slows one sample, a real
+  // ratio jitter by +-0.4x on shared runners, and best of three still crossed
+  // the limit on an unchanged tree. Best of COLD_SAMPLES independent cold
+  // processes on BOTH sides: scheduling slows some samples, a real
   // super-linear cost slows every large sample.
   const scaling =
     Math.min(...largeSamples.map(exportTime)) / Math.max(Math.min(...smallSamples.map(exportTime)), 1);

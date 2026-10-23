@@ -949,7 +949,9 @@ fn a_producer_config_failure_after_success_is_an_error_and_the_repair_recovers()
     // The error is the producer's configuration error, surfaced by the
     // native client; it is not a daemon, a cache event or a fallback.
     assert!(
-        failed.stderr.contains("open TS-Go project: parse tsconfig"),
+        failed
+            .stderr
+            .contains("open TypeScript project: parse tsconfig"),
         "{context}"
     );
     assert!(

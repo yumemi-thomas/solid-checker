@@ -643,6 +643,9 @@ fn populate_symbol_evidence(
         .map_err(|error| error.0)?;
     if request.operation == Operation::Symbols && !evidence.is_empty() {
         evidence.sort_by(|left, right| left.id.cmp(&right.id));
+        // A packed table holds each symbol once, in strictly ascending id
+        // order; a request naming an id twice still gets a decodable table.
+        evidence.dedup_by(|later, earlier| later.id == earlier.id);
         let mut target = ProducerTable::new(request.generation, project_id);
         target.symbols = evidence;
         let packed = encode_transition(

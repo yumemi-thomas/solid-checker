@@ -11,10 +11,36 @@ pub(super) struct StructuredReturnDiscovery<'a, 'facts> {
     pub(super) returned: &'a [SummaryReads],
     pub(super) structured_returns: &'a [Option<ReturnSummary>],
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    /// The accessor declared at each `(path, start, end)`: the first in the
+    /// iteration order of `accessors` (see [`accessor_declarations`]).
+    pub(super) accessor_declarations: &'a AccessorDeclarations<'a>,
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub(super) entities: &'a EntitySymbols,
     pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(super) lookup: &'a SemanticLookup<'facts>,
+}
+
+/// The accessors by declared location.
+pub(super) type AccessorDeclarations<'a> = HashMap<(&'a str, u32, u32), &'a SymbolId>;
+
+/// Indexes `accessors` by declaration. Several accessors may share one
+/// location; the first in `accessors`' iteration order wins, as the scan this
+/// replaces returned.
+pub(super) fn accessor_declarations(
+    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+) -> AccessorDeclarations<'_> {
+    let mut declarations = AccessorDeclarations::default();
+    for (symbol, (_, location)) in accessors {
+        if let (Ok(start), Ok(end)) = (
+            u32::try_from(location.start_byte),
+            u32::try_from(location.end_byte),
+        ) {
+            declarations
+                .entry((location.path.as_ref(), start, end))
+                .or_insert(symbol);
+        }
+    }
+    declarations
 }
 
 impl StructuredReturnDiscovery<'_, '_> {
@@ -81,21 +107,20 @@ impl StructuredReturnDiscovery<'_, '_> {
     ) -> Option<ReturnSummary> {
         if function.r#async
             || function.generator
-            || file.ast.identifiers.iter().any(|identifier| {
-                function.span.contains(identifier.span)
-                    && matches!(
+            || file
+                .ast
+                .identifiers_within(function.span)
+                .any(|identifier| {
+                    matches!(
                         file.source_text(identifier.span),
                         Some("eval" | "arguments")
                     )
-            })
+                })
         {
             return None;
         }
         let span = file.ast.peel_ts_sugar_span(span);
-        if !file.ast.identifiers.iter().any(|identifier| {
-            identifier.span == span
-                && identifier.role == solid_facts::ast::IdentifierRole::Reference
-        }) {
+        if !file.ast.has_reference_identifier_at(span) {
             return None;
         }
         let symbol = self.entities.at(file.path.as_str(), span)?;
@@ -462,13 +487,10 @@ impl StructuredReturnDiscovery<'_, '_> {
             // therefore keeps looking until it finds the matching name *with*
             // an initializer instead of committing to the first name match and
             // then failing the initializer test.
-            && let Some((bound, initializer)) = file.ast.bindings.iter().find_map(|binding| {
-                binding.names.iter().find_map(|name| {
-                    (self.entities.at(file.path.as_str(), name.span) == Some(symbol))
-                        .then_some(binding)
-                        .zip(binding.initializer)
-                })
-            })
+            && let Some((bound, initializer)) = self
+                .lookup
+                .initialized_binding_of_symbol(file.path.as_str(), symbol)
+                .and_then(|binding| binding.initializer.map(|initializer| (binding, initializer)))
         {
             return Some(BoundInitializer {
                 initializer,
@@ -482,11 +504,9 @@ impl StructuredReturnDiscovery<'_, '_> {
         // resolve that exact reference, so its declaration is the evidence
         // here -- exact, and block-scope aware.
         let declaration = self.shorthand_value_declaration(file, span)?;
-        let bound = file
-            .ast
-            .bindings
-            .iter()
-            .find(|binding| binding.names.iter().any(|name| name.span == declaration))?;
+        let bound = self
+            .lookup
+            .binding_named_at(file.path.as_str(), declaration)?;
         Some(BoundInitializer {
             initializer: bound.initializer?,
             symbol: self.entities.at(file.path.as_str(), declaration).cloned(),
@@ -506,9 +526,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         span: Span,
     ) -> Option<Span> {
         file.ast
-            .object_properties
-            .iter()
-            .find(|property| property.value == span)
+            .object_property_with_value(span)
             .and_then(|property| property.shorthand_binding)
     }
 
@@ -604,14 +622,9 @@ impl StructuredReturnDiscovery<'_, '_> {
     /// cannot be mistaken for this one.
     fn named_accessor(&self, file: &solid_facts::FileFacts, span: Span) -> Option<&SymbolId> {
         let declaration = self.shorthand_value_declaration(file, span)?;
-        self.accessors
-            .iter()
-            .find_map(|(symbol, (_, location))| {
-                (location.path.as_ref() == file.path.as_str()
-                    && u32::try_from(location.start_byte).ok()? == declaration.start
-                    && u32::try_from(location.end_byte).ok()? == declaration.end)
-                    .then_some(symbol)
-            })
+        self.accessor_declarations
+            .get(&(file.path.as_str(), declaration.start, declaration.end))
+            .copied()
             .or_else(|| self.imported_accessor(file, declaration))
     }
 
@@ -1015,11 +1028,8 @@ impl StructuredReturnDiscovery<'_, '_> {
         }
         if let Some(call) = file
             .ast
-            .calls
-            .iter()
-            .filter(|call| {
-                call.span == span || (span.contains(call.span) && call.span.start == span.start)
-            })
+            .calls_within(span)
+            .filter(|call| call.span.start == span.start)
             .max_by_key(|call| call.span.end - call.span.start)
             && let Some(returned) = self.call_return(file, call, fallback_label, depth - 1)
         {
@@ -1128,7 +1138,7 @@ pub(super) fn discover_structured_returns(
         let returned = function
             .expression_return
             .iter()
-            .chain(file.ast.returns.iter().filter(|returned| {
+            .chain(file.ast.returns_within(function.body).filter(|returned| {
                 containing_ast_function(&file.ast, returned.span)
                     .is_some_and(|owner| owner.span == function.span)
             }))

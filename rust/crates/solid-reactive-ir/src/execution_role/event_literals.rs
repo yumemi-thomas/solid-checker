@@ -203,14 +203,14 @@ impl<'a> InvocationFlow<'a, '_, '_> {
     /// The context the walk is in, as a `seen` key component: the callee
     /// calls it entered through a parameter and the elements whose props it
     /// is inside. Receiver proofs depend on the elements.
-    fn context(&self) -> Vec<(String, Span)> {
+    fn context(&self) -> Vec<(&'a str, Span)> {
         self.frames
             .iter()
-            .map(|(_, _, file, call)| (file.path.to_string(), *call))
+            .map(|(_, _, file, call)| (file.path.as_str(), *call))
             .chain(
                 self.props_stack
                     .iter()
-                    .map(|frame| (frame.element_file.path.to_string(), frame.element)),
+                    .map(|frame| (frame.element_file.path.as_str(), frame.element)),
             )
             .collect()
     }
@@ -323,7 +323,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         self.budget -= 1;
         let expr = file.ast.peel_ts_sugar_span(expr);
         if !self.seen.insert((
-            file.path.to_string(),
+            file.path.as_str(),
             expr,
             path.clone(),
             self.context(),
@@ -333,7 +333,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         }
         let peel = |span: Span| file.ast.peel_ts_sugar_span(span);
         // Called.
-        if let Some(call) = file.ast.calls.iter().find(|call| peel(call.callee) == expr) {
+        if let Some(call) = file.ast.call_with_peeled_callee(expr) {
             if call.construct || !path.is_empty() {
                 return None;
             }
@@ -341,28 +341,14 @@ impl<'a> InvocationFlow<'a, '_, '_> {
             return Some(());
         }
         // The object of a member access.
-        if let Some(member) = file
-            .ast
-            .members
-            .iter()
-            .find(|member| peel(member.object) == expr)
-        {
-            if file
-                .ast
-                .assignments
-                .iter()
-                .any(|assignment| assignment.target.contains(member.span))
-            {
+        if let Some(member) = file.ast.member_with_peeled_object(expr) {
+            if file.ast.any_assignment_target_containing(member.span) {
                 return None;
             }
             // A computed member counts only with a literal key.
             let key = member_static_key(file, member)?;
             let key = key.as_str();
-            let called = file
-                .ast
-                .calls
-                .iter()
-                .any(|call| peel(call.callee) == member.span)
+            let called = file.ast.any_call_with_peeled_callee(member.span)
                 || flow_tagged_or_chained(file, member.span);
             return match path.split_first() {
                 // A property of the function itself: `length`, `name`. A
