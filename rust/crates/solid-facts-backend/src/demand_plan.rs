@@ -880,6 +880,10 @@ fn callee_rooted_at_global(file: &FileFacts, callee: Span) -> bool {
         && file.ast.reference_declaration(root).is_none()
 }
 
+/// Per-declaration questions the call planner remembers in the file's span index.
+const QUESTION_FACTORY_RESULT: u8 = 2;
+const QUESTION_NESTED_FUNCTION: u8 = 3;
+
 fn plan_call_demands(
     dialect: &'static Dialect,
     file: &FileFacts,
@@ -965,13 +969,18 @@ fn plan_call_demands(
                 .ast
                 .reference_declaration(call.callee)
                 .is_some_and(|declaration| {
-                    file.ast.bindings.iter().any(|binding| {
-                        binding.immutable
-                            && binding.shape == solid_facts::ast::BindingShape::Identifier
-                            && binding.names.len() == 1
-                            && binding.names[0].span == declaration
-                            && binding.call_initializer.is_some()
-                    })
+                    // Asked once per declaration, not once per call of it.
+                    file.ast
+                        .span_index()
+                        .flag(QUESTION_FACTORY_RESULT, declaration, || {
+                            file.ast.bindings.iter().any(|binding| {
+                                binding.immutable
+                                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                                    && binding.names.len() == 1
+                                    && binding.names[0].span == declaration
+                                    && binding.call_initializer.is_some()
+                            })
+                        })
                 });
         // SC1002 asks whether a call before an async function's first
         // suspension may have tracked a source: only an exactly resolved
@@ -982,8 +991,7 @@ fn plan_call_demands(
             && callee_rooted_at_global(file, call.callee)
             && file
                 .ast
-                .functions_body_containing(call.span)
-                .min_by_key(|function| function.body.end - function.body.start)
+                .innermost_function_body_containing(call.span)
                 .is_some_and(|function| {
                     function.r#async
                         && file
@@ -1074,25 +1082,41 @@ fn extend_leaf_demand_regions(file: &FileFacts, regions: &mut Vec<solid_facts::c
 /// demand selection, not component identity or an execution proof. Parameters,
 /// aliases, imports, methods, and call-initialized bindings do not enter it.
 fn local_nested_function_callee(file: &FileFacts, callee: solid_facts::core::Span) -> bool {
-    use solid_facts::ast::{BindingShape, FunctionKind};
     let Some(declaration) = file.ast.reference_declaration(callee) else {
         return false;
     };
+    // The answer depends on the declaration alone, and every argumentless call
+    // of it asks.
+    file.ast
+        .span_index()
+        .flag(QUESTION_NESTED_FUNCTION, declaration, || {
+            nested_function_declared_at(file, declaration)
+        })
+}
+
+fn nested_function_declared_at(file: &FileFacts, declaration: solid_facts::core::Span) -> bool {
+    use solid_facts::ast::{BindingShape, FunctionKind};
+    // The functions a `const` identifier binding at `declaration` initializes.
+    let initialized = file
+        .ast
+        .bindings
+        .iter()
+        .filter(|binding| {
+            binding.immutable
+                && binding.shape == BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding.names[0].span == declaration
+        })
+        .filter_map(|binding| binding.initializer)
+        .map(|initializer| file.ast.peel_ts_sugar_span(initializer))
+        .collect::<HashSet<_>>();
     file.ast.functions.iter().any(|function| {
         let names_value = (function.kind == FunctionKind::Declaration
             && function
                 .name
                 .as_ref()
                 .is_some_and(|name| name.span == declaration))
-            || file.ast.bindings.iter().any(|binding| {
-                binding.immutable
-                    && binding.shape == BindingShape::Identifier
-                    && binding.names.len() == 1
-                    && binding.names[0].span == declaration
-                    && binding.initializer.is_some_and(|initializer| {
-                        file.ast.peel_ts_sugar_span(initializer) == function.span
-                    })
-            });
+            || initialized.contains(&function.span);
         names_value
             && file
                 .ast
@@ -1112,15 +1136,26 @@ fn parameter_rooted_member_call(file: &FileFacts, call: &solid_facts::ast::CallF
     let mut root = file.ast.peel_ts_sugar_span(call.callee);
     let mut member_found = false;
     loop {
-        if let Some(member) = file.ast.members.iter().find(|member| member.span == root) {
+        // `members` and `calls` are sorted by span, so the first at `root` is
+        // where a search for `root` lands.
+        let members_at_root = file
+            .ast
+            .members
+            .partition_point(|member| member.span < root);
+        if let Some(member) = file.ast.members[members_at_root..]
+            .iter()
+            .take_while(|member| member.span == root)
+            .next()
+        {
             member_found = true;
             root = file.ast.peel_ts_sugar_span(member.object);
-        } else if let Some(receiver_call) = file
-            .ast
-            .calls
-            .iter()
-            .find(|call| !call.construct && call.span == root)
-        {
+        } else if let Some(receiver_call) = {
+            let first = file.ast.calls.partition_point(|call| call.span < root);
+            file.ast.calls[first..]
+                .iter()
+                .take_while(|call| call.span == root)
+                .find(|call| !call.construct)
+        } {
             // Preserve demands for the rest of a parameter-rooted chain,
             // such as value.trim().toLowerCase(). This only asks for facts;
             // it does not establish the returned receiver's runtime identity.
@@ -1135,13 +1170,12 @@ fn parameter_rooted_member_call(file: &FileFacts, call: &solid_facts::ast::CallF
     let Some(declaration) = file.ast.reference_declaration(root) else {
         return false;
     };
-    file.ast.functions.iter().any(|function| {
-        function.span.contains(call.span)
-            && function
-                .parameters
-                .iter()
-                .flat_map(|parameter| &parameter.names)
-                .any(|name| name.span == declaration)
+    file.ast.functions_containing(call.span).any(|function| {
+        function
+            .parameters
+            .iter()
+            .flat_map(|parameter| &parameter.names)
+            .any(|name| name.span == declaration)
     })
 }
 

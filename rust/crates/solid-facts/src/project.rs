@@ -457,6 +457,22 @@ impl FileFacts {
         self.source.get(span.start as usize..span.end as usize)
     }
 
+    /// The spans of this file's calls whose callee, past transparent
+    /// TypeScript wrappers, is spelled `eval`. Computed once per file.
+    #[must_use]
+    pub fn eval_call_spans(&self) -> &[Span] {
+        self.ast.span_index().eval_calls_with(|| {
+            self.ast
+                .calls
+                .iter()
+                .filter(|call| {
+                    self.source_text(self.ast.peel_ts_sugar_span(call.callee)) == Some("eval")
+                })
+                .map(|call| call.span)
+                .collect()
+        })
+    }
+
     #[must_use]
     pub fn structural_seed_locations(&self) -> Vec<Location> {
         self.ast

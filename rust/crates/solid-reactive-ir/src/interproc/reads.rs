@@ -2016,6 +2016,7 @@ fn export_structured_return_obligations(
                     !returned.elements().is_empty() || !returned.properties().is_empty()
                 })
     });
+    let accessor_declarations = structured_returns::accessor_declarations(accessors);
     if has_structured_return_seed {
         for _ in 0..=nodes.len() {
             let discovered = discover_structured_returns(&StructuredReturnDiscovery {
@@ -2027,6 +2028,7 @@ fn export_structured_return_obligations(
                 returned,
                 structured_returns: &structured_returns,
                 accessors,
+                accessor_declarations: &accessor_declarations,
                 source_kinds,
                 entities,
                 symbol_names,
@@ -2053,6 +2055,7 @@ fn export_structured_return_obligations(
         returned,
         structured_returns: &structured_returns,
         accessors,
+        accessor_declarations: &accessor_declarations,
         source_kinds,
         entities,
         symbol_names,

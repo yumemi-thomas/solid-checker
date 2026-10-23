@@ -31,12 +31,12 @@ pub(super) enum FlowOrigin<'a> {
 /// A holder the walk followed: its path and span, the member path it held
 /// the value at, the context (calls and rendering elements) it was in, and
 /// the identity of its origin, on which receiver proofs depend.
-pub(super) type FlowVisit = (
-    String,
+pub(super) type FlowVisit<'a> = (
+    &'a str,
     Span,
     Vec<String>,
-    Vec<(String, Span)>,
-    Vec<(String, Span)>,
+    Vec<(&'a str, Span)>,
+    Vec<(&'a str, Span)>,
 );
 
 /// A call of an exact project callee the walk entered through a parameter:
@@ -71,7 +71,7 @@ pub(super) struct InvocationFlow<'a, 'l, 'c> {
     pub(super) budget: usize,
     /// Holders already followed in the current invocation census, with the
     /// call context they were reached in.
-    pub(super) seen: HashSet<FlowVisit>,
+    pub(super) seen: HashSet<FlowVisit<'a>>,
     /// Calls of exact project callees the walk entered through a parameter:
     /// a return from that callee goes to that call, not to every call.
     pub(super) frames: Vec<FlowFrame<'a>>,
