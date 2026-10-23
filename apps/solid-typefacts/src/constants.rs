@@ -9,35 +9,27 @@
 //! error type is never folded, and a cycle or a chain deeper than
 //! [`MAX_DEPTH`] answers absent.
 
-use crate::gocompat::clean;
 use crate::identity::Env;
-use crate::semantic_runs::Evidence;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tsrs_ast::{
-    Kind, ModifierFlags, Node, get_source_file_of_node, has_syntactic_modifier, is_as_expression,
-    is_binary_expression, is_enum_member, is_identifier, is_no_substitution_template_literal,
-    is_non_null_expression, is_numeric_literal, is_parenthesized_expression,
-    is_prefix_unary_expression, is_property_access_expression, is_property_declaration,
-    is_satisfies_expression, is_string_literal, is_var_const, is_variable_declaration,
+    Kind, ModifierFlags, Node, has_syntactic_modifier, is_as_expression, is_binary_expression,
+    is_enum_member, is_identifier, is_no_substitution_template_literal, is_non_null_expression,
+    is_numeric_literal, is_parenthesized_expression, is_prefix_unary_expression,
+    is_property_access_expression, is_property_declaration, is_satisfies_expression,
+    is_string_literal, is_var_const, is_variable_declaration,
 };
 use tsrs_checker::types::TypeFlags;
 use tsrs_core::P;
-use tsrs_scanner::skip_trivia;
-use typefacts::{ConstantValue, ConstantValueKind, Location};
+use typefacts::{ConstantValue, ConstantValueKind};
 
 /// Go: `constantValueMaxDepth`.
 const MAX_DEPTH: usize = 64;
 
 /// Go: `constantValueAtLocked`.
-pub fn constant_value_at(
-    env: &mut Env<'_>,
-    node: P<Node>,
-    evidence: &mut Evidence,
-) -> Option<ConstantValue> {
+pub fn constant_value_at(env: &mut Env<'_>, node: P<Node>) -> Option<ConstantValue> {
     Evaluator {
         env,
-        evidence,
         seen: HashSet::new(),
     }
     .evaluate(node, 0)
@@ -45,7 +37,6 @@ pub fn constant_value_at(
 
 struct Evaluator<'a, 'e> {
     env: &'a mut Env<'e>,
-    evidence: &'a mut Evidence,
     seen: HashSet<usize>,
 }
 
@@ -173,18 +164,6 @@ impl Evaluator<'_, '_> {
         } else {
             return None;
         }?;
-        if let Some(file) = get_source_file_of_node(declaration)
-            && let (Some(pos), Some(end)) = (
-                declaration.pos().source_offset(),
-                declaration.end().source_offset(),
-            )
-        {
-            self.evidence.dependency(&Location {
-                path: clean(file.file_name()).into(),
-                start_byte: u64::from(skip_trivia(file.text(), pos)),
-                end_byte: u64::from(end),
-            });
-        }
         self.evaluate(initializer, depth)
     }
 }

@@ -105,12 +105,9 @@ fn prepare_retained_contribution_rejects_misaligned_entity() {
     };
     let error = prepare_retained_contribution(
         path,
-        1,
         &[demand],
         SemanticDemandRunResult {
             entities: vec![blank_entity(location(path, 2, 3))],
-            structural: vec!["".into()],
-            dependencies: Vec::new(),
             durable: true,
         },
     )
@@ -118,30 +115,5 @@ fn prepare_retained_contribution_rejects_misaligned_entity() {
     assert!(
         error.contains("entity 0 location"),
         "misaligned entity error = {error}"
-    );
-}
-
-#[test]
-fn prepare_retained_contribution_rejects_noncanonical_dependencies() {
-    let path = "/project/a.ts";
-    let demand = EntityDemand {
-        location: location(path, 1, 2),
-        ..EntityDemand::default()
-    };
-    let error = prepare_retained_contribution(
-        path,
-        1,
-        std::slice::from_ref(&demand),
-        SemanticDemandRunResult {
-            entities: vec![blank_entity(demand.location.clone())],
-            structural: vec!["".into()],
-            dependencies: vec!["/project/z.ts".to_owned(), "/project/b.ts".to_owned()],
-            durable: true,
-        },
-    )
-    .unwrap_err();
-    assert!(
-        error.contains("not strictly ordered"),
-        "noncanonical dependencies error = {error}"
     );
 }

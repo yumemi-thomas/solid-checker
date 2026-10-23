@@ -908,8 +908,6 @@ impl CallRun<'_, '_> {
         if has_flag(value, OPEN_CONSTRUCTION_SHAPE | TypeFlags::TypeParameter) {
             return None;
         }
-        let descriptor = self.memo.descriptor(self.env.checker, value);
-        self.evidence.descriptor(Some(&descriptor));
         let properties = self.env.checker.get_properties_of_type_exported(value);
         let mut required: Vec<(String, ConstructionWitness)> = Vec::with_capacity(properties.len());
         for property in properties {
@@ -921,8 +919,6 @@ impl CallRun<'_, '_> {
                 .env
                 .checker
                 .get_type_of_property_of_type_exported(value, name)?;
-            let descriptor = self.memo.descriptor(self.env.checker, property_type);
-            self.evidence.descriptor(Some(&descriptor));
             let witness = self.construction_witness(property_type);
             required.push((name.to_owned(), witness));
         }

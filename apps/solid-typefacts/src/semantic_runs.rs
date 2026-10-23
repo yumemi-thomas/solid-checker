@@ -31,8 +31,7 @@ use crate::context::Context;
 use crate::gocompat::{absolute, quote};
 use crate::identity::Env;
 use crate::model::{
-    SemanticDemandRun, SemanticDemandRunResult, SemanticScope, SymbolId, blank_entity,
-    durable_symbol_id,
+    SemanticDemandRun, SemanticDemandRunResult, SymbolId, blank_entity, durable_symbol_id,
 };
 use crate::nodes::{NodeCursor, jsx_tag_name_at, symbol_span_covers};
 use crate::references::ReferenceIndex;
@@ -49,9 +48,7 @@ use tsrs_ast::{Node, SourceFile, Symbol, is_identifier};
 use tsrs_checker::types::Type;
 use tsrs_core::P;
 use typefacts::v3::EntityDemand;
-use typefacts::{
-    Location, ParameterFact, ReferenceSpace, ResolvedDeclaration, SymbolClaim, TypeDescriptor,
-};
+use typefacts::{ParameterFact, ReferenceSpace, ResolvedDeclaration, SymbolClaim};
 
 /// How many demanded facts were left absent because their family is not
 /// ported, by family name (the wire field's name).
@@ -70,21 +67,17 @@ impl Unavailable {
     }
 }
 
-/// Go: `semanticEvidence`: built alongside facts so retained-state ownership
-/// does not require a second walk through every nested call and descriptor.
+/// Go: `semanticEvidence`: whether every symbol identity a run embeds is a
+/// binder-level one (`symbol:h:`), built alongside the facts so it needs no
+/// second walk through every nested call and descriptor. A run holding a
+/// counter id is counted in the timings' `nonDurableFiles`.
 pub struct Evidence {
-    path: String,
-    dependencies: Vec<String>,
     pub(crate) durable: bool,
 }
 
 impl Evidence {
-    fn new(path: &str) -> Self {
-        Self {
-            path: path.to_owned(),
-            dependencies: Vec::new(),
-            durable: true,
-        }
+    fn new() -> Self {
+        Self { durable: true }
     }
 
     pub(crate) fn symbol(&mut self, id: &str) {
@@ -93,46 +86,18 @@ impl Evidence {
         }
     }
 
-    pub(crate) fn dependency(&mut self, location: &Location) {
-        let path: &str = &location.path;
-        if !path.is_empty() && path != self.path {
-            self.dependencies.push(path.to_owned());
-        }
-    }
-
-    pub(crate) fn descriptor(&mut self, descriptor: Option<&TypeDescriptor>) {
-        let Some(descriptor) = descriptor else {
-            return;
-        };
-        for declaration in descriptor.alias_declarations.iter() {
-            self.dependency(&declaration.location);
-        }
-    }
-
     pub(crate) fn declaration(&mut self, declaration: Option<&ResolvedDeclaration>) {
         let Some(declaration) = declaration else {
             return;
         };
         self.symbol(&declaration.symbol);
-        self.dependency(&declaration.location);
         for owner in declaration.owners.iter() {
             self.symbol(&owner.symbol);
-            self.dependency(&owner.location);
         }
     }
 
     pub(crate) fn parameter(&mut self, parameter: &ParameterFact) {
         self.symbol(&parameter.symbol);
-        if let Some(declaration) = &parameter.declaration {
-            self.dependency(&declaration.location);
-        }
-        self.descriptor(parameter.type_descriptor.as_ref());
-    }
-
-    fn finish(mut self) -> (Vec<String>, bool) {
-        self.dependencies.sort();
-        self.dependencies.dedup();
-        (self.dependencies, self.durable)
     }
 }
 
@@ -184,7 +149,6 @@ pub fn run(
     env: &mut Env<'_>,
     references: &mut ReferenceIndex,
     runs: &[SemanticDemandRun<'_>],
-    scope: &SemanticScope<'_>,
     unavailable: &mut Unavailable,
 ) -> Result<Vec<SemanticDemandRunResult>, BackendError> {
     check(ctx)?;
@@ -197,11 +161,10 @@ pub fn run(
 
     for run in runs {
         let path = run.path;
-        let mut run_evidence = Evidence::new(path);
+        let mut run_evidence = Evidence::new();
         let count = run.demands.len();
         let mut result = SemanticDemandRunResult {
             entities: Vec::with_capacity(count),
-            structural: vec!["".into(); count],
             ..SemanticDemandRunResult::default()
         };
         let mut run_nodes: Vec<Option<P<Node>>> = vec![None; count];
@@ -245,7 +208,6 @@ pub fn run(
             };
             if let Some(symbol) = env.checker.get_symbol_at_location_exported(node) {
                 let id = env.id_for(symbol);
-                result.structural[index] = id.clone();
                 let entity = &mut result.entities[index];
                 entity.symbol = id.clone();
                 entity.symbol_claim =
@@ -274,15 +236,11 @@ pub fn run(
     // on its location only (ADR 0367).
     let mut memo = DescriptorMemo::default();
     let mut caches = CallCaches::default();
-    let suppressed =
-        |symbol: &SymbolId| batch_structural.contains(symbol) || scope.suppression.contains(symbol);
+    let suppressed = |symbol: &SymbolId| batch_structural.contains(symbol);
 
     for (run_index, run) in runs.iter().enumerate() {
         let Some(file) = files[run_index] else {
-            let (dependencies, durable) =
-                std::mem::replace(&mut evidence[run_index], Evidence::new(run.path)).finish();
-            results[run_index].dependencies = dependencies;
-            results[run_index].durable = durable;
+            results[run_index].durable = evidence[run_index].durable;
             continue;
         };
         let mut query_cursor = NodeCursor::new(Some(file));
@@ -385,9 +343,7 @@ pub fn run(
             {
                 let value = env.checker.get_type_at_location(node);
                 query_type = Some(value);
-                let descriptor = memo.descriptor(env.checker, value);
-                evidence[run_index].descriptor(Some(&descriptor));
-                entity.type_descriptor = Some(descriptor);
+                entity.type_descriptor = Some(memo.descriptor(env.checker, value));
             }
             if (demand.callability || demand.constructability || demand.runtime_value_domain)
                 && let Some(node) = query_node
@@ -465,35 +421,23 @@ pub fn run(
             if demand.constant_value
                 && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
             {
-                entity.constant_value = constant_value_at(env, node, &mut evidence[run_index]);
+                entity.constant_value = constant_value_at(env, node);
             }
             if demand.array_shape
                 && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
             {
-                entity.array_shape = Some(array_shape_at(
-                    env.checker,
-                    &mut memo,
-                    &mut evidence[run_index],
-                    node,
-                ));
+                entity.array_shape = Some(array_shape_at(env.checker, node));
             }
             if demand.tuple_shape
                 && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
             {
-                entity.tuple_shape =
-                    tuple_shape_at(env.checker, &mut memo, &mut evidence[run_index], node);
+                entity.tuple_shape = tuple_shape_at(env.checker, node);
             }
             if demand.library_types
                 && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
             {
-                entity.library_types = library_types_at(
-                    env.checker,
-                    env.program,
-                    &mut memo,
-                    &mut evidence[run_index],
-                    node,
-                )
-                .map(Arc::new);
+                entity.library_types =
+                    library_types_at(env.checker, env.program, node).map(Arc::new);
             }
             note_unported(demand, unavailable);
             if demand.resolved_call {
@@ -520,10 +464,7 @@ pub fn run(
             }
             .resolve(&call_demands, &mut results[run_index].entities)?;
         }
-        let (dependencies, durable) =
-            std::mem::replace(&mut evidence[run_index], Evidence::new(run.path)).finish();
-        results[run_index].dependencies = dependencies;
-        results[run_index].durable = durable;
+        results[run_index].durable = evidence[run_index].durable;
     }
     Ok(results)
 }
