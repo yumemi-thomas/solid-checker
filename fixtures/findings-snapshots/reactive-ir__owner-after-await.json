@@ -70,6 +70,16 @@
       "start": 2508,
       "end": 2517,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-after-await/App.tsx",
+      "start": 3010,
+      "end": 3019,
+      "fixes": 0
     }
   ]
 }

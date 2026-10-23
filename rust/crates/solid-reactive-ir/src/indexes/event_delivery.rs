@@ -354,32 +354,11 @@ fn ownerless_dispatch_stack(
     let Some(function) = crate::owners::containing_ast_function(&file.ast, call.span) else {
         return false;
     };
-    if !written_directly_in_flow(&file.ast, function, call.span) {
+    if !crate::owners::written_directly_in_flow(&file.ast, function, call.span) {
         return false;
     }
     fresh_stack_scheduler_literal(lookup, file, function)
         || called_only_after_awaits(lookup, continuations, file, function)
-}
-
-/// Whether `span` runs when `function` does, on its stack: written directly in
-/// its body, outside a class body and outside JSX the compiler wraps in a getter.
-fn written_directly_in_flow(
-    ast: &solid_facts::ast::AstFacts,
-    function: &solid_facts::ast::FunctionFact,
-    span: Span,
-) -> bool {
-    crate::owners::written_directly_in(ast, function, span)
-        && !ast
-            .classes
-            .iter()
-            .any(|class| function.span.contains(class.span) && class.span.contains(span))
-        && !ast
-            .jsx_containing(span)
-            .any(|element| function.body.contains(element.span))
-        && !ast
-            .jsx_fragments
-            .iter()
-            .any(|fragment| function.body.contains(*fragment) && fragment.contains(span))
 }
 
 /// Whether `function` is a literal argument a fresh-stack host scheduler runs
@@ -475,9 +454,9 @@ fn called_only_after_awaits(
 }
 
 /// Whether `call` follows a dominating `await` ([`crate::owners::AwaitContinuations`],
-/// keyed by callee start) on the continuation's own stack. A callee start
-/// another call shares (`a.b(c).d(await e)`: `a.b(c)` runs before the await)
-/// is ambiguous and answers no.
+/// keyed by callee start, written directly in its async function's flow). A
+/// callee start another call shares (`a.b(c).d(await e)`: `a.b(c)` runs before
+/// the await) is ambiguous and answers no.
 fn after_dominating_await(
     continuations: &crate::owners::AwaitContinuations<'_>,
     file: &FileFacts,
@@ -491,18 +470,6 @@ fn after_dominating_await(
             .filter(|other| other.callee.start == call.callee.start)
             .count()
             == 1
-        && written_directly_in_async_flow(&file.ast, call.span)
-}
-
-/// Whether `span` is written directly in the flow of the async function that
-/// contains it. The producer's `calls_after_await` stops at arrows, function
-/// expressions and declarations and methods, but not at getters, setters,
-/// constructors, class field initialisers, static blocks or JSX: code there
-/// runs when it is read, constructed or rendered, on that stack. A getter,
-/// setter or constructor is its own (never async) function here.
-fn written_directly_in_async_flow(ast: &solid_facts::ast::AstFacts, span: Span) -> bool {
-    crate::owners::containing_ast_function(ast, span)
-        .is_some_and(|function| function.r#async && written_directly_in_flow(ast, function, span))
 }
 
 /// Whether a call through a computed key that is not a literal (`target[key]()`)
@@ -1233,49 +1200,6 @@ mod tests {
             result_discarded: false,
             construct: true,
         }
-    }
-
-    /// Whether the `target.click()` call in `source` is written directly in
-    /// the flow of the async function containing it.
-    fn click_in_async_flow(source: &str) -> bool {
-        let ast = solid_facts::ast::extract("test.tsx", source).unwrap();
-        let start = u32::try_from(source.find("target.click()").unwrap()).unwrap();
-        let call = ast
-            .calls
-            .iter()
-            .find(|call| call.callee.start == start)
-            .unwrap();
-        written_directly_in_async_flow(&ast, call.span)
-    }
-
-    #[test]
-    fn a_call_after_an_await_runs_on_the_continuation_only_in_the_async_flow() {
-        let wrap = |body: &str| format!("async function f(target: any) {{ await 0; {body} }}");
-        assert!(click_in_async_flow(&wrap("target.click();")));
-        assert!(click_in_async_flow(&wrap(
-            "if (target) { target.click(); }"
-        )));
-        assert!(click_in_async_flow(
-            "const o = { async m(target: any) { await 0; target.click(); } };"
-        ));
-        for nested in [
-            "const o = { get go() { target.click(); return 1; } };",
-            "const o = { set go(v: number) { target.click(); } };",
-            "const C = class { constructor() { target.click(); } };",
-            "class C { get go() { return target.click(); } }",
-            "class C { field = target.click(); }",
-            "class C { static { target.click(); } }",
-            "return <div>{(target.click(), 'x')}</div>;",
-            "return <div title={target.click()} />;",
-            "return <>{target.click()}</>;",
-            "const g = () => target.click();",
-            "function g(x = target.click()) {}",
-        ] {
-            assert!(!click_in_async_flow(&wrap(nested)), "{nested}");
-        }
-        assert!(!click_in_async_flow(
-            "function f(target: any) { target.click(); }"
-        ));
     }
 
     fn text(value: &str) -> ArgumentLiteralFact {

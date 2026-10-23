@@ -12,7 +12,9 @@ A `useContext(context)` read with no owner is the `context-read` operation (ADR
 `NoOwnerError` whatever default the context has, and the message says so. The
 owner walk places it as it places an effect: an ownerless event handler, a timer callback,
 module scope, code after an `await`, or a `runWithOwner(null)` callback is
-unowned. A package hook that reads a context is followed through its source, and
+unowned. After an `await` that means code written directly in the async
+function: one in a getter, setter, constructor, class body or JSX child there
+runs when read, constructed or rendered, and is uncertifiable. A package hook that reads a context is followed through its source, and
 the finding sits at the project call that runs it, as for any package owner
 requirement (ADR 0290). A context with no provider throws `ContextNotFoundError`
 instead, which is [missing-context-provider](missing-context-provider.md)'s claim,

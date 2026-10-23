@@ -103,3 +103,18 @@ export function CapturedOwner() {
   void cleanupUnderCapturedOwner();
   return <div />;
 }
+
+// Not proven: a cleanup in a getter defined after the await runs when the
+// getter is read (here by the returned JSX, under its render effect), not on
+// the continuation. The producer lists it after the await; it keeps the
+// getter's own placement, an SC4001 uncertifiable result.
+async function cleanupInGetterAfterAwait() {
+  await fetch("/api/i");
+  const view = { get label() { onCleanup(() => {}); return "x"; } };
+  return <div>{view.label}</div>;
+}
+
+export function GetterAfterAwait() {
+  void cleanupInGetterAfterAwait();
+  return <div />;
+}

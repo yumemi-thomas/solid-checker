@@ -293,7 +293,11 @@ pub(crate) fn find_missing_owners(
                             | OwnerRequirementRole::ContextRead
                     )
                 ))
-            .then(|| possible_await_continuation_context(file, call.callee, context))
+            .then(|| {
+                continuations
+                    .nested_context(file.path.as_str(), call.callee.start, context)
+                    .or_else(|| possible_await_continuation_context(file, call.callee, context))
+            })
             .flatten();
             let context = if after_await {
                 await_continuation_context(context)
