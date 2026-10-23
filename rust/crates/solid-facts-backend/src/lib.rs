@@ -53,6 +53,7 @@ mod host_plugins;
 mod inferred_host;
 pub mod installed_bytes;
 mod package_requirements;
+pub mod package_returns;
 mod release_scope;
 pub mod runtime_resolution;
 pub mod source_redirects;

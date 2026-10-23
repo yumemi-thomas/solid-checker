@@ -200,6 +200,7 @@ fn the_analysis_identity_vector_of_a_populated_boundary_is_its_digest() {
         crate::AnalysisInputs {
             boundary,
             hosts: None,
+            package_returns: crate::AnalysisInputs::no_package_returns(),
         }
         .cache_fingerprints()
     };
@@ -238,6 +239,7 @@ fn a_recorded_cause_is_part_of_the_analysis_identity_and_an_empty_boundary_is_no
     let explained = crate::AnalysisInputs {
         boundary: &boundary,
         hosts: None,
+        package_returns: crate::AnalysisInputs::no_package_returns(),
     }
     .cache_fingerprints();
     assert_eq!(explained, vec![boundary.digest()]);
@@ -256,6 +258,7 @@ fn a_recorded_cause_is_part_of_the_analysis_identity_and_an_empty_boundary_is_no
         crate::AnalysisInputs {
             boundary: &reworded,
             hosts: None,
+            package_returns: crate::AnalysisInputs::no_package_returns(),
         }
         .cache_fingerprints(),
         "a changed reason invalidates a cached answer although no file moved"

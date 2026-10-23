@@ -167,7 +167,11 @@ Exact event members (including tuple slot zero) and intrinsic spreads join the
 owner graph through the immutable object-literal census (ADR 0358). On web
 rc.13, spread keys beginning with `on` and containing no colon install
 listeners, including lowercase keys; on the audited rc.17 only `on` followed by
-an uppercase letter does, and `onclick` is an attribute. Unknown holders, getters, generators and
+an uppercase letter does, and `onclick` is an attribute. A spread of a call of
+an installed package's export (`{...stylex.attrs(styles.row)}`) is an exact
+holder with no handler when the package's selected runtime file shows that
+every return holds only static keys and none is an event key (ADR 0372).
+Unknown holders, getters, generators and
 unaudited web spread keys retain internal obligations. These placements obey
 the synchronous-dispatch rule above; no unresolved target proves a violation.
 

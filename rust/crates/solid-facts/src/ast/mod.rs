@@ -61,6 +61,7 @@ mod literal_array;
 mod module_requests;
 mod primitive_completion;
 mod proxy_get_forward;
+mod returned_keys;
 mod span_index;
 mod unconditional_calls;
 

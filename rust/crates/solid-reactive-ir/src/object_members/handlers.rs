@@ -132,6 +132,9 @@ fn spread_handlers<'a>(
     if file.source_text(argument)?.trim_start().starts_with('{') {
         return on_keys(facts, lookup, file, argument, None);
     }
+    if let Some(call) = file.ast.call_at(argument) {
+        return package_call_handlers(lookup, file, call);
+    }
     if !references.contains(&argument) {
         return None;
     }
@@ -154,6 +157,29 @@ fn spread_handlers<'a>(
         return None;
     }
     on_keys(facts, lookup, owner, literal, Some(stability))
+}
+
+/// ADR 0372: a spread of a call of an installed package's export hands the
+/// element the own keys that export's returns hold, as the host read them from
+/// the package's selected runtime source. When no key is an event key under the
+/// release's grammar, the spread hands no handler; any event key, an unaudited
+/// release or no row at all leaves it unresolved.
+fn package_call_handlers(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: &ast::CallFact,
+) -> Option<Vec<SpreadHandler>> {
+    if call.construct {
+        return None;
+    }
+    let (import, export) = file.ast.imported_callee(&file.source, call.callee)?;
+    let keys = lookup.package_return_keys(file.path.as_str(), import.module.as_str(), &export)?;
+    for key in keys {
+        if lookup.dialect.spread_key_is_event(key)? {
+            return None;
+        }
+    }
+    Some(Vec::new())
 }
 
 /// The `on…` functions a closed object literal holds, each resolved exactly. A

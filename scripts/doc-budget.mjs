@@ -27,7 +27,9 @@ export const FILE_BUDGETS = {
   "AGENTS.md": 8_000,
   "CLAUDE.md": 1_000,
   "docs/open-work.md": 36_000,
-  "docs/decisions.md": 140_000,
+  // Raised from 140 KB on 2026-10-23 for ADRs 0372-0373 (the file sat 700
+  // bytes under its ceiling).
+  "docs/decisions.md": 150_000,
 };
 
 export const GROUP_BUDGETS = [

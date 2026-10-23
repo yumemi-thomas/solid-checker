@@ -769,6 +769,8 @@ pub(super) struct SemanticLookup<'a> {
     /// Which installed `solid-js` each analyzed file loads at runtime; empty
     /// unless the pipeline sets it.
     package_instances: crate::PackageInstanceEvidence,
+    /// ADR 0372: what installed package functions return.
+    package_returns: crate::package_returns::PackageReturnKeys,
     ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
@@ -965,6 +967,26 @@ impl<'a> SemanticLookup<'a> {
         self
     }
 
+    /// ADR 0372: what installed package functions return, as the host read it.
+    pub(super) fn with_package_returns(
+        mut self,
+        returns: crate::package_returns::PackageReturnKeys,
+    ) -> Self {
+        self.package_returns = returns;
+        self
+    }
+
+    /// ADR 0372: the own keys `export` of `specifier`, imported from
+    /// `importer`, can return; `None` when the host read nothing about it.
+    pub(crate) fn package_return_keys(
+        &self,
+        importer: &str,
+        specifier: &str,
+        export: &str,
+    ) -> Option<&std::collections::BTreeSet<String>> {
+        self.package_returns.keys(importer, specifier, export)
+    }
+
     /// Records the closed program's namespace census (ADR 0347). The pipeline
     /// sets it once per build, before any owner pass reads it.
     pub(crate) fn set_namespace_hand_outs(&self, hand_outs: crate::attribution::NamespaceHandOuts) {
@@ -1013,6 +1035,7 @@ impl<'a> SemanticLookup<'a> {
             program_closed,
             router_install: crate::router_params::RouterInstallEvidence::default(),
             package_instances: crate::PackageInstanceEvidence::default(),
+            package_returns: crate::package_returns::PackageReturnKeys::default(),
             ast_indexes,
             entities,
             symbol_names,

@@ -71,6 +71,7 @@ pub type HashMap<K, V> = std::collections::HashMap<K, V, rustc_hash::FxBuildHash
 pub type HashSet<T> = std::collections::HashSet<T, rustc_hash::FxBuildHasher>;
 
 pub mod package_boundary;
+pub mod package_returns;
 mod pipeline;
 mod projection;
 mod reachability;
