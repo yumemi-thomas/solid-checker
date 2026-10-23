@@ -1139,6 +1139,7 @@ impl LocalAccessContext<'_, '_> {
                             missing_jsx_census(file, reference.span, execution);
                         attributed.host_callback_timing = false;
                         attributed.callee_callback_timing = false;
+                        attributed.blocker = None;
                         result.reads.push(Arc::new(attributed));
                         result.strict_read_obligations += 1;
                     }
@@ -1283,6 +1284,7 @@ impl LocalAccessContext<'_, '_> {
             attributed.missing_jsx_census = missing_jsx_census(file, call.span, execution);
             attributed.host_callback_timing = host_timing;
             attributed.callee_callback_timing = callee_timing;
+            attributed.blocker = None;
             result.reads.push(Arc::new(attributed));
             result.strict_read_obligations += 1;
         }
@@ -1357,14 +1359,16 @@ impl LocalAccessContext<'_, '_> {
                 callee.end_byte,
             ));
         }
-        let execution = semantic_execution_role(
-            file,
-            call.callee,
-            allowed,
-            self.entities,
-            self.symbol_names,
-            self.lookup,
-        );
+        let (execution, blocker) = crate::placement::traced(|| {
+            semantic_execution_role(
+                file,
+                call.callee,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            )
+        });
         // A universal callback-context proof can certify an accessor
         // read even when invocation is optional or resource-triggered.
         // Keep write/action and owner classification on their existing
@@ -1413,7 +1417,7 @@ impl LocalAccessContext<'_, '_> {
                 || named_callback_execution_role(file, call.callee, self.lookup).is_some())
             && seen.insert(key.clone())
         {
-            self.push_accessor_read(file, call, symbol, accessor, execution, result);
+            self.push_accessor_read(file, call, symbol, accessor, (execution, blocker), result);
         }
         // ADR 0294: a typed candidate read where an accessor read would be
         // reported. Its type is the only evidence that it reads reactive
@@ -1462,15 +1466,17 @@ impl LocalAccessContext<'_, '_> {
                 }
                 ReactiveSourceKind::Store => RootBodyGuard::Exempts,
             };
-            let mut write_execution = semantic_write_execution_role(
-                file,
-                call.callee,
-                allowed,
-                self.entities,
-                self.symbol_names,
-                self.lookup,
-                root_body,
-            );
+            let (mut write_execution, write_blocker) = crate::placement::traced(|| {
+                semantic_write_execution_role(
+                    file,
+                    call.callee,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    root_body,
+                )
+            });
             // Where the resolved release's optimistic-store setter meets no
             // owned-scope guard (rc.0), a store setter is reported only when
             // it is proven to be `createStore`'s, whose writes do reach the
@@ -1512,6 +1518,7 @@ impl LocalAccessContext<'_, '_> {
                     location: location(file.path.shared(), call.span),
                     declaration: declaration.clone(),
                     execution: write_execution,
+                    blocker: write_blocker,
                     allowed_by_option: *allowed_by_option,
                     context: analysis_context(
                         file,
@@ -1530,21 +1537,24 @@ impl LocalAccessContext<'_, '_> {
             // it throws `ACTION_CALLED_IN_OWNED_SCOPE` directly in a
             // `createRoot` body, and in a memo nested in one (probed
             // rc.0-rc.9, dev).
-            let action_execution = semantic_write_execution_role(
-                file,
-                call.callee,
-                allowed,
-                self.entities,
-                self.symbol_names,
-                self.lookup,
-                RootBodyGuard::Rejects,
-            );
+            let (action_execution, action_blocker) = crate::placement::traced(|| {
+                semantic_write_execution_role(
+                    file,
+                    call.callee,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    RootBodyGuard::Rejects,
+                )
+            });
             for _ in 0..multiplicity {
                 result.action_invocations.push(Arc::new(ActionInvocation {
                     action: name.to_string().into(),
                     location: location(file.path.shared(), call.span),
                     declaration: declaration.clone(),
                     execution: action_execution,
+                    blocker: action_blocker,
                     context: analysis_context(
                         file,
                         call.span,
@@ -1565,7 +1575,7 @@ impl LocalAccessContext<'_, '_> {
         call: &solid_facts::ast::CallFact,
         symbol: &str,
         accessor: &(SymbolId, Location),
-        execution: ExecutionRole,
+        (execution, blocker): (ExecutionRole, Option<crate::PlacementBlocker>),
         result: &mut LocalAccessResult,
     ) {
         let (name, declaration) = accessor;
@@ -1581,6 +1591,7 @@ impl LocalAccessContext<'_, '_> {
             location: location(file.path.shared(), call.span),
             declaration: origin.map_or_else(|| declaration.clone(), |origin| origin.2.clone()),
             execution,
+            blocker,
             context: read_analysis_context(file, call.span, execution, self.lookup).into(),
             via: origin.map_or_else(String::new, |_| name.to_string()).into(),
             origin: origin.map(|origin| origin.2.clone()),
@@ -1755,14 +1766,16 @@ impl LocalAccessContext<'_, '_> {
         else {
             return;
         };
-        let execution = semantic_execution_role(
-            file,
-            member.span,
-            allowed,
-            self.entities,
-            self.symbol_names,
-            self.lookup,
-        );
+        let (execution, blocker) = crate::placement::traced(|| {
+            semantic_execution_role(
+                file,
+                member.span,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            )
+        });
         let helper = self
             .prop_sources
             .get(symbol)
@@ -1915,13 +1928,14 @@ impl LocalAccessContext<'_, '_> {
         if !seen.insert(key) {
             return;
         }
-        let read = self.member_read(
+        let mut read = self.member_read(
             file,
             member,
             symbol,
             (name, declaration),
             (execution, uncertain, prop_head),
         );
+        read.blocker = blocker;
         if let Some(helper) = helper {
             self.project_helper_prop_read(
                 file,
@@ -1983,6 +1997,7 @@ impl LocalAccessContext<'_, '_> {
             location: location(file.path.shared(), member.span),
             declaration: declaration.clone(),
             execution,
+            blocker: None,
             context: read_analysis_context(file, member.span, execution, self.lookup).into(),
             via: Arc::from(""),
             origin: None,
@@ -2158,14 +2173,16 @@ impl LocalAccessContext<'_, '_> {
         allowed: &[solid_facts::core::Span],
         result: &mut LocalAccessResult,
     ) {
-        let execution = semantic_execution_role(
-            file,
-            spread.span,
-            allowed,
-            self.entities,
-            self.symbol_names,
-            self.lookup,
-        );
+        let (execution, blocker) = crate::placement::traced(|| {
+            semantic_execution_role(
+                file,
+                spread.span,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            )
+        });
         if inside_non_component_function(file, spread.span, self.lookup)
             && named_callback_execution_role(file, spread.span, self.lookup).is_none()
             && !matches!(
@@ -2230,6 +2247,7 @@ impl LocalAccessContext<'_, '_> {
             location: location(file.path.shared(), spread.span),
             declaration: declaration.clone(),
             execution,
+            blocker,
             context: read_analysis_context(file, spread.span, execution, self.lookup).into(),
             via: Arc::from(""),
             origin: None,

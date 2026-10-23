@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
-  bucketOf, confirmedMisses, findingKey, holdoutIndex, mutantSiteKey, reviewedPrecision, selectRows, shareBySplit, splitOf,
-  validateLedger,
+  blockerOf, bucketOf, confirmedMisses, findingKey, holdoutIndex, mutantSiteKey, reviewedPrecision, selectRows, shareBySplit, splitOf,
+  topApps, unknownsByBlocker, validateLedger,
 } from "./corpus-lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -227,4 +227,54 @@ test("corpus-metrics prints per-split and reviewed numbers, and compare ignores 
   assert.match(out, /confirmed misses \(confirmed-violation entries not proven now; mutants entries not read: no --mutants\)/);
   const compare = execFileSync(process.execPath, [join(here, "corpus-sweep-compare.mjs"), sweep, sweep], { encoding: "utf8" });
   assert.match(compare, /removed 0/);
+});
+
+const unplaced = "reactive accessor \"a\" is read in X, but no compiler or semantic fact places where this code runs";
+const blockerRows = [
+  { app: "a", project: "p.json", root: "/c/a", holdout: false, findings: [
+    finding("SC1001", "uncertifiable", "/c/a/1.tsx", 1, 2, { blocker: "role-mix", message: unplaced }),
+    finding("SC1001", "uncertifiable", "/c/a/2.tsx", 1, 2, { blocker: "role-mix", message: unplaced }),
+    finding("SC2001", "uncertifiable", "/c/a/3.tsx", 1, 2, { blocker: "refused-file", message: "x; refused" }),
+    finding("SC1001", "uncertifiable", "/c/a/4.tsx", 1, 2, { message: "a census hole" }),
+    finding("SC1001", "violation", "/c/a/5.tsx"),
+  ] },
+  { app: "b", project: "p.json", root: "/c/b", holdout: true, findings: [
+    finding("SC1001", "uncertifiable", "/c/b/1.tsx", 1, 2, { blocker: "role-mix", message: unplaced }),
+    finding("SC9015", "uncertifiable", "/c/b/n.tsx", 0, 0, { subjectKind: "project", blocker: "refused-file" }),
+  ] },
+];
+
+test("a finding's blocker is its field, unrecorded for an old unplaced finding, else none", () => {
+  assert.equal(blockerOf(finding("SC1001", "uncertifiable", "/x", 1, 2, { blocker: "component-children" })), "component-children");
+  assert.equal(blockerOf(finding("SC1001", "uncertifiable", "/x", 1, 2, { message: unplaced })), "unrecorded");
+  assert.equal(blockerOf(finding("SC1001", "uncertifiable", "/x", 1, 2, { message: "a census hole" })), null);
+  assert.equal(blockerOf(finding("SC1001", "violation", "/x", 1, 2, { message: unplaced })), null);
+  assert.equal(blockerOf(finding("SC9015", "uncertifiable", "/x", 0, 0, { subjectKind: "project", blocker: "refused-file" })), null);
+});
+
+test("unknowns by blocker count per blocker, per app and per split, against the uncertifiable total", () => {
+  const counts = unknownsByBlocker(blockerRows, null);
+  assert.equal(counts.total.uncertifiable, 5);
+  assert.equal(counts.total.unplaced, 4);
+  assert.deepEqual(Object.keys(counts.total.blockers), ["role-mix", "refused-file"]);
+  assert.deepEqual(counts.total.blockers["role-mix"], { count: 3, apps: { a: 2, b: 1 } });
+  assert.deepEqual(topApps(counts.total.blockers["role-mix"]), [["a", 2], ["b", 1]]);
+  assert.equal(counts.dev.blockers["role-mix"].count, 2);
+  assert.equal(counts.holdout.blockers["refused-file"], undefined);
+  assert.equal(counts.holdout.uncertifiable, 1);
+});
+
+test("corpus-metrics prints the blocker table, and an old report counts its unplaced findings as unrecorded", () => {
+  const dir = mkdtempSync(join(tmpdir(), "metrics-"));
+  const sweep = join(dir, "sweep.json");
+  writeFileSync(sweep, JSON.stringify({ split: "all", results: blockerRows }));
+  const out = execFileSync(process.execPath, [join(here, "corpus-metrics.mjs"), sweep], { encoding: "utf8" });
+  assert.match(out, /unknowns by blocker \(unplaced 4 of 5 uncertifiable; dev 3\/4, holdout 1\/1\)/);
+  assert.match(out, /role-mix +3 +75\.0% +60\.0% +2 +1  a 2, b 1/);
+  const old = join(dir, "old.json");
+  const stripped = blockerRows.map((row) => ({ ...row, findings: row.findings.map(({ blocker, ...rest }) => rest) }));
+  writeFileSync(old, JSON.stringify({ split: "all", results: stripped }));
+  const json = JSON.parse(execFileSync(process.execPath, [join(here, "corpus-metrics.mjs"), old, "--json"], { encoding: "utf8" }));
+  assert.deepEqual(Object.keys(json.unknownsByBlocker.total.blockers), ["unrecorded"]);
+  assert.equal(json.unknownsByBlocker.total.blockers.unrecorded.count, 3);
 });

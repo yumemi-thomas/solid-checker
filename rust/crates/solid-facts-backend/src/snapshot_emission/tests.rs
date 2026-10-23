@@ -184,6 +184,56 @@ fn formats_snapshot_without_adapter_specific_logic() {
     assert!(json.output.ends_with(b"\n"));
 }
 
+/// ADR 0367: the blocker rides in the JSON report and the internal text view;
+/// the user view shows no uncertifiable finding to carry it.
+#[test]
+fn an_unplaced_finding_carries_its_blocker_in_json_and_internal_text() {
+    let mut snapshot = snapshot("uncertifiable");
+    snapshot.findings.push(SnapshotFinding {
+        id: "SC2001".into(),
+        rule: "reactive-write-in-owned-scope".into(),
+        kind: "uncertifiable".into(),
+        severity: "error".into(),
+        message: "setter \"set\" is called in App, but no compiler or semantic fact places where this code runs".into(),
+        hint: String::new(),
+        analysis_context: String::new(),
+        subject_kind: String::new(),
+        coverage_family: String::new(),
+        coverage_subject: String::new(),
+        blocker: "no-resolved-caller".into(),
+        primary_location: SourceLocation {
+            path: "App.tsx".into(),
+            start_byte: 1,
+            end_byte: 2,
+            line: 1,
+            column: 2,
+        },
+        related_locations: Vec::new(),
+        evidence: Vec::new(),
+        fixes: Vec::new(),
+    });
+    let render = |format: &str, internal: bool| {
+        String::from_utf8(
+            emit(
+                solid_facts_backend::dialect::default_dialect(),
+                format,
+                "project",
+                &snapshot,
+                false,
+                internal,
+                Duration::ZERO,
+            )
+            .unwrap()
+            .output,
+        )
+        .unwrap()
+    };
+    let json: serde_json::Value = serde_json::from_str(&render("json", false)).unwrap();
+    assert_eq!(json["findings"][0]["blocker"], "no-resolved-caller");
+    assert!(render("text", true).contains("(placement blocker: no-resolved-caller)\n"));
+    assert!(!render("text", false).contains("placement blocker"));
+}
+
 #[test]
 fn default_format_renders_oxc_source_frames() {
     let directory = std::env::temp_dir().join(format!(
@@ -212,6 +262,7 @@ fn default_format_renders_oxc_source_frames() {
         subject_kind: "component-props".into(),
         coverage_family: String::new(),
         coverage_subject: String::new(),
+        blocker: String::new(),
         primary_location: SourceLocation {
             path: source_path.to_string_lossy().into_owned(),
             start_byte: 20,

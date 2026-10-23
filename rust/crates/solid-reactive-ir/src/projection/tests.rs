@@ -206,6 +206,7 @@ fn catalog_capabilities_gate_whole_program_tables() {
             declaration: location(2),
             execution: ExecutionRole::TrackedJsx,
             context: "App".into(),
+            blocker: None,
         }],
         async_reads: vec![AsyncRead {
             accessor: Arc::from("user()"),
@@ -300,6 +301,7 @@ fn selection_filters_safe_rows_before_the_catalog_seam() {
             declaration: location(2),
             execution: ExecutionRole::EventCallback,
             context: "handler".into(),
+            blocker: None,
         }],
         async_reads: vec![AsyncRead {
             accessor: Arc::from("user()"),

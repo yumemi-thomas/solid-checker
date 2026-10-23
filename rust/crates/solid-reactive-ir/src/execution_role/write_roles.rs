@@ -202,7 +202,7 @@ pub(super) fn semantic_write_execution_role_within(
 ) -> ExecutionRole {
     // ADR 0360: a file the compiler refused places no write.
     if file.compiler.withheld() {
-        return ExecutionRole::Unknown;
+        return crate::placement::unplaced(crate::PlacementBlocker::RefusedFile);
     }
     // Write legality follows the runtime's *owner* context, which is not
     // always the read-execution context: leaf scopes are write-legal though
@@ -235,7 +235,9 @@ pub(super) fn semantic_write_execution_role_within(
             }
             // Whether a root wraps this callback is not audited on this
             // release, so the write has no placement the checker can prove.
-            Some(WriteRegionAdjustment::UnauditedRoot) => return ExecutionRole::Unknown,
+            Some(WriteRegionAdjustment::UnauditedRoot) => {
+                return crate::placement::unplaced(crate::PlacementBlocker::UnauditedRelease);
+            }
             Some(WriteRegionAdjustment::FirstRunAtCallSite(call)) => {
                 // Where the call site forbids the write, the first run throws
                 // exactly when it runs during the call -- which needs the
@@ -258,7 +260,9 @@ pub(super) fn semantic_write_execution_role_within(
                 match first_run {
                     ExecutionRole::DiscardedRendering => return first_run,
                     ExecutionRole::Unknown | ExecutionRole::Unreported => return first_run,
-                    role if role.reports_disallowed_write() => return ExecutionRole::Unknown,
+                    role if role.reports_disallowed_write() => {
+                        return crate::placement::unplaced(crate::PlacementBlocker::FirstRunTiming);
+                    }
                     _ => break,
                 }
             }
@@ -326,7 +330,7 @@ pub(super) fn semantic_write_execution_role_within(
     let direct = if direct == ExecutionRole::UntrackedRendering
         && !nested_literal_runs_during_body(file, span, entities, symbol_names, lookup)
     {
-        ExecutionRole::Unknown
+        unplaced_site(file, span, lookup, false)
     } else {
         direct
     };
@@ -337,6 +341,7 @@ pub(super) fn semantic_write_execution_role_within(
     // change that. The tracked or rendering role such a wrapper gives the
     // *expression* is not a proof about the function inside it.
     if direct.reports_disallowed_write() && enclosed_by_jsx_attribute_function(file, span) {
+        crate::placement::note(crate::PlacementBlocker::PropCallback);
         return unknown;
     }
     // A tracked role reaches every closure written inside the tracked region
@@ -346,6 +351,7 @@ pub(super) fn semantic_write_execution_role_within(
     if direct == ExecutionRole::TrackedJsx
         && enclosed_by_stored_function(file, span, entities, symbol_names, lookup)
     {
+        crate::placement::note(crate::PlacementBlocker::NoResolvedCaller);
         return unknown;
     }
     // Past an await that dominates it, the write runs on a later task with no
@@ -363,6 +369,7 @@ pub(super) fn semantic_write_execution_role_within(
     if (direct == ExecutionRole::Unknown || direct.reports_disallowed_write())
         && may_follow_suspension(file, span)
     {
+        crate::placement::note(crate::PlacementBlocker::PossibleSuspension);
         return unknown;
     }
     if direct != ExecutionRole::Unknown {
@@ -376,7 +383,11 @@ pub(super) fn semantic_write_execution_role_within(
         return unknown;
     }
     let mut imperative = None;
-    for (caller_file, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
+    let callers = lookup.function_call_sites(file.path.as_str(), function.span);
+    // With no caller the direct classification's blocker stands; with
+    // callers that are all unplaced, the write is unplaced through them.
+    let callers_empty = callers.is_empty();
+    for (caller_file, callee) in callers {
         let caller_allowed = write_allowed_spans(
             caller_file,
             &allowed_callback_spans(caller_file, lookup),
@@ -401,6 +412,9 @@ pub(super) fn semantic_write_execution_role_within(
         }
     }
     visiting.remove(&key);
+    if imperative.is_none() && !callers_empty {
+        crate::placement::note(crate::PlacementBlocker::UnplacedCaller);
+    }
     imperative.unwrap_or(unknown)
 }
 
@@ -416,7 +430,9 @@ fn suspended_write_role(
     if follows_dominating_await(file, span) || follows_try_head_await(file, span, lookup) {
         Some(ExecutionRole::Unreported)
     } else if may_follow_suspension(file, span) {
-        Some(ExecutionRole::Unknown)
+        Some(crate::placement::unplaced(
+            crate::PlacementBlocker::PossibleSuspension,
+        ))
     } else {
         None
     }

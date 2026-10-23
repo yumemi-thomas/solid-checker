@@ -461,6 +461,7 @@ pub(crate) fn gate_diagnostics(
             ApplyExecution::Absent => false,
             ApplyExecution::Unknown => {
                 row.execution = crate::ExecutionRole::Unknown;
+                row.blocker = Some(crate::PlacementBlocker::DeferredApply);
                 true
             }
             ApplyExecution::Proven => true,
@@ -471,6 +472,7 @@ pub(crate) fn gate_diagnostics(
             ApplyExecution::Absent => false,
             ApplyExecution::Unknown => {
                 row.execution = crate::ExecutionRole::Unknown;
+                row.blocker = Some(crate::PlacementBlocker::DeferredApply);
                 true
             }
             ApplyExecution::Proven => true,

@@ -744,7 +744,12 @@ pub(super) fn inline_callback_execution_role(
                     lookup,
                 )
             {
-                return Some(ExecutionRole::Unknown);
+                return Some(unplaced_site(
+                    file,
+                    call.span,
+                    lookup,
+                    !classifying.contains(&write_classification_marker()),
+                ));
             }
             Some(role)
         })

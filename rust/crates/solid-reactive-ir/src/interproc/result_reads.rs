@@ -280,8 +280,9 @@ fn call_result_reads(
     // position that runs it. The direct-read path asks the same question
     // (`LocalAccess::discover`), so the two paths agree on which function
     // a read is written in.
-    let execution =
-        semantic_execution_role(file, call.callee, allowed, entities, symbol_names, lookup);
+    let (execution, blocker) = crate::placement::traced(|| {
+        semantic_execution_role(file, call.callee, allowed, entities, symbol_names, lookup)
+    });
     // ADR 0202: an unresolved dispatch decides a claim only where the
     // reads it hides could be reported. Reads at an event, a deferred
     // callback, a tracked JSX position or deleted code are reported by no
@@ -333,6 +334,7 @@ fn call_result_reads(
         call,
         valid: valid_call && ambiguous_candidates.is_none(),
         execution,
+        blocker,
         label: &label,
         source_kinds,
         accessors,
@@ -427,6 +429,7 @@ fn call_result_reads(
                 location: location(file.path.shared(), call.span),
                 declaration: read.declaration,
                 execution,
+                blocker,
                 context: context
                     .get_or_insert_with(|| enclosing_function_label(file, call.span))
                     .clone()
@@ -2043,8 +2046,9 @@ pub(super) fn dependency_getter_obligations(
             };
             if proven {
                 let allowed = allowed_callback_spans(file, lookup);
-                let execution =
-                    semantic_execution_role(file, span, &allowed, entities, symbol_names, lookup);
+                let (execution, blocker) = crate::placement::traced(|| {
+                    semantic_execution_role(file, span, &allowed, entities, symbol_names, lookup)
+                });
                 reads.push(ReactiveRead {
                     summary_attributed: false,
                     transported: true,
@@ -2053,6 +2057,7 @@ pub(super) fn dependency_getter_obligations(
                     location: location(file.path.shared(), span),
                     declaration: getter.clone(),
                     execution,
+                    blocker,
                     context: read_analysis_context(file, span, execution, lookup).into(),
                     via: "returned object Get".into(),
                     origin: Some(getter.clone()),

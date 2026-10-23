@@ -116,6 +116,13 @@ pub struct Finding {
     pub coverage_family: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub coverage_subject: String,
+    /// For an uncertifiable finding whose site no fact places, or that a
+    /// placement demotion made uncertifiable, the missing proof
+    /// ([`crate::PlacementBlocker::as_str`]). A measurement annotation:
+    /// it never changes the kind or the message. Empty for every other
+    /// finding.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub blocker: String,
     pub primary_location: Location,
     pub related_locations: Vec<Location>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -141,6 +148,7 @@ impl Finding {
             subject_kind: String::new(),
             coverage_family: String::new(),
             coverage_subject: String::new(),
+            blocker: String::new(),
             primary_location,
             related_locations: vec![],
             evidence: vec![],

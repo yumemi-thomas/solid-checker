@@ -236,3 +236,58 @@ export function confirmedMisses(results, ledger, mutantsReport) {
   }), { withheld: 0, absent: 0, unresolved: 0 });
   return { total, byRule: sorted, misses };
 }
+
+/** The message an unplaced read, write or action carries (ADR 0328). */
+const UNPLACED_MESSAGE = /no compiler or semantic fact places where/;
+
+/**
+ * An uncertifiable finding's placement blocker: its `blocker` field, or
+ * `unrecorded` for an unplaced finding of a report that predates the field.
+ * Null for a finding that is no unplaced obligation.
+ */
+export function blockerOf(finding) {
+  if (bucketOf(finding) !== "uncertifiable") return null;
+  if (typeof finding.blocker === "string" && finding.blocker !== "") return finding.blocker;
+  return UNPLACED_MESSAGE.test(finding.message ?? "") ? "unrecorded" : null;
+}
+
+/**
+ * Unplaced obligations by blocker: per blocker the count and the count per
+ * app, overall and per split, beside the uncertifiable total each share is
+ * read against. Blockers sort by count, then name.
+ */
+export function unknownsByBlocker(results, index) {
+  const empty = () => ({ uncertifiable: 0, unplaced: 0, blockers: {} });
+  const total = empty();
+  const splits = { dev: empty(), holdout: empty() };
+  for (const result of results) {
+    const split = splitOf(result, index);
+    for (const finding of result.findings ?? []) {
+      if (bucketOf(finding) !== "uncertifiable") continue;
+      const blocker = blockerOf(finding);
+      for (const bucket of [total, split && splits[split]].filter(Boolean)) {
+        bucket.uncertifiable += 1;
+        if (blocker === null) continue;
+        bucket.unplaced += 1;
+        const slot = (bucket.blockers[blocker] ??= { count: 0, apps: {} });
+        slot.count += 1;
+        slot.apps[result.app] = (slot.apps[result.app] ?? 0) + 1;
+      }
+    }
+  }
+  const sorted = (bucket) => ({
+    ...bucket,
+    blockers: Object.fromEntries(
+      Object.entries(bucket.blockers).sort(([leftName, left], [rightName, right]) =>
+        right.count - left.count || leftName.localeCompare(rightName)),
+    ),
+  });
+  return { total: sorted(total), dev: sorted(splits.dev), holdout: sorted(splits.holdout) };
+}
+
+/** The `limit` apps with the most findings in a blocker slot, most first, then by name. */
+export function topApps(slot, limit = 3) {
+  return Object.entries(slot.apps)
+    .sort(([leftName, left], [rightName, right]) => right - left || leftName.localeCompare(rightName))
+    .slice(0, limit);
+}

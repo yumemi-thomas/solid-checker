@@ -776,7 +776,7 @@ pub(super) struct SemanticLookup<'a> {
     /// ADR 0346: the project's identity wrappers, by declaration symbol.
     identity_wrappers: OnceLock<HashMap<&'a str, usize>>,
     /// ADR 0319: every literal's invocation-flow answer.
-    invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
+    invocation_flow_answers: OnceLock<crate::execution_role::FlowAnswers>,
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
     /// ADR 0363: the literals with an event edge and a non-event invocation.
@@ -1769,6 +1769,21 @@ impl<'a> SemanticLookup<'a> {
 
     /// ADR 0319: the invocation-flow answer of every literal, computed once.
     pub(crate) fn invocation_flow_answers(&self) -> &HashMap<(String, Span), crate::ExecutionRole> {
+        &self.flow_answers().roles
+    }
+
+    /// The literals invocation flow left unanswered over a mix of roles: a
+    /// placement annotation only ([`crate::PlacementBlocker::RoleMix`]).
+    /// `None` until the answers are computed: asking never computes them,
+    /// since a classification made while they are being computed would wait
+    /// on itself.
+    pub(crate) fn invocation_flow_mixed(&self) -> Option<&HashSet<(String, Span)>> {
+        self.invocation_flow_answers
+            .get()
+            .map(|answers| &answers.mixed)
+    }
+
+    fn flow_answers(&self) -> &crate::execution_role::FlowAnswers {
         self.invocation_flow_answers
             .get_or_init(|| crate::execution_role::invocation_flow_answers(self))
     }

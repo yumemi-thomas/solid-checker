@@ -34,10 +34,19 @@
 // sweep has only as uncertifiable (withheld) or not at all (absent), per rule,
 // with the unresolved-review entries in scope. Entries of source `mutants` are
 // read against the seeded probe's report (scripts/mutants.mjs, --mutants).
+//
+// Unknowns by blocker: the uncertifiable findings whose site no fact places
+// ("no compiler or semantic fact places where ...", and the placement
+// demotions), counted by the `blocker` each carries
+// (`solid_reactive_ir::PlacementBlocker`), overall and per split, with the
+// three apps that have the most of each. A report that predates the field
+// counts such findings as `unrecorded`.
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { bucketOf, confirmedMisses, decidedShare, holdoutIndex, reviewedPrecision, shareBySplit, validateLedger } from "./corpus-lib.mjs";
+import {
+  bucketOf, confirmedMisses, decidedShare, holdoutIndex, reviewedPrecision, shareBySplit, topApps, unknownsByBlocker, validateLedger,
+} from "./corpus-lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -90,6 +99,7 @@ const share = decidedShare;
 const splitShares = shareBySplit(sweep.results, index);
 const reviewed = reviewedPrecision(sweep.results, ledger, index);
 const mutantsPath = optionValue("--mutants");
+const blockers = unknownsByBlocker(sweep.results, index);
 const misses = confirmedMisses(sweep.results, ledger, mutantsPath ? JSON.parse(readFileSync(mutantsPath, "utf8")) : null);
 
 let oracle;
@@ -115,6 +125,7 @@ const metrics = {
   ),
   reviewed,
   misses: { mutants: mutantsPath ?? null, ...misses },
+  unknownsByBlocker: blockers,
   byCategory: Object.fromEntries(
     Object.entries(byCategory).sort().map(([name, bucket]) => [name, { ...bucket, decidedShare: share(bucket) }])
   ),
@@ -156,6 +167,19 @@ if (asJson) {
   console.log(`confirmed misses (confirmed-violation entries not proven now; mutants entries ${mutantsPath ? `from ${mutantsPath}` : "not read: no --mutants"})`);
   console.log(missLine("total", misses.total));
   for (const [rule, bucket] of Object.entries(misses.byRule)) console.log(missLine(`  ${rule}`, bucket));
+  const partOf = (count, of) => (of === 0 ? "  n/a" : `${((count / of) * 100).toFixed(1).padStart(5)}%`);
+  console.log(
+    `unknowns by blocker (unplaced ${blockers.total.unplaced} of ${blockers.total.uncertifiable} uncertifiable; ` +
+    `dev ${blockers.dev.unplaced}/${blockers.dev.uncertifiable}, holdout ${blockers.holdout.unplaced}/${blockers.holdout.uncertifiable})`,
+  );
+  console.log(`  ${"blocker".padEnd(30)} ${"count".padStart(5)}  unplaced  uncertifiable  ${"dev".padStart(5)}  ${"holdout".padStart(7)}  top apps`);
+  for (const [name, slot] of Object.entries(blockers.total.blockers)) {
+    const apps = topApps(slot).map(([app, count]) => `${app} ${count}`).join(", ");
+    console.log(
+      `  ${name.padEnd(30)} ${String(slot.count).padStart(5)}    ${partOf(slot.count, blockers.total.unplaced)}         ${partOf(slot.count, blockers.total.uncertifiable)}  ` +
+      `${String(blockers.dev.blockers[name]?.count ?? 0).padStart(5)}  ${String(blockers.holdout.blockers[name]?.count ?? 0).padStart(7)}  ${apps}`,
+    );
+  }
   if (oracle) {
     console.log(`oracle: ${oracle.cases} cases, unproven clean ${oracle.unprovenClean.length}, known open ${oracle.knownOpen.length}, static-only ${oracle.staticOnly.length}`);
     for (const site of oracle.unprovenClean) console.log(`  unproven-clean ${site}`);

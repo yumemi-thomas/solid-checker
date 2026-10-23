@@ -750,7 +750,7 @@ pub(super) fn semantic_execution_role_within(
     // is real, but which of its code runs tracked, deferred, on an event or
     // during rendering is exactly what the missing compiler facts decide.
     if file.compiler.withheld() {
-        return ExecutionRole::Unknown;
+        return crate::placement::unplaced(crate::PlacementBlocker::RefusedFile);
     }
     let role = semantic_role_before_awaits(
         file,
@@ -764,7 +764,7 @@ pub(super) fn semantic_execution_role_within(
     if role == ExecutionRole::EventCallback
         && lookup.event_role_may_run_on_a_dispatcher_stack(file, span)
     {
-        return ExecutionRole::Unknown;
+        return crate::placement::unplaced(crate::PlacementBlocker::DispatchConditionalHandler);
     }
     // ADR 0323: code after an await its async function reaches on every path
     // runs from a promise continuation, on a later task. The strict-read
@@ -790,7 +790,7 @@ pub(super) fn semantic_execution_role_within(
     if role.reports_untracked_read()
         && (follows_any_suspension(file, span) || may_follow_own_await(file, span))
     {
-        return ExecutionRole::Unknown;
+        return crate::placement::unplaced(crate::PlacementBlocker::PossibleSuspension);
     }
     // Review round 4: code written in a component element's children (an
     // event-handler factory on a `<button>` inside `<Show>`, `<Loading>`, a
@@ -799,7 +799,7 @@ pub(super) fn semantic_execution_role_within(
     // later render -- not in this body's strict-read window, which the
     // lexical rendering role assumes. No proven untracked read.
     if role == ExecutionRole::UntrackedRendering && inside_component_element_children(file, span) {
-        return ExecutionRole::Unknown;
+        return crate::placement::unplaced(crate::PlacementBlocker::ComponentChildren);
     }
     role
 }

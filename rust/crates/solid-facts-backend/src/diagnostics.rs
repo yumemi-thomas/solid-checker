@@ -48,6 +48,10 @@ pub struct SnapshotFinding {
     pub coverage_family: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub coverage_subject: String,
+    /// Why no fact places an uncertifiable finding's site
+    /// (`solid_reactive_ir::PlacementBlocker`); a measurement annotation.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub blocker: String,
     pub primary_location: SourceLocation,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub related_locations: Vec<SourceLocation>,
@@ -458,6 +462,9 @@ impl DiagnosticSession {
                 finding.message.push_str(
                     "; this code is in an instance field initializer, which runs when an instance is constructed, so where it runs is not proven",
                 );
+                finding.blocker = solid_reactive_ir::PlacementBlocker::InstanceField
+                    .as_str()
+                    .into();
             }
         }
         // A function analyzed as a component whose identity is not proven
@@ -479,6 +486,9 @@ impl DiagnosticSession {
                 finding.message.push_str(
                     "; this code is in a function that returns JSX but is also handed to code that may call it as a plain function, so whether it runs as a component is not proven",
                 );
+                finding.blocker = solid_reactive_ir::PlacementBlocker::UndecidedComponent
+                    .as_str()
+                    .into();
             }
         }
         // ADR 0138: a proven component only `Dynamic` renders runs with no
@@ -501,6 +511,9 @@ impl DiagnosticSession {
                 finding.message.push_str(
                     "; this code runs in a component only `Dynamic` renders, which calls it with no strict-read window, so the claim is not proven",
                 );
+                finding.blocker = solid_reactive_ir::PlacementBlocker::WindowlessComponent
+                    .as_str()
+                    .into();
             }
         }
         // ADR 0360: a file the compiler refused carries no compiler facts, so
@@ -537,6 +550,9 @@ impl DiagnosticSession {
                     finding.message.push_str(
                         "; this depends on a file the Solid compiler refused, which has no compiler facts, so it is not proven",
                     );
+                    finding.blocker = solid_reactive_ir::PlacementBlocker::RefusedFile
+                        .as_str()
+                        .into();
                 }
             }
             for (path, message) in &refused {
@@ -1023,6 +1039,7 @@ pub fn unsupported_runtime_snapshot(
             subject_kind: "project".into(),
             coverage_family: String::new(),
             coverage_subject: String::new(),
+            blocker: String::new(),
             primary_location: SourceLocation {
                 path: manifest.clone(),
                 start_byte: 0,
@@ -1080,6 +1097,7 @@ fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>)
             subject_kind: finding.subject_kind,
             coverage_family: finding.coverage_family,
             coverage_subject: finding.coverage_subject,
+            blocker: finding.blocker,
             primary_location: source_location(&finding.primary_location, sources),
             related_locations: finding
                 .related_locations

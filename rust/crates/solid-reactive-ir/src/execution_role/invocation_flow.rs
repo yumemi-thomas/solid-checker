@@ -118,6 +118,11 @@ pub(super) struct InvocationFlow<'a, 'l, 'c> {
     /// [`Invocation::Other`] instead of a refusal, and the host's event run
     /// is named ([`Invocation::Event`]).
     pub(super) mixed_mode: bool,
+    /// Set when a census refused invocations in roles that do not agree
+    /// ([`InvocationFlow::function_role`]): the placement blocker
+    /// ([`crate::PlacementBlocker::RoleMix`]) of a literal the walk leaves
+    /// unanswered. Never consulted for a role.
+    pub(super) refused_mix: bool,
 }
 
 /// ADR 0319: the one role every invocation of the function literal directly
@@ -157,25 +162,41 @@ thread_local! {
     static COMPUTING_FLOW_ANSWERS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+/// ADR 0319: every function literal's invocation-flow answer, computed once
+/// per build.
+#[derive(Default)]
+pub(crate) struct FlowAnswers {
+    /// The proven answers, keyed by path and literal span.
+    pub(crate) roles: HashMap<(String, Span), ExecutionRole>,
+    /// The literals left unanswered because their invocations' roles do not
+    /// agree: a placement annotation ([`crate::PlacementBlocker::RoleMix`]),
+    /// never a role.
+    pub(crate) mixed: HashSet<(String, Span)>,
+}
+
 /// ADR 0319: the invocation-flow answer of every function literal of a
 /// closed program, keyed by path and literal span; only proven roles are
 /// kept. Computed once per build, each answer from an empty context.
-pub(crate) fn invocation_flow_answers(
-    lookup: &SemanticLookup<'_>,
-) -> HashMap<(String, Span), ExecutionRole> {
-    let mut answers = HashMap::default();
+pub(crate) fn invocation_flow_answers(lookup: &SemanticLookup<'_>) -> FlowAnswers {
+    let mut answers = FlowAnswers::default();
     if !lookup.program_closed {
         return answers;
     }
     let outer = COMPUTING_FLOW_ANSWERS.with(|computing| computing.replace(true));
-    for file in lookup.files() {
-        for literal in &file.ast.functions {
-            let mut classifying = HashSet::default();
-            if let Some(role) = literal_flow_role(file, literal, lookup, &mut classifying) {
-                answers.insert((file.path.to_string(), literal.span), role);
+    crate::placement::isolated(|| {
+        for file in lookup.files() {
+            for literal in &file.ast.functions {
+                let mut classifying = HashSet::default();
+                let (role, mixed) = literal_flow_answer(file, literal, lookup, &mut classifying);
+                let key = (file.path.to_string(), literal.span);
+                if let Some(role) = role {
+                    answers.roles.insert(key, role);
+                } else if mixed {
+                    answers.mixed.insert(key);
+                }
             }
         }
-    }
+    });
     COMPUTING_FLOW_ANSWERS.with(|computing| computing.set(outer));
     answers
 }
@@ -187,10 +208,24 @@ pub(super) fn literal_flow_role(
     lookup: &SemanticLookup<'_>,
     classifying: &mut HashSet<(String, Span)>,
 ) -> Option<ExecutionRole> {
-    let file = lookup.file_by_path(file.path.as_str())?;
-    let literal = file.ast.function_at(literal.span)?;
+    literal_flow_answer(file, literal, lookup, classifying).0
+}
+
+/// [`literal_flow_role`], and whether the walk refused a mix of roles.
+fn literal_flow_answer(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> (Option<ExecutionRole>, bool) {
+    let Some(file) = lookup.file_by_path(file.path.as_str()) else {
+        return (None, false);
+    };
+    let Some(literal) = file.ast.function_at(literal.span) else {
+        return (None, false);
+    };
     if literal.generator || lookup.function_component_status(file, literal) != ComponentStatus::No {
-        return None;
+        return (None, false);
     }
     if lookup.files().iter().any(|file| {
         file.ast
@@ -198,11 +233,11 @@ pub(super) fn literal_flow_role(
             .iter()
             .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
     }) {
-        return None;
+        return (None, false);
     }
     let key = (format!("\0flow:{}", file.path.as_str()), literal.span);
     if !classifying.insert(key.clone()) {
-        return None;
+        return (None, false);
     }
     let mut flow = InvocationFlow {
         lookup,
@@ -213,8 +248,10 @@ pub(super) fn literal_flow_role(
         props_stack: Vec::new(),
         owner_mode: false,
         mixed_mode: false,
+        refused_mix: false,
     };
     let role = flow.function_role(file, literal).flatten();
+    let mixed = flow.refused_mix;
     flow.classifying.remove(&key);
-    role
+    (role, mixed)
 }

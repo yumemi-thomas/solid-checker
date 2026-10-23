@@ -85,6 +85,7 @@ fn catalog_prose_program() -> Program {
             project_consumer_non_strict: false,
             callback_invocation_unproven: false,
             callee_callback_timing: false,
+            blocker: None,
         }],
         writes: vec![ReactiveWrite {
             setter: "sampleSetter".into(),
@@ -95,6 +96,7 @@ fn catalog_prose_program() -> Program {
             execution: ExecutionRole::TrackedJsx,
             allowed_by_option: false,
             context: "sample computation".into(),
+            blocker: None,
         }],
         missing_owners: vec![OwnerRequirement {
             operation: OwnerRequirementOperation::Cleanup,

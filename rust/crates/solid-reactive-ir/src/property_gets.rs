@@ -16,6 +16,8 @@ pub(super) struct ReadContext<'a, 'b> {
     pub call: &'a solid_facts::ast::CallFact,
     pub valid: bool,
     pub execution: ExecutionRole,
+    /// Why no fact places the call, when [`Self::execution`] is unknown.
+    pub blocker: Option<crate::PlacementBlocker>,
     pub label: &'a str,
     pub source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
@@ -203,6 +205,7 @@ fn getter_reads(
             location: location(context.file.path.shared(), context.call.span),
             declaration: declaration.clone(),
             execution: context.execution,
+            blocker: context.blocker,
             context: enclosing_function_label(context.file, context.call.span).into(),
             via: context.label.into(),
             origin: Some(location(context.file.path.shared(), call.span)),
