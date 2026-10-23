@@ -104,3 +104,10 @@ export function PropsBeforeAwait(props: { x: number }) {
   });
   return <div />;
 }
+
+// Each component above is rendered with props no tag enumerates, so they are
+// unknown, not the empty props of a component nothing renders (ADR 0373).
+declare const propsBeforeAwaitProps: Parameters<typeof PropsBeforeAwait>[0];
+export function PropsBeforeAwaitHost() {
+  return <PropsBeforeAwait {...propsBeforeAwaitProps} />;
+}

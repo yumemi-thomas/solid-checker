@@ -120,16 +120,6 @@
       "start": 3398,
       "end": 3416,
       "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
-      "start": 3399,
-      "end": 3412,
-      "fixes": 0
     }
   ]
 }

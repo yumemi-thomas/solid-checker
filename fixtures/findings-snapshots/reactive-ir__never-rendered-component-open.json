@@ -1,0 +1,35 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/never-rendered-component/variants/open/Card.tsx",
+      "start": 226,
+      "end": 237,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/never-rendered-component/variants/open/Card.tsx",
+      "start": 262,
+      "end": 274,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/never-rendered-component/variants/open/Card.tsx",
+      "start": 262,
+      "end": 274,
+      "fixes": 0
+    }
+  ]
+}

@@ -823,6 +823,9 @@ pub(super) struct SemanticLookup<'a> {
     direct_value_aliases: OnceLock<HashSet<SymbolId>>,
     /// The closed program's namespace census (ADR 0347), set once per build.
     namespace_hand_outs: OnceLock<crate::attribution::NamespaceHandOuts>,
+    /// ADR 0373: the modules a namespace reaches, when the closed program's
+    /// module census is complete; `None` when it is not.
+    unrendered_census: OnceLock<Option<HashSet<String>>>,
     bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
     bindings_by_reference: OnceLock<BindingsByReference>,
     files_by_path: OnceLock<HashMap<&'a str, usize>>,
@@ -1069,6 +1072,7 @@ impl<'a> SemanticLookup<'a> {
             prop_render_sites: OnceLock::new(),
             direct_value_aliases: OnceLock::new(),
             namespace_hand_outs: OnceLock::new(),
+            unrendered_census: OnceLock::new(),
             bindings_by_symbol: OnceLock::new(),
             bindings_by_reference: OnceLock::new(),
             files_by_path: OnceLock::new(),

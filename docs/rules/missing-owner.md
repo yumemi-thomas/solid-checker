@@ -170,7 +170,10 @@ listeners, including lowercase keys; on the audited rc.17 only `on` followed by
 an uppercase letter does, and `onclick` is an attribute. A spread of a call of
 an installed package's export (`{...stylex.attrs(styles.row)}`) is an exact
 holder with no handler when the package's selected runtime file shows that
-every return holds only static keys and none is an event key (ADR 0372).
+every return holds only static keys and none is an event key (ADR 0372). In a
+component a closed program never renders (ADR 0373), a handler drawn only from
+its props (`onClick={props.onPick}`, `{...props}`, `{...omit(props, "x")}`)
+holds nothing and raises no obligation.
 Unknown holders, getters, generators and
 unaudited web spread keys retain internal obligations. These placements obey
 the synchronous-dispatch rule above; no unresolved target proves a violation.

@@ -71,3 +71,18 @@ export function SlotApply(props: { id: string }) {
   useApply(() => console.log(props.id));
   return <div />;
 }
+
+// Each component above is rendered with props no tag enumerates, so they are
+// unknown, not the empty props of a component nothing renders (ADR 0373).
+declare const trackedAndBodyProps: Parameters<typeof TrackedAndBody>[0];
+export function TrackedAndBodyHost() {
+  return <TrackedAndBody {...trackedAndBodyProps} />;
+}
+declare const trackedAndApplyProps: Parameters<typeof TrackedAndApply>[0];
+export function TrackedAndApplyHost() {
+  return <TrackedAndApply {...trackedAndApplyProps} />;
+}
+declare const slotApplyProps: Parameters<typeof SlotApply>[0];
+export function SlotApplyHost() {
+  return <SlotApply {...slotApplyProps} />;
+}

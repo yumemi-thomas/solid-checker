@@ -157,6 +157,11 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   (ADR 0337, `fixtures/reactive-ir/omit-view-props-root`). A read through the
   view or alias (`rest.x`, `local.x`), a destructured binding, a `merge` that may
   return its only source, and a spread onto a component stay uncertifiable.
+  In a closed program whose module census is complete, a component nothing
+  renders or calls (no reference to its declaration or `const`, no namespace
+  reaching its module, no `eval` or `import.meta.glob` anywhere) has no call
+  site at all, so its props are static and its reads are not reported
+  (ADR 0373, `fixtures/reactive-ir/never-rendered-component`).
 
 ## Why is this bad?
 

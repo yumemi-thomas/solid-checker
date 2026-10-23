@@ -118,3 +118,18 @@ export function StoreViewHidden() {
   console.log((omit(s, "y") as { y?: number }).y);
   return <div />;
 }
+
+// Each component above is rendered with props no tag enumerates, so they are
+// unknown, not the empty props of a component nothing renders (ADR 0373).
+declare const spreadProps: Parameters<typeof Spread>[0];
+export function SpreadHost() {
+  return <Spread {...spreadProps} />;
+}
+declare const variableKeyProps: Parameters<typeof VariableKey>[0];
+export function VariableKeyHost() {
+  return <VariableKey {...variableKeyProps} />;
+}
+declare const castReceiverProps: Parameters<typeof CastReceiver>[0];
+export function CastReceiverHost() {
+  return <CastReceiver {...castReceiverProps} />;
+}

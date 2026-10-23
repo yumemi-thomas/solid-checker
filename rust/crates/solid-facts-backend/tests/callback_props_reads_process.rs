@@ -23,7 +23,30 @@ fn twin(
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
-    let (directory, paths) = project(label, files);
+    // `App` is rendered with props no tag enumerates. A component nothing
+    // renders has no props in a closed program (ADR 0373), and the closed
+    // half of each case is about where the read runs, not whether `App` has
+    // a caller.
+    let hosted = |name: &str, text: &str| {
+        if name == "App.tsx" {
+            format!("{text}{APP_HOST}")
+        } else {
+            text.to_owned()
+        }
+    };
+    let files = files
+        .iter()
+        .map(|(name, text)| (*name, hosted(name, text)))
+        .collect::<Vec<_>>();
+    let edits = edits
+        .iter()
+        .map(|(name, text, expected)| (*name, hosted(name, text), *expected))
+        .collect::<Vec<_>>();
+    let files = files
+        .iter()
+        .map(|(name, text)| (*name, text.as_str()))
+        .collect::<Vec<_>>();
+    let (directory, paths) = project(label, &files);
     // The copied stub declares no `createRoot`; an import of it would be
     // TS2305 and resolve to no declaration, which names no primitive. The
     // declaration is published rc.13's (`@solidjs/signals`
@@ -88,14 +111,14 @@ fn twin(
                 vec![SourceChange {
                     path: paths[*name].clone(),
                     version: version as u64 + 1,
-                    source: Some((*text).into()),
+                    source: Some(text.as_str().into()),
                     compiler_options: CompilerOptions::default(),
                 }],
                 None,
             )
             .unwrap();
         if *name == "App.tsx" {
-            (*text).clone_into(&mut read_source);
+            text.clone_into(&mut read_source);
         }
         check(
             &format!("edit {} ({name})", version + 1),
@@ -107,6 +130,13 @@ fn twin(
     drop(session);
     fs::remove_dir_all(directory).unwrap();
 }
+
+const APP_HOST: &str = r#"
+declare const appProps: Parameters<typeof App>[0];
+export function AppHost() {
+  return <App {...appProps} />;
+}
+"#;
 
 const APP: &str = r#"import { run } from "./lib";
 export function App(props: { x: number }) {

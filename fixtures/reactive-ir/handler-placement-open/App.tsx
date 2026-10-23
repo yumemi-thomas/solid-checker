@@ -102,3 +102,14 @@ export function GeneratorMember() {
 export function UnknownTuple(props: { handler: () => void }) {
   return <button onPointerDown={[props.handler, 1]} />;
 }
+
+// Each component above is rendered with props no tag enumerates, so they are
+// unknown, not the empty props of a component nothing renders (ADR 0373).
+declare const unresolvedProps: Parameters<typeof Unresolved>[0];
+export function UnresolvedHost() {
+  return <Unresolved {...unresolvedProps} />;
+}
+declare const unresolvedSpreadProps: Parameters<typeof UnresolvedSpread>[0];
+export function UnresolvedSpreadHost() {
+  return <UnresolvedSpread {...unresolvedSpreadProps} />;
+}

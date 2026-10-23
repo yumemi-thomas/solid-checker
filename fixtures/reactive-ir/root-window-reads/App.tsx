@@ -117,3 +117,10 @@ export function HookRootInEvent() {
   const [count] = createSignal(0);
   return <div onClick={() => useRoot(() => console.log(count()))} />;
 }
+
+// Each component above is rendered with props no tag enumerates, so they are
+// unknown, not the empty props of a component nothing renders (ADR 0373).
+declare const propsInRootProps: Parameters<typeof PropsInRoot>[0];
+export function PropsInRootHost() {
+  return <PropsInRoot {...propsInRootProps} />;
+}

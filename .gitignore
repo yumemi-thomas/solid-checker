@@ -551,3 +551,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-mixed-invocation/variants/*/node_modules/**
 !fixtures/reactive-ir/package-spread-shape/node_modules/
 !fixtures/reactive-ir/package-spread-shape/node_modules/**
+!fixtures/reactive-ir/never-rendered-component/node_modules/
+!fixtures/reactive-ir/never-rendered-component/node_modules/**
