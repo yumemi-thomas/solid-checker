@@ -1016,6 +1016,21 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the function a call of `primitive` returns, in tuple slot
+    /// `slot` (`None`: the call's result itself), ignores the `this` it is
+    /// called with on every path of every build of this installation (ADR
+    /// 0319): a bound function or an arrow, never a function that reads its
+    /// receiver. An answer of `true` is a proof, so only a release whose
+    /// returning code was read answers it; the default is `false`.
+    fn returned_callable_ignores_receiver(
+        &self,
+        primitive: Primitive,
+        slot: Option<usize>,
+    ) -> bool {
+        let _ = (primitive, slot);
+        false
+    }
+
     /// Whether a call of `primitive` may run `flush` synchronously on its
     /// caller's stack (ADR 0362), so the effect applies it drains run under the
     /// **caller's** owner, not none.

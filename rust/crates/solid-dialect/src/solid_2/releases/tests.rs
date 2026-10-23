@@ -443,6 +443,40 @@ fn the_effect_phase_throw_is_rc17s_alone() {
     assert!(!Solid2::CONSERVATIVE.throws_inside_effect_phase(Primitive::CreateMemo));
 }
 
+/// ADR 0319: only the read rc.17 pair answers which returned functions ignore
+/// their receiver, and only for the slots that are functions it read.
+#[test]
+fn returned_callables_ignore_their_receiver_only_where_read() {
+    let read = [
+        (Primitive::CreateSignal, Some(0)),
+        (Primitive::CreateSignal, Some(1)),
+        (Primitive::CreateMemo, None),
+        (Primitive::CreateStore, Some(1)),
+    ];
+    for (primitive, slot) in read {
+        assert!(Solid2::AUDITED.returned_callable_ignores_receiver(primitive, slot));
+        assert!(!Solid2::RC13.returned_callable_ignores_receiver(primitive, slot));
+        assert!(!Solid2::CONSERVATIVE.returned_callable_ignores_receiver(primitive, slot));
+    }
+    for (primitive, slot) in [
+        // The tuple itself, the store proxy, a slot past the tuple.
+        (Primitive::CreateSignal, None),
+        (Primitive::CreateStore, Some(0)),
+        (Primitive::CreateSignal, Some(2)),
+        (Primitive::CreateMemo, Some(0)),
+        (Primitive::CreateOptimistic, Some(0)),
+        (Primitive::CreateProjection, None),
+    ] {
+        assert!(!Solid2::AUDITED.returned_callable_ignores_receiver(primitive, slot));
+    }
+    let (mixed, _) = analyzed(&triple(
+        Some("2.0.0-rc.17"),
+        Some("2.0.0-rc.13"),
+        Some("2.0.0-rc.17"),
+    ));
+    assert!(!mixed.returned_callable_ignores_receiver(Primitive::CreateSignal, Some(0)));
+}
+
 /// ADR 0362: `flush` and the calls proven or taken to reach it on the caller's
 /// stack answer the same in every vocabulary (rc.13 and rc.17 were read, every
 /// other release is taken to reach it conservatively); nothing else does.
