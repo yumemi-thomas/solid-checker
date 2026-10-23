@@ -56,7 +56,7 @@ pub(super) fn owner_node(
     if file.compiler.callback_roles.iter().any(|callback| {
         callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
             && callback.span.contains(function.body)
-            && lookup.event_handler_may_run_on_a_dispatcher_stack(file, callback.span)
+            && lookup.event_handler_unowned_run_unproven(file, callback.span)
     }) {
         seed_context = (seed_context & !OWNER_CONTEXT_PROVEN_UNOWNED)
             | OWNER_CONTEXT_OWNED
@@ -75,6 +75,19 @@ pub(super) fn owner_node(
         } else {
             OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
         };
+    }
+    // ADR 0363: a literal the host also runs as a proven event handler, beside
+    // invocations that may supply an owner. The event run has no owner; the
+    // seed adds that run to whatever the other invocations contribute, and
+    // propagation keeps it apart from them (`OWNER_CONTEXT_EVENT_PATH_UNOWNED`).
+    // With a synchronous dispatch in the program the host's run may not be
+    // ownerless, so the literal keeps its obligation (ADR 0356).
+    if !dispatch_uncertain
+        && lookup
+            .mixed_event_literals()
+            .contains_key(&(file.path.to_string(), function.span))
+    {
+        seed_context |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_EVENT_PATH_UNOWNED;
     }
     match component_status {
         crate::indexes::ComponentStatus::Proven => seed_context |= OWNER_CONTEXT_OWNED,
@@ -114,7 +127,7 @@ pub(super) fn owner_node(
 /// The owner context bits an enclosing compiler ownership region proves for a
 /// function body.
 ///
-pub(super) fn compiler_owner_context(file: &solid_facts::FileFacts, body: Span) -> u8 {
+pub(super) fn compiler_owner_context(file: &solid_facts::FileFacts, body: Span) -> u16 {
     file.compiler
         .ownership_regions
         .iter()
@@ -133,7 +146,7 @@ pub(super) fn compiler_owner_context(file: &solid_facts::FileFacts, body: Span) 
 }
 
 /// The context bits proved at the facts seam before graph propagation.
-pub(super) fn seed_contexts(nodes: &[OwnerNode]) -> Vec<u8> {
+pub(super) fn seed_contexts(nodes: &[OwnerNode]) -> Vec<u16> {
     nodes.iter().map(|node| node.seed_context).collect()
 }
 
@@ -147,7 +160,7 @@ pub(super) fn seed_contexts(nodes: &[OwnerNode]) -> Vec<u8> {
 pub(super) fn seed_named_hand_outs(
     nodes: &[OwnerNode],
     lookup: &SemanticLookup<'_>,
-    contexts: &mut [u8],
+    contexts: &mut [u16],
 ) {
     for (index, node) in nodes.iter().enumerate() {
         if node.namespace_candidate && lookup.hands_out_by_name(&node.path, node.span) {
@@ -180,7 +193,7 @@ pub(super) fn unnamed_hand_out_candidates(
 /// uncertifiable, not a violation. Called once the direct seeds and the edges
 /// are in, so `contexts` holds every other seed.
 pub(super) fn seed_unnamed_hand_outs(
-    contexts: &mut [u8],
+    contexts: &mut [u16],
     outgoing: &[Vec<(usize, OwnerEdgeKind)>],
     candidates: &[bool],
 ) -> Vec<bool> {
@@ -225,7 +238,7 @@ fn reached_from(outgoing: &[Vec<(usize, OwnerEdgeKind)>], mut reached: Vec<bool>
 /// unowned edge out of one carries the unowned bit without the proven one: the
 /// callback it runs is proven unowned only if the function running it is reached.
 pub(super) fn propagate_owner_contexts(
-    contexts: &mut [u8],
+    contexts: &mut [u16],
     outgoing: &[Vec<(usize, OwnerEdgeKind)>],
     uncertain: &[bool],
 ) {
@@ -275,7 +288,7 @@ pub(super) fn propagate_owner_contexts(
 /// and never the proven one. Propagation then carries that bit on. Both owner
 /// passes settle their own graph here, so they cannot disagree.
 pub(super) fn settle_eager_owners(
-    contexts: &mut [u8],
+    contexts: &mut [u16],
     outgoing: &[Vec<(usize, OwnerEdgeKind)>],
     uncertain: &[bool],
 ) {
@@ -321,7 +334,7 @@ pub(crate) struct OwnerRequirementCandidate {
     pub(crate) operation: &'static str,
     pub(crate) operation_span: Span,
     pub(crate) owner: Option<Span>,
-    pub(crate) report_mask: u8,
+    pub(crate) report_mask: u16,
     pub(crate) allow_uncertain: bool,
     pub(crate) runtime_uncertain: bool,
     pub(crate) settled_target: Option<OwnerTarget>,
@@ -362,7 +375,7 @@ pub(crate) type SettledGateDecisions = HashMap<(String, u64, u64), LeafGateDecis
 pub(super) fn leaf_gate_decision(
     owner_index: Option<usize>,
     nodes: &[OwnerNode],
-    contexts: &[u8],
+    contexts: &[u16],
 ) -> LeafGateDecision {
     let Some(index) = owner_index else {
         // Module evaluation: no owner can be live, so the call is
@@ -477,6 +490,9 @@ pub(crate) struct OwnerRequirementStatus {
     pub(crate) component_uncertain: bool,
     /// The operation runs after an `await` ([`AwaitContinuations`]).
     pub(crate) after_await: bool,
+    /// ADR 0363: the violation is the callback's event run alone; it is also
+    /// invoked in ways that may supply an owner.
+    pub(crate) event_path: bool,
     pub(crate) report: bool,
 }
 

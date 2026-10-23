@@ -88,6 +88,21 @@ lexically enclosing root, but a newly created root still owns its callback.
 Definite continuations keep their existing proof. Argument-specific take/skip
 proofs are not implemented.
 
+A callback the host runs as an event handler and something else also runs
+(`runWithOwner(owner, h.onClick)` beside `<button {...h}/>`, or a `run()` call in
+owned setup beside `{ onClick: run }`) has no owner on the event run. An
+`onCleanup` or effect reached on that run is a violation, and the message names
+it: "…; when run as the `onClick` handler of `<button>` this callback has no
+owner, though it is also invoked where one is current" (a helper the callback
+calls says "an event handler"). The owned runs are not asked, and a write is still
+an obligation (the owned run may write legally). It stays an obligation when the
+program has a synchronous dispatch, when a holder of the value cannot be followed,
+when the event run follows a skippable `await` (ADR 0357), and when a later attribute
+or spread of the element may replace the event key (`<button {...h} onClick={x}>`: the
+spread's last definition wins, so `h.onClick` may never be the handler; ADR 0364).
+Inside a `createRoot` the callback creates, the claim is quiet: the root owns it on
+every run (ADR 0363).
+
 JSX event placement alone does not prove an ownerless invocation. With a
 visible call selecting the standard-library `EventTarget.dispatchEvent` or
 `HTMLElement.click` declaration, handlers may run on their caller's owned stack

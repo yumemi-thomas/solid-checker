@@ -1,15 +1,3 @@
 {
-  "note": "ADR 0326/0327 reviewer 5570a4fad: owner-mix.",
-  "open": [
-    {
-      "code": "NO_OWNER_CLEANUP",
-      "site": "App.tsx:5",
-      "reason": "Documented mixed-invocation owner gap (ADR 0327): the same callback is invoked through runWithOwner and as an event handler; the owner walk refuses the literal as a whole."
-    },
-    {
-      "code": "NO_OWNER_CLEANUP",
-      "site": "App.tsx:13",
-      "reason": "Real owner miss: a handler returned from createRoot is later dispatched without an owner. The owner flow refuses the primitive slot instead of distinguishing callback registration from its later invocation."
-    }
-  ]
+  "note": "ADR 0326/0327/0363 reviewer 5570a4fad: owner-mix. Both sites are covered: the mixed callback (ADR 0363) and the handler a `createRoot` callback returns (the root pass-through)."
 }

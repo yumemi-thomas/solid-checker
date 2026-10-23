@@ -94,6 +94,16 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 1698,
+      "end": 1707,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",

@@ -1,0 +1,45 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-mixed-invocation/variants/may-resume/App.tsx",
+      "start": 224,
+      "end": 233,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-mixed-invocation/variants/may-resume/App.tsx",
+      "start": 561,
+      "end": 570,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-mixed-invocation/variants/may-resume/App.tsx",
+      "start": 655,
+      "end": 656,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-mixed-invocation/variants/may-resume/App.tsx",
+      "start": 1011,
+      "end": 1012,
+      "fixes": 0
+    }
+  ]
+}

@@ -169,21 +169,22 @@ pub(crate) fn find_missing_owners(
                 let Some(Some(targets)) = lookup.spread_handler_targets().get(&key) else {
                     continue;
                 };
-                for (path, span) in targets {
+                for held in targets {
                     let index = nodes_by_path
-                        .get(path.as_str())
+                        .get(held.path.as_str())
                         .into_iter()
                         .flatten()
                         .copied()
-                        .find(|index| nodes[*index].span == *span);
+                        .find(|index| nodes[*index].span == held.span);
                     if let Some(index) = index {
+                        let kind = event_owner_edge(
+                            lookup,
+                            lookup.file_by_path(&held.path).unwrap_or(file),
+                            held.span,
+                            nodes[index].generator,
+                        );
                         contexts[index] |= owner_edge_context(
-                            event_owner_edge(
-                                lookup,
-                                lookup.file_by_path(path).unwrap_or(file),
-                                *span,
-                                nodes[index].generator,
-                            ),
+                            spread_key_edge(lookup, file, element, spread.span, &held.key, kind),
                             OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
                         );
                     }
@@ -439,7 +440,11 @@ pub(crate) fn find_missing_owners(
                     file.path.as_str(),
                     call.span,
                 );
-                let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
+                // ADR 0363: an event run no owner reaches proves the violation of the
+                // event run alone, beside owned runs the same callback has.
+                let event_path = context & OWNER_CONTEXT_PROVEN_UNOWNED == 0
+                    && context & OWNER_CONTEXT_EVENT_PATH_UNOWNED != 0;
+                let proven_unowned = event_path || context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
                 let component_uncertain = !proven_unowned
                     && (context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
                         || owner_index.is_some_and(|index| nodes[index].component_uncertain));
@@ -485,6 +490,7 @@ pub(crate) fn find_missing_owners(
                         later_run_unowned,
                         component_uncertain,
                         after_await,
+                        event_path,
                         report,
                     },
                     lookup,
@@ -516,7 +522,11 @@ pub(crate) fn find_missing_owners(
             if root_owned_span(element.span) {
                 continue;
             }
-            let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
+            // ADR 0363: an event run no owner reaches proves the violation of the
+            // event run alone, beside owned runs the same callback has.
+            let event_path = context & OWNER_CONTEXT_PROVEN_UNOWNED == 0
+                && context & OWNER_CONTEXT_EVENT_PATH_UNOWNED != 0;
+            let proven_unowned = event_path || context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
             let component_uncertain = !proven_unowned
                 && (context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
                     || containing_function_indexed(
@@ -548,6 +558,7 @@ pub(crate) fn find_missing_owners(
                     later_run_unowned,
                     component_uncertain,
                     after_await: false,
+                    event_path,
                     report: context & OWNER_CONTEXT_UNOWNED != 0,
                 },
                 lookup,
@@ -638,7 +649,7 @@ pub(crate) fn attribute_dependency_requirements(
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     nodes: &[OwnerNode],
-    contexts: &[u8],
+    contexts: &[u16],
     outgoing: &[Vec<(usize, OwnerEdgeKind)>],
 ) {
     if facts.dependency_source_roots.is_empty() {
@@ -962,6 +973,7 @@ pub(crate) fn attribute_dependency_requirements(
                 later_run_unowned: requirement.later_run_unowned,
                 component_uncertain: requirement.component_uncertain,
                 after_await: false,
+                event_path: false,
                 report: true,
             },
             lookup,

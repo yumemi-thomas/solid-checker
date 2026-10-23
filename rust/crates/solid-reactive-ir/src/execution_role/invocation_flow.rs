@@ -63,6 +63,33 @@ pub(super) struct PropsFrame<'a> {
 pub(super) enum Invocation<'a> {
     Call(&'a solid_facts::FileFacts, Span, Vec<FlowFrame<'a>>),
     Role(ExecutionRole),
+    /// ADR 0363, [`InvocationFlow::mixed_mode`] only: the host runs the value
+    /// as the handler an intrinsic element's attribute or spread key names.
+    Event(EventEdge),
+    /// ADR 0363, [`InvocationFlow::mixed_mode`] only: a primitive's callback
+    /// slot runs the value. Who owns that run is the owner graph's question; it
+    /// neither supports nor limits an event edge found beside it.
+    Other,
+}
+
+/// The handler an event edge names: the attribute (or spread key) and the
+/// intrinsic element it sits on, both as written. Empty when the edge is a call
+/// inside a compiler event handler no attribute names exactly.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct EventEdge {
+    pub(crate) attribute: String,
+    pub(crate) element: String,
+}
+
+impl EventEdge {
+    /// How a finding names the run: "the `onClick` handler of `<button>`".
+    pub(crate) fn describe(&self) -> String {
+        if self.attribute.is_empty() || self.element.is_empty() {
+            "an event handler".into()
+        } else {
+            format!("the `{}` handler of `<{}>`", self.attribute, self.element)
+        }
+    }
 }
 
 pub(super) struct InvocationFlow<'a, 'l, 'c> {
@@ -84,6 +111,12 @@ pub(super) struct InvocationFlow<'a, 'l, 'c> {
     /// the call (which `createRoot` and `runWithOwner` pass through from
     /// their caller although they supply an owner).
     pub(super) owner_mode: bool,
+    /// ADR 0363: the mixed-invocation census ([`mixed_event_literals`], with
+    /// `owner_mode`). It looks for one proven event edge and tolerates any other
+    /// understood invocation, so a primitive's callback slot is an
+    /// [`Invocation::Other`] instead of a refusal, and the host's event run
+    /// is named ([`Invocation::Event`]).
+    pub(super) mixed_mode: bool,
 }
 
 /// ADR 0319: the one role every invocation of the function literal directly
@@ -178,6 +211,7 @@ pub(super) fn literal_flow_role(
         frames: Vec::new(),
         props_stack: Vec::new(),
         owner_mode: false,
+        mixed_mode: false,
     };
     let role = flow.function_role(file, literal).flatten();
     flow.classifying.remove(&key);

@@ -106,6 +106,7 @@ fn catalog_prose_program() -> Program {
             later_run_unowned: false,
             component_uncertain: false,
             after_await: false,
+            event_path: None,
             missing_jsx_census: false,
             through_dependency: None,
             report: true,

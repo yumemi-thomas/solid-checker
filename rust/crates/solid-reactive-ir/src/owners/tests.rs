@@ -1,11 +1,12 @@
 use super::{
-    OWNER_CONTEXT_COMPONENT_UNCERTAIN, OWNER_CONTEXT_LATER_RUN_UNOWNED, OWNER_CONTEXT_LEAF,
-    OWNER_CONTEXT_LEAF_OWNED, OWNER_CONTEXT_MAY_RESUME_UNOWNED, OWNER_CONTEXT_OWNED,
-    OWNER_CONTEXT_PROVEN_UNOWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind, OwnerNode,
-    binding_returns_reactive_source, callback_owner_edge_kind, compiler_owner_context,
-    compose_owner_edge, owner_edge_context, possible_await_continuation_context,
-    propagate_owner_contexts, providing_region_chain, returned_arrow_function, root_owned_at,
-    seed_contexts, seed_unnamed_hand_outs, settle_eager_owners,
+    OWNER_CONTEXT_COMPONENT_UNCERTAIN, OWNER_CONTEXT_EVENT_PATH_UNOWNED,
+    OWNER_CONTEXT_LATER_RUN_UNOWNED, OWNER_CONTEXT_LEAF, OWNER_CONTEXT_LEAF_OWNED,
+    OWNER_CONTEXT_MAY_RESUME_UNOWNED, OWNER_CONTEXT_OWNED, OWNER_CONTEXT_PROVEN_UNOWNED,
+    OWNER_CONTEXT_UNOWNED, OwnerEdgeKind, OwnerNode, binding_returns_reactive_source,
+    callback_owner_edge_kind, compiler_owner_context, compose_owner_edge, owner_edge_context,
+    possible_await_continuation_context, propagate_owner_contexts, providing_region_chain,
+    returned_arrow_function, root_owned_at, seed_contexts, seed_unnamed_hand_outs,
+    settle_eager_owners,
 };
 use solid_facts::ast;
 use solid_facts::compiler::{
@@ -227,6 +228,83 @@ fn owner_edge_context_transforms_the_source_bits_per_edge_kind() {
     }
 }
 
+/// ADR 0363: the event-path bit rides a plain call beside the owned bits and
+/// ends at every edge that restores an owner or leaves the owner uncertain.
+#[test]
+fn event_path_bit_survives_a_plain_call_and_ends_at_every_other_edge() {
+    let mixed = OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_EVENT_PATH_UNOWNED;
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::Preserve, mixed),
+        mixed,
+        "a call in the callback's own flow runs on the event path too"
+    );
+    for kind in [
+        OwnerEdgeKind::Owned,
+        OwnerEdgeKind::Conditional,
+        OwnerEdgeKind::FlushDrained,
+        OwnerEdgeKind::Leaf,
+        OwnerEdgeKind::QueuedLeaf,
+        OwnerEdgeKind::EagerCall,
+        OwnerEdgeKind::MayResumeUnowned,
+        OwnerEdgeKind::InheritsFirstRun,
+        OwnerEdgeKind::MayBeUnowned,
+    ] {
+        assert_eq!(
+            owner_edge_context(kind, mixed) & OWNER_CONTEXT_EVENT_PATH_UNOWNED,
+            0,
+            "{kind:?} must not forward the event-path claim"
+        );
+    }
+    // A proven unowned edge needs no bit: it already proves the callback.
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::Unowned, mixed) & OWNER_CONTEXT_EVENT_PATH_UNOWNED,
+        0
+    );
+    // Possible suspension still adds its unowned possibility to the rest.
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::MayResumeUnowned, mixed),
+        mixed & !OWNER_CONTEXT_EVENT_PATH_UNOWNED
+            | OWNER_CONTEXT_UNOWNED
+            | OWNER_CONTEXT_MAY_RESUME_UNOWNED
+    );
+    // The bit never counts as a proof of the whole function: a region around
+    // it is left, and PROVEN_UNOWNED stays a separate fact.
+    assert_ne!(
+        OWNER_CONTEXT_EVENT_PATH_UNOWNED & super::owner_context::OWNER_CONTEXT_LEAVES_REGION,
+        0
+    );
+    assert_eq!(mixed & OWNER_CONTEXT_PROVEN_UNOWNED, 0);
+}
+
+#[test]
+fn event_path_bit_propagates_to_a_helper_and_stops_at_an_owner_boundary() {
+    // 0 (mixed callback) --preserve--> 1 (helper) --owned--> 2 (root callback),
+    // and 0 --may-resume--> 3 (helper after a possible suspension).
+    let mixed = OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_EVENT_PATH_UNOWNED;
+    let mut contexts = vec![mixed, OWNER_CONTEXT_OWNED, 0, 0];
+    let outgoing = vec![
+        vec![
+            (1, OwnerEdgeKind::Preserve),
+            (3, OwnerEdgeKind::MayResumeUnowned),
+        ],
+        vec![(2, OwnerEdgeKind::Owned)],
+        vec![],
+        vec![],
+    ];
+    propagate_owner_contexts(&mut contexts, &outgoing, &[false; 4]);
+    // The helper keeps its owned caller's bit beside the event path's.
+    assert_eq!(
+        contexts[1],
+        OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_EVENT_PATH_UNOWNED
+    );
+    assert_eq!(contexts[2], OWNER_CONTEXT_OWNED);
+    assert_eq!(
+        contexts[3],
+        OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_MAY_RESUME_UNOWNED
+    );
+    assert_eq!(contexts[3] & OWNER_CONTEXT_EVENT_PATH_UNOWNED, 0);
+}
+
 #[test]
 fn callback_owner_edge_kinds_map_one_to_one() {
     use solid_dialect::CallbackOwner;
@@ -268,7 +346,7 @@ fn composing_owner_edges_lets_an_explicit_callback_owner_dominate() {
     );
 }
 
-fn node(seed_context: u8) -> OwnerNode {
+fn node(seed_context: u16) -> OwnerNode {
     OwnerNode {
         path: "app.tsx".to_owned(),
         span: Span::new(0, 10),

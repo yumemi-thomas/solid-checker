@@ -6,7 +6,16 @@ use super::*;
 /// handlers (ADR 0358): the `on…` functions its exact object literal holds, or
 /// `None` when that object cannot be resolved exactly. Keyed by the argument's
 /// span, like [`Targets`].
-pub(crate) type SpreadTargets = HashMap<Location, Option<Vec<(String, Span)>>>;
+pub(crate) type SpreadTargets = HashMap<Location, Option<Vec<SpreadHandler>>>;
+
+/// One `on…` function of an exact spread holder: the key it is held under,
+/// and the function (its file and span).
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct SpreadHandler {
+    pub(crate) key: String,
+    pub(crate) path: String,
+    pub(crate) span: Span,
+}
 
 /// Whether a JSX element is an intrinsic (lowercase, unqualified) tag, the only
 /// kind a spread can hand event listeners to.
@@ -15,6 +24,49 @@ pub(crate) fn intrinsic_element(file: &FileFacts, element: &ast::JsxElementFact)
         && file
             .source_text(element.name.span)
             .is_some_and(|tag| tag.starts_with(|c: char| c.is_ascii_lowercase()))
+}
+
+/// ADR 0364: whether a later attribute or spread of `element` may replace the
+/// event handler defined at `after` under the prop `key`. The compiler lowers an
+/// element with any spread to `spread(el, [source, ...])`, every attribute and
+/// spread in source order, and the runtime keeps a key from the last source that
+/// has it (`collectProps` skips a key a later source `sourceHas`); a later
+/// definition replaces it even when its value is `undefined`. Two props of one
+/// event type replace each other too where the type is delegated (`addEvent`
+/// stores `node["_$$" + type]`), so the test is the lowercased tail. A later
+/// spread replaces it unless its holder resolves exactly (ADR 0358) and holds no
+/// key of that type; an unaudited release answers `true`.
+pub(crate) fn event_key_may_be_replaced(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    element: &ast::JsxElementFact,
+    after: Span,
+    key: &str,
+) -> bool {
+    let event_type =
+        |key: &str| (key.is_ascii() && key.len() > 2).then(|| key[2..].to_ascii_lowercase());
+    let Some(wanted) = event_type(key) else {
+        return true;
+    };
+    let same_event = |other: &str| match lookup.dialect.spread_key_is_event(other) {
+        Some(false) => false,
+        Some(true) => event_type(other).is_none_or(|other| other == wanted),
+        None => true,
+    };
+    element.attributes.iter().any(|attribute| {
+        attribute.span.start > after.start
+            && attribute.namespace.is_none()
+            && file.source_text(attribute.name).is_none_or(same_event)
+    }) || element.spreads.iter().any(|spread| {
+        spread.span.start > after.start
+            && match lookup
+                .spread_handler_targets()
+                .get(&location(file.path.shared(), spread.argument))
+            {
+                Some(Some(held)) => held.iter().any(|held| same_event(&held.key)),
+                _ => true,
+            }
+    })
 }
 
 /// Every spread argument of an intrinsic element, resolved as far as the exact
@@ -76,7 +128,7 @@ fn spread_handlers<'a>(
     stability: &MemberStability,
     modules: &ModuleCensus,
     closed: &mut HashMap<(String, Span, SymbolId), bool>,
-) -> Option<Vec<(String, Span)>> {
+) -> Option<Vec<SpreadHandler>> {
     if file.source_text(argument)?.trim_start().starts_with('{') {
         return on_keys(facts, lookup, file, argument, None);
     }
@@ -113,7 +165,7 @@ fn on_keys<'a>(
     owner: &'a FileFacts,
     literal: Span,
     stability: Option<&MemberStability>,
-) -> Option<Vec<(String, Span)>> {
+) -> Option<Vec<SpreadHandler>> {
     let shape = owner
         .ast
         .object_get_shapes
@@ -143,7 +195,11 @@ fn on_keys<'a>(
         if !receiver_inert(target, function) {
             return None;
         }
-        targets.push((target.path.to_string(), function.span));
+        targets.push(SpreadHandler {
+            key: name.to_owned(),
+            path: target.path.to_string(),
+            span: function.span,
+        });
     }
     Some(targets)
 }

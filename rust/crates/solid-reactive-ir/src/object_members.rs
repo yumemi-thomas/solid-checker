@@ -17,7 +17,8 @@ use crate::{
 #[path = "object_members/handlers.rs"]
 mod handlers;
 pub(crate) use handlers::{
-    SpreadTargets, intrinsic_element, spread_index, unresolved_handler_defects,
+    SpreadTargets, event_key_may_be_replaced, intrinsic_element, spread_index,
+    unresolved_handler_defects,
 };
 
 pub(crate) type Targets = HashMap<Location, (String, Span)>;
