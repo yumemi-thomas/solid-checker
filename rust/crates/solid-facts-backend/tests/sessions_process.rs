@@ -101,7 +101,6 @@ fn nested_member_callee_edits_refresh_unchanged_callers() {
         assert_eq!(has_obligation(&retained), expected, "generation {version}");
         assert!(warm.last_build_timings().source_files_reused > 0);
     }
-    drop(warm);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -195,7 +194,6 @@ fn native_scheduler_writes_refresh_retained_eager_read_summaries() {
         assert_eq!(retained, cold, "generation {version}");
         assert!(warm.last_build_timings().source_files_reused > 0);
     }
-    drop(warm);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -295,7 +293,6 @@ fn augmented_timer_writes_in_another_file_refresh_retained_facts() {
         assert_eq!(retained, cold, "generation {version}");
         assert!(warm.last_build_timings().source_files_reused > 0);
     }
-    drop(warm);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -396,7 +393,6 @@ fn leaf_source_target_edits_match_cold_analysis() {
         assert_eq!(operations(&retained), expected);
         assert_eq!(retained, cold, "version {version}");
     }
-    drop(warm);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -510,7 +506,6 @@ fn routed_callback_consumer_edits_refresh_retained_dispatch_contexts() {
             "consumer-only edit {version} must refresh callback and dispatch proofs"
         );
     }
-    drop(warm);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -630,7 +625,6 @@ fn returned_anonymous_member_caller_edit_matches_cold_analysis() {
         retained_reverted, fresh_reverted,
         "returning to the inert member must remove the read in retained and cold IR"
     );
-    drop(warm);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -2029,6 +2023,150 @@ fn edit_recovers_when_the_service_dies_between_update_and_analyze() {
         serde_json::to_vec(&edited).unwrap(),
         serde_json::to_vec(&reanalyzed).unwrap(),
         "recovery must converge on the same facts"
+    );
+}
+
+/// A launch-counting wrapper around the real producer. Each launch appends a
+/// line to the returned log. `rearm_after` names a file: while it exists every
+/// launch re-creates the panic marker, so the producer panics on every launch;
+/// otherwise the marker is whatever the test wrote (one shot, consumed).
+#[cfg(unix)]
+fn panicking_service(
+    typefacts_executable: &str,
+    label: &str,
+) -> (PathBuf, PathBuf, PathBuf, PathBuf) {
+    use std::os::unix::fs::PermissionsExt as _;
+    let directory = temporary_directory(label);
+    let marker = directory.join("panic-marker");
+    let launches = directory.join("launches");
+    let rearm = directory.join("rearm");
+    let wrapper = directory.join("solid-typefacts-panicking.sh");
+    fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\necho launch >> '{launches}'\n[ -e '{rearm}' ] && : > '{marker}'\n\
+             SOLID_TYPEFACTS_PANIC_BEFORE_UPDATE='{marker}' exec '{typefacts_executable}' \"$@\"\n",
+            launches = launches.display(),
+            rearm = rearm.display(),
+            marker = marker.display(),
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).unwrap();
+    (wrapper, marker, launches, rearm)
+}
+
+#[cfg(unix)]
+fn launch_count(launches: &std::path::Path) -> usize {
+    fs::read_to_string(launches)
+        .map(|text| text.lines().count())
+        .unwrap_or(0)
+}
+
+fn nth_edit(paths: &[PathBuf], version: u64, label: &str) -> SourceChange {
+    SourceChange {
+        path: paths[0].to_string_lossy().into_owned(),
+        version,
+        source: Some(format!(
+            "// {label}\n{}",
+            fs::read_to_string(&paths[0]).unwrap()
+        )),
+        compiler_options: CompilerOptions::default(),
+    }
+}
+
+/// Runs `work` on a thread and fails the test if it does not finish: a client
+/// that hangs on a dead producer is the defect under test.
+#[cfg(unix)]
+fn bounded<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = done_tx.send(work());
+    });
+    done_rx
+        .recv_timeout(std::time::Duration::from_secs(120))
+        .expect("the client hung after a producer panic")
+}
+
+/// A panic on the producer's worker thread stops the process (fail-stop hook);
+/// the client's crash path relaunches, replays the earlier accepted edit, and
+/// re-sends the failed one. The facts must equal a session that never crashed.
+#[cfg(unix)]
+#[test]
+fn a_producer_panic_on_a_later_edit_recovers_by_replay() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let (wrapper, marker, launches, _) = panicking_service(&typefacts, "panic-recovers");
+    let wrapper = wrapper.to_string_lossy().into_owned();
+    let (recovered, launched) = bounded({
+        let launches = launches.clone();
+        move || {
+            let (mut session, paths) = tracer_fixture_session(&wrapper);
+            session.analyze().unwrap();
+            session
+                .edit(vec![nth_edit(&paths, 1, "first")], None)
+                .unwrap();
+            assert_eq!(launch_count(&launches), 1, "no relaunch before the panic");
+            fs::write(&marker, b"armed").unwrap();
+            let facts = session
+                .edit(vec![nth_edit(&paths, 2, "second")], None)
+                .unwrap();
+            assert!(!marker.exists(), "the panic marker must have been consumed");
+            (serde_json::to_vec(&facts).unwrap(), launch_count(&launches))
+        }
+    });
+    assert_eq!(launched, 2, "the panic must cost exactly one relaunch");
+    let control = bounded(move || {
+        let (mut session, paths) = tracer_fixture_session(&typefacts);
+        session.analyze().unwrap();
+        session
+            .edit(vec![nth_edit(&paths, 1, "first")], None)
+            .unwrap();
+        let facts = session
+            .edit(vec![nth_edit(&paths, 2, "second")], None)
+            .unwrap();
+        serde_json::to_vec(&facts).unwrap()
+    });
+    assert_eq!(
+        recovered, control,
+        "replayed overlays must give the facts of a session that never crashed"
+    );
+}
+
+/// A producer that panics on every launch never certifies: the edit fails
+/// within the bounded recovery attempts (no facts, so nothing is certified),
+/// and the relaunches stop.
+#[cfg(unix)]
+#[test]
+fn a_producer_that_panics_on_every_launch_fails_the_edit_without_looping() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let (wrapper, marker, launches, rearm) = panicking_service(&typefacts, "panic-always");
+    let wrapper = wrapper.to_string_lossy().into_owned();
+    let (edited, after) = bounded({
+        let launches = launches.clone();
+        move || {
+            let (mut session, paths) = tracer_fixture_session(&wrapper);
+            session.analyze().unwrap();
+            session
+                .edit(vec![nth_edit(&paths, 1, "first")], None)
+                .unwrap();
+            fs::write(&rearm, b"").unwrap();
+            fs::write(&marker, b"armed").unwrap();
+            let edited = session.edit(vec![nth_edit(&paths, 2, "second")], None);
+            let count = launch_count(&launches);
+            (edited.map(|_| ()), count)
+        }
+    });
+    assert!(edited.is_err(), "a panicking producer must not certify");
+    assert!(after > 1, "recovery must have relaunched");
+    assert!(
+        after <= 8,
+        "relaunches must be bounded, got {after} launches"
     );
 }
 
