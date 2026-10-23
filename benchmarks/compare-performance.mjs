@@ -19,8 +19,14 @@
 // ratio stayed within 0.98-1.04 while the absolute numbers on the same runs
 // swung 1.6x, so 25% headroom rejects real regressions the absolute ceilings
 // cannot see while staying an order of magnitude clear of the noise.
+//
+// A regression a decision accepted is listed in
+// benchmarks/accepted-regressions.json: one metric, a ratio ceiling, the ADR,
+// and the merge base it applies to (`--base-producer`, which the workflow
+// records with the base runtime). An entry for an older base expires by
+// itself once the change is on main.
 
-import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -52,6 +58,10 @@ const rounds = Number(argument("--rounds") ?? 5);
 const threshold = Number(
   process.env.SOLID_CHECKER_MAX_RELATIVE_REGRESSION ?? 1.25
 );
+const baseProducer = argument("--base-producer") ?? "unknown";
+const accepted = JSON.parse(
+  readFileSync(join(repository, "benchmarks/accepted-regressions.json"), "utf8")
+).entries.filter(entry => entry.baseProducer === baseProducer);
 
 function run(command, arguments_) {
   const result = spawnSync(command, arguments_, {
@@ -125,17 +135,20 @@ try {
     const base = median(samples.base[metric]);
     const head = median(samples.head[metric]);
     const ratio = head / Math.max(base, 1);
-    const verdict = ratio > threshold ? "REGRESSION" : "ok";
-    if (ratio > threshold) failed = true;
+    const exception = accepted.find(entry => entry.metric === metric);
+    const limit = exception ? Math.max(threshold, exception.maxRatio) : threshold;
+    const verdict =
+      ratio <= threshold ? "ok" : ratio <= limit ? `accepted (ADR ${exception.adr})` : "REGRESSION";
+    if (ratio > limit) failed = true;
     console.log(
-      `${metric}: base ${base.toFixed(0)} ${unit}, head ${head.toFixed(0)} ${unit}, ratio ${ratio.toFixed(3)} (limit ${threshold}) ${verdict}`
+      `${metric}: base ${base.toFixed(0)} ${unit}, head ${head.toFixed(0)} ${unit}, ratio ${ratio.toFixed(3)} (limit ${limit}) ${verdict}`
     );
     // The per-round samples, so a borderline verdict can be read against
     // the spread that produced it rather than the two medians alone.
     console.log(
       `  rounds: base [${samples.base[metric].map(value => value.toFixed(0)).join(", ")}], head [${samples.head[metric].map(value => value.toFixed(0)).join(", ")}]`
     );
-    summary.push(`| ${metric} | ${base.toFixed(0)} ${unit} | ${head.toFixed(0)} ${unit} | ${ratio.toFixed(3)} | ${threshold} | ${verdict} |`);
+    summary.push(`| ${metric} | ${base.toFixed(0)} ${unit} | ${head.toFixed(0)} ${unit} | ${ratio.toFixed(3)} | ${limit} | ${verdict} |`);
   }
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(

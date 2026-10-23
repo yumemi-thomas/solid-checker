@@ -193,6 +193,9 @@ jobs:
       # through packages/cli. `make test-cli` installs it too, but that runs
       # after this step.
       - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
+      # The oracle's TypeScript 7.1 (ADR 0361) installs apart from packages/cli;
+      # tsc-oracle.test.mjs drives it.
+      - run: bun scripts/tsc-oracle.mjs provision --dialect typescript
       - run: bun packages/cli/node_modules/vitest/vitest.mjs run --config packages/cli/vitest.config.mjs scripts/*.test.mjs
       - run: jq empty schema/*.json
       - run: make test-cli

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "metric": "incremental",
+      "maxRatio": 5,
+      "baseProducer": "go",
+      "adr": "0364",
+      "reason": "No retained analysis across updates (ADR 0364): every edit recomputes the demanded files, so the generated 1000-file one-file edit is ~4x the Go producer that still retained answers. Applies only while the merge base is a Go-era commit; once the switch (ADR 0365) is the base, the default limit applies again."
+    }
+  ]
+}

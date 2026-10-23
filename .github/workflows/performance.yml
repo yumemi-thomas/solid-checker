@@ -132,6 +132,9 @@ jobs:
           mkdir -p "$runtime"
           cp rust/target/release/solid-checker-session-bench "$runtime/bench"
           cp bin/solid-typefacts "$runtime/solid-typefacts"
+          # Which producer built this runtime; accepted-regressions.json
+          # entries are keyed on it (Go until ADR 0365 is on main).
+          if [ -f go.mod ]; then echo go; else echo rust; fi > "$runtime/producer"
 
       - name: Compare performance with the merge base
         run: |
@@ -140,7 +143,8 @@ jobs:
             --base-bench "$runtime/bench" \
             --base-typefacts "$runtime/solid-typefacts" \
             --head-bench rust/target/release/solid-checker-session-bench \
-            --head-typefacts bin/solid-typefacts
+            --head-typefacts bin/solid-typefacts \
+            --base-producer "$(cat "$runtime/producer" 2>/dev/null || echo unknown)"
 
       # This commit's own pair, saved under its sha, is what the next commit on
       # main resolves as its base. Main only: a pull request's next push
@@ -152,6 +156,9 @@ jobs:
           mkdir -p "$runtime"
           cp rust/target/release/solid-checker-session-bench "$runtime/bench"
           cp bin/solid-typefacts "$runtime/solid-typefacts"
+          # Which producer built this runtime; accepted-regressions.json
+          # entries are keyed on it (Go until ADR 0365 is on main).
+          if [ -f go.mod ]; then echo go; else echo rust; fi > "$runtime/producer"
       - name: Publish this commit's runtime as a future base
         if: github.ref == 'refs/heads/main'
         # A re-run of an already-published commit finds its own entry present.
