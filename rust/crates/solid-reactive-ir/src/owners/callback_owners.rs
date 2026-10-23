@@ -349,10 +349,23 @@ pub(crate) fn returned_callback_invocation_sites(
                     .bindings
                     .iter()
                     .filter_map(|binding| {
-                        let initializer = binding.initializer_identifier.as_ref()?;
+                        // `const alias = track` or `const alias = track.bind(x)`:
+                        // a bound function runs its target (ADR 0376 review).
+                        let initializer = match binding.initializer_identifier.as_ref() {
+                            Some(initializer) => initializer.span,
+                            None if binding.immutable
+                                && binding.shape == solid_facts::ast::BindingShape::Identifier =>
+                            {
+                                let call = candidate.ast.call_at(
+                                    candidate.ast.peel_ts_sugar_span(binding.initializer?),
+                                )?;
+                                bound_function_span(candidate, call, lookup)?
+                            }
+                            None => return None,
+                        };
                         returned_binding_reference(
                             candidate,
-                            initializer.span,
+                            initializer,
                             lookup,
                             &factory_bindings,
                             &references,
@@ -379,13 +392,17 @@ pub(crate) fn returned_callback_invocation_sites(
     let references = returned_binding_references(lookup, &factory_bindings);
     for use_file in lookup.files() {
         for outer in &use_file.ast.calls {
-            if returned_binding_reference(
-                use_file,
-                outer.callee,
-                lookup,
-                &factory_bindings,
-                &references,
-            ) {
+            // `track(fn)`, `track.call(null, fn)`, `track.bind(null)(fn)`: the
+            // same function an owner edge would name (ADR 0376 review).
+            if invoked_function_span(use_file, outer.callee, lookup).is_some_and(|invoked| {
+                returned_binding_reference(
+                    use_file,
+                    invoked,
+                    lookup,
+                    &factory_bindings,
+                    &references,
+                )
+            }) {
                 sites.push(ReturnedCallbackInvocationSite {
                     path: use_file.path.to_string(),
                     span: outer.span,

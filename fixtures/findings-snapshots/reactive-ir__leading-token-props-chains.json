@@ -110,6 +110,16 @@
       "start": 3241,
       "end": 3259,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leading-token-props-chains/App.tsx",
+      "start": 4933,
+      "end": 4943,
+      "fixes": 0
     }
   ]
 }

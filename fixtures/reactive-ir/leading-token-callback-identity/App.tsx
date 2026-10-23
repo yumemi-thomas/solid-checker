@@ -72,3 +72,40 @@ const trackCalled = createReaction(() => {
   createEffect(count, () => {});
 });
 trackCalled(() => count());
+
+// VIOLATION: `trackCall.call(null, …)` and `trackApply.apply(null, […])` are
+// the calls `trackCall(…)` and `trackApply(…)`.
+const trackCall = createReaction(() => {
+  createEffect(count, () => {});
+});
+trackCall.call(null, () => count());
+const trackApply = createReaction(() => {
+  createEffect(count, () => {});
+});
+trackApply.apply(null, [() => count()]);
+
+// VIOLATION: a standard `bind` result runs its target, called directly or
+// through a `const` alias.
+const trackBound = createReaction(() => {
+  createEffect(count, () => {});
+});
+trackBound.bind(null)(() => count());
+const trackAliased = createReaction(() => {
+  createEffect(count, () => {});
+});
+const trackAlias = trackAliased.bind(null);
+trackAlias(() => count());
+function setupBound() {
+  createEffect(count, () => {});
+}
+setupBound.bind(null)();
+
+// CLEAN: a `bind` result nothing calls runs nothing.
+const trackUnbound = createReaction(() => {
+  createEffect(count, () => {});
+});
+void trackUnbound.bind(null);
+function setupUnbound() {
+  createEffect(count, () => {});
+}
+void setupUnbound.bind(null);

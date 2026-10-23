@@ -724,12 +724,18 @@ fn discover_effect_store_parameters(ctx: &StageContext<'_>, tables: &mut SourceT
                 })
             });
             // ADR 0376: the returned value is the store when it is the store's
-            // identifier or a chain of static members rooted at it (a nested
-            // proxy); any other expression only leads with that identifier
-            // (`store.open ? "yes" : "no"`).
+            // identifier, or a chain of static members rooted at it whose value
+            // Solid wraps in a nested proxy (`returned_member_is_wrapped`); any
+            // other expression only leads with that identifier
+            // (`store.open ? "yes" : "no"`), and a primitive member
+            // (`store.title`) is no proxy.
             let Some(source_symbol) = returned
                 .and_then(|returned| {
                     super::member_chain_identifier_root(file, returned.span)
+                        .filter(|root| {
+                            *root == file.ast.peel_ts_sugar_span(returned.span)
+                                || returned_member_is_wrapped(semantic_lookup, file, returned.span)
+                        })
                         .and_then(|root| entities.value_symbol(file, root))
                         .or_else(|| {
                             (returned.value == solid_facts::ast::ReturnValueKind::Identifier)
@@ -1052,4 +1058,44 @@ fn propagate_prop_sources(ctx: &StageContext<'_>, tables: &mut SourceTables) {
             break;
         }
     }
+}
+
+/// ADR 0376 review: whether the type facts prove the member value at `span` is
+/// one Solid's store wraps in a proxy (`isWrappable`): an object on every
+/// path (no primitive, `null`, `undefined` or function), of no standard-library
+/// type but an array (a `Date`, `Map` or DOM node is returned raw). Both facts
+/// are demanded together at a returned member, so a present primitive domain
+/// with no library types means none. Premise: a project object or class
+/// instance there is neither frozen nor tagged with `Symbol.toStringTag`.
+fn returned_member_is_wrapped(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> bool {
+    let Some(entity) = lookup.entity_at(file.path.as_str(), span) else {
+        return false;
+    };
+    let object_only = entity
+        .primitive_value_domain
+        .present()
+        .is_some_and(|domain| {
+            !domain.unknown()
+                && domain.may_be_object()
+                && !(domain.may_be_string()
+                    || domain.may_be_number()
+                    || domain.may_be_boolean()
+                    || domain.may_be_big_int()
+                    || domain.may_be_symbol()
+                    || domain.may_be_null()
+                    || domain.may_be_undefined())
+        });
+    let not_callable = entity
+        .runtime_value_domain
+        .is_some_and(|domain| !domain.unknown() && !domain.may_be_callable());
+    let plain = entity.library_types.as_deref().is_none_or(|types| {
+        types
+            .iter()
+            .all(|name| matches!(name.as_ref(), "Array" | "ReadonlyArray"))
+    });
+    object_only && not_callable && plain
 }

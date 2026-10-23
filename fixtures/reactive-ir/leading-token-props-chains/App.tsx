@@ -113,3 +113,31 @@ export function App() {
     </div>
   );
 }
+
+// EFFECT APPLY MEMBERS: the store wraps only a plain object or array member
+// (`isWrappable`), so the apply's `value` is a nested proxy only then.
+// CLEAN: `record.title` is a string and `record.created` a `Date`, returned
+// raw (before: store-path SC1001 at `value.length` and `value.getTime`).
+// VIOLATION: `record.meta` is a plain object, a nested proxy.
+export function EffectMembers() {
+  const [record] = createStore({ title: "abc", created: new Date(), meta: { tags: ["a"] as string[] } });
+  createEffect(
+    () => record.title,
+    (value) => {
+      console.log(value.length);
+    },
+  );
+  createEffect(
+    () => record.created,
+    (value) => {
+      console.log(value.getTime());
+    },
+  );
+  createEffect(
+    () => record.meta,
+    (value) => {
+      console.log(value.tags);
+    },
+  );
+  return <div />;
+}

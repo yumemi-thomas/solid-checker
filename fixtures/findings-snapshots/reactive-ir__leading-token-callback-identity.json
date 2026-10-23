@@ -70,6 +70,76 @@
       "start": 2018,
       "end": 2030,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leading-token-callback-identity/App.tsx",
+      "start": 2260,
+      "end": 2272,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leading-token-callback-identity/App.tsx",
+      "start": 2322,
+      "end": 2329,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leading-token-callback-identity/App.tsx",
+      "start": 2376,
+      "end": 2388,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leading-token-callback-identity/App.tsx",
+      "start": 2441,
+      "end": 2448,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leading-token-callback-identity/App.tsx",
+      "start": 2600,
+      "end": 2612,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leading-token-callback-identity/App.tsx",
+      "start": 2719,
+      "end": 2731,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leading-token-callback-identity/App.tsx",
+      "start": 2851,
+      "end": 2863,
+      "fixes": 0
     }
   ]
 }

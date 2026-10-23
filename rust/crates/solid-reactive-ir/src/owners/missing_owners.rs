@@ -579,10 +579,9 @@ pub(crate) fn find_missing_owners(
     (requirements, settled_gates)
 }
 
-/// The function symbol a call runs, for an owner edge: an identifier callee's
-/// own symbol, or the identifier receiver of the standard library's `call` or
-/// `apply`, which run it before they return. Any other callee names no value
-/// through its leading token (ADR 0376): `f.reset()`, `f.bind(…)` and
+/// The function symbol a call runs, for an owner edge: the identifier
+/// [`invoked_function_span`] finds. Any other callee names no value through
+/// its leading token (ADR 0376): `f.reset()`, `f.bind(…)` and
 /// `f.child.call(…)` do not run `f` (ADR 0290 review round 1), and `f()()`
 /// runs what `f` returns.
 pub(super) fn call_edge_symbol<'e>(
@@ -591,27 +590,69 @@ pub(super) fn call_edge_symbol<'e>(
     entities: &'e EntitySymbols,
     lookup: &SemanticLookup<'_>,
 ) -> Option<&'e SymbolId> {
-    let callee = file.ast.peel_ts_sugar_span(call.callee);
-    let Some(member) = file.ast.member_at(callee) else {
-        return entities.value_symbol(file, call.callee);
-    };
-    let receiver = entities.value_symbol(file, member.object)?;
-    let invokes_receiver = lookup
-        .resolved_callee_call(file, call.callee)
+    entities.value_symbol(file, invoked_function_span(file, call.callee, lookup)?)
+}
+
+/// The expression whose function value a call of `callee` runs before it
+/// returns: the callee itself; the receiver of the standard library's `call`
+/// or `apply` (`f.call(…)`); or the receiver a standard `bind` call bound
+/// (`f.bind(x)(…)`, ADR 0376 review), unless the project may replace
+/// `Function.prototype.bind` (ADR 0338). Owner edges and a returned
+/// function's invocation sites read the same answer.
+pub(crate) fn invoked_function_span(
+    file: &solid_facts::FileFacts,
+    callee: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let peeled = file.ast.peel_ts_sugar_span(callee);
+    if let Some(member) = file.ast.member_at(peeled) {
+        return standard_function_method(file, callee, lookup, &["call", "apply"])
+            .then_some(member.object);
+    }
+    match file.ast.call_at(peeled) {
+        Some(bound) => bound_function_span(file, bound, lookup),
+        None => Some(callee),
+    }
+}
+
+/// The receiver `f` of a standard `f.bind(…)` call, whose result runs `f`
+/// whenever it is called: `None` for any other call, or when the project may
+/// replace `Function.prototype.bind` (ADR 0338).
+pub(crate) fn bound_function_span(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    if call.construct || lookup.function_bind_may_be_patched() {
+        return None;
+    }
+    let member = file
+        .ast
+        .member_at(file.ast.peel_ts_sugar_span(call.callee))?;
+    standard_function_method(file, call.callee, lookup, &["bind"]).then_some(member.object)
+}
+
+/// Whether the call at `callee` resolves to one of the standard library's
+/// `Function` methods `names`.
+fn standard_function_method(
+    file: &solid_facts::FileFacts,
+    callee: Span,
+    lookup: &SemanticLookup<'_>,
+    names: &[&str],
+) -> bool {
+    lookup
+        .resolved_callee_call(file, callee)
         .and_then(|resolved| resolved.declaration.as_ref())
         .is_some_and(|declaration| {
             declaration.standard_library
-                && matches!(
-                    declaration.qualified_name.as_ref(),
-                    "Function.call"
-                        | "Function.apply"
-                        | "CallableFunction.call"
-                        | "CallableFunction.apply"
-                        | "NewableFunction.call"
-                        | "NewableFunction.apply"
-                )
-        });
-    invokes_receiver.then_some(receiver)
+                && declaration
+                    .qualified_name
+                    .split_once('.')
+                    .is_some_and(|(owner, method)| {
+                        matches!(owner, "Function" | "CallableFunction" | "NewableFunction")
+                            && names.contains(&method)
+                    })
+        })
 }
 
 /// ADR 0290: report an owner requirement located in a package analyzed as
