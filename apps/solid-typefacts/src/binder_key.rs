@@ -34,7 +34,7 @@ use std::collections::HashSet;
 use tsrs_ast::{
     CheckFlags, Kind, Node, Symbol, SymbolFlags, get_source_file_of_node, is_identifier,
 };
-use tsrs_checker::types::{ObjectFlags, TypeFlags};
+use tsrs_checker::types::{ObjectFlags, Type, TypeFlags};
 use tsrs_compiler::Checker;
 use tsrs_core::P;
 
@@ -316,14 +316,16 @@ const FOREIGN_CHECK_FLAGS: CheckFlags = CheckFlags::Instantiated
 /// * Union or intersection property (`create_union_or_intersection_property`):
 ///   transient, a `Synthetic*` check flag and no `Partial` one (every
 ///   constituent declares it; no index signature or missing member adds to
-///   its type), a containing type that is a union or an intersection of plain
-///   object types (no mapped or reverse-mapped type, which would transform the
-///   declared type; no nested union, intersection, type parameter or
-///   primitive), no `target`/`mapper`, mapped origin or spread link. (Its
-///   single-constituent clone carries a `target` and is not one.)
+///   its type), a containing type that is a union or an intersection whose
+///   every constituent's own property keeps its declared type
+///   ([`constituent_preserves`]: not mapped, inherited from a mapped type,
+///   spread-merged or otherwise transformed), no `target`/`mapper`, mapped
+///   origin or spread link. (Its single-constituent clone carries a `target`
+///   and is not one.)
 /// * Spread property (`get_spread_type`): transient, both spread links, each
-///   side a declared property or an instantiation of one, no check flag the
-///   merge does not set, no other derivation link.
+///   side a declared property or an instantiation of one
+///   ([`preserves_declared_type`]), no check flag the merge does not set, no
+///   other derivation link.
 fn combination(checker: &Checker, symbol: P<Symbol>) -> Option<Combination> {
     if !symbol.flags().intersects(SymbolFlags::Transient) {
         return None;
@@ -361,22 +363,18 @@ fn combination(checker: &Checker, symbol: P<Symbol>) -> Option<Combination> {
         } else {
             return None;
         };
-        let plain = containing.types().iter().all(|constituent| {
-            constituent.flags() == TypeFlags::Object
-                && !constituent.object_flags().intersects(
-                    ObjectFlags::Mapped
-                        | ObjectFlags::ReverseMapped
-                        | ObjectFlags::EvolvingArray
-                        | ObjectFlags::InstantiationExpressionType,
-                )
-        });
-        return plain.then_some(combination);
+        let name = symbol.name();
+        let preserved = containing
+            .types()
+            .iter()
+            .all(|constituent| constituent_preserves(checker, *constituent, name));
+        return preserved.then_some(combination);
     }
     match spread {
         Some((Some(left), Some(right)))
             if containing.is_none()
-                && declared_or_instance(checker, left)
-                && declared_or_instance(checker, right) =>
+                && preserves_declared_type(checker, left)
+                && preserves_declared_type(checker, right) =>
         {
             Some(Combination::Spread)
         }
@@ -384,17 +382,74 @@ fn combination(checker: &Checker, symbol: P<Symbol>) -> Option<Combination> {
     }
 }
 
-/// A binder-level property, or a chain of instantiations or clones
-/// (`target` links only) ending at one: its type is its declaration's under a
-/// mapper, which [`closed_declaration`] proves does not change it.
-fn declared_or_instance(checker: &Checker, mut symbol: P<Symbol>) -> bool {
+/// Whether `constituent`'s own property `name` keeps its declaration's type,
+/// read without type work: a plain object type whose resolved members (as
+/// `try_resolved_property` reads them) hold `name` as a symbol that
+/// [`preserves_declared_type`], or a generic instantiation whose target
+/// declares `name` itself. Object flags alone prove nothing: an interface
+/// extending a mapped type is a plain interface whose inherited members are
+/// mapped symbols, and an object literal's member may be a spread merge.
+fn constituent_preserves(checker: &Checker, constituent: P<Type>, name: &str) -> bool {
+    if constituent.flags() != TypeFlags::Object
+        || constituent.object_flags().intersects(
+            ObjectFlags::Mapped
+                | ObjectFlags::ReverseMapped
+                | ObjectFlags::EvolvingArray
+                | ObjectFlags::InstantiationExpressionType,
+        )
+    {
+        return false;
+    }
+    if constituent
+        .object_flags_lazy()
+        .intersects(ObjectFlags::MembersResolved)
+    {
+        return constituent
+            .try_as_structured_type()
+            .and_then(|structured| structured.members())
+            .and_then(|members| members.lookup(name))
+            .is_some_and(|property| preserves_declared_type(checker, property));
+    }
+    // tsrs resolves a generic instantiation's properties one at a time,
+    // without its member table. Its property is then an instantiation of the
+    // target class or interface's own member of that name when there is one
+    // (an own member hides any base's); an inherited one is refused.
+    if !constituent
+        .object_flags()
+        .intersects(ObjectFlags::Reference)
+    {
+        return false;
+    }
+    let Some(declared) = constituent.target().and_then(|target| target.symbol()) else {
+        return false;
+    };
+    declared
+        .flags()
+        .intersects(SymbolFlags::Class | SymbolFlags::Interface)
+        && declared
+            .members()
+            .and_then(|members| members.lookup(name))
+            .is_some_and(|property| binder_root(checker, property).is_some())
+}
+
+/// A binder-level property, or a chain of instantiations (`Instantiated`
+/// with a `target` link, nothing else) ending at one. Under
+/// [`closed_declaration`] an instantiation's mapper cannot change the
+/// declared type. Any other derived symbol (mapped, reverse-mapped, spread,
+/// synthetic, a widened or `this` clone) may have another type: refused.
+fn preserves_declared_type(checker: &Checker, mut symbol: P<Symbol>) -> bool {
     for _ in 0..16 {
         if binder_root(checker, symbol).is_some() {
             return true;
         }
-        if symbol
-            .check_flags()
-            .intersects(CheckFlags::Synthetic | CheckFlags::Mapped | CheckFlags::ReverseMapped)
+        let check = symbol.check_flags();
+        if !check.intersects(CheckFlags::Instantiated)
+            || check.intersects(
+                CheckFlags::Synthetic
+                    | CheckFlags::Mapped
+                    | CheckFlags::ReverseMapped
+                    | CheckFlags::Late,
+            )
             || checker
                 .mapped_symbol_links
                 .try_get(symbol)
@@ -428,10 +483,17 @@ fn declared_or_instance(checker: &Checker, mut symbol: P<Symbol>) -> bool {
 ///   spread turns into a value);
 /// * every enclosing node is a declaration container or a type (no function,
 ///   mapped or conditional type, whose parameters it could read);
-/// * no `this` in it (polymorphic `this` is instantiated per receiver);
+/// * its type is written: a property, parameter property or method with a
+///   type annotation (a method: its return and every parameter), never
+///   inferred;
+/// * no `this` or `super` in it (polymorphic `this` is instantiated per
+///   receiver);
 /// * no identifier in it spells a type parameter of an enclosing class,
-///   interface or alias (a name match only ever refuses), and under such a
-///   parameter the declaration's type is written, not inferred.
+///   interface or alias (a name match only ever refuses).
+///
+/// A written annotation with neither resolves, in the declaration's scope,
+/// to one program-level type no container's mapper can reach (`typeof x`,
+/// `ReturnType<...>` and defaulted references name program-level entities).
 fn closed_declaration(declaration: P<Node>) -> bool {
     let Some(file) = get_source_file_of_node(declaration) else {
         return false;
@@ -505,12 +567,28 @@ fn closed_declaration(declaration: P<Node>) -> bool {
         }
         ancestor = node.parent();
     }
-    if !parameters.is_empty() && declaration.type_node().is_none() {
+    // The type must be written: an inferred one (an initializer, a method's
+    // body or unannotated parameters) can read `super`, a method returning
+    // `this`, or another declaration's inferred type, which no syntax check
+    // bounds.
+    let written = match declaration.kind() {
+        Kind::MethodSignature | Kind::MethodDeclaration => {
+            declaration.type_node().is_some()
+                && declaration
+                    .parameters()
+                    .iter()
+                    .all(|parameter| parameter.type_node().is_some())
+        }
+        _ => declaration.type_node().is_some(),
+    };
+    if !written {
         return false;
     }
     fn open(node: P<Node>, parameters: &[&'static str]) -> bool {
-        if matches!(node.kind(), Kind::ThisType | Kind::ThisKeyword)
-            || (is_identifier(node) && parameters.contains(&node.text()))
+        if matches!(
+            node.kind(),
+            Kind::ThisType | Kind::ThisKeyword | Kind::SuperKeyword
+        ) || (is_identifier(node) && parameters.contains(&node.text()))
         {
             return true;
         }

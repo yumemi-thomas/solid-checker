@@ -412,6 +412,141 @@ export const e = cd.v\n";
     }
 }
 
+/// PR #75 review: properties of different types never share a `Set` id.
+/// Each pair below has the same origins; the second property's type differs
+/// (inherited mapped members, a nested spread, an inferred polymorphic
+/// `this`), so it keeps a counter while the first keeps its key.
+#[test]
+fn transformed_or_inferred_origins_never_share_a_set_id() {
+    let source = "interface P { v: number }\n\
+interface Q { v: string }\n\
+type Wrap<T> = { [K in keyof T]: () => T[K] }\n\
+interface WP extends Wrap<P> {}\n\
+interface WQ extends Wrap<Q> {}\n\
+declare const plain: P | Q\n\
+declare const wrapped: WP | WQ\n\
+declare const iplain: P & Q\n\
+declare const iwrapped: WP & WQ\n\
+interface S { s: number }\n\
+interface T2 { s?: string }\n\
+interface U { s: boolean }\n\
+declare const p: S\n\
+declare const q: T2\n\
+const spread = { ...p, ...q }\n\
+declare const three: S | T2 | U\n\
+declare const nested: typeof spread | U\n\
+class Base { m() { return this; } }\n\
+class A extends Base { v = super.m(); n() { return super.m(); } }\n\
+class B extends Base { v = super.m(); n() { return super.m(); } }\n\
+class A1 extends A { extraA = 1; }\n\
+class B1 extends B { extraB = 2; }\n\
+declare const ab: A | B\n\
+declare const ab1: A1 | B1\n\
+class C { w: number = 1; k(x: number): number { return x; } }\n\
+class D { w: number = 2; k(x: number): number { return x; } }\n\
+class C1 extends C { extraC = 1; }\n\
+class D1 extends D { extraD = 2; }\n\
+declare const cd: C | D\n\
+declare const cd1: C1 | D1\n\
+class E { u = 1; j(x: number) { return x; } }\n\
+class F { u = 2; j(x: number) { return x; } }\n\
+declare const ef: E | F\n\
+export const r = [plain.v, wrapped.v, iplain.v, iwrapped.v, three.s, nested.s, ab.v, ab1.v, ab.n, ab1.n, cd.w, cd1.w, cd.k, cd1.k, ef.u, ef.j]\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", source)]);
+    let path = scratch.path("a.ts");
+    let ctx = Context::new();
+    let mut project = scratch.open();
+    let mut id = |needle: &str| {
+        let mut at = find(&path, source, needle);
+        at.start_byte += u64::try_from(needle.len()).unwrap() - 1;
+        at.end_byte = at.start_byte + 1;
+        project.symbol_at(&ctx, &at).unwrap()
+    };
+    let hashed = |id: &str| id.starts_with("symbol:h:");
+    // The plain readers keep their keys (each case proves something).
+    for keyed in [
+        "plain.v", "iplain.v", "three.s", "cd.w", "cd.k", "cd1.w", "cd1.k",
+    ] {
+        assert!(hashed(&id(keyed)), "{keyed}");
+    }
+    // Written types read through subclasses do not change: one id.
+    assert_eq!(id("cd.w"), id("cd1.w"));
+    assert_eq!(id("cd.k"), id("cd1.k"));
+    // A transformed or inferred member keeps a counter, so it shares nothing;
+    // so does an inferred one whose type happens to be fixed (`u = 1`, a
+    // method without a return annotation): only written types qualify.
+    for open in [
+        "wrapped.v",
+        "iwrapped.v",
+        "nested.s",
+        "ab.v",
+        "ab1.v",
+        "ab.n",
+        "ab1.n",
+        "ef.u",
+        "ef.j",
+    ] {
+        let got = id(open);
+        assert!(!hashed(&got), "{open}: {got}");
+    }
+}
+
+/// PR #75 review sweep: a written annotation resolves, in its declaration's
+/// scope, to one program-level type, so `typeof` another declaration,
+/// `ReturnType<...>`, a defaulted generic and a member added by a global or
+/// module augmentation are keyed and read the same type through every
+/// container; only an annotation reading the container's type parameter (an
+/// `Array<T>` augmentation's `T`) is refused.
+#[test]
+fn annotations_reading_other_declarations_keep_one_type_per_key() {
+    let lib = "export interface M { mv: number }\nexport interface N { mv: number }\n";
+    let source = "import type { M, N } from \"./lib\"\n\
+declare module \"./lib\" { interface M { added: string } interface N { added: string } }\n\
+declare global { interface Array<T> { gw: number; gt: T } }\n\
+declare const seed: { s: number }\n\
+declare function make(): boolean\n\
+interface Dflt<X = string> { d: number }\n\
+interface G1 { q: typeof seed; r: ReturnType<typeof make>; e: Dflt }\n\
+interface G2 { q: typeof seed; r: ReturnType<typeof make>; e: Dflt<number> }\n\
+interface G1b extends G1 { more: 1 }\n\
+declare const g: G1 | G2\n\
+declare const gb: G1b | G2\n\
+declare const arrs: number[] | string[]\n\
+declare const arrs2: boolean[] | string[]\n\
+declare const mn: M | N\n\
+export const r = [g.q, gb.q, g.r, gb.r, g.e, gb.e, arrs.gw, arrs2.gw, arrs.gt, mn.added, mn.mv]\n";
+    let scratch = Scratch::new(&[
+        ("tsconfig.json", SMALL_CONFIG),
+        ("lib.ts", lib),
+        ("a.ts", source),
+    ]);
+    let path = scratch.path("a.ts");
+    let ctx = Context::new();
+    let mut project = scratch.open();
+    let mut id = |needle: &str| {
+        let mut at = find(&path, source, needle);
+        at.start_byte += u64::try_from(needle.len()).unwrap() - 1;
+        at.end_byte = at.start_byte + 1;
+        project.symbol_at(&ctx, &at).unwrap()
+    };
+    let hashed = |id: &str| id.starts_with("symbol:h:");
+    // `number[] | string[]` reads `gw` through two instantiations of one
+    // member with one type: the checker's merged-instantiation clone (a
+    // counter, ADR 0366), not a union property.
+    let (a, b) = (id("arrs.gw"), id("arrs2.gw"));
+    assert!(!hashed(&a) && !hashed(&b), "{a} {b}");
+    for (left, right) in [("g.q", "gb.q"), ("g.r", "gb.r"), ("g.e", "gb.e")] {
+        let (a, b) = (id(left), id(right));
+        assert!(hashed(&a), "{left}: {a}");
+        assert_eq!(a, b, "{left} / {right}");
+    }
+    for keyed in ["mn.added", "mn.mv"] {
+        assert!(hashed(&id(keyed)), "{keyed}");
+    }
+    let got = id("arrs.gt");
+    assert!(!hashed(&got), "arrs.gt: {got}");
+}
+
 /// A `Set` id names a checker-made property, which no position re-resolves:
 /// after a release it fails closed until the generation mints it again (to
 /// the same id), and no retained binder-level answer may hold it.

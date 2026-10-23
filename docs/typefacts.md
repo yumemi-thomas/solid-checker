@@ -60,7 +60,8 @@ name, a module export by declaring path and name, else its minimum declaration
 by path and offset, with the checker's private and unique-symbol counters
 stripped from names. Whatever symbol asks first, the ID is the same. A union,
 intersection or spread property hashes its combination, name and origins'
-binder keys when those fix its type (ADR 0371). Any other derived symbol (an
+binder keys when those fix its type: written annotations reading no `this` or
+type parameter, through constituents that do not transform them (ADR 0371). Any other derived symbol (an
 instantiation, a `this`-type or widened copy, a mapped property) and any symbol
 not proven binder-level get counters (`symbol:<gen>:<n>`). A
 table build discards every type-derived answer, so none is reused inside a
