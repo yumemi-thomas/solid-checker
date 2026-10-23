@@ -4,9 +4,12 @@
 //!
 //! A binder-level symbol's wire id is a pure function of the program (ADR
 //! 0366): the hash of its [`Key`] (`binder_key.rs`), which does not depend on
-//! which symbol asked first, on the checker's history, or on file order. A
-//! symbol the checker derived (an instantiation, a transient clone, a mapped
-//! or spread property) or whose binder-ness cannot be proven gets a
+//! which symbol asked first, on the checker's history, or on file order. So is
+//! a multi-origin property's (a union, intersection or spread property whose
+//! origins all have binder keys and fix its type, ADR 0371): the hash of its
+//! `Set` key. Any
+//! other symbol the checker derived (an instantiation, a transient clone, a
+//! mapped property) or whose binder-ness cannot be proven gets a
 //! generation-scoped counter id (`symbol:<generation>:<n>`) that means nothing
 //! outside the generation that issued it.
 //!
@@ -21,7 +24,7 @@
 //! and `exported_by_ref`.
 //!
 
-use crate::binder_key::{Key, binder_key, binder_root, global_symbol, intrinsic_symbol};
+use crate::binder_key::{Key, binder_key, binder_root, global_symbol, intrinsic_symbol, set_key};
 use crate::durable::{DurableRef, minimum_declaration_ref};
 use crate::gocompat::clean;
 use crate::model::SymbolId;
@@ -74,7 +77,9 @@ pub struct Identities {
     /// Id to the symbol it names, so a counter (and a binder id) answers
     /// without re-resolving. Not a claim table: several symbols may map to one
     /// binder id (a pre-merge symbol and its merged symbol), and the entry is
-    /// always the binder-level root.
+    /// always the binder-level root. Several multi-origin properties may share
+    /// a `Set` id (one per containing type); the entry is the first minted,
+    /// which only answers what all of them share (declarations, references).
     symbols_by_id: HashMap<SymbolId, P<Symbol>>,
     /// Go: `durableRefs`. Maps a binder id back to its key so the symbol can be
     /// re-resolved lazily after a release.
@@ -139,10 +144,18 @@ impl Identities {
         &self.exported_by_ref
     }
 
-    /// The key a binder id was minted from in this generation.
+    /// The key a binder id was minted from in this generation. `None` for a
+    /// counter and for a multi-origin property's `Set` id: no binder-level
+    /// answer may hold one across an update (ADR 0369, 0371).
     #[must_use]
     pub(crate) fn key_of_id(&self, id: &SymbolId) -> Option<&Arc<Key>> {
-        self.keys.get(id)
+        self.keys.get(id).filter(|key| key.is_binder())
+    }
+
+    /// Whether `id` is a multi-origin property's `Set` id (ADR 0371).
+    #[must_use]
+    pub(crate) fn is_set_id(&self, id: &SymbolId) -> bool {
+        self.keys.get(id).is_some_and(|key| !key.is_binder())
     }
 
     /// Makes a retained binder id answerable in this generation without
@@ -150,6 +163,9 @@ impl Identities {
     /// does for an id minted before a release. `false` when the id already
     /// names another key (a collision): the caller must not reuse it.
     pub(crate) fn register_key(&mut self, id: &SymbolId, key: &Arc<Key>) -> bool {
+        if !key.is_binder() {
+            return false;
+        }
         match self.keys.get(id) {
             Some(held) => held == key,
             None => {
@@ -273,14 +289,37 @@ impl Env<'_> {
         })
     }
 
-    /// Go: `idFor`. A binder-level symbol's id is the hash of its key; any
-    /// other symbol takes the next counter of the generation.
+    /// The `Set` key of a multi-origin property (ADR 0371).
+    fn set_key_of(&self, symbol: P<Symbol>) -> Option<Key> {
+        let exported = &self.ids.exported_by_ref;
+        set_key(self.checker, symbol, |reference| {
+            exported.contains_key(reference)
+        })
+    }
+
+    /// Go: `idFor`. A binder-level symbol's id is the hash of its key, a
+    /// multi-origin property's the hash of its `Set` key; any other symbol
+    /// takes the next counter of the generation.
     pub fn id_for(&mut self, symbol: P<Symbol>) -> SymbolId {
         let address = symbol.addr();
         if let Some(id) = self.ids.ids_by_symbol.get(&address) {
             return Arc::clone(id);
         }
-        if let Some((key, root)) = self.key_of(symbol) {
+        if let Some(key) = self.set_key_of(symbol) {
+            let id: SymbolId = Arc::from(key.id().as_str());
+            if self.ids.keys.get(&id).is_none_or(|held| **held == key) {
+                self.ids
+                    .keys
+                    .entry(Arc::clone(&id))
+                    .or_insert_with(|| Arc::new(key));
+                self.ids
+                    .symbols_by_id
+                    .entry(Arc::clone(&id))
+                    .or_insert(symbol);
+                self.ids.ids_by_symbol.insert(address, Arc::clone(&id));
+                return id;
+            }
+        } else if let Some((key, root)) = self.key_of(symbol) {
             let id: SymbolId = Arc::from(key.id().as_str());
             // Two keys spelling one id (a 96-bit collision) would conflate two
             // symbols: the later one fails closed to a counter.
@@ -336,6 +375,10 @@ impl Env<'_> {
             Key::Decl(reference) | Key::Export(reference) => self.symbol_at_reference(reference)?,
             Key::Global(name) => global_symbol(self.checker, name)?,
             Key::Intrinsic(which) => intrinsic_symbol(self.checker, *which),
+            // A multi-origin property is made per containing type: no
+            // position names it, so after a release it fails closed, like a
+            // counter, until this generation mints it again.
+            Key::Set { .. } => return None,
         };
         let (found, root) = self.key_of(candidate)?;
         if found != *key {
