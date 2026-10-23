@@ -2068,9 +2068,8 @@ fn a_worker_panic_during_the_update_fails_the_edit_and_the_session_recovers() {
     assert!(consumed, "the panic marker must have been consumed");
     let error = edited.expect_err("an edit whose update panicked must not succeed");
     assert!(error.to_string().contains("producer-panic"), "got: {error}");
-    assert_eq!(
+    assert!(
         recovered.expect("the session must recover by relaunch and replay"),
-        true,
         "recovery must replay the pre-edit state"
     );
 }
