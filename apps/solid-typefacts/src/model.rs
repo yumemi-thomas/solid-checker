@@ -2,7 +2,6 @@
 //! the symbol-identity helpers of `semantic_retained.go`). The fact types
 //! themselves (`EntityFact`, `SymbolFact`, ...) are the client crate's.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 use typefacts::v3::EntityDemand;
 use typefacts::{EntityFact, Location, PrimitiveValueDomain, SymbolClaim, SymbolFact};
@@ -18,29 +17,16 @@ pub struct SemanticDemandRun<'a> {
     pub demands: &'a [EntityDemand],
 }
 
-/// The batch-wide state that makes a recomputed subset equivalent to resolving
-/// the complete demand closure (Go: `SemanticScope`). Type descriptors are not
-/// part of it: a descriptor is a function of its demanded location alone
-/// (ADR 0367), never shared from another entity of the same symbol.
-#[derive(Clone, Copy, Debug)]
-pub struct SemanticScope<'a> {
-    pub suppression: &'a HashSet<SymbolId>,
-}
-
 /// One input run's aligned semantic answer (Go: `SemanticDemandRunResult`).
-/// `dependencies` excludes the run's own path and `durable` covers every
-/// symbol identity embedded anywhere in the result.
+/// `durable` covers every symbol identity embedded anywhere in the result.
 ///
-/// `entities` and `structural` are index-aligned with the run's demands. In
-/// an entity, `symbol_claim` carries what Go spreads over `SymbolCoversSpan`
-/// and `SymbolUnresolved`: with a symbol, `Covering` is "covers span" and
-/// anything else is the partial claim; without one, `Unresolved` is
-/// "symbol unresolved".
+/// `entities` is index-aligned with the run's demands. In an entity,
+/// `symbol_claim` carries what Go spreads over `SymbolCoversSpan` and
+/// `SymbolUnresolved`: with a symbol, `Covering` is "covers span" and anything
+/// else is the partial claim; without one, `Unresolved` is "symbol unresolved".
 #[derive(Clone, Debug, Default)]
 pub struct SemanticDemandRunResult {
     pub entities: Vec<EntityFact>,
-    pub structural: Vec<SymbolId>,
-    pub dependencies: Vec<String>,
     pub durable: bool,
 }
 

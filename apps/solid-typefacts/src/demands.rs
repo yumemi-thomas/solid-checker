@@ -32,7 +32,6 @@ pub struct DemandGroup {
     pub path: String,
     pub demands: Option<Arc<[EntityDemand]>>,
     pub compact: Option<CompactBacking>,
-    pub hash: u64,
     pub contribution: Option<ContributionRef>,
 }
 

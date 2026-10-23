@@ -713,7 +713,7 @@ impl Project {
     }
 
     /// Go: the memo half of `Update`: every update clears it, because a
-    /// memoized fact may embed a claim-order id or read another file.
+    /// memoized fact may embed a generation-scoped id or read another file.
     pub(crate) fn evict_source_memo(&mut self) {
         self.source_memo.clear();
     }

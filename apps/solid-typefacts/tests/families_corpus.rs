@@ -13,9 +13,9 @@
 
 use solid_typefacts::backend::ClosureBackend;
 use solid_typefacts::context::Context;
-use solid_typefacts::model::{SemanticDemandRun, SemanticScope};
+use solid_typefacts::model::SemanticDemandRun;
 use solid_typefacts::project::Project;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use typefacts::Location;
 use typefacts::v3::EntityDemand;
@@ -141,10 +141,6 @@ fn every_family(location: Location) -> EntityDemand {
 fn every_family_is_answered_and_none_is_counted_unavailable_on_the_corpus() {
     assert!(solid_typefacts::semantic_runs::UNPORTED.is_empty());
     let ctx = Context::new();
-    let suppression = HashSet::new();
-    let scope = SemanticScope {
-        suppression: &suppression,
-    };
     let mut answered: BTreeMap<&'static str, u64> = BTreeMap::new();
     let (mut opened, mut demanded) = (0usize, 0usize);
     for config in projects() {
@@ -190,7 +186,6 @@ fn every_family_is_answered_and_none_is_counted_unavailable_on_the_corpus() {
                         path: &path,
                         demands: &demands,
                     }],
-                    &scope,
                 )
                 .unwrap_or_else(|error| panic!("{config} {path}: {error}"));
             for entity in &results[0].entities {

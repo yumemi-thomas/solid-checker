@@ -14,9 +14,6 @@
 //! * a symbol's id encodes its location (`symbol:h:<path>:<start>:<end>`), so
 //!   the fake answers `declarations` and `references_batch` with no state
 //!   while the ids still count as durable (ADR 0001);
-//! * `semantic_demand_runs` ignores the scope, as the Go double does:
-//!   honouring it would be a second implementation of a rule the compiler
-//!   adapter owns;
 //! * `changed_references` reports an exact, empty delta unless told otherwise.
 
 use crate::backend::{
@@ -25,21 +22,12 @@ use crate::backend::{
 };
 use crate::context::Context;
 use crate::gocompat::clean;
-use crate::model::{
-    SemanticDemandRun, SemanticDemandRunResult, SemanticScope, SymbolId, blank_entity,
-};
+use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SymbolId, blank_entity};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 use typefacts::producer::source_digest;
 use typefacts::v3::{FileChange, ModuleGraphRequest, SourceFile};
 use typefacts::{AsyncFunctionFact, Declaration, Location, SourceDigest, SymbolClaim};
-
-/// One `semantic_demand_runs` call as the fake saw it.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct ScopeSeen {
-    pub paths: Vec<String>,
-    pub suppression: std::collections::BTreeSet<String>,
-}
 
 pub struct FakeBackend {
     /// The program's files by path; `update` edits them.
@@ -58,19 +46,13 @@ pub struct FakeBackend {
     pub reference_requests: Arc<Mutex<Vec<Vec<SymbolId>>>>,
     /// Makes `semantic_demand_runs` fail with this message.
     pub fail_semantic: Option<String>,
-    /// Replaces the dependencies of the first result of the next
-    /// `semantic_demand_runs` call, once.
-    pub tamper_dependencies: Option<Vec<String>>,
+    /// Makes only the next `semantic_demand_runs` call fail with this message.
+    pub fail_semantic_once: Option<String>,
     /// Per-location symbol ids replacing the minted ones, so tests can make
     /// two files' demands reach one symbol.
     pub symbol_overrides: HashMap<Location, SymbolId>,
     /// Whether results claim every identity durable (Go: `Durable`).
     pub durable: bool,
-    /// Dependency paths a run reports, by the run's path.
-    pub dependencies: HashMap<String, Vec<String>>,
-    /// What each `semantic_demand_runs` call was asked: the run paths and the
-    /// suppression union and descriptor seed of its scope.
-    pub scopes_seen: Arc<Mutex<Vec<ScopeSeen>>>,
     /// Alias edges; `next_aliases` replaces them at the next `update`.
     pub aliases: HashMap<SymbolId, SymbolId>,
     pub next_aliases: Option<HashMap<SymbolId, SymbolId>>,
@@ -151,11 +133,9 @@ impl FakeBackend {
             reference_calls: Arc::default(),
             reference_requests: Arc::default(),
             fail_semantic: None,
-            tamper_dependencies: None,
+            fail_semantic_once: None,
             symbol_overrides: HashMap::new(),
             durable: true,
-            dependencies: HashMap::new(),
-            scopes_seen: Arc::default(),
             aliases: HashMap::new(),
             next_aliases: None,
             async_facts: Vec::new(),
@@ -263,29 +243,25 @@ impl ClosureBackend for FakeBackend {
         &mut self,
         _: &Context,
         runs: &[SemanticDemandRun<'_>],
-        scope: &SemanticScope<'_>,
     ) -> Result<Vec<SemanticDemandRunResult>, BackendError> {
         *self.semantic_calls.lock().unwrap() += 1;
-        self.scopes_seen.lock().unwrap().push(ScopeSeen {
-            paths: runs.iter().map(|run| run.path.to_owned()).collect(),
-            suppression: scope.suppression.iter().map(ToString::to_string).collect(),
-        });
+        if let Some(message) = self.fail_semantic_once.take() {
+            return Err(BackendError(message));
+        }
         if let Some(message) = &self.fail_semantic {
             return Err(BackendError(message.clone()));
         }
-        let mut results: Vec<SemanticDemandRunResult> = runs
+        let results: Vec<SemanticDemandRunResult> = runs
             .iter()
             .map(|run| {
                 let mut result = SemanticDemandRunResult {
                     durable: self.durable,
-                    dependencies: self.dependencies.get(run.path).cloned().unwrap_or_default(),
                     ..SemanticDemandRunResult::default()
                 };
                 for demand in run.demands {
                     let mut location = demand.location.clone();
                     location.path = clean(&location.path).into();
                     let mut entity = blank_entity(location.clone());
-                    let mut structural: SymbolId = "".into();
                     if demand.symbol {
                         entity.symbol = self
                             .symbol_overrides
@@ -294,20 +270,11 @@ impl ClosureBackend for FakeBackend {
                             .unwrap_or_else(|| symbol_id(&location));
                         entity.symbol_claim = SymbolClaim::Partial;
                     }
-                    if demand.structural_accessor {
-                        structural = entity.symbol.clone();
-                    }
                     result.entities.push(entity);
-                    result.structural.push(structural);
                 }
                 result
             })
             .collect();
-        if let (Some(dependencies), Some(first)) =
-            (self.tamper_dependencies.take(), results.first_mut())
-        {
-            first.dependencies = dependencies;
-        }
         Ok(results)
     }
 

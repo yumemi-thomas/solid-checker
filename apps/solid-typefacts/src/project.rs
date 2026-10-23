@@ -31,9 +31,7 @@ use crate::import_graph::{
     ImportGraph, affected_from_reverse_deps, every_source_path, global_scope_change,
 };
 use crate::inputs::ProgramInputs;
-use crate::model::{
-    SemanticDemandRun, SemanticDemandRunResult, SemanticScope, SymbolId, blank_symbol,
-};
+use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SymbolId, blank_symbol};
 use crate::module_graph::{normalize_type_script_path, type_script_path_dir};
 use crate::nodes::node_at;
 use crate::overlay::OverlayFs;
@@ -640,12 +638,11 @@ impl ClosureBackend for Project {
         &mut self,
         ctx: &Context,
         runs: &[SemanticDemandRun<'_>],
-        scope: &SemanticScope<'_>,
     ) -> Result<Vec<SemanticDemandRunResult>, BackendError> {
         check(ctx)?;
         let mut unavailable = std::mem::take(&mut self.unavailable);
         let outcome = self.with_env(|env, references| {
-            crate::semantic_runs::run(ctx, env, references, runs, scope, &mut unavailable)
+            crate::semantic_runs::run(ctx, env, references, runs, &mut unavailable)
         });
         for (family, count) in unavailable.0 {
             *self.unavailable.0.entry(family).or_default() += count;
@@ -713,19 +710,12 @@ impl ClosureBackend for Project {
         })
     }
 
-    /// Go: `ChangedReferences`: exposes the reference index's
-    /// generation-stable invalidation set. It never consumes the delta, so
-    /// cancelled analyses and retries in the same generation observe the same
-    /// answer.
+    /// Go: `ChangedReferences`. The index keeps no delta between tables (every
+    /// table rebuilds it, ADR 0364), so the answer is always "not exact".
     fn changed_references(&mut self, ctx: &Context) -> Result<(Vec<SymbolId>, bool), BackendError> {
         check(ctx)?;
-        self.with_env(|env, references| {
-            references.ensure(env);
-            match references.changed() {
-                Some(ids) => (ids, true),
-                None => (Vec::new(), false),
-            }
-        })
+        self.with_env(|env, references| references.ensure(env))?;
+        Ok((Vec::new(), false))
     }
 
     /// Go: `ReleaseAnalysisState`: drops checker-expanded query state once its

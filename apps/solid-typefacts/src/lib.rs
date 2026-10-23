@@ -42,7 +42,6 @@ pub mod serve;
 pub mod session;
 pub mod shape;
 pub mod source_facts;
-pub mod symbols;
 pub mod trace;
 pub mod type_facts;
 pub mod unsafe_boundary;

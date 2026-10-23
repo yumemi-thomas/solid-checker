@@ -5,7 +5,6 @@
 mod binder_ids;
 mod binder_retention;
 mod canonical_assembly;
-mod closure_order;
 mod contributions;
 mod entity_projection;
 mod generation;
@@ -29,7 +28,6 @@ mod shape_facts;
 mod source_facts;
 mod symbol_facts;
 mod symbol_integration;
-mod symbols;
 mod type_facts;
 
 use crate::context::Context;

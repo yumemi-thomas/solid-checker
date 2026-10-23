@@ -100,7 +100,7 @@ pub(crate) fn relative(root: &Path, path: &str) -> Option<String> {
 }
 
 use crate::backend::ClosureBackend;
-use crate::model::{SemanticDemandRun, SemanticScope};
+use crate::model::SemanticDemandRun;
 use typefacts::v3::EntityDemand;
 use typefacts::{EntityFact, Location};
 
@@ -147,13 +147,9 @@ pub(crate) fn entities(
     path: &str,
     demands: &[EntityDemand],
 ) -> Vec<EntityFact> {
-    let suppression = Default::default();
-    let scope = SemanticScope {
-        suppression: &suppression,
-    };
     let run = SemanticDemandRun { path, demands };
     let mut results = project
-        .semantic_demand_runs(&Context::new(), &[run], &scope)
+        .semantic_demand_runs(&Context::new(), &[run])
         .unwrap();
     results.remove(0).entities
 }

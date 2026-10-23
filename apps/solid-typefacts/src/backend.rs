@@ -22,7 +22,7 @@
 //! there; it need not be `Send` (tsrs state is thread-local).
 
 use crate::context::Context;
-use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SemanticScope, SymbolId};
+use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SymbolId};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -152,14 +152,11 @@ pub trait ClosureBackend {
 
     /// Resolves canonically ordered per-file runs of demands (Go:
     /// `SemanticDemandRuns`, `tsgo/semantic_runs.go`). Results are
-    /// index-aligned with `runs` and with each run's demands. `scope` carries
-    /// the structural-accessor symbols from outside the subset, so a
-    /// recomputed subset matches a whole-batch run.
+    /// index-aligned with `runs` and with each run's demands.
     fn semantic_demand_runs(
         &mut self,
         ctx: &Context,
         runs: &[SemanticDemandRun<'_>],
-        scope: &SemanticScope<'_>,
     ) -> Result<Vec<SemanticDemandRunResult>, BackendError>;
 
     /// The async-function facts relevant at the requested locations (Go:
