@@ -717,3 +717,64 @@ fn an_unread_exports_value_or_a_self_reference_does_not_hide_a_cycle() {
     );
     std::fs::remove_dir_all(&directory).unwrap();
 }
+
+/// ADR 0368: the generated program lists the project's files in the order
+/// given (TypeScript's root order first), then the closure: listed by path,
+/// a closure file came first and TypeScript reported call errors `tsc` does
+/// not report on the project.
+#[test]
+fn the_generated_program_lists_the_project_roots_first_in_their_order() {
+    let directory = std::env::temp_dir().join(format!(
+        "solid-checker-source-root-order-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(directory.join("src")).unwrap();
+    // The closure is named by canonical path (`/var` is `/private/var` on macOS).
+    let directory = directory.canonicalize().unwrap();
+    let package = directory.join("node_modules/aaa");
+    std::fs::create_dir_all(&package).unwrap();
+    std::fs::write(package.join("package.json"), r#"{"module":"index.js"}"#).unwrap();
+    std::fs::write(package.join("index.js"), "export const x = 1;").unwrap();
+    for name in ["src/main.ts", "src/app.ts", "src/shared.d.ts"] {
+        std::fs::write(directory.join(name), "export {};").unwrap();
+    }
+    let tsconfig = directory.join("tsconfig.json");
+    std::fs::write(&tsconfig, "{}").unwrap();
+    let modules = [
+        "src/main.ts",
+        "src/app.ts",
+        "node_modules/aaa/index.d.ts",
+        "src/shared.d.ts",
+    ]
+    .map(|name| directory.join(name));
+    let mut notes = super::SelectionNotes::default();
+    let prepared = super::prepare_program(
+        &tsconfig,
+        &["aaa".into()],
+        &host(&["browser", "development"]),
+        &[],
+        &modules,
+        &BTreeSet::new(),
+        &[],
+        &|_, _| None,
+        &mut notes,
+    )
+    .unwrap()
+    .unwrap();
+    let document: serde_json::Value = serde_json::from_slice(&prepared.document).unwrap();
+    let files = document["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|file| file.as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let expected = [
+        "src/main.ts",
+        "src/app.ts",
+        "src/shared.d.ts",
+        "node_modules/aaa/index.js",
+    ]
+    .map(|name| directory.join(name).to_string_lossy().into_owned());
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert_eq!(files, expected);
+}

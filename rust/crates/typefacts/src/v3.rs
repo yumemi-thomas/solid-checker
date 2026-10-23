@@ -70,7 +70,7 @@ pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 19] = [
 ];
 
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:6d2154ba04be45cdd241d78d3b94a32d0ec5c57ce264fe97e1b3ed979e3d0bfd";
+    "sha256:64805adaa7b2e0a0542806cdb4bf11408c450b3af7894a53ed7adbc8f0c82946";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -478,7 +478,9 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // Protocol 79 carries the independent default-library binding in Wire v20.
 // Protocol 80 carries the span-covering symbol flag in Wire v21.
 // Protocol 81 carries Wire v22, which keeps v21's rows under a new number.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 81;
+// Protocol 82 (ADR 0368) adds `ModuleFact.root`; a protocol-81 consumer
+// decodes with `deny_unknown_fields` and would reject it.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 82;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

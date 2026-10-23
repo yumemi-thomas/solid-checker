@@ -269,6 +269,7 @@ mod encode_tests {
         response.modules = vec![
             ModuleFact {
                 path: "/p/a.ts".into(),
+                root: None,
                 declaration_file: true,
                 format: ModuleFormat::Esm,
                 project_reference: Some(ProjectReferenceMapping {
@@ -279,6 +280,7 @@ mod encode_tests {
             },
             ModuleFact {
                 path: "/p/b.ts".into(),
+                root: None,
                 declaration_file: false,
                 format: ModuleFormat::Unknown,
                 project_reference: None,

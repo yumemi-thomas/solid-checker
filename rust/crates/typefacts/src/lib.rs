@@ -1477,6 +1477,13 @@ pub struct ModuleFact {
     /// reached through a symlink this is the realpath, matching
     /// [`ModuleImportFact::resolved_path`].
     pub path: Arc<str>,
+    /// The file's position among the configuration's root files
+    /// (`ParsedCommandLine.fileNames`, in TypeScript's own order), `None` for
+    /// a file the program reached otherwise. A program composed from this one
+    /// lists its roots in this order, so TypeScript builds its files in the
+    /// order `tsc` does (ADR 0368).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root: Option<u32>,
     #[serde(default, skip_serializing_if = "module_format_is_unknown")]
     pub format: ModuleFormat,
     #[serde(default, skip_serializing_if = "is_false")]

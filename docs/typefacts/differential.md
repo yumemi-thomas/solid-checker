@@ -19,7 +19,10 @@ Rust versions, such as a change of symbol ids.
   the allow-list stay valid.
 
 To compare two Rust builds, point the reference at the older binary (build it
-from the older commit; `make typefacts-differential` records through it).
+from the older commit; `make typefacts-differential` records through it). The
+producer's differential tests skip, with a NOTICE, a reference whose handshake
+names another protocol or schema: since protocol 82 (ADR 0368) that includes the
+archived Go producer (protocol 81).
 
 Pieces: `scripts/typefacts-differential.mjs` (CLI), `scripts/lib/typefacts-differential.mjs`
 (normalise, diff, report, allow-list; unit-tested without a producer),

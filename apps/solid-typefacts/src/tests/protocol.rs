@@ -13,8 +13,8 @@ use typefacts::v3::{
 #[test]
 fn handshake_declares_the_operation_sets_protocol() {
     assert_eq!(
-        TYPE_FACTS_HANDSHAKE_PROTOCOL, 81,
-        "Wire v22 keeps the entity symbol coverage of v21"
+        TYPE_FACTS_HANDSHAKE_PROTOCOL, 82,
+        "protocol 82 adds ModuleFact.root (ADR 0368)"
     );
 }
 

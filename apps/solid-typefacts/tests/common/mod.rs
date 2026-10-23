@@ -75,8 +75,52 @@ pub fn frames(mut bytes: &[u8]) -> Vec<Vec<u8>> {
 /// (`$TSGO_ARCHIVE/bin/solid-typefacts-go`, default
 /// `~/Documents/Github/sc-worktrees.noindex/tsgo-archive`). Without one the
 /// differential tests print a NOTICE and skip; they are an acceptance tool for
-/// producer changes, not a gate (docs/typefacts/differential.md).
+/// producer changes, not a gate (docs/typefacts/differential.md). A reference
+/// whose startup handshake names another protocol or schema (the archived Go
+/// producer speaks protocol 81) cannot answer this client either: same NOTICE.
 pub fn reference_binary(what: &str) -> Option<std::path::PathBuf> {
+    let path = reference_path(what)?;
+    match reference_handshake(&path) {
+        Ok(handshake)
+            if handshake.protocol == typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+                && handshake.schema_hash == typefacts::v3::TYPE_FACTS_SCHEMA_SHA256 =>
+        {
+            Some(path)
+        }
+        Ok(handshake) => {
+            eprintln!(
+                "NOTICE: reference producer at {} speaks protocol {} (schema {}), this client {}; {what} skipped (set SOLID_TYPEFACTS_REFERENCE_BIN)",
+                path.display(),
+                handshake.protocol,
+                handshake.schema_hash,
+                typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL,
+            );
+            None
+        }
+        Err(error) => panic!("reference producer at {}: {error}", path.display()),
+    }
+}
+
+/// The startup frame of the producer at `path`.
+fn reference_handshake(path: &std::path::Path) -> Result<typefacts::v3::Handshake, String> {
+    let mut child = std::process::Command::new(path)
+        .args(["-schema=1", "-project", "/nonexistent/tsconfig.json"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    let mut output = child.stdout.take().ok_or("no stdout")?;
+    let handshake = typefacts::read_frame(&mut output)
+        .map_err(|error| error.to_string())
+        .and_then(|frame| {
+            typefacts::decode::<typefacts::v3::Handshake>(&frame).map_err(|error| error.to_string())
+        });
+    let _ = child.kill();
+    let _ = child.wait();
+    handshake
+}
+
+fn reference_path(what: &str) -> Option<std::path::PathBuf> {
     let path = std::env::var_os("SOLID_TYPEFACTS_REFERENCE_BIN")
         .map(std::path::PathBuf::from)
         .or_else(|| {
