@@ -78,12 +78,12 @@ pub(super) struct Resolver<'a, 'facts> {
     runtime_source_origins: HashSet<SymbolId>,
     blocked_contexts: HashSet<Location>,
     unkeyed_provider: bool,
-    member_stability: MemberStability,
+    member_stability: std::borrow::Cow<'a, MemberStability>,
     receiver_channels_opaque: bool,
 }
 
 /// ADR 0273: absence of a visible veto is an assumption, not a closed census.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct MemberStability {
     written: HashMap<String, Location>,
     all: Option<Location>,

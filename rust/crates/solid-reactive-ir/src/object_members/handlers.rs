@@ -31,8 +31,8 @@ pub(crate) fn spread_index<'a>(
             .iter()
             .any(|hazard| hazard.kind == ast::ModuleHazardKind::Eval)
     });
-    let stability = MemberStability::index(facts, lookup);
-    let modules = ModuleCensus::new(facts, lookup);
+    let stability = lookup.member_stability_of(facts);
+    let modules = lookup.module_census_of(facts);
     let mut closed = HashMap::default();
     for file in &facts.files {
         let references = references(file);

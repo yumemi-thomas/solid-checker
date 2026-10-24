@@ -31,8 +31,8 @@ pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Target
     }) {
         return HashMap::default();
     }
-    let stability = MemberStability::index(facts, lookup);
-    let modules = ModuleCensus::new(facts, lookup);
+    let stability = lookup.member_stability_of(facts);
+    let modules = lookup.module_census_of(facts);
     let mut targets = HashMap::default();
     let mut closed = HashMap::default();
     for file in &facts.files {
@@ -206,8 +206,8 @@ pub(crate) fn namespace_exposed_modules(
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
 ) -> Option<HashSet<String>> {
-    let census = ModuleCensus::new(facts, lookup);
-    (!census.unknown_load).then_some(census.exposed)
+    let census = lookup.module_census_of(facts);
+    (!census.unknown_load).then(|| census.exposed.clone())
 }
 
 /// Where one specifier loads.
@@ -225,7 +225,7 @@ enum Landing {
 /// Namespace bindings and module loads are separate export channels: their
 /// references need not contain a receiver identifier at all. Until those uses
 /// can be censused exactly, refuse the entire exposed module (and its barrels).
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct ModuleCensus {
     exposed: HashSet<String>,
     cyclic: HashSet<String>,

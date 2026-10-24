@@ -27,7 +27,7 @@ impl Resolver<'_, '_> {
             runtime_source_origins: HashSet::default(),
             blocked_contexts: HashSet::default(),
             unkeyed_provider: false,
-            member_stability: MemberStability::index(facts, lookup),
+            member_stability: lookup.member_stability_of(facts),
             receiver_channels_opaque: facts.files.iter().any(|file| {
                 file.ast
                     .module_hazards

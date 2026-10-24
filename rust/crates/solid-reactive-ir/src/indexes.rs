@@ -845,6 +845,8 @@ pub(super) struct SemanticLookup<'a> {
     /// ADR 0339: references to function-valued bindings not proven to follow
     /// their declarators.
     initialization: initialization::State,
+    /// [`crate::interproc::accessor_provenance::MemberStability::index`] of the lookup's facts.
+    member_stability: OnceLock<crate::interproc::accessor_provenance::MemberStability>,
     /// ADR 0342: the member values of compound components that tags render.
     compound: compound::State<'a>,
     prop_render_sites: OnceLock<PropRenderSites<'a>>,
@@ -1061,6 +1063,7 @@ impl<'a> SemanticLookup<'a> {
             declaration_symbols: OnceLock::new(),
             function_call_sites: OnceLock::new(),
             initialization: initialization::State::default(),
+            member_stability: OnceLock::new(),
             compound: compound::State::default(),
             prop_render_sites: OnceLock::new(),
             direct_value_aliases: OnceLock::new(),

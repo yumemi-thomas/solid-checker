@@ -218,6 +218,38 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| ModuleCensus::new(self.facts, self))
     }
 
+    /// [`ModuleCensus::new`] of `facts`: built once per build when they are
+    /// this lookup's own facts, else built for the caller.
+    pub(crate) fn module_census_of(
+        &self,
+        facts: &ProjectFacts,
+    ) -> std::borrow::Cow<'_, ModuleCensus> {
+        if std::ptr::eq(facts, self.facts) {
+            std::borrow::Cow::Borrowed(self.module_census())
+        } else {
+            std::borrow::Cow::Owned(ModuleCensus::new(facts, self))
+        }
+    }
+
+    /// [`MemberStability::index`] of `facts`: built once per build when they
+    /// are this lookup's own facts, else built for the caller.
+    ///
+    /// [`MemberStability::index`]: crate::interproc::accessor_provenance::MemberStability::index
+    pub(crate) fn member_stability_of(
+        &self,
+        facts: &ProjectFacts,
+    ) -> std::borrow::Cow<'_, crate::interproc::accessor_provenance::MemberStability> {
+        use crate::interproc::accessor_provenance::MemberStability;
+        if std::ptr::eq(facts, self.facts) {
+            std::borrow::Cow::Borrowed(
+                self.member_stability
+                    .get_or_init(|| MemberStability::index(self.facts, self)),
+            )
+        } else {
+            std::borrow::Cow::Owned(MemberStability::index(facts, self))
+        }
+    }
+
     /// Whether code at `span` in file `caller` runs after the declarator of
     /// binding `binding` of file `declaring`. `visiting` holds the arrows
     /// whose own mentions are being proved, so a cycle of them ends.
