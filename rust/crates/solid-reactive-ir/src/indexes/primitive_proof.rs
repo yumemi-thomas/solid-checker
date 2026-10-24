@@ -10,8 +10,7 @@ impl<'a> SemanticLookup<'a> {
     /// [`Self::property_may_be_defined_reflectively`]. `None` when no Get
     /// spells an exempt key, so such a project keeps the digest it had.
     pub(super) fn exempt_store_key_census(&self) -> Option<Vec<(String, bool)>> {
-        self.memo_world()
-            .answer::<super::project_memos::ExemptStoreKeyCensus>(&())
+        self.whole_program_answer::<super::project_memos::ExemptStoreKeyCensus>()
     }
 
     /// [`Self::exempt_store_key_census`]'s computation (the memo's).
@@ -275,8 +274,7 @@ impl<'a> SemanticLookup<'a> {
     /// [`Self::imported_const_is_primitive`] can accept. Empty when no file
     /// imports a binding by name.
     pub(super) fn exported_primitive_consts(&self) -> Vec<(String, Span)> {
-        self.memo_world()
-            .answer::<super::project_memos::ExportedPrimitiveConsts>(&())
+        self.whole_program_answer::<super::project_memos::ExportedPrimitiveConsts>()
     }
 
     /// [`Self::exported_primitive_consts`]'s computation (the memo's).

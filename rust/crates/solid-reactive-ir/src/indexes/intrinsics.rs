@@ -62,8 +62,7 @@ impl SemanticLookup<'_> {
     fn intrinsics_view(&self) -> &Intrinsics {
         self.intrinsics.get_or_init(|| {
             let (promise, array_iteration) =
-                self.memo_world()
-                    .answer::<super::project_memos::IntrinsicsTripwires>(&());
+                self.whole_program_answer::<super::project_memos::IntrinsicsTripwires>();
             Intrinsics {
                 promise,
                 array_iteration,

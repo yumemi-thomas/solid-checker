@@ -978,8 +978,7 @@ impl<'a> SemanticLookup<'a> {
     /// ADR 0302: a view of the [`EffectApplyCalls`] memo, built once per build.
     pub(crate) fn effect_apply_calls(&self) -> &crate::effect_execution::ApplyCalls<'a> {
         self.effect_apply_calls.get_or_init(|| {
-            self.memo_world()
-                .answer::<EffectApplyCalls>(&())
+            self.whole_program_answer::<EffectApplyCalls>()
                 .into_iter()
                 .filter_map(|(path, span, argument, execution)| {
                     Some((
@@ -993,8 +992,7 @@ impl<'a> SemanticLookup<'a> {
     /// A view of the [`EffectApplyRegions`] memo, built once per build.
     pub(crate) fn effect_apply_regions(&self) -> &crate::effect_execution::ApplyRegions {
         self.effect_apply_regions.get_or_init(|| {
-            self.memo_world()
-                .answer::<EffectApplyRegions>(&())
+            self.whole_program_answer::<EffectApplyRegions>()
                 .into_iter()
                 .collect()
         })
@@ -1043,6 +1041,18 @@ impl<'a> SemanticLookup<'a> {
             )
         });
         world
+    }
+
+    /// A whole-program memo's answer. Inside a memo probe it is computed
+    /// straight from this lookup instead ([`project_memos::WholeProgram`]):
+    /// a probe is re-asked while a build begins, so it may not read a memo,
+    /// and the direct answer is the memo's own function of the lookup.
+    pub(crate) fn whole_program_answer<M: project_memos::WholeProgram>(&self) -> M::Value {
+        if memo_probes::probing() {
+            M::direct(self)
+        } else {
+            self.memo_world().answer::<M>(&())
+        }
     }
 
     pub(crate) fn memo_store(&self) -> &crate::base::memo::build::MemoStore {
@@ -1896,7 +1906,7 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn tuple_iteration_may_be_mutated(&self) -> bool {
         *self
             .tuple_iteration_veto
-            .get_or_init(|| self.memo_world().answer::<TupleIterationVeto>(&()))
+            .get_or_init(|| self.whole_program_answer::<TupleIterationVeto>())
     }
 
     /// Facts are immutable for this lookup's lifetime. Proxy and invocation
@@ -1905,7 +1915,7 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn visible_string_code(&self) -> bool {
         *self
             .string_code_veto
-            .get_or_init(|| self.memo_world().answer::<StringCodeVeto>(&()))
+            .get_or_init(|| self.whole_program_answer::<StringCodeVeto>())
     }
 
     /// ADR 0292: whether `property` holding `function` is the `default` of a
@@ -2050,7 +2060,7 @@ impl<'a> SemanticLookup<'a> {
     /// project.
     pub(super) fn router_params(&self) -> &crate::router_params::RouterParamsStatus {
         self.router_params
-            .get_or_init(|| self.memo_world().answer::<RouterParams>(&()))
+            .get_or_init(|| self.whole_program_answer::<RouterParams>())
     }
 
     /// ADR 0334: whether `span` in `path` is a component value of a route's

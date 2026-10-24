@@ -221,8 +221,7 @@ impl<'a> SemanticLookup<'a> {
     /// literal; or a destructuring that takes one of those names.
     pub(super) fn objects_may_be_assigned_into(&self) -> bool {
         *self.objects_assigned_into.get_or_init(|| {
-            self.memo_world()
-                .answer::<super::project_memos::ObjectsAssignedInto>(&())
+            self.whole_program_answer::<super::project_memos::ObjectsAssignedInto>()
         })
     }
 

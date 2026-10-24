@@ -89,6 +89,7 @@ macro_rules! whole_program {
         $(#[$doc:meta])*
         $memo:ident, $id:literal, $field:ident, $name:literal, $value:ty,
         cycle: $cycle:expr,
+        direct: $direct:expr,
         |$ctx:ident| $body:expr
     ) => {
         $(#[$doc])*
@@ -112,7 +113,24 @@ macro_rules! whole_program {
                 $cycle
             }
         }
+
+        impl WholeProgram for $memo {
+            fn direct(lookup: &SemanticLookup<'_>) -> $value {
+                let direct: fn(&SemanticLookup<'_>) -> $value = $direct;
+                direct(lookup)
+            }
+        }
     };
+}
+
+/// A whole-program memo's answer computed straight from a lookup, without the
+/// store: what a memo probe (`indexes::memo_probes`) gets, since a probe is
+/// re-asked while a build begins and may not read a memo. The memo's compute
+/// is `ctx.project(direct)` after reading other whole-program memos whose
+/// answers `direct` re-derives the same way, so both are the same function
+/// of the lookup.
+pub(crate) trait WholeProgram: Memo<BuildSchema, Key = ()> {
+    fn direct(lookup: &SemanticLookup<'_>) -> Self::Value;
 }
 
 /// ADR 0278: the `never`-returning and `asserts` calls written in one path,
@@ -166,6 +184,7 @@ whole_program! {
     /// `(path, call, argument, execution)`. A call with no row is unknown.
     EffectApplyCalls, 33, effect_apply_calls, "effect_apply_calls", ApplyCallRows,
     cycle: Vec::new(),
+    direct: crate::effect_execution::calls,
     |ctx| Ok(ctx.project(crate::effect_execution::calls))
 }
 
@@ -174,6 +193,7 @@ whole_program! {
     /// not proven, `(path, [(function, execution)])`. Reads the calls' answer.
     EffectApplyRegions, 34, effect_apply_regions, "effect_apply_regions", ApplyRegionRows,
     cycle: Vec::new(),
+    direct: crate::effect_execution::regions,
     |ctx| {
         ctx.memo::<EffectApplyCalls>(&())?;
         Ok(ctx.project(crate::effect_execution::regions))
@@ -186,6 +206,7 @@ whole_program! {
     ExportedPrimitiveConsts, 35, exported_primitive_consts, "exported_primitive_consts",
     Vec<(String, Span)>,
     cycle: Vec::new(),
+    direct: |lookup| lookup.compute_exported_primitive_consts(),
     |ctx| Ok(ctx.project(|lookup| lookup.compute_exported_primitive_consts()))
 }
 
@@ -197,6 +218,7 @@ whole_program! {
     UninitializedReferences, 36, uninitialized_references, "initialization_rejected",
     Vec<(String, Vec<Span>)>,
     cycle: Vec::new(),
+    direct: |lookup| lookup.compute_uninitialized_references(),
     |ctx| Ok(ctx.project(|lookup| lookup.compute_uninitialized_references()))
 }
 
@@ -206,6 +228,7 @@ whole_program! {
     ParameterCompletionCalls, 37, parameter_completion_calls, "parameter_completion_calls",
     Vec<(String, Span, usize)>,
     cycle: Vec::new(),
+    direct: |lookup| lookup.compute_parameter_completion_calls(),
     |ctx| Ok(ctx.project(|lookup| lookup.compute_parameter_completion_calls()))
 }
 
@@ -215,6 +238,7 @@ whole_program! {
     ExemptStoreKeyCensus, 38, exempt_store_key_census, "exempt_store_key_census",
     Option<Vec<(String, bool)>>,
     cycle: Some(vec![("\0cycle".into(), true)]),
+    direct: |lookup| lookup.compute_exempt_store_key_census(),
     |ctx| Ok(ctx.project(|lookup| lookup.compute_exempt_store_key_census()))
 }
 
@@ -223,6 +247,10 @@ whole_program! {
     /// `(promise, array_iteration)`.
     IntrinsicsTripwires, 39, intrinsics, "intrinsics", (bool, bool),
     cycle: (false, false),
+    direct: |lookup| {
+        let found = super::intrinsics::tripwires(lookup);
+        (found.promise, found.array_iteration)
+    },
     |ctx| Ok(ctx.project(|lookup| {
         let found = super::intrinsics::tripwires(lookup);
         (found.promise, found.array_iteration)
@@ -233,6 +261,9 @@ whole_program! {
     /// Whether any visible code constructs code from a string.
     StringCodeVeto, 40, string_code, "string_code_veto", bool,
     cycle: true,
+    direct: |lookup| {
+        crate::interproc::accessor_provenance::visible_string_code(lookup)
+    },
     |ctx| Ok(ctx.project(|lookup| {
         crate::interproc::accessor_provenance::visible_string_code(lookup)
     }))
@@ -243,6 +274,9 @@ whole_program! {
     /// the string-code veto's answer.
     TupleIterationVeto, 41, tuple_iteration, "tuple_iteration_veto", bool,
     cycle: true,
+    direct: |lookup| {
+            crate::interproc::accessor_provenance::tuple_iteration_write(lookup)
+        },
     |ctx| {
         ctx.memo::<StringCodeVeto>(&())?;
         Ok(ctx.project(|lookup| {
@@ -255,6 +289,7 @@ whole_program! {
     /// ADR 0338: whether any file may patch `Function.prototype.bind`.
     FunctionBindPatched, 42, function_bind, "function_bind_patched", bool,
     cycle: true,
+    direct: |lookup| lookup.compute_function_bind_patched(),
     |ctx| Ok(ctx.project(|lookup| lookup.compute_function_bind_patched()))
 }
 
@@ -262,6 +297,7 @@ whole_program! {
     /// ADR 0320: whether any code may copy keys into an existing object.
     ObjectsAssignedInto, 43, objects_assigned_into, "objects_assigned_into", bool,
     cycle: true,
+    direct: |lookup| lookup.compute_objects_assigned_into(),
     |ctx| Ok(ctx.project(|lookup| lookup.compute_objects_assigned_into()))
 }
 
@@ -271,6 +307,13 @@ whole_program! {
     crate::router_params::RouterParamsStatus,
     cycle: crate::router_params::RouterParamsStatus::Replaced {
         spelling: "a failed-closed memo cycle",
+    },
+    direct: |lookup| {
+        crate::router_params::router_params_status(
+            lookup.facts,
+            lookup.dialect,
+            &lookup.router_install,
+        )
     },
     |ctx| Ok(ctx.project(|lookup| {
         crate::router_params::router_params_status(

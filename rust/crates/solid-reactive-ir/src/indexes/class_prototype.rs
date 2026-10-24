@@ -22,8 +22,7 @@ impl<'a> SemanticLookup<'a> {
     /// what the project visibly writes, not a proof about the builtin.
     pub(crate) fn function_bind_may_be_patched(&self) -> bool {
         *self.function_bind_patched.get_or_init(|| {
-            self.memo_world()
-                .answer::<super::project_memos::FunctionBindPatched>(&())
+            self.whole_program_answer::<super::project_memos::FunctionBindPatched>()
         })
     }
 

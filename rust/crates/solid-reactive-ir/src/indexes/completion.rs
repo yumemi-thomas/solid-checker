@@ -137,8 +137,7 @@ impl<'a> SemanticLookup<'a> {
     /// per build.
     pub(super) fn parameter_completion_calls(&self) -> &HashSet<(&'a str, Span, usize)> {
         self.parameter_completion_calls.get_or_init(|| {
-            self.memo_world()
-                .answer::<ParameterCompletionCalls>(&())
+            self.whole_program_answer::<ParameterCompletionCalls>()
                 .into_iter()
                 .filter_map(|(path, span, index)| {
                     Some((self.file_by_path(&path)?.path.as_str(), span, index))

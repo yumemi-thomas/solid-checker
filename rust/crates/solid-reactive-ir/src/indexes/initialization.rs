@@ -124,8 +124,7 @@ impl<'a> SemanticLookup<'a> {
     /// digest: another module's imports decide a mention here.
     pub(super) fn uninitialized_references(&self) -> &HashMap<String, HashSet<Span>> {
         self.initialization.rejected.get_or_init(|| {
-            self.memo_world()
-                .answer::<super::project_memos::UninitializedReferences>(&())
+            self.whole_program_answer::<super::project_memos::UninitializedReferences>()
                 .into_iter()
                 .map(|(path, spans)| (path, spans.into_iter().collect()))
                 .collect()
