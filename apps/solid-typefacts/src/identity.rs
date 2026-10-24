@@ -186,6 +186,23 @@ impl Identities {
         self.next_symbol = 0;
     }
 
+    /// A file checker's pass ended (per-file checkers, `unsafe_boundary`
+    /// invariant 8): drops every map that may hold a handle into the checker's
+    /// region, which is freed now. `ids_by_symbol` and `symbols_by_id` hold
+    /// derived symbols and the checker's merged symbols (both in its region),
+    /// and binder symbols only as a memo of what `keys` re-resolves;
+    /// `write_indexes` holds canonical (possibly merged) symbol addresses. An
+    /// address in a freed region is reused by the next pass, so an entry left
+    /// behind could name another symbol. The counter keeps running, so a
+    /// counter id is never issued twice in a generation: a counter id of an
+    /// earlier pass stops resolving (fails closed), it never names a later
+    /// pass's symbol. `files_by_name` holds program files and stays.
+    pub fn purge_scope_pointers(&mut self) {
+        self.ids_by_symbol.clear();
+        self.symbols_by_id.clear();
+        self.write_indexes.clear();
+    }
+
     /// The program chain was rebuilt: every file and module resolution was
     /// read again, so resolved runtime paths are too.
     pub fn forget_runtime_paths(&mut self) {

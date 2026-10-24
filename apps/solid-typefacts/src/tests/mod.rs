@@ -11,6 +11,7 @@ mod generation;
 mod history_order;
 mod materialize;
 mod module_graph;
+mod per_file;
 mod project_invalidation;
 mod project_open;
 mod project_references;

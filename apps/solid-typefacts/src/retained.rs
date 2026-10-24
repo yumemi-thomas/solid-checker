@@ -32,7 +32,17 @@ fn async_functions_for_demands(
     ctx: &Context,
     demands: &[EntityDemand],
 ) -> Result<HashMap<String, Vec<AsyncFunctionFact>>, BackendError> {
-    let locations: Vec<_> = demands
+    let locations = async_locations(demands);
+    // Demand-shaped async lookup only: the per-file whole-table walk it
+    // replaced served the retired seed-based materializer.
+    Ok(async_facts_by_path(
+        closure.backend.async_functions_at(ctx, &locations)?,
+    ))
+}
+
+/// The clean locations of the demands that asked for async facts.
+fn async_locations(demands: &[EntityDemand]) -> Vec<typefacts::Location> {
+    demands
         .iter()
         .filter(|demand| demand.r#async)
         .map(|demand| {
@@ -40,16 +50,41 @@ fn async_functions_for_demands(
             location.path = clean(&location.path).into();
             location
         })
-        .collect();
+        .collect()
+}
+
+/// Async facts keyed by clean path, their expression paths cleaned.
+fn async_facts_by_path(facts: Vec<AsyncFunctionFact>) -> HashMap<String, Vec<AsyncFunctionFact>> {
     let mut by_path: HashMap<String, Vec<AsyncFunctionFact>> = HashMap::new();
-    // Demand-shaped async lookup only: the per-file whole-table walk it
-    // replaced served the retired seed-based materializer.
-    for mut fact in closure.backend.async_functions_at(ctx, &locations)? {
+    for mut fact in facts {
         let path = clean(&fact.expression.path);
         fact.expression.path = path.as_str().into();
         by_path.entry(path).or_default().push(fact);
     }
-    Ok(by_path)
+    by_path
+}
+
+/// One file row per source digest, holding its async facts.
+fn push_file_facts(
+    table: &mut ProducerTable,
+    source_digests: &[SourceDigest],
+    async_by_path: &mut HashMap<String, Vec<AsyncFunctionFact>>,
+    ctx: &Context,
+) -> Result<(), BackendError> {
+    for source in source_digests {
+        cancelled(ctx)?;
+        let facts = async_by_path
+            .remove(source.path.as_ref())
+            .unwrap_or_default();
+        table.files.push(FileFact {
+            path: source.path.clone(),
+            calls: Arc::from(Vec::new()),
+            bindings: Arc::from(Vec::new()),
+            functions: Arc::from(Vec::new()),
+            async_functions: facts.into(),
+        });
+    }
+    Ok(())
 }
 
 fn cancelled(ctx: &Context) -> Result<(), BackendError> {
@@ -145,11 +180,16 @@ impl DemandClosure {
         // order.
         // Reuse counts are this table's own (ADR 0369).
         let _ = self.backend.binder_retention();
-        let demanded: Vec<&str> = groups.iter().map(|group| group.path.as_str()).collect();
-        let started = Instant::now();
-        self.backend.check_demanded_files(ctx, &demanded)?;
-        if let Some(trace) = &self.trace {
-            trace.stage("analyze-check-first", started.elapsed());
+        // Per-file checkers: each file is checked first in a pass of its own,
+        // with its async facts and its run (`ClosureBackend::per_file_demand_runs`).
+        let per_file = self.backend.per_file_checkers();
+        if !per_file {
+            let demanded: Vec<&str> = groups.iter().map(|group| group.path.as_str()).collect();
+            let started = Instant::now();
+            self.backend.check_demanded_files(ctx, &demanded)?;
+            if let Some(trace) = &self.trace {
+                trace.stage("analyze-check-first", started.elapsed());
+            }
         }
 
         // The async facts are rebuilt every table; a group's run holds only
@@ -162,19 +202,13 @@ impl DemandClosure {
                 .append_async_demands(&mut async_demands)
                 .map_err(BackendError)?;
         }
-        let mut async_by_path = async_functions_for_demands(self, ctx, &async_demands)?;
-        for source in &source_digests {
-            cancelled(ctx)?;
-            let facts = async_by_path
-                .remove(source.path.as_ref())
-                .unwrap_or_default();
-            table.files.push(FileFact {
-                path: source.path.clone(),
-                calls: Arc::from(Vec::new()),
-                bindings: Arc::from(Vec::new()),
-                functions: Arc::from(Vec::new()),
-                async_functions: facts.into(),
-            });
+        let mut async_by_path = if per_file {
+            HashMap::new()
+        } else {
+            async_functions_for_demands(self, ctx, &async_demands)?
+        };
+        if !per_file {
+            push_file_facts(&mut table, &source_digests, &mut async_by_path, ctx)?;
         }
         stages.async_stage = started.elapsed();
 
@@ -201,9 +235,19 @@ impl DemandClosure {
                     demands,
                 })
                 .collect();
-            let results = self.backend.semantic_demand_runs(ctx, &runs)?;
+            let results = if per_file {
+                let locations = async_locations(&async_demands);
+                let (results, facts) = self.backend.per_file_demand_runs(ctx, &runs, &locations)?;
+                async_by_path = async_facts_by_path(facts);
+                results
+            } else {
+                self.backend.semantic_demand_runs(ctx, &runs)?
+            };
             drop(runs);
             rebuild_contributions(groups, results)?;
+        }
+        if per_file {
+            push_file_facts(&mut table, &source_digests, &mut async_by_path, ctx)?;
         }
         // Files holding generation-scoped counter ids are counted; the
         // timings report them.

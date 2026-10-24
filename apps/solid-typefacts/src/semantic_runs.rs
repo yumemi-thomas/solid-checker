@@ -142,7 +142,33 @@ fn check(ctx: &Context) -> Result<(), BackendError> {
     }
 }
 
+/// Per-file checkers (`SOLID_TYPEFACTS_PER_FILE_CHECKERS`): the answers of one
+/// file's run that read every file of the program. Inside the file's pass only
+/// its own contribution exists, so they are recorded here, by entity index,
+/// and completed once every file was scanned (`per_file`), from pointer-free
+/// state only. The canonical run (`None`) answers them in place.
+#[derive(Default)]
+pub struct Deferrals {
+    /// Entities whose reference space is the union of every file's spaces of
+    /// the id.
+    pub spaces: Vec<(usize, SymbolId)>,
+    /// Entities whose default-library binding stands only if no reference of
+    /// the target id, in any file, is a write (the census of
+    /// `CallRun::default_library_binding`).
+    pub library: Vec<(usize, SymbolId)>,
+    /// The structural-accessor symbols of the run: the canonical run
+    /// suppresses the type descriptor of an entity of such a symbol across the
+    /// whole batch, so the union over every file decides it.
+    pub structural: HashSet<SymbolId>,
+    /// The program-wide syntactic census of property-write names
+    /// (`CallCaches::library_property_writes`), shared by every pass instead
+    /// of recomputed per file.
+    pub library_writes: Option<Arc<HashSet<String>>>,
+}
+
 /// Go: `SemanticDemandRuns`, after the project lock and checker are held.
+/// `deferrals` (per-file checkers) is `Some` for a single run, which then
+/// leaves its cross-file answers to the caller ([`Deferrals`]).
 #[allow(clippy::too_many_lines)]
 pub fn run(
     ctx: &Context,
@@ -150,7 +176,9 @@ pub fn run(
     references: &mut ReferenceIndex,
     runs: &[SemanticDemandRun<'_>],
     unavailable: &mut Unavailable,
+    mut deferrals: Option<&mut Deferrals>,
 ) -> Result<Vec<SemanticDemandRunResult>, BackendError> {
+    debug_assert!(deferrals.is_none() || runs.len() == 1);
     check(ctx)?;
     let mut results: Vec<SemanticDemandRunResult> = Vec::with_capacity(runs.len());
     let mut files: Vec<Option<P<SourceFile>>> = Vec::with_capacity(runs.len());
@@ -236,6 +264,10 @@ pub fn run(
     // on its location only (ADR 0367).
     let mut memo = DescriptorMemo::default();
     let mut caches = CallCaches::default();
+    if let Some(deferrals) = deferrals.as_deref_mut() {
+        caches.defer_library_census(deferrals.library_writes.take());
+        deferrals.structural.clone_from(&batch_structural);
+    }
     let suppressed = |symbol: &SymbolId| batch_structural.contains(symbol);
 
     for (run_index, run) in runs.iter().enumerate() {
@@ -313,13 +345,16 @@ pub fn run(
             evidence[run_index].symbol(&entity.symbol);
             if demand.reference_space {
                 entity.reference_space = Some(ReferenceSpace::Neither);
-                if let Some(id) = &retained_id {
-                    if !id.is_empty() {
-                        entity.reference_space = Some(references.space_for(env, id));
+                let id = if let Some(id) = &retained_id {
+                    (!id.is_empty()).then(|| id.clone())
+                } else {
+                    result_symbol.map(|symbol| env.id_for(symbol))
+                };
+                if let Some(id) = id {
+                    match deferrals.as_deref_mut() {
+                        Some(deferrals) => deferrals.spaces.push((index, id)),
+                        None => entity.reference_space = Some(references.space_for(env, &id)),
                     }
-                } else if let Some(symbol) = result_symbol {
-                    let id = env.id_for(symbol);
-                    entity.reference_space = Some(references.space_for(env, &id));
                 }
             }
             if demand.runtime_identity
@@ -465,6 +500,11 @@ pub fn run(
             .resolve(&call_demands, &mut results[run_index].entities)?;
         }
         results[run_index].durable = evidence[run_index].durable;
+    }
+    if let Some(deferrals) = deferrals {
+        let (writes, library) = caches.take_deferred_library();
+        deferrals.library_writes = writes;
+        deferrals.library = library;
     }
     Ok(results)
 }

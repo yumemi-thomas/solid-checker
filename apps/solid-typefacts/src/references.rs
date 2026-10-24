@@ -321,7 +321,16 @@ pub struct ReferenceIndex {
     no_aliases: Option<AliasNames>,
     /// [`in_merged_scope`] per container node, for entity positions; node
     /// addresses are generation-scoped, so it is cleared with the index.
+    /// Program-arena addresses (syntax) and a binder-level answer: it stays
+    /// valid across per-file checkers.
     scopes: HashMap<usize, bool>,
+    /// Per-file checkers (`SOLID_TYPEFACTS_PER_FILE_CHECKERS`): the index is
+    /// never built by a scan under whatever checker is current. Each file's
+    /// contribution is scanned under that file's own checker
+    /// ([`ReferenceIndex::scan_file`]) and merged once every file was
+    /// ([`ReferenceIndex::finish_per_file`]); a cross-file answer asked for
+    /// inside a pass is deferred by its caller until then.
+    per_file: bool,
 }
 
 fn space_from_bits(bits: u8) -> ReferenceSpace {
@@ -1034,8 +1043,72 @@ impl ReferenceIndex {
         self.complete = None;
     }
 
+    /// Selects per-file checkers (see the field).
+    pub fn set_per_file(&mut self, per_file: bool) {
+        self.per_file = per_file;
+    }
+
+    /// Whether the index is filled per file (see the field).
+    #[must_use]
+    pub fn per_file(&self) -> bool {
+        self.per_file
+    }
+
+    /// Per-file checkers: scans `file` under the current (its own) checker
+    /// and holds its contribution until [`ReferenceIndex::finish_per_file`].
+    pub fn scan_file(&mut self, env: &mut Env<'_>, file: P<SourceFile>) {
+        let started = std::time::Instant::now();
+        let entry = self.contribution(env, file);
+        self.files.insert(clean(file.file_name()), entry);
+        self.retention.build += started.elapsed();
+    }
+
+    /// Per-file checkers: merges the scanned contributions of `paths` (every
+    /// non-declaration file of the program) into the index, exactly as a
+    /// whole build merges them. Pointer-free.
+    pub fn finish_per_file(&mut self, paths: Vec<String>) {
+        let started = std::time::Instant::now();
+        self.merged = Some(self.merge_files(paths));
+        self.refresh_paths.clear();
+        self.complete = None;
+        self.retention.build += started.elapsed();
+    }
+
+    /// Whether the merged index is built.
+    #[must_use]
+    pub fn has_merged(&self) -> bool {
+        self.merged.is_some()
+    }
+
+    /// The reference space of `id` from the merged index, without building
+    /// it (per-file checkers: it is built by [`ReferenceIndex::finish_per_file`]).
+    #[must_use]
+    pub fn merged_space(&self, id: &SymbolId) -> ReferenceSpace {
+        match self.spaces.as_ref().and_then(|spaces| spaces.get(id)) {
+            Some(bits) if *bits != 0 => space_from_bits(*bits),
+            _ => ReferenceSpace::Neither,
+        }
+    }
+
+    /// [`ReferenceIndex::query`] on an index already merged per file: marks
+    /// the bucket used and returns its locations.
+    pub fn query_merged(&mut self, id: &SymbolId) -> Vec<Location> {
+        assert!(
+            self.merged.is_some(),
+            "per-file checkers: the reference index is merged before it is queried"
+        );
+        self.mark_used(id);
+        self.locations(id)
+    }
+
     /// Go: `ensure`.
     pub fn ensure(&mut self, env: &mut Env<'_>) {
+        // Per-file checkers: a scan here would resolve every file under the
+        // current pass's checker, the history this mode exists to remove.
+        assert!(
+            !self.per_file || self.merged.is_some(),
+            "per-file checkers: the reference index is merged per file, not scanned under one checker"
+        );
         if self.merged.is_none() {
             let started = std::time::Instant::now();
             self.merged = Some(self.build(env));
@@ -1108,6 +1181,12 @@ impl ReferenceIndex {
             let entry = self.contribution(env, *file);
             self.files.insert(path, entry);
         }
+        self.merge_files(paths)
+    }
+
+    /// The merge half of [`ReferenceIndex::build`]: the contributions held for
+    /// `paths`, merged in path order.
+    fn merge_files(&mut self, mut paths: Vec<String>) -> HashMap<SymbolId, Vec<Indexed>> {
         // A departed file's retained answers go with it.
         let records = &mut self.records;
         let files = &self.files;

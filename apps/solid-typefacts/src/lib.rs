@@ -30,6 +30,7 @@ pub mod model;
 pub mod module_graph;
 pub mod nodes;
 pub mod overlay;
+pub mod per_file;
 pub mod project;
 pub mod reactor;
 pub mod references;

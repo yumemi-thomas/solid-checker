@@ -997,6 +997,44 @@ impl Project {
     }
 }
 
+/// Per-file checkers: the answers of several
+/// [`Project::async_functions_at_locations`] calls, in call order, as one call
+/// over all their locations gives them: the first fact of each key kept, in
+/// the same order.
+pub(crate) fn merge_async_facts(batches: Vec<Vec<AsyncFunctionFact>>) -> Vec<AsyncFunctionFact> {
+    let mut seen: HashSet<FactKey> = HashSet::new();
+    let mut facts: Vec<AsyncFunctionFact> = Vec::new();
+    for fact in batches.into_iter().flatten() {
+        let key: FactKey = (
+            fact.expression.path.to_string(),
+            fact.expression.start_byte,
+            fact.expression.end_byte,
+            fact.symbol.clone(),
+            fact.target.clone(),
+        );
+        if seen.insert(key) {
+            facts.push(fact);
+        }
+    }
+    facts.sort_by(|left, right| {
+        (
+            &*left.expression.path,
+            left.expression.start_byte,
+            left.expression.end_byte,
+            &*left.symbol,
+            &*left.target,
+        )
+            .cmp(&(
+                &*right.expression.path,
+                right.expression.start_byte,
+                right.expression.end_byte,
+                &*right.symbol,
+                &*right.target,
+            ))
+    });
+    facts
+}
+
 fn check(ctx: &Context) -> Result<(), BackendError> {
     match ctx.err() {
         Some(reason) => Err(BackendError(reason.to_owned())),
