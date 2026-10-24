@@ -93,7 +93,7 @@ pub use inert_javascript::{
     InertJavaScriptModule, InertJavaScriptRefusal, inert_javascript_module,
     inert_javascript_module_with_export_all,
 };
-pub use literal_array::{literal_array_element, this_expression_spans};
+pub use literal_array::{literal_array_element, receiver_and_array_syntax, this_expression_spans};
 pub use module_requests::static_module_requests;
 pub use primitive_completion::primitive_completion_by_syntax;
 pub use proxy_get_forward::proxy_get_forward_target;

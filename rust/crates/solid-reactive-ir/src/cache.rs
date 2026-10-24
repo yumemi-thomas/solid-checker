@@ -548,6 +548,20 @@ pub(crate) struct LateStageFileInput {
     pub(crate) ast: Arc<solid_facts::ast::AstFacts>,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
     pub(crate) source_fingerprint: LateStageSourceFingerprint,
+    /// The text, for the syntax a stage parses again
+    /// ([`same_reparsed_syntax`]); shared with the facts.
+    pub(crate) source: Arc<str>,
+}
+
+/// Whether two texts of one file answer the same where the interprocedural
+/// stage parses the source again: the accessor transport's `this` uses (a
+/// literal receiver's escape census) and array literal slots, which the
+/// compared AST facts do not hold. A same-shape edit that adds `this` to a
+/// method must not reuse the stage. Parsed only for a file whose text moved.
+fn same_reparsed_syntax(path: &str, previous: &str, current: &str) -> bool {
+    let path = std::path::Path::new(path);
+    solid_facts::ast::receiver_and_array_syntax(path, previous)
+        == solid_facts::ast::receiver_and_array_syntax(path, current)
 }
 
 #[derive(Clone, Default)]
@@ -774,7 +788,12 @@ pub(crate) fn late_stage_inputs_match(cache: &CachedLateStages, facts: &ProjectF
                         && (previous.source_hash == file.source_hash
                             || same_reachability_ast(&previous.ast, &file.ast)
                                 && previous.source_fingerprint
-                                    == late_stage_source_fingerprint(file))
+                                    == late_stage_source_fingerprint(file)
+                                && same_reparsed_syntax(
+                                    file.path.as_str(),
+                                    &previous.source,
+                                    &file.source,
+                                ))
                 })
         })
 }
@@ -793,6 +812,7 @@ pub(crate) fn current_late_stage_inputs(
                     ast: file.ast.clone(),
                     compiler: file.compiler.clone(),
                     source_fingerprint: late_stage_source_fingerprint(file),
+                    source: Arc::clone(&file.source),
                 },
             )
         })
@@ -825,6 +845,7 @@ pub(crate) fn refresh_late_stage_inputs(
                 ast: file.ast.clone(),
                 compiler: file.compiler.clone(),
                 source_fingerprint: late_stage_source_fingerprint(file),
+                source: Arc::clone(&file.source),
             },
         );
     }
@@ -881,6 +902,7 @@ impl ReusePlan {
                     for file in &facts.files {
                         if let Some(input) = retained.inputs.get_mut(file.path.as_str()) {
                             input.source_hash.clone_from(&file.source_hash);
+                            input.source = Arc::clone(&file.source);
                         }
                     }
                 }
