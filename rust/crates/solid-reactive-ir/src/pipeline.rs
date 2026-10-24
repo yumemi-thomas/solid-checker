@@ -747,9 +747,16 @@ fn report_memos(
     let begin = &report.begin;
     timings.memo_begin =
         std::time::Duration::from_nanos(begin.fingerprint_ns + begin.index_ns + begin.mark_ns);
-    for (_, stats) in &report.tables {
+    for (name, stats) in &report.tables {
         timings.memo_reused += stats.reused + stats.verified;
         timings.memo_computed += stats.fresh + stats.unchanged + stats.changed;
+        if *name == "returned_primitive_invocations" {
+            timings.returned_invocation_files = [
+                stats.reused + stats.verified,
+                stats.fresh + stats.unchanged + stats.changed,
+                stats.changed,
+            ];
+        }
     }
     let line = serde_json::json!({ "reactiveIrMemo": report });
     if emit_timings {

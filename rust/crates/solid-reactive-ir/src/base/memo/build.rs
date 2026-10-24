@@ -163,6 +163,9 @@ pub(crate) struct BuildTables {
     returned: crate::indexes::ReturnedTables,
     /// Tables 96 to 127: the invocation-flow answers (study S5a).
     flow: crate::execution_role::FlowTables,
+    /// Tables 160 to 191: returned-function invocations and returned sources
+    /// (study S6a).
+    invocations: crate::indexes::InvocationTables,
 }
 
 impl TableSet<BuildSchema> for BuildTables {
@@ -201,6 +204,10 @@ impl BuildTables {
                     .table(id)
                     .unwrap_or_else(|| unreachable!("memo table {id:?}"))
             }
+            id if id.0 >= crate::indexes::INVOCATION_TABLES_FROM => self
+                .invocations
+                .table(id)
+                .unwrap_or_else(|| unreachable!("memo table {id:?}")),
             id if id.0 >= crate::indexes::RETURNED_TABLES_FROM => self
                 .returned
                 .table(id)
@@ -229,6 +236,7 @@ impl BuildTables {
         tables.extend(self.census.tables());
         tables.extend(self.returned.tables());
         tables.extend(self.flow.tables());
+        tables.extend(self.invocations.tables());
         tables
     }
 }
@@ -294,6 +302,10 @@ impl BuildTables {
 
     pub(crate) fn flow(&self) -> &crate::execution_role::FlowTables {
         &self.flow
+    }
+
+    pub(crate) fn invocations(&self) -> &crate::indexes::InvocationTables {
+        &self.invocations
     }
 }
 
@@ -1108,6 +1120,13 @@ impl<'w> FileRead<'_, '_, 'w> {
         self.ctx
             .record_input(Input::File(self.id, Section::Entities));
         self.view.symbol_at(span)
+    }
+
+    /// The file's TypeFacts references, `(symbol, span)` (its entity rows).
+    pub(crate) fn references(&self) -> &'w [(Arc<str>, Span)] {
+        self.ctx
+            .record_input(Input::File(self.id, Section::Entities));
+        self.view.references()
     }
 
     /// The symbol a callee resolves to, runtime redirects aside

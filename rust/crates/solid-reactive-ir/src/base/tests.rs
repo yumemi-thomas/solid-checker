@@ -1651,3 +1651,244 @@ fn flow_memos_through_random_edits_equal_a_fresh_store() {
     assert!(steps > 120, "only {steps} edits applied");
     assert!(reused > 0, "{reused} reused, {computed} computed");
 }
+
+/// A tracker and a tuple bound in one file, aliased, re-exported and called
+/// (plainly and through TypeScript wrappers) in a second; a hook returning a
+/// fresh signal and its caller; and a module unrelated to all of them.
+const INVOCATION_FILES: &[(&str, &str)] = &[
+    (
+        "/fixture/invocations/factory.ts",
+        "export const load = make(() => 1);\nexport const [first, second] = pair(0);\nload(() => 2);\nexport function useCounter() {\n  const count = memo(() => 0);\n  return count;\n}\n",
+    ),
+    (
+        "/fixture/invocations/user.ts",
+        "import { load, second } from \"./factory\";\nimport { useCounter } from \"./factory\";\nconst Alias = load;\nAlias(() => 3);\n(load as any)(() => 4);\nload!(() => 5);\nsecond(1);\nother(() => 6);\nexport const counter = useCounter();\n",
+    ),
+    (
+        "/fixture/invocations/other.ts",
+        "export const note = \"x\";\nexport function helper(value: number) {\n  return String(value);\n}\n",
+    ),
+];
+
+fn invocation_project() -> Project {
+    Project {
+        files: INVOCATION_FILES
+            .iter()
+            .map(|(path, source)| ((*path).to_owned(), (*source).to_owned()))
+            .collect(),
+        schemes: HashMap::default(),
+        unreferenced: Vec::new(),
+    }
+}
+
+/// Per call: `(file, call text, primitive, slot)` for every positive
+/// returned-invocation answer; per binding-initializer call: `(file, call
+/// text, created call text, primitive)` for every returned source.
+type InvocationAnswers = (
+    Vec<(String, String, solid_dialect::Primitive, Option<usize>)>,
+    Vec<(String, String, String, solid_dialect::Primitive)>,
+);
+
+fn invocation_build(
+    project: &Project,
+    store: &super::memo::build::MemoStore,
+) -> Option<(InvocationAnswers, MemoTables)> {
+    let facts = facts(project)?;
+    let ast_indexes = facts
+        .files
+        .iter()
+        .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
+        .collect::<HashMap<_, _>>();
+    let symbols = entity_symbols(&facts);
+    // The synthetic table names every identifier by its spelling (scheme 0):
+    // `make`, `pair` and `memo` are the primitives.
+    let names = [
+        ("make", "createReaction"),
+        ("pair", "createSignal"),
+        ("memo", "createMemo"),
+    ]
+    .into_iter()
+    .map(|(symbol, name)| {
+        (
+            crate::SymbolId::from(format!("s0:{symbol}").as_str()),
+            crate::SymbolId::from(name),
+        )
+    })
+    .collect::<HashMap<_, _>>();
+    let lookup = crate::indexes::SemanticLookup::new(
+        &facts,
+        &ast_indexes,
+        &symbols,
+        &names,
+        &solid_dialect::Solid2,
+        false,
+    )
+    .with_memo_store(store);
+    let text = |file: &FileFacts, span: Span| file.source_text(span).unwrap_or_default().to_owned();
+    let mut invocations = Vec::new();
+    let mut sources = Vec::new();
+    for file in lookup.files() {
+        let path = file.path.as_str();
+        for call in &file.ast.calls {
+            if let Some((primitive, slot)) = lookup.returned_primitive_at(file, call) {
+                invocations.push((path.to_owned(), text(file, call.span), primitive, slot));
+            }
+            if let Some((origin, created, primitive)) = lookup.returned_source_at(file, call.span) {
+                sources.push((
+                    path.to_owned(),
+                    text(file, call.span),
+                    text(origin, created.span),
+                    primitive,
+                ));
+            }
+        }
+    }
+    let report = lookup.end_memos()?;
+    Some(((invocations, sources), report.tables))
+}
+
+fn invocation_table(tables: &[(&'static str, super::memo::TableStats)]) -> super::memo::TableStats {
+    table_stats(tables, "returned_primitive_invocations")
+}
+
+#[test]
+fn returned_invocations_follow_aliases_slots_and_wrapped_callees() {
+    use solid_dialect::Primitive;
+    let store = super::memo::build::MemoStore::new(false, true);
+    let ((invocations, sources), _) = invocation_build(&invocation_project(), &store).unwrap();
+    let of = |path: &str, call: &str| {
+        invocations
+            .iter()
+            .find(|(file, text, ..)| file.ends_with(path) && text == call)
+            .map(|(.., primitive, slot)| (*primitive, *slot))
+    };
+    assert_eq!(
+        of("factory.ts", "load(() => 2)"),
+        Some((Primitive::CreateReaction, None))
+    );
+    // Through a local alias of an imported binding.
+    assert_eq!(
+        of("user.ts", "Alias(() => 3)"),
+        Some((Primitive::CreateReaction, None))
+    );
+    // A callee wrapped in `as` or `!` resolves as the identifier it peels to.
+    assert_eq!(
+        of("user.ts", "(load as any)(() => 4)"),
+        Some((Primitive::CreateReaction, None))
+    );
+    assert_eq!(
+        of("user.ts", "load!(() => 5)"),
+        Some((Primitive::CreateReaction, None))
+    );
+    // The destructured slot holding the symbol.
+    assert_eq!(
+        of("user.ts", "second(1)"),
+        Some((Primitive::CreateSignal, Some(1)))
+    );
+    // A callee bound to nothing proves nothing.
+    assert_eq!(of("user.ts", "other(() => 6)"), None);
+    assert_eq!(
+        sources
+            .iter()
+            .map(|(file, call, created, primitive)| (
+                file.rsplit('/').next().unwrap(),
+                call.as_str(),
+                created.as_str(),
+                *primitive
+            ))
+            .collect::<Vec<_>>(),
+        [(
+            "user.ts",
+            "useCounter()",
+            "memo(() => 0)",
+            Primitive::CreateMemo
+        )]
+    );
+}
+
+/// With stable symbol ids, an edit of a module no chain reads leaves every
+/// other file's answer unrun; an edit of the factory reruns exactly the files
+/// whose chains read it.
+#[test]
+fn returned_invocations_rerun_exactly_the_files_that_read_an_edit() {
+    let store = super::memo::build::MemoStore::new(false, true);
+    let mut project = invocation_project();
+    let (first, tables) = invocation_build(&project, &store).unwrap();
+    assert_eq!(invocation_table(&tables).fresh, 3);
+    assert!(project.files[2].0.ends_with("other.ts"));
+    project.files[2].1 = project.files[2].1.replace("\"x\"", "\"y\"");
+    let (second, tables) = invocation_build(&project, &store).unwrap();
+    assert_eq!(first, second);
+    let calls = invocation_table(&tables);
+    assert_eq!(
+        (
+            calls.reused + calls.verified,
+            calls.unchanged,
+            calls.changed
+        ),
+        (2, 1, 0),
+        "{calls:?}"
+    );
+    // The tracker stops being one: the factory's own answer and the user's
+    // change; the unrelated module's is reused.
+    project.files[0].1 = project.files[0].1.replace("make(() => 1)", "keep(() => 1)");
+    let (third, tables) = invocation_build(&project, &store).unwrap();
+    assert_ne!(first, third);
+    let calls = invocation_table(&tables);
+    assert_eq!(
+        (calls.reused + calls.verified, calls.changed),
+        (1, 2),
+        "{calls:?}"
+    );
+    let fresh = super::memo::build::MemoStore::new(false, false);
+    let (expected, _) = invocation_build(&project, &fresh).unwrap();
+    assert_eq!(third, expected);
+}
+
+/// Through random edits, the retained store's answers equal a fresh store's,
+/// with verify-reused mode on.
+#[test]
+fn returned_invocations_through_random_edits_equal_a_fresh_store() {
+    let (mut steps, mut reused) = (0, 0);
+    for fixture in FIXTURES {
+        let mut original = Project {
+            files: fixture_sources(fixture),
+            schemes: HashMap::default(),
+            unreferenced: Vec::new(),
+        };
+        original.files.extend(invocation_project().files);
+        original.files.sort();
+        for seed in 1..=2 {
+            let mut random = Random(seed);
+            let mut project = original.clone();
+            let store = super::memo::build::MemoStore::new(true, true);
+            invocation_build(&project, &store).expect("the fixture parses");
+            for serial in 0..15 {
+                let kind = KINDS[random.below(KINDS.len())];
+                let mut next = project.clone();
+                if edit(&mut next, kind, &mut random, serial).is_none() || facts(&next).is_none() {
+                    continue;
+                }
+                project = next;
+                let (answers, tables) = invocation_build(&project, &store).unwrap();
+                let fresh = super::memo::build::MemoStore::new(false, false);
+                let (expected, _) = invocation_build(&project, &fresh).unwrap();
+                assert_eq!(
+                    answers, expected,
+                    "{fixture} seed {seed} step {serial} ({kind})"
+                );
+                for (table, stats) in &tables {
+                    assert_eq!(
+                        stats.mismatches, 0,
+                        "{fixture} seed {seed} step {serial}: {table}"
+                    );
+                }
+                let calls = invocation_table(&tables);
+                reused += calls.reused + calls.verified;
+                steps += 1;
+            }
+        }
+    }
+    assert!(steps > 120, "only {steps} edits applied");
+    assert!(reused > 0, "{reused} reused");
+}

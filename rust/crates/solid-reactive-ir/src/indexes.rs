@@ -36,11 +36,13 @@ mod compound;
 mod event_delivery;
 mod identity_wrappers;
 mod memo_probes;
+mod returned_invocations;
 mod returned_uses;
 pub(crate) use identity_wrappers::{
     IdentityWrapper, WrapperAt, identity_wrapped_literal_span, identity_wrapper_candidates,
 };
 pub(crate) use memo_probes::probing;
+pub(crate) use returned_invocations::{INVOCATION_TABLES_FROM, InvocationTables};
 pub(crate) use returned_uses::{RETURNED_TABLES_FROM, ReturnedTables, UseKind};
 mod initialization;
 mod intrinsics;
@@ -161,7 +163,10 @@ pub(crate) fn constant_string_key(file: &FileFacts, key: Span) -> Option<String>
 /// callee spelled `Proxy` (ADR 0287): the only shapes whose callee syntax a
 /// returned-source proof (ADR 0222) reads beyond the summaries and Type Facts
 /// the caches compare. A same-file `return g(…)` forward (ADR 0287) proves
-/// nothing unless its file also holds one of these, so it is bound with it.
+/// nothing unless its file also holds one of these. The interprocedural
+/// result cache counts such a file as call-role syntax
+/// (`interproc::call_role_syntax`); the cross-file digest binds the proof's
+/// answers instead (ADR 0392).
 pub(crate) fn returns_source_root(file: &FileFacts) -> bool {
     file.ast
         .returns
@@ -829,6 +834,8 @@ pub(super) struct SemanticLookup<'a> {
     /// The invocation sites of each factory call's returned function, by
     /// file path and call span. Several passes ask the same factory call.
     returned_invocation_sites: ReturnedInvocationSites,
+    /// This build's views of the returned-invocation and returned-source memos.
+    invocation_answers: returned_invocations::State,
     /// ADR 0349: the Promise and array-iteration premises, by their tripwires.
     intrinsics: OnceLock<intrinsics::Intrinsics>,
     /// ADR 0351: each member read that names a closed object literal's function.
@@ -1118,6 +1125,7 @@ impl<'a> SemanticLookup<'a> {
             assigned_member_names: OnceLock::new(),
             reflective_definition_names: OnceLock::new(),
             returned_invocation_sites: ReturnedInvocationSites::default(),
+            invocation_answers: returned_invocations::State::default(),
             binding_declarations: OnceLock::new(),
             intrinsics: OnceLock::new(),
             closed_members: OnceLock::new(),
@@ -1224,20 +1232,10 @@ impl<'a> SemanticLookup<'a> {
         self.callback_capabilities().stored_function_arguments
     }
 
-    /// Whether the cross-file proofs can read anything at all from this file.
-    ///
-    /// Two machines read other files. The use-site machine (is the function a
-    /// factory call returns ever used?) is a memo since ADR 0390 (S5e)
-    /// ([`ReturnedUses`](returned_uses::ReturnedUses)). The binding-chain
-    /// machine ([`crate::owners::returned_primitive_invocation`]: is this call
-    /// an invocation of a returned function, and of which primitive?) is
-    /// not: it walks `binding_at_reference` through the TypeScript reference
-    /// tables, and the consumers that ask it (callee roles, owner context,
-    /// named callbacks, reachability, callback standing) land in per-file
-    /// caches. Every read it makes of a file other than the one it was asked
-    /// about is drawn from four AST tables: `calls`, `jsx_elements`,
-    /// `members`, and `bindings`. A file with all four empty is never
-    /// resolved against, so editing it cannot move any proof.
+    /// Whether the binding-chain machine or the use-site machine can read
+    /// anything at all from this file: every read either makes of a file other
+    /// than the one it was asked about is drawn from four AST tables, `calls`,
+    /// `jsx_elements`, `members` and `bindings`.
     fn participates_in_returned_callback_proofs(file: &FileFacts) -> bool {
         !file.ast.calls.is_empty()
             || !file.ast.jsx_elements.is_empty()
@@ -1245,35 +1243,67 @@ impl<'a> SemanticLookup<'a> {
             || !file.ast.bindings.is_empty()
     }
 
-    /// Identity of the whole-project facts that the cross-file
-    /// returned-callback proofs read, or `None` when no such proof can exist.
+    /// The analyzed files, one per path (its first slot), sorted by path.
+    fn files_by_path(&self) -> Vec<&'a FileFacts> {
+        let all_slots = self.files();
+        let mut ordered = self
+            .file_table
+            .ids()
+            .iter()
+            .filter_map(|id| all_slots.get(*self.file_table.slots_of(*id).first()?))
+            .collect::<Vec<_>>();
+        ordered.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+        ordered
+    }
+
+    /// Whether some consumer of a returned-invocation answer can tell it from
+    /// no answer: the dialect gives some argument of that call (`argument <
+    /// arguments`, the call's count) an execution or an owner. Every consumer
+    /// reads the answer only through those two questions, at the call's own
+    /// count (callee roles, owner edges, reachability, named callbacks).
+    fn returned_invocation_is_read(
+        &self,
+        answer: returned_invocations::ReturnedInvocation,
+    ) -> bool {
+        let count = answer.arguments as usize;
+        let slot = answer.slot.map(|slot| slot as usize);
+        (0..count).any(|argument| {
+            let semantics = self.dialect.returned_callback_semantics_at(
+                answer.primitive,
+                slot,
+                argument,
+                count,
+            );
+            semantics.execution.is_some() || semantics.owner.is_some()
+        })
+    }
+
+    /// Identity of the whole-project answers that the cross-file
+    /// returned-callback proofs give the per-file caches, or `None` when no
+    /// such proof can exist (ADR 0392).
     ///
-    /// Those proofs answer "is the function `mapArray` returned in file A ever
-    /// invoked?" and "is this call an invocation of one?", yet their answers
-    /// land in *per-file* cache fragments keyed on that one file's source
-    /// hash. Editing the only file that invokes the adapter would otherwise
-    /// leave the factory file's fragment untouched and stale. Folding this
-    /// digest into those fragments' reuse identity closes that hole.
+    /// Those proofs answer "is the function `createReaction` returned in file A
+    /// ever invoked, and where?" and "is this call an invocation of one?", yet
+    /// their answers land in *per-file* cache fragments keyed on that one
+    /// file's source hash. Folding this digest into those fragments' reuse
+    /// identity closes that hole. It binds the answers themselves:
     ///
-    /// # Why the contribution is still the whole source hash (ADR 0390 (S5e))
+    /// - every positive returned-invocation answer a consumer can read
+    ///   ([`Self::returned_invocation_is_read`]): the binding-chain walk is a
+    ///   memo per file ([`returned_invocations::ReturnedPrimitiveCalls`]);
+    /// - per factory call (a primitive with a callback that runs only when
+    ///   its returned function does), its proven invocation sites with what
+    ///   each inherits, as every consumer reads them
+    ///   (`owners::returned_callback_invocation_sites`).
     ///
-    /// The use-site answers are memos now, so the first machine could feed the
-    /// digest its answers (the uses of each factory call). The section stays a
-    /// source hash because the second machine cannot: its answer at a call is
-    /// a walk through TypeScript's reference tables (an edit to file A can
-    /// change what a position in file B resolves to while B's own AST is
-    /// byte-identical), it also accepts spans the first one does not (a callee
-    /// wrapped in `as`, `!` or parentheses peels to the identifier), and there
-    /// is no per-call index to enumerate the calls whose answer is positive.
-    /// Besides, the local-access fragments classify each site's span *in the
-    /// using file*, which folds in that file's whole execution context. A
-    /// digest of the first machine's answers would leave a cached using file
-    /// stale when only the second machine's chain moved. Until that machine is
-    /// a memo, a participating file's contribution is its source hash: coarse,
-    /// but never stale. The `returned-source-inputs` section is another proof
-    /// (ADR 0222, 0287) and is untouched.
+    /// One read is not an answer: an inline callback of a factory takes its
+    /// role from each invocation site, classified in the site's file
+    /// (`callback_standing::role_at_returned_invocations`), which folds in
+    /// that file's whole execution context. A factory whose inline callback
+    /// has such a site in another file keeps the former contribution: the
+    /// source hash of every participating file. Coarse, but never stale.
     ///
-    /// The caches that still rely on it: every per-file cache whose answer is
+    /// The caches that rely on it: every per-file cache whose answer is
     /// computed through `returned_primitive_invocation` or through the
     /// returned-callback sites (source discovery, local accesses,
     /// interprocedural graph and results, owners, reachability).
@@ -1282,24 +1312,127 @@ impl<'a> SemanticLookup<'a> {
             if !self.models_returned_callbacks() {
                 return None;
             }
-            let mut inputs = self
-                .facts
-                .files
-                .iter()
-                .filter(|file| Self::participates_in_returned_callback_proofs(file))
-                .map(|file| (file.path.as_str(), file.source_hash.as_str()))
-                .collect::<Vec<_>>();
-            // Facts arrive in configured-source order; sort so a reordered
-            // source set cannot read as a changed one.
-            inputs.sort_unstable();
+            let ordered_files = self.files_by_path();
             let mut hasher = Sha256::new();
-            for (path, source_hash) in inputs {
-                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                hasher.update(path.as_bytes());
-                hasher.update(source_hash.as_bytes());
+            let text = |hasher: &mut Sha256, value: &str| {
+                hasher.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(value.as_bytes());
+            };
+            let span = |hasher: &mut Sha256, span: Span| {
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+            };
+            hasher.update(b"returned-invocations\0");
+            for file in &ordered_files {
+                let answers = self.returned_invocations(file);
+                let mut read = answers
+                    .iter()
+                    .filter(|(_, answer)| self.returned_invocation_is_read(*answer))
+                    .peekable();
+                if read.peek().is_none() {
+                    continue;
+                }
+                text(&mut hasher, file.path.as_str());
+                for ((call, callee), answer) in read {
+                    span(&mut hasher, *call);
+                    span(&mut hasher, *callee);
+                    text(&mut hasher, &format!("{:?}", answer.primitive));
+                    hasher.update(answer.slot.map_or(u64::MAX, u64::from).to_le_bytes());
+                    hasher.update(answer.arguments.to_le_bytes());
+                }
+                hasher.update([0xff]);
+            }
+            hasher.update(b"returned-sites\0");
+            let mut classified_elsewhere = false;
+            for file in &ordered_files {
+                for call in &file.ast.calls {
+                    let Some(primitive) = self.primitive_at_call(file, call.span) else {
+                        continue;
+                    };
+                    let count = call.arguments.len();
+                    let semantics = (0..count)
+                        .map(|argument| {
+                            self.dialect
+                                .callback_semantics_at(primitive, argument, count)
+                        })
+                        .filter(|semantics| semantics.requires_return_invocation)
+                        .collect::<Vec<_>>();
+                    if semantics.is_empty() {
+                        continue;
+                    }
+                    let sites = crate::owners::returned_callback_invocation_sites(file, call, self);
+                    text(&mut hasher, file.path.as_str());
+                    span(&mut hasher, call.span);
+                    for site in &sites {
+                        text(&mut hasher, &site.path);
+                        span(&mut hasher, site.span);
+                        text(
+                            &mut hasher,
+                            &format!("{:?}/{:?}", site.inherited_execution, site.inherited_owner),
+                        );
+                    }
+                    hasher.update([0xff]);
+                    classified_elsewhere |= semantics.iter().any(|semantics| {
+                        semantics.execution == Some(solid_dialect::Execution::Inline)
+                    }) && sites.iter().any(|site| {
+                        matches!(
+                            site.inherited_execution,
+                            Some(solid_dialect::Execution::Inline) | None
+                        ) && site.path != file.path.as_str()
+                    });
+                }
+            }
+            if classified_elsewhere {
+                hasher.update(b"returned-site-files\0");
+                for file in ordered_files
+                    .iter()
+                    .filter(|file| Self::participates_in_returned_callback_proofs(file))
+                {
+                    text(&mut hasher, file.path.as_str());
+                    hasher.update(file.source_hash.as_str().as_bytes());
+                }
             }
             Some(hasher.finalize().into())
         })
+    }
+
+    /// Identity of the returned-source answers (ADR 0222, 0287) the
+    /// source-discovery fragments bake in: per binding-initializer call that
+    /// returns a fresh source ([`returned_invocations::ReturnedSourceCalls`]),
+    /// the creating file and call, its primitive, and everything a fragment
+    /// reads of that call ([`crate::source_discovery::returned_source_facts`]).
+    /// ADR 0392: the answers, not the bytes of every file returning a bare
+    /// identifier.
+    fn returned_source_digest(&self, hasher: &mut Sha256) {
+        let text = |hasher: &mut Sha256, value: &str| {
+            hasher.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
+            hasher.update(value.as_bytes());
+        };
+        let ordered_files = self.files_by_path();
+        for file in ordered_files {
+            let answers = self.returned_sources(file);
+            if answers.is_empty() {
+                continue;
+            }
+            text(hasher, file.path.as_str());
+            for answer in answers.iter() {
+                hasher.update(answer.call.start.to_le_bytes());
+                hasher.update(answer.call.end.to_le_bytes());
+                let Some((origin, created, primitive)) = self.returned_source_at(file, answer.call)
+                else {
+                    hasher.update([0]);
+                    continue;
+                };
+                text(hasher, origin.path.as_str());
+                hasher.update(created.span.start.to_le_bytes());
+                hasher.update(created.span.end.to_le_bytes());
+                let facts = crate::source_discovery::returned_source_facts(
+                    self, origin, created, primitive,
+                );
+                text(hasher, &format!("{primitive:?}/{facts:?}"));
+            }
+            hasher.update([0xff]);
+        }
     }
 
     /// Digest of every project-wide proof whose answer is baked into a
@@ -1372,6 +1505,14 @@ impl<'a> SemanticLookup<'a> {
                             .is_some_and(|primitive| self.dialect.returns_reactive_tuple(primitive))
                 })
             });
+            // Begin the build's memos here, before the lanes: a lane that
+            // begins them would re-ask the recorded probes while holding its
+            // own table's `OnceLock`, and a probe that needs that table
+            // (member stability reads the tuple veto) would wait on it
+            // forever.
+            if !memo_probes::probing() {
+                let _ = self.memo_world();
+            }
             if crate::pipeline::available_analysis_workers() > 1 {
                 let limit = crate::pipeline::analysis_worker_limit_for_lanes(4);
                 std::thread::scope(|scope| {
@@ -1569,24 +1710,10 @@ impl<'a> SemanticLookup<'a> {
                 hasher.update(span.start.to_le_bytes());
                 hasher.update(span.end.to_le_bytes());
             }
-            // Returned-source proofs inspect callee syntax and binding facts,
-            // even when its public type and read summary do not change. Bind
-            // the byte identity of every file that can hold such a proof (a
-            // bare identifier or `new Proxy` return, ADR 0222 and 0287); a file gaining or losing one
-            // enters or leaves the digest, so the set itself is bound too.
-            let mut source_inputs = self
-                .files()
-                .iter()
-                .filter(|file| returns_source_root(file))
-                .collect::<Vec<_>>();
-            source_inputs.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+            // Returned-source proofs (ADR 0222, 0287) read another file's
+            // function: bind their answers (ADR 0392).
             hasher.update(b"returned-source-inputs\0");
-            for file in source_inputs {
-                let path = file.path.as_str();
-                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                hasher.update(path.as_bytes());
-                hasher.update(file.source_hash.as_str().as_bytes());
-            }
+            self.returned_source_digest(&mut hasher);
             hasher.update(b"synchronous-event-dispatch\0");
             hasher.update([u8::from(self.synchronous_event_dispatch_present())]);
             // ADR 0319: an invocation-flow proof follows a function value
