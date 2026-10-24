@@ -156,19 +156,34 @@ fn rebuild_and_update_loops_do_not_accumulate() {
     eprintln!("updates: before {before_updates} KiB, #10 {at_10} KiB, #100 {at_100} KiB");
     eprintln!("update arena: #10 {arena_10} KiB, #100 {arena_u100} KiB");
 
-    // 1,100 edits of a 10 KB file, across the rebase at 1,024: every edited
+    // Edits of a 10 KB file across two rebases (the chain is rebuilt after
+    // every 1,024 updates; the loops above made 100 of them): every edited
     // version's tree, binder output and lazily filled data is freed once no
     // head reads it. Without that, a 100 KB file kept about 1 MiB per edit.
     // The rebase is what the edit count must cross; the file size only scales
     // a leak and the time (100 KB took about 21 s of 25). At 10 KB, with
-    // nothing reused (TSRS_ARENA_POISON=1), #100 to #1,100 grew the arena by
+    // nothing reused (TSRS_ARENA_POISON=1), 1,000 edits grew the arena by
     // about 1.25 GiB, against the 8 MiB bound below.
+    //
+    // The bound covers the edits from the first rebase to 100 past the
+    // second (1,124), not the edits before the first: the arena counts
+    // capacity its pools keep for reuse (released slabs, up to 64 MiB, and
+    // spare thread arenas, never released), and a rebase holds the old and
+    // the new chain at once, so the first one can raise that high-water mark
+    // once. How far depends on scheduling: under 24 extra busy processes the
+    // first rebase stepped 2 to 14 MiB in each of 8 runs (11 MiB failed the
+    // old #100 to #1,100 bound twice), and no other round of those runs grew
+    // at all; idle runs do not step. Over 4,100 edits (4 rebases) under the
+    // same load, later rebases added 0 to 2 MiB and the total settled at
+    // 91 to 92 MiB in 3 runs. A leak grows with the edits, a high-water mark
+    // does not.
     let body: String = (0..200)
         .map(|n| format!("export function f{n}(x: number): number {{ return x + {n}; }}\n"))
         .collect();
     let big = path("c.ts");
+    let mut rebases = Vec::new();
     let (mut arena_a, mut arena_b) = (0, 0);
-    for round in 1..=1100_u64 {
+    for round in 1..=2200_u64 {
         project
             .update(
                 &ctx,
@@ -179,15 +194,28 @@ fn rebuild_and_update_loops_do_not_accumulate() {
                 )],
             )
             .unwrap();
+        let rebased = project.last_update.rebased;
         project.release_analysis_state();
-        if round == 100 {
-            arena_a = arena_kib();
+        if rebased {
+            rebases.push(round);
+            if rebases.len() == 1 {
+                arena_a = arena_kib();
+            }
         }
-        if round == 1100 {
+        if rebases.len() == 2 && round == rebases[1] + 100 {
             arena_b = arena_kib();
+            break;
         }
     }
-    eprintln!("big edits: #100 {arena_a} KiB, #1100 {arena_b} KiB of arena");
+    assert_eq!(
+        rebases.len(),
+        2,
+        "the edits crossed two rebases: {rebases:?}"
+    );
+    eprintln!(
+        "big edits: rebases at #{} and #{}, {arena_a} KiB after the first, {arena_b} KiB 100 edits past the second",
+        rebases[0], rebases[1]
+    );
 
     if poisoned() {
         eprintln!("TSRS_ARENA_POISON=1: growth is expected, no RSS bound asserted");
@@ -220,7 +248,7 @@ fn rebuild_and_update_loops_do_not_accumulate() {
     );
     assert!(
         arena_b.saturating_sub(arena_a) <= 8 * 1024,
-        "1,000 edits of a 10 KB file grew the arena by {} KiB",
+        "1,124 edits of a 10 KB file (across a rebase) grew the arena by {} KiB",
         arena_b.saturating_sub(arena_a)
     );
     // Without freeing, 270 more rebuilds would add ~2.4 GiB and 90 more updates
