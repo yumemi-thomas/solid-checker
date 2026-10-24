@@ -1,4 +1,4 @@
-//! The execution-role machine reads other files' syntax (ADR 03XX-role-reads):
+//! The execution-role machine reads other files' syntax (ADR 0408):
 //! a call site's role in a callee's body, a component's callers, a named
 //! callback's primitive. Each stage chunk that asks a role is reused only
 //! while what the role read of those files answers as it did. Every case

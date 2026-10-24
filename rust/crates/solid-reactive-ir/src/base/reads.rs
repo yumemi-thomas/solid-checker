@@ -74,7 +74,7 @@ pub(crate) enum Section {
     /// The exported module-level constants proven primitive (ADR 0325).
     ExportedPrimitiveConsts,
     /// The route component values (ADR 0334), whose router configurations
-    /// may sit in another file than the value (ADR 03XX-role-reads).
+    /// may sit in another file than the value (ADR 0408).
     RouteComponents,
 }
 

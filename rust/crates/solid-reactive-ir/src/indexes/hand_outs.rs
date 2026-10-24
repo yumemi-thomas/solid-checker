@@ -1,5 +1,5 @@
 //! What the lookup hands a recording computation of other files
-//! (ADR 03XX-role-reads).
+//! (ADR 0408).
 //!
 //! The execution-role machine, and every other reader of the lookup, reaches
 //! another file through a few lookup questions: which function a symbol

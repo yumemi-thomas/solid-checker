@@ -767,7 +767,7 @@ pub(crate) struct CachedLateStages {
 /// role machine reads assignments, logical and conditional expressions,
 /// object properties, classes, through another file too), so a table left
 /// out of the comparison was a same-length edit the reuse could not see
-/// (ADR 03XX-role-reads).
+/// (ADR 0408).
 pub(crate) fn same_reachability_ast(
     previous: &solid_facts::ast::AstFacts,
     current: &solid_facts::ast::AstFacts,

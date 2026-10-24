@@ -183,7 +183,7 @@ pub(crate) struct BuildTables {
     /// Tables 384 to 447: accessor transport (S7c).
     transport: crate::interproc::accessor_provenance::TransportTables,
     /// Tables 640 to 703: what the lookup hands a recording chunk
-    /// (ADR 03XX-role-reads).
+    /// (ADR 0408).
     hand_outs: crate::indexes::HandOutTables,
 }
 

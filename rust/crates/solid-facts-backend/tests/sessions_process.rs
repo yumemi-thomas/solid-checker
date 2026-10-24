@@ -414,7 +414,7 @@ fn routed_callback_consumer_edits_refresh_retained_dispatch_contexts() {
         fs::copy(fixture.join(name), directory.join(name)).unwrap();
     }
     // Every other file reads the consumer it calls, so its graph chunk reruns
-    // on a consumer edit (ADR 03XX-role-reads); this one reads nothing of it.
+    // on a consumer edit (ADR 0408); this one reads nothing of it.
     fs::write(
         directory.join("unrelated.ts"),
         "export function unrelated() {\n  return 1;\n}\n",
