@@ -1071,6 +1071,27 @@ impl<'a> SemanticLookup<'a> {
         }
     }
 
+    /// Runs `f` on the state `T` the retained memo store keeps under `id`
+    /// between builds, taken out for the call (a computation reading memos
+    /// meanwhile may use other kept state). `f` is told whether the state is
+    /// kept: a one-shot build, or a probe, gets a fresh one and keeps nothing.
+    pub(crate) fn with_kept_state<T: Default + Send + 'static, R>(
+        &self,
+        id: crate::base::memo::derived::SolverId,
+        f: impl FnOnce(&mut T, bool) -> R,
+    ) -> R {
+        let store = self.memos.store();
+        if !store.is_retained() || memo_probes::probing() {
+            return f(&mut T::default(), false);
+        }
+        let mut state = store
+            .derived()
+            .solver::<T, T>(id, |kept, _| std::mem::take(kept));
+        let value = f(&mut state, true);
+        store.derived().solver::<T, ()>(id, |kept, _| *kept = state);
+        value
+    }
+
     /// Ends the build's memo use ([`crate::base::memo::build::LookupMemos::end`]).
     pub(crate) fn end_memos(&self) -> Option<crate::base::memo::build::MemoReport> {
         self.memos.end()

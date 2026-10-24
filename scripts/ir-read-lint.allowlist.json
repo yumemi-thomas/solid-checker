@@ -56,7 +56,7 @@
     "facts.files": 1
   },
   "rust/crates/solid-reactive-ir/src/effect_execution.rs": {
-    "files()": 3,
+    "files()": 5,
     "file_by_path": 1,
     "hashmap-iteration": 1
   },
@@ -187,21 +187,20 @@
     "hashmap-iteration": 1
   },
   "rust/crates/solid-reactive-ir/src/owners/missing_owners.rs": {
-    "facts.files": 4,
+    "facts.files": 1,
     "file_by_path": 4,
     "hashmap-iteration": 1
   },
   "rust/crates/solid-reactive-ir/src/owners/owner_context.rs": {
-    "files()": 1,
     "file_by_path": 1
   },
   "rust/crates/solid-reactive-ir/src/owners/owner_discovery.rs": {
-    "facts.files": 4,
+    "facts.files": 1,
     "files()": 1,
     "file_by_path": 1
   },
-  "rust/crates/solid-reactive-ir/src/owners/owner_graph.rs": {
-    "file_by_path": 1
+  "rust/crates/solid-reactive-ir/src/owners/owner_state.rs": {
+    "hashmap-iteration": 7
   },
   "rust/crates/solid-reactive-ir/src/owners.rs": {
     "facts.files": 2

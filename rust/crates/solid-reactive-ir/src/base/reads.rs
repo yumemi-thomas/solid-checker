@@ -131,6 +131,17 @@ impl Reads {
         &self.memos
     }
 
+    /// Adds every set of `others`' reads: the sections at once, the memo
+    /// reads sorted and deduplicated once at the end.
+    pub(crate) fn extend_all<'a>(&mut self, others: impl IntoIterator<Item = &'a Self>) {
+        for other in others {
+            self.sections |= other.sections;
+            self.memos.extend_from_slice(&other.memos);
+        }
+        self.memos.sort_unstable();
+        self.memos.dedup();
+    }
+
     /// Adds `other`'s reads.
     pub(crate) fn extend(&mut self, other: &Self) {
         self.sections |= other.sections;

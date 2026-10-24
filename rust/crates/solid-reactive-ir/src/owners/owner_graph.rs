@@ -131,43 +131,9 @@ pub(super) fn compiler_owner_context(file: &solid_facts::FileFacts, body: Span) 
 }
 
 /// The context bits proved at the facts seam before graph propagation.
+#[cfg(test)]
 pub(super) fn seed_contexts(nodes: &[OwnerNode]) -> Vec<u8> {
     nodes.iter().map(|node| node.seed_context).collect()
-}
-
-/// ADR 0347: an exported function that a namespace import or a dynamic import
-/// hands out by name has a caller the analysis cannot see, so in a closed program
-/// it is seeded with the open-world unowned bit, as an export of an open program
-/// is. A detached callback it passes to `runWithOwner(null)` is still proven
-/// unowned, so the seed reaches it; a requirement directly in the function stays
-/// uncertain. Applied at assembly, after the per-file fragments are read, so the
-/// census is never cached with a file.
-pub(super) fn seed_named_hand_outs(
-    nodes: &[OwnerNode],
-    lookup: &SemanticLookup<'_>,
-    contexts: &mut [u8],
-) {
-    for (index, node) in nodes.iter().enumerate() {
-        if node.namespace_candidate && lookup.hands_out_by_name(&node.path, node.span) {
-            contexts[index] |= OWNER_CONTEXT_UNOWNED;
-        }
-    }
-}
-
-/// ADR 0347 amendment: the exported functions an unnamed namespace escape hands out and no
-/// read names. Their reach is seeded by [`seed_unnamed_hand_outs`].
-pub(super) fn unnamed_hand_out_candidates(
-    nodes: &[OwnerNode],
-    lookup: &SemanticLookup<'_>,
-) -> Vec<bool> {
-    nodes
-        .iter()
-        .map(|node| {
-            node.namespace_candidate
-                && lookup.escapes_unnamed(&node.path)
-                && !lookup.hands_out_by_name(&node.path, node.span)
-        })
-        .collect()
 }
 
 /// ADR 0347 amendment: a function whose only reach is an unnamed namespace escape has a
@@ -294,27 +260,27 @@ pub(super) fn settle_eager_owners(
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum OwnerTarget {
     Symbol(SymbolId),
     LocalSpan(Span),
     Function(String, Span),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct SymbolicOwnerEdge {
     pub(crate) source: Option<OwnerSource>,
     pub(crate) target: OwnerTarget,
     pub(crate) kind: OwnerEdgeKind,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct OwnerSource {
     pub(crate) path: String,
     pub(crate) span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct OwnerRequirementCandidate {
     pub(crate) operation: &'static str,
     pub(crate) operation_span: Span,
@@ -357,17 +323,12 @@ pub(crate) enum LeafGateDecision {
 /// Gate decisions keyed by the owner call's location bytes.
 pub(crate) type SettledGateDecisions = HashMap<(String, u64, u64), LeafGateDecision>;
 
-pub(super) fn leaf_gate_decision(
-    owner_index: Option<usize>,
-    nodes: &[OwnerNode],
-    contexts: &[u8],
-) -> LeafGateDecision {
-    let Some(index) = owner_index else {
+pub(super) fn leaf_gate_decision(owner: Option<(&OwnerNode, u8)>) -> LeafGateDecision {
+    let Some((node, context)) = owner else {
         // Module evaluation: no owner can be live, so the call is
         // out-of-band by construction.
         return LeafGateDecision::OutOfBand;
     };
-    let context = contexts[index];
     // A leaf body never gives its own code a children-capable owner: its nested
     // `onSettled` is queued out of band (rc.13), so only the run-owned bit can
     // make the call owned, and a body reached both ways is conditional.
@@ -378,7 +339,7 @@ pub(super) fn leaf_gate_decision(
     // non-component helper has callers the analysis cannot see, so assuming
     // either owned or out-of-band would be a guess.
     let exported_unproven =
-        nodes[index].exported && context & OWNER_CONTEXT_UNOWNED != 0 && !nodes[index].component;
+        node.exported && context & OWNER_CONTEXT_UNOWNED != 0 && !node.component;
     if conditional || exported_unproven {
         LeafGateDecision::Uncertain
     } else if owned {
@@ -478,6 +439,7 @@ pub(crate) struct OwnerRequirementStatus {
     pub(crate) report: bool,
 }
 
+#[derive(Clone)]
 pub(crate) struct CachedOwnerFile {
     pub(crate) source_hash: SourceHash,
     /// What the fragment read of the rest of the program (owner seeds and

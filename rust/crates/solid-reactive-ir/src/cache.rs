@@ -3,7 +3,7 @@
 
 use crate::indexes::CachedAstFileIndex;
 use crate::owners::{
-    CachedOwnerFile, SettledGateDecisions, binding_returns_reactive_source, returned_arrow_function,
+    SettledGateDecisions, binding_returns_reactive_source, returned_arrow_function,
 };
 use crate::pipeline::available_analysis_workers;
 use crate::{
@@ -750,7 +750,7 @@ pub(crate) struct CachedLateStages {
     /// same reuse condition: the leaf-operation table is rebuilt every run
     /// and must be re-gated even when the graph itself is reused.
     pub(crate) settled_gates: Option<SettledGateDecisions>,
-    pub(crate) owner_files: HashMap<SourcePath, CachedOwnerFile>,
+    pub(crate) owners: crate::owners::OwnerState,
     /// The upstream-compat surface's location-keyed reference map. Retained
     /// under the same condition as `interprocedural`, because both are
     /// functions of the TypeScript table and the proven source set.
@@ -1092,7 +1092,7 @@ fn settle_late_stages(slot: &mut Option<CachedLateStages>, facts: &ProjectFacts,
             interprocedural: None,
             missing_owners: None,
             settled_gates: None,
-            owner_files: HashMap::default(),
+            owners: crate::owners::OwnerState::default(),
             compat_reference_locations: None,
         });
     }
