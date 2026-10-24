@@ -497,6 +497,8 @@ pub(super) fn interprocedural_reads(
         &mut invoked_parameter_members,
     );
     let refresh = step_started.elapsed();
+    let mut fixed_points = crate::InterproceduralFixedPointTimings::default();
+    let step_started = Instant::now();
     let transported_edges = add_transported_call_summaries(
         &TransportedCallInputs {
             context,
@@ -514,6 +516,8 @@ pub(super) fn interprocedural_reads(
     // Extra memo-wrapper source origins also enter through ordinary discovery.
     // Tag those rows before any normal summary hop can copy them.
     tag_extra_source_origins(&provenance, &mut summaries);
+    fixed_points.transported = step_started.elapsed();
+    let step_started = Instant::now();
     propagate_callback_forwardings(
         &callback_forwardings,
         nodes,
@@ -521,6 +525,7 @@ pub(super) fn interprocedural_reads(
         &mut callback_summaries,
         &mut unresolved_callback_obligations,
     );
+    fixed_points.callback_forwarding = step_started.elapsed();
     let graph = phase_started.elapsed();
     phase_started = Instant::now();
     let (direct_index, direct_references, direct_summaries) = add_direct_reference_summaries(
@@ -548,6 +553,7 @@ pub(super) fn interprocedural_reads(
     let returned_delta_started = Instant::now();
     propagate_returned_summary_deltas(&mut returned, &returned_edges);
     let returned_delta = returned_delta_started.elapsed();
+    fixed_points.returned = returned_delta;
     let call_summary_delta_started = Instant::now();
     let mut summary_propagation = SummaryPropagation {
         reverse_edges: reverse_summary_edges(&mut edges),
@@ -556,7 +562,8 @@ pub(super) fn interprocedural_reads(
         guaranteed_edges,
     };
     summary_propagation.run(&mut summaries);
-
+    fixed_points.calls = call_summary_delta_started.elapsed();
+    let step_started = Instant::now();
     attach_dispatch_edges(
         &DispatchGraph {
             dispatches: &dispatches,
@@ -574,7 +581,8 @@ pub(super) fn interprocedural_reads(
         &mut edges,
         &mut summary_propagation,
     );
-
+    fixed_points.dispatch = step_started.elapsed();
+    let step_started = Instant::now();
     add_returned_function_reads(
         context,
         nodes,
@@ -583,6 +591,7 @@ pub(super) fn interprocedural_reads(
         &returns_by_ast_owner,
         &mut returned,
     );
+    fixed_points.returned_functions = step_started.elapsed();
     let call_summary_delta = call_summary_delta_started.elapsed();
     let factory_propagation_started = Instant::now();
     let returned_bindings = propagate_factory_reads(
@@ -599,6 +608,7 @@ pub(super) fn interprocedural_reads(
     );
 
     let factory_propagation = factory_propagation_started.elapsed();
+    fixed_points.factory = factory_propagation;
     let propagation = phase_started.elapsed();
     phase_started = Instant::now();
     let result_view = InterproceduralResultView {
@@ -649,7 +659,9 @@ pub(super) fn interprocedural_reads(
         result.extend(getter_reads);
         dispatch_obligations.extend(getter_obligations);
     }
+    let step_started = Instant::now();
     export_parameter_member_dispatch_obligations(context, nodes, &mut dispatch_obligations);
+    fixed_points.parameter_member_obligations = step_started.elapsed();
     let factory_instances = returned_bindings
         .values()
         .filter(|summary| !summary.is_empty())
@@ -665,6 +677,7 @@ pub(super) fn interprocedural_reads(
             returned: &returned,
         },
         &mut dispatch_obligations,
+        &mut fixed_points,
     );
     let results_and_exports = phase_started.elapsed();
     super::node_index::keep(lookup, node_index);
@@ -695,6 +708,7 @@ pub(super) fn interprocedural_reads(
             result_reads,
             export_summaries,
             export_work,
+            fixed_points,
             graph_reused_files,
             graph_recomputed_files,
             result_reused_files,
@@ -1971,6 +1985,7 @@ fn export_structured_return_obligations(
     context: &InterproceduralContext<'_, '_>,
     inputs: &StructuredReturnInputs<'_>,
     dispatch_obligations: &mut Vec<StaticDefect>,
+    fixed_points: &mut crate::InterproceduralFixedPointTimings,
 ) -> (Duration, u64) {
     let work = AtomicU64::new(0);
     let InterproceduralContext {
@@ -2038,6 +2053,8 @@ fn export_structured_return_obligations(
             }
         }
     }
+    fixed_points.structured_returns = export_started.elapsed();
+    let shorthand_started = Instant::now();
     let structured_discovery = StructuredReturnDiscovery {
         facts,
         nodes,
@@ -2127,5 +2144,6 @@ fn export_structured_return_obligations(
             });
         }
     }
+    fixed_points.shorthand_obligations = shorthand_started.elapsed();
     (export_started.elapsed(), work.into_inner())
 }

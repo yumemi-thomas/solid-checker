@@ -492,6 +492,7 @@ pub(super) struct InterproceduralTimings {
     pub(super) result_reads: Duration,
     pub(super) export_summaries: Duration,
     pub(super) export_work: u64,
+    pub(super) fixed_points: crate::InterproceduralFixedPointTimings,
     pub(super) graph_reused_files: u64,
     pub(super) graph_recomputed_files: u64,
     pub(super) result_reused_files: u64,

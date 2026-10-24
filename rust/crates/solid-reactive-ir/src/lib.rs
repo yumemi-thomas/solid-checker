@@ -1304,6 +1304,26 @@ pub struct UnresolvedCallbackObligation {
     pub message: String,
 }
 
+/// The interprocedural stage's fixed points and obligation passes, each
+/// timed on its own (`fixedPointsMs` in the reuse line).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct InterproceduralFixedPointTimings {
+    /// Transported-call seeds and extra source-origin tags.
+    pub transported: Duration,
+    pub callback_forwarding: Duration,
+    pub returned: Duration,
+    /// Call propagation's first run.
+    pub calls: Duration,
+    /// The dispatch gate and the second run.
+    pub dispatch: Duration,
+    pub returned_functions: Duration,
+    /// Factory copies and the third run.
+    pub factory: Duration,
+    pub parameter_member_obligations: Duration,
+    pub structured_returns: Duration,
+    pub shorthand_obligations: Duration,
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct BuildTimings {
     pub total: Duration,
@@ -1404,6 +1424,8 @@ pub struct BuildTimings {
     pub interprocedural_results_and_exports: Duration,
     pub interprocedural_result_reads: Duration,
     pub interprocedural_export_summaries: Duration,
+    /// Each interprocedural fixed point's own time (S7e).
+    pub interprocedural_fixed_points: InterproceduralFixedPointTimings,
     pub leaf_and_cleanup: Duration,
     /// Inside `leaf_and_cleanup` (with the compatibility pass and the
     /// read-table passes after the interprocedural merge): the attributed
