@@ -343,6 +343,48 @@ impl TypeScriptTable {
             )
     }
 
+    /// The ids of the symbols whose alias target or declarations differ
+    /// between `previous` and this table, added and removed ones included:
+    /// for two retained tables, from the index leaves they do not share
+    /// ([`FactTable::symbols_with_moved_declarations`]); otherwise by
+    /// comparing every symbol of both.
+    #[must_use]
+    pub fn symbols_with_moved_declarations(&self, previous: &Self) -> Vec<Arc<str>> {
+        if let (Some(current), Some(previous), None, None) = (
+            &self.retained,
+            &previous.retained,
+            &self.synthetic,
+            &previous.synthetic,
+        ) {
+            return current.symbols_with_moved_declarations(previous);
+        }
+        type Rows<'t> = HashMap<&'t str, (&'t str, &'t [typefacts::Declaration])>;
+        fn rows(table: &TypeScriptTable) -> Rows<'_> {
+            let mut rows = Rows::new();
+            for symbol in table.symbols() {
+                // The first row of an id is the one `symbol` answers.
+                rows.entry(symbol.id())
+                    .or_insert((symbol.alias_target(), symbol.declarations()));
+            }
+            rows
+        }
+        let (current, before) = (rows(self), rows(previous));
+        let mut moved = current
+            .iter()
+            .filter(|(id, row)| before.get(*id) != Some(*row))
+            .map(|(id, _)| *id)
+            .chain(
+                before
+                    .keys()
+                    .filter(|id| !current.contains_key(*id))
+                    .copied(),
+            )
+            .map(Arc::<str>::from)
+            .collect::<Vec<_>>();
+        moved.sort_unstable();
+        moved
+    }
+
     #[must_use]
     pub fn symbol(&self, id: &str) -> Option<TypeScriptSymbol<'_>> {
         self.retained
