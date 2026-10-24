@@ -21,9 +21,10 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const FILE_BUDGETS = {
   "AGENTS.md": 8_000,
   "CLAUDE.md": 1_000,
-  "docs/open-work.md": 26_300,
-  // Raised for ADR 0378: the file stood 2 bytes under 113_200.
-  "docs/decisions.md": 114_700,
+  // Raised for ADR 0380's latent-key item.
+  "docs/open-work.md": 26_700,
+  // Raised for ADR 0378: the file stood 2 bytes under 113_200. Again for ADR 0380.
+  "docs/decisions.md": 115_600,
 };
 
 export const GROUP_BUDGETS = [

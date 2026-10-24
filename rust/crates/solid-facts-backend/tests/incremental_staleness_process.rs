@@ -308,11 +308,10 @@ const CALLER_F: &str = "import { count } from \"./S\";\nimport { ns } from \"./G
 /// reads, execution roles) reads it; it is in neither digest. `F` is unchanged
 /// when the receiver's module flips between a mutated literal (withheld) and an
 /// opaque value, and the two builds differ (asserted), so a retained `F` would
-/// be stale. Today nothing of `F` is retained: the module that changed holds the
-/// TypeScript identity (the delta names `F`'s entities) that every per-file
-/// cache checks first. This pins the scenario so the day that gate narrows
-/// (stable ids, then the digest's removal) the shadow comparison fails here
-/// instead of in a project.
+/// be stale. Today nothing of `F` is retained (source discovery reuses 0 files
+/// after the receiver module changes), so retained equals fresh. This pins the
+/// scenario so the day that gate narrows (stable ids, then the digest's
+/// removal) the shadow comparison fails here instead of in a project.
 #[test]
 fn a_receiver_that_stops_being_a_literal_in_another_file_does_not_keep_the_old_withholding() {
     let Some(mut project) = Project::scratch(

@@ -121,6 +121,30 @@ export const CHECKS = {
       SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
     },
   },
+  "ir-read-lint": {
+    why:
+      "a new raw cross-file read in the Reactive IR is a read an incremental build cannot see; " +
+      "the lint ratchets the allow-listed sites down (scripts/ir-read-lint.mjs)",
+    command: ["bun", "scripts/ir-read-lint.mjs"],
+  },
+  "ir-edit-fuzz": {
+    why:
+      "the retained daemon's answer must equal a fresh one after random edits (and shadow mode must stay " +
+      "silent); this is the seconds-long fixture budget, on a copy of each fixture",
+    command: ["bun", "scripts/ir-edit-fuzz.mjs", "--fixtures", "--steps", "6"],
+    env: {
+      SOLID_CHECKER_BIN: join(ROOT, DEBUG_CHECKER),
+      SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
+    },
+  },
+  "ir-tools-test": {
+    why: "the lint and the harness are scripts with their own unit tests",
+    command: [
+      "bun", "packages/cli/node_modules/vitest/vitest.mjs", "run",
+      "--config", "packages/cli/vitest.config.mjs",
+      "scripts/ir-read-lint.test.mjs", "scripts/ir-edit-fuzz.test.mjs",
+    ],
+  },
   "bun-test-cli": { command: ["bun", "run", "--cwd", "packages/cli", "test"] },
   "bun-test-wasm": { command: ["bun", "run", "--cwd", "packages/wasm", "test"] },
   "wasm-parity": {
@@ -217,7 +241,7 @@ export const ROWS = [
   {
     prefix: "rust/crates/solid-reactive-ir/",
     owner: "solid-reactive-ir (IR, indexes, source summaries, interprocedural, rules engine)",
-    checks: ["ir-lib", "coverage", "wasm-compile"],
+    checks: ["ir-lib", "coverage", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"],
   },
   {
     prefix: "rust/crates/solid-facts-backend/",
@@ -278,6 +302,19 @@ export const ROWS = [
     owner: "the Type Facts differential harness (test tooling; not read by the checker)",
     checks: ["differential-harness"],
   })),
+  // The incrementality tools, one exact path each: neighbours in scripts/ stay
+  // unmapped on purpose.
+  ...[
+    "scripts/ir-edit-fuzz.mjs",
+    "scripts/ir-edit-fuzz.test.mjs",
+    "scripts/ir-read-lint.mjs",
+    "scripts/ir-read-lint.test.mjs",
+    "scripts/ir-read-lint.allowlist.json",
+  ].map((prefix) => ({
+    prefix,
+    owner: "the IR incrementality tools (lint and random-edit harness)",
+    checks: ["ir-tools-test", "ir-read-lint", "ir-edit-fuzz"],
+  })),
   { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
   { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm", "wasm-parity"] },
   // Prose that no build, test, or gate reads: the universal set only. Only
@@ -335,7 +372,7 @@ export function planFor(paths) {
   }
   // Prerequisite, not a row: a gate that runs the checker must run *this*
   // source's checker.
-  const needsChecker = ["coverage", "ownership-gate"].some((check) => selected.has(check));
+  const needsChecker = ["coverage", "ownership-gate", "ir-edit-fuzz"].some((check) => selected.has(check));
   const ordered = [
     // In every plan, mapped or empty: the producer is gitignored, so no change
     // set can report that it needs rebuilding. The stamp check is ~10ms when it
@@ -347,6 +384,7 @@ export function planFor(paths) {
     // and everything after it should run against that binary.
     ...["facts-lib", "ir-lib", "backend-process", "dialects-process"].filter((id) => selected.has(id)),
     ...["coverage", "ownership-gate"].filter((id) => selected.has(id)),
+    ...["ir-read-lint", "ir-tools-test", "ir-edit-fuzz"].filter((id) => selected.has(id)),
     // Separate workspace; its tests drive the producer built above.
     ...["typefacts"].filter((id) => selected.has(id)),
     ...["differential-harness"].filter((id) => selected.has(id)),

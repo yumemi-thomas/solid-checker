@@ -80,6 +80,9 @@ and docs/decisions.md (live decisions by ADR number).
   Analysis-only paths (solid-facts, solid-reactive-ir, `rust/dialects/solid-v2/rules/`)
   get a seconds-long WASM compile check instead of the WASM package build and
   parity, which only `packages/wasm/` selects; `make verify` runs both.
+- IR reuse changes: `make ir-edit-fuzz` (random edits, daemon against one-shot, shadow
+  mode silent; `SOLID_CHECKER_IR_SHADOW`, ADR 0380) and `make ir-read-lint` (a ratchet on raw
+  cross-file reads). Long budget on the corpus: `make ir-edit-fuzz-corpus`.
 - Fixture or finding changes: `make coverage`, then `make ownership-gate`. Both
   build and use the fresh debug checker.
 - Handoff authority: `make verify`, once, at the end.

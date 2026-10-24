@@ -255,6 +255,17 @@ step obligation-audit
 SOLID_CHECKER_BIN="$checker_bin" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/obligation-audit.mjs
 
+# The retained IR's safety net: a ratchet on raw cross-file reads, and a short
+# random-edit differential run (the daemon's answer must equal a fresh one after
+# every edit, shadow mode silent) over copies of fixture projects. The long
+# budget on the rc17 corpus is `make ir-edit-fuzz-corpus`.
+step ir-read-lint
+bun scripts/ir-read-lint.mjs
+
+step ir-edit-fuzz
+SOLID_CHECKER_BIN="$checker_bin" \
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/ir-edit-fuzz.mjs --fixtures --steps 6
+
 step lint-misc
 sh -n scripts/*.sh
 jq empty schema/*.json
