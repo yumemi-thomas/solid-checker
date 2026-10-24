@@ -833,6 +833,10 @@ pub(crate) struct MergeUpdate {
     /// (`per_file::ENV_VERIFY_ROWS`).
     pub rows_verified: usize,
     pub row_mismatches: usize,
+    /// Every id whose served row ([`Merged::row`]) differs from the one the
+    /// previous table served (gained, lost or changed); `None` for a merge
+    /// that started over.
+    pub changed_rows: Option<Vec<SymbolId>>,
 }
 
 impl Merged {
@@ -855,6 +859,18 @@ impl Merged {
     pub(crate) fn row(&self, id: &SymbolId) -> Option<&Row> {
         let first = *self.providers.get(id)?.first()?;
         self.outputs.get(first as usize)?.row(id)
+    }
+
+    /// Every id whose served row's alias-canonical id is in `canonical`.
+    pub(crate) fn ids_with_canonical(&self, canonical: &HashSet<SymbolId>) -> Vec<SymbolId> {
+        self.providers
+            .keys()
+            .filter(|id| {
+                self.row(id)
+                    .is_some_and(|row| canonical.contains(&row.canonical))
+            })
+            .cloned()
+            .collect()
     }
 
     /// Ids with a row.
@@ -899,6 +915,26 @@ impl Merged {
                 None => changed.push((at, None)),
             }
         }
+        // A served row can move only for an id a changed position held or
+        // holds: every other id keeps its providers and their outputs.
+        // Snapshotted before the merge, compared after it.
+        let served_before: Option<Vec<(SymbolId, Option<Row>)>> = (!full).then(|| {
+            let mut candidates: Vec<&SymbolId> = changed
+                .iter()
+                .flat_map(|(at, old)| {
+                    old.iter()
+                        .flat_map(|old| old.rows.iter())
+                        .chain(outputs[*at].rows.iter())
+                        .map(|(id, _)| id)
+                })
+                .collect();
+            candidates.sort_unstable();
+            candidates.dedup();
+            candidates
+                .into_iter()
+                .map(|id| (id.clone(), self.row(id).cloned()))
+                .collect()
+        });
         // Every changed position leaves before any enters, so an id moving
         // between passes is never seen twice.
         let keys = Arc::make_mut(&mut self.keys);
@@ -945,6 +981,13 @@ impl Merged {
         }
         self.works = works;
         self.outputs = outputs;
+        let changed_rows = served_before.map(|before| {
+            before
+                .into_iter()
+                .filter(|(id, row)| self.row(id) != row.as_ref())
+                .map(|(id, _)| id)
+                .collect()
+        });
         let (mut rows_verified, mut row_mismatches) = (0, 0);
         if verify_rows {
             for (at, _) in &changed {
@@ -973,6 +1016,7 @@ impl Merged {
                 .collect(),
             rows_verified,
             row_mismatches,
+            changed_rows,
         })
     }
 }

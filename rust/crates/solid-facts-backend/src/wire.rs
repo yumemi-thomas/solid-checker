@@ -93,6 +93,8 @@ pub struct TypeFactsExchangeTimings {
     pub server_retained_files: u64,
     pub server_recomputed_files: u64,
     pub server_non_durable_files: u64,
+    pub client_close_symbols: Duration,
+    pub client_closure_patched: bool,
 }
 
 impl TypeFactsExchangeTimings {

@@ -668,7 +668,9 @@ fn populate_symbol_evidence(
         let (ids, exact) = closure.changed_references(ctx).map_err(|error| error.0)?;
         response.changed_reference_symbols.clone_from(&ids);
         response.reference_changes_exact = exact;
-        if exact && !ids.is_empty() {
+        // The evidence rides along only for a client that names the paths
+        // it patches; one that closes its own symbols asks for what it holds.
+        if exact && !ids.is_empty() && !request.reference_paths.is_empty() {
             let queries: Vec<_> = ids
                 .into_iter()
                 .map(|id| typefacts::v3::SymbolQuery {

@@ -802,7 +802,10 @@ impl ClosureBackend for Project {
         check(ctx)?;
         if self.per_file.is_some() {
             self.ensure_references_per_file(ctx)?;
-            return Ok((Vec::new(), false));
+            // Instant-edits P4: the merged passes name every changed answer.
+            return Ok(self
+                .per_file_symbol_changes()
+                .map_or_else(|| (Vec::new(), false), |ids| (ids, true)));
         }
         self.with_env(|env, references| references.ensure(env))?;
         Ok((Vec::new(), false))

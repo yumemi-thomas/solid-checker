@@ -284,8 +284,15 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
     SOLID_TYPEFACTS_BIN: typefacts,
     // The daemon is stopped by this harness, not by its idle or memory limits.
     SOLID_CHECKER_DAEMON_MAX_RSS_MB: "0",
+    // Shadow mode also checks every patched Type Facts symbol closure
+    // against a full one (typefacts session/closure.rs), into the same log.
     ...(shadow
-      ? { SOLID_CHECKER_IR_SHADOW: "1", SOLID_CHECKER_IR_SHADOW_LOG: shadowLog }
+      ? {
+          SOLID_CHECKER_IR_SHADOW: "1",
+          SOLID_CHECKER_IR_SHADOW_LOG: shadowLog,
+          TYPEFACTS_VERIFY_SYMBOL_PATCH: "1",
+          TYPEFACTS_VERIFY_SYMBOL_PATCH_LOG: shadowLog
+        }
       : { SOLID_CHECKER_IR_SHADOW: "0" })
   };
   const check = (daemon) =>

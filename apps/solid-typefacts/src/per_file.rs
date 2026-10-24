@@ -178,6 +178,61 @@ pub(crate) struct PerFile {
     /// Whether `stashed_index` describes the current program (a release
     /// stashed it), so reference questions may use it.
     pub(crate) stashed_current: bool,
+    /// Which `symbols` answers the last table changed against the table
+    /// before it ([`Project::per_file_symbol_changes`]); `None` when that is
+    /// not known exactly.
+    symbol_changes: Option<SymbolChanges>,
+    /// Whether the last table's rows were the merged passes' (so the next
+    /// merge's changes are relative to what that table answered).
+    merged_base: bool,
+    /// Every id a scratch pass ever answered: its answer is not a row the
+    /// merge tracks, so every table names it as changed.
+    scratch_ids: HashSet<SymbolId>,
+}
+
+/// What one table changed in the `symbols` answers of the table before it
+/// (instant-edits P4): the ids whose served row differs, and the reference
+/// buckets (alias-canonical ids) whose locations differ.
+#[derive(Clone, Debug, Default)]
+struct SymbolChanges {
+    rows: Vec<SymbolId>,
+    buckets: HashSet<SymbolId>,
+    /// `rows`, the scratch ids and every id whose row's bucket is in
+    /// `buckets`, sorted: computed on the first question.
+    answered: Option<Vec<SymbolId>>,
+}
+
+/// The ids whose reference spans differ between two contributions of one
+/// path.
+fn changed_buckets(
+    old: Option<&crate::references::FileReferences>,
+    new: Option<&crate::references::FileReferences>,
+    buckets: &mut HashSet<SymbolId>,
+) {
+    fn groups(
+        references: Option<&crate::references::FileReferences>,
+    ) -> HashMap<&SymbolId, &Vec<crate::references::Span>> {
+        references
+            .map(|references| {
+                references
+                    .refs
+                    .iter()
+                    .map(|group| (&group.id, &group.spans))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+    let (old, new) = (groups(old), groups(new));
+    for (id, spans) in &old {
+        if new.get(id) != Some(spans) {
+            buckets.insert((*id).clone());
+        }
+    }
+    for id in new.keys() {
+        if !old.contains_key(id) {
+            buckets.insert((*id).clone());
+        }
+    }
 }
 
 /// How the cross-file answers of one entity were completed after the passes
@@ -436,6 +491,8 @@ impl Project {
         state.versions_valid = false;
         state.served_runs.clear();
         state.served_async.clear();
+        state.symbol_changes = None;
+        state.merged_base = false;
         state.merged = crate::passes::Merged::default();
         state.stashed_index = None;
         self.ids.set_table_keys(None);
@@ -777,10 +834,13 @@ impl Project {
                 state.reuse.clear();
                 state.merged = crate::passes::Merged::default();
                 state.stashed_index = None;
+                state.symbol_changes = None;
+                state.merged_base = false;
                 *self.per_file_state() = state;
                 return Ok(None);
             }
         };
+        let mut exact = state.merged_base && update.changed_rows.is_some();
         if state.reuse.verify && !update.full {
             let mut fresh = crate::passes::Merged::default();
             let rebuilt = fresh.update(
@@ -790,10 +850,13 @@ impl Project {
             );
             if rebuilt.is_err() || !fresh.same_as(&state.merged) {
                 reuse_mismatch("the merged keys and rows");
+                exact = false;
                 state.merged = fresh;
                 if rebuilt.is_err() {
                     state.reuse.clear();
                     state.merged = crate::passes::Merged::default();
+                    state.symbol_changes = None;
+                    state.merged_base = false;
                     *self.per_file_state() = state;
                     return Ok(None);
                 }
@@ -857,6 +920,7 @@ impl Project {
             }
             Some(index)
         });
+        exact &= patched.is_some();
         let build = |paths: Vec<String>| {
             crate::references::PassIndex::build(
                 paths,
@@ -875,6 +939,7 @@ impl Project {
                     index
                 } else {
                     reuse_mismatch("the merged reference index");
+                    exact = false;
                     rebuilt
                 }
             }
@@ -882,6 +947,25 @@ impl Project {
             None => build(paths),
         };
         self.references.install_pass_index(index);
+        state.symbol_changes = exact.then(|| {
+            let mut buckets = HashSet::new();
+            for (old, new) in &update.changed {
+                let old = old.as_ref().and_then(|old| old.references.as_ref());
+                if old.is_some() || new.references.is_some() {
+                    changed_buckets(
+                        old.map(|(_, references)| references),
+                        new.references.as_ref().map(|(_, references)| references),
+                        &mut buckets,
+                    );
+                }
+            }
+            SymbolChanges {
+                rows: update.changed_rows.clone().unwrap_or_default(),
+                buckets,
+                answered: None,
+            }
+        });
+        state.merged_base = true;
         let mut results: Vec<SemanticDemandRunResult> = outputs[..runs.len()]
             .iter()
             .map(|output| output.result.clone().unwrap_or_default())
@@ -1102,6 +1186,7 @@ impl Project {
         state.stats.scratch_passes += 1;
         state.stats.scratch_queries += computed.len();
         for (id, row) in computed {
+            state.scratch_ids.insert(id.clone());
             if !row.found {
                 state.stats.unresolved_queries += 1;
                 if env_is_one(ENV_STATS) {
@@ -1111,6 +1196,27 @@ impl Project {
             rows.insert(id, row);
         }
         Ok(rows)
+    }
+
+    /// Per-file passes with reuse (instant-edits P4): every id whose
+    /// `symbols` answer (row or references) may differ from the one the
+    /// previous table gave, or `None` when the last table cannot say
+    /// exactly (its first table, a merge that started over, a rebuilt
+    /// reference index, the sequential run, a reuse mismatch).
+    pub(crate) fn per_file_symbol_changes(&mut self) -> Option<Vec<SymbolId>> {
+        let state = self.per_file.as_mut()?;
+        let changes = state.symbol_changes.as_mut()?;
+        if changes.answered.is_none() {
+            let mut answered: HashSet<SymbolId> = changes.rows.iter().cloned().collect();
+            answered.extend(state.scratch_ids.iter().cloned());
+            if !changes.buckets.is_empty() {
+                answered.extend(state.merged.ids_with_canonical(&changes.buckets));
+            }
+            let mut answered: Vec<SymbolId> = answered.into_iter().collect();
+            answered.sort_unstable();
+            changes.answered = Some(answered);
+        }
+        changes.answered.clone()
     }
 
     /// The merged reference index, rebuilt per file if a release dropped it.

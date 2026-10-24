@@ -1901,6 +1901,8 @@ impl PhaseClock {
                         "exchangeRoundtripMs": ms(facts.exchange.roundtrip),
                         "serverAnalyzeMs": ms(facts.exchange.server_analyze),
                         "responseDecodeMs": ms(facts.exchange.response_decode),
+                        "closeSymbolsMs": ms(facts.exchange.client_close_symbols),
+                        "closurePatched": facts.exchange.client_closure_patched,
                         "hydrateMs": ms(facts.hydrate),
                         "joinMs": ms(facts.join),
                     },
