@@ -24,7 +24,7 @@ pub struct SemanticDemandRun<'a> {
 /// `symbol_claim` carries what Go spreads over `SymbolCoversSpan` and
 /// `SymbolUnresolved`: with a symbol, `Covering` is "covers span" and anything
 /// else is the partial claim; without one, `Unresolved` is "symbol unresolved".
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct SemanticDemandRunResult {
     pub entities: Vec<EntityFact>,
     pub durable: bool,

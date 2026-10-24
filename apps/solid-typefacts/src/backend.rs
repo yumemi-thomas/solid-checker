@@ -167,6 +167,30 @@ pub trait ClosureBackend {
         locations: &[Location],
     ) -> Result<Vec<AsyncFunctionFact>, BackendError>;
 
+    /// Whether the backend computes each demanded file's facts with a checker
+    /// of its own (`SOLID_TYPEFACTS_PER_FILE_CHECKERS`, `per_file`). The
+    /// closure then skips the shared check-first and asks
+    /// [`ClosureBackend::per_file_demand_runs`] instead of the separate
+    /// async and run calls.
+    fn per_file_checkers(&self) -> bool {
+        false
+    }
+
+    /// Per-file checkers: the runs' results (as `semantic_demand_runs`) and
+    /// the async facts of `async_locations` (as `async_functions_at`), each
+    /// file in a pass of its own.
+    fn per_file_demand_runs(
+        &mut self,
+        ctx: &Context,
+        runs: &[SemanticDemandRun<'_>],
+        async_locations: &[Location],
+    ) -> Result<(Vec<SemanticDemandRunResult>, Vec<AsyncFunctionFact>), BackendError> {
+        let _ = (ctx, runs, async_locations);
+        Err(BackendError(
+            "type facts backend has no per-file checkers".to_owned(),
+        ))
+    }
+
     /// The call expressions of one file in source order, each with its
     /// alias-resolved target (Go: the optional `CallDiscoverer`). Not every
     /// backend has them: the default says so rather than answer empty.
@@ -229,6 +253,23 @@ pub trait ClosureBackend {
     /// How much binder-level work was reused since the last call (ADR 0369).
     fn binder_retention(&mut self) -> crate::references::BinderRetention {
         crate::references::BinderRetention::default()
+    }
+
+    /// Per-file passes with reuse (instant-edits P3): whether the last
+    /// [`ClosureBackend::per_file_demand_runs`] tracked, per path, whether its
+    /// rows changed ([`ClosureBackend::content_version`]).
+    fn tracks_content_versions(&self) -> bool {
+        false
+    }
+
+    /// A number that changes exactly when the rows the last
+    /// [`ClosureBackend::per_file_demand_runs`] answered for `path` (its run's
+    /// entities and its async facts) differ from any earlier answer; `None`
+    /// for a path without rows. Meaningful only while
+    /// [`ClosureBackend::tracks_content_versions`].
+    fn content_version(&self, path: &str) -> Option<u64> {
+        let _ = path;
+        None
     }
 }
 

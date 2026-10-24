@@ -32,6 +32,7 @@ use crate::backend::BackendError;
 use crate::context::Context;
 use crate::gocompat::clean;
 use crate::identity::Env;
+use crate::model::SymbolId;
 use crate::nodes::{is_call_like_expression, node_at};
 use crate::project::{declarations_for_symbol, wire_symbol_name};
 use crate::references::ReferenceIndex;
@@ -63,6 +64,9 @@ use typefacts::{
     ResolvedCallValidity, ResolvedDeclaration, RuntimeValueDomain,
 };
 
+/// The program-wide census of property-write names (syntax only).
+pub type PropertyWrites = Arc<HashSet<String>>;
+
 /// Go: `resolvedCallDemand`: the private seam between semantic location lookup
 /// and resolved-call construction.
 pub struct CallDemand {
@@ -83,10 +87,60 @@ pub struct CallCaches {
     /// Go: `callDiagnostics`: per source file, the call-like nodes a
     /// call-resolution diagnostic landed in.
     diagnostics: HashMap<usize, HashSet<usize>>,
-    /// Go: `libraryPropertyWrites`.
-    library_property_writes: Option<HashSet<String>>,
+    /// Go: `libraryPropertyWrites`. Syntax only (names), so per-file checkers
+    /// share one census across passes.
+    library_property_writes: Option<PropertyWrites>,
     /// Go: `currentSourceFiles`.
     current_files: Option<HashSet<usize>>,
+    /// Per-file checkers: the reference half of the default-library census
+    /// reads every file's references, which exist only once every file was
+    /// scanned. The binding is kept and its `(entity, target id)` recorded,
+    /// for the caller to withdraw if a reference is a write
+    /// (`semantic_runs::Deferrals::library`).
+    defer_library: bool,
+    pending_library: Option<SymbolId>,
+    deferred_library: Vec<(usize, SymbolId)>,
+    /// Per-file checkers: every census question asked (a property name and
+    /// whether the program writes it). The census reads every file, so a
+    /// reused pass is valid only while each answer is unchanged.
+    census_reads: Vec<(String, bool)>,
+}
+
+impl CallCaches {
+    /// Per-file checkers: defers the cross-file half of the default-library
+    /// census, seeded with the program's property-write census if one was
+    /// already taken.
+    pub fn defer_library_census(&mut self, writes: Option<PropertyWrites>) {
+        self.defer_library = true;
+        self.library_property_writes = writes;
+    }
+
+    /// The property-write census and the deferred `(entity, target id)` pairs.
+    pub fn take_deferred_library(&mut self) -> (Option<PropertyWrites>, Vec<(usize, SymbolId)>) {
+        (
+            self.library_property_writes.take(),
+            std::mem::take(&mut self.deferred_library),
+        )
+    }
+
+    /// The census questions asked in deferral mode, in order.
+    pub fn take_census_reads(&mut self) -> Vec<(String, bool)> {
+        std::mem::take(&mut self.census_reads)
+    }
+}
+
+/// Whether a reference at `start` of `source` is a write: the syntactic test
+/// the default-library census applies to every reference of the target.
+#[must_use]
+pub fn reference_is_write(source: P<SourceFile>, start: u32) -> bool {
+    let mut node = node_at(source, start);
+    if let Some(parent) = node.parent()
+        && is_property_access_expression(parent)
+        && parent.name() == Some(node)
+    {
+        node = parent;
+    }
+    get_assignment_target(node).is_some()
 }
 
 fn addr<T>(value: Option<P<T>>) -> usize {
@@ -359,6 +413,9 @@ impl CallRun<'_, '_> {
         for demand in demands {
             check(self.ctx)?;
             let call = self.resolve_one(demand)?;
+            if let Some(id) = self.caches.pending_library.take() {
+                self.caches.deferred_library.push((demand.entity_index, id));
+            }
             entities[demand.entity_index].resolved_call = Some(Arc::new(call));
         }
         Ok(())
@@ -518,21 +575,34 @@ impl CallRun<'_, '_> {
         if runtime_implementation {
             return None;
         }
-        let writes = self.caches.library_property_writes.get_or_insert_with(|| {
-            let mut writes = HashSet::new();
-            for file in program.source_files() {
-                if !file.is_declaration_file() {
-                    file.as_node()
-                        .for_each_child(&mut |child| collect_property_writes(child, &mut writes));
-                }
-            }
-            writes
-        });
-        if writes.contains(&*library.name) {
+        let writes = self
+            .caches
+            .library_property_writes
+            .get_or_insert_with(|| Arc::new(property_write_census(program)));
+        let written = writes.contains(&*library.name);
+        if self.caches.defer_library {
+            self.caches
+                .census_reads
+                .push((library.name.to_string(), written));
+        }
+        if written {
             return None;
+        }
+        // The write census reads the binding's references, which a symbol
+        // with no id does not have: no binding (fail closed).
+        if self.caches.defer_library {
+            let id = self.env.id_for(target);
+            if id.is_empty() {
+                return None;
+            }
+            self.caches.pending_library = Some(id);
+            return Some(library);
         }
         self.references.ensure(self.env);
         let id = self.env.id_for(target);
+        if id.is_empty() {
+            return None;
+        }
         for reference in self.references.query(self.env, &id) {
             let source = program.get_source_file(&reference.path)?;
             let position = u32::try_from(reference.start_byte).ok()?;
@@ -1141,6 +1211,29 @@ fn is_call_resolution_diagnostic(code: i32) -> bool {
             | 2810
             | 6234
     )
+}
+
+/// The program's property-write census: [`file_property_writes`] over every
+/// non-declaration file.
+#[must_use]
+pub fn property_write_census(program: &tsrs_compiler::Program) -> HashSet<String> {
+    let mut writes = HashSet::new();
+    for file in program.source_files() {
+        if !file.is_declaration_file() {
+            writes.extend(file_property_writes(*file));
+        }
+    }
+    writes
+}
+
+/// One file's half of the property-write census (syntax only: a function of
+/// the file's text).
+#[must_use]
+pub fn file_property_writes(file: P<tsrs_ast::SourceFile>) -> HashSet<String> {
+    let mut writes = HashSet::new();
+    file.as_node()
+        .for_each_child(&mut |child| collect_property_writes(child, &mut writes));
+    writes
 }
 
 /// The library-write census walk of `defaultLibraryBinding`: every property or

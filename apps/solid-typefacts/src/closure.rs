@@ -81,6 +81,11 @@ pub struct DemandInputGroup {
     pub demands: Vec<EntityDemand>,
 }
 
+/// Per path: the version of its rows (`ClosureBackend::content_version`) and
+/// its source digest.
+pub(crate) type PathVersions =
+    std::collections::HashMap<String, (Option<u64>, Option<typefacts::SourceHash>)>;
+
 pub struct DemandClosure {
     pub(crate) backend: Box<dyn Backend>,
     pub(crate) trace: SharedTrace,
@@ -91,6 +96,10 @@ pub struct DemandClosure {
     /// automatically take the full diff path.
     pub(crate) previous_table: Option<ProducerTable>,
     pub(crate) transport_changed_paths: Option<HashSet<String>>,
+    /// Per-file passes with reuse: the state id of the last table this
+    /// closure built and, per path, its rows' version and source digest, so
+    /// the next table's transport names exactly the paths that changed.
+    pub(crate) path_versions: Option<(u64, PathVersions)>,
     pub(crate) stats: ClosureStats,
     pub(crate) generation: u64,
     pub(crate) next_table_state_id: u64,
@@ -111,6 +120,7 @@ impl DemandClosure {
             table: None,
             previous_table: None,
             transport_changed_paths: None,
+            path_versions: None,
             stats: ClosureStats::default(),
             generation: 1,
             next_table_state_id: 0,

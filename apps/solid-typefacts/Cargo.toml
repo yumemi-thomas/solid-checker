@@ -89,3 +89,15 @@ inherits = "release"
 lto = "thin"
 codegen-units = 16
 incremental = true
+
+# PROTOTYPE ONLY (derived-keys): local fork worktree with could_contain_type_variables_exported.
+[patch."https://github.com/yumemi-thomas/tsrs"]
+tsrs_core = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_core" }
+tsrs_ast = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_ast" }
+tsrs_checker = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_checker" }
+tsrs_compiler = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_compiler" }
+tsrs_tsoptions = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_tsoptions" }
+tsrs_scanner = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_scanner" }
+tsrs_contentmapper = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_contentmapper" }
+tsrs_diagnostics = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_diagnostics" }
+tsrs_vfs = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_vfs" }

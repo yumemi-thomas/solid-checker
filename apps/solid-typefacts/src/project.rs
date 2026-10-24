@@ -165,10 +165,10 @@ pub struct UpdateMetrics {
 }
 
 pub struct Project {
-    trace: SharedTrace,
+    pub(crate) trace: SharedTrace,
     config_path: String,
     fs: Arc<OverlayFs>,
-    generation: Option<Generation>,
+    pub(crate) generation: Option<Generation>,
     /// After `generation`: dropped after every configuration parsed through it.
     config_host: HostLease<ConfigHost>,
     versions: HashMap<String, u64>,
@@ -191,6 +191,10 @@ pub struct Project {
     pub unavailable: Unavailable,
     /// Per-file `Source*` facts across generations (Go: `sourceFactsMemo`).
     pub(crate) source_memo: HashMap<String, crate::source_facts::FileFactsMemo>,
+    /// `Some` when per-file checkers are selected (`per_file`,
+    /// `SOLID_TYPEFACTS_PER_FILE_CHECKERS=1`); `None`, the default, runs the
+    /// canonical single-checker producer unchanged.
+    pub(crate) per_file: Option<crate::per_file::PerFile>,
 }
 
 impl Project {
@@ -219,7 +223,8 @@ impl Project {
             },
             directory: type_script_path_dir(&config_path),
         });
-        let generation = build_program(ctx, &config_path, &fs, &config_host)?;
+        let per_file = crate::per_file::enabled_by_env();
+        let generation = build_program(ctx, &config_path, &fs, &config_host, per_file)?;
         let mut project = Self {
             trace,
             config_path,
@@ -231,16 +236,27 @@ impl Project {
             graph: ImportGraph::default(),
             declaration_shapes: HashMap::new(),
             last_update: UpdateMetrics::default(),
-            ids: Identities::new(1),
+            ids: Identities::new(1).with_derived_keys(crate::derived_key::enabled_by_env()),
             references: ReferenceIndex::default(),
             inputs: ProgramInputs::default(),
             unavailable: Unavailable::default(),
             source_memo: HashMap::new(),
+            per_file: per_file.then(crate::per_file::PerFile::new),
         };
+        project.references.set_per_file(project.per_file.is_some());
         // Go: `collectExportedIdentities` seeds the symbol store at open.
         let generation = project.generation.as_ref().expect("just built");
         let program = generation.program();
+        // Per-file checkers: a checker of its own, freed after (the exported
+        // identities are pointer-free), so the program's single checker is
+        // never made.
+        let pass = project
+            .per_file
+            .is_some()
+            .then(|| generation.file_checker());
         generation.with_checker(|checker| project.ids.seed_exported(program, checker));
+        project.ids.purge_scope_pointers();
+        drop(pass);
         project.graph = ImportGraph::rebuild(program);
         Ok(project)
     }
@@ -262,6 +278,14 @@ impl Project {
             .generation
             .as_ref()
             .ok_or_else(|| BackendError(ERR_CLOSED.to_owned()))?;
+        if self.per_file.is_some() && !generation.in_file_checker() {
+            // Per-file checkers: a question asked outside any pass gets a
+            // scratch pass of its own.
+            if let Some(state) = &mut self.per_file {
+                state.stats.scratch_passes += 1;
+            }
+            return self.in_file_pass(|this| this.with_env(f))?;
+        }
         let program = generation.program();
         let (ids, references, inputs) = (&mut self.ids, &mut self.references, &mut self.inputs);
         Ok(generation.with_checker(|checker| {
@@ -305,7 +329,15 @@ impl Project {
                         node.end().source_offset().map_or(-1, i64::from),
                     ))
                 })?;
-            Ok(env.id_for(symbol))
+            let id = env.id_for(symbol);
+            if id.is_empty() {
+                // No exact key (`Identities::derived_keys`): no id to answer.
+                return Err(BackendError(format!(
+                    "not found: symbol at byte {} has no exact id",
+                    location.start_byte
+                )));
+            }
+            Ok(id)
         })?
     }
 
@@ -338,6 +370,11 @@ impl Project {
     pub fn references(&mut self, ctx: &Context, id: &str) -> Result<Vec<Location>, BackendError> {
         check(ctx)?;
         let id: SymbolId = id.into();
+        if self.per_file.is_some() {
+            return self
+                .per_file_references(ctx, &id)?
+                .ok_or_else(|| BackendError(format!("not found: symbol {id}")));
+        }
         self.with_env(|env, references| {
             let target = env
                 .symbol_for(&id)
@@ -410,6 +447,7 @@ fn build_program(
     config_path: &str,
     fs: &Arc<OverlayFs>,
     config_host: &HostLease<ConfigHost>,
+    reuse_synthetic_imports: bool,
 ) -> Result<Generation, String> {
     if let Some(reason) = ctx.err() {
         return Err(reason.to_owned());
@@ -460,7 +498,12 @@ fn build_program(
         let _scope = config_region.enter();
         P::new(config)
     };
-    Ok(Generation::build(config_region, config, host))
+    Ok(Generation::build(
+        config_region,
+        config,
+        host,
+        reuse_synthetic_imports,
+    ))
 }
 
 pub(crate) fn compiler_host(
@@ -561,8 +604,20 @@ impl ClosureBackend for Project {
 
     fn discard_derived_state(&mut self) {
         self.ids.release_pointers();
+        // Per-file passes keep their merged reference index across the
+        // program change, to patch it by the files that changed.
+        if let Some(state) = &mut self.per_file {
+            if let Some(index) = self.references.take_pass_index() {
+                state.stashed_index = Some(index);
+            }
+            // It describes the replaced program now: only a patch may use it.
+            state.stashed_current = false;
+        }
         self.references.reset();
         self.evict_source_memo();
+        if let Some(state) = &mut self.per_file {
+            state.clear_rows();
+        }
     }
 
     /// Go: `Close`.
@@ -586,13 +641,16 @@ impl ClosureBackend for Project {
     fn resolve_alias(&mut self, ctx: &Context, id: &str) -> Result<Option<SymbolId>, BackendError> {
         check(ctx)?;
         let id: SymbolId = id.into();
+        if self.per_file.is_some() {
+            return Ok(self.per_file_row_answer(&id)?.0);
+        }
         self.with_env(|env, _| {
             let symbol = env.symbol_for(&id)?;
             if !symbol.flags().intersects(SymbolFlags::Alias) {
                 return None;
             }
             let original = env.checker.get_aliased_symbol(symbol);
-            Some(env.id_for(original))
+            Some(env.id_for(original)).filter(|id| !id.is_empty())
         })
     }
 
@@ -605,6 +663,9 @@ impl ClosureBackend for Project {
     ) -> Result<Option<Vec<Declaration>>, BackendError> {
         check(ctx)?;
         let id: SymbolId = id.into();
+        if self.per_file.is_some() {
+            return Ok(self.per_file_row_answer(&id)?.1);
+        }
         self.with_env(|env, _| {
             let symbol = env.symbol_for(&id)?;
             let declarations = id_declarations(env, &id, symbol);
@@ -618,6 +679,12 @@ impl ClosureBackend for Project {
     /// files it needs, which the checker answers without checking twice.
     fn check_demanded_files(&mut self, ctx: &Context, paths: &[&str]) -> Result<(), BackendError> {
         check(ctx)?;
+        if self.per_file.is_some() {
+            // Per-file checkers: each file is checked first in its own pass
+            // (`per_file_demand_runs`); a shared check here would be the
+            // history this mode removes.
+            return Ok(());
+        }
         let generation = self.live()?;
         let program = generation.program();
         for path in paths {
@@ -640,9 +707,12 @@ impl ClosureBackend for Project {
         runs: &[SemanticDemandRun<'_>],
     ) -> Result<Vec<SemanticDemandRunResult>, BackendError> {
         check(ctx)?;
+        if self.per_file.is_some() {
+            return Ok(self.per_file_demand_runs(ctx, runs, &[])?.0);
+        }
         let mut unavailable = std::mem::take(&mut self.unavailable);
         let outcome = self.with_env(|env, references| {
-            crate::semantic_runs::run(ctx, env, references, runs, &mut unavailable)
+            crate::semantic_runs::run(ctx, env, references, runs, &mut unavailable, None)
         });
         for (family, count) in unavailable.0 {
             *self.unavailable.0.entry(family).or_default() += count;
@@ -657,6 +727,19 @@ impl ClosureBackend for Project {
         locations: &[Location],
     ) -> Result<Vec<AsyncFunctionFact>, BackendError> {
         self.async_functions_at_locations(ctx, locations)
+    }
+
+    fn per_file_checkers(&self) -> bool {
+        self.per_file.is_some()
+    }
+
+    fn per_file_demand_runs(
+        &mut self,
+        ctx: &Context,
+        runs: &[SemanticDemandRun<'_>],
+        async_locations: &[Location],
+    ) -> Result<(Vec<SemanticDemandRunResult>, Vec<AsyncFunctionFact>), BackendError> {
+        Project::per_file_demand_runs(self, ctx, runs, async_locations)
     }
 
     fn source_calls(&mut self, ctx: &Context, path: &str) -> Result<Vec<SourceCall>, BackendError> {
@@ -695,6 +778,9 @@ impl ClosureBackend for Project {
         ids: &[SymbolId],
     ) -> Result<HashMap<SymbolId, Vec<Location>>, BackendError> {
         check(ctx)?;
+        if self.per_file.is_some() {
+            return self.per_file_references_batch(ctx, ids);
+        }
         self.with_env(|env, references| {
             references.ensure(env);
             let mut result = HashMap::with_capacity(ids.len());
@@ -714,6 +800,10 @@ impl ClosureBackend for Project {
     /// table rebuilds it, ADR 0364), so the answer is always "not exact".
     fn changed_references(&mut self, ctx: &Context) -> Result<(Vec<SymbolId>, bool), BackendError> {
         check(ctx)?;
+        if self.per_file.is_some() {
+            self.ensure_references_per_file(ctx)?;
+            return Ok((Vec::new(), false));
+        }
         self.with_env(|env, references| references.ensure(env))?;
         Ok((Vec::new(), false))
     }
@@ -729,6 +819,26 @@ impl ClosureBackend for Project {
         let Some(generation) = &mut self.generation else {
             return;
         };
+        if let Some(state) = &mut self.per_file {
+            // Per-file checkers: no pass is live here, so no handle points
+            // into a file checker; the rows and the merged index are the
+            // analysis state. The counter is not reset: an id handed out in
+            // this generation is never handed out again.
+            state.clear_rows();
+            self.ids.purge_scope_pointers();
+            // Per-file passes keep their merged reference index (pointer-free)
+            // for this generation's reference questions and the next table's
+            // patch: what a rescan of every file would build again.
+            if let Some(index) = self.references.take_pass_index() {
+                state.stashed_index = Some(index);
+                state.stashed_current = true;
+            }
+            self.references.release_analysis_state();
+            if generation.has_checker() {
+                generation.release_checker();
+            }
+            return;
+        }
         if !generation.has_checker() {
             return;
         }
@@ -739,6 +849,14 @@ impl ClosureBackend for Project {
 
     fn binder_retention(&mut self) -> crate::references::BinderRetention {
         self.references.take_retention()
+    }
+
+    fn tracks_content_versions(&self) -> bool {
+        self.per_file_content_version("").is_some()
+    }
+
+    fn content_version(&self, path: &str) -> Option<u64> {
+        self.per_file_content_version(path).flatten()
     }
 }
 
@@ -752,6 +870,9 @@ impl SymbolEvidence for Project {
         queries: &[SymbolQuery],
     ) -> Result<Vec<SymbolFact>, BackendError> {
         check(ctx)?;
+        if self.per_file.is_some() {
+            return self.per_file_symbol_evidence(ctx, queries);
+        }
         let started = Instant::now();
         let mut reused = 0_usize;
         let outcome = self.with_env(|env, references| {
@@ -926,8 +1047,14 @@ impl Project {
             let host = compiler_host(&type_script_path_dir(&self.config_path), &candidate_fs);
             generation.prepare_update(&incremental_path, host)
         } else {
-            build_program(ctx, &self.config_path, &candidate_fs, &self.config_host)
-                .map_err(BackendError)?
+            build_program(
+                ctx,
+                &self.config_path,
+                &candidate_fs,
+                &self.config_host,
+                self.per_file.is_some(),
+            )
+            .map_err(BackendError)?
         };
         let program_duration = stage.elapsed();
 
@@ -1013,6 +1140,11 @@ impl Project {
         self.references.start_retaining();
         if !reused {
             self.ids.forget_runtime_paths();
+            // Per-file passes (instant-edits P3): a rebuilt chain re-read
+            // every file and resolution; no kept pass output survives it.
+            if let Some(state) = &mut self.per_file {
+                state.reuse.program_rebuilt();
+            }
         }
         self.fs = candidate_fs;
         self.versions = candidate_versions;
@@ -1025,6 +1157,9 @@ impl Project {
         // re-keying) before anything can read them.
         let ids = &mut self.ids;
         let identities_started = Instant::now();
+        // Per-file checkers: the exports scan in a checker of its own, freed
+        // after (its output is pointer-free).
+        let pass = self.per_file.is_some().then(|| accepted.file_checker());
         accepted.with_checker(|checker| {
             ids.after_update(
                 generation_number,
@@ -1034,6 +1169,8 @@ impl Project {
                 current_exports,
             );
         });
+        ids.purge_scope_pointers();
+        drop(pass);
         let identities_duration = identities_started.elapsed();
 
         // The retained graph must advance on every accepted update, even ones
@@ -1165,6 +1302,9 @@ impl Project {
         // chain about to be freed.
         self.ids.release_pointers();
         self.ids.forget_runtime_paths();
+        if let Some(state) = &mut self.per_file {
+            state.reuse.program_rebuilt();
+        }
         generation.commit(fresh);
         self.inputs.program_changed(None);
         true
@@ -1230,7 +1370,7 @@ pub(crate) fn wire_symbol_name(name: &str) -> String {
 /// origins' declarations (ADR 0371), in `(path, start, end)` order: the
 /// properties sharing a `Set` id list them in their constituents' order,
 /// which follows type ids.
-fn id_declarations(
+pub(crate) fn id_declarations(
     env: &Env<'_>,
     id: &SymbolId,
     symbol: tsrs_core::P<tsrs_ast::Symbol>,

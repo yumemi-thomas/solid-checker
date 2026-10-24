@@ -156,10 +156,22 @@ fn an_export_added_in_another_module_changes_a_retained_id() {
             &[("g.ts", Some(g))],
         ],
     );
-    assert!(
-        reuse.iter().all(|step| step.reused_reference_files > 0),
-        "{reuse:?}"
-    );
+    // Per-file passes with reuse (instant-edits P3) keep whole passes keyed
+    // by their demands, which this test's word demands shift in every file
+    // after an edited one; retained == fresh above is what holds there.
+    if !pass_reuse_by_env() {
+        assert!(
+            reuse.iter().all(|step| step.reused_reference_files > 0),
+            "{reuse:?}"
+        );
+    }
+}
+
+/// Whether the environment selects per-file passes with reuse (instant-edits
+/// P3), which replace binder-level retention: a pass whose read set holds an
+/// edited file runs again whole.
+fn pass_reuse_by_env() -> bool {
+    crate::per_file::enabled_by_env() && crate::derived_key::enabled_by_env()
 }
 
 /// A global removed from a script leaves a module's identifier unresolved,
@@ -274,8 +286,14 @@ fn a_prefix_edit_rescans_only_the_edited_file() {
         ],
         &[&[("a.ts", Some(&format!("// shifted\n{a}")))]],
     );
-    assert_eq!(reuse[0].scanned_reference_files, 1, "{reuse:?}");
-    assert_eq!(reuse[0].reused_reference_files, 3, "{reuse:?}");
+    if pass_reuse_by_env() {
+        // b.ts and c.ts read a.ts (their read sets hold it): only warm.ts's
+        // pass is kept, and its word demands moved with a.ts's words.
+        assert_eq!(reuse[0].scanned_reference_files, 4, "{reuse:?}");
+    } else {
+        assert_eq!(reuse[0].scanned_reference_files, 1, "{reuse:?}");
+        assert_eq!(reuse[0].reused_reference_files, 3, "{reuse:?}");
+    }
 }
 
 /// Scope lookup resolves an alias to test its meaning: an import of an

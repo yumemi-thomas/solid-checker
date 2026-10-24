@@ -162,6 +162,12 @@ impl ProgramInputs {
         self.input(file).text
     }
 
+    /// Whether `file` adds to the global scope or augments a module (a
+    /// member of `Ambient`).
+    pub fn is_ambient(&mut self, file: P<SourceFile>) -> bool {
+        self.input(file).ambient
+    }
+
     /// `Text(path)`, or `None` when the program has no such file.
     pub fn text_at(&mut self, program: &Program, path: &str) -> Option<Digest> {
         if let Some(input) = self.files.get(path) {

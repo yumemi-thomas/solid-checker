@@ -54,7 +54,7 @@ struct Indexed {
     end: u32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Group {
     pub id: SymbolId,
     /// Emptied once merged into the index, so the index does not duplicate
@@ -65,7 +65,7 @@ pub struct Group {
 /// One file's contribution to the reference index: every resolvable
 /// non-declaration identifier in the file, grouped by the id of its
 /// alias-canonicalized symbol, each group in ascending byte order.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FileReferences {
     pub refs: Vec<Group>,
     spaces: Vec<(SymbolId, u8)>,
@@ -321,7 +321,187 @@ pub struct ReferenceIndex {
     no_aliases: Option<AliasNames>,
     /// [`in_merged_scope`] per container node, for entity positions; node
     /// addresses are generation-scoped, so it is cleared with the index.
+    /// Program-arena addresses (syntax) and a binder-level answer: it stays
+    /// valid across per-file checkers.
     scopes: HashMap<usize, bool>,
+    /// Per-file passes (instant-edits P3): per id, how many files' spaces
+    /// carry each bit, so a file's contribution can leave the merged spaces
+    /// ([`PassIndex`]). `Some` exactly while a pass index is installed.
+    pass_counts: Option<HashMap<SymbolId, [u32; 2]>>,
+    /// Per-file checkers (`SOLID_TYPEFACTS_PER_FILE_CHECKERS`): the index is
+    /// never built by a scan under whatever checker is current. Each file's
+    /// contribution is scanned under that file's own checker
+    /// ([`ReferenceIndex::scan_file`]) and merged once every file was
+    /// ([`ReferenceIndex::finish_per_file`]); a cross-file answer asked for
+    /// inside a pass is deferred by its caller until then.
+    per_file: bool,
+}
+
+/// Per-file passes (instant-edits P3): the merged reference index kept
+/// across tables, patched per file whose contribution changed. Its contents
+/// equal [`ReferenceIndex::finish_per_file`]'s over the same contributions:
+/// buckets ordered by (path, start, end), spaces the union of every file's
+/// bits.
+pub(crate) struct PassIndex {
+    merged: HashMap<SymbolId, Vec<Indexed>>,
+    spaces: HashMap<SymbolId, u8>,
+    counts: HashMap<SymbolId, [u32; 2]>,
+    paths: Vec<String>,
+}
+
+impl PassIndex {
+    /// The index of `contributions` over `paths` (every non-declaration
+    /// file; sorted here, as `merge_files` sorts them).
+    pub(crate) fn build<'a>(
+        mut paths: Vec<String>,
+        contributions: impl Iterator<Item = (&'a str, &'a FileReferences)>,
+    ) -> Self {
+        paths.sort();
+        let mut index = Self {
+            merged: HashMap::new(),
+            spaces: HashMap::new(),
+            counts: HashMap::new(),
+            paths,
+        };
+        let mut by_path: Vec<Option<&FileReferences>> = vec![None; index.paths.len()];
+        for (path, references) in contributions {
+            if let Some(at) = index.position(path) {
+                by_path[at] = Some(references);
+            }
+        }
+        for (at, references) in by_path.into_iter().enumerate() {
+            if let Some(references) = references {
+                index.add(at, references, false);
+            }
+        }
+        index
+    }
+
+    /// Whether `other` answers every question this index answers the same
+    /// way (buckets, non-empty spaces, paths): a patched index against a
+    /// rebuilt one (`passes::ENV_VERIFY_REUSE`).
+    pub(crate) fn same_answers(&self, other: &PassIndex) -> bool {
+        let spaces = |index: &PassIndex| -> HashMap<SymbolId, u8> {
+            index
+                .spaces
+                .iter()
+                .filter(|(_, bits)| **bits != 0)
+                .map(|(id, bits)| (id.clone(), *bits))
+                .collect()
+        };
+        let buckets = |index: &PassIndex| -> usize {
+            index
+                .merged
+                .values()
+                .filter(|bucket| !bucket.is_empty())
+                .count()
+        };
+        self.paths == other.paths
+            && buckets(self) == buckets(other)
+            && self
+                .merged
+                .iter()
+                .filter(|(_, bucket)| !bucket.is_empty())
+                .all(|(id, bucket)| other.merged.get(id) == Some(bucket))
+            && spaces(self) == spaces(other)
+    }
+
+    /// The program's non-declaration paths the index covers.
+    pub(crate) fn paths(&self) -> &[String] {
+        &self.paths
+    }
+
+    fn position(&self, path: &str) -> Option<usize> {
+        self.paths
+            .binary_search_by(|candidate| candidate.as_str().cmp(path))
+            .ok()
+    }
+
+    /// Replaces `path`'s contribution `old` by `new`. `false` when `path` is
+    /// not one of the index's paths (the caller rebuilds).
+    pub(crate) fn patch(
+        &mut self,
+        path: &str,
+        old: Option<&FileReferences>,
+        new: Option<&FileReferences>,
+    ) -> bool {
+        let Some(at) = self.position(path) else {
+            return false;
+        };
+        if let Some(old) = old {
+            self.remove(at, old);
+        }
+        if let Some(new) = new {
+            self.add(at, new, true);
+        }
+        true
+    }
+
+    fn add(&mut self, at: usize, references: &FileReferences, ordered: bool) {
+        let path = u32::try_from(at).unwrap_or(u32::MAX);
+        for group in &references.refs {
+            let bucket = self.merged.entry(group.id.clone()).or_default();
+            let spans = group.spans.iter().map(|span| Indexed {
+                path,
+                start: span.start,
+                end: span.end,
+            });
+            if ordered {
+                // Every other file's entries are already in (path, start)
+                // order and this file's spans are in byte order.
+                let from = bucket.partition_point(|entry| entry.path < path);
+                bucket.splice(from..from, spans);
+            } else {
+                bucket.extend(spans);
+            }
+        }
+        for (id, bits) in &references.spaces {
+            let counts = self.counts.entry(id.clone()).or_default();
+            if bits & 1 != 0 {
+                counts[0] += 1;
+            }
+            if bits & 2 != 0 {
+                counts[1] += 1;
+            }
+            *self.spaces.entry(id.clone()).or_default() |= *bits;
+        }
+    }
+
+    fn remove(&mut self, at: usize, references: &FileReferences) {
+        let path = u32::try_from(at).unwrap_or(u32::MAX);
+        for group in &references.refs {
+            if let Some(bucket) = self.merged.get_mut(&group.id) {
+                bucket.retain(|entry| entry.path != path);
+                if bucket.is_empty() {
+                    self.merged.remove(&group.id);
+                }
+            }
+        }
+        for (id, bits) in &references.spaces {
+            let Some(counts) = self.counts.get_mut(id) else {
+                continue;
+            };
+            if bits & 1 != 0 {
+                counts[0] = counts[0].saturating_sub(1);
+            }
+            if bits & 2 != 0 {
+                counts[1] = counts[1].saturating_sub(1);
+            }
+            let union = u8::from(counts[0] > 0) | (u8::from(counts[1] > 0) << 1);
+            if union == 0 && counts == &[0, 0] {
+                self.counts.remove(id);
+                // A file whose spaces held the id with no bit still put it
+                // in the union map (`finish_per_file` keeps such an entry);
+                // whether another file does is not counted, so the entry
+                // stays: `merged_space` reads a zero entry as absent.
+                if let Some(bits) = self.spaces.get_mut(id) {
+                    *bits = 0;
+                }
+            } else if let Some(bits) = self.spaces.get_mut(id) {
+                *bits = union;
+            }
+        }
+    }
 }
 
 fn space_from_bits(bits: u8) -> ReferenceSpace {
@@ -584,9 +764,12 @@ impl Acc {
     }
 
     fn finish(self) -> (Vec<Group>, Vec<(SymbolId, u8)>, bool) {
+        // A symbol with no id (no exact key, `Identities::derived_keys`) has
+        // no reference list: its identifiers join no bucket and no space.
         let mut groups: Vec<Group> = self
             .groups
             .into_iter()
+            .filter(|group| !group.id.is_empty())
             .map(|mut group| {
                 if group.unordered {
                     group.spans.sort_by_key(|span| span.start);
@@ -599,6 +782,7 @@ impl Acc {
             .collect();
         groups.sort_by(|left, right| left.id.cmp(&right.id));
         let mut spaces = self.spaces;
+        spaces.retain(|(id, _)| !id.is_empty());
         spaces.sort_by(|left, right| left.0.cmp(&right.0));
         (groups, spaces, self.durable)
     }
@@ -735,7 +919,11 @@ impl<'r> Walk<'r> {
             return;
         };
         let slot = slot_of(&mut self.slots, env, symbol);
-        if !durable_symbol_id(&slot.reference) || !durable_symbol_id(&slot.canonical) {
+        if !durable_symbol_id(&slot.reference)
+            || !durable_symbol_id(&slot.canonical)
+            || slot.reference.is_empty()
+            || slot.canonical.is_empty()
+        {
             // A generation-scoped id (an unresolved type name's placeholder,
             // a symbol with no provable key) means nothing next generation:
             // the identifier joins the half resolved again on every reuse.
@@ -899,6 +1087,7 @@ impl ReferenceIndex {
     /// answers stay, guarded by their dependencies.
     pub fn reset(&mut self) {
         self.merged = None;
+        self.pass_counts = None;
         self.spaces = None;
         self.refresh_paths.clear();
         self.files.clear();
@@ -1026,6 +1215,7 @@ impl ReferenceIndex {
     pub fn release_analysis_state(&mut self) {
         self.scopes.clear();
         self.merged = None;
+        self.pass_counts = None;
         self.spaces = None;
         self.refresh_paths.clear();
         self.files.clear();
@@ -1034,8 +1224,127 @@ impl ReferenceIndex {
         self.complete = None;
     }
 
+    /// Selects per-file checkers (see the field).
+    pub fn set_per_file(&mut self, per_file: bool) {
+        self.per_file = per_file;
+    }
+
+    /// Whether the index is filled per file (see the field).
+    #[must_use]
+    pub fn per_file(&self) -> bool {
+        self.per_file
+    }
+
+    /// Per-file checkers: scans `file` under the current (its own) checker
+    /// and holds its contribution until [`ReferenceIndex::finish_per_file`].
+    pub fn scan_file(&mut self, env: &mut Env<'_>, file: P<SourceFile>) {
+        let started = std::time::Instant::now();
+        let entry = self.contribution(env, file);
+        self.files.insert(clean(file.file_name()), entry);
+        self.retention.build += started.elapsed();
+    }
+
+    /// Per-file passes on their own index (instant-edits P3): the
+    /// contribution [`ReferenceIndex::scan_file`] just held for `path`.
+    pub(crate) fn take_file(&mut self, path: &str) -> Option<FileReferences> {
+        self.files.remove(path)
+    }
+
+    /// Per-file passes with reuse (instant-edits P3): reference
+    /// contributions and entity symbols served from a kept pass output, and
+    /// computed anew, in the counters ADR 0369's retention reports.
+    pub(crate) fn note_pass_reuse(&mut self, reuse: BinderRetention) {
+        self.retention.reused_reference_files += reuse.reused_reference_files;
+        self.retention.scanned_reference_files += reuse.scanned_reference_files;
+        self.retention.reused_symbols += reuse.reused_symbols;
+        self.retention.resolved_symbols += reuse.resolved_symbols;
+    }
+
+    /// Per-file passes: takes the installed pass index (merged buckets,
+    /// spaces with their counts, paths) out, leaving no merged index.
+    pub(crate) fn take_pass_index(&mut self) -> Option<PassIndex> {
+        let counts = self.pass_counts.take()?;
+        let merged = self.merged.take()?;
+        let spaces = self.spaces.take().unwrap_or_default();
+        self.complete = None;
+        self.refresh_paths.clear();
+        Some(PassIndex {
+            merged,
+            spaces,
+            counts,
+            paths: std::mem::take(&mut self.paths),
+        })
+    }
+
+    /// Per-file passes: installs `index` as this generation's merged index.
+    pub(crate) fn install_pass_index(&mut self, index: PassIndex) {
+        self.merged = Some(index.merged);
+        self.spaces = Some(index.spaces);
+        self.pass_counts = Some(index.counts);
+        self.paths = index.paths;
+        self.files.clear();
+        self.refresh_paths.clear();
+        self.complete = None;
+        self.current = None;
+    }
+
+    /// An index of a pass's own (per-file checkers, instant-edits P3): filled
+    /// per file and never merged or retained.
+    #[must_use]
+    pub(crate) fn for_pass() -> Self {
+        Self {
+            per_file: true,
+            ..Self::default()
+        }
+    }
+
+    /// Per-file checkers: merges the scanned contributions of `paths` (every
+    /// non-declaration file of the program) into the index, exactly as a
+    /// whole build merges them. Pointer-free.
+    pub fn finish_per_file(&mut self, paths: Vec<String>) {
+        let started = std::time::Instant::now();
+        self.merged = Some(self.merge_files(paths));
+        self.pass_counts = None;
+        self.refresh_paths.clear();
+        self.complete = None;
+        self.retention.build += started.elapsed();
+    }
+
+    /// Whether the merged index is built.
+    #[must_use]
+    pub fn has_merged(&self) -> bool {
+        self.merged.is_some()
+    }
+
+    /// The reference space of `id` from the merged index, without building
+    /// it (per-file checkers: it is built by [`ReferenceIndex::finish_per_file`]).
+    #[must_use]
+    pub fn merged_space(&self, id: &SymbolId) -> ReferenceSpace {
+        match self.spaces.as_ref().and_then(|spaces| spaces.get(id)) {
+            Some(bits) if *bits != 0 => space_from_bits(*bits),
+            _ => ReferenceSpace::Neither,
+        }
+    }
+
+    /// [`ReferenceIndex::query`] on an index already merged per file: marks
+    /// the bucket used and returns its locations.
+    pub fn query_merged(&mut self, id: &SymbolId) -> Vec<Location> {
+        assert!(
+            self.merged.is_some(),
+            "per-file checkers: the reference index is merged before it is queried"
+        );
+        self.mark_used(id);
+        self.locations(id)
+    }
+
     /// Go: `ensure`.
     pub fn ensure(&mut self, env: &mut Env<'_>) {
+        // Per-file checkers: a scan here would resolve every file under the
+        // current pass's checker, the history this mode exists to remove.
+        assert!(
+            !self.per_file || self.merged.is_some(),
+            "per-file checkers: the reference index is merged per file, not scanned under one checker"
+        );
         if self.merged.is_none() {
             let started = std::time::Instant::now();
             self.merged = Some(self.build(env));
@@ -1108,6 +1417,12 @@ impl ReferenceIndex {
             let entry = self.contribution(env, *file);
             self.files.insert(path, entry);
         }
+        self.merge_files(paths)
+    }
+
+    /// The merge half of [`ReferenceIndex::build`]: the contributions held for
+    /// `paths`, merged in path order.
+    fn merge_files(&mut self, mut paths: Vec<String>) -> HashMap<SymbolId, Vec<Indexed>> {
         // A departed file's retained answers go with it.
         let records = &mut self.records;
         let files = &self.files;
@@ -1298,6 +1613,9 @@ impl ReferenceIndex {
     /// Go: `locations`.
     #[must_use]
     pub fn locations(&self, id: &SymbolId) -> Vec<Location> {
+        if id.is_empty() {
+            return Vec::new();
+        }
         let Some(references) = self.merged.as_ref().and_then(|merged| merged.get(id)) else {
             return Vec::new();
         };
@@ -1409,17 +1727,22 @@ impl ReferenceIndex {
                     let id = env.id_for(canonical);
                     let start = skip_trivia(text, node.pos().source_offset().unwrap_or(0));
                     let end = node.end().source_offset().unwrap_or(start);
-                    let spans = scan.references.entry(id.clone()).or_default();
-                    // Parsed children normally arrive in source order.
-                    // Preserve the ordering contract without sorting every
-                    // bucket, but detect and repair any non-lexical compiler
-                    // traversal defensively.
-                    if spans.last().is_some_and(|last| last.start > start) {
-                        scan.unordered.insert(id);
+                    // A symbol with no id has no bucket and no space.
+                    if !id.is_empty() {
+                        let spans = scan.references.entry(id.clone()).or_default();
+                        // Parsed children normally arrive in source order.
+                        // Preserve the ordering contract without sorting every
+                        // bucket, but detect and repair any non-lexical compiler
+                        // traversal defensively.
+                        if spans.last().is_some_and(|last| last.start > start) {
+                            scan.unordered.insert(id);
+                        }
+                        spans.push(Span { start, end });
                     }
-                    spans.push(Span { start, end });
-                    *scan.spaces.entry(reference_id).or_default() |=
-                        if is_type_space_reference(node) { 2 } else { 1 };
+                    if !reference_id.is_empty() {
+                        *scan.spaces.entry(reference_id).or_default() |=
+                            if is_type_space_reference(node) { 2 } else { 1 };
+                    }
                 }
             }
             node.for_each_child(&mut |child| {
