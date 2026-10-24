@@ -22,8 +22,9 @@ export const FILE_BUDGETS = {
   "AGENTS.md": 8_000,
   "CLAUDE.md": 1_000,
   "docs/open-work.md": 26_300,
-  // Raised for ADR 0378: the file stood 2 bytes under 113_200.
-  "docs/decisions.md": 113_800,
+  // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
+  // 14 bytes under 113_800; and for ADR 0380, 3 bytes under 114_700.
+  "docs/decisions.md": 115_600,
 };
 
 export const GROUP_BUDGETS = [

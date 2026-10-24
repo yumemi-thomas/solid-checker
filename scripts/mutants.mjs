@@ -3,11 +3,12 @@
 // node scripts/mutants.mjs --oracle <runtime-oracle.json> --out <fresh-directory>
 //   --apps-root <corpus/apps> --checker <binary> --typefacts <absolute-binary>
 //   [--scratch /tmp/sc-scratch.noindex/mutants] [--limit 5] [--seed 20261019]
-//   [--apps app,...] [--typescript <installed typescript directory>]
+//   [--apps app,...] [--typescript <installed typescript directory>] [--jobs 3]
 // First: --write-patterns <fresh-directory>, then run runtime-oracle.mjs on it
 // with --install pointing to an APFS-cloned rc.17 app, using /private/tmp on macOS.
-// Hold the shared lock for the entire sweep (avoids contention between passes):
-// sc-heavy node scripts/mutants.mjs ... --heavy /usr/bin/env
+// The run holds the shared heavy-step lock (`--heavy`, sc-heavy) once, for the
+// whole sweep, and analyzes `--jobs` apps side by side. A caller that already
+// holds the lock passes --heavy /usr/bin/env.
 // Resume an interrupted sweep with the same options and --resume true.
 // APFS clones, one batch per project, disjoint function bodies; baseline and mutant
 // use identical project settings. TypeScript diagnostics are differenced, not
@@ -21,7 +22,7 @@
 // compares baseline against mutant under one compiler, so no version is
 // claimed to match the producer's.
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -108,6 +109,29 @@ function command(bin, args, options = {}) {
     timeout: 900_000, ...options });
   assert(!result.error && !result.signal, `${bin}: ${result.error ?? result.signal}`);
   return { status: result.status, stdout: result.stdout, stderr: result.stderr, wallMs: Date.now() - started };
+}
+/** `command` without blocking the event loop, so several apps run at once. */
+function commandAsync(bin, args, options = {}) {
+  const started = Date.now();
+  return new Promise((done, fail) => {
+    const child = spawn(bin, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
+    const out = [], err = [];
+    let size = 0, overflow = false;
+    const collect = into => chunk => {
+      size += chunk.length;
+      if (size > 128 * 1024 * 1024) { overflow = true; child.kill("SIGKILL"); } else into.push(chunk);
+    };
+    child.stdout.on("data", collect(out));
+    child.stderr.on("data", collect(err));
+    const timer = setTimeout(() => child.kill("SIGKILL"), 900_000);
+    child.on("error", error => { clearTimeout(timer); fail(new Error(`${bin}: ${error}`)); });
+    child.on("close", (status, signal) => {
+      clearTimeout(timer);
+      if (overflow || signal) return fail(new Error(`${bin}: ${overflow ? "output over 128 MiB" : signal}`));
+      done({ status, stdout: Buffer.concat(out).toString("utf8"), stderr: Buffer.concat(err).toString("utf8"),
+        wallMs: Date.now() - started });
+    });
+  });
 }
 function originalOffset(offset, edits) {
   let delta = 0;
@@ -497,7 +521,7 @@ const options = { "apps-root": "/Users/thomas/Documents/Github/solid-checker-rc1
   checker: "/tmp/sc-scratch.noindex/agents/checker-6a4940bc9",
   typefacts: "/Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts",
   manifest: join(repo, "scripts/corpus/rc17-manifest.json"), scratch: "/tmp/sc-scratch.noindex/mutants",
-  heavy: "/Users/thomas/.local/bin/sc-heavy", limit: "5", seed: "20261019", apps: "", typescript: null, oracle: null, out: null, resume: "false" };
+  heavy: "/Users/thomas/.local/bin/sc-heavy", jobs: "3", limit: "5", seed: "20261019", apps: "", typescript: null, oracle: null, out: null, resume: "false" };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, "");
   assert(key in options && process.argv[i + 1] !== undefined, `unknown/incomplete ${process.argv[i]}`);
@@ -505,6 +529,17 @@ for (let i = 2; i < process.argv.length; i += 2) {
 }
 assert(options.out && options.oracle, "--out and --oracle are required");
 assert(Number.isInteger(Number(options.limit)) && Number(options.limit) > 0, "positive integer --limit required");
+assert(Number.isInteger(Number(options.jobs)) && Number(options.jobs) > 0, "positive integer --jobs required");
+// The whole run holds the shared heavy-step lock once: taking it per checker
+// run queued each of the ~90 runs behind other agents' heavy steps (31 min for
+// 11 min of work, 2026-10-19). The script runs itself under `--heavy`;
+// `--heavy /usr/bin/env` when the caller already holds it.
+if (process.env.SOLID_CHECKER_MUTANTS_LOCKED !== "1") {
+  const locked = spawnSync(resolve(options.heavy), [process.execPath, script, ...process.argv.slice(2)],
+    { stdio: "inherit", env: { ...process.env, SOLID_CHECKER_MUTANTS_LOCKED: "1" } });
+  assert(!locked.error && !locked.signal, `${options.heavy}: ${locked.error ?? locked.signal}`);
+  process.exit(locked.status ?? 1);
+}
 assert(isAbsolute(options.typefacts), "producer must be absolute");
 const output = resolve(options.out);
 assert(!output.startsWith(realpathSync(options["apps-root"]) + "/"), "output must not be inside the corpus");
@@ -538,7 +573,10 @@ else {
   save(identityPath, runIdentity);
 }
 const runId = `${options.seed}-${Date.now()}`;
-for (const [app, appRows] of Map.groupBy(rows, r => r.app)) {
+// Apps run side by side (`--jobs`): each has its own clones and checker runs.
+// An app's projects stay in order, since its per-pattern quota carries from
+// one project to the next.
+async function processApp(app, appRows) {
   const source = realpathSync(join(options["apps-root"], appRows[0].root));
   const remaining = Object.fromEntries(Object.keys(patterns).map(p => [p, Number(options.limit)]));
   for (const site of sites.filter(s => s.app === app)) remaining[site.pattern]--;
@@ -555,17 +593,17 @@ for (const [app, appRows] of Map.groupBy(rows, r => r.app)) {
     if (!resumeProject) {
     assert(!existsSync(target));
     console.error(`clone ${prefix}`);
-    copy = command("cp", ["-cR", source, target]);
+    copy = await commandAsync("cp", ["-cR", source, target]);
     assert.equal(copy.status, 0, copy.stderr);
     } else console.error(`resume ${prefix}`);
     const clone = realpathSync(target);
-    const runChecker = phase => {
+    const runChecker = async phase => {
       const checkpointPath = join(output, `${prefix}-${phase}.json`);
       if (resumeProject && existsSync(checkpointPath)) {
         const cached = json(checkpointPath);
         if (cached.payload) return cached;
       }
-      const run = command(resolve(options.heavy), ["/usr/bin/time", "-p", resolve(options.checker), "--format", "json", "--project", join(clone, row.project),
+      const run = await commandAsync("/usr/bin/time", ["-p", resolve(options.checker), "--format", "json", "--project", join(clone, row.project),
         "--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"], { cwd: clone, env });
       const timing = run.stderr.match(/(?:^|\n)real\s+(\d+(?:\.\d+)?)/);
       assert(timing, `missing checker wall time: ${run.stderr}`);
@@ -582,16 +620,16 @@ for (const [app, appRows] of Map.groupBy(rows, r => r.app)) {
       save(join(output, `${prefix}-${phase}.json`), { ...run, stdout: undefined, payload });
       return { ...run, payload };
     };
-    const baseline = runChecker("baseline");
+    const baseline = await runChecker("baseline");
     const spec = resumeProject ? previousSpec : { app, project: row.project, clone, original: source, seed: options.seed, limit: Number(options.limit),
       remaining, typescript, prepared: join(output, `${prefix}-sites.json`) };
     const specPath = join(output, `${prefix}-spec.json`);
     save(specPath, spec);
-    const preparation = resumeProject ? { status: 0, wallMs: 0 } : command(process.execPath, [script, "--prepare", specPath]);
+    const preparation = resumeProject ? { status: 0, wallMs: 0 } : await commandAsync(process.execPath, [script, "--prepare", specPath]);
     assert.equal(preparation.status, 0, `${prefix}: ${preparation.stderr}`);
     const prepared = json(spec.prepared);
     const analyzedMutant = prepared.sites.length > 0 && prepared.introduced.length === 0;
-    const mutant = analyzedMutant ? runChecker("mutant") : baseline;
+    const mutant = analyzedMutant ? await runChecker("mutant") : baseline;
     for (const resolution of prepared.resolution) assert.equal(sha(readFileSync(join(source, resolution.file))),
       resolution.originalSourceSha256, `corpus input changed during run: ${resolution.file}`);
     const baselineKeys = new Set(baseline.payload.findings.map(f => {
@@ -637,6 +675,16 @@ for (const [app, appRows] of Map.groupBy(rows, r => r.app)) {
     }
   }
 }
+const appQueue = [...Map.groupBy(rows, r => r.app)];
+let nextApp = 0;
+await Promise.all(Array.from({ length: Math.min(Number(options.jobs), appQueue.length) }, async () => {
+  while (nextApp < appQueue.length) await processApp(...appQueue[nextApp++]);
+}));
+// Back into manifest order, so the report does not depend on which app
+// finished first; within a project, sites keep the order they were found in.
+const order = new Map(rows.map((row, index) => [`${row.app}\0${row.project}`, index]));
+const position = entry => order.get(`${entry.app}\0${entry.project}`) ?? Infinity;
+for (const list of [results, sites, blockers]) list.sort((left, right) => position(left) - position(right));
 const totals = Object.fromEntries(Object.keys(patterns).map(pattern => {
   const rows = sites.filter(s => s.pattern === pattern);
   const counts = Object.fromEntries(["proven", "uncertifiable", "missed", "type-error", "other"].map(c => [c, rows.filter(s => s.classification === c).length]));
@@ -664,7 +712,7 @@ const report = { seed: options.seed, limitPerPatternPerApp: Number(options.limit
     { ...pattern, template: patternSource(id), templateSha256: sha(patternSource(id)) }])), totals, groups,
   checker: resolve(options.checker), producer: options.typefacts, ...identities, node: process.version,
   manifestSha256: sha(readFileSync(options.manifest)), harnessSha256: sha(readFileSync(script)),
-  typescript, oracle: resolve(options.oracle), configuration: { ...manifest.configuration, daemon: false },
+  typescript, oracle: resolve(options.oracle), configuration: { ...manifest.configuration, daemon: false, jobs: Number(options.jobs) },
   selectedProjects: rows, skippedAfterAppQuota: rows.filter(row => ![...results, ...blockers]
     .some(r => r.app === row.app && r.project === row.project)),
   wallMs: Date.now() - started, checkerWallMs: results.reduce((n, r) => n + r.baselineWallMs + r.mutantWallMs, 0),

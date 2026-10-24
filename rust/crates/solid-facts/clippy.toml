@@ -1,0 +1,13 @@
+# An analysis crate also compiles into the wasm32-wasip1 reactor, which has no
+# threads: `Scope::spawn` panics there instead of running inline, so every
+# parallel stage needs a sequential arm that a native run never exercises.
+# `make verify` skips the WASM parity gate for changes confined to the analysis
+# crates (docs/decisions.md, ADR 0379); this lint keeps a new thread site from
+# reaching WASM without one. An allowed site names its sequential arm.
+disallowed-methods = [
+  { path = "std::thread::scope", reason = "wasm32-wasip1 has no threads; give the stage a sequential arm and allow it there" },
+  { path = "std::thread::spawn", reason = "wasm32-wasip1 has no threads; give the stage a sequential arm and allow it there" },
+  { path = "std::thread::Scope::spawn", reason = "wasm32-wasip1 has no threads; give the stage a sequential arm and allow it there" },
+  { path = "std::thread::Builder::spawn", reason = "wasm32-wasip1 has no threads; give the stage a sequential arm and allow it there" },
+  { path = "std::thread::Builder::spawn_scoped", reason = "wasm32-wasip1 has no threads; give the stage a sequential arm and allow it there" },
+]

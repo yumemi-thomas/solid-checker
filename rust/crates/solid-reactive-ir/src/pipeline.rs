@@ -272,6 +272,8 @@ pub fn build_with_analysis_inputs_measured(
     )
 }
 
+// Threads only with a second analysis worker; the `available_analysis_workers() <= 1` arm runs inline (wasm32-wasip1).
+#[allow(clippy::disallowed_methods)]
 pub(crate) fn build_with_analysis_inputs_measured_incremental(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
@@ -692,6 +694,8 @@ pub(crate) fn analysis_worker_limit_for_lanes(lanes: usize) -> usize {
         .div_ceil(lanes.max(1))
 }
 
+// Threads only with a second worker and 256 items; otherwise a plain map (wasm32-wasip1).
+#[allow(clippy::disallowed_methods)]
 pub(crate) fn parallel_slice_results<T, R, F>(items: &[T], analyze: F) -> Vec<R>
 where
     T: Sync,
@@ -722,6 +726,8 @@ where
     })
 }
 
+// Threads only with a second worker and 256 files; otherwise a plain map (wasm32-wasip1).
+#[allow(clippy::disallowed_methods)]
 pub(crate) fn parallel_file_chunk_results<R, F>(files: &[FileFacts], analyze: F) -> Vec<R>
 where
     R: Send,

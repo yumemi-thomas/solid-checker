@@ -156,10 +156,14 @@ fn rebuild_and_update_loops_do_not_accumulate() {
     eprintln!("updates: before {before_updates} KiB, #10 {at_10} KiB, #100 {at_100} KiB");
     eprintln!("update arena: #10 {arena_10} KiB, #100 {arena_u100} KiB");
 
-    // 1,100 edits of a 100 KB file, across the rebase at 1,024: every edited
+    // 1,100 edits of a 10 KB file, across the rebase at 1,024: every edited
     // version's tree, binder output and lazily filled data is freed once no
-    // head reads it. Without that, each edit kept about 1 MiB.
-    let body: String = (0..2000)
+    // head reads it. Without that, a 100 KB file kept about 1 MiB per edit.
+    // The rebase is what the edit count must cross; the file size only scales
+    // a leak and the time (100 KB took about 21 s of 25). At 10 KB, with
+    // nothing reused (TSRS_ARENA_POISON=1), #100 to #1,100 grew the arena by
+    // about 1.25 GiB, against the 8 MiB bound below.
+    let body: String = (0..200)
         .map(|n| format!("export function f{n}(x: number): number {{ return x + {n}; }}\n"))
         .collect();
     let big = path("c.ts");
@@ -216,7 +220,7 @@ fn rebuild_and_update_loops_do_not_accumulate() {
     );
     assert!(
         arena_b.saturating_sub(arena_a) <= 8 * 1024,
-        "1,000 edits of a 100 KB file grew the arena by {} KiB",
+        "1,000 edits of a 10 KB file grew the arena by {} KiB",
         arena_b.saturating_sub(arena_a)
     );
     // Without freeing, 270 more rebuilds would add ~2.4 GiB and 90 more updates

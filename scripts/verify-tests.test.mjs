@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { test } from "vitest";
-import { runTestJobs, verificationJobs } from "./verify-tests.mjs";
+import { runTestJobs, selectJobs, verificationJobs } from "./verify-tests.mjs";
 
 const node = execFileSync("node", ["-p", "process.execPath"], { encoding: "utf8" }).trim();
 const job = (name, code) => ({ name, commands: [[node, "-e", code]] });
@@ -88,3 +88,16 @@ test("interrupting the runner kills even a TERM-resistant grandchild", async () 
     if (grandchildPid) { try { process.kill(grandchildPid, "SIGKILL"); } catch {} }
   }
 }));
+
+test("a job can be selected by name, and a misspelled name cannot run nothing", () => {
+  const jobs = verificationJobs("nextest", {});
+  assert.deepEqual(selectJobs(jobs, ["test-workspace"]).map(row => row.name), ["test-workspace"]);
+  assert.equal(selectJobs(jobs, []).length, jobs.length);
+  assert.throws(() => selectJobs(jobs, ["test-workspac"]), /unknown verification job/);
+});
+
+test("the suites build in the edit loop's dev profile unless told otherwise", () => {
+  const rust = verificationJobs("nextest", {})[1];
+  assert.equal(rust.commands[0][rust.commands[0].indexOf("--cargo-profile") + 1], "dev");
+  assert.equal(rust.commands[1][rust.commands[1].indexOf("--profile") + 1], "dev");
+});
