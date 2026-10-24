@@ -596,3 +596,7 @@ The producer pins `yumemi-thomas/tsrs@e1e9183` (upstream `3bbcc754`, v0.19.0, pl
 <a id="adr-0378"></a>
 ## ADR 0378 — A write's legal role needs all of its function's entries
 An event-only proof (ADR 0327) decides first. Else an unplaced write takes its function's call sites' and naming positions' role (a nested closure: its own, unless each layer between runs inline or on a fresh stack). An owned-scope entry is a violation if the binding holds only it. An unplaced entry, a recursive JSX render, or other reference to the binding or a named expression's outer one (prop, store, alias, method, open or escaping export): uncertifiable. Owner: `execution_role/write_roles.rs`.
+
+<a id="adr-0379"></a>
+## ADR 0379 — A retained daemon keeps its session across an edit
+The resolution witness observes program files outside the tracked sources only (a tracked edit is an overlay update; observing it made every edit a rebuild). It reads the `Modules` demand `distinctBareImports` (protocol 84): non-relative imports, one row per importer, text and resolved, included and symlink path, so a `.d.ts` repeating `import("pkg")` no longer overflows the 64 MiB frame and drops the daemon to one-shot. An update that keeps the program's files keeps the witness and adds the edited files' imports: a superset of a fresh one. A dangling symlink's cache digest is its link text (inference still refuses on it). Owners: `daemon.rs` `answer`, `daemon_resolution.rs`, `inferred_host_input_digest`, `module_graph.rs`.

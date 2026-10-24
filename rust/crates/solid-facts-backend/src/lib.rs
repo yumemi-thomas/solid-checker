@@ -1054,6 +1054,17 @@ impl NativeIncrementalSession {
             .module_graph(&typefacts::ModuleGraphDemand::with_distinct_bare_imports())
     }
 
+    /// [`Self::resolution_graph`] scoped to the imports of `paths`.
+    pub fn resolution_graph_of(
+        &mut self,
+        paths: &[String],
+    ) -> Result<typefacts::ModuleGraph, BackendError> {
+        self.typescript.module_graph(
+            &typefacts::ModuleGraphDemand::with_distinct_bare_imports()
+                .import_paths(paths.iter().cloned()),
+        )
+    }
+
     /// Recovery is the session's own concern now.
     ///
     /// `typefacts::Session` restarts the producer and replays every retained

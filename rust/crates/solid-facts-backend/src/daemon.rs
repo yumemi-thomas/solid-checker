@@ -1318,6 +1318,8 @@ fn answer(
         state.session.set_semantic_demand_options(options);
         Ok(())
     };
+    // The files an overlay update edited while the program kept its files.
+    let mut edited = None;
     let facts = if changes.is_empty() {
         demand(state)?;
         state.session.analyze()?
@@ -1328,17 +1330,28 @@ fn answer(
             state.modules = Some(state.session.program_modules()?);
         }
         demand(state)?;
-        let facts = state.session.edit(changes, None)?;
-        let modules = state.session.program_modules()?;
-        if state.modules.as_ref() == Some(&modules) {
-            facts
-        } else {
-            // An edited import added a file to the program or dropped one,
-            // which the session's fixed source set does not follow.
+        let paths = changes
+            .iter()
+            .map(|change| change.path.clone())
+            .collect::<Vec<_>>();
+        let facts = state.session.edit(changes, None);
+        let modules = state.session.program_modules();
+        // An edited import added a file to the program or dropped one, which
+        // the session's fixed source set does not follow. A dropped file can
+        // fail the update's own analysis (its source is still demanded): the
+        // program's files moved all the same, so that error is not the answer.
+        let moved = modules
+            .as_ref()
+            .is_ok_and(|modules| state.modules.as_ref() != Some(modules));
+        if moved {
             let previous = state.generated().map(Path::to_path_buf);
             replace_state(state, State::open(request)?, previous);
             demand(state)?;
             state.session.analyze()?
+        } else {
+            modules?;
+            edited = Some(paths);
+            facts?
         }
     };
     // Review of ADR 0368: a project call's validity is the project's own
@@ -1373,8 +1386,30 @@ fn answer(
         }
         _ => facts,
     };
-    // Observe what this program's resolution read, for the next request.
-    state.resolution = Some(ResolutionWitness::of(&state.session.resolution_graph()?));
+    // Observe what this program's resolution read, for the next request. The
+    // tracked sources are `resync_tracked`'s: their edits are overlay updates.
+    // A retained witness was found current by `resync` this request, so it
+    // still holds for the same program, and after an update that kept the
+    // program's files it needs only the edited files' imports on top. A new
+    // session (rebuilt, reprepared, or reopened by the update) has none.
+    let tracked = &state.tracking.fingerprints;
+    let tracked = |path: &str| tracked.contains_key(path);
+    match (state.resolution.as_mut(), edited) {
+        (Some(_), None) => {}
+        (Some(witness), Some(paths)) => {
+            let graph = state.session.resolution_graph_of(&paths)?;
+            if graph.unknown_import_paths.is_empty() {
+                witness.extend(&graph, tracked);
+            } else {
+                let graph = state.session.resolution_graph()?;
+                state.resolution = Some(ResolutionWitness::of(&graph, tracked));
+            }
+        }
+        (None, _) => {
+            let graph = state.session.resolution_graph()?;
+            state.resolution = Some(ResolutionWitness::of(&graph, tracked));
+        }
+    }
     let directory = state
         .project
         .parent()

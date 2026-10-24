@@ -11,8 +11,10 @@
 //!
 //! The witness records, from the open program's own module graph:
 //!
-//! - every file the program holds, by content (a file outside the tracked
-//!   sources -- a package's declarations -- edited in place);
+//! - every file the program holds outside the tracked sources, by content (a
+//!   package's declarations edited in place). A tracked source's edit is the
+//!   daemon's own overlay update, so observing its bytes here would turn
+//!   every edit into a rebuild;
 //! - for every non-relative import, each `node_modules/<name>` and
 //!   `node_modules/@types/<name>` candidate on the walk from the importing
 //!   file's directory to the root: absent, a directory (with its realpath),
@@ -150,15 +152,37 @@ pub(crate) struct ResolutionWitness {
 }
 
 impl ResolutionWitness {
-    pub(crate) fn of(graph: &typefacts::ModuleGraph) -> Self {
-        let mut observed = BTreeMap::new();
+    /// `tracked` names the sources the caller reconciles by content itself.
+    /// A tracked path spelled differently from the module's is observed, so
+    /// a mismatch costs a rebuild, never a missed edit.
+    pub(crate) fn of(graph: &typefacts::ModuleGraph, tracked: impl Fn(&str) -> bool) -> Self {
+        let mut witness = Self {
+            observed: BTreeMap::new(),
+        };
+        witness.extend(graph, tracked);
+        witness
+    }
+
+    /// Adds what `graph` read to a witness that is still [`Self::current`],
+    /// keeping every entry already recorded (each still as it was). After an
+    /// overlay update that kept the program's files, `graph` scoped to the
+    /// edited files makes a superset of a fresh witness: an import the edit
+    /// dropped stays observed, which can only cost a rebuild.
+    pub(crate) fn extend(
+        &mut self,
+        graph: &typefacts::ModuleGraph,
+        tracked: impl Fn(&str) -> bool,
+    ) {
+        let observed = &mut self.observed;
         let mut record = |path: PathBuf| {
             observed
                 .entry(path)
                 .or_insert_with_key(|path| observe(path));
         };
         for module in &graph.modules {
-            record(PathBuf::from(module.path.as_ref()));
+            if !tracked(module.path.as_ref()) {
+                record(PathBuf::from(module.path.as_ref()));
+            }
         }
         for import in &graph.imports {
             let text = import.text.as_ref();
@@ -204,7 +228,6 @@ impl ResolutionWitness {
                 record(ancestor.join("node_modules"));
             }
         }
-        Self { observed }
     }
 
     /// Whether every recorded entry is still as it was.
