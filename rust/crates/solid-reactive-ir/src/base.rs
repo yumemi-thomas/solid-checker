@@ -224,12 +224,14 @@ base_indexes! {
         hazards: Hazard => u32 = contributions::hazards;
         /// Reflective-definer keys.
         definers: DefinerKey => () = contributions::definers;
+    }
+    unread: {
         /// Uses of entity symbols, by symbol.
         symbol_uses: Arc<str> => SymbolUse = contributions::symbol_uses;
         /// Property spellings, by name.
         spellings: Arc<str> => Spelling = contributions::spellings;
-    }
-    unread: {
+        /// The global bindings assignments write, by name.
+        global_writes: Arc<str> => () = contributions::global_writes;
         /// References by symbol.
         references: Arc<str> => Span = contributions::references;
         /// The spans where a symbol's value is used like a returned callback.

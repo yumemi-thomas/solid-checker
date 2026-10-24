@@ -194,7 +194,7 @@ impl<'a> SemanticLookup<'a> {
             // identity must first require an exact identifier span (accessor
             // provenance's `exact_identifier`).
             for (path, entities) in &self.entities.by_path {
-                for ((start, end), symbol) in entities {
+                for ((start, end), symbol) in entities.iter() {
                     if let Some(resolution) = by_symbol.get(symbol) {
                         by_path
                             .entry(path.clone())

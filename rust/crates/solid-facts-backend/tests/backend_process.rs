@@ -8,6 +8,8 @@ mod process_support;
 #[path = "accessor_provenance_process.rs"]
 mod accessor_provenance_process;
 
+#[path = "bookkeeping_process.rs"]
+mod bookkeeping_process;
 #[path = "callback_props_reads_process.rs"]
 mod callback_props_reads_process;
 #[path = "cli_process.rs"]

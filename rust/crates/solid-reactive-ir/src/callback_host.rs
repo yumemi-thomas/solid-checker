@@ -1013,8 +1013,11 @@ mod tests {
             })
             .collect();
         let entities = crate::indexes::EntitySymbols {
-            by_path: HashMap::from_iter([("case.tsx".into(), entries.clone())]),
-            exact_by_path: HashMap::from_iter([("case.tsx".into(), entries)]),
+            by_path: HashMap::from_iter([(
+                "case.tsx".into(),
+                std::sync::Arc::new(entries.clone()),
+            )]),
+            exact_by_path: HashMap::from_iter([("case.tsx".into(), std::sync::Arc::new(entries))]),
         };
         let facts = ProjectFacts {
             generation,

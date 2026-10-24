@@ -103,16 +103,40 @@ pub(crate) struct MemoRead {
 }
 
 /// Everything one computation read of the rest of the program.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+///
+/// The memo reads are kept as sorted runs without duplicates, shared by
+/// `Arc` with the sets they were added from, and a short unsorted tail
+/// (ADR 0406). Adding a set ([`Self::extend`]) adds its runs by
+/// pointer, skipping one already held, so a set added to a thousand others
+/// (the reads a stage made before its chunks ran) is neither copied nor
+/// sorted again for each; small runs are merged once there are many. A read
+/// may sit in more than one run: a check of the set asks it again, with the
+/// same answer.
+#[derive(Clone, Debug, Default)]
 pub(crate) struct Reads {
     sections: u32,
-    /// Sorted, without duplicates.
-    memos: Vec<MemoRead>,
+    /// Each sorted, without duplicates, never empty.
+    runs: Vec<Arc<[MemoRead]>>,
+    /// At most [`TAIL_MAX`] reads not in a run yet, in the order added.
+    tail: Vec<MemoRead>,
 }
+
+impl PartialEq for Reads {
+    fn eq(&self, other: &Self) -> bool {
+        self.sections == other.sections && self.distinct_memos() == other.distinct_memos()
+    }
+}
+
+impl Eq for Reads {}
+
+/// A tail longer than this becomes a run.
+const TAIL_MAX: usize = 64;
+/// More runs than this: the smaller half is merged into one.
+const RUNS_MAX: usize = 16;
 
 impl Reads {
     pub(crate) fn is_empty(&self) -> bool {
-        self.sections == 0 && self.memos.is_empty()
+        self.sections == 0 && self.runs.is_empty() && self.tail.is_empty()
     }
 
     pub(crate) fn sections(&self) -> impl Iterator<Item = Section> + '_ {
@@ -126,31 +150,176 @@ impl Reads {
         self.sections & section.bit() != 0
     }
 
+    /// The memo reads, sorted without duplicates.
     #[cfg(test)]
-    pub(crate) fn memos(&self) -> &[MemoRead] {
-        &self.memos
+    pub(crate) fn memos(&self) -> Vec<MemoRead> {
+        self.distinct_memos()
     }
 
-    /// Adds every set of `others`' reads: the sections at once, the memo
-    /// reads sorted and deduplicated once at the end.
+    /// Every memo read, a read held twice listed twice.
+    fn memo_reads(&self) -> impl Iterator<Item = &MemoRead> + '_ {
+        self.runs
+            .iter()
+            .flat_map(|run| run.iter())
+            .chain(&self.tail)
+    }
+
+    fn has_memos(&self) -> bool {
+        !self.runs.is_empty() || !self.tail.is_empty()
+    }
+
+    fn distinct_memos(&self) -> Vec<MemoRead> {
+        let mut memos = self.memo_reads().copied().collect::<Vec<_>>();
+        memos.sort_unstable();
+        memos.dedup();
+        memos
+    }
+
+    /// The reads of a finished recording: its own notes (sorted, without
+    /// duplicates) and the runs it replayed.
+    fn of(sections: u32, mut runs: Vec<Arc<[MemoRead]>>, own: Vec<MemoRead>) -> Self {
+        if !own.is_empty() {
+            runs.push(Arc::from(own));
+        }
+        let mut reads = Self {
+            sections,
+            runs,
+            tail: Vec::new(),
+        };
+        reads.bound_runs();
+        reads
+    }
+
+    /// Adds every set of `others`' reads. Runs are shared by pointer
+    /// ([`Self::extend`]), so this is linear in the runs added.
     pub(crate) fn extend_all<'a>(&mut self, others: impl IntoIterator<Item = &'a Self>) {
         for other in others {
-            self.sections |= other.sections;
-            self.memos.extend_from_slice(&other.memos);
+            self.extend(other);
         }
-        self.memos.sort_unstable();
-        self.memos.dedup();
     }
 
     /// Adds `other`'s reads.
     pub(crate) fn extend(&mut self, other: &Self) {
         self.sections |= other.sections;
-        if other.memos.is_empty() {
+        for run in &other.runs {
+            self.add_run(run);
+        }
+        if other.tail.is_empty() {
+            self.bound_runs();
             return;
         }
-        self.memos.extend_from_slice(&other.memos);
-        self.memos.sort_unstable();
-        self.memos.dedup();
+        self.tail.extend_from_slice(&other.tail);
+        if self.tail.len() > TAIL_MAX {
+            let mut tail = std::mem::take(&mut self.tail);
+            cost::timed(cost::EXTEND, tail.len(), || {
+                tail.sort_unstable();
+                tail.dedup();
+            });
+            self.runs.push(Arc::from(tail));
+        }
+        self.bound_runs();
+    }
+
+    fn add_run(&mut self, run: &Arc<[MemoRead]>) {
+        if !self.runs.iter().any(|held| Arc::ptr_eq(held, run)) {
+            self.runs.push(Arc::clone(run));
+        }
+    }
+
+    /// Merges the smaller half of the runs into one while there are more
+    /// than [`RUNS_MAX`]: a read is merged again only with runs at least as
+    /// large as its own, and a large shared run stays shared.
+    fn bound_runs(&mut self) {
+        if self.runs.len() <= RUNS_MAX {
+            return;
+        }
+        self.runs.sort_by_key(|run| std::cmp::Reverse(run.len()));
+        let small = self.runs.split_off(RUNS_MAX / 2);
+        let elements = small.iter().map(|run| run.len()).sum::<usize>();
+        let merged = cost::timed(cost::MERGE, elements, || {
+            let mut merged = Vec::with_capacity(elements);
+            for run in &small {
+                merged.extend_from_slice(run);
+            }
+            merged.sort_unstable();
+            merged.dedup();
+            merged
+        });
+        self.runs.push(Arc::from(merged));
+    }
+}
+
+/// What keeping read sets costs, for `SOLID_CHECKER_IR_BOOKKEEPING_LOG`
+/// (off unless that names a file): per kind of normalization, the calls,
+/// the elements they normalized and their CPU time, summed over threads.
+pub(crate) mod cost {
+    use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+
+    pub(crate) const FINISH: usize = 0;
+    pub(crate) const EXTEND: usize = 1;
+    pub(crate) const SO_FAR: usize = 2;
+    pub(crate) const MERGE: usize = 3;
+    pub(crate) const KINDS: [&str; 4] = ["finish", "tail", "soFar", "merge"];
+
+    static ON: AtomicU8 = AtomicU8::new(2);
+    static CALLS: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
+    static ELEMENTS: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
+    static NANOS: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
+
+    /// Whether the costs are measured.
+    pub(crate) fn on() -> bool {
+        match ON.load(Ordering::Relaxed) {
+            0 => false,
+            1 => true,
+            _ => {
+                let on = std::env::var_os("SOLID_CHECKER_IR_BOOKKEEPING_LOG").is_some();
+                ON.store(u8::from(on), Ordering::Relaxed);
+                on
+            }
+        }
+    }
+
+    /// Nanoseconds since the first call: what a measured computation took.
+    /// Measured phases run on one thread ([`super::super::memo::build`]),
+    /// so a duration there is CPU time, not a wait on another thread.
+    pub(crate) fn now_ns() -> u64 {
+        static EPOCH: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+        u64::try_from(
+            EPOCH
+                .get_or_init(std::time::Instant::now)
+                .elapsed()
+                .as_nanos(),
+        )
+        .unwrap_or(u64::MAX)
+    }
+
+    pub(crate) fn timed<R>(kind: usize, elements: usize, f: impl FnOnce() -> R) -> R {
+        if !on() {
+            return f();
+        }
+        let started = now_ns();
+        let value = f();
+        let nanos = now_ns().saturating_sub(started);
+        CALLS[kind].fetch_add(1, Ordering::Relaxed);
+        ELEMENTS[kind].fetch_add(elements as u64, Ordering::Relaxed);
+        NANOS[kind].fetch_add(nanos, Ordering::Relaxed);
+        value
+    }
+
+    /// The costs since the last call, `(kind, calls, elements, nanos)`.
+    pub(crate) fn take() -> Vec<(&'static str, u64, u64, u64)> {
+        KINDS
+            .iter()
+            .enumerate()
+            .map(|(kind, name)| {
+                (
+                    *name,
+                    CALLS[kind].swap(0, Ordering::Relaxed),
+                    ELEMENTS[kind].swap(0, Ordering::Relaxed),
+                    NANOS[kind].swap(0, Ordering::Relaxed),
+                )
+            })
+            .collect()
     }
 }
 
@@ -159,24 +328,30 @@ impl Reads {
 struct Frame {
     sections: u32,
     memos: Vec<MemoRead>,
+    /// The runs of the read sets replayed into this frame, each once.
+    runs: Vec<Arc<[MemoRead]>>,
     /// The replayed [`Recorded`] read sets, by address, so a cache read a
-    /// thousand times is copied once.
+    /// thousand times is added once.
     replayed: BTreeSet<usize>,
 }
 
 impl Frame {
     fn finish(mut self) -> Reads {
-        self.memos.sort_unstable();
-        self.memos.dedup();
-        Reads {
-            sections: self.sections,
-            memos: self.memos,
-        }
+        cost::timed(cost::FINISH, self.memos.len(), || {
+            self.memos.sort_unstable();
+            self.memos.dedup();
+        });
+        Reads::of(self.sections, self.runs, self.memos)
     }
 
     fn add(&mut self, reads: &Reads) {
         self.sections |= reads.sections;
-        self.memos.extend_from_slice(&reads.memos);
+        for run in &reads.runs {
+            if !self.runs.iter().any(|held| Arc::ptr_eq(held, run)) {
+                self.runs.push(Arc::clone(run));
+            }
+        }
+        self.memos.extend_from_slice(&reads.tail);
     }
 }
 
@@ -235,7 +410,7 @@ fn replay_shared(reads: &Arc<Reads>) {
     }
     FRAMES.with(|frames| {
         if let Some(frame) = frames.borrow_mut().last_mut() {
-            if reads.memos.is_empty() {
+            if !reads.has_memos() {
                 frame.sections |= reads.sections;
             } else if frame.replayed.insert(Arc::as_ptr(reads) as usize) {
                 frame.add(reads);
@@ -304,12 +479,11 @@ impl Recording {
             let frames = frames.borrow();
             let frame = frames.last().expect("a recording frame is open");
             let mut memos = frame.memos.clone();
-            memos.sort_unstable();
-            memos.dedup();
-            Reads {
-                sections: frame.sections,
-                memos,
-            }
+            cost::timed(cost::SO_FAR, memos.len(), || {
+                memos.sort_unstable();
+                memos.dedup();
+            });
+            Reads::of(frame.sections, frame.runs.clone(), memos)
         })
     }
 
@@ -495,14 +669,14 @@ impl ReadProof {
                 return Verdict::Moved(format!("section {section:?}"));
             }
         }
-        if self.reads.memos.is_empty() {
+        if !self.reads.has_memos() {
             return Verdict::Holds;
         }
         if answers.memo_store_id() != self.store {
             return Verdict::Moved("another memo store".to_owned());
         }
         let mut undecided = Vec::new();
-        for read in &self.reads.memos {
+        for read in self.reads.memo_reads() {
             match answers.memo_check(self.store, *read) {
                 MemoCheck::Same => {}
                 MemoCheck::Moved => {
@@ -588,6 +762,58 @@ mod tests {
         // Outside every recording, a note goes nowhere.
         note(Section::Components);
         assert!(!recording());
+    }
+
+    fn recorded(queries: impl IntoIterator<Item = u32>) -> Reads {
+        record(|| {
+            for query in queries {
+                note_memo(read(query));
+            }
+        })
+        .1
+    }
+
+    /// ADR 0406: a set added to many others is shared, not
+    /// copied; however many sets are added, the runs stay few and the set
+    /// is exactly the union; equality ignores how the runs fall.
+    #[test]
+    fn extended_sets_share_their_runs_and_stay_exact() {
+        let shared = recorded(0..500);
+        let mut per_chunk = Vec::new();
+        for chunk in 0..40 {
+            let mut reads = recorded([1000 + chunk, 3]);
+            reads.extend(&shared);
+            assert!(
+                reads
+                    .runs
+                    .iter()
+                    .any(|run| Arc::ptr_eq(run, &shared.runs[0])),
+                "the shared run is held, not copied"
+            );
+            per_chunk.push(reads);
+        }
+        let mut aggregate = Reads::default();
+        for reads in &per_chunk {
+            aggregate.extend(reads);
+        }
+        assert!(aggregate.runs.len() <= RUNS_MAX, "{}", aggregate.runs.len());
+        let expected = (0..500).chain(1000..1040).map(read).collect::<Vec<_>>();
+        assert_eq!(aggregate.memos(), expected);
+        assert_eq!(aggregate, recorded((0..500).chain(1000..1040)));
+        // A replayed set's runs reach the recording that replays it.
+        let ((), replayed) = record(|| replay(&aggregate));
+        assert_eq!(replayed, aggregate);
+        // A long tail becomes a run.
+        let mut tailed = Reads::default();
+        for query in 0..(TAIL_MAX as u32 * 3) {
+            tailed.extend(&Reads {
+                sections: 0,
+                runs: Vec::new(),
+                tail: vec![read(query)],
+            });
+        }
+        assert!(tailed.tail.len() <= TAIL_MAX);
+        assert_eq!(tailed, recorded(0..(TAIL_MAX as u32 * 3)));
     }
 
     /// Answers over fixed memo revisions; `undecided` holds the queries

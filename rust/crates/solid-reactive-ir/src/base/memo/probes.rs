@@ -58,12 +58,6 @@ pub(crate) enum Probe {
     CreateSignalCall,
     /// The standard-library declaration of a call. Site.
     StandardCall,
-    /// Some assignment writes the global binding of a name. Text.
-    GlobalWritten,
-    /// The base `symbol_uses` index at a symbol. Text.
-    SymbolUses,
-    /// The base `spellings` index at a name. Text.
-    Spellings,
     /// The member names some assignment writes. Unit.
     AssignedNames,
     /// The assignments that write through `R.prototype`, in file order. Unit.
@@ -115,8 +109,6 @@ pub(crate) enum ProbeAnswer {
     References(Option<Vec<(Arc<str>, u64, u64)>>),
     Symbols(Vec<Arc<str>>),
     Call(Option<(Arc<str>, Arc<str>)>),
-    Uses(Vec<(FileId, u32, crate::base::SymbolUse)>),
-    Spellings(Vec<(FileId, u32, crate::base::Spelling)>),
     Names(Vec<Arc<str>>),
     Sites(Vec<(FileId, u32, u32)>),
     /// A binding (file, slot rank, ordinal) and the symbol of its name.
@@ -195,10 +187,6 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
     /// (`SemanticLookup::property_may_be_defined_reflectively_as`).
     pub(crate) fn defined_reflectively(&self, name: &str) -> bool {
         self.flag(Probe::DefinedReflectively, PolledKey::Text(Arc::from(name)))
-    }
-
-    pub(crate) fn global_written(&self, name: &str) -> bool {
-        self.flag(Probe::GlobalWritten, PolledKey::Text(Arc::from(name)))
     }
 
     pub(crate) fn create_signal_call(&self, site: (FileId, u32, u32)) -> bool {
@@ -287,22 +275,6 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
         match self.probe(Probe::StandardCall, PolledKey::Site(site.0, site.1, site.2)) {
             ProbeAnswer::Call(call) => call,
             other => unreachable!("standard_call answers a call, not {other:?}"),
-        }
-    }
-
-    /// The uses of the entity symbol `symbol` (the base `symbol_uses` index).
-    pub(crate) fn symbol_uses(&self, symbol: &str) -> Vec<(FileId, u32, crate::base::SymbolUse)> {
-        match self.probe(Probe::SymbolUses, PolledKey::Text(Arc::from(symbol))) {
-            ProbeAnswer::Uses(uses) => uses,
-            other => unreachable!("symbol_uses answers uses, not {other:?}"),
-        }
-    }
-
-    /// Where `name` is spelled as a property (the base `spellings` index).
-    pub(crate) fn spellings(&self, name: &str) -> Vec<(FileId, u32, crate::base::Spelling)> {
-        match self.probe(Probe::Spellings, PolledKey::Text(Arc::from(name))) {
-            ProbeAnswer::Spellings(spellings) => spellings,
-            other => unreachable!("spellings answers spellings, not {other:?}"),
         }
     }
 

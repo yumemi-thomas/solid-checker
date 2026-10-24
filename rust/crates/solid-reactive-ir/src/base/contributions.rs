@@ -135,6 +135,45 @@ pub(crate) fn symbol_uses(
     entries
 }
 
+/// The names of the global bindings this file's assignments write, each
+/// once: the per-file part of whether some assignment writes the global
+/// binding of a name (`object_members`' host check).
+pub(crate) fn global_writes(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Arc<str>, ())> {
+    let mut names = written_global_identifiers(view.file).collect::<Vec<_>>();
+    names.sort_unstable();
+    names.dedup();
+    names
+        .into_iter()
+        .map(|name| (Arc::from(name), ()))
+        .collect()
+}
+
+/// The identifiers an assignment or iteration target of `file` writes that
+/// no declaration binds: the whole target, or a leaf of a destructuring
+/// pattern. An identifier inside a member target or a type assertion
+/// (`(x as HTMLCanvasElement).width = …`) writes no binding.
+pub(crate) fn written_global_identifiers(
+    file: &solid_facts::FileFacts,
+) -> impl Iterator<Item = &str> + '_ {
+    file.ast
+        .assignments
+        .iter()
+        .map(|assignment| assignment.target)
+        .chain(file.ast.iteration_targets.iter().copied())
+        .flat_map(move |target| {
+            let target = file.ast.peel_ts_sugar_span(target);
+            let pattern = file
+                .source_text(target)
+                .is_some_and(|text| text.starts_with(['[', '{']));
+            file.ast.identifiers.iter().filter_map(move |identifier| {
+                ((identifier.span == target || (pattern && target.contains(identifier.span)))
+                    && file.ast.reference_declaration(identifier.span).is_none())
+                .then(|| file.source_text(identifier.span))
+                .flatten()
+            })
+        })
+}
+
 /// How a name is spelled as a property.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) enum Spelling {

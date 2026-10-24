@@ -291,25 +291,7 @@ pub(super) struct AssignedMembers {
 /// binds.
 fn global_identifier_written(facts: &ProjectFacts, name: &str) -> bool {
     facts.files.iter().any(|file| {
-        file.ast
-            .assignments
-            .iter()
-            .map(|assignment| assignment.target)
-            .chain(file.ast.iteration_targets.iter().copied())
-            .any(|target| {
-                // The whole target, or a leaf of a destructuring pattern; an
-                // identifier inside a member target or a type assertion
-                // (`(x as HTMLCanvasElement).width = …`) writes no binding.
-                let target = file.ast.peel_ts_sugar_span(target);
-                let pattern = file
-                    .source_text(target)
-                    .is_some_and(|text| text.starts_with(['[', '{']));
-                file.ast.identifiers.iter().any(|identifier| {
-                    (identifier.span == target || (pattern && target.contains(identifier.span)))
-                        && file.source_text(identifier.span) == Some(name)
-                        && file.ast.reference_declaration(identifier.span).is_none()
-                })
-            })
+        crate::base::contributions::written_global_identifiers(file).any(|written| written == name)
     })
 }
 
@@ -469,11 +451,16 @@ pub(super) enum ComponentStatus {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct EntitySymbols {
-    pub(super) by_path: HashMap<String, HashMap<(u64, u64), SymbolId>>,
+    pub(super) by_path: HashMap<String, PathSymbols>,
     /// The entries of `by_path` whose symbol names the whole span
     /// (`EntityFact::symbol_covers_span`).
-    pub(super) exact_by_path: HashMap<String, HashMap<(u64, u64), SymbolId>>,
+    pub(super) exact_by_path: HashMap<String, PathSymbols>,
 }
+
+/// One path's entity symbols by span. Shared, and changed only through
+/// `Arc::make_mut`: a holder of a clone (the memo store, ADR 0406)
+/// knows the rows are the ones it fingerprinted while the pointer is the same.
+pub(crate) type PathSymbols = Arc<HashMap<(u64, u64), SymbolId>>;
 
 impl EntitySymbols {
     /// The symbol of the entity at `location`, whatever its span. At a call

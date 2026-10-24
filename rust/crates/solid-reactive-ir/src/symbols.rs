@@ -515,17 +515,13 @@ pub(super) fn entity_symbols(
 fn record_entity_symbol(entities: &mut EntitySymbols, entity: &EntityFact, symbol: SymbolId) {
     let path = entity.location.path.to_string();
     let key = (entity.location.start_byte, entity.location.end_byte);
-    let exact = entities.exact_by_path.entry(path.clone()).or_default();
+    let exact = std::sync::Arc::make_mut(entities.exact_by_path.entry(path.clone()).or_default());
     if entity.symbol_covers_span() {
         exact.insert(key, symbol.clone());
     } else {
         exact.remove(&key);
     }
-    entities
-        .by_path
-        .entry(path)
-        .or_default()
-        .insert(key, symbol);
+    std::sync::Arc::make_mut(entities.by_path.entry(path).or_default()).insert(key, symbol);
 }
 
 pub(super) fn symbol_names(
