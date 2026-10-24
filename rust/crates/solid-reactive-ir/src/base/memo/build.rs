@@ -387,20 +387,6 @@ impl FileFingerprints {
     }
 }
 
-/// Feeds serialized bytes straight into a digest.
-struct DigestWriter<'a>(&'a mut Sha256);
-
-impl std::io::Write for DigestWriter<'_> {
-    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        self.0.update(bytes);
-        Ok(bytes.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
 /// CPU time of one file's fingerprints by part, when measured
 /// ([`crate::base::reads::cost`]): source and compiler, symbol rows,
 /// declarations and signatures, references, and the parts reused.
@@ -595,25 +581,63 @@ fn declarations_digest(entities: &[typefacts::EntityFact]) -> [u8; 32] {
 }
 
 /// Each entity's location and whole resolved call, digested: the
-/// Signatures section.
+/// Signatures section. The rows are written as self-delimiting binary
+/// ([`super::serial_digest`]) and digested at once.
 fn signatures_digest(entities: &[typefacts::EntityFact]) -> [u8; 32] {
-    let mut signatures = Sha256::new();
+    let mut bytes = Vec::with_capacity(entities.len() * 64);
     for entity in entities {
-        signatures.update(entity.location.start_byte.to_le_bytes());
-        signatures.update(entity.location.end_byte.to_le_bytes());
+        bytes.extend_from_slice(&entity.location.start_byte.to_le_bytes());
+        bytes.extend_from_slice(&entity.location.end_byte.to_le_bytes());
         match entity.resolved_call.as_deref() {
-            None => signatures.update([0]),
+            None => bytes.push(0),
             Some(call) => {
-                signatures.update([1]);
+                bytes.push(1);
                 // The call's canonical serialization (field order is the
-                // struct's; no map iterates), terminated so two calls
-                // cannot run together.
-                let _ = serde_json::to_writer(DigestWriter(&mut signatures), call);
-                signatures.update([0xff]);
+                // struct's; no map iterates).
+                super::serial_digest::append(&mut bytes, call);
             }
         }
     }
-    signatures.finalize().into()
+    Sha256::digest(&bytes).into()
+}
+
+/// Runs the four folds at once, each on a quarter of the analysis workers;
+/// with one worker (wasm32-wasip1) one after the other.
+#[allow(clippy::disallowed_methods)]
+fn fold_side_by_side<A: Send, B: Send, C: Send, D: Send>(
+    a: impl FnOnce() -> A + Send,
+    b: impl FnOnce() -> B + Send,
+    c: impl FnOnce() -> C + Send,
+    d: impl FnOnce() -> D + Send,
+) -> (A, B, C, D) {
+    if crate::pipeline::available_analysis_workers() <= 1 {
+        return (a(), b(), c(), d());
+    }
+    let limit = crate::pipeline::analysis_worker_limit_for_lanes(4);
+    std::thread::scope(|scope| {
+        let b = scope.spawn(move || {
+            let _limit = crate::pipeline::AnalysisWorkerLimit::enter(limit);
+            b()
+        });
+        let c = scope.spawn(move || {
+            let _limit = crate::pipeline::AnalysisWorkerLimit::enter(limit);
+            c()
+        });
+        let d = scope.spawn(move || {
+            let _limit = crate::pipeline::AnalysisWorkerLimit::enter(limit);
+            d()
+        });
+        let a = {
+            let _limit = crate::pipeline::AnalysisWorkerLimit::enter(limit);
+            a()
+        };
+        (
+            a,
+            b.join().expect("index fold panicked"),
+            c.join().expect("index fold panicked"),
+            d.join().expect("index fold panicked"),
+        )
+    })
 }
 
 /// Interned keys of one index: an [`Input::Index`] names a key by id.
@@ -667,8 +691,8 @@ impl<K, C> Default for KeptIndex<K, C> {
 
 impl<K, C> KeptIndex<K, C>
 where
-    K: Clone + Eq + std::hash::Hash + Send + std::fmt::Debug,
-    C: Clone + PartialEq + Send + std::hash::Hash,
+    K: Clone + Eq + std::hash::Hash + Send + Sync + std::fmt::Debug,
+    C: Clone + PartialEq + Send + Sync + std::hash::Hash,
 {
     /// Brings the index to `views` from the last build's: the changed and
     /// removed files' contributions are replaced, and each changed key some
@@ -682,6 +706,7 @@ where
         &mut self,
         id: IndexId,
         lazy: bool,
+        folded: Option<BaseIndex<K, C>>,
         views: &Views<'_>,
         contribute: Contribute<K, C>,
         changed_files: &[FileId],
@@ -708,7 +733,7 @@ where
                 }
             }
             None if lazy => {}
-            None => self.index = Some(views.fold(contribute)),
+            None => self.index = Some(folded.unwrap_or_else(|| views.fold(contribute))),
         }
         if check && let Some(index) = &self.index {
             let fold = views.fold(contribute);
@@ -1072,6 +1097,28 @@ impl MemoStore {
         let started = Instant::now();
         let contribute: Contribute<Arc<str>, WrapperCandidate> =
             crate::indexes::identity_wrapper_candidates;
+        // A store's first build folds its four eager indexes side by side;
+        // each is then installed below as the fold it would have made.
+        let mut first_folds = if base.wrapper_candidates.is_none()
+            && base.references.index.is_none()
+            && base.callees.index.is_none()
+            && base.use_spans.index.is_none()
+        {
+            let (wrappers, references, callees, use_spans) = fold_side_by_side(
+                || views.fold(contribute),
+                || views.fold(crate::base::contributions::references),
+                || views.fold(crate::base::contributions::callees),
+                || views.fold(crate::base::contributions::use_spans),
+            );
+            (
+                Some(wrappers),
+                Some(references),
+                Some(callees),
+                Some(use_spans),
+            )
+        } else {
+            (None, None, None, None)
+        };
         match base.wrapper_candidates.as_mut() {
             Some(index) => {
                 let delta = index.update(
@@ -1090,7 +1137,14 @@ impl MemoStore {
                     }
                 }
             }
-            None => base.wrapper_candidates = Some(views.fold(contribute)),
+            None => {
+                base.wrapper_candidates = Some(
+                    first_folds
+                        .0
+                        .take()
+                        .unwrap_or_else(|| views.fold(contribute)),
+                );
+            }
         }
         if self.check_indexes
             && let Some(index) = &base.wrapper_candidates
@@ -1117,6 +1171,7 @@ impl MemoStore {
         report.census_delta_keys += references.update(
             IndexId::References,
             false,
+            first_folds.1.take(),
             views,
             crate::base::contributions::references,
             &changed_files,
@@ -1128,6 +1183,7 @@ impl MemoStore {
         report.census_delta_keys += callees.update(
             IndexId::Callees,
             false,
+            first_folds.2.take(),
             views,
             crate::base::contributions::callees,
             &changed_files,
@@ -1139,6 +1195,7 @@ impl MemoStore {
         report.census_delta_keys += use_spans.update(
             IndexId::UseSpans,
             false,
+            first_folds.3.take(),
             views,
             crate::base::contributions::use_spans,
             &changed_files,
@@ -1150,6 +1207,7 @@ impl MemoStore {
         report.census_delta_keys += symbol_uses.update(
             IndexId::SymbolUses,
             true,
+            None,
             views,
             crate::base::contributions::symbol_uses,
             &changed_files,
@@ -1161,6 +1219,7 @@ impl MemoStore {
         report.census_delta_keys += spellings.update(
             IndexId::Spellings,
             true,
+            None,
             views,
             crate::base::contributions::spellings,
             &changed_files,
@@ -1172,6 +1231,7 @@ impl MemoStore {
         report.census_delta_keys += global_writes.update(
             IndexId::GlobalWrites,
             true,
+            None,
             views,
             crate::base::contributions::global_writes,
             &changed_files,
@@ -1870,7 +1930,7 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
         contribute: Contribute<Arc<str>, C>,
     ) -> Vec<(FileId, usize, C)>
     where
-        C: Clone + PartialEq + Send + std::hash::Hash,
+        C: Clone + PartialEq + Send + Sync + std::hash::Hash,
     {
         let store = self.world().store;
         let interned = {

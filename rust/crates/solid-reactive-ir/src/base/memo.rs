@@ -46,6 +46,7 @@ pub(crate) mod build;
 pub(crate) mod derived;
 mod locks;
 pub(crate) mod probes;
+mod serial_digest;
 #[cfg(test)]
 mod tests;
 

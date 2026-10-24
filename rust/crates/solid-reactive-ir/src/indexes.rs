@@ -1765,6 +1765,21 @@ impl<'a> SemanticLookup<'a> {
 
     /// The position of a file in project facts, for the per-file memo tables.
     fn file_index(&self, file: &FileFacts) -> usize {
+        // A file of this build's facts names its slot by its address: the
+        // last slot of its id, found without hashing its path.
+        let files = &self.facts.files;
+        let size = std::mem::size_of::<FileFacts>();
+        let offset = (std::ptr::from_ref(file) as usize).wrapping_sub(files.as_ptr() as usize);
+        if size != 0
+            && offset.is_multiple_of(size)
+            && offset / size < files.len()
+            && let Some(last) = self
+                .file_table
+                .slots_of(self.file_table.slot_id(offset / size))
+                .last()
+        {
+            return *last;
+        }
         self.file_table
             .last_slot(file.path.as_str())
             .expect("per-file lookup for a file outside project facts")

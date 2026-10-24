@@ -36,7 +36,7 @@
     "hashmap-iteration": 7
   },
   "rust/crates/solid-reactive-ir/src/base/index.rs": {
-    "hashmap-iteration": 3
+    "hashmap-iteration": 4
   },
   "rust/crates/solid-reactive-ir/src/boundary_defects.rs": {
     "facts.files": 1
@@ -135,7 +135,7 @@
     "facts.files": 1
   },
   "rust/crates/solid-reactive-ir/src/indexes.rs": {
-    "facts.files": 8,
+    "facts.files": 9,
     "files()": 4,
     "file_by_path": 3,
     "hashmap-iteration": 1

@@ -298,7 +298,9 @@ impl Reads {
             for run in &small {
                 merged.extend_from_slice(run);
             }
-            merged.sort_unstable();
+            // Each run is sorted: the stable sort merges the runs it finds
+            // instead of sorting the whole from scratch.
+            merged.sort();
             merged.dedup();
             merged
         });
