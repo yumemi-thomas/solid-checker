@@ -75,7 +75,6 @@ mod result_view;
 pub(crate) use result_view::*;
 mod result_reads;
 mod transport_reads;
-pub(crate) use graph::GraphCalleeRead;
 pub(crate) use result_reads::*;
 pub(crate) use transport_reads::{AccessorTable, SourceKindTable, TransportReads};
 mod node_index;

@@ -311,9 +311,6 @@ pub(crate) struct CachedInterproceduralGraph {
     /// The accessor entries the contribution embeds, by symbol
     /// (`interproc::transport_reads`): another file's discovery can move one.
     pub(crate) accessor_reads: crate::interproc::TransportReads,
-    /// What the contribution asked of other files through the function
-    /// table (`interproc::GraphCalleeRead`), asked again before reuse.
-    pub(crate) callee_reads: Vec<crate::interproc::GraphCalleeRead>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
