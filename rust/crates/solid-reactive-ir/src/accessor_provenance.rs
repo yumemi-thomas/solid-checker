@@ -35,7 +35,7 @@ mod transport_memos;
 pub(crate) use projection_helpers::*;
 use resolver_dependencies::{Dependencies, dependency_member_stable};
 use resolver_index::*;
-pub(crate) use resolver_memos::{RESOLVER_TABLES_FROM, ResolverTables};
+pub(crate) use resolver_memos::{RESOLVER_TABLES, RESOLVER_TABLES_FROM, ResolverTables};
 use resolver_queries::Queries;
 use resolver_values::Values;
 use resolver_world::{ProviderValues, World, parameter_typefacts_admit_in};

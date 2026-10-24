@@ -62,7 +62,8 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         function: &solid_facts::ast::FunctionFact,
     ) -> bool {
-        self.component_functions()
+        self.component_statuses_of(file.path.as_str())
+            .0
             .contains(&(file.path.as_str(), function.span))
     }
 
@@ -78,7 +79,8 @@ impl<'a> SemanticLookup<'a> {
             return ComponentStatus::Proven;
         }
         if self
-            .possible_component_functions()
+            .component_statuses_of(file.path.as_str())
+            .2
             .contains(&(file.path.as_str(), function.span))
         {
             return ComponentStatus::Uncertain;
@@ -121,6 +123,21 @@ impl<'a> SemanticLookup<'a> {
     /// function per span.
     fn component_statuses(&self) -> &ComponentSets<'a> {
         crate::base::reads::note(crate::base::reads::Section::Components);
+        self.component_sets()
+    }
+
+    /// The three sets, read only at keys whose path is `path`: the reader
+    /// records that path's part of the census
+    /// ([`super::census::ComponentSpansOf`]), or the whole census when the
+    /// build holds no such path.
+    pub(super) fn component_statuses_of(&self, path: &str) -> &ComponentSets<'a> {
+        if !self.note_component_spans(path) {
+            crate::base::reads::note(crate::base::reads::Section::Components);
+        }
+        self.component_sets()
+    }
+
+    fn component_sets(&self) -> &ComponentSets<'a> {
         self.component_functions
             .get_or_init(|| crate::base::reads::suppress(|| self.component_statuses_uncached()))
     }
@@ -244,7 +261,8 @@ impl<'a> SemanticLookup<'a> {
                                 // component however this body is entered.
                                 || (self.jsx_call_site_loading(path, inner.span).any
                                     && !self
-                                        .escaped_component_functions()
+                                        .component_statuses_of(path)
+                                        .1
                                         .contains(&(*path, inner.span)))
                         })
                         .map(|inner| crate::location(*path, inner.span))

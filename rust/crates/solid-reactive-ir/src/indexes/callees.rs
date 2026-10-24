@@ -487,6 +487,9 @@ impl<'a> SemanticLookup<'a> {
         if member_property.is_none()
             && let Some(symbol) = self.entities.value_symbol(file, callee)
         {
+            // Whether a binding naming the symbol can replace its identity:
+            // those bindings are its declarations' (`hand_outs`).
+            self.note_symbol_declarations(symbol.as_str());
             if !self.direct_value_aliases().contains(symbol) {
                 return vec![symbol.clone()];
             }

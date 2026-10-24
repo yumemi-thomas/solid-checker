@@ -352,10 +352,6 @@ pub(crate) struct InterproceduralContext<'a, 'facts> {
     /// ADR 0294's typed candidates, for [`typed_candidate_contributions`].
     pub(crate) typed_sources: &'a HashMap<SymbolId, crate::source_discovery::TypedSource>,
     pub(crate) lookup: &'a SemanticLookup<'facts>,
-    /// What source discovery's project passes read ([`crate::base::reads`]):
-    /// part of every graph and result chunk's proof, since both read the
-    /// tables they fill.
-    pub(crate) source_shared_reads: &'a crate::base::reads::Reads,
 }
 
 impl InterproceduralContext<'_, '_> {
@@ -404,11 +400,16 @@ pub(super) fn interprocedural_reads(
     // reused chunks read is part of the retained aggregate's.
     let recording = crate::base::reads::begin();
     let mut reused_reads = crate::base::reads::Reads::default();
+    // The recomputed graph chunks' and the refresh's reads: their own
+    // proofs, replayed into the stage's recording once the result chunks'
+    // stage proof is taken (`stage_only`).
+    let mut chunk_reads = Vec::new();
     let mut phase_started = Instant::now();
     let (file_nodes, graph_node_reused_paths) = discover_summary_graph_nodes(
         context,
         interprocedural_graph_cache.as_deref_mut(),
         &mut reused_reads,
+        &mut chunk_reads,
     );
     let graph_nodes = phase_started.elapsed();
     let step_started = Instant::now();
@@ -486,16 +487,22 @@ pub(super) fn interprocedural_reads(
             &graph_node_reused_paths,
             interprocedural_graph_cache,
             &mut graph,
+            &mut chunk_reads,
         )
     };
     let merge = step_started.elapsed();
     let step_started = Instant::now();
-    super::refresh::refresh_member_invocation_contexts(
-        context,
-        nodes,
-        nodes_by_path,
-        &mut invoked_parameter_members,
-    );
+    // What the refresh decides is the result view's (each node's member
+    // invocations): its reads join the graph chunks'.
+    let ((), refresh_reads) = crate::base::reads::record_detached(|| {
+        super::refresh::refresh_member_invocation_contexts(
+            context,
+            nodes,
+            nodes_by_path,
+            &mut invoked_parameter_members,
+        );
+    });
+    chunk_reads.push(refresh_reads);
     let refresh = step_started.elapsed();
     let mut fixed_points = crate::InterproceduralFixedPointTimings::default();
     let step_started = Instant::now();
@@ -622,8 +629,8 @@ pub(super) fn interprocedural_reads(
     };
     let result_read_context = InterproceduralResultReadContext {
         result: result_view,
-        source_kinds,
-        accessors,
+        source_kinds: super::transport_reads::SourceKindsRead(source_kinds),
+        accessors: super::transport_reads::AccessorsRead(accessors),
         entities,
         symbol_names,
         lookup: context.lookup,
@@ -634,14 +641,27 @@ pub(super) fn interprocedural_reads(
     };
     // What the stage's other chunks were handed is their own read: each
     // result chunk records what it is handed itself (`indexes::hand_outs`).
-    let mut stage_reads = recording
-        .so_far()
-        .without_tables(crate::indexes::HAND_OUT_TABLES);
-    stage_reads.extend(
-        &context
-            .source_shared_reads
-            .without_tables(crate::indexes::HAND_OUT_TABLES),
-    );
+    // So are the resolver's and transport's answers: a result chunk records
+    // each one it asks (`transport_reads`), so what building them read is
+    // not its read. Nor is what a recomputed graph chunk read: what the
+    // graph gives a result chunk is the result view, whose every entry it
+    // reads is a dependency compared by value (`dependency_matches`); and a
+    // reused graph chunk's reads were never part of this proof, so no
+    // result chunk could rely on them. The member-invocation refresh
+    // likewise decides only view entries.
+    let stage_only = |reads: &crate::base::reads::Reads| {
+        reads
+            .without_tables(crate::indexes::HAND_OUT_TABLES)
+            .without_tables(accessor_provenance::RESOLVER_TABLES)
+            .without_tables(
+                accessor_provenance::TRANSPORT_TABLES_FROM
+                    ..accessor_provenance::TRANSPORT_TABLES_END,
+            )
+    };
+    let stage_reads = stage_only(&recording.so_far());
+    for reads in &chunk_reads {
+        crate::base::reads::replay(reads);
+    }
     let ResultReads {
         mut result,
         result_reused_files,
@@ -776,6 +796,7 @@ fn discover_summary_graph_nodes<'a, 'c>(
         &'c mut HashMap<solid_facts::core::SourcePath, CachedInterproceduralGraph>,
     >,
     reused_reads: &mut crate::base::reads::Reads,
+    chunk_reads: &mut Vec<crate::base::reads::Reads>,
 ) -> (Vec<(&'a str, FileNodes<'c>)>, HashSet<&'a str>) {
     let InterproceduralContext {
         facts,
@@ -822,13 +843,16 @@ fn discover_summary_graph_nodes<'a, 'c>(
         .collect::<HashSet<_>>();
     let discovered = parallel_file_results(&facts.files, |file| {
         (!reusable_paths.contains(file.path.as_str())).then(|| {
-            crate::base::reads::record(|| discover_summary_nodes(file, project_indexes, entities))
+            crate::base::reads::record_detached(|| {
+                discover_summary_nodes(file, project_indexes, entities)
+            })
         })
     });
     let mut computed = Vec::with_capacity(discovered.len());
     let mut reused_proofs = Vec::new();
     for (file, discovered) in facts.files.iter().zip(discovered) {
         if let Some((file_nodes, reads)) = discovered {
+            chunk_reads.push(reads.clone());
             // The nodes' reads, until the merge adds the contribution's.
             cache.insert(
                 file.path.clone(),
@@ -918,6 +942,7 @@ fn merge_graph_contributions(
         &mut HashMap<solid_facts::core::SourcePath, CachedInterproceduralGraph>,
     >,
     graph: &mut InterproceduralGraphAssembly<'_>,
+    chunk_reads: &mut Vec<crate::base::reads::Reads>,
 ) -> (u64, u64) {
     let InterproceduralContext {
         facts,
@@ -952,7 +977,7 @@ fn merge_graph_contributions(
         Some(cache) => {
             let contributions = parallel_file_results(&facts.files, |file| {
                 (!graph_node_reused_paths.contains(file.path.as_str())).then(|| {
-                    crate::base::reads::record(|| {
+                    crate::base::reads::record_detached(|| {
                         super::transport_reads::record(|| {
                             super::graph::record_graph_callee_reads(|| {
                                 discover_interprocedural_graph(
@@ -982,6 +1007,7 @@ fn merge_graph_contributions(
                 graph_recomputed_files += 1;
                 let (((contribution, callee_reads), accessor_reads), mut reads) =
                     contribution.expect("recomputed graph path has a fresh contribution");
+                chunk_reads.push(reads.clone());
                 graph.merge(file.path.as_str(), &contribution);
                 // The nodes' reads (this build's) and the contribution's.
                 if let Some(discovered) = cache.get(file.path.as_str()) {

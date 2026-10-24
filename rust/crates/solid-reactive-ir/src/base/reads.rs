@@ -71,15 +71,13 @@ pub(crate) enum Section {
     ReflectiveDefinition,
     /// A reflective write through a `prototype` (ADR 0292).
     ReflectivePrototypeWrite,
-    /// The exported module-level constants proven primitive (ADR 0325).
-    ExportedPrimitiveConsts,
     /// The route component values (ADR 0334), whose router configurations
     /// may sit in another file than the value (ADR 0408).
     RouteComponents,
 }
 
 impl Section {
-    pub(crate) const ALL: [Self; 14] = [
+    pub(crate) const ALL: [Self; 13] = [
         Self::Components,
         Self::MemberTargets,
         Self::SpreadTargets,
@@ -92,7 +90,6 @@ impl Section {
         Self::SynchronousDispatch,
         Self::ReflectiveDefinition,
         Self::ReflectivePrototypeWrite,
-        Self::ExportedPrimitiveConsts,
         Self::RouteComponents,
     ];
 
@@ -548,6 +545,17 @@ pub(crate) fn record<R>(f: impl FnOnce() -> R) -> (R, Reads) {
     let reads = take_top().finish();
     drop(guard);
     replay(&reads);
+    (value, reads)
+}
+
+/// [`record`], without handing the reads to the enclosing computation: a
+/// chunk whose reads its stage replays itself once it has read what the
+/// stage's own proof needs (`interproc::reads`).
+pub(crate) fn record_detached<R>(f: impl FnOnce() -> R) -> (R, Reads) {
+    let guard = push();
+    let value = f();
+    let reads = take_top().finish();
+    drop(guard);
     (value, reads)
 }
 

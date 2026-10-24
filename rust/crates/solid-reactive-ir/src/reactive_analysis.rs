@@ -130,7 +130,6 @@ pub(crate) fn collect_project<'facts>(
         unchanged_paths: &source.unchanged_paths,
         typed_sources: ctx.typed_sources,
         lookup: ctx.semantic_lookup,
-        source_shared_reads: &source.shared_reads,
     };
     let run_local_access = || {
         local_access_context.build(

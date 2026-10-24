@@ -124,9 +124,6 @@
   "rust/crates/solid-reactive-ir/src/indexes/memo_probes.rs": {
     "facts.files": 2
   },
-  "rust/crates/solid-reactive-ir/src/indexes/primitive_proof.rs": {
-    "files()": 2
-  },
   "rust/crates/solid-reactive-ir/src/indexes/returned_invocations.rs": {
     "facts.files": 2,
     "files()": 1

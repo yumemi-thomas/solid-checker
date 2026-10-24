@@ -1583,13 +1583,6 @@ impl<'a> SemanticLookup<'a> {
                     self.hazard_present(crate::base::Hazard::SynchronousDispatch),
                 )]);
             }
-            Section::ExportedPrimitiveConsts => {
-                for (path, span) in self.exported_primitive_consts() {
-                    text(&mut hasher, &path);
-                    hasher.update(span.start.to_le_bytes());
-                    hasher.update(span.end.to_le_bytes());
-                }
-            }
             Section::ReflectivePrototypeWrite => {
                 hasher.update([u8::from(self.reflective_prototype_write_present())]);
             }
@@ -2038,7 +2031,12 @@ impl<'a> SemanticLookup<'a> {
     }
 
     /// Whether some analyzed file has `hazard`.
+    /// Whether some file has `hazard`: a whole-program answer, recorded for
+    /// the computation recording as its probe's (`indexes::hand_outs`).
     pub(crate) fn hazard_present(&self, hazard: crate::base::Hazard) -> bool {
+        self.note_probe_read(crate::base::memo::probes::Probe::Hazard(hazard), || {
+            crate::base::memo::probes::PolledKey::Unit
+        });
         self.base
             .hazards(|| self.base_views())
             .contains_key(&hazard)

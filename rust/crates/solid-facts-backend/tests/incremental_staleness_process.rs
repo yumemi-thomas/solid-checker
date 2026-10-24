@@ -520,6 +520,42 @@ fn an_argument_that_stops_being_an_accessor_in_another_file_is_not_kept_in_the_g
     assert_retained_is_fresh(&mut builder, &signal, &options, "signal again");
 }
 
+/// A result chunk's proof is its own reads, the
+/// result view's dependencies and each entry it asks of the stage's tables,
+/// not what building them read. `B` turns `count` from an opaque value (no
+/// summary node, not an accessor) into a signal getter, with `A` and `H`
+/// byte-identical: the graph's dependency on `count` answers "missing" both
+/// times, so only `A`'s recorded source-kind read can move it.
+const OPAQUE_B: &str = "declare function make(): () => number;\nexport const count = make();\n";
+
+#[test]
+fn an_opaque_argument_that_becomes_an_accessor_in_another_file_reruns_its_result_reads() {
+    let Some(mut project) = Project::scratch_per_file(
+        "opaque-accessor",
+        &[("B.ts", OPAQUE_B), ("H.ts", HELPER_H), ("A.tsx", CALLER_A)],
+    ) else {
+        return;
+    };
+    let options = RuleOptions::default();
+    let vocabulary = solid_v2().vocabulary;
+    let fresh = |facts: &ProjectFacts| {
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap()
+            .0
+    };
+    let mut builder = IncrementalBuilder::default();
+    let first = project.analyze();
+    assert_retained_is_fresh(&mut builder, &first, &options, "opaque");
+    let signal = project.rewrite("B.ts", SIGNAL_B);
+    assert!(
+        first_difference(&fresh(&first), &fresh(&signal)).is_some(),
+        "whether `count` is an accessor must change `A`'s answer"
+    );
+    assert_retained_is_fresh(&mut builder, &signal, &options, "signal");
+    let opaque = project.rewrite("B.ts", OPAQUE_B);
+    assert_retained_is_fresh(&mut builder, &opaque, &options, "opaque again");
+}
+
 /// ADR 0397: the component census moves when `U` stops rendering `Panel`
 /// (it only mentions it), with `C` unchanged: the effect in `Panel` loses
 /// its proven owner. Before, every per-file cache was keyed on one digest of

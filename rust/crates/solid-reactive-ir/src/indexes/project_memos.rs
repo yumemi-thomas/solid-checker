@@ -70,7 +70,6 @@ project_tables! {
     32 never_returning: NeverReturning,
     33 effect_apply_calls: EffectApplyCalls,
     34 effect_apply_regions: EffectApplyRegions,
-    35 exported_primitive_consts: ExportedPrimitiveConsts,
     36 uninitialized_references: UninitializedReferences,
     37 parameter_completion_calls: ParameterCompletionCalls,
     39 intrinsics: IntrinsicsTripwires,
@@ -233,16 +232,6 @@ whole_program! {
         ctx.memo::<EffectApplyCalls>(&())?;
         Ok(ctx.project(crate::effect_execution::regions))
     }
-}
-
-whole_program! {
-    /// ADR 0325: every exported module-level `const` proven primitive,
-    /// `(path, declaration)`, sorted.
-    ExportedPrimitiveConsts, 35, exported_primitive_consts, "exported_primitive_consts",
-    Vec<(String, Span)>,
-    cycle: Vec::new(),
-    direct: |lookup| lookup.compute_exported_primitive_consts(),
-    |ctx| Ok(ctx.project(|lookup| lookup.compute_exported_primitive_consts()))
 }
 
 whole_program! {

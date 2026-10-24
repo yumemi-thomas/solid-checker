@@ -470,7 +470,7 @@ pub(crate) fn argument_proves_non_reactive(
     file: &solid_facts::FileFacts,
     argument: &solid_facts::ast::ArgumentFact,
     entities: &EntitySymbols,
-    source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
+    source_kinds: &impl crate::interproc::SourceKindTable,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     use solid_facts::ast::RuntimeValueKind;
@@ -486,7 +486,7 @@ pub(crate) fn argument_proves_non_reactive(
     let Some(symbol) = entities.get(&location(file.path.shared(), argument.span)) else {
         return false;
     };
-    if source_kinds.contains_key(symbol.as_str()) {
+    if source_kinds.source_kind(symbol.as_str()).is_some() {
         return false;
     }
     file.ast.bindings.iter().any(|binding| {

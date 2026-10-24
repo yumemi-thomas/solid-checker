@@ -204,6 +204,7 @@ pub(crate) struct HandOutReads {
     files: OnceLock<Vec<OnceLock<MemoRead>>>,
     rows: OnceLock<Vec<OnceLock<MemoRead>>>,
     buckets: OnceLock<Vec<OnceLock<MemoRead>>>,
+    component_spans: OnceLock<Vec<OnceLock<MemoRead>>>,
 }
 
 /// The cached read of slot `index` of `cells` (sized `len` on first use),
@@ -246,6 +247,7 @@ enum Noted {
     Probe(Probe, PolledKey),
     FunctionBucket(u16),
     BindingRows(FileId),
+    ComponentSpans(FileId),
 }
 
 thread_local! {
@@ -350,6 +352,55 @@ impl<'a> SemanticLookup<'a> {
                     slot,
                     || self.memo_world().memo_read::<BindingRowsOf>(&id),
                 );
+            }
+        }
+    }
+
+    /// Records, for the computation recording, the component identities of
+    /// the functions of the file at `path` ([`super::census::ComponentSpansOf`]):
+    /// what a question about one of them reads of the census. `false` when no
+    /// such read stands for it (outside a recording, or a path the build does
+    /// not hold), so the reader records the whole census instead.
+    pub(crate) fn note_component_spans(&self, path: &str) -> bool {
+        if probing() {
+            return false;
+        }
+        let Some(frame) = crate::base::reads::recording_frame() else {
+            return true;
+        };
+        let Some(slot) = self.file_table.last_slot(path) else {
+            return false;
+        };
+        let (id, _) = self.memo_slot_of(slot);
+        if first_in_frame(frame, Noted::ComponentSpans(id)) {
+            cached_read(
+                &self.hand_out_reads.component_spans,
+                self.file_table.slot_count(),
+                slot,
+                || {
+                    self.memo_world()
+                        .memo_read::<super::census::ComponentSpansOf>(&id)
+                },
+            );
+        }
+        true
+    }
+
+    /// Records, for the computation recording, `symbol`'s declarations and
+    /// every analyzed file that holds one: what a question about the
+    /// bindings that name the symbol reads, as a binding naming a symbol is
+    /// one of its declarations.
+    pub(crate) fn note_symbol_declarations(&self, symbol: &str) {
+        if self.hand_out_frame().is_none() {
+            return;
+        }
+        self.note_probe_read(Probe::SymbolInfo, || Self::symbol_key(symbol));
+        for declaration in self.symbol_declarations(symbol).into_iter().flatten() {
+            if let Some(slot) = self
+                .file_table
+                .last_slot(declaration.location.path.as_ref())
+            {
+                self.note_slot_read(slot);
             }
         }
     }

@@ -1054,7 +1054,7 @@ fn the_any_file_vetoes_follow_what_the_project_writes() {
 }
 
 #[test]
-fn parameter_completion_and_primitive_consts_are_memo_views() {
+fn parameter_completion_calls_are_a_memo_view() {
     let source = "function run(cb) { cb(); }\nfunction maybe(cb) { if (flag) cb(); }\n";
     let spans = [
         (span_of(source, "cb", 0), "s:run-cb"),
@@ -1073,14 +1073,6 @@ fn parameter_completion_and_primitive_consts_are_memo_views() {
     });
     let run = span_of(source, "function run(cb) { cb(); }", 0);
     assert_eq!(calls, HashSet::from_iter([(PATH.to_owned(), run, 0)]));
-
-    let source = "import { a } from \"./a\";\nexport const k = 1;\nexport const m = a;\n";
-    let facts = project(source);
-    let store = crate::base::memo::build::MemoStore::new(true, true);
-    let (consts, _) = memo_build(&facts, &store, &[], |lookup| {
-        lookup.exported_primitive_consts()
-    });
-    assert_eq!(consts, vec![(PATH.to_owned(), span_of(source, "k", 0))]);
 }
 
 #[test]
@@ -1154,4 +1146,21 @@ fn project_memos_are_reused_until_the_program_moves() {
     let (answer, tables) = memo_build(&flipped, &store, &[], ask);
     assert_eq!(answer, (1, true, false));
     assert_eq!(stats_of(&tables, "tuple_iteration_veto").changed, 1);
+}
+
+/// A whole-program hazard asked in a recording is a recorded read (its
+/// probe's answer, `hand_outs`): a chunk that asked whether the program
+/// evaluates code reruns when that answer moves.
+#[test]
+fn a_hazard_question_is_a_recorded_read() {
+    for (source, expected) in [("eval(\"1\");\n", true), ("export const k = 1;\n", false)] {
+        let facts = project(source);
+        let store = crate::base::memo::build::MemoStore::new(true, true);
+        let ((present, reads), _) = memo_build(&facts, &store, &[], |lookup| {
+            lookup.begin_memos();
+            crate::base::reads::record(|| lookup.program_has_eval())
+        });
+        assert_eq!(present, expected, "{source}");
+        assert_eq!(reads.memos().len(), 1, "{source}: the hazard's probe");
+    }
 }

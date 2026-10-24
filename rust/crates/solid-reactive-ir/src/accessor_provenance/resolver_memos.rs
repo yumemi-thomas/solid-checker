@@ -45,6 +45,8 @@ use crate::base::{FileId, FileTable, Hazard};
 
 /// The resolver's memo tables hold ids 240 to 255.
 pub(crate) const RESOLVER_TABLES_FROM: u16 = 240;
+/// Every resolver table's id.
+pub(crate) const RESOLVER_TABLES: std::ops::Range<u16> = RESOLVER_TABLES_FROM..256;
 
 macro_rules! resolver_tables {
     ($($field:ident: $memo:ty = $id:literal;)*) => {

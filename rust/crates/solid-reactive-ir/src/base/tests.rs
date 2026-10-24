@@ -1212,6 +1212,84 @@ fn component_identities_are_reused_across_an_unrelated_edit() {
     assert!(census.unchanged + census.changed >= 1, "{census:?}");
 }
 
+/// A question about one function's component identity reads its file's
+/// part of the census (`component_spans`), not the whole census: a prefix
+/// edit of another file, which moves every span there, leaves the proof of
+/// a question about this file holding, and moves the proof of a question
+/// about the edited file. The answers are the whole sets'.
+#[test]
+fn a_component_question_reads_only_its_files_part_of_the_census() {
+    use crate::base::reads::{ReadProof, Section, record};
+    const PATHS: [&str; 2] = ["/fixture/census/app.tsx", "/fixture/census/panel.tsx"];
+    type Asked = (
+        Vec<crate::indexes::ComponentStatus>,
+        Vec<ReadProof>,
+        Vec<bool>,
+    );
+    let store = super::memo::build::MemoStore::new(false, true);
+    // Each path's answers, their proofs, and whether `kept`'s proofs hold.
+    let ask = |project: &Project, kept: &[Asked]| -> Vec<Asked> {
+        let facts = facts(project).expect("the project parses");
+        let ast_indexes = facts
+            .files
+            .iter()
+            .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
+            .collect::<HashMap<_, _>>();
+        let symbols = entity_symbols(&facts);
+        let names = HashMap::default();
+        let lookup = crate::indexes::SemanticLookup::new(
+            &facts,
+            &ast_indexes,
+            &symbols,
+            &names,
+            &solid_dialect::Solid2,
+            false,
+        )
+        .with_memo_store(&store);
+        lookup.begin_memos();
+        let asked = PATHS
+            .iter()
+            .enumerate()
+            .map(|(index, path)| {
+                let held = kept.get(index).map_or_else(Vec::new, |(_, proofs, _)| {
+                    proofs.iter().map(|proof| proof.holds(&lookup)).collect()
+                });
+                let file = lookup.file_by_path(path).expect("the file is analyzed");
+                let (mut answers, mut proofs) = (Vec::new(), Vec::new());
+                for function in &file.ast.functions {
+                    let (status, reads) =
+                        record(|| lookup.function_component_status(file, function));
+                    assert!(!reads.reads_section(Section::Components), "{path}");
+                    let proven = lookup.function_is_component(file, function)
+                        || lookup
+                            .escaped_component_functions()
+                            .contains(&(*path, function.span));
+                    assert_eq!(
+                        status == crate::indexes::ComponentStatus::Proven,
+                        proven,
+                        "{path}"
+                    );
+                    answers.push(status);
+                    proofs.push(ReadProof::new(reads, &lookup));
+                }
+                (answers, proofs, held)
+            })
+            .collect();
+        let _ = lookup.end_memos();
+        asked
+    };
+    let mut project = census_project();
+    let first = ask(&project, &[]);
+    project.files[0].1 = format!("// moved\n{}", project.files[0].1);
+    let second = ask(&project, &first);
+    assert!(
+        second[0].2.iter().all(|held| *held),
+        "app reads none of panel's spans"
+    );
+    assert!(second[1].2.iter().all(|held| !*held), "panel's spans moved");
+    assert_eq!(second[1].0, first[1].0);
+}
+
 /// Through random edits (the base property test's kinds, TypeFacts-only
 /// changes included), the retained store's census answers exactly as a
 /// fresh store's, with verify-reused mode on: no reused answer missed a read.
