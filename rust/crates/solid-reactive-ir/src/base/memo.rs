@@ -434,33 +434,47 @@ struct Node<I> {
     kind: NodeKind<I>,
     /// A memo's recorded reads, in reading order, each with its answer's
     /// fingerprint: for a memo read, the revision the answer last changed
-    /// in; an input read records 0, since its changes are pushed by
-    /// [`Store::begin`] and never compared.
+    /// in; an input read records [`INPUT_READ`], since its changes are
+    /// pushed by [`Store::begin`] and never compared.
     reads: Vec<(QueryId, u64)>,
-    /// Exact once [`Graph::flush`] has applied the pending edges.
-    readers: BTreeSet<QueryId>,
+    /// Sorted, without repeats. Exact once [`Graph::flush`] has applied the
+    /// pending edges.
+    readers: Vec<QueryId>,
 }
 
-struct Graph<I> {
-    next: u32,
-    inputs: HashMap<I, QueryId>,
+impl<I> Node<I> {
+    fn new(kind: NodeKind<I>) -> Self {
+        Self {
+            kind,
+            reads: Vec::new(),
+            readers: Vec::new(),
+        }
+    }
+}
+
+/// The fingerprint an input read records: no revision is this large, so a
+/// recorded read is told an input read without looking its node up.
+const INPUT_READ: u64 = u64::MAX;
+
+/// One shard of the read graph: the nodes whose id is the shard modulo
+/// [`TABLE_SHARDS`] (a memo key's id names its table shard, an input's its
+/// [`input_shard`]), so moving the records in and applying reverse edges run
+/// shard by shard on several workers.
+struct GraphShard<I> {
     nodes: HashMap<QueryId, Node<I>>,
     /// Nodes that lost a reader or were allocated since the last
     /// [`Store::end`]: the only inputs it can find unread.
     unread: Vec<QueryId>,
-    /// Reverse-edge changes [`Self::record`] has not applied yet, in record
+    /// Reverse-edge changes [`Graph::record`] has not applied yet, in record
     /// order: each reader with the reads it dropped. Only [`Store::mark`] and
     /// [`Store::end`] read `readers`, and both flush first, so the reverse
-    /// map they see is the one recording it eagerly would have built, while
-    /// an install holds the graph lock only to intern and push.
+    /// map they see is the one recording it eagerly would have built.
     pending: Vec<(QueryId, Vec<(QueryId, u64)>)>,
 }
 
-impl<I> Default for Graph<I> {
+impl<I> Default for GraphShard<I> {
     fn default() -> Self {
         Self {
-            next: 0,
-            inputs: HashMap::default(),
             nodes: HashMap::default(),
             unread: Vec::new(),
             pending: Vec::new(),
@@ -468,82 +482,268 @@ impl<I> Default for Graph<I> {
     }
 }
 
-impl<I: Copy + Eq + Hash> Graph<I> {
-    fn allocate(&mut self, kind: NodeKind<I>) -> QueryId {
-        self.allocate_in(kind, 0)
-    }
+/// The read graph: every recorded query's reads and readers. Installs do
+/// not take its lock: they intern their inputs in [`Interned`] and queue
+/// their reads in [`Store::records`], which [`Store::synced_graph`] moves
+/// here before anything reads the graph ([`Store::mark`], [`Store::end`]).
+/// A verification ([`Store::reads_unchanged`]) reads it without moving
+/// them: it verifies only a maybe-dirty entry, which a mark raised after
+/// moving every record made before it, and an entry recorded since is
+/// clean.
+struct Graph<I> {
+    shards: Box<[GraphShard<I>; TABLE_SHARDS]>,
+}
 
-    /// A new query whose id is `shard` modulo [`TABLE_SHARDS`]: a memo key's
-    /// id names the table shard that holds it.
-    fn allocate_in(&mut self, kind: NodeKind<I>, shard: usize) -> QueryId {
-        let id = QueryId(
-            self.next
-                .checked_mul(TABLE_SHARDS as u32)
-                .and_then(|id| id.checked_add(shard as u32))
-                .expect("fewer than 2^28 queries"),
-        );
-        self.next = self.next.checked_add(1).expect("fewer than 2^28 queries");
-        self.nodes.insert(
-            id,
-            Node {
-                kind,
-                reads: Vec::new(),
-                readers: BTreeSet::new(),
-            },
-        );
-        id
-    }
-
-    fn input(&mut self, input: I) -> QueryId {
-        if let Some(id) = self.inputs.get(&input) {
-            return *id;
+impl<I> Default for Graph<I> {
+    fn default() -> Self {
+        Self {
+            shards: Box::new(std::array::from_fn(|_| GraphShard::default())),
         }
-        let id = self.allocate(NodeKind::Input(input));
-        self.inputs.insert(input, id);
-        self.unread.push(id);
-        id
+    }
+}
+
+fn graph_shard(query: QueryId) -> usize {
+    query.0 as usize % TABLE_SHARDS
+}
+
+impl<I> Graph<I> {
+    fn node(&self, query: &QueryId) -> Option<&Node<I>> {
+        self.shards[graph_shard(*query)].nodes.get(query)
     }
 
+    fn remove(&mut self, query: &QueryId) -> Option<Node<I>> {
+        self.shards[graph_shard(*query)].nodes.remove(query)
+    }
+
+    fn nodes(&self) -> impl Iterator<Item = &Node<I>> {
+        self.shards.iter().flat_map(|shard| shard.nodes.values())
+    }
+}
+
+impl<I: Copy + Eq + Hash + Send> GraphShard<I> {
     /// Replaces `query`'s recorded reads; the reverse map follows at the
-    /// next [`Self::flush`].
+    /// next [`Graph::flush`].
     fn record(&mut self, query: QueryId, reads: Vec<(QueryId, u64)>) {
         let previous = self
             .nodes
             .get_mut(&query)
-            .map(|node| std::mem::take(&mut node.reads))
+            .map(|node| std::mem::replace(&mut node.reads, reads))
             .unwrap_or_default();
-        if let Some(node) = self.nodes.get_mut(&query) {
-            node.reads = reads;
-        }
         self.pending.push((query, previous));
     }
 
-    /// Applies the pending reverse-edge changes, in record order. Each
-    /// reader gains its reads as they are now: a reader recorded twice since
-    /// the last flush drops each earlier set and ends with the last one, the
-    /// map recording eagerly builds. Nodes are removed only by `Store::end`
-    /// and `Store::clear`, which flush or drop the pending changes first, so
-    /// a read present at its record is present here.
-    fn flush(&mut self) {
-        for (query, previous) in std::mem::take(&mut self.pending) {
+    /// This shard's pending changes as reverse edges, by the shard of the
+    /// node read: each reader's dropped reads (lost) and its reads as they
+    /// are now (gained).
+    fn pending_edges(&mut self) -> [(Vec<u64>, Vec<u64>); TABLE_SHARDS] {
+        let mut edges: [(Vec<u64>, Vec<u64>); TABLE_SHARDS] =
+            std::array::from_fn(|_| (Vec::new(), Vec::new()));
+        let pending = std::mem::take(&mut self.pending);
+        let mut readers = Vec::with_capacity(pending.len());
+        for (query, previous) in pending {
             for (read, _) in previous {
-                if let Some(node) = self.nodes.get_mut(&read) {
-                    node.readers.remove(&query);
-                    self.unread.push(read);
-                }
+                edges[graph_shard(read)].0.push(edge(read, query));
             }
-            let gained = self
-                .nodes
-                .get(&query)
-                .map(|node| node.reads.iter().map(|(read, _)| *read).collect::<Vec<_>>())
-                .unwrap_or_default();
-            for read in gained {
-                if let Some(node) = self.nodes.get_mut(&read) {
-                    node.readers.insert(query);
+            readers.push(query);
+        }
+        readers.sort_unstable();
+        readers.dedup();
+        for query in readers {
+            if let Some(node) = self.nodes.get(&query) {
+                for (read, _) in &node.reads {
+                    edges[graph_shard(*read)].1.push(edge(*read, query));
                 }
             }
         }
+        edges
     }
+
+    /// Removes the `lost` reverse edges and adds the `gained` ones (each
+    /// [`edge`]-packed, of nodes in this shard; a reader in both keeps the
+    /// edge), node by node. A node that lost a reader becomes an unread
+    /// candidate.
+    fn apply_edges(&mut self, mut lost: Vec<u64>, mut gained: Vec<u64>) {
+        lost.sort_unstable();
+        lost.dedup();
+        gained.sort_unstable();
+        gained.dedup();
+        let (mut l, mut g) = (0, 0);
+        let mut lost_readers = Vec::new();
+        let mut gained_readers = Vec::new();
+        while l < lost.len() || g < gained.len() {
+            let read = match (lost.get(l), gained.get(g)) {
+                (Some(a), Some(b)) => edge_read(*a).min(edge_read(*b)),
+                (Some(a), None) => edge_read(*a),
+                (None, Some(b)) => edge_read(*b),
+                (None, None) => unreachable!("one side has edges"),
+            };
+            lost_readers.clear();
+            gained_readers.clear();
+            while let Some(packed) = lost.get(l).filter(|packed| edge_read(**packed) == read) {
+                lost_readers.push(edge_reader(*packed));
+                l += 1;
+            }
+            while let Some(packed) = gained.get(g).filter(|packed| edge_read(**packed) == read) {
+                gained_readers.push(edge_reader(*packed));
+                g += 1;
+            }
+            let Some(node) = self.nodes.get_mut(&read) else {
+                continue;
+            };
+            if !lost_readers.is_empty() {
+                node.readers
+                    .retain(|reader| lost_readers.binary_search(reader).is_err());
+                self.unread.push(read);
+            }
+            merge_sorted(&mut node.readers, &gained_readers);
+        }
+    }
+}
+
+impl<I: Copy + Eq + Hash + Send> Graph<I> {
+    /// Applies the pending reverse-edge changes. Each reader ends with its
+    /// reads as they are now and loses every read it dropped since the last
+    /// flush: the map recording eagerly, in record order, builds (a reader
+    /// recorded twice drops each earlier set and ends with the last; a
+    /// reader's records are all in its own shard). The edges are applied
+    /// grouped by the node read, sorted, so each node is looked up and
+    /// merged once, shard by shard. Nodes are removed only by `Store::end`
+    /// and `Store::clear`, which flush or drop the pending changes first, so
+    /// a read present at its record is present here.
+    fn flush(&mut self) {
+        if self.shards.iter().all(|shard| shard.pending.is_empty()) {
+            return;
+        }
+        let edges = each_shard(self.shards.iter_mut().collect(), |shard| {
+            shard.pending_edges()
+        });
+        let mut by_read: [(Vec<u64>, Vec<u64>); TABLE_SHARDS] =
+            std::array::from_fn(|_| (Vec::new(), Vec::new()));
+        for source in edges {
+            for ((lost, gained), (all_lost, all_gained)) in source.into_iter().zip(&mut by_read) {
+                all_lost.extend(lost);
+                all_gained.extend(gained);
+            }
+        }
+        self.apply_edges(by_read);
+    }
+
+    /// Applies reverse-edge changes already split by the shard of the node
+    /// read ([`GraphShard::apply_edges`]).
+    fn apply_edges(&mut self, by_read: [(Vec<u64>, Vec<u64>); TABLE_SHARDS]) {
+        each_shard(
+            self.shards.iter_mut().zip(by_read).collect(),
+            |(shard, (lost, gained))| shard.apply_edges(lost, gained),
+        );
+    }
+}
+
+/// Runs `work` on each item (one per graph shard), on several analysis
+/// workers when there are; the sequential arm is the wasm32-wasip1 one.
+#[allow(clippy::disallowed_methods)]
+fn each_shard<T: Send, R: Send>(items: Vec<T>, work: impl Fn(T) -> R + Sync) -> Vec<R> {
+    let workers = crate::pipeline::available_analysis_workers().min(items.len());
+    if workers <= 1 {
+        return items.into_iter().map(work).collect();
+    }
+    let chunk = items.len().div_ceil(workers);
+    let mut groups = Vec::new();
+    let mut items = items.into_iter();
+    loop {
+        let group = items.by_ref().take(chunk).collect::<Vec<_>>();
+        if group.is_empty() {
+            break;
+        }
+        groups.push(group);
+    }
+    let work = &work;
+    std::thread::scope(|scope| {
+        let handles = groups
+            .into_iter()
+            .map(|group| scope.spawn(move || group.into_iter().map(work).collect::<Vec<_>>()))
+            .collect::<Vec<_>>();
+        handles
+            .into_iter()
+            .flat_map(|handle| handle.join().expect("memo graph worker panicked"))
+            .collect()
+    })
+}
+
+/// A reverse edge `read -> reader`, packed so that sorting groups the
+/// edges by the node read.
+fn edge(read: QueryId, reader: QueryId) -> u64 {
+    (u64::from(read.0) << 32) | u64::from(reader.0)
+}
+
+fn edge_read(edge: u64) -> QueryId {
+    QueryId((edge >> 32) as u32)
+}
+
+fn edge_reader(edge: u64) -> QueryId {
+    QueryId(edge as u32)
+}
+
+/// Adds the sorted, distinct `gained` to the sorted, distinct `readers`.
+fn merge_sorted(readers: &mut Vec<QueryId>, gained: &[QueryId]) {
+    if gained.is_empty() {
+        return;
+    }
+    if readers.last().is_none_or(|last| *last < gained[0]) {
+        readers.extend_from_slice(gained);
+        return;
+    }
+    let mut merged = Vec::with_capacity(readers.len() + gained.len());
+    let (mut i, mut j) = (0, 0);
+    while i < readers.len() && j < gained.len() {
+        match readers[i].cmp(&gained[j]) {
+            std::cmp::Ordering::Less => {
+                merged.push(readers[i]);
+                i += 1;
+            }
+            std::cmp::Ordering::Greater => {
+                merged.push(gained[j]);
+                j += 1;
+            }
+            std::cmp::Ordering::Equal => {
+                merged.push(readers[i]);
+                i += 1;
+                j += 1;
+            }
+        }
+    }
+    merged.extend_from_slice(&readers[i..]);
+    merged.extend_from_slice(&gained[j..]);
+    *readers = merged;
+}
+
+/// One shard of the interned inputs: an install interns the inputs it
+/// read here, under this shard's lock only.
+struct Interned<I> {
+    ids: HashMap<I, QueryId>,
+    /// Interned since the graph last took them: their nodes are created
+    /// then ([`Store::synced_graph`]).
+    fresh: Vec<(QueryId, I)>,
+}
+
+impl<I> Default for Interned<I> {
+    fn default() -> Self {
+        Self {
+            ids: HashMap::default(),
+            fresh: Vec::new(),
+        }
+    }
+}
+
+/// An install's reads, queued for the graph: the query, its table, and its
+/// reads with their fingerprints, in reading order.
+type Record = (QueryId, TableId, Vec<(QueryId, u64)>);
+
+/// The shard of an input's interned id.
+fn input_shard<I: Hash>(input: &I) -> usize {
+    use std::hash::Hasher;
+    let mut hasher = rustc_hash::FxHasher::default();
+    input.hash(&mut hasher);
+    (hasher.finish() >> 60) as usize % TABLE_SHARDS
 }
 
 /// One recorded read, before its input is interned.
@@ -551,6 +751,10 @@ enum Read<I> {
     Input(I),
     Memo(QueryId, Revision),
 }
+
+/// How many reads a computation records before its repeated-input check
+/// keeps a set ([`Ctx::record_input`]).
+const SCANNED_READS: usize = 16;
 
 /// The computation stack of one thread: the entries being computed or
 /// verified, innermost first, for cycle detection.
@@ -623,13 +827,38 @@ impl<'c, 'w, S: Schema> Ctx<'c, 'w, S> {
         self.world
     }
 
-    /// Records a read of `input`.
+    /// Records a read of `input`. A computation's first few reads are
+    /// checked for a repeat by scanning them; past [`SCANNED_READS`], a set
+    /// of the inputs read answers.
     fn record_input(&self, input: S::Input) {
         if self.frame.current.is_none() || self.implied.contains(&input) {
             return;
         }
-        if self.recorded.borrow_mut().insert(input) {
-            self.reads.borrow_mut().push(Read::Input(input));
+        let mut reads = self.reads.borrow_mut();
+        let mut recorded = self.recorded.borrow_mut();
+        if recorded.is_empty() {
+            if reads
+                .iter()
+                .any(|read| matches!(read, Read::Input(read) if *read == input))
+            {
+                return;
+            }
+            if reads.len() < SCANNED_READS {
+                reads.push(Read::Input(input));
+                return;
+            }
+            recorded.extend(reads.iter().filter_map(|read| match read {
+                Read::Input(input) => Some(*input),
+                Read::Memo(..) => None,
+            }));
+            // A computation with only memo reads so far: the set must not
+            // stay empty, or the scan would answer again.
+            recorded.insert(input);
+            reads.push(Read::Input(input));
+            return;
+        }
+        if recorded.insert(input) {
+            reads.push(Read::Input(input));
         }
     }
 
@@ -670,6 +899,12 @@ pub(crate) struct Invalidation {
 pub(crate) struct Store<S: Schema> {
     tables: S::Tables,
     graph: Mutex<Graph<S::Input>>,
+    /// The next query id's sequence number ([`Self::allocate`]).
+    next: AtomicU32,
+    /// The interned inputs, split by hash ([`input_shard`]).
+    inputs: Box<[Mutex<Interned<S::Input>>; TABLE_SHARDS]>,
+    /// Installs' reads not yet in the graph, split like the tables' shards.
+    records: Box<[Mutex<Vec<Record>>; TABLE_SHARDS]>,
     revision: AtomicU32,
     /// A cycle or a verify-reused mismatch: the next [`Self::begin`] starts
     /// from an empty store.
@@ -685,6 +920,9 @@ impl<S: Schema> Store<S> {
         Self {
             tables: S::Tables::default(),
             graph: Mutex::default(),
+            next: AtomicU32::new(0),
+            inputs: Box::new(std::array::from_fn(|_| Mutex::default())),
+            records: Box::new(std::array::from_fn(|_| Mutex::default())),
             revision: AtomicU32::new(0),
             poisoned: AtomicBool::new(false),
             verify_reused,
@@ -739,21 +977,20 @@ impl<S: Schema> Store<S> {
     }
 
     fn mark(&self, changed: &[S::Input]) -> Invalidation {
-        let mut graph = self.graph.lock().expect("memo graph lock");
         // An input is interned when an install records it, so one no
-        // reader records, flushed or pending, marks nothing.
-        if !changed.iter().any(|input| graph.inputs.contains_key(input)) {
+        // reader records, in the graph or queued, marks nothing.
+        let found = changed
+            .iter()
+            .filter_map(|input| self.interned(input))
+            .collect::<Vec<_>>();
+        if found.is_empty() {
             return Invalidation::default();
         }
+        let mut graph = self.synced_graph();
         graph.flush();
         let mut dirty = BTreeSet::new();
-        let mut found = 0;
-        for input in changed {
-            let Some(query) = graph.inputs.get(input) else {
-                continue;
-            };
-            found += 1;
-            if let Some(node) = graph.nodes.get(query) {
+        for query in &found {
+            if let Some(node) = graph.node(query) {
                 dirty.extend(node.readers.iter().copied());
             }
         }
@@ -763,7 +1000,7 @@ impl<S: Schema> Store<S> {
         let mut maybe = BTreeSet::new();
         let mut queue = dirty.iter().copied().collect::<Vec<_>>();
         while let Some(query) = queue.pop() {
-            let Some(node) = graph.nodes.get(&query) else {
+            let Some(node) = graph.node(&query) else {
                 continue;
             };
             for reader in &node.readers {
@@ -774,7 +1011,7 @@ impl<S: Schema> Store<S> {
             }
         }
         Invalidation {
-            changed_inputs: found,
+            changed_inputs: found.len(),
             dirty: dirty.len(),
             maybe_dirty: maybe.len(),
         }
@@ -784,7 +1021,7 @@ impl<S: Schema> Store<S> {
         if let Some(Node {
             kind: NodeKind::Memo(table),
             ..
-        }) = graph.nodes.get(&query)
+        }) = graph.node(&query)
         {
             self.tables.table(*table).raise(query, state);
         }
@@ -796,70 +1033,82 @@ impl<S: Schema> Store<S> {
     pub(crate) fn end(&self) -> (Vec<(&'static str, TableStats)>, Vec<S::Input>) {
         let revision = self.revision();
         let tables = self.tables.tables();
-        let mut graph = self.graph.lock().expect("memo graph lock");
+        let mut graph = self.synced_graph();
         graph.flush();
-        let mut live = HashSet::default();
-        let mut queue = tables
+        let used = tables
             .iter()
             .flat_map(|table| table.used(revision))
             .collect::<Vec<_>>();
-        while let Some(query) = queue.pop() {
-            if !live.insert(query) {
-                continue;
+        // Every entry asked for in this build (a first build's are): all are
+        // live, and nothing is swept.
+        let entries = tables.iter().map(|table| table.len()).sum::<usize>();
+        if used.len() < entries {
+            let mut live = HashSet::default();
+            live.reserve(entries);
+            live.extend(used.iter().copied());
+            let mut queue = used;
+            while let Some(query) = queue.pop() {
+                if let Some(node) = graph.node(&query) {
+                    // Memo reads only (an input read's fingerprint says so),
+                    // each entered once.
+                    queue.extend(node.reads.iter().filter_map(|(read, fingerprint)| {
+                        (*fingerprint != INPUT_READ && live.insert(*read)).then_some(*read)
+                    }));
+                }
             }
-            if let Some(node) = graph.nodes.get(&query) {
-                queue.extend(node.reads.iter().filter_map(|(read, _)| {
-                    matches!(
-                        graph.nodes.get(read).map(|node| node.kind),
-                        Some(NodeKind::Memo(_))
-                    )
-                    .then_some(*read)
-                }));
-            }
-        }
-        for table in &tables {
-            for query in table.sweep(&live) {
-                let Some(node) = graph.nodes.remove(&query) else {
-                    continue;
-                };
-                for (read_id, _) in &node.reads {
-                    if let Some(read) = graph.nodes.get_mut(read_id) {
-                        read.readers.remove(&query);
-                        graph.unread.push(*read_id);
+            let mut lost: [(Vec<u64>, Vec<u64>); TABLE_SHARDS] =
+                std::array::from_fn(|_| (Vec::new(), Vec::new()));
+            let mut stale = Vec::new();
+            for table in &tables {
+                for query in table.sweep(&live) {
+                    let Some(node) = graph.remove(&query) else {
+                        continue;
+                    };
+                    for (read, _) in &node.reads {
+                        lost[graph_shard(*read)].0.push(edge(*read, query));
                     }
+                    stale.extend(node.readers);
                 }
-                // Live entries never read a dropped one (live is closed
-                // under reads); any other reader must not trust its record.
-                for reader in &node.readers {
-                    self.raise(&graph, *reader, DIRTY);
-                }
+            }
+            graph.apply_edges(lost);
+            // Live entries never read a dropped one (live is closed under
+            // reads); any other reader must not trust its record.
+            for reader in stale {
+                self.raise(&graph, reader, DIRTY);
             }
         }
         let mut released = Vec::new();
         // An input is unread only if it lost a reader or was allocated
         // since the last end: every other one kept the reader it had.
-        let candidates = std::mem::take(&mut graph.unread);
-        let Graph { inputs, nodes, .. } = &mut *graph;
-        for query in candidates {
-            let Some(Node {
-                kind: NodeKind::Input(input),
-                readers,
-                ..
-            }) = nodes.get(&query)
-            else {
-                continue;
-            };
-            if readers.is_empty() {
+        for shard in graph.shards.iter_mut() {
+            let candidates = std::mem::take(&mut shard.unread);
+            let nodes = &mut shard.nodes;
+            for query in candidates {
+                let Some(Node {
+                    kind: NodeKind::Input(input),
+                    readers,
+                    ..
+                }) = nodes.get(&query)
+                else {
+                    continue;
+                };
+                if !readers.is_empty() {
+                    continue;
+                }
                 let input = *input;
                 nodes.remove(&query);
-                inputs.remove(&input);
+                self.inputs[input_shard(&input)]
+                    .lock()
+                    .expect("memo input lock")
+                    .ids
+                    .remove(&input);
                 released.push(input);
             }
         }
         released.sort_unstable();
         // Recorded reads by table, in one pass over the graph.
         let mut reads = BTreeMap::<TableId, u64>::new();
-        for node in nodes.values() {
+        for node in graph.nodes() {
             if let NodeKind::Memo(id) = node.kind {
                 *reads.entry(id).or_default() += node.reads.len() as u64;
             }
@@ -880,7 +1129,85 @@ impl<S: Schema> Store<S> {
         for table in self.tables.tables() {
             table.clear();
         }
-        *self.graph.lock().expect("memo graph lock") = Graph::default();
+        let mut graph = self.graph.lock().expect("memo graph lock");
+        *graph = Graph::default();
+        for shard in self.inputs.iter() {
+            *shard.lock().expect("memo input lock") = Interned::default();
+        }
+        for shard in self.records.iter() {
+            shard.lock().expect("memo record lock").clear();
+        }
+        self.next.store(0, Ordering::Release);
+    }
+
+    /// A new query id in `shard` (modulo [`TABLE_SHARDS`]): a memo key's id
+    /// names the table shard that holds it.
+    fn allocate(&self, shard: usize) -> QueryId {
+        let next = self.next.fetch_add(1, Ordering::Relaxed);
+        QueryId(
+            next.checked_mul(TABLE_SHARDS as u32)
+                .and_then(|id| id.checked_add(shard as u32))
+                .expect("fewer than 2^28 queries"),
+        )
+    }
+
+    /// The interned id of `input`, if a recorded read named it.
+    fn interned(&self, input: &S::Input) -> Option<QueryId> {
+        self.inputs[input_shard(input)]
+            .lock()
+            .expect("memo input lock")
+            .ids
+            .get(input)
+            .copied()
+    }
+
+    /// The id of `input`, interned if no read named it yet.
+    fn intern(&self, input: S::Input) -> QueryId {
+        let shard = input_shard(&input);
+        let mut interned = self.inputs[shard].lock().expect("memo input lock");
+        if let Some(id) = interned.ids.get(&input) {
+            return *id;
+        }
+        let id = self.allocate(shard);
+        interned.ids.insert(input, id);
+        interned.fresh.push((id, input));
+        id
+    }
+
+    /// The graph lock, with every input interned and every install
+    /// recorded since the last call moved into the graph (each record in
+    /// its shard's order: a query's records are all in its own shard).
+    /// Locks are taken graph, then input or record shard.
+    fn synced_graph(&self) -> parking_lot::MutexGuard<'_, Graph<S::Input>> {
+        let mut graph = self.graph.lock().expect("memo graph lock");
+        // Shard by shard: an input's id and a record's query are in the
+        // graph shard of their own shard.
+        each_shard(
+            graph
+                .shards
+                .iter_mut()
+                .zip(self.inputs.iter().zip(self.records.iter()))
+                .collect(),
+            |(shard, (inputs, records))| {
+                let fresh = std::mem::take(&mut inputs.lock().expect("memo input lock").fresh);
+                let records = std::mem::take(&mut *records.lock().expect("memo record lock"));
+                shard.nodes.reserve(fresh.len() + records.len());
+                for (id, input) in fresh {
+                    shard.nodes.insert(id, Node::new(NodeKind::Input(input)));
+                    shard.unread.push(id);
+                }
+                for (query, table, reads) in records {
+                    // Swept between the key's interning and now, or never in
+                    // the graph: (re-)register.
+                    shard
+                        .nodes
+                        .entry(query)
+                        .or_insert_with(|| Node::new(NodeKind::Memo(table)));
+                    shard.record(query, reads);
+                }
+            },
+        );
+        graph
     }
 
     /// The answer for `key` to a top-level reader (outside every memo). A
@@ -943,16 +1270,12 @@ impl<S: Schema> Store<S> {
         {
             return *query;
         }
-        // Locks are taken table first, then graph, everywhere a build reads.
         let mut data = table.data[shard].write().expect("memo table lock");
         if let Some(query) = data.ids.get(key) {
             return *query;
         }
-        let query = self
-            .graph
-            .lock()
-            .expect("memo graph lock")
-            .allocate_in(NodeKind::Memo(M::ID), shard);
+        // Its graph node is created when an install records it.
+        let query = self.allocate(shard);
         data.ids.insert(key.clone(), query);
         data.keys.insert(query, key.clone());
         query
@@ -1067,17 +1390,13 @@ impl<S: Schema> Store<S> {
     ) -> Result<bool, Cycle> {
         let reads = {
             let graph = self.graph.lock().expect("memo graph lock");
-            let Some(node) = graph.nodes.get(&query) else {
+            let Some(node) = graph.node(&query) else {
                 return Ok(false);
             };
             node.reads
                 .iter()
                 .map(|(read, fingerprint)| {
-                    (
-                        *read,
-                        *fingerprint,
-                        graph.nodes.get(read).map(|node| node.kind),
-                    )
+                    (*read, *fingerprint, graph.node(read).map(|node| node.kind))
                 })
                 .collect::<Vec<_>>()
         };
@@ -1152,19 +1471,43 @@ impl<S: Schema> Store<S> {
         let table = M::table(&self.tables);
         // Each input is recorded once ([`Ctx::record_input`]) and an implied
         // one never, so only a memo read can repeat: the first is kept.
-        let mut seen = HashSet::default();
-        let reads = implied
+        let memo_reads = reads
             .iter()
-            .map(|input| Read::Input(*input))
-            .chain(reads)
-            .filter(|read| match read {
-                Read::Input(_) => true,
-                Read::Memo(id, _) => seen.insert(*id),
+            .filter(|read| matches!(read, Read::Memo(..)))
+            .count();
+        let reads = if memo_reads > 1 {
+            let mut seen = HashSet::default();
+            implied
+                .iter()
+                .map(|input| Read::Input(*input))
+                .chain(reads)
+                .filter(|read| match read {
+                    Read::Input(_) => true,
+                    Read::Memo(id, _) => seen.insert(*id),
+                })
+                .collect::<Vec<_>>()
+        } else {
+            implied
+                .iter()
+                .map(|input| Read::Input(*input))
+                .chain(reads)
+                .collect::<Vec<_>>()
+        };
+        // Interned before the table's write lock is taken, so a shard's
+        // writer does not wait on input shards (an input interned for an
+        // install that then finds the entry computed is released unread at
+        // the end). Queued for the graph ([`Self::synced_graph`]): an install
+        // takes an input shard's lock per read and its record shard's, never
+        // the graph's.
+        let recorded = reads
+            .into_iter()
+            .map(|read| match read {
+                Read::Input(input) => (self.intern(input), INPUT_READ),
+                Read::Memo(id, changed_at) => (id, u64::from(changed_at)),
             })
             .collect::<Vec<_>>();
-        // The reads and the value change together, under the table's write
-        // lock: a verifier sees old reads with the old value or new reads
-        // with the new one, never new reads with the old value.
+        // The record and the value change together, under the table's write
+        // lock.
         let mut data = table.shard(query).write().expect("memo table lock");
         if data.entries.get(&query).is_some_and(|entry| {
             entry.computed_at == revision && entry.state.load(Ordering::Acquire) == CLEAN
@@ -1179,23 +1522,10 @@ impl<S: Schema> Store<S> {
                 changed_at: entry.changed_at,
             };
         }
-        {
-            let mut graph = self.graph.lock().expect("memo graph lock");
-            let recorded = reads
-                .into_iter()
-                .map(|read| match read {
-                    Read::Input(input) => (graph.input(input), 0),
-                    Read::Memo(id, changed_at) => (id, u64::from(changed_at)),
-                })
-                .collect::<Vec<_>>();
-            // Swept between the key's interning and now: re-register.
-            graph.nodes.entry(query).or_insert_with(|| Node {
-                kind: NodeKind::Memo(M::ID),
-                reads: Vec::new(),
-                readers: BTreeSet::new(),
-            });
-            graph.record(query, recorded);
-        }
+        self.records[query.0 as usize % TABLE_SHARDS]
+            .lock()
+            .expect("memo record lock")
+            .push((query, M::ID, recorded));
         if !data.ids.contains_key(key) {
             data.ids.insert(key.clone(), query);
             data.keys.insert(query, key.clone());
@@ -1280,20 +1610,15 @@ impl<S: Schema> Store<S> {
         let recorded = {
             let graph = self.graph.lock().expect("memo graph lock");
             graph
-                .nodes
-                .get(&query)
+                .node(&query)
                 .map(|node| {
                     node.reads
                         .iter()
-                        .map(
-                            |(read, _)| match graph.nodes.get(read).map(|node| node.kind) {
-                                Some(NodeKind::Input(input)) => format!("{input:?}"),
-                                Some(NodeKind::Memo(table)) => {
-                                    self.tables.table(table).describe(*read)
-                                }
-                                None => format!("{read:?} (dropped)"),
-                            },
-                        )
+                        .map(|(read, _)| match graph.node(read).map(|node| node.kind) {
+                            Some(NodeKind::Input(input)) => format!("{input:?}"),
+                            Some(NodeKind::Memo(table)) => self.tables.table(table).describe(*read),
+                            None => format!("{read:?} (dropped)"),
+                        })
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default()
