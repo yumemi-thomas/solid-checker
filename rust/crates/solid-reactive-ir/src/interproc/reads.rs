@@ -714,9 +714,9 @@ fn tag_extra_source_origins(
 ) {
     if provenance.has_extra_source_origins() {
         for summary in summaries {
-            for read in &mut summary.ordered {
+            summary.rewrite(|read| {
                 read.transported |= provenance.has_source_origin(&read.symbol);
-            }
+            });
         }
     }
 }
@@ -1436,8 +1436,8 @@ fn collect_returned_summaries<'a>(
                         } else if let Some(target) = by_symbol.get(symbol).copied()
                             && target != index
                         {
-                            for read in summaries[target].iter() {
-                                returned[index].push_unique(read.clone());
+                            for (hops, read) in summaries[target].rows() {
+                                returned[index].insert(read.clone(), hops + 1);
                             }
                         }
                     }
@@ -1581,9 +1581,12 @@ fn attach_dispatch_edges(
             if !edges[*owner].contains(&target) {
                 edges[*owner].push(target);
                 summary_propagation.reverse_edges[target].push(*owner);
-                let target_reads = summaries[target].to_vec();
-                for read in target_reads {
-                    if summaries[*owner].push_unique(read) {
+                let target_reads = summaries[target]
+                    .rows()
+                    .map(|(hops, read)| (hops, read.clone()))
+                    .collect::<Vec<_>>();
+                for (hops, read) in target_reads {
+                    if summaries[*owner].insert(read, hops + 1) {
                         dispatch_edges_added = true;
                     }
                 }
@@ -1625,8 +1628,8 @@ fn add_returned_function_reads<'a>(
             if value.value == solid_facts::ast::ReturnValueKind::Function
                 && let Some(target) = indexes.get(&(node.path.clone(), value.span))
             {
-                for read in summaries[*target].iter() {
-                    returned[index].push_unique(read.clone());
+                for (hops, read) in summaries[*target].rows() {
+                    returned[index].insert(read.clone(), hops + 1);
                 }
             }
         }
@@ -1651,6 +1654,8 @@ fn propagate_factory_reads(
     let returned_binding_candidates = candidates.returned_bindings;
     let factory_call_candidates = candidates.factory_calls;
     let mut returned_bindings = HashMap::<SymbolId, Vec<SummaryRead>>::default();
+    // The factory each binding's rows come from, for their hop counts.
+    let mut binding_targets = HashMap::<SymbolId, usize>::default();
     if returned.iter().any(|summary| !summary.is_empty()) {
         for (binding_symbol, target_symbol) in returned_binding_candidates {
             let Some(target) = by_symbol.get(target_symbol).copied() else {
@@ -1663,6 +1668,7 @@ fn propagate_factory_reads(
                 }
             }
             returned_bindings.insert(binding_symbol.clone(), summary);
+            binding_targets.insert(binding_symbol.clone(), target);
         }
         let mut factory_reads_added = false;
         if !returned_bindings.is_empty() {
@@ -1673,10 +1679,11 @@ fn propagate_factory_reads(
                 let Some(factory_reads) = returned_bindings.get(symbol) else {
                     continue;
                 };
-                for read in factory_reads {
-                    let previous_len = summaries[*owner].len();
-                    summaries[*owner].push_unique(read.clone());
-                    factory_reads_added |= summaries[*owner].len() != previous_len;
+                let hops = returned[binding_targets[symbol]]
+                    .rows()
+                    .map(|(hops, _)| hops);
+                for (read, hops) in factory_reads.iter().zip(hops) {
+                    factory_reads_added |= summaries[*owner].insert(read.clone(), hops + 1);
                 }
             }
         }

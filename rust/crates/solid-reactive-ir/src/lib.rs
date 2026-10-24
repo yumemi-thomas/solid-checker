@@ -1662,10 +1662,10 @@ fn propagate_returned_summary_deltas(summaries: &mut [SummaryReads], edges: &[(u
         let mut changed = false;
         for (edge_index, (owner, target)) in edges.iter().copied().enumerate() {
             let start = propagated_lengths[edge_index];
-            let propagated = summaries[target].ordered[start..].to_vec();
-            propagated_lengths[edge_index] = summaries[target].len();
-            for read in propagated {
-                changed |= summaries[owner].push_unique(read);
+            let propagated = summaries[target].log_since(start).to_vec();
+            propagated_lengths[edge_index] = summaries[target].log_len();
+            for (hops, read) in propagated {
+                changed |= summaries[owner].insert(read, hops + 1);
             }
         }
         if !changed {
@@ -1684,7 +1684,7 @@ fn propagate_summary_deltas(
     let mut queued = summaries
         .iter()
         .zip(propagated_lengths.iter())
-        .map(|(summary, propagated)| summary.len() > *propagated)
+        .map(|(summary, propagated)| summary.log_len() > *propagated)
         .collect::<Vec<_>>();
     let mut worklist = queued
         .iter()
@@ -1694,19 +1694,19 @@ fn propagate_summary_deltas(
     while let Some(target) = worklist.pop_front() {
         queued[target] = false;
         let start = propagated_lengths[target];
-        let propagated = summaries[target].ordered[start..].to_vec();
-        propagated_lengths[target] = summaries[target].len();
+        let propagated = summaries[target].log_since(start).to_vec();
+        propagated_lengths[target] = summaries[target].log_len();
         for owner in reverse_edges[target].iter().copied() {
             let transported = transported_edges.contains(&(owner, target));
             let mut changed = false;
-            for read in &propagated {
+            for (hops, read) in &propagated {
                 let mut read = read.clone();
                 read.transported |= transported;
                 // ADR 0276: past this edge the row's own completion standing
                 // is a hop below the caller, and the edge's is the caller's.
                 read.conditional |= read.local;
                 read.local = !guaranteed_edges.contains(&(owner, target));
-                changed |= summaries[owner].push_unique(read);
+                changed |= summaries[owner].insert(read, hops + 1);
             }
             if changed && !queued[owner] {
                 queued[owner] = true;
