@@ -202,22 +202,6 @@ pub(crate) const fn owned_on_every_path(context: u8) -> bool {
         && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
 }
 
-/// The binding key of a `useContext` read's context argument, or `None` for any
-/// other call shape.
-pub(crate) fn read_context_key(
-    lookup: &SemanticLookup<'_>,
-    file: &solid_facts::FileFacts,
-    call: &solid_facts::ast::CallFact,
-) -> Option<Location> {
-    let [argument] = call.arguments.as_slice() else {
-        return None;
-    };
-    if argument.spread {
-        return None;
-    }
-    context_key_at(lookup, file, argument.span)
-}
-
 /// The binding key of the context an expression at `span` names, when it names
 /// a binding exactly.
 pub(crate) fn context_key_at(

@@ -97,15 +97,21 @@ pub(crate) fn collect_project(
         cache.missing_owners = Some(draft.missing_owners.clone());
         cache.settled_gates = Some(gates);
     } else {
-        let (requirements, gates) = find_missing_owners(
+        // A build with no retained cache runs the same pass over a scratch
+        // fragment table: one owner analysis, so a fresh and a retained
+        // build cannot disagree (the duplicate batch pass drifted, S7f-0).
+        let (requirements, gates, owner_timings, _) = find_missing_owners_incremental(
             ctx.facts,
             ctx.semantic_lookup,
             project_indexes,
             ctx.symbol_names,
+            unchanged_paths,
+            &mut HashMap::default(),
         );
         draft.missing_owners.extend(requirements);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
         apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
+        timings.absorb_owner(&owner_timings);
         timings.owner_recomputed_files = u64::try_from(ctx.facts.files.len()).unwrap_or(u64::MAX);
     }
 }

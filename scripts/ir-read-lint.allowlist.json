@@ -184,7 +184,7 @@
     "hashmap-iteration": 1
   },
   "rust/crates/solid-reactive-ir/src/owners/missing_owners.rs": {
-    "facts.files": 4,
+    "facts.files": 1,
     "file_by_path": 4,
     "hashmap-iteration": 1
   },
