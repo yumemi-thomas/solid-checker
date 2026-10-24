@@ -335,9 +335,29 @@ pub fn inferred_host_directory_digest(path: &Path) -> Option<[u8; 32]> {
 
 /// Content, absence, directory membership, and symlink identity all matter.
 /// Metadata alone is never sufficient to reuse inferred authority.
+///
+/// A dangling symlink (a pnpm link to an optional package that was never
+/// installed) has no [`identity`], and inference refuses on it, but the
+/// refusal is a stable answer: its digest is the link text, so the answer is
+/// reused until the link is retargeted or its target appears.
 #[must_use]
 pub fn inferred_host_input_digest(path: &Path) -> Option<[u8; 32]> {
-    Some(Sha256::digest(identity(path)?.as_bytes()).into())
+    let identity = identity(path).or_else(|| dangling_link(path))?;
+    Some(Sha256::digest(identity.as_bytes()).into())
+}
+
+fn dangling_link(path: &Path) -> Option<String> {
+    let metadata = fs::symlink_metadata(path).ok()?;
+    if !metadata.file_type().is_symlink() {
+        return None;
+    }
+    let target = fs::read_link(path).ok()?;
+    match fs::canonicalize(path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Some(format!("dangling-symlink:{}", target.display()))
+        }
+        _ => None,
+    }
 }
 
 pub(super) fn inventory_paths(directory: &Path, paths: &mut Vec<PathBuf>) -> Option<()> {

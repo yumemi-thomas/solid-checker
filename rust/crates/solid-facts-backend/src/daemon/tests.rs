@@ -152,6 +152,24 @@ fn retained_inference_closure_observes_content_absence_membership_and_symlinks()
         !inference_inputs_current(&links),
         "equal target bytes do not imply equal link identity"
     );
+    // A dangling link is a stable input: the answer is reused while it
+    // dangles, and not once it is retargeted or its target appears.
+    let dangling = scratch.join("optional-package");
+    std::os::unix::fs::symlink(scratch.join("never-installed"), &dangling).unwrap();
+    let dangles = observed(std::slice::from_ref(&dangling));
+    assert!(inference_inputs_current(&dangles));
+    fs::remove_file(&dangling).unwrap();
+    std::os::unix::fs::symlink(scratch.join("also-missing"), &dangling).unwrap();
+    assert!(
+        !inference_inputs_current(&dangles),
+        "a retargeted link moves"
+    );
+    let dangles = observed(std::slice::from_ref(&dangling));
+    fs::create_dir_all(scratch.join("also-missing")).unwrap();
+    assert!(
+        !inference_inputs_current(&dangles),
+        "an installed target moves"
+    );
     fs::remove_dir_all(scratch).unwrap();
 }
 
