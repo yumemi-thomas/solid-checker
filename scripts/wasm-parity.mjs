@@ -16,6 +16,7 @@ import {
   appendFileSync, chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync,
   readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
+import { constants as osConstants } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -390,6 +391,9 @@ const g3Sub = freeze("g3-sub", root => {
 const osAlias = path => (path.startsWith("/private/var/") || path.startsWith("/private/tmp/") ? path.slice("/private".length) : undefined);
 if (process.platform === "darwin" && !osAlias(g3.root)) fail(`${g3.root} has no macOS /private alias`);
 const g3Case = g3.caseRoot;
+// Native's line for a host error: the number is the host's own (ELOOP is 62
+// on macOS, 40 on Linux); the package's WASI numbers are the same everywhere.
+const hostError = (text, code) => `${text} (os error ${osConstants.errno[code]})`;
 const G3 = {
   equal: [
     ["g3-canonical", join(g3.root, "tsconfig.json")],
@@ -403,10 +407,10 @@ const G3 = {
   ],
   // [name, spelling, the package's error (exact, or a pattern), native's stderr line or "answers"]
   refused: [
-    ["g3-missing", join(g3Case, "alias/absent/tsconfig.json"), "No such file or directory (os error 44)", "No such file or directory (os error 2)"],
-    ["g3-dangling", join(g3Case, "dangling/tsconfig.json"), "No such file or directory (os error 44)", "No such file or directory (os error 2)"],
-    ["g3-notdir", join(g3Case, "file/tsconfig.json"), / \(os error 54\)$/, "Not a directory (os error 20)"],
-    ["g3-loop", join(g3Case, "loopA/tsconfig.json"), / \(os error 32\)$/, "Too many levels of symbolic links (os error 62)"],
+    ["g3-missing", join(g3Case, "alias/absent/tsconfig.json"), "No such file or directory (os error 44)", hostError("No such file or directory", "ENOENT")],
+    ["g3-dangling", join(g3Case, "dangling/tsconfig.json"), "No such file or directory (os error 44)", hostError("No such file or directory", "ENOENT")],
+    ["g3-notdir", join(g3Case, "file/tsconfig.json"), / \(os error 54\)$/, hostError("Not a directory", "ENOTDIR")],
+    ["g3-loop", join(g3Case, "loopA/tsconfig.json"), / \(os error 32\)$/, hostError("Too many levels of symbolic links", "ELOOP")],
   ],
   // Held contrasts (A4, names the host matches case-insensitively): recorded
   // beside native, never counted as equivalence.
@@ -965,7 +969,7 @@ for (const [engine, { driver, urls, oldEntry }] of Object.entries(engines)) {
     }
     check(same(eacces?.observation, { ok: false, code: "EACCES" }), `${label("g3-eacces")}: observation ${JSON.stringify(eacces?.observation)}`);
     refusal("g3-eacces", / \(os error 2\)$/);
-    check(native["g3-eacces"].status !== 0 && native["g3-eacces"].notes.at(-1)?.endsWith("Permission denied (os error 13)"), `g3-eacces: native ${JSON.stringify(native["g3-eacces"])}`);
+    check(native["g3-eacces"].status !== 0 && native["g3-eacces"].notes.at(-1)?.endsWith(hostError("Permission denied", "EACCES")), `g3-eacces: native ${JSON.stringify(native["g3-eacces"])}`);
     // Search permission is all native needs, and all the owned check now
     // uses: the denied listing is never taken.
     check(readDenied?.observation === null, `${label("g3-read-denied-parent")}: the denied listing was read: ${JSON.stringify(readDenied?.observation)}`);
@@ -1014,7 +1018,7 @@ for (const [engine, { driver, urls, oldEntry }] of Object.entries(engines)) {
   // S3d: the link is followed on the host, as native follows it, to a
   // directory with no tsconfig.json.
   check(reached?.ok === false && reached.error === "No such file or directory (os error 44)" && same(reached.transport?.calls, []) &&
-    native.outsideLinkReached.status !== 0 && native.outsideLinkReached.notes.at(-1)?.endsWith("No such file or directory (os error 2)"),
+    native.outsideLinkReached.status !== 0 && native.outsideLinkReached.notes.at(-1)?.endsWith(hostError("No such file or directory", "ENOENT")),
   `${label("directory-outside-link-reached")}: ${JSON.stringify(reached)} vs native ${JSON.stringify(native.outsideLinkReached)}`);
 
   const canary = at("canary");
