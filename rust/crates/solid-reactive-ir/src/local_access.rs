@@ -11,7 +11,7 @@ use crate::owners::{
     function_binding_name, inside_known_value_function_argument, inside_non_component_function,
     read_loading_cover, typed_accessor_descriptor_at,
 };
-use crate::pipeline::parallel_file_chunk_results;
+use crate::pipeline::{parallel_file_chunk_results, parallel_slice_results};
 use crate::source_discovery::{AsyncSourceOptions, PropUse, PropsReactivityIndex};
 use crate::{
     ActionInvocation, AsyncRead, ExecutionRole, ReactiveRead, ReactiveSourceKind, ReactiveWrite,
@@ -576,6 +576,7 @@ impl LocalAccessContext<'_, '_> {
             cache
                 .files
                 .retain(|path, _| current_paths.contains(path.as_str()));
+            let mut recompute = Vec::new();
             for file in &self.facts.files {
                 if let Some(cached) = cache.files.get(file.path.as_str())
                     && exact_typescript_delta
@@ -590,15 +591,29 @@ impl LocalAccessContext<'_, '_> {
                     reused_files += 1;
                     continue;
                 }
-                let contribution = self.discover(file);
+                recompute.push(file);
+            }
+            // Each file's contribution reads only this build's facts and
+            // lookup, so the files are discovered in parallel and recorded in
+            // their order.
+            let fresh = parallel_slice_results(&recompute, |file| {
+                (
+                    self.discover(file),
+                    self.dependencies(file),
+                    self.call_multiplicities(file),
+                )
+            });
+            for (file, (contribution, dependencies, call_multiplicities)) in
+                recompute.into_iter().zip(fresh)
+            {
                 cache.files.insert(
                     file.path.clone(),
                     CachedLocalAccessFile {
                         source_hash: file.source_hash.clone(),
                         cross_file_proofs: self.lookup.member_resolution_digest(),
                         compiler: file.compiler.clone(),
-                        dependencies: self.dependencies(file),
-                        call_multiplicities: self.call_multiplicities(file),
+                        dependencies,
+                        call_multiplicities,
                         contribution,
                     },
                 );
@@ -646,8 +661,9 @@ impl LocalAccessContext<'_, '_> {
             }
             cache.aggregate = Some(result.clone());
         } else {
-            for file in &self.facts.files {
-                let contribution = self.discover(file);
+            for contribution in
+                parallel_slice_results(&self.facts.files, |file| self.discover(file))
+            {
                 append_local_access_result(&mut result, &contribution);
                 recomputed_files += 1;
             }

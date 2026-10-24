@@ -866,6 +866,7 @@ pub(super) struct SemanticLookup<'a> {
     component_functions: OnceLock<ComponentSets<'a>>,
     result_access_forwarded: OnceLock<HashMap<&'a str, Vec<ResultAccessForwarded>>>,
     cross_file_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
+    member_resolution_digest: OnceLock<Option<CrossFileProofDigest>>,
     tuple_iteration_veto: OnceLock<bool>,
     string_code_veto: OnceLock<bool>,
     /// ADR 0277: `(path, function span, parameter index)` for each parameter
@@ -1074,6 +1075,7 @@ impl<'a> SemanticLookup<'a> {
             component_functions: OnceLock::new(),
             result_access_forwarded: OnceLock::new(),
             cross_file_proof_digest: OnceLock::new(),
+            member_resolution_digest: OnceLock::new(),
             tuple_iteration_veto: OnceLock::new(),
             string_code_veto: OnceLock::new(),
             parameter_completion_calls: OnceLock::new(),
@@ -1247,6 +1249,14 @@ impl<'a> SemanticLookup<'a> {
     /// interprocedural graph and results, local accesses -- are keyed on it,
     /// so a write elsewhere does not discard source discovery.
     pub(super) fn member_resolution_digest(&self) -> Option<CrossFileProofDigest> {
+        // Every input is this lookup's own once-computed answer, and the
+        // caches compare it once per retained function: compute it once.
+        *self
+            .member_resolution_digest
+            .get_or_init(|| self.member_resolution_digest_uncached())
+    }
+
+    fn member_resolution_digest_uncached(&self) -> Option<CrossFileProofDigest> {
         let base = self.cross_file_proof_digest()?;
         let assigned = self.assigned_members();
         let mut names = assigned.names.iter().collect::<Vec<_>>();
