@@ -1334,6 +1334,8 @@ pub struct BuildTimings {
     /// Facts delta) no longer matched; the rest of the recomputed retained
     /// files read an answer that moved ([`base::reads`]).
     pub source_discovery_identity_misses: u64,
+    /// Source discovery's post-pass row sets (S7a): kept, recomputed.
+    pub source_post_pass_row_sets: [u64; 2],
     pub interprocedural_graph_reused_files: u64,
     pub interprocedural_graph_recomputed_files: u64,
     pub interprocedural_result_reused_files: u64,

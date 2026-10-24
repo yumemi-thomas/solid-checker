@@ -178,74 +178,233 @@ impl PropsReactivityIndex {
     }
 }
 
-/// Builds [`PropsReactivityIndex`] from the proven components' JSX call
-/// sites. Empty (answering [`PropUse::Reactive`] everywhere) when the dialect
-/// keeps the upstream over-approximation.
-#[allow(clippy::too_many_arguments)]
-pub(super) fn classify_component_props(
+/// A project function a JSX tag renders: its file's path and its span.
+pub(super) type RenderedAt = (Arc<str>, Span);
+
+/// A JSX element: its file's slot key and its ordinal there.
+pub(super) type RenderingAt = (crate::base::FileId, u32);
+
+/// A declaration's path and byte range.
+pub(super) type DeclarationAt = (Arc<str>, u64, u64);
+
+/// The source tables and indexes the component pass (pass 10) reads, each
+/// read recorded at its key ([`super::trace`]): a component's rows are kept
+/// while every key they read answers as it did.
+pub(super) struct ComponentInputs<'s> {
+    pub(super) files: &'s [FileFacts],
+    pub(super) accessors: &'s HashMap<SymbolId, (SymbolId, Location)>,
+    pub(super) source_kinds: &'s HashMap<SymbolId, ReactiveSourceKind>,
+    pub(super) prop_sources: &'s HashMap<SymbolId, (SymbolId, Location)>,
+    /// Runtime sources no file writes.
+    pub(super) runtime_sources: &'s HashSet<SymbolId>,
+    /// The JSX elements rendering each project function, in file order:
+    /// each element's file slot key and ordinal.
+    pub(super) uses: &'s BTreeMap<RenderedAt, Arc<Vec<RenderingAt>>>,
+    /// The slot a file key names in this build.
+    pub(super) slots: &'s HashMap<crate::base::FileId, usize>,
+    /// The symbols some analyzed file exports.
+    pub(super) exported: &'s BTreeMap<SymbolId, ()>,
+    /// The prop sources attached to each declaration, sorted, built on first
+    /// use.
+    pub(super) attached: std::sync::OnceLock<HashMap<DeclarationAt, Vec<SymbolId>>>,
+}
+
+impl ComponentInputs<'_> {
+    fn attached_index(&self) -> &HashMap<DeclarationAt, Vec<SymbolId>> {
+        self.attached.get_or_init(|| {
+            let mut index = HashMap::<DeclarationAt, Vec<SymbolId>>::default();
+            for (symbol, (_, declaration)) in self.prop_sources {
+                index
+                    .entry((
+                        Arc::clone(&declaration.path),
+                        declaration.start_byte,
+                        declaration.end_byte,
+                    ))
+                    .or_default()
+                    .push(symbol.clone());
+            }
+            for symbols in index.values_mut() {
+                symbols.sort_unstable();
+            }
+            index
+        })
+    }
+
+    /// What `key` answers now, as [`super::trace::Dep::State`] records it;
+    /// `None` for a key this pass does not read.
+    pub(super) fn answer(&self, key: &super::trace::StateKey) -> Option<u64> {
+        use super::trace::{StateKey, fingerprint, kind_fingerprint};
+        Some(match key {
+            StateKey::Accessor(symbol) => u64::from(self.accessors.contains_key(symbol)),
+            StateKey::Kind(symbol) => kind_fingerprint(self.source_kinds.get(symbol)),
+            StateKey::PropSource(symbol) => fingerprint(&self.prop_sources.get(symbol)),
+            StateKey::Runtime(symbol) => u64::from(self.runtime_sources.contains(symbol)),
+            StateKey::Uses(path, span) => fingerprint(&self.uses.get(&(Arc::clone(path), *span))),
+            StateKey::Exported(symbol) => u64::from(self.exported.contains_key(symbol)),
+            StateKey::Attached(path, start, end) => {
+                fingerprint(&self.attached_index().get(&(Arc::clone(path), *start, *end)))
+            }
+            StateKey::Runtime0(_) | StateKey::Kind0(_) => return None,
+        })
+    }
+
+    fn note(&self, key: super::trace::StateKey) {
+        if super::trace::recording() {
+            let answer = self.answer(&key).expect("a key the component pass reads");
+            super::trace::note(super::trace::Dep::State(key, answer));
+        }
+    }
+
+    fn is_accessor(&self, symbol: &SymbolId) -> bool {
+        self.note(super::trace::StateKey::Accessor(symbol.clone()));
+        self.accessors.contains_key(symbol)
+    }
+
+    fn kind(&self, symbol: &SymbolId) -> Option<ReactiveSourceKind> {
+        self.note(super::trace::StateKey::Kind(symbol.clone()));
+        self.source_kinds.get(symbol).copied()
+    }
+
+    fn prop_source(&self, symbol: &SymbolId) -> Option<&(SymbolId, Location)> {
+        self.note(super::trace::StateKey::PropSource(symbol.clone()));
+        self.prop_sources.get(symbol)
+    }
+
+    fn is_runtime(&self, symbol: &SymbolId) -> bool {
+        self.note(super::trace::StateKey::Runtime(symbol.clone()));
+        self.runtime_sources.contains(symbol)
+    }
+
+    fn exported(&self, symbol: &SymbolId) -> bool {
+        self.note(super::trace::StateKey::Exported(symbol.clone()));
+        self.exported.contains_key(symbol)
+    }
+
+    /// The JSX elements rendering the function at `span` of `file`, each
+    /// element's file recorded.
+    fn uses_of<'f>(
+        &'f self,
+        file: &FileFacts,
+        span: solid_facts::core::Span,
+    ) -> Vec<(&'f FileFacts, &'f solid_facts::ast::JsxElementFact)> {
+        self.note(super::trace::StateKey::Uses(file.path.shared(), span));
+        self.uses
+            .get(&(file.path.shared(), span))
+            .map(|uses| {
+                uses.iter()
+                    .filter_map(|(key, ordinal)| {
+                        let use_file = self.files.get(*self.slots.get(key)?)?;
+                        super::trace::read_file(use_file);
+                        Some((use_file, use_file.ast.jsx_elements.get(*ordinal as usize)?))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// [`crate::local_access::props_root_attachments_are_views`], recording
+    /// which prop sources the declaration has.
+    fn attachments_are_views(
+        &self,
+        file: &FileFacts,
+        declaration: &Location,
+        symbol: &SymbolId,
+        entities: &EntitySymbols,
+        lookup: &SemanticLookup<'_>,
+    ) -> bool {
+        self.note(super::trace::StateKey::Attached(
+            Arc::clone(&declaration.path),
+            declaration.start_byte,
+            declaration.end_byte,
+        ));
+        crate::local_access::props_root_attachments_are_views(
+            file,
+            self.prop_sources,
+            declaration,
+            symbol,
+            entities,
+            lookup,
+        )
+    }
+}
+
+/// Records that the current computation read the entity rows of
+/// `declaration`'s file, when that is not `file`.
+fn read_declaration_file(lookup: &SemanticLookup<'_>, file: &FileFacts, declaration: &Location) {
+    if *declaration.path != *file.path.as_str() {
+        super::trace::read_path(lookup, declaration.path.as_ref());
+    }
+}
+
+/// One possible component's classification from its callers (pass 10), and
+/// what its call sites forward into it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct ComponentRow {
+    /// The props parameter's pattern, and its name when it has one: both key
+    /// the classification.
+    pub(super) pattern: Location,
+    pub(super) name: Option<Location>,
+    pub(super) classification: PropsReactivity,
+    pub(super) forwarded: ForwardedProps,
+    pub(super) spreads: Vec<SpreadForward>,
+}
+
+/// Pass 10's rows of one file: each possible component of one parameter,
+/// classified from its JSX call sites.
+pub(super) fn component_rows(
     runtime: &crate::RuntimeEnvironment,
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
-    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
-    source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
-    prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
-    runtime_sources: &HashSet<SymbolId>,
-) -> PropsReactivityIndex {
-    if !lookup.dialect.props_require_caller_proof() {
-        return PropsReactivityIndex::default();
-    }
-    // Every JSX element resolved to the project function it renders.
-    let mut uses = HashMap::<(&str, solid_facts::core::Span), Vec<(usize, usize)>>::default();
-    for (file_index, file) in facts.files.iter().enumerate() {
-        for (element_index, element) in file.ast.jsx_elements.iter().enumerate() {
-            if let Some((target_file, target)) =
-                lookup.function_called_at(file.path.as_str(), element.name.span)
-            {
-                uses.entry((target_file.path.as_str(), target.span))
-                    .or_default()
-                    .push((file_index, element_index));
-            }
+    inputs: &ComponentInputs<'_>,
+    statuses: Option<&[crate::indexes::ComponentIdentity]>,
+    file: &FileFacts,
+) -> Vec<ComponentRow> {
+    let mut rows = Vec::new();
+    for (ordinal, function) in file.ast.functions.iter().enumerate() {
+        let Some(parameter) = function.parameters.first() else {
+            continue;
+        };
+        if function.parameters.len() > 1
+            || super::post_rows::component_status(lookup, statuses, file, ordinal, function)
+                == crate::indexes::ComponentStatus::No
+        {
+            continue;
         }
+        let (classification, forwarded, spreads) =
+            classify_one_component(runtime, facts, lookup, entities, inputs, file, function);
+        rows.push(ComponentRow {
+            pattern: location(file.path.shared(), parameter.pattern),
+            name: parameter
+                .names
+                .first()
+                .map(|name| location(file.path.shared(), name.span)),
+            classification,
+            forwarded,
+            spreads,
+        });
     }
+    rows
+}
+
+/// [`PropsReactivityIndex`] from every file's component rows in file order.
+pub(super) fn props_reactivity_index<'r>(
+    rows: impl IntoIterator<Item = &'r ComponentRow>,
+) -> PropsReactivityIndex {
     let mut by_declaration = HashMap::default();
     let mut pending = Vec::new();
-    for file in &facts.files {
-        for function in &file.ast.functions {
-            let Some(parameter) = function.parameters.first() else {
-                continue;
-            };
-            if function.parameters.len() > 1 || !lookup.function_may_be_component(file, function) {
-                continue;
-            }
-            let (classification, forwarded, spreads) = classify_one_component(
-                runtime,
-                facts,
-                lookup,
-                entities,
-                accessors,
-                source_kinds,
-                prop_sources,
-                runtime_sources,
-                &uses,
-                file,
-                function,
-            );
-            pending.push((
-                location(file.path.shared(), parameter.pattern),
-                forwarded.clone(),
-                spreads.clone(),
-            ));
-            if let Some(name) = parameter.names.first() {
-                pending.push((location(file.path.shared(), name.span), forwarded, spreads));
-            }
-            by_declaration.insert(
-                location(file.path.shared(), parameter.pattern),
-                classification.clone(),
-            );
-            if let Some(name) = parameter.names.first() {
-                by_declaration.insert(location(file.path.shared(), name.span), classification);
-            }
+    for row in rows {
+        pending.push((
+            row.pattern.clone(),
+            row.forwarded.clone(),
+            row.spreads.clone(),
+        ));
+        if let Some(name) = &row.name {
+            pending.push((name.clone(), row.forwarded.clone(), row.spreads.clone()));
+        }
+        by_declaration.insert(row.pattern.clone(), row.classification.clone());
+        if let Some(name) = &row.name {
+            by_declaration.insert(name.clone(), row.classification.clone());
         }
     }
     resolve_forwarded_props(&mut by_declaration, &pending);
@@ -373,17 +532,12 @@ pub(super) fn resolve_forwarded_props(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(super) fn classify_one_component(
     runtime: &crate::RuntimeEnvironment,
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
-    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
-    source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
-    prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
-    runtime_sources: &HashSet<SymbolId>,
-    uses: &HashMap<(&str, solid_facts::core::Span), Vec<(usize, usize)>>,
+    inputs: &ComponentInputs<'_>,
     file: &FileFacts,
     function: &solid_facts::ast::FunctionFact,
 ) -> (PropsReactivity, ForwardedProps, Vec<SpreadForward>) {
@@ -413,18 +567,15 @@ pub(super) fn classify_one_component(
     // removes only the assumption of an *unseen* caller; every reference below
     // must still resolve to a use this analysis understands.
     let closed = runtime.program_is_closed();
-    if !closed && component_symbol_is_exported(facts, entities, symbol) {
+    if !closed && inputs.exported(symbol) {
         escapes = true;
     }
-    let empty = Vec::new();
-    let component_uses = uses
-        .get(&(file.path.as_str(), function.span))
-        .unwrap_or(&empty);
+    let component_uses = inputs.uses_of(file, function.span);
     // Every reference must be the declaration itself or one of the resolved
     // JSX uses; anything else (passed as a value, aliased, re-exported) hands
     // the component to callers this cannot see. An empty reference list is
     // the absence of the fact, not proof of no references.
-    let references = lookup.symbol_references(symbol.as_str());
+    let references = super::trace::references(lookup, symbol.as_str());
     if references.is_empty() {
         escapes = true;
     }
@@ -445,9 +596,7 @@ pub(super) fn classify_one_component(
         if own_declaration {
             continue;
         }
-        let jsx_use = component_uses.iter().any(|(file_index, element_index)| {
-            let use_file = &facts.files[*file_index];
-            let element = &use_file.ast.jsx_elements[*element_index];
+        let jsx_use = component_uses.iter().any(|(use_file, element)| {
             *reference.path == *use_file.path.as_str()
                 && (element.name.span == span
                     || (element.span.contains(span)
@@ -465,7 +614,10 @@ pub(super) fn classify_one_component(
             // reference in this list. Aliasing and passing as a value still
             // escape under a closed program, because the analyzer still does
             // not know what the receiver does with the component.
-            if !(closed && reference_is_export_specifier(facts, span, reference.path.as_ref())) {
+            if !(closed && {
+                super::trace::read_path(lookup, reference.path.as_ref());
+                reference_is_export_specifier(facts, span, reference.path.as_ref())
+            }) {
                 escapes = true;
             }
         }
@@ -474,9 +626,7 @@ pub(super) fn classify_one_component(
     let mut unresolved = BTreeSet::new();
     let mut accessor_values = BTreeSet::new();
     let mut spreads = Vec::new();
-    for (file_index, element_index) in component_uses {
-        let use_file = &facts.files[*file_index];
-        let element = &use_file.ast.jsx_elements[*element_index];
+    for (use_file, element) in component_uses {
         // A spread hands over an object whose properties this cannot
         // enumerate — and, because a later spread wins over an earlier
         // explicit attribute, it can also overwrite one of this element's own
@@ -489,8 +639,7 @@ pub(super) fn classify_one_component(
         // name no later attribute or child sets reads the parent's getter.
         if !element.spreads.is_empty() {
             escapes = true;
-            if let Some(forward) =
-                spread_of_own_props(lookup, entities, prop_sources, use_file, element)
+            if let Some(forward) = spread_of_own_props(lookup, entities, inputs, use_file, element)
             {
                 spreads.push(forward);
             }
@@ -514,10 +663,7 @@ pub(super) fn classify_one_component(
                             Some(expression) => classify_passed_expression(
                                 lookup,
                                 entities,
-                                accessors,
-                                source_kinds,
-                                prop_sources,
-                                runtime_sources,
+                                inputs,
                                 use_file,
                                 expression,
                                 forwarded.entry(attribute_name.to_owned()).or_default(),
@@ -530,7 +676,7 @@ pub(super) fn classify_one_component(
             if attribute.namespace.is_none()
                 && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
                 && attribute.expression.is_some_and(|expression| {
-                    passed_expression_is_accessor(lookup, entities, accessors, use_file, expression)
+                    passed_expression_is_accessor(lookup, entities, inputs, use_file, expression)
                 })
             {
                 accessor_values.insert(attribute_name.to_owned());
@@ -563,10 +709,7 @@ pub(super) fn classify_one_component(
             let child_use = classify_passed_expression(
                 lookup,
                 entities,
-                accessors,
-                source_kinds,
-                prop_sources,
-                runtime_sources,
+                inputs,
                 use_file,
                 *child,
                 &mut child_forwards,
@@ -641,7 +784,7 @@ pub(super) type SpreadForward = (Location, BTreeSet<String>);
 fn spread_of_own_props(
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
-    prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
+    inputs: &ComponentInputs<'_>,
     file: &FileFacts,
     element: &solid_facts::ast::JsxElementFact,
 ) -> Option<SpreadForward> {
@@ -659,12 +802,9 @@ fn spread_of_own_props(
     let symbol = entities
         .get(&location(file.path.shared(), argument))
         .cloned()
-        .or_else(|| {
-            lookup
-                .binding_at_reference(file.path.as_str(), argument)
-                .map(|(_, _, symbol)| symbol)
-        })?;
-    let (_, declaration) = prop_sources.get(&symbol)?;
+        .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), argument))?;
+    let (_, declaration) = inputs.prop_source(&symbol)?;
+    read_declaration_file(lookup, file, declaration);
     if entities.get(declaration) != Some(&symbol)
         || !props_root_is_current_through_spreads(
             lookup,
@@ -674,14 +814,7 @@ fn spread_of_own_props(
             &symbol,
             SPREAD_RECEIVER_DEPTH,
         )
-        || !crate::local_access::props_root_attachments_are_views(
-            file,
-            prop_sources,
-            declaration,
-            &symbol,
-            entities,
-            lookup,
-        )
+        || !inputs.attachments_are_views(file, declaration, &symbol, entities, lookup)
     {
         return None;
     }
@@ -755,8 +888,7 @@ fn lone_spread_receiver_is_inert(
     element: &solid_facts::ast::JsxElementFact,
     depth: usize,
 ) -> bool {
-    let Some((target_file, target)) =
-        lookup.function_called_at(file.path.as_str(), element.name.span)
+    let Some((target_file, target)) = super::trace::called_at(lookup, file, element.name.span)
     else {
         return false;
     };
@@ -791,10 +923,10 @@ fn lone_spread_receiver_is_inert(
     }
 }
 
-pub(super) fn passed_expression_is_accessor(
+fn passed_expression_is_accessor(
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
-    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+    inputs: &ComponentInputs<'_>,
     file: &FileFacts,
     expression: solid_facts::core::Span,
 ) -> bool {
@@ -802,12 +934,8 @@ pub(super) fn passed_expression_is_accessor(
     entities
         .get(&location(file.path.shared(), expression))
         .cloned()
-        .or_else(|| {
-            lookup
-                .binding_at_reference(file.path.as_str(), expression)
-                .map(|(_, _, symbol)| symbol)
-        })
-        .is_some_and(|symbol| accessors.contains_key(&symbol))
+        .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), expression))
+        .is_some_and(|symbol| inputs.is_accessor(&symbol))
 }
 
 /// Whether a reference span is an export specifier's local name in the file it
@@ -834,29 +962,6 @@ pub(super) fn reference_is_export_specifier(
         })
 }
 
-/// Whether the component's canonical symbol is exported from any analyzed
-/// file — by declaration (`export function Card`), by specifier
-/// (`export { Card }`), or as a default export.
-pub(super) fn component_symbol_is_exported(
-    facts: &ProjectFacts,
-    entities: &EntitySymbols,
-    symbol: &SymbolId,
-) -> bool {
-    facts.files.iter().any(|file| {
-        file.ast.exports.iter().any(|export| {
-            export
-                .specifiers
-                .iter()
-                .chain(export.declarations.iter())
-                .filter(|specifier| !specifier.type_only)
-                .any(|specifier| {
-                    entities.get(&location(file.path.shared(), specifier.local.span))
-                        == Some(symbol)
-                })
-        })
-    })
-}
-
 /// Classifies one expression a call site passes for a prop (or renders as a
 /// child).
 ///
@@ -868,14 +973,10 @@ pub(super) fn component_symbol_is_exported(
 /// whose bodies run later, not in the getter). Anything unresolvable, any
 /// call the engine cannot classify, and JSX evaluated inside the getter stay
 /// unknown.
-#[allow(clippy::too_many_arguments)]
-pub(super) fn classify_passed_expression(
+fn classify_passed_expression(
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
-    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
-    source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
-    prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
-    runtime_sources: &HashSet<SymbolId>,
+    inputs: &ComponentInputs<'_>,
     file: &FileFacts,
     expression: solid_facts::core::Span,
     forwards: &mut Vec<Forward>,
@@ -940,14 +1041,10 @@ pub(super) fn classify_passed_expression(
         let symbol = entities
             .get(&location(file.path.shared(), root))
             .cloned()
-            .or_else(|| {
-                // The binder fallback covers plain locals entity facts skip.
-                lookup
-                    .binding_at_reference(file.path.as_str(), root)
-                    .map(|(_, _, symbol)| symbol)
-            });
+            // The binder fallback covers plain locals entity facts skip.
+            .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), root));
         match symbol {
-            Some(symbol) if source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store) => {
+            Some(symbol) if inputs.kind(&symbol) == Some(ReactiveSourceKind::Store) => {
                 let key = if file.ast.computed_members.binary_search(&head.span).is_ok() {
                     file.ast
                         .literal_computed_members
@@ -957,7 +1054,7 @@ pub(super) fn classify_passed_expression(
                 } else {
                     file.source_text(head.property)
                 };
-                if runtime_sources.contains(&symbol)
+                if inputs.is_runtime(&symbol)
                     && key.is_some_and(|key| lookup.dialect.store_key_warns_strict_read(key))
                 {
                     return PropUse::Reactive;
@@ -966,8 +1063,10 @@ pub(super) fn classify_passed_expression(
             }
             // A parent's prop forwarded is exactly as reactive as that prop is
             // in the parent: decided once every component is classified.
-            Some(symbol) if prop_sources.contains_key(&symbol) => {
-                let (_, declaration) = &prop_sources[&symbol];
+            Some(symbol) if inputs.prop_source(&symbol).is_some() => {
+                let (_, declaration) = inputs.prop_sources[&symbol].clone();
+                let declaration = &declaration;
+                read_declaration_file(lookup, file, declaration);
                 // Only the props parameter itself: a view or alias attached
                 // to it never certifies a read of its own (its keys are not
                 // mapped back to the parent's props), and a destructured
@@ -980,14 +1079,7 @@ pub(super) fn classify_passed_expression(
                         entities,
                         lookup,
                     )
-                    || !crate::local_access::props_root_attachments_are_views(
-                        file,
-                        prop_sources,
-                        declaration,
-                        &symbol,
-                        entities,
-                        lookup,
-                    )
+                    || !inputs.attachments_are_views(file, declaration, &symbol, entities, lookup)
                 {
                     result = PropUse::Unknown;
                     continue;
@@ -1016,9 +1108,7 @@ pub(super) fn classify_passed_expression(
             continue;
         }
         let callee = entities.get(&location(file.path.shared(), call.callee));
-        if callee.is_some_and(|symbol| {
-            accessors.contains_key(symbol) && runtime_sources.contains(symbol)
-        }) {
+        if callee.is_some_and(|symbol| inputs.is_accessor(symbol) && inputs.is_runtime(symbol)) {
             return PropUse::Reactive;
         }
         // Any other call may read reactive state each time the compiled
@@ -1047,21 +1137,17 @@ pub(super) fn classify_passed_expression(
         let symbol = entities
             .get(&location(file.path.shared(), identifier.span))
             .cloned()
-            .or_else(|| {
-                lookup
-                    .binding_at_reference(file.path.as_str(), identifier.span)
-                    .map(|(_, _, symbol)| symbol)
-            });
+            .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), identifier.span));
         match symbol {
             // A store passed whole is a reference: reading the prop hands over
             // the proxy and reads no key. The receiver's own key reads are
             // what is reactive, and this classification does not follow them.
-            Some(symbol) if source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store) => {
+            Some(symbol) if inputs.kind(&symbol) == Some(ReactiveSourceKind::Store) => {
                 result = PropUse::Unknown;
             }
             // A props object passed whole forwards every prop; which ones the
             // receiver reads, and whether they are live, is not followed.
-            Some(symbol) if prop_sources.contains_key(&symbol) => result = PropUse::Unknown,
+            Some(symbol) if inputs.prop_source(&symbol).is_some() => result = PropUse::Unknown,
             Some(_) => {}
             None => result = PropUse::Unknown,
         }

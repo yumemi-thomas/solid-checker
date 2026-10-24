@@ -152,9 +152,9 @@ pub(super) fn returned_source_through<'a>(
     }
     let callee = caller.ast.peel_ts_sugar_span(call.callee);
     let target = if caller.ast.identifiers.iter().any(|id| id.span == callee) {
-        lookup.function_called_at(caller.path.as_str(), callee)
+        super::trace::called_at(lookup, caller, callee)
     } else {
-        lookup.namespace_member_function(caller, callee)
+        super::trace::namespace_member(lookup, caller, callee)
     };
     let (file, function) = target?;
     if function.r#async

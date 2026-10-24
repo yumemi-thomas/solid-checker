@@ -15,7 +15,9 @@ use crate::{
 };
 
 use crate::{HashMap, HashSet};
+use solid_facts::core::Span;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use crate::identity::{SymbolId, symbol_id};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
@@ -38,6 +40,9 @@ mod typed_sources;
 pub(crate) use typed_sources::*;
 mod props_reactivity;
 pub(crate) use props_reactivity::*;
+mod post_passes;
+mod post_rows;
+pub(crate) mod trace;
 
 pub(crate) fn source_discovery_identity(
     file: &FileFacts,

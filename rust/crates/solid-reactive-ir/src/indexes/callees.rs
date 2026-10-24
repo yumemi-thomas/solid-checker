@@ -95,12 +95,37 @@ impl<'a> SemanticLookup<'a> {
         span: Span,
     ) -> Option<&BindingResolution> {
         let references = self.bindings_by_reference().get(path)?;
+        self.resolution_in(references, self.file_by_path(path), span)
+    }
+
+    /// The symbol [`Self::binding_at_reference`] names at each of `spans` of
+    /// `path`, finding the path's resolutions once.
+    pub(crate) fn binding_symbols_at(&self, path: &str, spans: &[Span]) -> Vec<Option<SymbolId>> {
+        let Some(references) = self.bindings_by_reference().get(path) else {
+            return vec![None; spans.len()];
+        };
+        let file = self.file_by_path(path);
+        spans
+            .iter()
+            .map(|span| {
+                self.resolution_in(references, file, *span)
+                    .map(|resolution| resolution.symbol.clone())
+            })
+            .collect()
+    }
+
+    fn resolution_in<'t>(
+        &self,
+        references: &'t HashMap<(u64, u64), BindingResolution>,
+        file: Option<&FileFacts>,
+        span: Span,
+    ) -> Option<&'t BindingResolution> {
         let key = |span: Span| (u64::from(span.start), u64::from(span.end));
         // Transparent TypeScript wrappers, however nested, preserve the value
         // of the identifier they wrap. A missed wrapped span resolves as that
         // identifier, and only when it peels to exactly one identifier.
         let resolution = references.get(&key(span)).or_else(|| {
-            let file = self.file_by_path(path)?;
+            let file = file?;
             let peeled = file.ast.peel_ts_sugar_span(span);
             let identifier = file
                 .ast
@@ -318,6 +343,47 @@ impl<'a> SemanticLookup<'a> {
         callee: Span,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
         super::callee_world::namespace_member_function_in(self, file, callee)
+    }
+
+    /// The exported value a static member of a namespace import names: what
+    /// [`Self::namespace_member_function`] reads of `file` alone. Must agree
+    /// with `callee_world::namespace_member_function_in`, which that method
+    /// delegates to (S7a's kept discovery rows read the two halves apart).
+    pub(crate) fn namespace_member_symbol(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<&'a SymbolId> {
+        let callee = file.ast.peel_ts_sugar_span(callee);
+        if file.ast.computed_members.binary_search(&callee).is_ok() {
+            return None;
+        }
+        let member = file.ast.member_at(callee)?;
+        let receiver = file.ast.peel_ts_sugar_span(member.object);
+        let declaration = file.ast.reference_declaration(receiver)?;
+        let namespace = file.ast.imports.iter().any(|import| {
+            !import.type_only
+                && import.bindings.iter().any(|binding| {
+                    !binding.type_only
+                        && binding.kind == solid_facts::ast::ImportKind::Namespace
+                        && binding.local.span == declaration
+                })
+        });
+        if !namespace {
+            return None;
+        }
+        self.entities.at(file.path.as_str(), member.property)
+    }
+
+    /// [`Self::namespace_member_function`]'s answer from the member
+    /// symbol's function: what it reads of the function's file.
+    pub(crate) fn namespace_member_target(
+        &self,
+        found: Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)>,
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+        found.filter(|(target_file, function)| {
+            function.method_name.is_none() && self.function_value_is_current(target_file, function)
+        })
     }
 
     pub(crate) fn function_for_symbol(

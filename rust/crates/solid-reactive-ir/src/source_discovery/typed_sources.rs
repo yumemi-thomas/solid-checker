@@ -15,11 +15,7 @@ pub(crate) fn reference_symbol(
     entities
         .get(&location(file.path.shared(), span))
         .cloned()
-        .or_else(|| {
-            lookup
-                .binding_at_reference(file.path.as_str(), span)
-                .map(|(_, _, symbol)| symbol)
-        })
+        .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), span))
         .or_else(|| {
             file.ast
                 .reference_declaration(span)
@@ -44,32 +40,61 @@ pub(crate) fn view_root(
     is_source: &dyn Fn(&SymbolId) -> bool,
     depth: usize,
 ) -> Option<SymbolId> {
+    let mut candidates = Vec::new();
+    push_view_candidates(file, expression, entities, lookup, depth, &mut candidates);
+    candidates.into_iter().find(|symbol| is_source(symbol))
+}
+
+/// The symbols [`view_root`] tests, in the order it tests them (the
+/// expression's own, then each view argument's, depth first): its answer is
+/// the first one its `is_source` accepts. What a pass keeps of a binding
+/// whose sources grow while it iterates (S7a).
+pub(super) fn view_candidates(
+    file: &FileFacts,
+    expression: solid_facts::core::Span,
+    entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<SymbolId> {
+    let mut candidates = Vec::new();
+    push_view_candidates(file, expression, entities, lookup, 0, &mut candidates);
+    candidates
+}
+
+fn push_view_candidates(
+    file: &FileFacts,
+    expression: solid_facts::core::Span,
+    entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+    candidates: &mut Vec<SymbolId>,
+) {
     if depth > 8 {
-        return None;
+        return;
     }
     let expression = file.ast.peel_ts_sugar_span(expression);
-    if let Some(symbol) = reference_symbol(file, expression, entities, lookup)
-        && is_source(&symbol)
-    {
-        return Some(symbol);
+    if let Some(symbol) = reference_symbol(file, expression, entities, lookup) {
+        candidates.push(symbol);
     }
-    let call = file.ast.call_at(expression)?;
-    let primitive = lookup.primitive_at_call(file, call.span)?;
+    let Some(call) = file.ast.call_at(expression) else {
+        return;
+    };
+    let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+        return;
+    };
     if lookup.dialect.splits_props(primitive) {
         // A spread among the hidden keys hides nothing nameable; the source is
         // still the first argument, which a spread cannot be.
-        let first = call.arguments.first().filter(|first| !first.spread)?;
-        return view_root(file, first.span, entities, lookup, is_source, depth + 1);
+        if let Some(first) = call.arguments.first().filter(|first| !first.spread) {
+            push_view_candidates(file, first.span, entities, lookup, depth + 1, candidates);
+        }
+        return;
     }
     if !lookup.dialect.merges_props_reactivity(primitive) {
-        return None;
+        return;
     }
-    call.arguments.iter().find_map(|argument| {
-        if argument.spread {
-            return None;
-        }
-        view_root(file, argument.span, entities, lookup, is_source, depth + 1)
-    })
+    for argument in call.arguments.iter().filter(|argument| !argument.spread) {
+        push_view_candidates(file, argument.span, entities, lookup, depth + 1, candidates);
+    }
 }
 
 /// ADR 0294: a binding or member typed with a dialect source alias
@@ -120,7 +145,7 @@ pub(super) enum TypedImplementation {
 pub(super) fn typed_implementation(
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
-    literal_member_slots: &mut crate::literal_member_slots::LiteralMemberSlots<'_, '_>,
+    literal_member_slots: &crate::literal_member_slots::LiteralMemberSlots<'_, '_>,
     entity: &Location,
     symbol: &SymbolId,
     kind: ReactiveSourceKind,
@@ -248,10 +273,28 @@ pub(super) struct TypedValueJudge<'j, 'a> {
 }
 
 impl TypedValueJudge<'_, '_> {
+    /// The tables are pass 0's (a post-pass row records what it read of
+    /// them, `super::trace`).
     fn proven(&self, symbol: Option<SymbolId>) -> Option<SymbolId> {
+        use super::trace::{Dep, StateKey, kind_fingerprint, note, recording};
         symbol.filter(|symbol| {
-            self.runtime_sources.contains(symbol)
-                && self.source_kinds.get(symbol) == Some(&self.kind)
+            let runtime = self.runtime_sources.contains(symbol);
+            if recording() {
+                note(Dep::State(
+                    StateKey::Runtime0(symbol.clone()),
+                    u64::from(runtime),
+                ));
+            }
+            runtime && {
+                let kind = self.source_kinds.get(symbol);
+                if recording() {
+                    note(Dep::State(
+                        StateKey::Kind0(symbol.clone()),
+                        kind_fingerprint(kind),
+                    ));
+                }
+                kind == Some(&self.kind)
+            }
         })
     }
 
@@ -303,7 +346,7 @@ impl TypedValueJudge<'_, '_> {
         // The same destructuring protocol as ADR 0282's closure slots. A
         // declared accessor type cannot restore an identity the iterator may
         // have replaced; retain the ordinary typed candidate instead.
-        if self.lookup.tuple_iteration_may_be_mutated() {
+        if super::trace::tuple_veto(self.lookup) {
             return None;
         }
         let binding = file.ast.bindings.iter().find(|binding| {
@@ -362,7 +405,7 @@ impl TypedValueJudge<'_, '_> {
         let (factory_file, factory) = self
             .lookup
             .callee_symbol(file, call.callee)
-            .and_then(|symbol| self.lookup.function_for_symbol(symbol))?;
+            .and_then(|symbol| super::trace::function_for(self.lookup, symbol))?;
         if factory.r#async
             || factory.generator
             || factory.method_name.is_some()

@@ -39,6 +39,8 @@
 //! root, a function literal stored there is decided by its own body, and any
 //! other root (an Unknown receiver among them) is only a typed candidate.
 
+use std::sync::{Arc, Mutex, OnceLock};
+
 use crate::HashMap;
 
 use solid_facts::{
@@ -52,21 +54,27 @@ use solid_facts::{
 
 use typefacts::Location;
 
+use crate::source_discovery::trace::{self, Dep};
 use crate::{SymbolId, indexes::SemanticLookup, owners::containing_ast_function};
 
 /// One verdict per property symbol: the fallback meets the same symbol at
-/// every entity Type Facts demanded for it.
+/// every entity Type Facts demanded for it. Shared by the source-discovery
+/// rows computed in parallel; a verdict keeps what computing it read
+/// ([`trace`]) and hands that to every row that asks it.
 pub(crate) struct LiteralMemberSlots<'l, 'a> {
     facts: &'l ProjectFacts,
     lookup: &'l SemanticLookup<'a>,
-    verdicts: HashMap<SymbolId, bool>,
+    verdicts: Mutex<HashMap<SymbolId, Verdict>>,
     /// Every entity location, by the symbol it resolves to; built on the
     /// first member candidate.
-    sites: Option<HashMap<&'l SymbolId, Vec<&'l Location>>>,
+    sites: OnceLock<HashMap<&'l SymbolId, Vec<&'l Location>>>,
     /// Each file's static members by their own span and by their property
     /// span, built on first use.
-    members: HashMap<&'l str, HashMap<Span, usize>>,
+    members: Mutex<HashMap<&'a str, Arc<HashMap<Span, usize>>>>,
 }
+
+/// A symbol's verdict and what computing it read.
+type Verdict = (bool, Arc<[Dep]>);
 
 /// The declaring object-literal keys of one property symbol.
 type DeclaringKeys<'f> = Vec<(&'f str, Span)>;
@@ -84,36 +92,39 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
         Self {
             facts,
             lookup,
-            verdicts: HashMap::default(),
-            sites: None,
-            members: HashMap::default(),
+            verdicts: Mutex::default(),
+            sites: OnceLock::new(),
+            members: Mutex::default(),
         }
     }
 
     /// Whether some read of the member `symbol` may observe the slot after
     /// other code replaced it, so the type-only fallback must not admit it.
-    pub(crate) fn replaceable(&mut self, symbol: &SymbolId) -> bool {
-        if let Some(verdict) = self.verdicts.get(symbol) {
-            return *verdict;
+    pub(crate) fn replaceable(&self, symbol: &SymbolId) -> bool {
+        let cached = self
+            .verdicts
+            .lock()
+            .expect("literal member slots lock")
+            .get(symbol)
+            .cloned();
+        if let Some((verdict, deps)) = cached {
+            trace::replay(&deps);
+            return verdict;
         }
-        let verdict = self.compute(symbol);
-        self.verdicts.insert(symbol.clone(), verdict);
+        // No file of its own: every file it reads is recorded.
+        let (verdict, deps) = trace::record("", || self.compute(symbol));
+        self.verdicts
+            .lock()
+            .expect("literal member slots lock")
+            .insert(symbol.clone(), (verdict, Arc::from(deps)));
         verdict
     }
 
-    /// ADR 0294: the property every read of the member `symbol` observes,
-    /// when each read is a static member Get whose receiver is Closed over
-    /// project object literals that all declare that property as an own
-    /// static data property. `None` when some read is anything else. The
-    /// type-only fallback asks this to judge what the slot holds instead of
-    /// trusting the member's type.
-    pub(crate) fn closed_values(
-        &mut self,
-        symbol: &SymbolId,
-    ) -> Option<Vec<(&'a FileFacts, &'a ObjectPropertyFact)>> {
+    /// The entity sites of `symbol`, recorded by the paths that hold one.
+    fn sites(&self, symbol: &SymbolId) -> Vec<&'l Location> {
         let lookup = self.lookup;
         let facts = self.facts;
-        let sites = self.sites.get_or_insert_with(|| {
+        let sites = self.sites.get_or_init(|| {
             let mut sites = HashMap::<&SymbolId, Vec<&Location>>::default();
             for entity in facts.typescript.entities() {
                 if let Some(root) = lookup.entities().get(&entity.location) {
@@ -123,12 +134,39 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
             sites
         });
         let sites = sites.get(symbol).cloned().unwrap_or_default();
-        let declarations = lookup
-            .symbol_declarations(symbol.as_str())
-            .unwrap_or_default();
+        if trace::recording() {
+            let mut paths = sites
+                .iter()
+                .map(|site| Arc::clone(&site.path))
+                .collect::<Vec<_>>();
+            paths.sort_unstable();
+            paths.dedup();
+            trace::note(Dep::Sites(symbol.clone(), paths));
+        }
+        sites
+    }
+
+    /// The analyzed file at a site's or declaration's path, recorded.
+    fn file(&self, path: &str) -> Option<&'a FileFacts> {
+        trace::read_path(self.lookup, path);
+        self.lookup.file_by_path(path)
+    }
+
+    /// ADR 0294: the property every read of the member `symbol` observes,
+    /// when each read is a static member Get whose receiver is Closed over
+    /// project object literals that all declare that property as an own
+    /// static data property. `None` when some read is anything else. The
+    /// type-only fallback asks this to judge what the slot holds instead of
+    /// trusting the member's type.
+    pub(crate) fn closed_values(
+        &self,
+        symbol: &SymbolId,
+    ) -> Option<Vec<(&'a FileFacts, &'a ObjectPropertyFact)>> {
+        let sites = self.sites(symbol);
+        let declarations = trace::declarations(self.lookup, symbol.as_str()).unwrap_or_default();
         let mut values = Vec::new();
         for site in sites {
-            let file = lookup.file_by_path(site.path.as_ref())?;
+            let file = self.file(site.path.as_ref())?;
             let span = Span::new(
                 u32::try_from(site.start_byte).ok()?,
                 u32::try_from(site.end_byte).ok()?,
@@ -198,11 +236,8 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
         })
     }
 
-    fn compute(&mut self, symbol: &SymbolId) -> bool {
-        let declarations = self
-            .lookup
-            .symbol_declarations(symbol.as_str())
-            .unwrap_or_default();
+    fn compute(&self, symbol: &SymbolId) -> bool {
+        let declarations = trace::declarations(self.lookup, symbol.as_str()).unwrap_or_default();
         // A variable, function or class is no member: its reads are not
         // member Gets, so no receiver can be judged.
         if !declarations.is_empty()
@@ -215,9 +250,7 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
         let keys = declarations
             .iter()
             .filter_map(|declaration| {
-                let file = self
-                    .lookup
-                    .file_by_path(declaration.location.path.as_ref())?;
+                let file = self.file(declaration.location.path.as_ref())?;
                 let span = Span::new(
                     u32::try_from(declaration.location.start_byte).ok()?,
                     u32::try_from(declaration.location.end_byte).ok()?,
@@ -235,20 +268,8 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
         // identity, and a span with no entity resolves to no root. Type
         // Facts' reference census is demand-driven and is not asked for a
         // property symbol, so it cannot stand in for this.
-        let lookup = self.lookup;
-        let facts = self.facts;
-        let sites = self.sites.get_or_insert_with(|| {
-            let mut sites = HashMap::<&SymbolId, Vec<&Location>>::default();
-            for entity in facts.typescript.entities() {
-                if let Some(root) = lookup.entities().get(&entity.location) {
-                    sites.entry(root).or_default().push(&entity.location);
-                }
-            }
-            sites
-        });
-        let sites = sites.get(symbol).cloned().unwrap_or_default();
-        for site in sites {
-            let Some(file) = self.lookup.file_by_path(site.path.as_ref()) else {
+        for site in self.sites(symbol) {
+            let Some(file) = self.file(site.path.as_ref()) else {
                 if literal_declared {
                     return true;
                 }
@@ -268,21 +289,7 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
             // still holds the declaring literal. A destructuring key, a
             // computed access or any other shape is not judged here and
             // withholds the root.
-            let members = self.members.entry(file.path.as_str()).or_insert_with(|| {
-                let mut index = HashMap::default();
-                for (position, member) in file.ast.members.iter().enumerate() {
-                    if file
-                        .ast
-                        .computed_members
-                        .binary_search(&member.span)
-                        .is_err()
-                    {
-                        index.entry(member.span).or_insert(position);
-                        index.entry(member.property).or_insert(position);
-                    }
-                }
-                index
-            });
+            let members = self.members_of(file);
             let Some(member) = members
                 .get(&span)
                 .map(|position| &file.ast.members[*position])
@@ -312,11 +319,42 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
         false
     }
 
+    /// `file`'s static members by their own span and by their property span.
+    fn members_of(&self, file: &'a FileFacts) -> Arc<HashMap<Span, usize>> {
+        let cached = self
+            .members
+            .lock()
+            .expect("literal member slots lock")
+            .get(file.path.as_str())
+            .cloned();
+        if let Some(members) = cached {
+            return members;
+        }
+        let mut index = HashMap::default();
+        for (position, member) in file.ast.members.iter().enumerate() {
+            if file
+                .ast
+                .computed_members
+                .binary_search(&member.span)
+                .is_err()
+            {
+                index.entry(member.span).or_insert(position);
+                index.entry(member.property).or_insert(position);
+            }
+        }
+        let index = Arc::new(index);
+        self.members
+            .lock()
+            .expect("literal member slots lock")
+            .insert(file.path.as_str(), Arc::clone(&index));
+        index
+    }
+
     /// What the receiver at `receiver` holds. `keys`, when given, are the
     /// declaring keys the literal must carry for the receiver to be Closed.
     fn receiver(
         &self,
-        file: &FileFacts,
+        file: &'a FileFacts,
         receiver: Span,
         keys: Option<&DeclaringKeys<'_>>,
     ) -> Receiver {
@@ -365,7 +403,7 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
         let (factory_file, factory) = self
             .lookup
             .callee_symbol(file, call.callee)
-            .and_then(|symbol| self.lookup.function_for_symbol(symbol))?;
+            .and_then(|symbol| trace::function_for(self.lookup, symbol))?;
         (!factory.r#async
             && !factory.generator
             && factory.method_name.is_none()
