@@ -76,11 +76,33 @@ impl std::fmt::Display for ShadowMismatch {
 /// Canonical rows of a table: one string per row, in table order. Tables are
 /// ordered `Vec`s by contract (final ordering sorts them); a `HashSet` is
 /// sorted here.
-fn rows<T: serde::Serialize>(table: &[T]) -> Vec<String> {
-    table
+fn row<T: serde::Serialize>(row: &T) -> String {
+    serde_json::to_string(row).unwrap_or_else(|error| format!("<{error}>"))
+}
+
+/// [`compare`] over two tables' serialized rows, one row pair at a time: a
+/// whole table's rows are never held as strings (the idle check compares
+/// every table of two programs while both builds are resident).
+fn compare_tables<T: serde::Serialize>(
+    table: &'static str,
+    incremental: &[T],
+    fresh: &[T],
+) -> Option<ShadowMismatch> {
+    let at = incremental
         .iter()
-        .map(|row| serde_json::to_string(row).unwrap_or_else(|error| format!("<{error}>")))
-        .collect()
+        .zip(fresh)
+        .position(|(left, right)| row(left) != row(right))
+        .or_else(|| {
+            (incremental.len() != fresh.len()).then(|| incremental.len().min(fresh.len()))
+        })?;
+    Some(ShadowMismatch {
+        table,
+        row: Some(at),
+        incremental_rows: incremental.len(),
+        fresh_rows: fresh.len(),
+        incremental: incremental.get(at).map(row).unwrap_or_default(),
+        fresh: fresh.get(at).map(row).unwrap_or_default(),
+    })
 }
 
 fn compare(
@@ -112,10 +134,10 @@ pub fn first_difference(incremental: &Program, fresh: &Program) -> Option<Shadow
     macro_rules! tables {
         ($($field:ident),* $(,)?) => {
             $(
-                if let Some(found) = compare(
+                if let Some(found) = compare_tables(
                     stringify!($field),
-                    rows(&incremental.$field),
-                    rows(&fresh.$field),
+                    &incremental.$field,
+                    &fresh.$field,
                 ) {
                     return Some(found);
                 }
@@ -253,6 +275,18 @@ mod tests {
         assert_eq!(
             (found.row, found.incremental.as_str(), found.fresh.as_str()),
             (Some(1), "", "c")
+        );
+        // Tables compare row by row with the same answers.
+        assert_eq!(compare_tables("reads", &[1, 2], &[1, 2]), None);
+        let found = compare_tables("reads", &[1, 2], &[1, 3]).unwrap();
+        assert_eq!(
+            (found.row, found.incremental.as_str(), found.fresh.as_str()),
+            (Some(1), "2", "3")
+        );
+        let found = compare_tables("reads", &[1], &[1, 3]).unwrap();
+        assert_eq!(
+            (found.row, found.incremental_rows, found.fresh.as_str()),
+            (Some(1), 1, "3")
         );
     }
 }

@@ -415,7 +415,14 @@ fn verify(request: &Request, served: &Served, cancel: &AtomicBool) -> Outcome {
             return Outcome::Inconclusive(format!("the fresh build did not open: {error}"));
         }
     };
-    let answer = match super::answer_with(&mut fresh, request, &served.check, false, Some(cancel)) {
+    let answer = match super::answer_with(
+        &mut fresh,
+        request,
+        &served.check,
+        false,
+        Some(cancel),
+        super::AfterFacts::Close,
+    ) {
         Ok(answer) => answer,
         Err(_) if cancelled() => return Outcome::Cancelled,
         Err(error) => {
@@ -425,7 +432,11 @@ fn verify(request: &Request, served: &Served, cancel: &AtomicBool) -> Outcome {
     if cancelled() {
         return Outcome::Cancelled;
     }
-    let Some(witness) = Witness::of(&fresh) else {
+    let witness = Witness::of(&fresh);
+    // The comparison reads only the answer and the witness: the fresh state's
+    // caches go before it.
+    drop(fresh);
+    let Some(witness) = witness else {
         return Outcome::Inconclusive("the fresh build's package inputs were not stable".into());
     };
     if witness != served.witness {

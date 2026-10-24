@@ -9,6 +9,7 @@ use oxc_semantic::{AstNodes, NodeId, Semantic};
 use oxc_span::GetSpan;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use super::host_call_completion::{
     State as CallState, argument_completion, assignment_completion, declarator_completion,
@@ -92,16 +93,16 @@ pub enum HostExecutionPredicate {
         identity: HostConstantIdentity,
         expected: bool,
     },
-    All(Vec<Self>),
-    Any(Vec<Self>),
+    All(Arc<[Self]>),
+    Any(Arc<[Self]>),
     /// A call continuation is feasible if the call returns (ADR 0270 A).
     /// Recognized ordinary invocation uses premise A; a certain synchronous
     /// exit is dead. Unsupported eager forms/bodies remain unproved here.
-    CallCompletion(Box<Self>),
+    CallCompletion(Arc<Self>),
     /// Normal completion of a statement during module evaluation. Only the
     /// inference consumer may apply ADR 0270's admitted static-graph startup
     /// premise here; branch selection and function bodies are separate facts.
-    ModuleEvaluationCompletion(Box<Self>),
+    ModuleEvaluationCompletion(Arc<Self>),
 }
 
 impl HostExecutionPredicate {
@@ -139,7 +140,7 @@ impl HostExecutionPredicate {
             }
             Self::All(items) => {
                 let mut unknown = false;
-                for item in items {
+                for item in items.iter() {
                     match item.evaluate_with_startup(value, module_startup) {
                         Some(false) => return Some(false),
                         None => unknown = true,
@@ -150,7 +151,7 @@ impl HostExecutionPredicate {
             }
             Self::Any(items) => {
                 let mut unknown = false;
-                for item in items {
+                for item in items.iter() {
                     match item.evaluate_with_startup(value, module_startup) {
                         Some(true) => return Some(true),
                         None => unknown = true,
@@ -348,7 +349,7 @@ pub(super) fn all(items: Vec<HostExecutionPredicate>) -> HostExecutionPredicate 
         {
             HostExecutionPredicate::Unknown
         }
-        _ => All(items),
+        _ => All(items.into()),
     }
 }
 
@@ -373,7 +374,7 @@ pub(super) fn any(items: Vec<HostExecutionPredicate>) -> HostExecutionPredicate 
         {
             HostExecutionPredicate::Unknown
         }
-        _ => Any(items),
+        _ => Any(items.into()),
     }
 }
 
@@ -837,7 +838,7 @@ fn statement_completion<'a>(
 ) -> HostExecutionPredicate {
     let predicate = completion(semantic, suspensions, statement, 0, state);
     if module_evaluation {
-        HostExecutionPredicate::ModuleEvaluationCompletion(Box::new(predicate))
+        HostExecutionPredicate::ModuleEvaluationCompletion(Arc::new(predicate))
     } else {
         predicate
     }
@@ -882,7 +883,7 @@ fn startup_completion<'a>(
                 .map_or(HostExecutionPredicate::Live, |statement| {
                     startup_completion(semantic, suspensions, statement, depth + 1, state)
                 });
-            let evaluated = HostExecutionPredicate::ModuleEvaluationCompletion(Box::new(
+            let evaluated = HostExecutionPredicate::ModuleEvaluationCompletion(Arc::new(
                 expression_completion(semantic, &statement.test, &mut state.calls),
             ));
             if yes == no {
@@ -1517,7 +1518,7 @@ fn host_execution_with_state(
                 span: span(program.span),
                 kind: HostExecutionSiteKind::ModuleStartupCompletion,
                 scope: None,
-                predicate: HostExecutionPredicate::ModuleEvaluationCompletion(Box::new(predicate)),
+                predicate: HostExecutionPredicate::ModuleEvaluationCompletion(Arc::new(predicate)),
             });
         }
         let kind = match node.kind() {

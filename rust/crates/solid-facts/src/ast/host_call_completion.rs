@@ -758,7 +758,7 @@ fn expression_flow_inner<'a>(
                         }),
                 });
             }
-            evaluated.push(Predicate::CallCompletion(Box::new(invocation(
+            evaluated.push(Predicate::CallCompletion(std::sync::Arc::new(invocation(
                 semantic, call, inputs, state,
             ))));
             all(evaluated)
