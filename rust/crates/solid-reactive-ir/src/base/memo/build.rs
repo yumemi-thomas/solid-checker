@@ -169,6 +169,8 @@ pub(crate) struct BuildTables {
     /// Tables 160 to 191: returned-function invocations and returned sources
     /// (study S6a).
     invocations: crate::indexes::InvocationTables,
+    /// Tables 240 to 255: the accessor-provenance resolver (S7b).
+    resolver: crate::interproc::accessor_provenance::ResolverTables,
 }
 
 impl TableSet<BuildSchema> for BuildTables {
@@ -207,6 +209,10 @@ impl BuildTables {
                     .table(id)
                     .unwrap_or_else(|| unreachable!("memo table {id:?}"))
             }
+            id if id.0 >= crate::interproc::accessor_provenance::RESOLVER_TABLES_FROM => self
+                .resolver
+                .table(id)
+                .unwrap_or_else(|| unreachable!("memo table {id:?}")),
             id if id.0 >= crate::indexes::INVOCATION_TABLES_FROM => self
                 .invocations
                 .table(id)
@@ -240,6 +246,7 @@ impl BuildTables {
         tables.extend(self.returned.tables());
         tables.extend(self.flow.tables());
         tables.extend(self.invocations.tables());
+        tables.extend(self.resolver.tables());
         tables
     }
 }
@@ -309,6 +316,10 @@ impl BuildTables {
 
     pub(crate) fn invocations(&self) -> &crate::indexes::InvocationTables {
         &self.invocations
+    }
+
+    pub(crate) fn resolver(&self) -> &crate::interproc::accessor_provenance::ResolverTables {
+        &self.resolver
     }
 }
 

@@ -2,7 +2,7 @@
 
 use super::*;
 
-impl Resolver<'_, '_> {
+impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
     pub fn has_source_origin(&self, symbol: &SymbolId) -> bool {
         self.source_origins.contains(symbol)
     }
@@ -17,11 +17,8 @@ impl Resolver<'_, '_> {
     pub fn has_extra_source_origins(&self) -> bool {
         !self.source_origins.is_empty()
     }
-    pub fn source_call(&self, file: &FileFacts, callee: Span) -> Option<SymbolId> {
-        match self.value(file, callee, 24, &mut false)? {
-            Value::Callable(Callable::Accessor(symbol)) => Some(symbol),
-            _ => None,
-        }
+    pub fn source_call(&self, file: &'a FileFacts, callee: Span) -> Option<SymbolId> {
+        <Self as Queries<'a>>::source_call(self, file, callee)
     }
     pub fn calls(&self) -> (HashMap<Location, Callable>, HashSet<Location>) {
         let mut calls = HashMap::default();
@@ -103,7 +100,11 @@ impl Resolver<'_, '_> {
         (calls, unavailable)
     }
 
-    fn array_members(&self, file: &FileFacts, call: &ast::CallFact) -> Option<Vec<(String, Span)>> {
+    fn array_members(
+        &self,
+        file: &'a FileFacts,
+        call: &'a ast::CallFact,
+    ) -> Option<Vec<(String, Span)>> {
         let receiver = array_iteration_receiver(file, call, self.lookup)?;
         // A stored or named callback's witnessed use cannot establish its
         // other invocations. Leave those definitions and obligations alone;
@@ -207,7 +208,7 @@ impl Resolver<'_, '_> {
         (!targets.is_empty()).then_some(targets)
     }
 
-    pub fn read(&self, symbol: &SymbolId, file: &FileFacts, span: Span) -> Option<SummaryRead> {
+    pub fn read(&self, symbol: &SymbolId, file: &'a FileFacts, span: Span) -> Option<SummaryRead> {
         let (display, declaration) = self
             .accessors
             .get(symbol)
@@ -227,29 +228,30 @@ impl Resolver<'_, '_> {
             undecided: false,
         })
     }
+}
 
-    pub(super) fn role(&self, file: &FileFacts, call: &ast::CallFact) -> Option<ContextRole> {
-        let primitive = crate::call_primitive_name_cached(
-            self.lookup,
-            file,
-            call,
-            self.lookup.entities(),
-            self.names,
-            self.lookup.dialect,
-        )?
-        .primitive()?;
-        self.lookup
-            .dialect
-            .context_role(self.lookup.dialect.name_of(primitive)?)
+/// The resolver's call questions, over any [`World`].
+pub(super) trait Queries<'w>: World<'w> {
+    fn source_call(&self, file: &'w FileFacts, callee: Span) -> Option<SymbolId> {
+        match self.value(file, callee, 24, &mut false)? {
+            Value::Callable(Callable::Accessor(symbol)) => Some(symbol),
+            _ => None,
+        }
+    }
+
+    fn role(&self, file: &'w FileFacts, call: &'w ast::CallFact) -> Option<ContextRole> {
+        let primitive = self.primitive(file, call)?;
+        let dialect = self.dialect();
+        dialect.context_role(dialect.name_of(primitive)?)
     }
 
     /// Every use of this exact parameter only reads a context, directly or
     /// through another current source function with the same complete census.
     /// A provider, mutation, alias, export, return or opaque handoff refuses.
-    pub(super) fn context_read_only_argument(
+    fn context_read_only_argument(
         &self,
-        file: &FileFacts,
-        call: &ast::CallFact,
+        file: &'w FileFacts,
+        call: &'w ast::CallFact,
         position: usize,
         depth: usize,
     ) -> bool {
@@ -262,9 +264,8 @@ impl Resolver<'_, '_> {
         if self.role(file, call) == Some(ContextRole::Read) {
             return position == 0 && call.arguments.len() == 1;
         }
-        let Some((target_file, function)) = self
-            .lookup
-            .function_called_at(file.path.as_str(), file.ast.peel_ts_sugar_span(call.callee))
+        let Some((target_file, function)) =
+            self.function_called_at(file, file.ast.peel_ts_sugar_span(call.callee))
         else {
             return false;
         };
@@ -274,7 +275,7 @@ impl Resolver<'_, '_> {
         if function.rest_parameter
             || function.r#async
             || function.generator
-            || !self.lookup.function_value_is_current(target_file, function)
+            || !crate::indexes::function_value_is_current_in(target_file, function)
             || parameter.initializer.is_some()
             || parameter.shape != ast::BindingShape::Identifier
             || parameter.names.len() != 1
@@ -317,3 +318,5 @@ impl Resolver<'_, '_> {
             })
     }
 }
+
+impl<'w, T: World<'w> + ?Sized> Queries<'w> for T {}

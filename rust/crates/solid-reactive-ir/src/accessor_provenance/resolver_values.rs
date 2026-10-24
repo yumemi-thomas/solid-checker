@@ -2,10 +2,11 @@
 
 use super::*;
 
-impl Resolver<'_, '_> {
-    pub(super) fn value(
+/// The value walks, over any [`World`].
+pub(super) trait Values<'w>: World<'w> {
+    fn value(
         &self,
-        file: &FileFacts,
+        file: &'w FileFacts,
         span: Span,
         depth: usize,
         transported: &mut bool,
@@ -15,17 +16,14 @@ impl Resolver<'_, '_> {
         }
         let span = file.ast.peel_ts_sugar_span(span);
         let declaration = file.ast.reference_declaration(span).unwrap_or(span);
-        if let Some((path, argument)) = self
-            .parameter_inputs
-            .get(&location(file.path.shared(), declaration))
-        {
-            let argument_file = self.lookup.file_by_path(path)?;
+        if let Some((argument_file, argument)) = self.parameter_input(file, declaration) {
+            let argument_file = argument_file?;
             let mut origin_transport = false;
-            let value = self.value(argument_file, *argument, depth - 1, &mut origin_transport)?;
+            let value = self.value(argument_file, argument, depth - 1, &mut origin_transport)?;
             if !origin_transport {
                 return None;
             }
-            let uses = self.uses.get(&location(file.path.shared(), declaration));
+            let uses = self.uses_of(&location(file.path.shared(), declaration));
             let closed = match &value {
                 Value::Object { .. } => uses.is_none_or(|uses| !uses.object_escaped),
                 Value::Array { .. } => uses.is_none_or(|uses| !uses.array_escaped),
@@ -52,16 +50,12 @@ impl Resolver<'_, '_> {
             .identifiers
             .iter()
             .any(|id| id.span == span)
-            .then(|| {
-                self.lookup
-                    .callee_symbol(file, span)
-                    .and_then(|symbol| self.lookup.function_for_symbol(symbol))
-            })
+            .then(|| self.callee_function(file, span))
             .flatten()
-            .or_else(|| self.lookup.namespace_member_function(file, span));
+            .or_else(|| self.namespace_member_function(file, span));
         if let Some((target_file, function)) = declared_function
             && function.kind == ast::FunctionKind::Declaration
-            && self.lookup.function_value_is_current(target_file, function)
+            && crate::indexes::function_value_is_current_in(target_file, function)
         {
             return Some(Value::Callable(Callable::Function {
                 path: target_file.path.to_string(),
@@ -78,7 +72,7 @@ impl Resolver<'_, '_> {
             else {
                 return None;
             };
-            let object_file = self.lookup.file_by_path(&path)?;
+            let object_file = self.file(&path)?;
             let name = file.source_text(member.property)?;
             return self.member_value(object_file, object, name, depth - 1, transported);
         }
@@ -107,11 +101,11 @@ impl Resolver<'_, '_> {
             else {
                 return None;
             };
-            let target_file = self.lookup.file_by_path(&path)?;
+            let target_file = self.file(&path)?;
             let function = target_file.ast.function_at(span)?;
             if function.r#async
                 || function.generator
-                || !self.lookup.function_value_is_current(target_file, function)
+                || !crate::indexes::function_value_is_current_in(target_file, function)
             {
                 return None;
             }
@@ -165,7 +159,7 @@ impl Resolver<'_, '_> {
             // function-valued aliases; unknown values withhold transport.
             if properties.iter().any(|property| property.method)
                 && (!module_scoped_source(file)
-                    || self.receiver_channels_opaque
+                    || self.receiver_channels_opaque()
                     || !properties.iter().all(|property| {
                         if property.value_kind == ast::RuntimeValueKind::Primitive {
                             return true;
@@ -186,8 +180,7 @@ impl Resolver<'_, '_> {
                             &mut false,
                         ) {
                             Some(Value::Callable(Callable::Function { path, span })) => self
-                                .lookup
-                                .file_by_path(&path)
+                                .file(&path)
                                 .and_then(|owner| {
                                     owner
                                         .ast
@@ -202,7 +195,7 @@ impl Resolver<'_, '_> {
                                             ))
                                 }),
                             Some(Value::Callable(Callable::Accessor(symbol))) => {
-                                self.accessors.contains_key(&symbol)
+                                self.accessor(&symbol)
                             }
                             Some(
                                 Value::Object { .. }
@@ -237,10 +230,8 @@ impl Resolver<'_, '_> {
         if !exact_identifier(file, span) {
             return None;
         }
-        let (bound_file, binding, symbol) = self
-            .lookup
-            .binding_at_reference(file.path.as_str(), span)
-            .or_else(|| {
+        let (bound_file, binding, symbol) =
+            self.binding_at_reference(file, span).or_else(|| {
                 // Shorthand values use the binder's declaration, where no
                 // reference fact need have been demanded.
                 let declaration = file.ast.reference_declaration(span).unwrap_or(span);
@@ -249,15 +240,11 @@ impl Resolver<'_, '_> {
                     .bindings
                     .iter()
                     .find(|b| b.names.iter().any(|n| n.span == declaration))?;
-                let symbol = self
-                    .lookup
-                    .entities()
-                    .at(file.path.as_str(), declaration)?
-                    .clone();
+                let symbol = self.symbol_at(file, declaration)?.clone();
                 Some((file, binding, symbol))
             })?;
         if !binding.immutable
-            || crate::value_identity::binding_has_write(bound_file, self.lookup.entities(), &symbol)
+            || self.binding_has_write(bound_file, &symbol)
             || binding
                 .names
                 .iter()
@@ -268,8 +255,7 @@ impl Resolver<'_, '_> {
         if binding.shape == ast::BindingShape::Object {
             if !simple_object_binding(binding)
                 || self
-                    .uses
-                    .get(&location(bound_file.path.shared(), binding.pattern))
+                    .uses_of(&location(bound_file.path.shared(), binding.pattern))
                     .is_some_and(|uses| uses.destructured_escaped)
             {
                 return None;
@@ -288,26 +274,21 @@ impl Resolver<'_, '_> {
                 return None;
             }
             return self.member_value(
-                self.lookup.file_by_path(&path)?,
+                self.file(&path)?,
                 object,
                 slot.property.as_str(),
                 depth - 1,
                 transported,
             );
         }
-        if self.source_kinds.get(&symbol) != Some(&crate::ReactiveSourceKind::Store)
-            && (source_has_runtime_witness(
-                &symbol,
-                self.accessors,
-                self.lookup.entities(),
-                self.names,
-                self.lookup,
-            ) || (binding.shape == ast::BindingShape::Identifier
-                && binding
-                    .call_initializer
-                    .is_some_and(|span| self.created_accessor(bound_file, span, 8))))
+        if self.source_kind(&symbol) != Some(crate::ReactiveSourceKind::Store)
+            && (self.source_has_runtime_witness(&symbol)
+                || (binding.shape == ast::BindingShape::Identifier
+                    && binding
+                        .call_initializer
+                        .is_some_and(|span| self.created_accessor(bound_file, span, 8))))
         {
-            if !self.accessors.contains_key(&symbol) {
+            if !self.accessor(&symbol) {
                 *transported = true;
             }
             return Some(Value::Callable(Callable::Accessor(symbol)));
@@ -328,8 +309,7 @@ impl Resolver<'_, '_> {
         if matches!(value, Value::Array { .. }) {
             let key = location(bound_file.path.shared(), binding.pattern);
             return self
-                .uses
-                .get(&key)
+                .uses_of(&key)
                 .is_none_or(|uses| !uses.array_escaped)
                 .then_some(value);
         }
@@ -341,15 +321,13 @@ impl Resolver<'_, '_> {
 
     fn member_value(
         &self,
-        file: &FileFacts,
+        file: &'w FileFacts,
         object: Span,
         name: &str,
         depth: usize,
         transported: &mut bool,
     ) -> Option<Value> {
-        if let Stability::Vetoed(_site) =
-            self.member_stability
-                .state_of(self.facts, file.path.as_str(), name)
+        if self.member_vetoed(file.path.as_str(), name)
             && !self.dependency_member_stable(file.path.as_str(), object, name)
         {
             return None;
@@ -368,14 +346,11 @@ impl Resolver<'_, '_> {
             transported,
         )?;
         if let Value::Callable(Callable::Function { path, span }) = &value {
-            let selected = self.lookup.file_by_path(path)?.ast.function_at(*span)?;
+            let selected = self.file(path)?.ast.function_at(*span)?;
             if selected.kind != ast::FunctionKind::Arrow
-                && (!module_scoped_source(self.lookup.file_by_path(path)?)
-                    || self.receiver_channels_opaque
-                    || !crate::object_members::receiver_inert(
-                        self.lookup.file_by_path(path)?,
-                        selected,
-                    ))
+                && (!module_scoped_source(self.file(path)?)
+                    || self.receiver_channels_opaque()
+                    || !crate::object_members::receiver_inert(self.file(path)?, selected))
             {
                 return None;
             }
@@ -392,9 +367,9 @@ impl Resolver<'_, '_> {
     /// pair with one binding.
     fn tuple_slot(
         &self,
-        file: &FileFacts,
-        bound_file: &FileFacts,
-        binding: &ast::BindingFact,
+        file: &'w FileFacts,
+        bound_file: &'w FileFacts,
+        binding: &'w ast::BindingFact,
         declaration: Span,
         depth: usize,
         transported: &mut bool,
@@ -425,16 +400,11 @@ impl Resolver<'_, '_> {
         }
         // A slot past the literal's end destructures `undefined`.
         let element = *elements.get(index)?;
-        let span = slot_closure(
-            self.lookup.file_by_path(&path)?,
-            factory,
-            element,
-            self.lookup,
-        )?;
+        let span = self.slot_closure(self.file(&path)?, factory, element)?;
         // Retain the transported-call obligation after establishing this is
         // a tuple closure. A mutation withdraws its identity, never certifies
         // silence or substitutes another violating implementation.
-        if self.member_stability.tuple_iteration {
+        if self.tuple_iteration() {
             return Some(Value::VetoedTuple);
         }
         Some(Value::Callable(Callable::Function { path, span }))
@@ -443,18 +413,18 @@ impl Resolver<'_, '_> {
     /// One exact default-less dialect context, one syntactic provider, no
     /// hidden/spread value, and no escape of the context itself. Several
     /// providers are ambiguous even if their values happen to look alike.
-    fn provider<'a>(
-        &'a self,
-        file: &FileFacts,
-        call: &ast::CallFact,
-    ) -> Option<(&'a FileFacts, Span)> {
+    fn provider(
+        &self,
+        file: &'w FileFacts,
+        call: &'w ast::CallFact,
+    ) -> Option<(&'w FileFacts, Span)> {
         // useContext is a channel any code beneath the provider can use. In an
         // open program, unseen importers can reach the value through an
         // exported context, wrapper or returned closure and replace a member
         // where ADR 0273's name index cannot see the write, so no context's
         // provider census is closed.
-        if !self.lookup.program_closed
-            || self.unkeyed_provider
+        if !self.program_closed()
+            || self.unkeyed_provider()
             || call.arguments.len() != 1
             || call.arguments[0].spread
         {
@@ -464,9 +434,7 @@ impl Resolver<'_, '_> {
         if !exact_identifier(file, argument) {
             return None;
         }
-        let (context_file, binding, _) = self
-            .lookup
-            .binding_at_reference(file.path.as_str(), argument)?;
+        let (context_file, binding, _) = self.binding_at_reference(file, argument)?;
         // ADR 0300 excludes unseen providers of selected-package contexts.
         // Visible providers, escapes and writes still participate below.
         if !binding.immutable
@@ -483,51 +451,41 @@ impl Resolver<'_, '_> {
             return None;
         }
         let key = location(context_file.path.shared(), binding.pattern);
-        if self.blocked_contexts.contains(&key)
-            || self.uses.get(&key).is_some_and(|uses| uses.context_escaped)
+        if self.blocked(&key) || self.uses_of(&key).is_some_and(|uses| uses.context_escaped) {
+            return None;
+        }
+        let (path, value) = {
+            let providers = self.providers_of(&key)?;
+            if providers.len() != 1 {
+                return None;
+            }
+            providers[0].clone()?
+        };
+        let provider_file = self.file(&path)?;
+        if let Some((bound_file, binding, _)) =
+            self.binding_at_reference(provider_file, provider_file.ast.peel_ts_sugar_span(value))
         {
-            return None;
-        }
-        let providers = self.providers.get(&key)?;
-        if providers.len() != 1 {
-            return None;
-        }
-        let (path, value) = providers[0].as_ref()?;
-        let provider_file = self.lookup.file_by_path(path)?;
-        if let Some((bound_file, binding, _)) = self.lookup.binding_at_reference(
-            provider_file.path.as_str(),
-            provider_file.ast.peel_ts_sugar_span(*value),
-        ) {
             let key = location(bound_file.path.shared(), binding.pattern);
             if self
-                .uses
-                .get(&key)
+                .uses_of(&key)
                 .is_some_and(|uses| uses.context_value_escaped)
             {
                 return None;
             }
         }
-        Some((provider_file, *value))
+        Some((provider_file, value))
     }
 
     /// Derivation only: this deliberately ignores receiver closure/provider
     /// acceptance so a bad receiver cannot disappear from the shared census.
-    pub(super) fn context_origin(
-        &self,
-        file: &FileFacts,
-        span: Span,
-        depth: usize,
-    ) -> Option<Location> {
+    fn context_origin(&self, file: &'w FileFacts, span: Span, depth: usize) -> Option<Location> {
         if depth == 0 {
             return None;
         }
         let span = file.ast.peel_ts_sugar_span(span);
         let declaration = file.ast.reference_declaration(span).unwrap_or(span);
-        if let Some((path, argument)) = self
-            .parameter_inputs
-            .get(&location(file.path.shared(), declaration))
-        {
-            return self.context_origin(self.lookup.file_by_path(path)?, *argument, depth - 1);
+        if let Some((argument_file, argument)) = self.parameter_input(file, declaration) {
+            return self.context_origin(argument_file?, argument, depth - 1);
         }
         if let Some(call) = file.ast.call_at(span) {
             if call.construct {
@@ -546,13 +504,12 @@ impl Resolver<'_, '_> {
             }
             let callee = file.ast.peel_ts_sugar_span(call.callee);
             let target = self
-                .lookup
-                .function_called_at(file.path.as_str(), callee)
-                .or_else(|| self.lookup.namespace_member_function(file, callee));
+                .function_called_at(file, callee)
+                .or_else(|| self.namespace_member_function(file, callee));
             let (target_file, function) = target?;
             if function.r#async
                 || function.generator
-                || !self.lookup.function_value_is_current(target_file, function)
+                || !crate::indexes::function_value_is_current_in(target_file, function)
             {
                 return None;
             }
@@ -565,8 +522,32 @@ impl Resolver<'_, '_> {
         if !exact_identifier(file, span) {
             return None;
         }
-        let (bound_file, binding, _) =
-            self.lookup.binding_at_reference(file.path.as_str(), span)?;
+        let (bound_file, binding, _) = self.binding_at_reference(file, span)?;
         self.context_origin(bound_file, binding.initializer?, depth - 1)
     }
+
+    /// The binding a reference at `span` denotes, keyed by its pattern: the
+    /// lookup's binding resolution, else the binding (or parameter) the
+    /// entity's symbol keys, else the local declaration's binding.
+    fn binding_key(&self, file: &'w FileFacts, span: Span) -> Option<Location> {
+        if let Some((declared, binding, _)) = self.binding_at_reference(file, span) {
+            return Some(location(declared.path.shared(), binding.pattern));
+        }
+        if let Some(key) = self
+            .symbol_at(file, span)
+            .and_then(|symbol| self.binding_location(symbol))
+        {
+            return Some(key);
+        }
+        let declaration = file.ast.reference_declaration(span)?;
+        let binding = file
+            .ast
+            .bindings
+            .iter()
+            .chain(file.ast.functions.iter().flat_map(|f| f.parameters.iter()))
+            .find(|b| b.names.iter().any(|n| n.span == declaration))?;
+        Some(location(file.path.shared(), binding.pattern))
+    }
 }
+
+impl<'w, T: World<'w> + ?Sized> Values<'w> for T {}

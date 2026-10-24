@@ -1892,3 +1892,7 @@ fn returned_invocations_through_random_edits_equal_a_fresh_store() {
     assert!(steps > 120, "only {steps} edits applied");
     assert!(reused > 0, "{reused} reused");
 }
+
+/// The accessor-provenance resolver's memo build (S7b), over this harness.
+#[path = "../accessor_provenance/tests/resolver_memos.rs"]
+mod resolver_memos;

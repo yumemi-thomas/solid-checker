@@ -41,7 +41,7 @@ mod returned_uses;
 pub(crate) use identity_wrappers::{
     IdentityWrapper, WrapperAt, identity_wrapped_literal_span, identity_wrapper_candidates,
 };
-pub(crate) use memo_probes::probing;
+pub(crate) use memo_probes::{BindingResolutionRows, probing};
 pub(crate) use returned_invocations::{INVOCATION_TABLES_FROM, InvocationTables};
 pub(crate) use returned_uses::{RETURNED_TABLES_FROM, ReturnedTables, UseKind};
 mod initialization;
