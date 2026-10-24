@@ -239,6 +239,7 @@ pub(crate) fn reuse_line(
                 "serverRules": ms(timings.server_rules),
                 "reachability": ms(timings.reachability),
                 "memoBegin": ms(timings.memo_begin),
+                "memoWarm": ms(timings.memo_warm),
                 "baseIndexUpdate": ms(timings.base_index_update),
             },
             "interprocMs": {

@@ -406,6 +406,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         Some(store) => semantic_lookup.with_memo_store(store),
         None => semantic_lookup,
     };
+    // The memo store begins outside every recording, before the census below
+    // reads a memo (ADR 0392's ordering); its cost is `memo_begin`'s, not the
+    // census's.
+    crate::base::reads::suppress(|| {
+        let _ = semantic_lookup.memo_world();
+    });
     // ADR 0347: which exports a namespace import hands out, read once per build.
     let substage_started = Instant::now();
     let (hand_outs, hand_out_reads) = crate::base::reads::record(|| {
@@ -435,6 +441,8 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     let substage_started = Instant::now();
     // The memos begin before any stage reads one (ADR 0392's ordering).
     semantic_lookup.begin_memos();
+    build_timings.memo_warm = substage_started.elapsed();
+    let substage_started = Instant::now();
     let mut reuse = ReusePlan::prepare(facts, late_stage_cache.as_deref_mut(), semantic_lookup);
     build_timings.reuse_plan = substage_started.elapsed();
     // Source discovery does not inspect missing exports, and the static prepass

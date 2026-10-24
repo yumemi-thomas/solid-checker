@@ -1338,6 +1338,9 @@ pub struct BuildTimings {
     /// L2 memos ([`base::memo`]): finding the changed inputs and marking
     /// their readers, before the build's first memo read.
     pub memo_begin: Duration,
+    /// The project-wide answers most stages read, warmed concurrently once
+    /// the memos have begun (`SemanticLookup::begin_memos`).
+    pub memo_warm: Duration,
     /// Memo answers reused from an earlier build (clean, or maybe-dirty and
     /// verified), each key counted once per build.
     pub memo_reused: u64,
@@ -1391,9 +1394,9 @@ pub struct BuildTimings {
     pub entity_symbols: Duration,
     pub symbol_name_indexes: Duration,
     pub boundary_defects: Duration,
-    /// The namespace hand-out census (ADR 0347) and the cross-file reuse
-    /// gate (`ReusePlan::prepare`, which computes the member-resolution
-    /// digest), both in the indexes-and-reachability stage.
+    /// The namespace hand-out census (ADR 0347) and the late stages' reuse
+    /// gate (`ReusePlan::prepare`), both in the indexes-and-reachability
+    /// stage.
     pub namespace_hand_outs: Duration,
     pub reuse_plan: Duration,
     pub reachability: Duration,
