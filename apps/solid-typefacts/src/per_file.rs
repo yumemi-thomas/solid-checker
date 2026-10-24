@@ -169,6 +169,15 @@ pub(crate) struct PerFile {
     next_version: u64,
     /// Whether `versions` describes the last table.
     versions_valid: bool,
+    /// The last table's pass outputs merged (keys, rows), patched by what
+    /// changed.
+    pub(crate) merged: crate::passes::Merged,
+    /// The merged reference index while the project's is dropped (a
+    /// release, or a program change until the next table patches it).
+    pub(crate) stashed_index: Option<crate::references::PassIndex>,
+    /// Whether `stashed_index` describes the current program (a release
+    /// stashed it), so reference questions may use it.
+    pub(crate) stashed_current: bool,
 }
 
 /// How the cross-file answers of one entity were completed after the passes
@@ -189,9 +198,20 @@ impl PerFile {
         }
     }
 
-    /// Drops every row (a new table, a release, an update).
+    /// Drops every row (a new table, a release, an update). The merged pass
+    /// rows stop answering until the next table.
     pub(crate) fn clear_rows(&mut self) {
         self.rows = HashMap::new();
+        self.merged.serving = false;
+    }
+
+    /// The row of `id` the last table computed.
+    fn row(&self, id: &SymbolId) -> Option<&Row> {
+        if self.merged.serving {
+            self.merged.row(id)
+        } else {
+            self.rows.get(id)
+        }
     }
 }
 
@@ -267,7 +287,7 @@ pub(crate) fn row_for(env: &mut Env<'_>, id: &SymbolId) -> Row {
 
 /// Two rows of one binder id, computed by different passes, agree on what
 /// does not depend on which pass minted a counter.
-fn rows_agree(left: &Row, right: &Row) -> bool {
+pub(crate) fn rows_agree(left: &Row, right: &Row) -> bool {
     let id_agrees = |a: &SymbolId, b: &SymbolId| {
         a == b || (!crate::model::durable_symbol_id(a) && !crate::model::durable_symbol_id(b))
     };
@@ -416,6 +436,9 @@ impl Project {
         state.versions_valid = false;
         state.served_runs.clear();
         state.served_async.clear();
+        state.merged = crate::passes::Merged::default();
+        state.stashed_index = None;
+        self.ids.set_table_keys(None);
         self.sequential_demand_runs(ctx, runs, async_locations)
     }
 
@@ -720,68 +743,67 @@ impl Project {
         state.stats.demanded_passes += runs.len();
         state.stats.reference_passes += works.len() - async_count;
 
-        // Keys: one id names one key across every pass and what the
-        // project already holds (scratch questions), or the table is the
-        // sequential run's.
+        // Keys and rows, merged by the positions whose output changed: one id
+        // names one key across every pass and what the project's own state
+        // minted (scratch questions), or the table is the sequential run's.
         let started = std::time::Instant::now();
-        let mut keys: HashMap<SymbolId, Arc<crate::binder_key::Key>> = HashMap::new();
-        let mut collision: Option<SymbolId> = None;
-        'outputs: for output in &outputs {
-            for (id, key) in &output.keys {
-                match keys.get(id) {
-                    Some(held) if held != key => {
-                        collision = Some(id.clone());
-                        break 'outputs;
-                    }
-                    Some(_) => {}
-                    None => {
-                        keys.insert(id.clone(), Arc::clone(key));
-                    }
+        self.ids.set_table_keys(None);
+        let ids_of: Vec<crate::passes::WorkId> =
+            works.iter().map(crate::passes::WorkId::of).collect();
+        let update = match state
+            .merged
+            .update(ids_of, outputs.clone(), state.verify_rows)
+        {
+            Ok(update) => {
+                let own = self
+                    .ids
+                    .own_keys()
+                    .find(|(id, key)| state.merged.key(id).is_some_and(|held| held != *key))
+                    .map(|(id, _)| id.clone());
+                match own {
+                    Some(id) => Err(id),
+                    None => Ok(update),
+                }
+            }
+            Err(id) => Err(id),
+        };
+        let update = match update {
+            Ok(update) => update,
+            Err(id) => {
+                state.stats.key_collisions += 1;
+                if env_is_one(ENV_STATS) {
+                    eprintln!("per-file key collision {id}: the sequential run answers");
+                }
+                state.reuse.clear();
+                state.merged = crate::passes::Merged::default();
+                state.stashed_index = None;
+                *self.per_file_state() = state;
+                return Ok(None);
+            }
+        };
+        if state.reuse.verify && !update.full {
+            let mut fresh = crate::passes::Merged::default();
+            let rebuilt = fresh.update(
+                works.iter().map(crate::passes::WorkId::of).collect(),
+                outputs.clone(),
+                false,
+            );
+            if rebuilt.is_err() || !fresh.same_as(&state.merged) {
+                reuse_mismatch("the merged keys and rows");
+                state.merged = fresh;
+                if rebuilt.is_err() {
+                    state.reuse.clear();
+                    state.merged = crate::passes::Merged::default();
+                    *self.per_file_state() = state;
+                    return Ok(None);
                 }
             }
         }
-        if collision.is_none() {
-            collision = keys
-                .iter()
-                .find(|(id, key)| self.ids.key(id).is_some_and(|held| held != *key))
-                .map(|(id, _)| id.clone());
-        }
-        if let Some(id) = collision {
-            state.stats.key_collisions += 1;
-            if env_is_one(ENV_STATS) {
-                eprintln!("per-file key collision {id}: the sequential run answers");
-            }
-            state.reuse.clear();
-            *self.per_file_state() = state;
-            return Ok(None);
-        }
-        for (id, key) in &keys {
-            self.ids.insert_key(id, key);
-        }
-        // Rows: the first pass in path order wins.
-        for output in &outputs {
-            for (id, row) in &output.rows {
-                match state.rows.get(id) {
-                    Some(existing) => {
-                        if state.verify_rows && crate::model::durable_symbol_id(id) {
-                            state.stats.rows_verified += 1;
-                            if !rows_agree(existing, row) {
-                                state.stats.row_mismatches += 1;
-                                if env_is_one(ENV_STATS) {
-                                    eprintln!(
-                                        "per-file row mismatch {id}: {existing:?} vs {row:?}"
-                                    );
-                                }
-                            }
-                        }
-                    }
-                    None => {
-                        state.rows.insert(id.clone(), row.clone());
-                        state.stats.rows += 1;
-                    }
-                }
-            }
-        }
+        self.ids.set_table_keys(Some(state.merged.keys()));
+        state.merged.serving = true;
+        state.stats.rows = state.merged.row_count();
+        state.stats.rows_verified += update.rows_verified;
+        state.stats.row_mismatches += update.row_mismatches;
         let mut reuse = crate::references::BinderRetention::default();
         for (output, recomputed) in outputs.iter().zip(&recomputed) {
             let reused = !recomputed;
@@ -803,15 +825,63 @@ impl Project {
         }
         self.references.note_pass_reuse(reuse);
         for output in &outputs {
-            if let Some((path, references)) = &output.references {
-                self.references
-                    .insert_file(path.clone(), references.clone());
-            }
             for (family, count) in &output.unavailable.0 {
                 *self.unavailable.0.entry(family).or_default() += count;
             }
         }
-        self.references.finish_per_file(paths);
+        // The reference index: patched by the changed contributions while
+        // the program's paths are the same, else built from every one.
+        let mut sorted_paths = paths.clone();
+        sorted_paths.sort();
+        let kept = self
+            .references
+            .take_pass_index()
+            .or_else(|| state.stashed_index.take());
+        state.stashed_current = false;
+        let patched = kept.and_then(|mut index| {
+            if update.full || index.paths() != sorted_paths.as_slice() {
+                return None;
+            }
+            for (old, new) in &update.changed {
+                if let Some((path, references)) =
+                    old.as_ref().and_then(|old| old.references.as_ref())
+                    && !index.patch(path, Some(references), None)
+                {
+                    return None;
+                }
+                if let Some((path, references)) = &new.references
+                    && !index.patch(path, None, Some(references))
+                {
+                    return None;
+                }
+            }
+            Some(index)
+        });
+        let build = |paths: Vec<String>| {
+            crate::references::PassIndex::build(
+                paths,
+                outputs.iter().filter_map(|output| {
+                    output
+                        .references
+                        .as_ref()
+                        .map(|(path, references)| (path.as_str(), references))
+                }),
+            )
+        };
+        let index = match patched {
+            Some(index) if state.reuse.verify => {
+                let rebuilt = build(paths);
+                if index.same_answers(&rebuilt) {
+                    index
+                } else {
+                    reuse_mismatch("the merged reference index");
+                    rebuilt
+                }
+            }
+            Some(index) => index,
+            None => build(paths),
+        };
+        self.references.install_pass_index(index);
         let mut results: Vec<SemanticDemandRunResult> = outputs[..runs.len()]
             .iter()
             .map(|output| output.result.clone().unwrap_or_default())
@@ -1004,10 +1074,10 @@ impl Project {
             if rows.contains_key(id) {
                 continue;
             }
-            match state.rows.get(id) {
+            match state.row(id).cloned() {
                 Some(row) => {
                     state.stats.row_queries += 1;
-                    rows.insert(id.clone(), row.clone());
+                    rows.insert(id.clone(), row);
                 }
                 None => {
                     if !missing.contains(id) {
@@ -1046,6 +1116,14 @@ impl Project {
     /// The merged reference index, rebuilt per file if a release dropped it.
     pub(crate) fn ensure_references_per_file(&mut self, ctx: &Context) -> Result<(), BackendError> {
         if self.references.has_merged() {
+            return Ok(());
+        }
+        let state = self.per_file_state();
+        if state.stashed_current
+            && let Some(index) = state.stashed_index.take()
+        {
+            state.stashed_current = false;
+            self.references.install_pass_index(index);
             return Ok(());
         }
         let program = self.live()?.program();

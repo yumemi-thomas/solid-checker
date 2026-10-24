@@ -70,7 +70,7 @@ use crate::binder_key::Key;
 use crate::context::Context;
 use crate::durable::DurableRef;
 use crate::gocompat::{absolute, clean};
-use crate::identity::{Env, Identities, PassSeed, Preserved};
+use crate::identity::{Env, Identities, PassSeed, Preserved, TableKeys};
 use crate::inputs::{Digest, ProgramInputs};
 use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SymbolId};
 use crate::per_file::{Row, row_for, seeds};
@@ -142,11 +142,22 @@ pub(crate) struct PassOutput {
     pub deferrals: Deferrals,
     /// The file's reference contribution, by its clean name.
     pub references: Option<(String, FileReferences)>,
-    /// The rows of every id the facts name (and their alias targets).
+    /// The rows of every id the facts name (and their alias targets), by id.
     pub rows: Vec<(SymbolId, Row)>,
     /// The keys the pass minted, in id order.
     pub keys: Vec<(SymbolId, Arc<Key>)>,
     pub unavailable: Unavailable,
+}
+
+impl PassOutput {
+    /// This pass's row of `id`.
+    #[must_use]
+    pub(crate) fn row(&self, id: &SymbolId) -> Option<&Row> {
+        self.rows
+            .binary_search_by(|(held, _)| held.cmp(id))
+            .ok()
+            .map(|at| &self.rows[at].1)
+    }
 }
 
 fn check(ctx: &Context) -> Result<(), BackendError> {
@@ -241,10 +252,12 @@ pub(crate) fn run_pass(
                 }
                 _ => None,
             };
-            let rows = match &result {
+            let mut rows = match &result {
                 Some(result) => rows_in_pass(&mut env, seeds(result, &facts)),
                 None => Vec::new(),
             };
+            // By id: `PassOutput::row` searches them.
+            rows.sort_unstable_by(|left, right| left.0.cmp(&right.0));
             Ok(PassOutput {
                 result,
                 facts,
@@ -770,5 +783,196 @@ impl Reuse {
             .filter(|(index, _)| bit_get(&reads, u32::try_from(*index).unwrap_or(u32::MAX)))
             .map(|(_, path)| path.clone())
             .collect()
+    }
+}
+
+// --- merge -----------------------------------------------------------------
+
+/// What a work position means across tables: its outputs are compared
+/// position by position only while the work list is the same.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct WorkId {
+    path: String,
+    run: bool,
+    scan: bool,
+    reusable: bool,
+}
+
+impl WorkId {
+    pub(crate) fn of(work: &PassWork<'_>) -> Self {
+        Self {
+            path: work.path.clone(),
+            run: work.run.is_some(),
+            scan: work.scan,
+            reusable: work.reusable,
+        }
+    }
+}
+
+/// The table's pass outputs merged, kept across tables and patched by the
+/// positions whose output changed: the union of their keys (one id, one key,
+/// or a collision), and per id the positions whose pass computed its row
+/// (the first in path order answers).
+#[derive(Default)]
+pub(crate) struct Merged {
+    works: Vec<WorkId>,
+    outputs: Vec<Arc<PassOutput>>,
+    keys: Arc<TableKeys>,
+    providers: HashMap<SymbolId, Vec<u32>>,
+    /// Whether the rows answer queries (false from a program change until
+    /// the next table).
+    pub(crate) serving: bool,
+}
+
+/// One merge: whether it started over, and each changed position's old and
+/// new output.
+pub(crate) struct MergeUpdate {
+    pub full: bool,
+    pub changed: Vec<(Option<Arc<PassOutput>>, Arc<PassOutput>)>,
+    /// Rows a later provider computed again, and how many differed
+    /// (`per_file::ENV_VERIFY_ROWS`).
+    pub rows_verified: usize,
+    pub row_mismatches: usize,
+}
+
+impl Merged {
+    /// Whether `other` merged the same keys and rows (an incrementally
+    /// updated merge against a fresh one, `ENV_VERIFY_REUSE`).
+    pub(crate) fn same_as(&self, other: &Merged) -> bool {
+        self.works == other.works
+            && *self.keys == *other.keys
+            && self.providers == other.providers
+            && self.outputs.len() == other.outputs.len()
+            && self
+                .outputs
+                .iter()
+                .zip(&other.outputs)
+                .all(|(left, right)| Arc::ptr_eq(left, right))
+    }
+
+    /// The row of `id` from the first pass in path order that computed one.
+    #[must_use]
+    pub(crate) fn row(&self, id: &SymbolId) -> Option<&Row> {
+        let first = *self.providers.get(id)?.first()?;
+        self.outputs.get(first as usize)?.row(id)
+    }
+
+    /// Ids with a row.
+    #[must_use]
+    pub(crate) fn row_count(&self) -> usize {
+        self.providers.len()
+    }
+
+    /// The key the merged passes minted for `id`.
+    #[must_use]
+    pub(crate) fn key(&self, id: &SymbolId) -> Option<&Arc<Key>> {
+        self.keys.get(id).map(|(key, _)| key)
+    }
+
+    /// The merged keys, to attach to the project's identity state.
+    #[must_use]
+    pub(crate) fn keys(&self) -> Arc<TableKeys> {
+        Arc::clone(&self.keys)
+    }
+
+    /// Merges `outputs` (aligned with `works`). The caller has detached the
+    /// keys from every identity state (else they are copied once). `Err`
+    /// names an id two passes minted for two keys; the state is then
+    /// inconsistent and the caller drops it.
+    pub(crate) fn update(
+        &mut self,
+        works: Vec<WorkId>,
+        outputs: Vec<Arc<PassOutput>>,
+        verify_rows: bool,
+    ) -> Result<MergeUpdate, SymbolId> {
+        let full = self.works != works;
+        if full {
+            self.keys = Arc::default();
+            self.providers.clear();
+            self.outputs.clear();
+        }
+        let mut changed: Vec<(usize, Option<Arc<PassOutput>>)> = Vec::new();
+        for (at, output) in outputs.iter().enumerate() {
+            match self.outputs.get(at) {
+                Some(old) if Arc::ptr_eq(old, output) => {}
+                Some(old) => changed.push((at, Some(Arc::clone(old)))),
+                None => changed.push((at, None)),
+            }
+        }
+        // Every changed position leaves before any enters, so an id moving
+        // between passes is never seen twice.
+        let keys = Arc::make_mut(&mut self.keys);
+        for (at, old) in &changed {
+            let Some(old) = old else {
+                continue;
+            };
+            for (id, _) in &old.keys {
+                if let Some(entry) = keys.get_mut(id) {
+                    entry.1 -= 1;
+                    if entry.1 == 0 {
+                        keys.remove(id);
+                    }
+                }
+            }
+            let at = u32::try_from(*at).unwrap_or(u32::MAX);
+            for (id, _) in &old.rows {
+                if let Some(positions) = self.providers.get_mut(id) {
+                    positions.retain(|position| *position != at);
+                    if positions.is_empty() {
+                        self.providers.remove(id);
+                    }
+                }
+            }
+        }
+        for (at, _) in &changed {
+            let output = &outputs[*at];
+            for (id, key) in &output.keys {
+                match keys.get_mut(id) {
+                    Some(entry) if entry.0 != *key => return Err(id.clone()),
+                    Some(entry) => entry.1 += 1,
+                    None => {
+                        keys.insert(id.clone(), (Arc::clone(key), 1));
+                    }
+                }
+            }
+            let at = u32::try_from(*at).unwrap_or(u32::MAX);
+            for (id, _) in &output.rows {
+                let positions = self.providers.entry(id.clone()).or_default();
+                if let Err(slot) = positions.binary_search(&at) {
+                    positions.insert(slot, at);
+                }
+            }
+        }
+        self.works = works;
+        self.outputs = outputs;
+        let (mut rows_verified, mut row_mismatches) = (0, 0);
+        if verify_rows {
+            for (at, _) in &changed {
+                for (id, row) in &self.outputs[*at].rows {
+                    if !crate::model::durable_symbol_id(id) {
+                        continue;
+                    }
+                    let Some(first) = self.row(id) else {
+                        continue;
+                    };
+                    if std::ptr::eq(first, row) {
+                        continue;
+                    }
+                    rows_verified += 1;
+                    if !crate::per_file::rows_agree(first, row) {
+                        row_mismatches += 1;
+                    }
+                }
+            }
+        }
+        Ok(MergeUpdate {
+            full,
+            changed: changed
+                .into_iter()
+                .map(|(at, old)| (old, Arc::clone(&self.outputs[at])))
+                .collect(),
+            rows_verified,
+            row_mismatches,
+        })
     }
 }

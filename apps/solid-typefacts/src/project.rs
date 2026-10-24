@@ -604,6 +604,15 @@ impl ClosureBackend for Project {
 
     fn discard_derived_state(&mut self) {
         self.ids.release_pointers();
+        // Per-file passes keep their merged reference index across the
+        // program change, to patch it by the files that changed.
+        if let Some(state) = &mut self.per_file {
+            if let Some(index) = self.references.take_pass_index() {
+                state.stashed_index = Some(index);
+            }
+            // It describes the replaced program now: only a patch may use it.
+            state.stashed_current = false;
+        }
         self.references.reset();
         self.evict_source_memo();
         if let Some(state) = &mut self.per_file {
@@ -817,6 +826,13 @@ impl ClosureBackend for Project {
             // this generation is never handed out again.
             state.clear_rows();
             self.ids.purge_scope_pointers();
+            // Per-file passes keep their merged reference index (pointer-free)
+            // for this generation's reference questions and the next table's
+            // patch: what a rescan of every file would build again.
+            if let Some(index) = self.references.take_pass_index() {
+                state.stashed_index = Some(index);
+                state.stashed_current = true;
+            }
             self.references.release_analysis_state();
             if generation.has_checker() {
                 generation.release_checker();

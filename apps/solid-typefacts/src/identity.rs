@@ -118,7 +118,16 @@ pub struct Identities {
     /// no key carries no id at all instead of a counter (instant-edits P2).
     /// Chosen at open; never changes for a project.
     derived_keys: bool,
+    /// Per-file passes (instant-edits P3): the keys the last table's passes
+    /// minted, merged (with how many passes minted each), consulted after
+    /// `keys` by every lookup, so a scratch question resolves a pass's id and
+    /// never mints one id for another key. Shared with the merge that owns
+    /// it; detached at every program change, as `keys` is cleared then.
+    table_keys: Option<Arc<TableKeys>>,
 }
+
+/// The keys of a table's passes, each with how many passes minted it.
+pub(crate) type TableKeys = HashMap<SymbolId, (Arc<Key>, u32)>;
 
 /// The pointer-free start of a pass's identity state ([`Identities::pass_seed`]).
 #[derive(Clone)]
@@ -191,13 +200,13 @@ impl Identities {
     /// answer may hold one across an update (ADR 0369, 0371).
     #[must_use]
     pub(crate) fn key_of_id(&self, id: &SymbolId) -> Option<&Arc<Key>> {
-        self.keys.get(id).filter(|key| key.is_binder())
+        self.key(id).filter(|key| key.is_binder())
     }
 
     /// Whether `id` is a multi-origin property's `Set` id (ADR 0371).
     #[must_use]
     pub(crate) fn is_set_id(&self, id: &SymbolId) -> bool {
-        self.keys.get(id).is_some_and(|key| !key.is_binder())
+        self.key(id).is_some_and(|key| !key.is_binder())
     }
 
     /// Makes a retained binder id answerable in this generation without
@@ -208,7 +217,7 @@ impl Identities {
         if !key.is_binder() {
             return false;
         }
-        match self.keys.get(id) {
+        match self.key(id) {
             Some(held) => held == key,
             None => {
                 self.keys.insert(Arc::clone(id), Arc::clone(key));
@@ -294,18 +303,26 @@ impl Identities {
         keys
     }
 
-    /// The key `id` names in this generation, if any.
+    /// The key `id` names in this generation, if any: minted under this
+    /// state, or by the last table's passes.
     #[must_use]
     pub(crate) fn key(&self, id: &SymbolId) -> Option<&Arc<Key>> {
-        self.keys.get(id)
+        self.keys.get(id).or_else(|| {
+            self.table_keys
+                .as_ref()
+                .and_then(|keys| keys.get(id))
+                .map(|(key, _)| key)
+        })
     }
 
-    /// Records `key` for `id` (the merge of a pass's keys; the caller checked
-    /// that `id` names no other key).
-    pub(crate) fn insert_key(&mut self, id: &SymbolId, key: &Arc<Key>) {
-        self.keys
-            .entry(Arc::clone(id))
-            .or_insert_with(|| Arc::clone(key));
+    /// The keys minted under this state itself (not the table's).
+    pub(crate) fn own_keys(&self) -> impl Iterator<Item = (&SymbolId, &Arc<Key>)> {
+        self.keys.iter()
+    }
+
+    /// Attaches (or detaches) the last table's merged keys.
+    pub(crate) fn set_table_keys(&mut self, keys: Option<Arc<TableKeys>>) {
+        self.table_keys = keys;
     }
 
     /// The runtime paths a pass state resolved (to merge back).
@@ -332,6 +349,7 @@ impl Identities {
         self.release_pointers();
         self.runtime_paths.clear();
         self.keys.clear();
+        self.table_keys = None;
         self.exported_by_ref = Arc::default();
     }
 
@@ -367,6 +385,7 @@ impl Identities {
         self.tuple_index = crate::derived_key::TupleIndex::default();
         self.next_symbol = 0;
         self.keys.clear();
+        self.table_keys = None;
         self.seed_exported(program, checker);
     }
 }
@@ -447,7 +466,7 @@ impl Env<'_> {
         if let Some(key) = self.set_key_of(symbol) {
             let id: SymbolId = Arc::from(key.id().as_str());
             self.ids.last_failure = Some("set-collision".into());
-            if self.ids.keys.get(&id).is_none_or(|held| **held == key) {
+            if self.ids.key(&id).is_none_or(|held| **held == key) {
                 self.ids
                     .keys
                     .entry(Arc::clone(&id))
@@ -463,11 +482,11 @@ impl Env<'_> {
             let id: SymbolId = Arc::from(key.id().as_str());
             self.ids.last_failure = Some(format!(
                 "binder-collision held={:?} new={key:?}",
-                self.ids.keys.get(&id)
+                self.ids.key(&id)
             ));
             // Two keys spelling one id (a 96-bit collision) would conflate two
             // symbols: the later one fails closed to a counter.
-            if self.ids.keys.get(&id).is_none_or(|held| **held == key) {
+            if self.ids.key(&id).is_none_or(|held| **held == key) {
                 self.ids
                     .keys
                     .entry(Arc::clone(&id))
@@ -602,10 +621,10 @@ impl Env<'_> {
             return Some(id);
         }
         // Two keys spelling one id (a 96-bit collision): no id.
-        if self.ids.keys.get(&id).is_some_and(|held| **held != key) {
+        if self.ids.key(&id).is_some_and(|held| **held != key) {
             self.ids.last_failure = Some(format!(
                 "derived-collision held={:?} new={key:?}",
-                self.ids.keys.get(&id)
+                self.ids.key(&id)
             ));
             return None;
         }
@@ -702,7 +721,7 @@ impl Env<'_> {
         if let Some(symbol) = self.ids.symbols_by_id.get(id) {
             return Some(*symbol);
         }
-        let key = Arc::clone(self.ids.keys.get(id)?);
+        let key = Arc::clone(self.ids.key(id)?);
         let candidate = match &*key {
             Key::Decl(reference) | Key::Export(reference) => self.symbol_at_reference(reference)?,
             Key::Global(name) => global_symbol(self.checker, name)?,

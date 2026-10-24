@@ -268,6 +268,18 @@ fn kept_passes_rerun_exactly_what_an_edit_can_change() {
             step.what,
             first_line_difference(&kept, &whole)
         );
+        // And the shared-identity run of P2, which merges no pass output.
+        let mut shared = open(&scratch, 1, false);
+        for changes in &history {
+            ClosureBackend::update(&mut shared, &ctx, changes).unwrap();
+        }
+        let legacy = table_with(&mut shared, &demands, true);
+        assert!(
+            kept == legacy,
+            "{}: kept passes differ from the shared-identity run: {:?}",
+            step.what,
+            first_line_difference(&kept, &legacy)
+        );
     }
 }
 
