@@ -24,7 +24,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -573,10 +573,14 @@ else {
   save(identityPath, runIdentity);
 }
 const runId = `${options.seed}-${Date.now()}`;
-// Apps run side by side (`--jobs`): each has its own clones and checker runs.
+// Apps run side by side (`--jobs`): each has its own clone and checker runs.
 // An app's projects stay in order, since its per-pattern quota carries from
-// one project to the next.
+// one project to the next, and they share one clone: each project's mutated
+// files are kept in the output and then restored from the corpus, byte-checked.
+// A project that fails before its edits are known leaves the clone dirty, and
+// the next one starts from a fresh clone (kui, 11 projects: 32 s of cloning).
 async function processApp(app, appRows) {
+  let appClone = null;
   const source = realpathSync(join(options["apps-root"], appRows[0].root));
   const remaining = Object.fromEntries(Object.keys(patterns).map(p => [p, Number(options.limit)]));
   for (const site of sites.filter(s => s.app === app)) remaining[site.pattern]--;
@@ -588,14 +592,16 @@ async function processApp(app, appRows) {
     const previousSpecPath = join(output, `${prefix}-spec.json`);
     const previousSpec = options.resume === "true" && existsSync(previousSpecPath) ? json(previousSpecPath) : null;
     const resumeProject = previousSpec && existsSync(previousSpec.prepared) && existsSync(join(output, `${prefix}-baseline.json`));
-    const target = resumeProject ? previousSpec.clone : join(scratch, `${runId}-${prefix}`);
+    const target = resumeProject ? previousSpec.clone : appClone ?? join(scratch, `${runId}-${prefix}`);
     let copy = { wallMs: 0 };
-    if (!resumeProject) {
+    if (resumeProject) console.error(`resume ${prefix}`);
+    else if (!appClone) {
     assert(!existsSync(target));
     console.error(`clone ${prefix}`);
     copy = await commandAsync("cp", ["-cR", source, target]);
     assert.equal(copy.status, 0, copy.stderr);
-    } else console.error(`resume ${prefix}`);
+    }
+    appClone = null;
     const clone = realpathSync(target);
     const runChecker = async phase => {
       const checkpointPath = join(output, `${prefix}-${phase}.json`);
@@ -656,8 +662,18 @@ async function processApp(app, appRows) {
         ...(f.evidence ?? []).map(e => e.location)].some(inSite));
       const typing = prepared.introduced;
       const classification = typing.length ? "type-error" : classify(covering, site.rule);
-      sites.push({ app, project: row.project, clone, ...site, classification, typing, findings: covering });
+      sites.push({ app, project: row.project, clone, mutated: join(output, `${prefix}-mutated`), ...site, classification, typing, findings: covering });
     }
+    // Keep this project's mutated sources, then hand the next project a clean
+    // clone: every edited file back to the corpus bytes.
+    for (const file of Object.keys(prepared.edits)) {
+      const kept = join(output, `${prefix}-mutated`, file);
+      mkdirSync(dirname(kept), { recursive: true });
+      copyFileSync(join(clone, file), kept);
+      copyFileSync(join(source, file), join(clone, file));
+      assert.equal(sha(readFileSync(join(clone, file))), sha(readFileSync(join(source, file))), `${prefix}: ${file} not restored`);
+    }
+    appClone = clone;
     const result = { app, project: row.project, clone, siteCount: prepared.sites.length,
       candidateCount: prepared.candidates,
       typescriptVersion: prepared.typescriptVersion, cloneWallMs: copy.wallMs,
@@ -704,7 +720,7 @@ for (const site of sites.filter(s => ["uncertifiable", "missed", "other"].includ
   if (!group) groups.push(group = { pattern: site.pattern, classification: site.classification, reason: normalized, count: 0, examples: [] });
   group.count++;
   if (group.examples.length < 3) group.examples.push({ app: site.app, file: site.file, line: site.mutantLine,
-    originalLine: site.line, shape: site.shape, snippet: site.text.trim(), clone: site.clone });
+    originalLine: site.line, shape: site.shape, snippet: site.text.trim(), clone: site.clone, mutated: site.mutated });
 }
 groups.sort((a, b) => b.count - a.count);
 const report = { seed: options.seed, limitPerPatternPerApp: Number(options.limit),
