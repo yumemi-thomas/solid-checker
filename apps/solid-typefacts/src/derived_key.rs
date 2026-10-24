@@ -1,5 +1,5 @@
-//! Checker-independent keys for derived symbols (instant-edits P2), behind
-//! [`ENV_FLAG`]; off by default, and then nothing here runs.
+//! Checker-independent keys for derived symbols (instant-edits P2, ADR
+//! 0398).
 //!
 //! A derived symbol (an instantiation, a transient clone, a mapped or a
 //! synthetic property) is keyed by what it is derived from and by the exact
@@ -46,17 +46,8 @@ use tsrs_core::P;
 
 pub(crate) type Digest32 = [u8; 32];
 
-/// The environment flag that selects exact derived-symbol keys.
-pub const ENV_FLAG: &str = "SOLID_TYPEFACTS_DERIVED_KEYS";
-
 /// Opt-in (measurement): a file the keyer appends one line per decision to.
 pub const ENV_STATS: &str = "SOLID_TYPEFACTS_DERIVED_KEY_STATS";
-
-/// Whether the environment selects exact derived-symbol keys.
-#[must_use]
-pub fn enabled_by_env() -> bool {
-    std::env::var_os(ENV_FLAG).is_some()
-}
 
 /// Tuple targets' type parameters and member symbols, by address, to the
 /// target and their role. A tuple target's element properties and `length`

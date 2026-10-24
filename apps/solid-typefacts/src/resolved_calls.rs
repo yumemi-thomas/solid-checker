@@ -35,7 +35,6 @@ use crate::identity::Env;
 use crate::model::SymbolId;
 use crate::nodes::{is_call_like_expression, node_at};
 use crate::project::{declarations_for_symbol, wire_symbol_name};
-use crate::references::ReferenceIndex;
 use crate::semantic_runs::Evidence;
 use crate::type_facts::{
     DescriptorMemo, array_shape_of_type, callability_of_type, declaration_module,
@@ -92,26 +91,22 @@ pub struct CallCaches {
     library_property_writes: Option<PropertyWrites>,
     /// Go: `currentSourceFiles`.
     current_files: Option<HashSet<usize>>,
-    /// Per-file checkers: the reference half of the default-library census
-    /// reads every file's references, which exist only once every file was
-    /// scanned. The binding is kept and its `(entity, target id)` recorded,
-    /// for the caller to withdraw if a reference is a write
+    /// The reference half of the default-library census reads every file's
+    /// references, which exist only once every file was scanned (in its own
+    /// pass). The binding is kept and its `(entity, target id)` recorded, for
+    /// the caller to withdraw if a reference is a write
     /// (`semantic_runs::Deferrals::library`).
-    defer_library: bool,
     pending_library: Option<SymbolId>,
     deferred_library: Vec<(usize, SymbolId)>,
-    /// Per-file checkers: every census question asked (a property name and
-    /// whether the program writes it). The census reads every file, so a
+    /// Every census question asked (a property name and whether the program
+    /// writes it). The census reads every file, so a
     /// reused pass is valid only while each answer is unchanged.
     census_reads: Vec<(String, bool)>,
 }
 
 impl CallCaches {
-    /// Per-file checkers: defers the cross-file half of the default-library
-    /// census, seeded with the program's property-write census if one was
-    /// already taken.
+    /// Seeds the program's property-write census, if one was already taken.
     pub fn defer_library_census(&mut self, writes: Option<PropertyWrites>) {
-        self.defer_library = true;
         self.library_property_writes = writes;
     }
 
@@ -123,7 +118,7 @@ impl CallCaches {
         )
     }
 
-    /// The census questions asked in deferral mode, in order.
+    /// The census questions asked, in order.
     pub fn take_census_reads(&mut self) -> Vec<(String, bool)> {
         std::mem::take(&mut self.census_reads)
     }
@@ -214,7 +209,6 @@ fn has_flag(value: P<Type>, flags: TypeFlags) -> bool {
 pub struct CallRun<'a, 'e> {
     pub ctx: &'a Context,
     pub env: &'a mut Env<'e>,
-    pub references: &'a mut ReferenceIndex,
     pub caches: &'a mut CallCaches,
     pub memo: &'a mut DescriptorMemo,
     pub file: P<SourceFile>,
@@ -580,43 +574,20 @@ impl CallRun<'_, '_> {
             .library_property_writes
             .get_or_insert_with(|| Arc::new(property_write_census(program)));
         let written = writes.contains(&*library.name);
-        if self.caches.defer_library {
-            self.caches
-                .census_reads
-                .push((library.name.to_string(), written));
-        }
+        self.caches
+            .census_reads
+            .push((library.name.to_string(), written));
         if written {
             return None;
         }
         // The write census reads the binding's references, which a symbol
-        // with no id does not have: no binding (fail closed).
-        if self.caches.defer_library {
-            let id = self.env.id_for(target);
-            if id.is_empty() {
-                return None;
-            }
-            self.caches.pending_library = Some(id);
-            return Some(library);
-        }
-        self.references.ensure(self.env);
+        // with no id does not have: no binding (fail closed). The rest is
+        // decided once every file's references are merged.
         let id = self.env.id_for(target);
         if id.is_empty() {
             return None;
         }
-        for reference in self.references.query(self.env, &id) {
-            let source = program.get_source_file(&reference.path)?;
-            let position = u32::try_from(reference.start_byte).ok()?;
-            let mut node = node_at(source, position);
-            if let Some(parent) = node.parent()
-                && is_property_access_expression(parent)
-                && parent.name() == Some(node)
-            {
-                node = parent;
-            }
-            if get_assignment_target(node).is_some() {
-                return None;
-            }
-        }
+        self.caches.pending_library = Some(id);
         Some(library)
     }
 

@@ -1902,7 +1902,7 @@ fn cancellation_cannot_strand_a_sent_update() {
     session.close().unwrap();
 }
 
-/// Instant-edits P4: with per-file passes the producer names every changed
+/// Instant-edits P4: the producer's per-file passes name every changed
 /// `symbols` answer, and the retained session patches its closure from the
 /// previous one. After every edit the patched table must hold exactly the
 /// symbols a fresh session's full closure holds, and the change list must
@@ -1912,12 +1912,7 @@ fn per_file_symbol_closure_patch_equals_a_fresh_closure() {
     let project = project();
     let directory = project.parent().unwrap().to_path_buf();
     let path = |name: &str| directory.join(name).to_string_lossy().into_owned();
-    let per_file = || {
-        Producer::at("/usr/bin/env")
-            .with_arg("SOLID_TYPEFACTS_PER_FILE_CHECKERS=1")
-            .with_arg("SOLID_TYPEFACTS_DERIVED_KEYS=1")
-            .with_arg(producer())
-    };
+    let per_file = || Producer::at(producer());
     let original = ["consumer.ts", "source.ts", "unrelated.ts", "use.ts"].map(|name| {
         (
             path(name),
@@ -2012,9 +2007,9 @@ fn per_file_symbol_closure_patch_equals_a_fresh_closure() {
         retained.update(changes).unwrap();
         let patched = rows(&retained.analyze(&demands(&sources)).unwrap());
         let changes = retained.take_last_table_changes().unwrap();
-        // The first edit's closure is full: the producer has not yet said it
-        // names its changes exactly.
-        assert_eq!(retained.last_closure_patched(), step > 0, "step {step}");
+        // Every edit's closure is patched, the first one's too: the client
+        // asks every retained analysis for the changed answers.
+        assert!(retained.last_closure_patched(), "step {step}");
 
         let mut fresh = Session::open(per_file(), project.to_string_lossy(), Vec::new()).unwrap();
         fresh

@@ -1,6 +1,8 @@
-//! Retained binder-level answers (ADR 0369): each dependency a retained
-//! answer records is changed by one edit, and the next generation must equal a
-//! fresh one over the same program, while unaffected files are still reused.
+//! Reused per-file passes (`passes`, ADR 0398), at binder-level
+//! dependencies: each dependency a kept pass reads (a file's text, exports, a
+//! global script, an alias target, a merged namespace) is changed by one edit,
+//! and the next generation must equal a fresh one over the same program,
+//! while unaffected files are still reused.
 
 use super::project_support::Scratch;
 use super::randomized_incremental::{first_difference, probe_with};
@@ -81,8 +83,7 @@ fn retained_matches_fresh(
     let mut versions = std::collections::HashMap::<&str, u64>::new();
     let mut history: Vec<Vec<FileChange>> = Vec::new();
     let mut reuse = Vec::new();
-    // Retention starts with the first update (ADR 0369): a warm-up update
-    // records the answers the steps then reuse. It is compared like a step.
+    // A warm-up update before the steps; it is compared like a step.
     let warm: &[(&str, Option<&str>)] = &[("warm.ts", Some("export const warm = 1;\n"))];
     for (step, edits) in std::iter::once(&warm).chain(steps).enumerate() {
         let changes: Vec<FileChange> = edits
@@ -156,22 +157,10 @@ fn an_export_added_in_another_module_changes_a_retained_id() {
             &[("g.ts", Some(g))],
         ],
     );
-    // Per-file passes with reuse (instant-edits P3) keep whole passes keyed
-    // by their demands, which this test's word demands shift in every file
-    // after an edited one; retained == fresh above is what holds there.
-    if !pass_reuse_by_env() {
-        assert!(
-            reuse.iter().all(|step| step.reused_reference_files > 0),
-            "{reuse:?}"
-        );
-    }
-}
-
-/// Whether the environment selects per-file passes with reuse (instant-edits
-/// P3), which replace binder-level retention: a pass whose read set holds an
-/// edited file runs again whole.
-fn pass_reuse_by_env() -> bool {
-    crate::per_file::enabled_by_env() && crate::derived_key::enabled_by_env()
+    // Per-file passes keep whole passes keyed by their demands, which this
+    // test's word demands shift in every file after an edited one: retained
+    // == fresh above is what holds.
+    let _ = reuse;
 }
 
 /// A global removed from a script leaves a module's identifier unresolved,
@@ -269,8 +258,8 @@ fn a_tsconfig_change_drops_every_retained_answer() {
     assert!(reuse[1].reused_reference_files > 0, "{reuse:?}");
 }
 
-/// A span shift in a declaring file moves `Decl` ids but not `Export` ids:
-/// importers keep their retained answers, the edited file does not.
+/// A span shift in a declaring file moves `Decl` ids but not `Export` ids;
+/// every pass whose read set holds the edited file runs again.
 #[test]
 fn a_prefix_edit_rescans_only_the_edited_file() {
     let a = "export function f() { return 1; }\nfunction hidden() { return f(); }\nexport const h = hidden();\n";
@@ -286,14 +275,9 @@ fn a_prefix_edit_rescans_only_the_edited_file() {
         ],
         &[&[("a.ts", Some(&format!("// shifted\n{a}")))]],
     );
-    if pass_reuse_by_env() {
-        // b.ts and c.ts read a.ts (their read sets hold it): only warm.ts's
-        // pass is kept, and its word demands moved with a.ts's words.
-        assert_eq!(reuse[0].scanned_reference_files, 4, "{reuse:?}");
-    } else {
-        assert_eq!(reuse[0].scanned_reference_files, 1, "{reuse:?}");
-        assert_eq!(reuse[0].reused_reference_files, 3, "{reuse:?}");
-    }
+    // b.ts and c.ts read a.ts (their read sets hold it): only warm.ts's
+    // pass is kept, and its word demands moved with a.ts's words.
+    assert_eq!(reuse[0].scanned_reference_files, 4, "{reuse:?}");
 }
 
 /// Scope lookup resolves an alias to test its meaning: an import of an
@@ -328,10 +312,12 @@ fn a_lookup_an_alias_answers_follows_the_alias_target() {
     );
 }
 
-/// A session that never updates retains nothing: a one-shot run pays no
-/// retention cost (ADR 0369).
+/// Pass reuse needs no update to start: a table scans every file once, and
+/// the next table over an edit runs only the passes whose read set holds the
+/// edited file. `a.ts` reads nothing `b.ts` declares, so its pass is kept.
 #[test]
-fn nothing_is_retained_before_the_first_update() {
+fn a_table_scans_every_file_and_an_edit_reruns_only_its_readers() {
+    let ctx = Context::new();
     let scratch = Scratch::new(&[
         ("tsconfig.json", STRICT_CONFIG),
         ("a.ts", "export const a = 1;\n"),
@@ -339,22 +325,32 @@ fn nothing_is_retained_before_the_first_update() {
     ]);
     let mut closure = open_closure(&scratch.config());
     drop(probe_with(&mut closure, 1, false, word_demands));
-    let reuse = closure.backend_mut().binder_retention();
-    assert_eq!(reuse.reused_symbol_facts, 0, "{reuse:?}");
-    assert!(reuse.resolved_symbol_facts > 0, "{reuse:?}");
-    drop(probe_with(&mut closure, 1, false, word_demands));
-    let again = closure.backend_mut().binder_retention();
+    let first = closure.stats().retention;
     assert_eq!(
-        (again.reused_reference_files, again.reused_symbol_facts),
-        (0, 0),
+        (first.cached_reference_facts, first.recomputed_references),
+        (0, 2),
+        "{first:?}"
+    );
+    let edit = change(
+        &scratch,
+        "b.ts",
+        1,
+        Some("import { a } from \"./a\";\nexport const b = a + 1;\n"),
+    );
+    closure.update(&ctx, std::slice::from_ref(&edit)).unwrap();
+    drop(probe_with(&mut closure, 2, false, word_demands));
+    let again = closure.stats().retention;
+    assert_eq!(
+        (again.cached_reference_facts, again.recomputed_references),
+        (1, 1),
         "{again:?}"
     );
 }
 
 /// Queries naming one id twice are merged before they are answered
 /// (references if any asks, declarations unless every query is
-/// references-only); retained symbol facts answer the merged query exactly as
-/// a fresh closure does.
+/// references-only); the passes' rows answer the merged query exactly as a
+/// fresh closure does.
 #[test]
 fn retained_symbol_facts_answer_merged_duplicate_queries() {
     let ctx = Context::new();
@@ -408,7 +404,7 @@ fn retained_symbol_facts_answer_merged_duplicate_queries() {
             .binder_retention()
             .reused_symbol_facts
             > 0,
-        "no retained fact answered"
+        "no pass row answered"
     );
     let mut fresh = open_closure(&config);
     for version in [1, 2] {

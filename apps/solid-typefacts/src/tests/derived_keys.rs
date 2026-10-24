@@ -1,5 +1,5 @@
-//! Exact derived-symbol keys (`derived_key.rs`, instant-edits P2): with
-//! `Identities::derived_keys`, a derived symbol's id is a function of what it
+//! Exact derived-symbol keys (`derived_key.rs`, instant-edits P2): a derived
+//! symbol's id is a function of what it
 //! is derived from and its exact type context, the same in every checker and
 //! every pass, never shared by two symbols of different types; a symbol with
 //! no exact key carries no id at all (no counter).
@@ -105,15 +105,16 @@ fn rows(table: &ProducerTable) -> Vec<EntityFact> {
 }
 
 /// Each site's entity, by name.
+/// `sequential`: the passes share one identity state, in path order (the
+/// key-collision run), instead of the pool's state per pass.
 fn answer(
     scratch: &Scratch,
-    per_file: bool,
+    sequential: bool,
     warm: impl FnOnce(&mut Project),
 ) -> BTreeMap<&'static str, EntityFact> {
     let mut project = open(&scratch.config());
-    project.select_derived_keys_for_test();
-    if per_file {
-        project.select_per_file_checkers_for_test();
+    if sequential {
+        project.select_sequential_for_test();
     }
     warm(&mut project);
     let named = demands(scratch);
@@ -148,21 +149,33 @@ fn assert_keyed(facts: &BTreeMap<&'static str, EntityFact>, name: &str) {
 #[test]
 fn instantiations_keep_their_type_context_and_share_it_across_files() {
     let scratch = fixture();
-    for per_file in [false, true] {
-        let facts = answer(&scratch, per_file, |_| {});
+    for sequential in [false, true] {
+        let facts = answer(&scratch, sequential, |_| {});
         for name in ["nv", "sv", "mv", "bl", "cl", "ns", "meta", "other"] {
             assert_keyed(&facts, name);
         }
         // `Box<number>.value` and `Box<string>.value` are two symbols.
-        assert_ne!(id(&facts, "nv"), id(&facts, "sv"), "per-file {per_file}");
+        assert_ne!(
+            id(&facts, "nv"),
+            id(&facts, "sv"),
+            "sequential {sequential}"
+        );
         // One instantiation reached from two files is one symbol.
-        assert_eq!(id(&facts, "nv"), id(&facts, "mv"), "per-file {per_file}");
-        assert_eq!(id(&facts, "bl"), id(&facts, "cl"), "per-file {per_file}");
+        assert_eq!(
+            id(&facts, "nv"),
+            id(&facts, "mv"),
+            "sequential {sequential}"
+        );
+        assert_eq!(
+            id(&facts, "bl"),
+            id(&facts, "cl"),
+            "sequential {sequential}"
+        );
         // `import.meta`'s `meta` is a checker singleton.
         assert_eq!(
             id(&facts, "meta"),
             id(&facts, "other"),
-            "per-file {per_file}"
+            "sequential {sequential}"
         );
     }
 }
@@ -170,8 +183,8 @@ fn instantiations_keep_their_type_context_and_share_it_across_files() {
 #[test]
 fn an_accessor_instantiation_takes_its_root_id_when_no_type_variable_reaches_it() {
     let scratch = fixture();
-    for per_file in [false, true] {
-        let facts = answer(&scratch, per_file, |_| {});
+    for sequential in [false, true] {
+        let facts = answer(&scratch, sequential, |_| {});
         // `size` and `label` read and write a type with no type variable:
         // the checker answers their instantiations with the root itself once
         // both types are resolved, so the id is the declaration's.
@@ -184,12 +197,12 @@ fn an_accessor_instantiation_takes_its_root_id_when_no_type_variable_reaches_it(
 #[test]
 fn an_index_signature_symbol_has_no_id() {
     let scratch = fixture();
-    for per_file in [false, true] {
-        let facts = answer(&scratch, per_file, |_| {});
+    for sequential in [false, true] {
+        let facts = answer(&scratch, sequential, |_| {});
         let row = &facts["dv"];
         assert!(
             row.symbol.is_empty(),
-            "per-file {per_file}: {:?}",
+            "sequential {sequential}: {:?}",
             row.symbol
         );
         assert_eq!(row.symbol_claim, SymbolClaim::Unresolved);
@@ -197,15 +210,16 @@ fn an_index_signature_symbol_has_no_id() {
 }
 
 #[test]
-fn ids_do_not_depend_on_the_mode_or_the_checker_history() {
+fn ids_do_not_depend_on_the_identity_state_or_the_checker_history() {
     let scratch = fixture();
     let base = answer(&scratch, false, |_| {});
     let text = |facts: &BTreeMap<&'static str, EntityFact>| format!("{facts:?}");
     assert!(!text(&base).contains("symbol:1:"), "a counter id: {base:?}");
-    let per_file = answer(&scratch, true, |_| {});
-    assert_eq!(text(&base), text(&per_file));
-    // Warm the canonical checker on the other file, and resolve the types at
-    // the sites in reverse, before the table.
+    let sequential = answer(&scratch, true, |_| {});
+    assert_eq!(text(&base), text(&sequential));
+    // Warm a scratch checker on the other file, and resolve the types at the
+    // sites in reverse (minting their keys in the project's own state),
+    // before the table.
     let warmed = answer(&scratch, false, |project| {
         let generation = project.live().unwrap();
         let program = generation.program();

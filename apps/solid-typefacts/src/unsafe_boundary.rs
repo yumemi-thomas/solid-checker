@@ -75,7 +75,7 @@
 //!    borrow checker already forbids any `&mut Checker` derived from it from
 //!    living across the call.
 //! 8. **A file checker is the thread's checker while it is installed**
-//!    (per-file checkers, behind `SOLID_TYPEFACTS_PER_FILE_CHECKERS`).
+//!    (per-file checkers, the producer's only mode).
 //!    [`Generation::file_checker`] creates a fresh checker in a [`Region`] of
 //!    its own and installs it in a thread-local; the program's pool hands it
 //!    out, under invariant 7's exclusivity, to every acquisition on that
@@ -509,9 +509,6 @@ pub struct Generation {
     updates: u32,
     thread: ThreadId,
     kind: UpdateKind,
-    /// Whether `prepare_update` may keep the edited file's synthetic imports
-    /// (the JSX runtime, import helpers): see [`options_for`].
-    reuse_synthetic_imports: bool,
 }
 
 fn options_for(
@@ -519,9 +516,8 @@ fn options_for(
     host: Arc<dyn CompilerHost>,
     regions: &Arc<ProgramRegions>,
     factory: &CreateCheckerPool,
-    reuse_synthetic_imports: bool,
 ) -> ProgramOptions {
-    // tsrs's canonical checker history (ADR 0367): the caches typescript-go
+    // tsrs's canonical checker history: the caches typescript-go
     // keys by what the checker saw first (`undefinedProperties`, keyed by name
     // across the program, orders the properties of a normalized object-literal
     // union by the first literal that mentioned the name) are a function of the
@@ -553,9 +549,8 @@ fn options_for(
     // does. The kept synthetic import nodes' parent is the full build's
     // version of the file; the chain keeps every file of its full build alive
     // until the chain is freed (`FileRegions` base, `sweep_dead_files`), which
-    // is the condition the option states. Off in the default mode, which stays
-    // byte-identical.
-    options.reuse_synthetic_imports = reuse_synthetic_imports;
+    // is the condition the option states.
+    options.reuse_synthetic_imports = true;
     options
 }
 
@@ -592,19 +587,12 @@ impl Generation {
         config_region: Region,
         config: P<ParsedCommandLine>,
         host: Arc<dyn CompilerHost>,
-        reuse_synthetic_imports: bool,
     ) -> Generation {
         let regions = Arc::new(ProgramRegions::default());
         let files = Arc::new(FileRegions::default());
         let host = RegionHost::wrap(host, &files);
         let (factory, cell) = slot_factory();
-        let program = new_program(options_for(
-            config,
-            host,
-            &regions,
-            &factory,
-            reuse_synthetic_imports,
-        ));
+        let program = new_program(options_for(config, host, &regions, &factory));
         program.bind_source_files();
         files.set_base(program.source_files().iter().map(|file| file.addr()));
         Generation {
@@ -617,7 +605,6 @@ impl Generation {
             updates: 0,
             thread: std::thread::current().id(),
             kind: UpdateKind::Rebuilt,
-            reuse_synthetic_imports,
         }
     }
 
@@ -781,7 +768,6 @@ impl Generation {
                 updates: self.updates + 1,
                 thread: self.thread,
                 kind: UpdateKind::Reused,
-                reuse_synthetic_imports: self.reuse_synthetic_imports,
             };
         }
         // A fresh chain from the same parsed configuration, in regions of its
@@ -800,7 +786,6 @@ impl Generation {
             RegionHost::wrap(host, &files),
             &regions,
             &factory,
-            self.reuse_synthetic_imports,
         ));
         program.bind_source_files();
         files.set_base(program.source_files().iter().map(|file| file.addr()));
@@ -814,7 +799,6 @@ impl Generation {
             updates: 0,
             thread: self.thread,
             kind: UpdateKind::Rebuilt,
-            reuse_synthetic_imports: self.reuse_synthetic_imports,
         }
     }
 

@@ -901,14 +901,8 @@ pub struct Session {
     state_token: String,
     retained_demands: HashMap<String, Arc<[EntityDemand]>>,
     retained_table: Option<FactTable>,
-    affected_paths: HashSet<String>,
     reference_tier: HashSet<Arc<str>>,
     symbols_by_path: HashMap<Arc<str>, Vec<Arc<str>>>,
-    /// Whether this producer has named its changed `symbols` answers exactly
-    /// (per-file passes, instant-edits P4). Only such a producer is asked for
-    /// them with a table whose demand roots changed: the canonical producer
-    /// keeps the order of questions it always had.
-    symbol_changes_exact: bool,
     /// The reasons of the retained closure, for patching it
     /// ([`closure::ClosureIndex`]).
     closure_index: Option<closure::ClosureIndex>,
@@ -1033,10 +1027,8 @@ impl Session {
             state_token: String::new(),
             retained_demands: HashMap::new(),
             retained_table: None,
-            affected_paths: HashSet::new(),
             reference_tier: HashSet::new(),
             symbols_by_path: HashMap::new(),
-            symbol_changes_exact: false,
             closure_index: None,
             last_closure_patched: false,
             pending_demand_paths: HashSet::new(),
@@ -1181,7 +1173,6 @@ impl Session {
         } else {
             closure::ReferenceLocations::new(retained_locations, &changed, &removed)
         };
-        let demand_roots_changed = reset_state || !changed.is_empty() || !removed.is_empty();
         self.pending_demand_paths = changed
             .iter()
             .map(|group| group.path().to_owned())
@@ -1193,7 +1184,6 @@ impl Session {
             removed.clone(),
             reset_state,
             &reference_locations,
-            demand_roots_changed,
         ) {
             Err(SessionError::Service { code, .. })
                 if code == "state-mismatch" && self.can_recover() =>
@@ -1207,7 +1197,7 @@ impl Session {
                     .flat_map(|group| group.demands().iter().cloned())
                     .collect::<Vec<_>>();
                 let table =
-                    self.analyze_exchange(complete, Vec::new(), true, &reference_locations, true)?;
+                    self.analyze_exchange(complete, Vec::new(), true, &reference_locations)?;
                 self.retain_all_groups(groups);
                 self.retained_reference_locations = reference_locations.commit();
                 self.reference_locations_valid = true;
@@ -1244,7 +1234,7 @@ impl Session {
                     .flat_map(|group| group.demands().iter().cloned())
                     .collect::<Vec<_>>();
                 let table =
-                    self.analyze_exchange(complete, Vec::new(), true, &reference_locations, true)?;
+                    self.analyze_exchange(complete, Vec::new(), true, &reference_locations)?;
                 self.retain_all_groups(groups);
                 self.retained_reference_locations = reference_locations.commit();
                 self.reference_locations_valid = true;
@@ -1391,8 +1381,8 @@ impl Session {
             validate_response_identity(&response, &self.project_id, generation).map(|()| response)
         });
         match outcome {
-            Ok(response) => {
-                self.commit_update(changes, response.affected);
+            Ok(_) => {
+                self.commit_update(changes);
                 Ok(())
             }
             Err(error) if error.is_transport_failure() && self.can_recover() => {
@@ -1401,8 +1391,8 @@ impl Session {
                 self.restart_and_replay()?;
                 let mut retry = request(Operation::Update, &self.project_id, self.generation + 1);
                 retry.changes.clone_from(&changes);
-                let response = self.exchange_once(&mut retry)?;
-                self.commit_update(changes, response.affected);
+                self.exchange_once(&mut retry)?;
+                self.commit_update(changes);
                 Ok(())
             }
             Err(error) => Err(error),
@@ -1410,11 +1400,8 @@ impl Session {
     }
 
     /// Records an acknowledged update: one generation, one replay batch.
-    fn commit_update(&mut self, changes: Vec<FileChange>, affected: Vec<String>) {
+    fn commit_update(&mut self, changes: Vec<FileChange>) {
         self.generation += 1;
-        self.affected_paths.extend(affected);
-        self.affected_paths
-            .extend(changes.iter().map(|change| change.path.clone()));
         self.supersede_replayed_overlays(&changes);
         self.replay_batches.push(changes);
     }
@@ -1561,7 +1548,6 @@ impl Session {
         removed_demand_paths: Vec<String>,
         reset_state: bool,
         reference_locations: &closure::ReferenceLocations,
-        demand_roots_changed: bool,
     ) -> Result<FactTable, SessionError> {
         let (demands, compact_demands) = if reset_state && !wire_demands.is_empty() {
             (Vec::new(), Some(v3::compact_demands(&wire_demands)))
@@ -1578,19 +1564,9 @@ impl Session {
         };
         analyze.reset_state = reset_state;
         analyze.removed_demand_paths = removed_demand_paths;
-        if !demand_roots_changed && self.retained_table.is_some() && !self.symbol_changes_exact {
-            let invalidated = self.invalidated_symbol_ids();
-            analyze.symbol_queries = invalidated
-                .into_iter()
-                .map(|id| SymbolQuery {
-                    id,
-                    references: false,
-                    references_only: false,
-                })
-                .collect();
-            analyze.reference_changes = true;
-        } else if !reset_state && self.symbol_changes_exact && self.retained_table.is_some() {
-            // An exact producer names what changed; the closure asks for it.
+        if !reset_state && self.retained_table.is_some() {
+            // The producer names every changed `symbols` answer when it can
+            // (ADR 0389); the closure is then patched from them.
             analyze.reference_changes = true;
         }
         // The analysis is released by the closure's last request: an exact
@@ -1635,7 +1611,6 @@ impl Session {
         // The candidate and successor token publish together. All decoding,
         // identity checks, and candidate construction completed above.
         self.retained_table = Some(candidate);
-        self.affected_paths.clear();
         self.state_token = response.state_token;
         self.last_table_changes = Some(changes);
         Ok(returned)
@@ -1657,7 +1632,6 @@ impl Session {
         if let Some(changed) = exact.filter(|_| table.symbol_count() != 0)
             && let Some(previous) = previous
         {
-            self.symbol_changes_exact = true;
             self.last_closure_patched = true;
             let changed = changed.iter().cloned().collect::<HashSet<_>>();
             if !verify_symbol_patch() {
@@ -1800,7 +1774,6 @@ impl Session {
             let response = self.exchange_once(&mut request)?;
             if request.reference_changes {
                 reference_changes_exact = response.reference_changes_exact;
-                self.symbol_changes_exact |= reference_changes_exact;
                 changed_references.extend(response.changed_reference_symbols.iter().cloned());
             }
             if response.symbol_evidence.len() != expected.len() {
@@ -1829,7 +1802,6 @@ impl Session {
             request.reference_changes = true;
             let response = self.exchange_once(&mut request)?;
             reference_changes_exact = response.reference_changes_exact;
-            self.symbol_changes_exact |= reference_changes_exact;
             changed_references.extend(response.changed_reference_symbols);
         }
 
@@ -1935,23 +1907,10 @@ impl Session {
         self.reference_tier = full_ids.into_iter().collect();
         let changed = table.replace_symbols(facts);
         self.rebuild_symbol_path_index(table);
-        // An exact producer's next table is patched from this closure.
-        self.closure_index = self
-            .symbol_changes_exact
-            .then(|| closure::ClosureIndex::build(table, reference_locations))
-            .flatten();
+        // The next table is patched from this closure when the producer names
+        // its changes exactly.
+        self.closure_index = closure::ClosureIndex::build(table, reference_locations);
         Ok(changed)
-    }
-
-    fn invalidated_symbol_ids(&self) -> Vec<Arc<str>> {
-        self.affected_paths
-            .iter()
-            .filter_map(|path| self.symbols_by_path.get(path.as_str()))
-            .flatten()
-            .cloned()
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect()
     }
 
     fn rebuild_symbol_path_index(&mut self, table: &FactTable) {
@@ -2045,7 +2004,6 @@ impl Session {
         self.state_token.clear();
         self.retained_demands.clear();
         self.retained_table = None;
-        self.affected_paths.clear();
         self.reference_tier.clear();
         self.symbols_by_path.clear();
         self.closure_index = None;

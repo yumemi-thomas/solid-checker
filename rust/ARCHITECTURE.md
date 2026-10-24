@@ -155,23 +155,26 @@ The producer is `apps/solid-typefacts`, a Rust process (and, for WASM, a
 (ADR 0365). It sits behind the versioned process protocol, so no checker node,
 type or symbol crosses into solid-facts; `docs/typefacts.md` owns the protocol.
 
-A table is a function of the program and its demands. Before it answers any
-demand, the producer checks every demanded file in path order (check-first,
-ADR 0367); a type descriptor is its location's type, and no checker counter
-reaches a fact. Each update and each table discards the demand contributions,
-async facts, source-fact memo and id maps (ADR 0364); only the compiler's
-incremental program and the binder-level answers survive, the latter under
-recorded `Text`, `Exports`, `Ambient` and `Options` dependencies (ADR 0369).
+A table is a function of the program and its demands. Each file's facts come
+from a pass: a fresh checker of its own checks the file first, then answers
+its demands, scans its references and computes the rows of the ids it names;
+answers that read every file (reference spaces, the default-library write
+census) are completed from the merged passes (ADR 0398). A type descriptor
+is its location's type, and no checker counter reaches a fact. A pass is
+reused while everything its checker can read (its read set: the forward
+closure of the file and of every global contributor over recorded
+resolutions) is unchanged; the passes that must run do so on a pool.
 A dependency-source program lists the project's roots first, in `tsc`'s order,
 because TypeScript's answers can depend on it (ADR 0368).
 
-A symbol id is canonical or generation-scoped. A binder-level symbol's
-`symbol:h:` id is `H(domain, key)` over a checker singleton, a global name, a
-module export or its minimum declaration (ADR 0366); a union, intersection or
-spread property's id is its combination and origins when they fix its type
-(ADR 0371). Every other symbol (an instantiation, a `this` clone, a mapped
-property) keeps a `symbol:<generation>:<n>` id and never shares a canonical
-one: derived symbols are not erased to their root, because index-keyed
+A symbol id is a hash (`symbol:h:`) that names the same symbol in every
+checker of the program. A binder-level symbol's id is `H(domain, key)` over a
+checker singleton, a global name, a module export or its minimum declaration
+(ADR 0366); a union, intersection or spread property's id is its combination
+and origins when they fix its type (ADR 0371); any other symbol (an
+instantiation, a `this` clone, a mapped property) takes its exact derived key,
+its source and type context (`derived_key.rs`), or no id at all, never a
+counter. Derived symbols are not erased to their root, because index-keyed
 consumers (typed sources, descriptors and call sites by symbol) would then
 apply one instantiation's type to another's (ADR 0372). The reactive IR may
 therefore treat an id as naming one symbol and must not assume it names one

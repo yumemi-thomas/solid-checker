@@ -1,8 +1,7 @@
 //! `SemanticDemandRuns` over tsrs (Go: `tsgo/semantic_runs.go`).
 //!
-//! One call resolves canonically ordered per-file runs under one checker.
-//! Results are index-aligned with `runs` and with each run's demands; no
-//! caller has to flatten or repartition file ownership.
+//! One call resolves one file's run under that file's own checker (its pass,
+//! `passes`). Results are index-aligned with the run's demands.
 //!
 //! # What is answered, and what is unavailable
 //!
@@ -25,7 +24,6 @@
 //! at zero (the precondition for making this producer the default).
 
 use crate::backend::BackendError;
-use crate::binder_resolution::entity_resolves_without_types;
 use crate::constants::constant_value_at;
 use crate::context::Context;
 use crate::gocompat::{absolute, quote};
@@ -34,7 +32,6 @@ use crate::model::{
     SemanticDemandRun, SemanticDemandRunResult, SymbolId, blank_entity, durable_symbol_id,
 };
 use crate::nodes::{NodeCursor, jsx_tag_name_at, symbol_span_covers};
-use crate::references::ReferenceIndex;
 use crate::resolved_calls::{CallCaches, CallDemand, CallRun};
 use crate::runtime_facts::{runtime_binding_kind, runtime_identity};
 use crate::type_facts::{
@@ -44,7 +41,7 @@ use crate::type_facts::{
 };
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
-use tsrs_ast::{Node, SourceFile, Symbol, is_identifier};
+use tsrs_ast::{Node, Symbol, is_identifier};
 use tsrs_checker::types::Type;
 use tsrs_core::P;
 use typefacts::v3::EntityDemand;
@@ -142,11 +139,10 @@ fn check(ctx: &Context) -> Result<(), BackendError> {
     }
 }
 
-/// Per-file checkers (`SOLID_TYPEFACTS_PER_FILE_CHECKERS`): the answers of one
-/// file's run that read every file of the program. Inside the file's pass only
-/// its own contribution exists, so they are recorded here, by entity index,
-/// and completed once every file was scanned (`per_file`), from pointer-free
-/// state only. The canonical run (`None`) answers them in place.
+/// The answers of one file's run that read every file of the program. Inside
+/// the file's pass only its own contribution exists, so they are recorded
+/// here, by entity index, and completed once every file was scanned
+/// (`per_file`), from pointer-free state only.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Deferrals {
     /// Entities whose reference space is the union of every file's spaces of
@@ -156,9 +152,9 @@ pub struct Deferrals {
     /// the target id, in any file, is a write (the census of
     /// `CallRun::default_library_binding`).
     pub library: Vec<(usize, SymbolId)>,
-    /// The structural-accessor symbols of the run: the canonical run
-    /// suppresses the type descriptor of an entity of such a symbol across the
-    /// whole batch, so the union over every file decides it.
+    /// The structural-accessor symbols of the run: the type descriptor of an
+    /// entity of such a symbol is suppressed across the whole table, so the
+    /// union over every file decides it.
     pub structural: HashSet<SymbolId>,
     /// The program-wide syntactic census of property-write names
     /// (`CallCaches::library_property_writes`), shared by every pass instead
@@ -169,362 +165,299 @@ pub struct Deferrals {
     pub census: Vec<(String, bool)>,
 }
 
-/// Go: `SemanticDemandRuns`, after the project lock and checker are held.
-/// `deferrals` (per-file checkers) is `Some` for a single run, which then
-/// leaves its cross-file answers to the caller ([`Deferrals`]).
+/// Go: `SemanticDemandRuns` for one file's run, inside that file's pass
+/// (its own checker). The answers that read every file are left to the
+/// caller ([`Deferrals`]).
 #[allow(clippy::too_many_lines)]
 pub fn run(
     ctx: &Context,
     env: &mut Env<'_>,
-    references: &mut ReferenceIndex,
-    runs: &[SemanticDemandRun<'_>],
+    run: &SemanticDemandRun<'_>,
     unavailable: &mut Unavailable,
-    mut deferrals: Option<&mut Deferrals>,
-) -> Result<Vec<SemanticDemandRunResult>, BackendError> {
-    debug_assert!(deferrals.is_none() || runs.len() == 1);
+    deferrals: &mut Deferrals,
+) -> Result<SemanticDemandRunResult, BackendError> {
     check(ctx)?;
-    let mut results: Vec<SemanticDemandRunResult> = Vec::with_capacity(runs.len());
-    let mut files: Vec<Option<P<SourceFile>>> = Vec::with_capacity(runs.len());
-    let mut evidence: Vec<Evidence> = Vec::with_capacity(runs.len());
-    let mut nodes: Vec<Vec<Option<P<Node>>>> = Vec::with_capacity(runs.len());
-    let mut symbols: Vec<Vec<Option<P<Symbol>>>> = Vec::with_capacity(runs.len());
-    let mut batch_structural: HashSet<SymbolId> = HashSet::new();
-
-    for run in runs {
-        let path = run.path;
-        let mut run_evidence = Evidence::new();
-        let count = run.demands.len();
-        let mut result = SemanticDemandRunResult {
-            entities: Vec::with_capacity(count),
-            ..SemanticDemandRunResult::default()
-        };
-        let mut run_nodes: Vec<Option<P<Node>>> = vec![None; count];
-        let mut run_symbols: Vec<Option<P<Symbol>>> = vec![None; count];
-        // `sourceFileFor(Location{Path: path})`: an absent file leaves every
-        // entity of the run as its bare location.
-        let file = absolute(path)
-            .ok()
-            .and_then(|absolute_path| env.program.get_source_file(&absolute_path));
-        let mut cursor = NodeCursor::new(file);
-        for (index, demand) in run.demands.iter().enumerate() {
-            if *demand.location.path != *path {
-                return Err(BackendError(format!(
-                    "semantic demand run {} contains location from {}",
-                    quote(path),
-                    quote(&demand.location.path)
-                )));
-            }
-            if let Some(query) = &demand.query_location
-                && *query.path != *path
-            {
-                return Err(BackendError(format!(
-                    "semantic demand run {} contains query location from {}",
-                    quote(path),
-                    quote(&query.path)
-                )));
-            }
-            let mut location = demand.location.clone();
-            location.path = path.into();
-            result.entities.push(blank_entity(location.clone()));
-            let Some(file) = file else {
-                continue;
-            };
-            let node = cursor.at(location.start_byte);
-            run_nodes[index] = node;
-            if !demand.structural_accessor {
-                continue;
-            }
-            let Some(node) = node else {
-                continue;
-            };
-            if let Some(symbol) = env.checker.get_symbol_at_location_exported(node) {
-                let id = env.id_for(symbol);
-                // No exact key: no symbol (a structural accessor without one
-                // is not suppressed batch-wide either).
-                if id.is_empty() {
-                    continue;
-                }
-                let entity = &mut result.entities[index];
-                entity.symbol = id.clone();
-                entity.symbol_claim =
-                    if symbol_span_covers(file, node, location.start_byte, location.end_byte) {
-                        SymbolClaim::Covering
-                    } else {
-                        SymbolClaim::Partial
-                    };
-                if jsx_tag_name_at(node, location.start_byte, location.end_byte) == node {
-                    run_symbols[index] = Some(symbol);
-                }
-                run_evidence.symbol(&id);
-                batch_structural.insert(id);
-            }
+    let path = run.path;
+    let mut evidence = Evidence::new();
+    let count = run.demands.len();
+    let mut result = SemanticDemandRunResult {
+        entities: Vec::with_capacity(count),
+        ..SemanticDemandRunResult::default()
+    };
+    let mut nodes: Vec<Option<P<Node>>> = vec![None; count];
+    let mut symbols: Vec<Option<P<Symbol>>> = vec![None; count];
+    let mut structural: HashSet<SymbolId> = HashSet::new();
+    // `sourceFileFor(Location{Path: path})`: an absent file leaves every
+    // entity of the run as its bare location.
+    let file = absolute(path)
+        .ok()
+        .and_then(|absolute_path| env.program.get_source_file(&absolute_path));
+    let mut cursor = NodeCursor::new(file);
+    for (index, demand) in run.demands.iter().enumerate() {
+        if *demand.location.path != *path {
+            return Err(BackendError(format!(
+                "semantic demand run {} contains location from {}",
+                quote(path),
+                quote(&demand.location.path)
+            )));
         }
-        results.push(result);
-        files.push(file);
-        evidence.push(run_evidence);
-        nodes.push(run_nodes);
-        symbols.push(run_symbols);
+        if let Some(query) = &demand.query_location
+            && *query.path != *path
+        {
+            return Err(BackendError(format!(
+                "semantic demand run {} contains query location from {}",
+                quote(path),
+                quote(&query.path)
+            )));
+        }
+        let mut location = demand.location.clone();
+        location.path = path.into();
+        result.entities.push(blank_entity(location.clone()));
+        let Some(file) = file else {
+            continue;
+        };
+        let node = cursor.at(location.start_byte);
+        nodes[index] = node;
+        if !demand.structural_accessor {
+            continue;
+        }
+        let Some(node) = node else {
+            continue;
+        };
+        if let Some(symbol) = env.checker.get_symbol_at_location_exported(node) {
+            let id = env.id_for(symbol);
+            // No exact key: no symbol (a structural accessor without one is
+            // not suppressed batch-wide either).
+            if id.is_empty() {
+                continue;
+            }
+            let entity = &mut result.entities[index];
+            entity.symbol = id.clone();
+            entity.symbol_claim =
+                if symbol_span_covers(file, node, location.start_byte, location.end_byte) {
+                    SymbolClaim::Covering
+                } else {
+                    SymbolClaim::Partial
+                };
+            if jsx_tag_name_at(node, location.start_byte, location.end_byte) == node {
+                symbols[index] = Some(symbol);
+            }
+            evidence.symbol(&id);
+            structural.insert(id);
+        }
     }
+    let Some(file) = file else {
+        result.durable = evidence.durable;
+        return Ok(result);
+    };
 
     // Go: `project.typeDescriptors`, held per call here, so no type address
     // outlives its checker. Go's `batchDescriptors` (the first descriptor of a
     // symbol answered every later entity of it) is gone: a descriptor depends
-    // on its location only (ADR 0367).
+    // on its location only.
     let mut memo = DescriptorMemo::default();
     let mut caches = CallCaches::default();
-    if let Some(deferrals) = deferrals.as_deref_mut() {
-        caches.defer_library_census(deferrals.library_writes.take());
-        deferrals.structural.clone_from(&batch_structural);
-    }
-    let suppressed = |symbol: &SymbolId| batch_structural.contains(symbol);
+    caches.defer_library_census(deferrals.library_writes.take());
+    deferrals.structural.clone_from(&structural);
+    // The structural-accessor symbols of the whole table suppress
+    // descriptors too; the caller completes that across files.
+    let suppressed = |symbol: &SymbolId| structural.contains(symbol);
 
-    for (run_index, run) in runs.iter().enumerate() {
-        let Some(file) = files[run_index] else {
-            results[run_index].durable = evidence[run_index].durable;
+    let mut query_cursor = NodeCursor::new(Some(file));
+    let mut call_demands: Vec<CallDemand> = Vec::new();
+    for (index, demand) in run.demands.iter().enumerate() {
+        check(ctx)?;
+        let entity = &mut result.entities[index];
+        if !entity.symbol.is_empty() && !wants_beyond_symbol(demand) {
             continue;
-        };
-        let mut query_cursor = NodeCursor::new(Some(file));
-        let mut call_demands: Vec<CallDemand> = Vec::new();
-        for (index, demand) in run.demands.iter().enumerate() {
-            check(ctx)?;
-            let entity = &mut results[run_index].entities[index];
-            if !entity.symbol.is_empty() && !wants_beyond_symbol(demand) {
-                continue;
+        }
+        let location = entity.location.clone();
+        let result_node = nodes[index];
+        let mut result_symbol: Option<P<Symbol>> = None;
+        if let Some(node) = result_node
+            && (demand.symbol || demand.reference_space || demand.runtime_identity)
+        {
+            let tag = jsx_tag_name_at(node, location.start_byte, location.end_byte);
+            result_symbol = symbols[index];
+            if result_symbol.is_none() {
+                result_symbol = env.checker.get_symbol_at_location_exported(tag);
             }
-            let location = entity.location.clone();
-            let result_node = nodes[run_index][index];
-            let mut result_symbol: Option<P<Symbol>> = None;
-            // A binder-resolved symbol answered from an earlier generation
-            // (ADR 0369): its id, empty when it did not resolve.
-            let mut retained_id: Option<SymbolId> = None;
-            if let Some(node) = result_node
-                && (demand.symbol || demand.reference_space || demand.runtime_identity)
-            {
-                let tag = jsx_tag_name_at(node, location.start_byte, location.end_byte);
-                result_symbol = symbols[run_index][index];
-                // Retention needs neither the live symbol (a runtime identity
-                // does) nor a type: only a scope-lookup answer is kept.
-                let span = (location.start_byte, location.end_byte);
-                let binder = references.retaining()
-                    && result_symbol.is_none()
-                    && !demand.runtime_identity
-                    && entity_resolves_without_types(tag)
-                    && references.may_retain_symbol(env, file, tag);
-                let retained = if binder {
-                    references.retained_symbol(env, file, span)
-                } else {
-                    None
-                };
-                if let Some((id, claim)) = retained {
-                    if demand.symbol && entity.symbol.is_empty() {
-                        entity.symbol = id.clone();
-                        entity.symbol_claim = claim;
-                    }
-                    retained_id = Some(id);
-                } else {
-                    if result_symbol.is_none() {
-                        result_symbol = env.checker.get_symbol_at_location_exported(tag);
-                    }
-                    let answer = match result_symbol {
-                        Some(symbol) => {
-                            let claim = if symbol_span_covers(
-                                file,
-                                tag,
-                                location.start_byte,
-                                location.end_byte,
-                            ) {
-                                SymbolClaim::Covering
-                            } else {
-                                SymbolClaim::Partial
-                            };
-                            let id = env.id_for(symbol);
-                            // A symbol with no exact key carries no id: the
-                            // entity says it could not name one.
-                            if id.is_empty() {
-                                (id, SymbolClaim::Unresolved)
-                            } else {
-                                (id, claim)
-                            }
-                        }
-                        None => ("".into(), SymbolClaim::Unresolved),
-                    };
-                    if demand.symbol && entity.symbol.is_empty() {
-                        entity.symbol = answer.0.clone();
-                        entity.symbol_claim = answer.1;
-                    }
-                    // A symbol without an id is not retained: a later
-                    // generation may key it.
-                    if binder && !(result_symbol.is_some() && answer.0.is_empty()) {
-                        references.retain_symbol(env, file, span, answer);
+            let answer = match result_symbol {
+                Some(symbol) => {
+                    let claim =
+                        if symbol_span_covers(file, tag, location.start_byte, location.end_byte) {
+                            SymbolClaim::Covering
+                        } else {
+                            SymbolClaim::Partial
+                        };
+                    let id = env.id_for(symbol);
+                    // A symbol with no exact key carries no id: the entity
+                    // says it could not name one.
+                    if id.is_empty() {
+                        (id, SymbolClaim::Unresolved)
+                    } else {
+                        (id, claim)
                     }
                 }
-            }
-            evidence[run_index].symbol(&entity.symbol);
-            if demand.reference_space {
-                entity.reference_space = Some(ReferenceSpace::Neither);
-                let id = if let Some(id) = &retained_id {
-                    (!id.is_empty()).then(|| id.clone())
-                } else {
-                    result_symbol
-                        .map(|symbol| env.id_for(symbol))
-                        .filter(|id| !id.is_empty())
-                };
-                if let Some(id) = id {
-                    match deferrals.as_deref_mut() {
-                        Some(deferrals) => deferrals.spaces.push((index, id)),
-                        None => entity.reference_space = Some(references.space_for(env, &id)),
-                    }
-                }
-            }
-            if demand.runtime_identity
-                && let Some(symbol) = result_symbol
-            {
-                let identity = runtime_identity(env, symbol);
-                entity.runtime_identity = identity.as_str().into();
-            }
-
-            let query = demand
-                .query_location
-                .as_ref()
-                .map_or((location.start_byte, location.end_byte), |query| {
-                    (query.start_byte, query.end_byte)
-                });
-            let query_node = query_cursor.covering(query.0, query.1);
-            let mut query_type: Option<P<Type>> = None;
-            if demand.type_descriptor
-                && !suppressed(&entity.symbol)
-                && let Some(node) = query_node
-            {
-                let value = env.checker.get_type_at_location(node);
-                query_type = Some(value);
-                entity.type_descriptor = Some(memo.descriptor(env.checker, value));
-            }
-            if (demand.callability || demand.constructability || demand.runtime_value_domain)
-                && let Some(node) = query_node
-            {
-                let value = match query_type {
-                    Some(value) => value,
-                    None => {
-                        let value = env.checker.get_type_at_location(node);
-                        query_type = Some(value);
-                        value
-                    }
-                };
-                if demand.callability {
-                    entity.callability = Some(callability_of_type(env.checker, value));
-                }
-                if demand.constructability {
-                    entity.constructability = Some(constructability_of_type(env.checker, value));
-                }
-                if demand.runtime_value_domain {
-                    entity.runtime_value_domain =
-                        Some(runtime_value_domain_of_type(env.checker, value));
-                }
-            }
-            if demand.runtime_identity && demand.callability && demand.constructability {
-                let mut binding_node = query_cursor.exact_expression_at(query.0, query.1);
-                if binding_node.is_none()
-                    && demand.query_location.is_none()
-                    && let Some(node) = result_node
-                    && is_identifier(node)
-                {
-                    // Export/import specifiers are exact identifier demands but
-                    // are not expression nodes in the TypeScript AST. The
-                    // already located result node has the same demanded
-                    // boundaries and exact symbol.
-                    binding_node = Some(node);
-                }
-                if let Some(node) = binding_node {
-                    entity.runtime_binding_kind = runtime_binding_kind(env, node);
-                }
-            }
-            if (demand.primitive_value_domain || demand.primitive_literal_candidates)
-                && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
-            {
-                // The query node's type is reused only when it is the
-                // same node (Go: `primitiveNode != queryNode`).
-                let value = match query_type {
-                    Some(value) if query_node == Some(node) => value,
-                    _ => env.checker.get_type_at_location(node),
-                };
-                if demand.primitive_value_domain {
-                    entity.primitive_value_domain =
-                        primitive_value_domain_of_type(env.checker, value);
-                }
-                if demand.primitive_literal_candidates {
-                    entity.primitive_literal_candidates = Some(Arc::new(
-                        primitive_literal_candidates_of_type(env.checker, value),
-                    ));
-                }
-            }
-            if demand.call_result_domain
-                && let Some(call_node) = query_cursor.exact_call_like_at(query.0, query.1)
-            {
-                let domain = CallRun {
-                    ctx,
-                    env: &mut *env,
-                    references: &mut *references,
-                    caches: &mut caches,
-                    memo: &mut memo,
-                    file,
-                    evidence: &mut evidence[run_index],
-                }
-                .call_result_domain(call_node)?;
-                entity.call_result_domain = Some(domain);
-            }
-            if demand.constant_value
-                && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
-            {
-                entity.constant_value = constant_value_at(env, node);
-            }
-            if demand.array_shape
-                && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
-            {
-                entity.array_shape = Some(array_shape_at(env.checker, node));
-            }
-            if demand.tuple_shape
-                && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
-            {
-                entity.tuple_shape = tuple_shape_at(env.checker, node);
-            }
-            if demand.library_types
-                && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
-            {
-                entity.library_types =
-                    library_types_at(env.checker, env.program, node).map(Arc::new);
-            }
-            note_unported(demand, unavailable);
-            if demand.resolved_call {
-                // Call lookup is anchored at the first token and walks outward;
-                // callers may demand a statement-sized range including a
-                // trailing semicolon. Type/value domains above instead
-                // classify the complete demanded expression range.
-                call_demands.push(CallDemand {
-                    entity_index: index,
-                    node: query_cursor.resolved_call_like_at(query.0, query.1),
-                    object_shape: demand.parameter_object_shape,
-                });
+                None => ("".into(), SymbolClaim::Unresolved),
+            };
+            if demand.symbol && entity.symbol.is_empty() {
+                entity.symbol = answer.0;
+                entity.symbol_claim = answer.1;
             }
         }
-        if !call_demands.is_empty() {
-            CallRun {
+        evidence.symbol(&entity.symbol);
+        if demand.reference_space {
+            entity.reference_space = Some(ReferenceSpace::Neither);
+            if let Some(id) = result_symbol
+                .map(|symbol| env.id_for(symbol))
+                .filter(|id| !id.is_empty())
+            {
+                deferrals.spaces.push((index, id));
+            }
+        }
+        if demand.runtime_identity
+            && let Some(symbol) = result_symbol
+        {
+            let identity = runtime_identity(env, symbol);
+            entity.runtime_identity = identity.as_str().into();
+        }
+
+        let query = demand
+            .query_location
+            .as_ref()
+            .map_or((location.start_byte, location.end_byte), |query| {
+                (query.start_byte, query.end_byte)
+            });
+        let query_node = query_cursor.covering(query.0, query.1);
+        let mut query_type: Option<P<Type>> = None;
+        if demand.type_descriptor
+            && !suppressed(&entity.symbol)
+            && let Some(node) = query_node
+        {
+            let value = env.checker.get_type_at_location(node);
+            query_type = Some(value);
+            entity.type_descriptor = Some(memo.descriptor(env.checker, value));
+        }
+        if (demand.callability || demand.constructability || demand.runtime_value_domain)
+            && let Some(node) = query_node
+        {
+            let value = match query_type {
+                Some(value) => value,
+                None => {
+                    let value = env.checker.get_type_at_location(node);
+                    query_type = Some(value);
+                    value
+                }
+            };
+            if demand.callability {
+                entity.callability = Some(callability_of_type(env.checker, value));
+            }
+            if demand.constructability {
+                entity.constructability = Some(constructability_of_type(env.checker, value));
+            }
+            if demand.runtime_value_domain {
+                entity.runtime_value_domain =
+                    Some(runtime_value_domain_of_type(env.checker, value));
+            }
+        }
+        if demand.runtime_identity && demand.callability && demand.constructability {
+            let mut binding_node = query_cursor.exact_expression_at(query.0, query.1);
+            if binding_node.is_none()
+                && demand.query_location.is_none()
+                && let Some(node) = result_node
+                && is_identifier(node)
+            {
+                // Export/import specifiers are exact identifier demands but
+                // are not expression nodes in the TypeScript AST. The already
+                // located result node has the same demanded boundaries and
+                // exact symbol.
+                binding_node = Some(node);
+            }
+            if let Some(node) = binding_node {
+                entity.runtime_binding_kind = runtime_binding_kind(env, node);
+            }
+        }
+        if (demand.primitive_value_domain || demand.primitive_literal_candidates)
+            && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
+        {
+            // The query node's type is reused only when it is the same node
+            // (Go: `primitiveNode != queryNode`).
+            let value = match query_type {
+                Some(value) if query_node == Some(node) => value,
+                _ => env.checker.get_type_at_location(node),
+            };
+            if demand.primitive_value_domain {
+                entity.primitive_value_domain = primitive_value_domain_of_type(env.checker, value);
+            }
+            if demand.primitive_literal_candidates {
+                entity.primitive_literal_candidates = Some(Arc::new(
+                    primitive_literal_candidates_of_type(env.checker, value),
+                ));
+            }
+        }
+        if demand.call_result_domain
+            && let Some(call_node) = query_cursor.exact_call_like_at(query.0, query.1)
+        {
+            let domain = CallRun {
                 ctx,
                 env: &mut *env,
-                references: &mut *references,
                 caches: &mut caches,
                 memo: &mut memo,
                 file,
-                evidence: &mut evidence[run_index],
+                evidence: &mut evidence,
             }
-            .resolve(&call_demands, &mut results[run_index].entities)?;
+            .call_result_domain(call_node)?;
+            entity.call_result_domain = Some(domain);
         }
-        results[run_index].durable = evidence[run_index].durable;
+        if demand.constant_value
+            && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
+        {
+            entity.constant_value = constant_value_at(env, node);
+        }
+        if demand.array_shape
+            && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
+        {
+            entity.array_shape = Some(array_shape_at(env.checker, node));
+        }
+        if demand.tuple_shape
+            && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
+        {
+            entity.tuple_shape = tuple_shape_at(env.checker, node);
+        }
+        if demand.library_types
+            && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
+        {
+            entity.library_types = library_types_at(env.checker, env.program, node).map(Arc::new);
+        }
+        note_unported(demand, unavailable);
+        if demand.resolved_call {
+            // Call lookup is anchored at the first token and walks outward;
+            // callers may demand a statement-sized range including a trailing
+            // semicolon. Type/value domains above instead classify the
+            // complete demanded expression range.
+            call_demands.push(CallDemand {
+                entity_index: index,
+                node: query_cursor.resolved_call_like_at(query.0, query.1),
+                object_shape: demand.parameter_object_shape,
+            });
+        }
     }
-    if let Some(deferrals) = deferrals {
-        let (writes, library) = caches.take_deferred_library();
-        deferrals.library_writes = writes;
-        deferrals.library = library;
-        deferrals.census = caches.take_census_reads();
+    if !call_demands.is_empty() {
+        CallRun {
+            ctx,
+            env: &mut *env,
+            caches: &mut caches,
+            memo: &mut memo,
+            file,
+            evidence: &mut evidence,
+        }
+        .resolve(&call_demands, &mut result.entities)?;
     }
-    Ok(results)
+    result.durable = evidence.durable;
+    let (writes, library) = caches.take_deferred_library();
+    deferrals.library_writes = writes;
+    deferrals.library = library;
+    deferrals.census = caches.take_census_reads();
+    Ok(result)
 }

@@ -1,6 +1,7 @@
 //! Per-file checkers (`per_file`, `unsafe_boundary` invariant 8): the file
-//! checker's lifecycle, and the facts of a small multi-file project under
-//! per-file checkers against the canonical single checker.
+//! checker's lifecycle, and the facts of a small multi-file project: the
+//! pooled passes against the sequential shared-identity run, and the
+//! `symbols` answers before and after a release.
 
 use super::project_support::{BUNDLER_CONFIG, Scratch};
 use super::symbol_integration::{groups, paths, symbol_demands};
@@ -44,37 +45,18 @@ fn fixture() -> Scratch {
     ])
 }
 
-fn open(scratch: &Scratch, per_file: bool) -> Project {
-    let mut project = scratch.open();
-    if per_file {
-        project.select_per_file_checkers_for_test();
-    }
-    project
+fn open(scratch: &Scratch) -> Project {
+    scratch.open()
 }
 
-/// `text` with every generation-scoped counter id (`symbol:<g>:<n>`)
-/// spelled `symbol:#`: the two modes hand counters out in different orders.
-fn without_counters(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(at) = rest.find("symbol:") {
-        out.push_str(&rest[..at]);
-        let tail = &rest[at + "symbol:".len()..];
-        let digits = tail.bytes().take_while(u8::is_ascii_digit).count();
-        if digits > 0 && tail.as_bytes().get(digits) == Some(&b':') {
-            let more = tail[digits + 1..]
-                .bytes()
-                .take_while(u8::is_ascii_digit)
-                .count();
-            out.push_str("symbol:#");
-            rest = &tail[digits + 1 + more..];
-        } else {
-            out.push_str("symbol:");
-            rest = tail;
-        }
-    }
-    out.push_str(rest);
-    out
+/// Whether `text` holds a generation-scoped counter id (`symbol:<g>:<n>`).
+fn has_counter(text: &str) -> bool {
+    text.match_indices("symbol:").any(|(at, _)| {
+        text[at + "symbol:".len()..]
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_digit())
+    })
 }
 
 fn entity_rows(table: &ProducerTable) -> Vec<EntityFact> {
@@ -128,7 +110,7 @@ fn evidence(closure: &mut DemandClosure, ids: &[std::sync::Arc<str>]) -> String 
         .backend_mut()
         .symbol_evidence(&Context::new(), &queries)
         .unwrap();
-    without_counters(&format!("{facts:#?}"))
+    format!("{facts:#?}")
 }
 
 #[test]
@@ -171,20 +153,25 @@ fn file_checkers_do_not_nest() {
     let _inner = generation.file_checker();
 }
 
+/// The pool's passes (an identity state each) and the sequential run (one
+/// identity state, path order: the key-collision answer) give one table and
+/// one set of `symbols` answers: an id is a function of the program, never
+/// of which pass minted it first. No counter id reaches either.
 #[test]
-fn per_file_facts_equal_the_canonical_facts_with_counters_renamed() {
+fn pooled_and_sequential_passes_answer_the_same_facts() {
     let scratch = fixture();
-    let (mut canonical, canonical_table) = analyze(open(&scratch, false));
-    let (mut per_file, per_file_table) = analyze(open(&scratch, true));
-    let canonical_rows = entity_rows(&canonical_table);
-    let per_file_rows = entity_rows(&per_file_table);
-    assert!(!canonical_rows.is_empty());
-    assert_eq!(
-        without_counters(&format!("{canonical_rows:#?}")),
-        without_counters(&format!("{per_file_rows:#?}")),
-    );
+    let (mut pooled, pooled_table) = analyze(open(&scratch));
+    let mut sequential_project = open(&scratch);
+    sequential_project.select_sequential_for_test();
+    let (mut sequential, sequential_table) = analyze(sequential_project);
+    let pooled_rows = entity_rows(&pooled_table);
+    let sequential_rows = entity_rows(&sequential_table);
+    assert!(!pooled_rows.is_empty());
+    let text = format!("{pooled_rows:#?}");
+    assert!(!has_counter(&text), "a counter id: {text}");
+    assert_eq!(text, format!("{sequential_rows:#?}"));
     // The cross-file census withdrew `parseInt`'s binding (c.ts writes it)
-    // and kept `isNaN`'s, in both modes.
+    // and kept `isNaN`'s.
     let binding = |rows: &[EntityFact], name: &str| {
         let at = B.find(name).unwrap() as u64;
         rows.iter()
@@ -192,60 +179,44 @@ fn per_file_facts_equal_the_canonical_facts_with_counters_renamed() {
             .and_then(|row| row.resolved_call.as_ref())
             .map(|call| call.default_library_binding.is_some())
     };
-    assert_eq!(binding(&per_file_rows, "parseInt(\""), Some(false));
-    assert_eq!(binding(&per_file_rows, "isNaN("), Some(true));
-    assert_eq!(binding(&canonical_rows, "parseInt(\""), Some(false));
+    assert_eq!(binding(&pooled_rows, "parseInt(\""), Some(false));
+    assert_eq!(binding(&pooled_rows, "isNaN("), Some(true));
 
     // `symbols` answers, references included, from the precomputed rows.
-    let canonical_ids = table_ids(&canonical_rows);
-    let per_file_ids = table_ids(&per_file_rows);
-    assert_eq!(canonical_ids.len(), per_file_ids.len());
-    assert_eq!(
-        evidence(&mut canonical, &canonical_ids),
-        evidence(&mut per_file, &per_file_ids)
-    );
+    let ids = table_ids(&pooled_rows);
+    let answers = evidence(&mut pooled, &ids);
+    assert_eq!(answers, evidence(&mut sequential, &ids));
 
-    // After a release the binder ids answer the same again (the reference
-    // index is rebuilt per file); the counter ids of freed passes fail
-    // closed to id-only rows.
-    per_file.release_backend_analysis_state();
-    let binder: Vec<_> = per_file_ids
-        .iter()
-        .filter(|id| crate::model::durable_symbol_id(id))
-        .cloned()
-        .collect();
-    let canonical_binder: Vec<_> = canonical_ids
-        .iter()
-        .filter(|id| crate::model::durable_symbol_id(id))
-        .cloned()
-        .collect();
-    assert_eq!(
-        evidence(&mut canonical, &canonical_binder),
-        evidence(&mut per_file, &binder)
-    );
-    for id in per_file_ids
-        .iter()
-        .filter(|id| !crate::model::durable_symbol_id(id))
-    {
-        let facts = per_file
+    // After a release every id is asked in a scratch pass: a binder id
+    // re-resolves through its key and answers the same; a derived id no
+    // position names fails closed to an id-only row, never to another
+    // symbol's answer.
+    pooled.release_backend_analysis_state();
+    for id in &ids {
+        let query = SymbolQuery {
+            id: id.clone(),
+            references: true,
+            references_only: false,
+        };
+        let before = &sequential
             .backend_mut()
-            .symbol_evidence(
-                &Context::new(),
-                &[SymbolQuery {
-                    id: id.clone(),
-                    references: true,
-                    references_only: false,
-                }],
-            )
-            .unwrap();
-        assert!(facts[0].declarations.is_empty() && facts[0].references.is_empty());
+            .symbol_evidence(&Context::new(), std::slice::from_ref(&query))
+            .unwrap()[0];
+        let after = &pooled
+            .backend_mut()
+            .symbol_evidence(&Context::new(), std::slice::from_ref(&query))
+            .unwrap()[0];
+        assert!(
+            after == before || (after.declarations.is_empty() && after.references.is_empty()),
+            "{id}: {after:?} vs {before:?}"
+        );
     }
 }
 
 #[test]
 fn per_file_runs_never_make_the_program_checker_and_purge_every_handle() {
     let scratch = fixture();
-    let mut project = open(&scratch, true);
+    let mut project = open(&scratch);
     assert!(project.current_mut_for_test().release_checker());
     let path = scratch.path("b.ts");
     let demands: Vec<_> = ["area(", "make(", "parseInt("]
@@ -272,7 +243,7 @@ fn per_file_runs_never_make_the_program_checker_and_purge_every_handle() {
         !project.identities().holds_symbols(),
         "a handle into a freed file checker survived its pass"
     );
-    let stats = project.per_file_stats().unwrap();
+    let stats = project.per_file_stats();
     assert_eq!(stats.demanded_passes, 1);
     // b.ts in its own pass; a.ts and c.ts for their reference contributions.
     assert_eq!(stats.reference_passes, 2);
@@ -292,7 +263,7 @@ fn program_caches_never_land_in_a_file_checkers_region() {
         ("a.ts", a),
         ("b.ts", b),
     ]);
-    let mut project = open(&scratch, true);
+    let mut project = open(&scratch);
     let leaked = crate::unsafe_boundary::leaked_file_checkers();
     let (a_path, b_path) = (scratch.path("a.ts"), scratch.path("b.ts"));
     let demand = |path: &str, source: &str, needle: &str| typefacts::v3::EntityDemand {
@@ -335,17 +306,18 @@ fn program_caches_never_land_in_a_file_checkers_region() {
     );
 }
 
-/// The same cache in canonical mode: filled by the program's single checker's
-/// first `get_semantic_diagnostics`, it must not land in that checker's region,
-/// which `release_checker` frees while the program (and the cache) stays.
+/// The same cache filled by the program's single checker (a program-level
+/// question outside any file checker): its first `get_semantic_diagnostics`
+/// must not land in that checker's region, which `release_checker` frees
+/// while the program (and the cache) stays.
 #[test]
-fn program_caches_survive_a_canonical_release() {
+fn program_caches_survive_a_program_checker_release() {
     let a = "/// <reference path=\"./missing.ts\" />\nexport const one = 1;\n";
     let scratch = Scratch::new(&[
         ("tsconfig.json", super::project_support::SMALL_CONFIG),
         ("a.ts", a),
     ]);
-    let mut project = open(&scratch, false);
+    let mut project = open(&scratch);
     let leaked = crate::unsafe_boundary::leaked_file_checkers();
     let a_path = scratch.path("a.ts");
     let has_6053 = |project: &Project| {

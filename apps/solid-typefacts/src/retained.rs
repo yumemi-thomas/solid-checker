@@ -1,14 +1,13 @@
 //! The materializer of the demand closure (Go: `semantic_retained.go`).
 //!
-//! This producer reuses no demand contribution across an update or across a
+//! The closure reuses no demand contribution across an update or across a
 //! change of the demand set (ADR 0364): every table begins by discarding what
-//! earlier analysis left (`DemandClosure::discard_derived_state`), so each file
-//! is resolved against the compiler, in canonical order after the check-first
-//! pass (ADR 0367), and ids are minted as a fresh program mints them. The
-//! contributions are published in the store only so the packed transition can
-//! release their entity rows. Only binder-level answers (reference spans,
-//! entity symbols and symbol declarations resolved without types) are reused,
-//! by the backend, under recorded dependencies (ADR 0369).
+//! earlier analysis left (`DemandClosure::discard_derived_state`) and asks the
+//! backend for every run. The backend answers each file in a pass of a
+//! checker of its own and reuses a pass while everything it read is
+//! unchanged (`per_file`, `passes`; ADR 0398). The contributions are
+//! published in the store only so the packed transition can release their
+//! entity rows.
 
 use crate::backend::BackendError;
 use crate::closure::{ClosureRetention, DemandClosure, SemanticDemandStages};
@@ -23,22 +22,6 @@ use std::time::Instant;
 use typefacts::producer::{EntityRows, ProducerTable, rust_owned_transport_manifest};
 use typefacts::v3::EntityDemand;
 use typefacts::{AsyncFunctionFact, FileFact, SourceDigest};
-
-/// The async facts for the demands that asked for them, keyed by clean path.
-/// The backend is always asked, even for an empty demand list (Go:
-/// `asyncFunctionsForDemands`).
-fn async_functions_for_demands(
-    closure: &mut DemandClosure,
-    ctx: &Context,
-    demands: &[EntityDemand],
-) -> Result<HashMap<String, Vec<AsyncFunctionFact>>, BackendError> {
-    let locations = async_locations(demands);
-    // Demand-shaped async lookup only: the per-file whole-table walk it
-    // replaced served the retired seed-based materializer.
-    Ok(async_facts_by_path(
-        closure.backend.async_functions_at(ctx, &locations)?,
-    ))
-}
 
 /// The clean locations of the demands that asked for async facts.
 fn async_locations(demands: &[EntityDemand]) -> Vec<typefacts::Location> {
@@ -174,26 +157,11 @@ impl DemandClosure {
         let mut table = ProducerTable::new(generation, "semantic-demand");
         table.sources.clone_from(&source_digests);
 
-        // Check-first (ADR 0367): every demanded file is fully checked, in
-        // path order (the groups are path-ordered), before any demand of the
-        // table is answered, so no answer depends on demand, batch or request
-        // order.
-        // Reuse counts are this table's own (ADR 0369).
+        // Reuse counts are this table's own.
         let _ = self.backend.binder_retention();
-        // Per-file checkers: each file is checked first in a pass of its own,
-        // with its async facts and its run (`ClosureBackend::per_file_demand_runs`).
-        let per_file = self.backend.per_file_checkers();
-        if !per_file {
-            let demanded: Vec<&str> = groups.iter().map(|group| group.path.as_str()).collect();
-            let started = Instant::now();
-            self.backend.check_demanded_files(ctx, &demanded)?;
-            if let Some(trace) = &self.trace {
-                trace.stage("analyze-check-first", started.elapsed());
-            }
-        }
-
-        // The async facts are rebuilt every table; a group's run holds only
-        // the rows that asked for async.
+        // Each file is checked first in a pass of its own, with its async
+        // facts and its run (`ClosureBackend::per_file_demand_runs`); a
+        // group's run holds only the rows that asked for async.
         let mut stages = SemanticDemandStages::default();
         let started = Instant::now();
         let mut async_demands: Vec<EntityDemand> = Vec::new();
@@ -202,14 +170,7 @@ impl DemandClosure {
                 .append_async_demands(&mut async_demands)
                 .map_err(BackendError)?;
         }
-        let mut async_by_path = if per_file {
-            HashMap::new()
-        } else {
-            async_functions_for_demands(self, ctx, &async_demands)?
-        };
-        if !per_file {
-            push_file_facts(&mut table, &source_digests, &mut async_by_path, ctx)?;
-        }
+        let mut async_by_path = HashMap::new();
         stages.async_stage = started.elapsed();
 
         // Every file is resolved: the store is empty at the start of a table.
@@ -218,6 +179,7 @@ impl DemandClosure {
             group.ensure_expanded().map_err(BackendError)?;
         }
         if !groups.is_empty() {
+            let locations = async_locations(&async_demands);
             let demands: Vec<Arc<[EntityDemand]>> = groups
                 .iter()
                 .map(|group| {
@@ -235,22 +197,14 @@ impl DemandClosure {
                     demands,
                 })
                 .collect();
-            let results = if per_file {
-                let locations = async_locations(&async_demands);
-                let (results, facts) = self.backend.per_file_demand_runs(ctx, &runs, &locations)?;
-                async_by_path = async_facts_by_path(facts);
-                results
-            } else {
-                self.backend.semantic_demand_runs(ctx, &runs)?
-            };
+            let (results, facts) = self.backend.per_file_demand_runs(ctx, &runs, &locations)?;
+            async_by_path = async_facts_by_path(facts);
             drop(runs);
             rebuild_contributions(groups, results)?;
         }
-        if per_file {
-            push_file_facts(&mut table, &source_digests, &mut async_by_path, ctx)?;
-        }
-        // Files holding generation-scoped counter ids are counted; the
-        // timings report them.
+        push_file_facts(&mut table, &source_digests, &mut async_by_path, ctx)?;
+        // Files holding an id that is not a binder-level hash are counted;
+        // the timings report them.
         for group in groups.iter() {
             if group
                 .contribution
