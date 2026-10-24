@@ -45,7 +45,7 @@ use solid_facts::core::Span;
 
 pub(crate) use contributions::{
     BuildConstants, CalleeSite, DefinerKey, Hazard, MemberName, MemberRole, MemberUse, ModuleEdge,
-    ModuleKey,
+    ModuleKey, Spelling, SymbolUse,
 };
 pub(crate) use file_table::{FileId, FileTable, FileView, ItemKind, ViewSources};
 pub(crate) use index::{BaseIndex, FileContribution};
@@ -222,6 +222,10 @@ base_indexes! {
         hazards: Hazard => u32 = contributions::hazards;
         /// Reflective-definer keys.
         definers: DefinerKey => () = contributions::definers;
+        /// Uses of entity symbols, by symbol.
+        symbol_uses: Arc<str> => SymbolUse = contributions::symbol_uses;
+        /// Property spellings, by name.
+        spellings: Arc<str> => Spelling = contributions::spellings;
     }
     unread: {
         /// References by symbol.

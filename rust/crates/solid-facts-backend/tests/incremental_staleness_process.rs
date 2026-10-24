@@ -302,10 +302,10 @@ const OPAQUE_G: &str =
     "declare const other: { run(callback: () => void): void };\nexport const ns = other;\n";
 const CALLER_F: &str = "import { count } from \"./S\";\nimport { ns } from \"./G\";\nexport function App() {\n  ns.run(() => count());\n  return <div />;\n}\n";
 
-/// 2.5, fourth path (not reproduced): `literal_receiver_members` says which
-/// member calls have a receiver bound to an exact object literal, possibly
+/// 2.5, fourth path (closed by ADR 03XX-S5b): `literal_receiver_members` says
+/// which member calls have a receiver bound to an exact object literal, possibly
 /// declared in another file, and `call_withheld` (interprocedural graph, result
-/// reads, execution roles) reads it; it is in neither digest. `F` is unchanged
+/// reads, execution roles) reads it; the cross-file part is now in the digest. `F` is unchanged
 /// when the receiver's module flips between a mutated literal (withheld) and an
 /// opaque value, and the two builds differ (asserted), so a retained `F` would
 /// be stale. Today nothing of `F` is retained (source discovery reuses 0 files

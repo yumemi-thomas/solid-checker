@@ -53,33 +53,7 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         function: &solid_facts::ast::FunctionFact,
     ) -> bool {
-        // A class element's or an object literal method's own function. A
-        // function nested inside a method inherits its `method_name`, so that
-        // field alone says nothing.
-        let element_function = file.ast.classes.iter().any(|class| {
-            class
-                .elements
-                .iter()
-                .any(|element| element.value == Some(function.span))
-        }) || file.ast.object_properties.iter().any(|property| {
-            !property.data && file.ast.peel_ts_sugar_span(property.value) == function.span
-        });
-        if element_function {
-            return true;
-        }
-        if function.kind == solid_facts::ast::FunctionKind::Declaration {
-            return function
-                .name
-                .as_ref()
-                .is_some_and(|name| !binding_written(file, name.span));
-        }
-        file.ast.bindings.iter().any(|binding| {
-            binding.immutable
-                && binding.shape == solid_facts::ast::BindingShape::Identifier
-                && binding.initializer.is_some_and(|initializer| {
-                    file.ast.peel_ts_sugar_span(initializer) == function.span
-                })
-        })
+        function_value_is_current_in(file, function)
     }
 
     /// Whether `new C(…)` of this class evaluates to an instance whose
@@ -173,6 +147,23 @@ impl<'a> SemanticLookup<'a> {
         path: &str,
         span: Span,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::BindingFact, SymbolId)> {
+        let resolution = self.binding_resolution_at(path, span)?;
+        let file = &self.facts.files[resolution.file];
+        Some((
+            file,
+            &file.ast.bindings[resolution.binding],
+            resolution.symbol.clone(),
+        ))
+    }
+
+    /// The slot of the file and the ordinal of the binding that the reference
+    /// at `span` of `path` resolves to: [`Self::binding_at_reference`]'s
+    /// answer as positions.
+    pub(super) fn binding_resolution_at(
+        &self,
+        path: &str,
+        span: Span,
+    ) -> Option<&BindingResolution> {
         let references = self.bindings_by_reference().get(path)?;
         let key = |span: Span| (u64::from(span.start), u64::from(span.end));
         // Transparent TypeScript wrappers, however nested, preserve the value
@@ -191,12 +182,7 @@ impl<'a> SemanticLookup<'a> {
                 .then(|| references.get(&key(peeled)))
                 .flatten()
         })?;
-        let file = &self.facts.files[resolution.file];
-        Some((
-            file,
-            &file.ast.bindings[resolution.binding],
-            resolution.symbol.clone(),
-        ))
+        Some(resolution)
     }
 
     pub(super) fn bindings_by_reference(&self) -> &BindingsByReference {
@@ -870,4 +856,39 @@ pub(crate) fn resolved_callee_call_in<'e>(
         .and_then(|entity| entity.resolved_call.as_deref())
         .or_else(|| entity_at(callee).and_then(|entity| entity.resolved_call.as_deref()))
         .or_else(|| entity_at(call_span).and_then(|entity| entity.resolved_call.as_deref()))
+}
+
+/// [`SemanticLookup::function_value_is_current`]: it reads the function's
+/// own file only.
+pub(crate) fn function_value_is_current_in(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    // A class element's or an object literal method's own function. A
+    // function nested inside a method inherits its `method_name`, so that
+    // field alone says nothing.
+    let element_function = file.ast.classes.iter().any(|class| {
+        class
+            .elements
+            .iter()
+            .any(|element| element.value == Some(function.span))
+    }) || file.ast.object_properties.iter().any(|property| {
+        !property.data && file.ast.peel_ts_sugar_span(property.value) == function.span
+    });
+    if element_function {
+        return true;
+    }
+    if function.kind == solid_facts::ast::FunctionKind::Declaration {
+        return function
+            .name
+            .as_ref()
+            .is_some_and(|name| !binding_written(file, name.span));
+    }
+    file.ast.bindings.iter().any(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.initializer.is_some_and(|initializer| {
+                file.ast.peel_ts_sugar_span(initializer) == function.span
+            })
+    })
 }

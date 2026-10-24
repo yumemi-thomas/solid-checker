@@ -34,6 +34,101 @@ pub(crate) fn references(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Ar
         .collect()
 }
 
+/// One use of an entity symbol in a file, as receiver censuses read it.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) enum SymbolUse {
+    /// An identifier in a reference role whose entity is the symbol.
+    Reference(Span),
+    /// An import binding whose local name's entity is the symbol; `imported`
+    /// is false for a default or namespace-like binding with no imported name.
+    ImportLocal { local: Span, imported: bool },
+    /// A reference to the symbol that the binder resolves to this named
+    /// import binding.
+    BoundReference { bound: Span },
+}
+
+/// Uses of entity symbols, by the symbol: the per-file part of the receiver
+/// closure census (`object_members`). Entries come in three runs (references,
+/// import bindings, bound references), each in source-fact order.
+pub(crate) fn symbol_uses(
+    view: &FileView<'_>,
+    _: &BuildConstants<'_>,
+) -> Vec<(Arc<str>, SymbolUse)> {
+    let file = view.file;
+    let mut entries = Vec::new();
+    for id in &file.ast.identifiers {
+        if id.role == solid_facts::ast::IdentifierRole::Reference
+            && let Some(symbol) = view.symbol_at(id.span)
+        {
+            entries.push((symbol.shared(), SymbolUse::Reference(id.span)));
+        }
+    }
+    for import in &file.ast.imports {
+        for binding in &import.bindings {
+            if let Some(symbol) = view.symbol_at(binding.local.span) {
+                entries.push((
+                    symbol.shared(),
+                    SymbolUse::ImportLocal {
+                        local: binding.local.span,
+                        imported: binding.imported.is_some(),
+                    },
+                ));
+            }
+        }
+    }
+    for (reference, bound) in &file.ast.reference_declarations {
+        if let Some(symbol) = view.symbol_at(*reference)
+            && file.ast.imports.iter().any(|import| {
+                import
+                    .bindings
+                    .iter()
+                    .any(|binding| binding.local.span == *bound && binding.imported.is_some())
+            })
+        {
+            entries.push((symbol.shared(), SymbolUse::BoundReference { bound: *bound }));
+        }
+    }
+    entries
+}
+
+/// How a name is spelled as a property.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) enum Spelling {
+    /// A static member access whose property is spelled this way (ordinal in
+    /// `members`; not a computed member).
+    Member(u32),
+    /// A computed member with this literal key, or an object slot with this
+    /// property name.
+    Key,
+}
+
+/// Property spellings, by name: every static member access, and every
+/// literal computed key and destructured slot.
+pub(crate) fn spellings(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Arc<str>, Spelling)> {
+    let file = view.file;
+    let mut entries = Vec::new();
+    for (index, member) in file.ast.members.iter().enumerate() {
+        if file
+            .ast
+            .computed_members
+            .binary_search(&member.span)
+            .is_err()
+            && let Some(text) = file.source_text(member.property)
+        {
+            entries.push((Arc::from(text), Spelling::Member(ordinal(index))));
+        }
+    }
+    for literal in &file.ast.literal_computed_members {
+        entries.push((Arc::from(literal.key.as_str()), Spelling::Key));
+    }
+    for binding in &file.ast.bindings {
+        for slot in &binding.object_slots {
+            entries.push((Arc::from(slot.property.as_str()), Spelling::Key));
+        }
+    }
+    entries
+}
+
 /// A call or a JSX element, by ordinal in its file.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum CalleeSite {

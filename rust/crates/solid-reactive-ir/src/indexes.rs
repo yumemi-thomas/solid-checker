@@ -17,7 +17,9 @@ use super::{SymbolId, SymbolName};
 use crate::owners::function_binding_name;
 
 mod callees;
-pub(crate) use callees::{resolved_callee_call_in, standard_library_declaration_of};
+pub(crate) use callees::{
+    function_value_is_current_in, resolved_callee_call_in, standard_library_declaration_of,
+};
 mod class_prototype;
 mod closed_members;
 mod completion;
@@ -25,9 +27,11 @@ mod components;
 mod compound;
 mod event_delivery;
 mod identity_wrappers;
+mod memo_probes;
 pub(crate) use identity_wrappers::{
     IdentityWrapper, WrapperAt, identity_wrapped_literal_span, identity_wrapper_candidates,
 };
+pub(crate) use memo_probes::probing;
 mod initialization;
 mod intrinsics;
 mod member_values;
@@ -250,14 +254,6 @@ pub(super) struct AssignedMembers {
     /// Host constructors whose prototype is written, each with whether every
     /// declaration of it is in `lib.dom.d.ts`.
     hosts: Vec<(String, bool)>,
-}
-
-/// Whose instances a write through one `prototype` reaches (ADR 0314).
-enum PrototypeOwner {
-    /// The project constructor declared at this span of the writing file.
-    Constructor(Span),
-    /// These host constructors, through this static method's parameter.
-    Hosts(String, Vec<(String, bool)>),
 }
 
 /// Whether some assignment writes the global binding `name` directly
@@ -787,7 +783,9 @@ pub(super) struct SemanticLookup<'a> {
     object_members: OnceLock<crate::object_members::Targets>,
     /// ADR 0358: the handlers each intrinsic element's spread supplies.
     spread_handlers: OnceLock<crate::object_members::SpreadTargets>,
-    literal_receiver_members: OnceLock<HashSet<(String, Span)>>,
+    /// Every member whose receiver is bound to an exact object literal, and
+    /// the ones whose literal is declared in another file.
+    literal_receiver_members: OnceLock<crate::object_members::LiteralReceiverCensus>,
     facts: &'a ProjectFacts,
     /// The Solid-version vocabulary this build analyzes with. Every consumer
     /// of the lookup shares one dialect; a build never mixes two.
@@ -1004,13 +1002,21 @@ impl<'a> SemanticLookup<'a> {
     /// The build as memo computations read it. The first call begins the
     /// build: the store's invalidation runs before any read.
     pub(crate) fn memo_world(&self) -> crate::base::memo::build::BuildWorld<'_> {
+        debug_assert!(
+            !probing(),
+            "a memo probe read a memo: the build would begin from inside its own invalidation"
+        );
         let world = crate::base::memo::build::BuildWorld::new(
             self.base_views_over(self.memos.table()),
             self.memos.store(),
             self.program_closed,
+            self,
         );
-        self.memos
-            .begin_once(|| self.memos.store().begin(world.views(), self.program_closed));
+        self.memos.begin_once(|| {
+            self.memos
+                .store()
+                .begin(world.views(), self.program_closed, self)
+        });
         world
     }
 
@@ -1530,6 +1536,20 @@ impl<'a> SemanticLookup<'a> {
                     }
                 }
             }
+            // `call_withheld` (interprocedural graph, result reads, execution
+            // roles) keeps a call off the older accessor-transport route when
+            // its receiver is bound to an exact object literal, possibly
+            // declared in another file: a receiver that stops being a literal
+            // there moves the answer here with this file unchanged (ADR 0383,
+            // study 2.5). A literal declared in the member's own file moves
+            // with that file's hash, so only the cross-file ones are digested.
+            hasher.update(b"literal-receiver-members\0");
+            for (path, span) in self.literal_receivers_across_files() {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+            }
             // Returned-source proofs inspect callee syntax and binding facts,
             // even when its public type and read summary do not change. Bind
             // the byte identity of every file that can hold such a proof (a
@@ -1773,16 +1793,27 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn object_member_targets(&self) -> &crate::object_members::Targets {
         self.object_members
-            .get_or_init(|| crate::object_members::index(self.facts, self))
+            .get_or_init(|| crate::object_members::index(self))
     }
 
     /// ADR 0358: what each spread argument of an intrinsic element supplies.
     pub(crate) fn spread_handler_targets(&self) -> &crate::object_members::SpreadTargets {
         self.spread_handlers
-            .get_or_init(|| crate::object_members::spread_index(self.facts, self))
+            .get_or_init(|| crate::object_members::spread_index(self))
     }
 
     pub(super) fn literal_receiver_members(&self) -> &HashSet<(String, Span)> {
+        &self.literal_receiver_census().all
+    }
+
+    /// The literal-receiver members whose literal another file declares,
+    /// sorted: the part of the census that moves while the member's own file
+    /// does not.
+    pub(super) fn literal_receivers_across_files(&self) -> &[(String, Span)] {
+        &self.literal_receiver_census().across_files
+    }
+
+    fn literal_receiver_census(&self) -> &crate::object_members::LiteralReceiverCensus {
         self.literal_receiver_members
             .get_or_init(|| crate::object_members::literal_receiver_members(self))
     }

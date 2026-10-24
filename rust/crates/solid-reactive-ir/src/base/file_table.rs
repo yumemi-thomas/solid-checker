@@ -137,6 +137,11 @@ impl FileTable {
         &self.ids
     }
 
+    /// The path `id` names.
+    pub(crate) fn path_of(&self, id: FileId) -> &str {
+        self.interner.path(id)
+    }
+
     pub(crate) fn id_of(&self, path: &str) -> Option<FileId> {
         self.interner
             .get(path)
@@ -276,6 +281,12 @@ impl<'a> FileView<'a> {
             .exact_by_path
             .get(self.path())
             .and_then(|rows| rows.get(&(u64::from(span.start), u64::from(span.end))))
+    }
+
+    /// The symbol of the entity at exactly `span` of this file
+    /// ([`EntitySymbols::at`]).
+    pub(crate) fn symbol_at(&self, span: Span) -> Option<&'a SymbolId> {
+        self.sources.symbols.at(self.path(), span)
     }
 
     pub(crate) fn entity_at(&self, span: Span) -> Option<&'a EntityFact> {

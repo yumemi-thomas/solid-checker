@@ -256,6 +256,158 @@ fn exact_object_member_calls_require_a_closed_const_receiver() {
     }
 }
 
+/// Builds a lookup over one synthetic file reading the retained `store`, and
+/// runs `body` against it, ending the build's memo use after.
+fn with_lookup_in<T>(
+    store: &crate::base::memo::build::MemoStore,
+    source: &str,
+    spans: &[(Span, &str)],
+    body: impl FnOnce(&SemanticLookup<'_>) -> T,
+) -> T {
+    let facts = project(source);
+    let entities = entity_symbols(spans);
+    let ast_indexes = HashMap::default();
+    let symbol_names = HashMap::default();
+    let dialect = solid_dialect::Solid2;
+    let lookup = SemanticLookup::new(
+        &facts,
+        &ast_indexes,
+        &entities,
+        &symbol_names,
+        &dialect,
+        false,
+    )
+    .with_memo_store(store);
+    let answer = body(&lookup);
+    lookup.end_memos();
+    answer
+}
+
+/// Everything the member-resolution memos answer, rendered in a canonical
+/// order.
+fn member_answers(lookup: &SemanticLookup<'_>) -> Vec<String> {
+    let mut answers = Vec::new();
+    answers.extend(
+        lookup
+            .object_member_targets()
+            .iter()
+            .map(|(site, target)| format!("target {site:?} -> {target:?}")),
+    );
+    answers.extend(
+        lookup
+            .spread_handler_targets()
+            .iter()
+            .map(|(site, targets)| format!("spread {site:?} -> {targets:?}")),
+    );
+    answers.extend(
+        lookup
+            .literal_receiver_members()
+            .iter()
+            .map(|member| format!("literal receiver {member:?}")),
+    );
+    answers.sort();
+    for name in ["run", "m", "onClick", "bind"] {
+        answers.push(format!(
+            "reassigned {name}: {} {}",
+            lookup.member_name_may_be_reassigned(name),
+            lookup.member_may_be_reassigned_on_builtin(name)
+        ));
+    }
+    answers.push(format!("assigned {:?}", lookup.assigned_members().hosts));
+    answers
+}
+
+/// A retained store walked through edits answers what a fresh lookup answers
+/// at every step (verify-reused recomputes each reused answer), and an edit
+/// that leaves a file's text alone reuses its answers.
+#[test]
+fn member_resolution_memos_through_edits_equal_a_fresh_build() {
+    let sources = [
+        "const obj = { run() {} }; function use() { obj.run(); }",
+        "const obj = { run() {} }; function use() { obj.run(); } obj.run = other;",
+        "const obj = { run() {} }; function use() { obj.run(); }",
+        "function use() { const obj = { run() {} }; obj.run(); }",
+        "function use() { const obj = { run() {} }; keep(obj); obj.run(); }",
+        "function use() { const obj = { run() {} }; eval('x'); obj.run(); }",
+        "function use() { const obj = { onClick() {} }; return <div {...obj} />; }",
+        "function use() { const obj = { onClick() {} }; keep(obj); return <div {...obj} />; }",
+        "function C() {} C.prototype.m = function () {}; const obj = { run() {} }; function use() { obj.run(); }",
+        "const C = class {}; C.prototype.run = other; const obj = { run() {} }; function use() { obj.run(); }",
+        "function patch(t) { t.prototype.run = other; } patch(Foo); const obj = { run() {} }; function use() { obj.run(); }",
+        "const obj = { run() {} }; function use() { obj.run(); }",
+        "const obj = { run() {} }; function use() { obj.run(); }",
+    ];
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    for source in sources {
+        let ast = solid_facts::ast::extract(PATH, source).unwrap();
+        let spans = ast
+            .identifiers
+            .iter()
+            .filter(|id| &source[id.span.start as usize..id.span.end as usize] == "obj")
+            .map(|id| (id.span, "object"))
+            .collect::<Vec<_>>();
+        let fresh = with_lookup(source, &spans, member_answers);
+        let retained = with_lookup_in(&store, source, &spans, member_answers);
+        assert_eq!(retained, fresh, "{source}");
+    }
+}
+
+/// The receiver closure of an object literal is its own memo, keyed by the
+/// receiver: an unchanged file reuses it, and a use that appears (a second
+/// escape of the receiver) recomputes it to a different answer.
+#[test]
+fn a_receiver_closure_is_reused_until_a_use_of_the_receiver_changes() {
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    let closed = "function use() { const obj = { run() {} }; obj.run(); }";
+    let escaped = "function use() { const obj = { run() {} }; keep(obj); obj.run(); }";
+    let targets = |source: &str| {
+        let ast = solid_facts::ast::extract(PATH, source).unwrap();
+        let spans = ast
+            .identifiers
+            .iter()
+            .filter(|id| &source[id.span.start as usize..id.span.end as usize] == "obj")
+            .map(|id| (id.span, "object"))
+            .collect::<Vec<_>>();
+        let facts = project(source);
+        let entities = entity_symbols(&spans);
+        let ast_indexes = HashMap::default();
+        let symbol_names = HashMap::default();
+        let dialect = solid_dialect::Solid2;
+        let lookup = SemanticLookup::new(
+            &facts,
+            &ast_indexes,
+            &entities,
+            &symbol_names,
+            &dialect,
+            false,
+        )
+        .with_memo_store(&store);
+        let found = lookup.object_member_targets().len();
+        let report = lookup.end_memos().expect("the build read memos");
+        let closure = report
+            .tables
+            .into_iter()
+            .find(|(name, _)| *name == "receiver_closed")
+            .map(|(_, stats)| stats)
+            .expect("the receiver closure table");
+        (found, closure)
+    };
+    let (found, first) = targets(closed);
+    assert_eq!(found, 1);
+    assert_eq!(first.fresh, 1);
+    let (found, again) = targets(closed);
+    assert_eq!(found, 1);
+    assert_eq!(
+        again.fresh + again.changed + again.unchanged,
+        0,
+        "{again:?}"
+    );
+    assert_eq!(again.reused + again.verified, 1, "{again:?}");
+    let (found, edited) = targets(escaped);
+    assert_eq!(found, 0);
+    assert_eq!(edited.changed, 1, "{edited:?}");
+}
+
 /// Call sites keyed by target function span, as `(callee start, end)`.
 /// One entry per invocation, which is what every consumer but the escape
 /// test reads.
