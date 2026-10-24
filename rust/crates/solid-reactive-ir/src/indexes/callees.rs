@@ -165,12 +165,37 @@ impl<'a> SemanticLookup<'a> {
         span: Span,
     ) -> Option<&BindingResolution> {
         let references = self.bindings_by_reference().get(path)?;
+        self.resolution_in(references, self.file_by_path(path), span)
+    }
+
+    /// The symbol [`Self::binding_at_reference`] names at each of `spans` of
+    /// `path`, finding the path's resolutions once.
+    pub(crate) fn binding_symbols_at(&self, path: &str, spans: &[Span]) -> Vec<Option<SymbolId>> {
+        let Some(references) = self.bindings_by_reference().get(path) else {
+            return vec![None; spans.len()];
+        };
+        let file = self.file_by_path(path);
+        spans
+            .iter()
+            .map(|span| {
+                self.resolution_in(references, file, *span)
+                    .map(|resolution| resolution.symbol.clone())
+            })
+            .collect()
+    }
+
+    fn resolution_in<'t>(
+        &self,
+        references: &'t HashMap<(u64, u64), BindingResolution>,
+        file: Option<&FileFacts>,
+        span: Span,
+    ) -> Option<&'t BindingResolution> {
         let key = |span: Span| (u64::from(span.start), u64::from(span.end));
         // Transparent TypeScript wrappers, however nested, preserve the value
         // of the identifier they wrap. A missed wrapped span resolves as that
         // identifier, and only when it peels to exactly one identifier.
         let resolution = references.get(&key(span)).or_else(|| {
-            let file = self.file_by_path(path)?;
+            let file = file?;
             let peeled = file.ast.peel_ts_sugar_span(span);
             let identifier = file
                 .ast
@@ -387,6 +412,17 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         callee: Span,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+        let symbol = self.namespace_member_symbol(file, callee)?;
+        self.namespace_member_target(self.function_for_symbol(symbol))
+    }
+
+    /// The exported value a static member of a namespace import names: what
+    /// [`Self::namespace_member_function`] reads of `file` alone.
+    pub(crate) fn namespace_member_symbol(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<&'a SymbolId> {
         let callee = file.ast.peel_ts_sugar_span(callee);
         if file.ast.computed_members.binary_search(&callee).is_ok() {
             return None;
@@ -405,12 +441,18 @@ impl<'a> SemanticLookup<'a> {
         if !namespace {
             return None;
         }
-        let symbol = self.entities.at(file.path.as_str(), member.property)?;
-        self.function_for_symbol(symbol)
-            .filter(|(target_file, function)| {
-                function.method_name.is_none()
-                    && self.function_value_is_current(target_file, function)
-            })
+        self.entities.at(file.path.as_str(), member.property)
+    }
+
+    /// [`Self::namespace_member_function`]'s answer from the member
+    /// symbol's function: what it reads of the function's file.
+    pub(crate) fn namespace_member_target(
+        &self,
+        found: Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)>,
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+        found.filter(|(target_file, function)| {
+            function.method_name.is_none() && self.function_value_is_current(target_file, function)
+        })
     }
 
     pub(crate) fn function_for_symbol(

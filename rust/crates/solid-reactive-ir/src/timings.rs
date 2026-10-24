@@ -145,6 +145,7 @@ impl BuildTimings {
         self.source_discovery_reused_files = lane.source_discovery_reused_files;
         self.source_discovery_recomputed_files = lane.source_discovery_recomputed_files;
         self.source_discovery_identity_misses = lane.source_discovery_identity_misses;
+        self.source_post_pass_row_sets = lane.source_post_pass_row_sets;
         self.typed_accessors_and_prop_roots = lane.typed_accessors_and_prop_roots;
         self.prop_propagation_and_control_flow = lane.prop_propagation_and_control_flow;
     }
@@ -214,6 +215,7 @@ pub(crate) fn reuse_line(
             "memo": [timings.memo_reused, timings.memo_computed],
             "sourceDiscovery": [timings.source_discovery_reused_files, timings.source_discovery_recomputed_files],
             "sourceDiscoveryIdentityMisses": timings.source_discovery_identity_misses,
+            "sourcePostPassRowSets": timings.source_post_pass_row_sets,
             "reachability": [timings.reachability_reused_files, timings.reachability_recomputed_files],
             "localAccess": [timings.local_access_reused_files, timings.local_access_recomputed_files],
             "interprocGraph": [timings.interprocedural_graph_reused_files, timings.interprocedural_graph_recomputed_files],

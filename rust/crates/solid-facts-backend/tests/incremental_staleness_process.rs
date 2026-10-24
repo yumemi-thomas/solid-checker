@@ -690,3 +690,189 @@ fn a_same_length_edit_of_a_parameter_use_in_another_file_is_not_kept() {
     let back = project.rewrite("G.ts", DECIDING_G);
     assert_retained_is_fresh(&mut builder, &back, &options, "deciding again");
 }
+
+impl Project {
+    /// Adds `name` (a new path), or replaces its whole source.
+    fn add(&mut self, name: &str, source: &str) -> Arc<ProjectFacts> {
+        let root = self.scratch_root.clone().expect("a scratch project");
+        let path = root.join(name);
+        fs::write(&path, source).unwrap();
+        let path = path.to_string_lossy().into_owned();
+        if !self.sources.iter().any(|file| file.path == path) {
+            self.sources.push(SourceFile {
+                path: path.clone(),
+                source: source.into(),
+                compiler_options: CompilerOptions::default(),
+            });
+        }
+        self.rewrite(name, source)
+    }
+
+    /// Removes the file `name` from the project.
+    fn remove(&mut self, name: &str) -> Arc<ProjectFacts> {
+        self.version += 1;
+        let at = self
+            .sources
+            .iter()
+            .position(|file| file.path.ends_with(name))
+            .expect("a file of the project");
+        let file = self.sources.remove(at);
+        let _ = fs::remove_file(&file.path);
+        self.session
+            .edit(
+                vec![SourceChange {
+                    path: file.path,
+                    version: self.version,
+                    source: None,
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap()
+    }
+}
+
+/// The stub the source-discovery post-pass edits read: signals, stores,
+/// their views, effects.
+const PASSES_STUB: &str = r#"declare module "solid-js" {
+  export function createSignal<T>(value: T): [() => T, (value: T) => void];
+  export function createStore<T extends object>(value: T): [T, (next: T) => void];
+  export function omit<T extends object, K extends keyof T>(value: T, ...keys: K[]): Omit<T, K>;
+  export function merge<A extends object, B extends object>(a: A, b: B): A & B;
+  export function createEffect<T>(compute: () => T, apply: (value: T) => void): void;
+}
+
+declare namespace JSX {
+  interface IntrinsicElements {
+    div: Record<string, unknown>;
+  }
+}
+"#;
+
+/// The chains each post-pass follows, in the first file by path order.
+const PASSES_A: &str = r#"import { createSignal, createStore, omit, merge, createEffect } from "solid-js";
+export const [count, setCount] = createSignal(0);
+export const set1 = setCount;
+export const set2 = set1;
+export const set3 = set2;
+export const [store, setStore] = createStore({ a: 1, b: 2, c: 3 });
+export const view1 = omit(store, "a");
+export const view2 = omit(view1, "b");
+export const view3 = omit(view2, "c");
+createEffect(() => view3, (seen) => { void seen; });
+export function Child(props: { value: number }) {
+  return <div>{props.value}</div>;
+}
+export function Parent(props: { value: number }) {
+  const p1 = props;
+  const p2 = p1;
+  const p3 = p2;
+  const read = p3.value;
+  return <Child value={read + merge(p3, { extra: 1 }).value} />;
+}
+"#;
+
+const PASSES_Z: &str = r#"import { count, Child, Parent, set3, view3 } from "./a";
+function Box(props: { v: number }) {
+  return <div>{props.v}</div>;
+}
+export function App() {
+  set3(1);
+  return <div><Parent value={count()} /><Child value={1} /><Box v={view3.b} /><Box v={count()} /></div>;
+}
+"#;
+
+/// A file between the two in path order: another alias of the chains'
+/// ends and another caller of the components.
+const PASSES_M: &str = r#"import { count, Child, set3, view3 } from "./a";
+export const set4 = set3;
+export const view4 = view3;
+export function Mid() {
+  return <Child value={count()} />;
+}
+"#;
+
+/// S7a: the post-passes kept between builds equal a fresh run through the
+/// edits each pass's state can see: an alias removed in the middle of each
+/// chain (setters, store views, props) and put back, the tuple-iteration
+/// veto flipped on and off, and a file added and removed between two others
+/// in path order. A body edit of the last file keeps the rest's row sets.
+#[test]
+fn kept_post_passes_follow_mid_chain_veto_and_mid_order_file_edits() {
+    let Some(mut project) =
+        Project::scratch("post-passes", &[("a.tsx", PASSES_A), ("z.tsx", PASSES_Z)])
+    else {
+        return;
+    };
+    let root = project.scratch_root.clone().unwrap();
+    fs::write(root.join("solid-js.d.ts"), PASSES_STUB).unwrap();
+    let options = RuleOptions::default();
+    let mut builder = IncrementalBuilder::default();
+    let first = project.rewrite("a.tsx", PASSES_A);
+    assert_retained_is_fresh(&mut builder, &first, &options, "cold");
+    let vocabulary = solid_v2().vocabulary;
+    let fresh = |facts: &ProjectFacts| {
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap()
+            .0
+    };
+    let original = fresh(&first);
+    // Each edit must move the fresh answer (so it reaches a pass), and the
+    // retained one with it.
+    let mut step = |facts: &ProjectFacts, label: &str, moves: Option<bool>| {
+        assert_retained_is_fresh(&mut builder, facts, &options, label);
+        if let Some(moves) = moves {
+            assert_eq!(
+                first_difference(&original, &fresh(facts)).is_some(),
+                moves,
+                "{label}: whether the edit moves the answer"
+            );
+        }
+    };
+    for (from, to) in [
+        ("export const set2 = set1;", "export const set2 = () => {};"),
+        (
+            "export const view2 = omit(view1, \"b\");",
+            "export const view2 = omit({ b: 1 }, \"b\");",
+        ),
+        ("  const p2 = p1;", "  const p2 = { value: 1 };"),
+        // What another file's component pass read of this one's accessors.
+        (
+            "export const [count, setCount] = createSignal(0);",
+            "export const [count, setCount] = [() => 0, (next: number) => { void next; }] as const;",
+        ),
+    ] {
+        let edited = PASSES_A.replace(from, to);
+        assert_ne!(edited, PASSES_A, "{from}");
+        let facts = project.rewrite("a.tsx", &edited);
+        step(&facts, &format!("without `{from}`"), Some(true));
+        let facts = project.rewrite("a.tsx", PASSES_A);
+        step(&facts, &format!("with `{from}` again"), Some(false));
+    }
+    let vetoed = format!("{PASSES_Z}eval(\"1\");\n");
+    let facts = project.rewrite("z.tsx", &vetoed);
+    step(&facts, "tuple veto on", Some(true));
+    let facts = project.rewrite("z.tsx", PASSES_Z);
+    step(&facts, "tuple veto off", Some(false));
+    let facts = project.add("m.tsx", PASSES_M);
+    step(&facts, "a file added mid-order", Some(true));
+    let facts = project.remove("m.tsx");
+    step(&facts, "the file removed", None);
+    // A body edit of the caller file keeps the other file's rows and typed
+    // sources (its components read the call site, and recompute).
+    builder.set_shadow_mode(ShadowMode::Off);
+    let edited = PASSES_Z.replace("value={1}", "value={2}");
+    let facts = project.rewrite("z.tsx", &edited);
+    let (_, timings) = builder
+        .build_with_analysis_inputs_shared(
+            &facts,
+            solid_v2().vocabulary,
+            AnalysisInputs::empty(),
+            &options,
+        )
+        .unwrap();
+    let [kept, recomputed] = timings.source_post_pass_row_sets;
+    // a.tsx's rows and typed sources are kept; z.tsx's three row sets and
+    // a.tsx's components recompute.
+    assert_eq!((kept, recomputed), (2, 4), "row sets kept and recomputed");
+}
