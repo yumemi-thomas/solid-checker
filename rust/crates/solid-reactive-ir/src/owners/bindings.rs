@@ -141,41 +141,6 @@ pub(super) fn lazy_wrapper_only_rendered(
     opened
 }
 
-pub(crate) fn returned_binding_references(
-    lookup: &SemanticLookup<'_>,
-    bindings: &HashSet<SymbolId>,
-) -> HashSet<(String, u64, u64)> {
-    bindings
-        .iter()
-        .flat_map(|symbol| lookup.symbol_references(symbol.as_str()))
-        .map(|reference| {
-            (
-                reference.path.to_string(),
-                reference.start_byte,
-                reference.end_byte,
-            )
-        })
-        .collect()
-}
-
-pub(crate) fn returned_binding_reference(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    lookup: &SemanticLookup<'_>,
-    bindings: &HashSet<SymbolId>,
-    references: &HashSet<(String, u64, u64)>,
-) -> bool {
-    lookup
-        .entities()
-        .at(file.path.as_str(), span)
-        .is_some_and(|symbol| bindings.contains(symbol))
-        || references.contains(&(
-            file.path.to_string(),
-            u64::from(span.start),
-            u64::from(span.end),
-        ))
-}
-
 /// The name that binds a function declaration, arrow bindings included.
 ///
 /// `function.name` covers `function X() {}` and `method_name` covers a class

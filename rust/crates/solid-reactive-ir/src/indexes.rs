@@ -35,10 +35,12 @@ mod compound;
 mod event_delivery;
 mod identity_wrappers;
 mod memo_probes;
+mod returned_uses;
 pub(crate) use identity_wrappers::{
     IdentityWrapper, WrapperAt, identity_wrapped_literal_span, identity_wrapper_candidates,
 };
 pub(crate) use memo_probes::probing;
+pub(crate) use returned_uses::{RETURNED_TABLES_FROM, ReturnedTables, UseKind};
 mod initialization;
 mod intrinsics;
 mod member_values;
@@ -65,7 +67,9 @@ pub(super) struct BindingDeclarations<'a> {
     by_name_span: HashMap<(&'a str, Span), &'a solid_facts::ast::BindingFact>,
 }
 
-/// Memo of `returned_callback_invocation_sites` per factory call.
+/// Per-build cache of `returned_callback_invocation_sites` per factory call:
+/// the uses are a memo ([`ReturnedUses`](returned_uses::ReturnedUses)), what
+/// each inherits is assembled from lookup tables that are not memos yet.
 pub(super) type ReturnedInvocationSites = std::sync::Mutex<
     HashMap<(String, Span), std::sync::Arc<Vec<crate::owners::ReturnedCallbackInvocationSite>>>,
 >;
@@ -1221,14 +1225,18 @@ impl<'a> SemanticLookup<'a> {
 
     /// Whether the cross-file proofs can read anything at all from this file.
     ///
-    /// Every read either machine makes of a file *other* than the one it was
-    /// asked about is drawn from one of four AST tables: `calls` (invocation
-    /// sites and the `factory(...)()` shape), `jsx_elements` (a rendered
-    /// adapter), `members` (`lazyResult.preload()`), and `bindings` (the factory
-    /// seed, its destructured tuple slots, and every identifier alias the
-    /// closure walks). A file with all four empty is never resolved against, so
-    /// its TypeScript facts are never consulted either — and editing it cannot
-    /// move any proof.
+    /// Two machines read other files. The use-site machine (is the function a
+    /// factory call returns ever used?) is a memo since ADR 0390 (S5e)
+    /// ([`ReturnedUses`](returned_uses::ReturnedUses)). The binding-chain
+    /// machine ([`crate::owners::returned_primitive_invocation`]: is this call
+    /// an invocation of a returned function, and of which primitive?) is
+    /// not: it walks `binding_at_reference` through the TypeScript reference
+    /// tables, and the consumers that ask it (callee roles, owner context,
+    /// named callbacks, reachability, callback standing) land in per-file
+    /// caches. Every read it makes of a file other than the one it was asked
+    /// about is drawn from four AST tables: `calls`, `jsx_elements`,
+    /// `members`, and `bindings`. A file with all four empty is never
+    /// resolved against, so editing it cannot move any proof.
     fn participates_in_returned_callback_proofs(file: &FileFacts) -> bool {
         !file.ast.calls.is_empty()
             || !file.ast.jsx_elements.is_empty()
@@ -1239,43 +1247,35 @@ impl<'a> SemanticLookup<'a> {
     /// Identity of the whole-project facts that the cross-file
     /// returned-callback proofs read, or `None` when no such proof can exist.
     ///
-    /// Those proofs — "is the function `mapArray` returned in file A ever
-    /// invoked?" — scan every project file's calls, members, JSX tags and
-    /// bindings, yet their answers land in *per-file* cache fragments keyed on
-    /// that one file's source hash. Editing the only file that invokes the
-    /// adapter would otherwise leave the factory file's fragment untouched and
-    /// stale. Folding this digest into those fragments' reuse identity closes
-    /// that hole.
+    /// Those proofs answer "is the function `mapArray` returned in file A ever
+    /// invoked?" and "is this call an invocation of one?", yet their answers
+    /// land in *per-file* cache fragments keyed on that one file's source
+    /// hash. Editing the only file that invokes the adapter would otherwise
+    /// leave the factory file's fragment untouched and stale. Folding this
+    /// digest into those fragments' reuse identity closes that hole.
     ///
-    /// One thing narrows it, provable from the machinery's loop headers alone: a
-    /// file contributes only if a proof can read anything from it at all (see
-    /// [`Self::participates_in_returned_callback_proofs`]). Editing a
-    /// declaration-only module therefore invalidates nothing.
+    /// # Why the contribution is still the whole source hash (ADR 0390 (S5e))
     ///
-    /// # Why the contribution is still the whole source hash
+    /// The use-site answers are memos now, so the first machine could feed the
+    /// digest its answers (the uses of each factory call). The section stays a
+    /// source hash because the second machine cannot: its answer at a call is
+    /// a walk through TypeScript's reference tables (an edit to file A can
+    /// change what a position in file B resolves to while B's own AST is
+    /// byte-identical), it also accepts spans the first one does not (a callee
+    /// wrapped in `as`, `!` or parentheses peels to the identifier), and there
+    /// is no per-call index to enumerate the calls whose answer is positive.
+    /// Besides, the local-access fragments classify each site's span *in the
+    /// using file*, which folds in that file's whole execution context. A
+    /// digest of the first machine's answers would leave a cached using file
+    /// stale when only the second machine's chain moved. Until that machine is
+    /// a memo, a participating file's contribution is its source hash: coarse,
+    /// but never stale. The `returned-source-inputs` section is another proof
+    /// (ADR 0222, 0287) and is untouched.
     ///
-    /// The obvious next step — digest each participating file's *proof-relevant
-    /// projection* (its call callees, member invocations and alias bindings)
-    /// instead of its source — is not sound, for two independent reasons.
-    ///
-    /// The proofs resolve every position through the project-wide TypeScript
-    /// symbol and reference tables: `returned_binding_reference` accepts a span
-    /// because some adapter symbol's *reference list* covers it, and
-    /// `returned_primitive_invocation` walks binding chains through
-    /// `binding_at_reference`. Those tables are a whole-project product, so an
-    /// edit to file A can change what a position in file B resolves to while B's
-    /// own AST is byte-identical. A projection of B alone cannot see that.
-    ///
-    /// And the local-access fragments depend on more than whether a site exists:
-    /// `returned_factory_callback_execution_role` classifies each site's span
-    /// *in the using file*, so the answer folds in that file's whole execution
-    /// context. A projection would have to carry the classifier's entire input,
-    /// which is the file.
-    ///
-    /// Decomposing the digest per file therefore needs the project-wide reverse
-    /// index from adapter bindings to their use sites that the machinery does
-    /// not build. Until it exists, a participating file's contribution stays its
-    /// source hash: coarse, but never stale.
+    /// The caches that still rely on it: every per-file cache whose answer is
+    /// computed through `returned_primitive_invocation` or through the
+    /// returned-callback sites (source discovery, local accesses,
+    /// interprocedural graph and results, owners, reachability).
     pub(super) fn returned_callback_proof_digest(&self) -> Option<CrossFileProofDigest> {
         *self.returned_callback_proof_digest.get_or_init(|| {
             if !self.models_returned_callbacks() {
