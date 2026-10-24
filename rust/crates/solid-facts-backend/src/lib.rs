@@ -398,6 +398,8 @@ impl TypeFactsSession {
                     server_retained_files: timings.server_retained_files,
                     server_recomputed_files: timings.server_recomputed_files,
                     server_non_durable_files: timings.server_non_durable_files,
+                    client_close_symbols: timings.client_close_symbols,
+                    client_closure_patched: timings.client_closure_patched,
                 });
         self.last_table_changes =
             self.session

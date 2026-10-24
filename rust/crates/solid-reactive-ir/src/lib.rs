@@ -1327,6 +1327,10 @@ pub struct BuildTimings {
     pub reused: bool,
     pub source_discovery_reused_files: u64,
     pub source_discovery_recomputed_files: u64,
+    /// Retained source-discovery files whose identity (source hash and Type
+    /// Facts delta) no longer matched; the rest of the recomputed retained
+    /// files missed on the cross-file proof digest.
+    pub source_discovery_identity_misses: u64,
     pub interprocedural_graph_reused_files: u64,
     pub interprocedural_graph_recomputed_files: u64,
     pub interprocedural_result_reused_files: u64,
@@ -1337,6 +1341,13 @@ pub struct BuildTimings {
     /// machine. See `StructuredReturnDiscovery::work`.
     pub interprocedural_export_work: u64,
     pub typescript_indexes_reused: bool,
+    /// The retained TypeScript indexes were patched from the Type Facts
+    /// delta (a subset of `typescript_indexes_reused`).
+    pub typescript_indexes_patched: bool,
+    /// The runtime-configuration scan ([`runtime_configuration`]): files whose
+    /// scan the Type Facts delta proved unchanged, and files scanned.
+    pub runtime_scan_reused_files: u64,
+    pub runtime_scan_scanned_files: u64,
     pub reachability_reused: bool,
     pub reachability_reused_files: u64,
     pub reachability_recomputed_files: u64,
@@ -1468,6 +1479,7 @@ impl IncrementalBuilder {
             facts.project_id.clone(),
             facts.generation.get(),
         );
+        let mut runtime_scan_counts = (0, 0);
         let premise = match &self.runtime_configuration {
             Some((key, premise)) if *key == premise_key => premise.clone(),
             _ => {
@@ -1476,6 +1488,7 @@ impl IncrementalBuilder {
                     dialect,
                     &mut self.runtime_configuration_scan,
                 );
+                runtime_scan_counts = self.runtime_configuration_scan.last_counts;
                 self.runtime_configuration = Some((premise_key, premise.clone()));
                 premise
             }
@@ -1556,6 +1569,13 @@ impl IncrementalBuilder {
         timings.total = total_started.elapsed();
         timings.cache_lookup = cache_lookup;
         timings.shadow = shadow_elapsed;
+        (
+            timings.runtime_scan_reused_files,
+            timings.runtime_scan_scanned_files,
+        ) = runtime_scan_counts;
+        if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {
+            eprintln!("{}", timings::reuse_line(facts, &timings, domain_reset));
+        }
         Ok((program, timings))
     }
 
@@ -1572,8 +1592,9 @@ impl IncrementalBuilder {
 
     /// Applies the idle-memory policy without invalidating the current result.
     ///
-    /// `Balanced` targets the three cache families that profiling found to
-    /// account for most retained bytes per millisecond of recomputation.
+    /// `Balanced` targets the cache families that profiling found to
+    /// account for most retained bytes per millisecond of recomputation; it
+    /// keeps the TypeScript indexes, which an exact Type Facts delta patches.
     /// `Compact` releases every derived index while preserving the current
     /// generation and its source-discovery domain identity.
     pub fn retain_for_idle(&mut self, retention: CacheRetention) {

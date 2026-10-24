@@ -432,3 +432,106 @@ fn the_transport_names_only_paths_whose_rows_changed() {
         previous = table;
     }
 }
+
+/// Every id a table's rows name (entity symbols, call targets) and each one's
+/// `symbols` answer with references, as text.
+fn answers(project: &mut Project, demands: &[EntityDemand]) -> BTreeMap<String, String> {
+    let ctx = Context::new();
+    let groups = groups(demands);
+    let runs: Vec<SemanticDemandRun<'_>> = groups
+        .iter()
+        .map(|group| SemanticDemandRun {
+            path: &group.path,
+            demands: &group.demands,
+        })
+        .collect();
+    let (results, _) = project.per_file_demand_runs(&ctx, &runs, &[]).unwrap();
+    let mut ids: Vec<std::sync::Arc<str>> = results
+        .iter()
+        .flat_map(|result| &result.entities)
+        .flat_map(|entity| {
+            std::iter::once(entity.symbol.clone())
+                .chain(entity.resolved_call.iter().map(|call| call.target.clone()))
+        })
+        .filter(|id| !id.is_empty())
+        .collect();
+    ids.sort();
+    ids.dedup();
+    answers_of(project, &ids)
+}
+
+fn answers_of(project: &mut Project, ids: &[std::sync::Arc<str>]) -> BTreeMap<String, String> {
+    let queries: Vec<SymbolQuery> = ids
+        .iter()
+        .map(|id| SymbolQuery {
+            id: id.clone(),
+            references: true,
+            references_only: false,
+        })
+        .collect();
+    project
+        .per_file_symbol_evidence(&Context::new(), &queries)
+        .unwrap()
+        .into_iter()
+        .map(|fact| (fact.id.to_string(), format!("{fact:?}")))
+        .collect()
+}
+
+/// Instant-edits P4: after a table the merged passes name every id whose
+/// `symbols` answer (row or references) may differ from the previous table's,
+/// so a client patches its closure instead of asking every row again. Each
+/// edit's named set must hold every previously answered id whose answer
+/// moved; a table that cannot say (a file entering or leaving the program
+/// rebuilds the reference index) names nothing.
+#[test]
+fn the_merged_passes_name_every_changed_symbol_answer() {
+    let ctx = Context::new();
+    let scratch = Scratch::new(&files());
+    let mut sources: BTreeMap<String, String> = files()
+        .into_iter()
+        .filter(|(name, _)| name.ends_with(".ts"))
+        .map(|(name, text)| (name.to_owned(), text.to_owned()))
+        .collect();
+    let mut project = open(&scratch, 2, true);
+    let mut previous = answers(&mut project, &demands(&scratch, &sources));
+    assert_eq!(project.per_file_symbol_changes(), None, "the first table");
+    let edits: [(&str, Option<String>, bool); 6] = [
+        ("a.ts", Some(A.replace("x + 1", "x + 2")), true),
+        ("c.ts", Some(format!("// moved\n{C}")), true),
+        ("b.ts", Some(B.replace("g.value", "g.value + 1")), true),
+        ("f.ts", Some("export const ff = 1;\n".to_owned()), false),
+        ("e.ts", Some(E.replace("ez = z", "ez = z + 1")), true),
+        ("c.ts", Some(C.to_owned()), true),
+    ];
+    for (version, (name, text, exact)) in edits.into_iter().enumerate() {
+        match &text {
+            Some(text) => sources.insert(name.to_owned(), text.clone()),
+            None => sources.remove(name),
+        };
+        let change = FileChange {
+            path: scratch.path(name),
+            source: text.clone().unwrap_or_default().into_bytes(),
+            deleted: text.is_none(),
+            version: version as u64 + 1,
+        };
+        ClosureBackend::update(&mut project, &ctx, &[change]).unwrap();
+        let current = answers(&mut project, &demands(&scratch, &sources));
+        let named = project.per_file_symbol_changes();
+        assert_eq!(named.is_some(), exact, "{name}: exactness");
+        if let Some(named) = named {
+            let held: Vec<std::sync::Arc<str>> =
+                previous.keys().map(|id| id.as_str().into()).collect();
+            let now = answers_of(&mut project, &held);
+            for (id, answer) in &previous {
+                if now.get(id) != Some(answer) {
+                    assert!(
+                        named.iter().any(|named| named.as_ref() == id),
+                        "{name}: {id} moved but is not named ({answer} -> {:?})",
+                        now.get(id)
+                    );
+                }
+            }
+        }
+        previous = current;
+    }
+}

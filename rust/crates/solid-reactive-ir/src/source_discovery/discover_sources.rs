@@ -200,6 +200,7 @@ fn merge_file_source_contributions(
                 .map(|file| file.path.as_str())
                 .collect::<HashSet<_>>();
             cache.retain(|path, _| current_paths.contains(path.as_str()));
+            let mut identity_misses = 0;
             let reusable_paths = facts
                 .files
                 .iter()
@@ -210,18 +211,22 @@ fn merge_file_source_contributions(
                             // A returned-source proof's callee syntax is bound
                             // by `cross_file_proof_digest` (ADR 0222); its
                             // symbol resolution by the per-file delta.
-                            source_discovery_identity_matches(
+                            let identity = source_discovery_identity_matches(
                                 &cached.identity,
                                 file.path.as_str(),
                                 &file.source_hash,
                                 typescript_unchanged,
                                 typescript_indexes.source_discovery_delta.as_ref(),
-                            ) && cached.cross_file_proofs
-                                == semantic_lookup.cross_file_proof_digest()
+                            );
+                            identity_misses += u64::from(!identity);
+                            identity
+                                && cached.cross_file_proofs
+                                    == semantic_lookup.cross_file_proof_digest()
                         })
                         .then_some(file.path.as_str())
                 })
                 .collect::<HashSet<_>>();
+            build_timings.source_discovery_identity_misses = identity_misses;
             let recomputed = facts
                 .files
                 .iter()

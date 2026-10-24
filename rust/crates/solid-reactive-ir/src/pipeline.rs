@@ -345,6 +345,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             })
             .flatten();
         let indexes_patched = patch_timings.is_some();
+        build_timings.typescript_indexes_patched = indexes_patched;
         if let Some((alias_roots, entity_symbols)) = patch_timings {
             build_timings.alias_roots = alias_roots;
             build_timings.entity_symbols = entity_symbols;

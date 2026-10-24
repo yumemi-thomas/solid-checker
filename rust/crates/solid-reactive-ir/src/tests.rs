@@ -606,6 +606,162 @@ fn exact_index_patch_replaces_local_alias_ids_without_retargeting_the_graph() {
     );
 }
 
+/// Instant-edits P4: an import added or removed by an edit adds or removes
+/// one alias row. It moves no other root (a retained alias pointing at it
+/// is rejected separately), so the indexes are patched, and equal a rebuild.
+#[test]
+fn exact_index_patch_adds_and_removes_an_alias_like_a_rebuild() {
+    let symbol = |id: &str, target: &str, declarations: Vec<Declaration>| SymbolFact {
+        id: id.into(),
+        alias_target: target.into(),
+        declarations: declarations.into(),
+        references: Vec::new().into(),
+    };
+    let entity = |symbol: &str, start: u64| EntityFact {
+        location: Location {
+            path: "fixture.ts".into(),
+            start_byte: start,
+            end_byte: start + 1,
+        },
+        symbol: symbol.into(),
+        symbol_claim: typefacts::SymbolClaim::Covering,
+        type_descriptor: None,
+        resolved_call: None,
+        callability: None,
+        constructability: None,
+        runtime_binding_kind: None,
+        runtime_value_domain: None,
+        primitive_value_domain: typefacts::PrimitiveValueDomain::default(),
+        primitive_literal_candidates: None,
+        call_result_domain: None,
+        constant_value: None,
+        array_shape: None,
+        tuple_shape: None,
+        library_types: None,
+        reference_space: None,
+        runtime_identity: "".into(),
+    };
+    let without = typescript_table(
+        1,
+        Vec::new(),
+        vec![entity("root", 1)],
+        vec![symbol(
+            "root",
+            "",
+            vec![declaration("createSignal", "solid.d.ts", 1)],
+        )],
+        Vec::new(),
+    );
+    let with = typescript_table(
+        2,
+        Vec::new(),
+        vec![entity("root", 1), entity("import", 20)],
+        // In id order, as a retained table holds its rows.
+        vec![
+            symbol(
+                "import",
+                "root",
+                vec![declaration("createSignal", "fixture.ts", 20)],
+            ),
+            symbol(
+                "root",
+                "",
+                vec![declaration("createSignal", "solid.d.ts", 1)],
+            ),
+        ],
+        Vec::new(),
+    );
+    for (old, current) in [(&without, &with), (&with, &without)] {
+        let symbols_by_id = current
+            .symbols()
+            .map(|symbol| (symbol.id(), symbol))
+            .collect::<HashMap<_, _>>();
+        let mut patched = typescript_index_cache(old);
+        let changes = solid_facts::TypeScriptChanges {
+            unchanged: false,
+            entity_paths: vec!["fixture.ts".into()],
+            symbol_ids: vec!["import".into()],
+            file_paths: Vec::new(),
+        };
+        assert!(
+            patch_typescript_indexes(
+                &mut patched,
+                current,
+                &symbols_by_id,
+                &solid_dialect::Solid2,
+                &changes
+            )
+            .is_some()
+        );
+        let fresh = typescript_index_cache(current);
+        assert_eq!(patched.symbol_alias_targets, fresh.symbol_alias_targets);
+        assert_eq!(patched.aliases, fresh.aliases);
+        assert_eq!(patched.symbols_by_root, fresh.symbols_by_root);
+        assert_eq!(patched.source_declarations, fresh.source_declarations);
+        assert_eq!(patched.entities, fresh.entities);
+        assert_eq!(patched.symbol_names, fresh.symbol_names);
+        assert_eq!(
+            patched.source_discovery_symbol_semantics,
+            fresh.source_discovery_symbol_semantics
+        );
+    }
+}
+
+/// A retained alias pointing at an id that becomes an alias would move that
+/// alias's root: the indexes are rebuilt.
+#[test]
+fn exact_index_patch_rejects_an_alias_chain_through_a_new_alias() {
+    let symbol = |id: &str, target: &str| SymbolFact {
+        id: id.into(),
+        alias_target: target.into(),
+        declarations: Vec::new().into(),
+        references: Vec::new().into(),
+    };
+    let old = typescript_table(
+        1,
+        Vec::new(),
+        Vec::new(),
+        vec![
+            symbol("root", ""),
+            symbol("middle", ""),
+            symbol("outer", "middle"),
+        ],
+        Vec::new(),
+    );
+    let current = typescript_table(
+        2,
+        Vec::new(),
+        Vec::new(),
+        vec![
+            symbol("root", ""),
+            symbol("middle", "root"),
+            symbol("outer", "middle"),
+        ],
+        Vec::new(),
+    );
+    let symbols_by_id = current
+        .symbols()
+        .map(|symbol| (symbol.id(), symbol))
+        .collect::<HashMap<_, _>>();
+    let mut patched = typescript_index_cache(&old);
+    let changes = solid_facts::TypeScriptChanges {
+        unchanged: false,
+        entity_paths: Vec::new(),
+        symbol_ids: vec!["middle".into()],
+        file_paths: Vec::new(),
+    };
+    assert!(
+        patch_typescript_indexes(
+            &mut patched,
+            &current,
+            &symbols_by_id,
+            &solid_dialect::Solid2,
+            &changes
+        )
+        .is_none()
+    );
+}
+
 #[test]
 fn exact_index_patch_does_not_treat_references_as_source_discovery_semantics() {
     let table = |reference_start| {
