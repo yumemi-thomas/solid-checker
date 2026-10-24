@@ -15,6 +15,9 @@ pub type SymbolId = Arc<str>;
 pub struct SemanticDemandRun<'a> {
     pub path: &'a str,
     pub demands: &'a [EntityDemand],
+    /// The retained allocation `demands` borrows from, when there is one:
+    /// a kept pass compares it by identity instead of by value.
+    pub shared: Option<&'a std::sync::Arc<[EntityDemand]>>,
 }
 
 /// One input run's aligned semantic answer (Go: `SemanticDemandRunResult`).
@@ -28,6 +31,36 @@ pub struct SemanticDemandRun<'a> {
 pub struct SemanticDemandRunResult {
     pub entities: Vec<EntityFact>,
     pub durable: bool,
+}
+
+/// One run's answer to a table: its aligned result, or the entity rows a
+/// pass already prepared from it (`contributions::prepare_rows`) and
+/// completed (ADR 0398).
+#[derive(Clone, Debug, PartialEq)]
+pub enum RunAnswer {
+    Result(SemanticDemandRunResult),
+    Rows {
+        entities: Arc<[EntityFact]>,
+        durable: bool,
+    },
+}
+
+impl RunAnswer {
+    /// The run's entity rows and whether every identity in them is
+    /// binder-level.
+    pub fn into_rows(
+        self,
+        path: &str,
+        demands: &[EntityDemand],
+    ) -> Result<(Arc<[EntityFact]>, bool), String> {
+        match self {
+            Self::Result(result) => Ok((
+                crate::contributions::prepare_rows(path, demands, result.entities)?.into(),
+                result.durable,
+            )),
+            Self::Rows { entities, durable } => Ok((entities, durable)),
+        }
+    }
 }
 
 /// An entity row carrying only its location.

@@ -98,6 +98,7 @@ fn table_with(project: &mut Project, demands: &[EntityDemand], sequential: bool)
         .map(|group| SemanticDemandRun {
             path: &group.path,
             demands: &group.demands,
+            shared: None,
         })
         .collect();
     let locations: Vec<Location> = demands
@@ -106,14 +107,26 @@ fn table_with(project: &mut Project, demands: &[EntityDemand], sequential: bool)
         .map(|demand| demand.location.clone())
         .collect();
     let (results, facts) = if sequential {
-        project.sequential_demand_runs(&ctx, &runs, &locations)
+        let (results, facts) = project
+            .sequential_demand_runs(&ctx, &runs, &locations)
+            .unwrap();
+        (
+            results
+                .into_iter()
+                .map(crate::model::RunAnswer::Result)
+                .collect(),
+            facts,
+        )
     } else {
-        project.per_file_demand_runs(&ctx, &runs, &locations)
-    }
-    .unwrap();
+        project
+            .per_file_demand_runs(&ctx, &runs, &locations)
+            .unwrap()
+    };
+    // As the table holds them: one row per location.
+    let results = entity_rows(results, &runs);
     let mut ids: Vec<std::sync::Arc<str>> = Vec::new();
     for result in &results {
-        for entity in &result.entities {
+        for entity in result.iter() {
             ids.push(entity.symbol.clone());
             if let Some(call) = &entity.resolved_call {
                 ids.push(call.target.clone());
@@ -133,6 +146,18 @@ fn table_with(project: &mut Project, demands: &[EntityDemand], sequential: bool)
         .collect();
     let evidence = project.per_file_symbol_evidence(&ctx, &queries).unwrap();
     format!("{results:#?}\n{facts:#?}\n{evidence:#?}")
+}
+
+/// Each run's entity rows (and durability), as the table holds them.
+fn entity_rows(
+    answers: Vec<crate::model::RunAnswer>,
+    runs: &[SemanticDemandRun<'_>],
+) -> Vec<std::sync::Arc<[typefacts::EntityFact]>> {
+    answers
+        .into_iter()
+        .zip(runs)
+        .map(|(answer, run)| answer.into_rows(run.path, run.demands).unwrap().0)
+        .collect()
 }
 
 fn first_line_difference(left: &str, right: &str) -> Option<String> {
@@ -445,12 +470,14 @@ fn answers(project: &mut Project, demands: &[EntityDemand]) -> BTreeMap<String, 
         .map(|group| SemanticDemandRun {
             path: &group.path,
             demands: &group.demands,
+            shared: None,
         })
         .collect();
     let (results, _) = project.per_file_demand_runs(&ctx, &runs, &[]).unwrap();
+    let results = entity_rows(results, &runs);
     let mut ids: Vec<std::sync::Arc<str>> = results
         .iter()
-        .flat_map(|result| &result.entities)
+        .flat_map(|result| result.iter())
         .flat_map(|entity| {
             std::iter::once(entity.symbol.clone())
                 .chain(entity.resolved_call.iter().map(|call| call.target.clone()))

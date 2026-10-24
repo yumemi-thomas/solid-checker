@@ -44,7 +44,7 @@ use crate::shape::{
 };
 use crate::trace::SharedTrace;
 use crate::unsafe_boundary::{Generation, HostLease, UpdateKind};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 use tsrs_ast::{
@@ -188,6 +188,9 @@ pub struct Project {
     pub(crate) references: ReferenceIndex,
     /// Digests of the accepted program's inputs (pass reuse, `passes`).
     pub(crate) inputs: ProgramInputs,
+    /// The last source inventory (`source_digests`) and the files replaced
+    /// in place since; `None` after a rebuilt chain.
+    source_digests: Option<(Vec<SourceDigest>, HashSet<String>)>,
     /// Demanded facts left absent because their family is not ported yet.
     pub unavailable: Unavailable,
     /// Per-file `Source*` facts across generations (Go: `sourceFactsMemo`).
@@ -237,6 +240,7 @@ impl Project {
             ids: Identities::new(1),
             references: ReferenceIndex::default(),
             inputs: ProgramInputs::default(),
+            source_digests: None,
             unavailable: Unavailable::default(),
             source_memo: HashMap::new(),
             per_file: crate::per_file::PerFile::new(),
@@ -246,8 +250,17 @@ impl Project {
         let program = generation.program();
         // A checker of its own, freed after (the exported identities are
         // pointer-free), so the program's single checker is never made.
+        let scanned = crate::identity::scan_exports_on_workers(
+            generation,
+            program.source_files(),
+            project.per_file.workers,
+        );
         let pass = generation.file_checker();
-        generation.with_checker(|checker| project.ids.seed_exported(program, checker));
+        generation.with_checker(|checker| {
+            project
+                .ids
+                .seed_exported_with(program, checker, Some(scanned));
+        });
         project.ids.purge_scope_pointers();
         drop(pass);
         project.graph = ImportGraph::rebuild(program);
@@ -539,15 +552,41 @@ impl ClosureBackend for Project {
             .ok_or_else(|| BackendError(ERR_CLOSED.to_owned()))?;
         // `Text(file)` is the SHA-256 the digest spells, memoized while the
         // file's parse is reused.
+        let program = generation.program();
+        if self.source_digests.is_none() {
+            self.inputs.prime(program, self.per_file.workers);
+        }
         let inputs = &mut self.inputs;
-        let mut digests: Vec<SourceDigest> = generation
-            .program()
+        // Kept while the chain reuses every parse: only the replaced files'
+        // rows are computed again.
+        if let Some((digests, dirty)) = &mut self.source_digests {
+            let mut kept = true;
+            for path in dirty.drain() {
+                let file = program
+                    .get_source_file(&path)
+                    .filter(|file| !file.is_declaration_file() && clean(file.file_name()) == path);
+                match (
+                    file,
+                    digests.binary_search_by(|digest| (*digest.path).cmp(&path)),
+                ) {
+                    (Some(file), Ok(at)) => {
+                        digests[at] = source_digest_of(&path, &inputs.text(file))
+                    }
+                    _ => kept = false,
+                }
+            }
+            if kept {
+                return Ok(digests.clone());
+            }
+        }
+        let mut digests: Vec<SourceDigest> = program
             .source_files()
             .iter()
             .filter(|file| !file.is_declaration_file())
             .map(|file| source_digest_of(&clean(file.file_name()), &inputs.text(*file)))
             .collect();
         digests.sort_by(|left, right| left.path.cmp(&right.path));
+        self.source_digests = Some((digests.clone(), HashSet::new()));
         Ok(digests)
     }
 
@@ -593,6 +632,7 @@ impl ClosureBackend for Project {
         self.ids.close();
         self.references.forget();
         self.inputs = ProgramInputs::default();
+        self.source_digests = None;
         self.source_memo.clear();
         self.generation = None;
         self.graph = ImportGraph::default();
@@ -627,7 +667,8 @@ impl ClosureBackend for Project {
         runs: &[SemanticDemandRun<'_>],
     ) -> Result<Vec<SemanticDemandRunResult>, BackendError> {
         check(ctx)?;
-        Ok(self.per_file_demand_runs(ctx, runs, &[])?.0)
+        // Aligned results: the pooled passes keep only rows.
+        Ok(self.sequential_results(ctx, runs, &[])?.0)
     }
 
     /// Go: `AsyncFunctionsAt` (`source_facts`).
@@ -644,7 +685,7 @@ impl ClosureBackend for Project {
         ctx: &Context,
         runs: &[SemanticDemandRun<'_>],
         async_locations: &[Location],
-    ) -> Result<(Vec<SemanticDemandRunResult>, Vec<AsyncFunctionFact>), BackendError> {
+    ) -> Result<(Vec<crate::model::RunAnswer>, Vec<AsyncFunctionFact>), BackendError> {
         Project::per_file_demand_runs(self, ctx, runs, async_locations)
     }
 
@@ -939,6 +980,17 @@ impl Project {
             Vec::new()
         };
         let candidate_kind = candidate.kind();
+        // Whether the edited file adds to the global scope or augments a
+        // module, before or after: then any module's exports can move.
+        let global_exports = changed_paths.iter().any(|path| {
+            [generation.program(), candidate.program()]
+                .iter()
+                .any(|program| {
+                    program
+                        .get_source_file(path)
+                        .is_none_or(crate::inputs::contributes_to_global_scope)
+                })
+        });
 
         // Commit: nothing below can fail.
         let generation = self.generation.as_mut().expect("checked live above");
@@ -947,7 +999,13 @@ impl Project {
         let reused = candidate_kind == UpdateKind::Reused;
         self.inputs
             .program_changed(reused.then_some(incremental_path.as_str()));
-        if !reused {
+        if reused {
+            self.per_file.reuse.file_replaced(&incremental_path);
+            if let Some((_, dirty)) = &mut self.source_digests {
+                dirty.insert(clean(&incremental_path));
+            }
+        } else {
+            self.source_digests = None;
             // A rebuilt chain read the file system again. Kept passes are
             // checked path by path against the new program's text, exports
             // and resolutions at the next table (`passes::Reuse::refresh`).
@@ -967,13 +1025,28 @@ impl Project {
         let identities_started = Instant::now();
         // The exports scan in a checker of its own, freed after (its output
         // is pointer-free).
+        // A parse-reusing update kept every other file's parse and
+        // resolutions: only the modules that reach the edited file can export
+        // something else.
+        let rescan = (reused && !global_exports)
+            .then(|| self.per_file.reuse.reaching(&clean(&incremental_path)))
+            .flatten();
+        // Every module rescanned: on the pass workers first.
+        let scanned = rescan.is_none().then(|| {
+            crate::identity::scan_exports_on_workers(
+                accepted,
+                program.source_files(),
+                self.per_file.workers,
+            )
+        });
         let pass = accepted.file_checker();
         accepted.with_checker(|checker| {
             ids.after_update(
                 generation_number,
                 program,
                 checker,
-                incremental.then_some(incremental_path.as_str()),
+                rescan.as_deref(),
+                scanned,
                 current_exports,
             );
         });
@@ -1109,7 +1182,9 @@ impl Project {
         // chain about to be freed.
         self.ids.release_pointers();
         self.ids.forget_runtime_paths();
+        self.ids.forget_export_roots();
         self.per_file.reuse.program_rebuilt();
+        self.source_digests = None;
         generation.commit(fresh);
         self.inputs.program_changed(None);
         true

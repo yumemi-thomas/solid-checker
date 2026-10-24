@@ -223,6 +223,41 @@ fn merged(checker: &Checker, mut symbol: P<Symbol>) -> P<Symbol> {
     symbol
 }
 
+/// A stand-in for `root`'s identity that lives as long as the files of its
+/// declarations keep their parse: a binder symbol that owns its declarations
+/// stands for itself; a merge clone whose every declaration's binder symbol
+/// merges into it stands for the least of those binder symbols (the set is
+/// a fact of the program, so every checker of the chain makes the same
+/// clone from it). Within one checker two roots share a stand-in only when
+/// they are one symbol. `None` for any other root.
+pub(crate) fn lasting_root(checker: &Checker, root: P<Symbol>) -> Option<usize> {
+    if root.declarations().is_empty() {
+        return None;
+    }
+    if !root.flags().intersects(SymbolFlags::Transient) {
+        let owns = root.declarations().iter().all(|declaration| {
+            declaration
+                .symbol()
+                .is_some_and(|own| own.addr() == root.addr())
+                || declaration
+                    .local_symbol()
+                    .is_some_and(|own| own.addr() == root.addr())
+        });
+        return owns.then_some(root.addr());
+    }
+    let mut least: Option<usize> = None;
+    for declaration in root.declarations() {
+        let binder = declaration.symbol()?;
+        if binder.flags().intersects(SymbolFlags::Transient)
+            || merged(checker, binder).addr() != root.addr()
+        {
+            return None;
+        }
+        least = Some(least.map_or(binder.addr(), |held| held.min(binder.addr())));
+    }
+    least
+}
+
 /// Whether `symbol` carries any derivation link or check flag. A binder-level
 /// symbol, merged clones included, carries none.
 fn derived(checker: &Checker, symbol: P<Symbol>) -> bool {

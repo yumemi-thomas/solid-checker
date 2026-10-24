@@ -22,7 +22,7 @@
 //! there; it need not be `Send` (tsrs state is thread-local).
 
 use crate::context::Context;
-use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SymbolId};
+use crate::model::{RunAnswer, SemanticDemandRun, SemanticDemandRunResult, SymbolId};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -165,14 +165,14 @@ pub trait ClosureBackend {
         ctx: &Context,
         runs: &[SemanticDemandRun<'_>],
         async_locations: &[Location],
-    ) -> Result<(Vec<SemanticDemandRunResult>, Vec<AsyncFunctionFact>), BackendError> {
+    ) -> Result<(Vec<RunAnswer>, Vec<AsyncFunctionFact>), BackendError> {
         let facts = self.async_functions_at(ctx, async_locations)?;
         let results = if runs.is_empty() {
             Vec::new()
         } else {
             self.semantic_demand_runs(ctx, runs)?
         };
-        Ok((results, facts))
+        Ok((results.into_iter().map(RunAnswer::Result).collect(), facts))
     }
 
     /// The call expressions of one file in source order, each with its

@@ -86,6 +86,10 @@ pub struct Identities {
     /// `exportedIdentitiesByRef`): pointer-free, so it also answers after a
     /// release.
     exported_by_ref: Arc<HashMap<DurableRef, Preserved>>,
+    /// What each module contributed to `exported_by_ref`, so an update that
+    /// replaced one file rescans only the modules that can read it
+    /// ([`ExportScan`]).
+    export_scan: ExportScan,
     /// Go: `filesByName`. `Program.GetSourceFile` does not round-trip virtual
     /// bundled-lib names, so durable re-resolution of lib-declared symbols
     /// falls back to this index.
@@ -304,11 +308,222 @@ impl Identities {
         self.keys.clear();
         self.table_keys = None;
         self.exported_by_ref = Arc::default();
+        self.export_scan = ExportScan::default();
     }
 
     /// Seeds the exported identities at open (Go: `OpenProject`).
     pub fn seed_exported(&mut self, program: &Program, checker: &mut Checker) {
-        self.exported_by_ref = Arc::new(collect_exported_identities(program, checker));
+        self.seed_exported_with(program, checker, None);
+    }
+
+    /// [`Identities::seed_exported`], with the modules `scanned` already
+    /// answered elsewhere ([`scan_exports_on_workers`]); a module it left
+    /// out, or answered with roots that are not lasting, is scanned here.
+    pub(crate) fn seed_exported_with(
+        &mut self,
+        program: &Program,
+        checker: &mut Checker,
+        scanned: Option<Vec<Option<Option<FileExports>>>>,
+    ) {
+        let files = program.source_files();
+        let mut answers: Vec<(String, Option<FileExports>)> = Vec::with_capacity(files.len());
+        let mut scanned = scanned.filter(|scanned| scanned.len() == files.len());
+        for (at, file) in files.iter().enumerate() {
+            let held = scanned.as_mut().and_then(|scanned| scanned[at].take());
+            let now = match held {
+                Some(now) if now.as_ref().is_none_or(|now| now.kept) => now,
+                _ => file_exports(checker, *file),
+            };
+            answers.push((clean(file.file_name()), now));
+        }
+        self.apply_every_export(answers);
+        self.export_scan.valid = true;
+    }
+
+    /// Rescans `files` (their earlier contributions replaced) and patches
+    /// `exported_by_ref` at the references they held or hold.
+    fn rescan_exports(&mut self, checker: &mut Checker, files: &[P<SourceFile>]) {
+        let scanned = files
+            .iter()
+            .map(|file| (clean(file.file_name()), file_exports(checker, *file)))
+            .collect();
+        self.apply_exports(scanned);
+    }
+
+    /// Replaces every module's contribution by `answers` (a scan of every
+    /// module) and builds `exported_by_ref` from them. An identity the
+    /// previous scan held keeps its value (its id hashes only its path and
+    /// name).
+    fn apply_every_export(&mut self, answers: Vec<(String, Option<FileExports>)>) {
+        let previous = std::mem::take(&mut self.exported_by_ref);
+        let mut scan = ExportScan {
+            valid: self.export_scan.valid,
+            ..ExportScan::default()
+        };
+        for (path, now) in answers {
+            let Some(now) = now else {
+                continue;
+            };
+            for (reference, root) in &now.entries {
+                let roots = scan.roots.entry(reference.clone()).or_default();
+                match roots.iter_mut().find(|(held, _)| held == root) {
+                    Some(entry) => entry.1 += 1,
+                    None => roots.push((*root, 1)),
+                }
+            }
+            scan.files.insert(path, now);
+        }
+        let mut exported: HashMap<DurableRef, Preserved> = HashMap::with_capacity(scan.roots.len());
+        for (reference, roots) in &scan.roots {
+            if roots.len() != 1 {
+                continue;
+            }
+            let preserved = previous
+                .get(reference)
+                .cloned()
+                .unwrap_or_else(|| Preserved {
+                    id: Arc::from(reference.exported_id().as_str()),
+                    reference: reference.clone(),
+                });
+            scan.by_path
+                .entry(reference.path.clone())
+                .or_default()
+                .insert((
+                    reference.start_byte,
+                    reference.end_byte,
+                    reference.name.clone(),
+                ));
+            exported.insert(reference.clone(), preserved);
+        }
+        self.exported_by_ref = Arc::new(exported);
+        self.export_scan = scan;
+    }
+
+    /// Replaces the contributions of the scanned modules and patches
+    /// `exported_by_ref` at the references they held or hold.
+    fn apply_exports(&mut self, scanned: Vec<(String, Option<FileExports>)>) {
+        let mut touched: HashSet<DurableRef> = HashSet::new();
+        for (path, now) in scanned {
+            let before = self.export_scan.files.remove(&path);
+            if let Some(before) = &before {
+                self.export_scan.remove(before, &mut touched);
+            }
+            if let Some(now) = now {
+                self.export_scan.add(&now, &mut touched);
+                self.export_scan.files.insert(path, now);
+            }
+        }
+        let exported = Arc::make_mut(&mut self.exported_by_ref);
+        let scan = &mut self.export_scan;
+        for reference in touched {
+            let moved = match scan.roots.get(&reference) {
+                // Exactly one root: the reference is a safe export identity.
+                Some(roots) if roots.len() == 1 => {
+                    let entered = !exported.contains_key(&reference);
+                    if entered {
+                        let id: SymbolId = Arc::from(reference.exported_id().as_str());
+                        exported.insert(
+                            reference.clone(),
+                            Preserved {
+                                id,
+                                reference: reference.clone(),
+                            },
+                        );
+                        scan.by_path
+                            .entry(reference.path.clone())
+                            .or_default()
+                            .insert((
+                                reference.start_byte,
+                                reference.end_byte,
+                                reference.name.clone(),
+                            ));
+                    }
+                    entered
+                }
+                _ => {
+                    let left = exported.remove(&reference).is_some();
+                    if left && let Some(held) = scan.by_path.get_mut(&reference.path) {
+                        held.remove(&(
+                            reference.start_byte,
+                            reference.end_byte,
+                            reference.name.clone(),
+                        ));
+                        if held.is_empty() {
+                            scan.by_path.remove(&reference.path);
+                        }
+                    }
+                    left
+                }
+            };
+            if moved {
+                scan.digests.remove(&reference.path);
+                if let Some(changed) = &mut scan.changed {
+                    changed.insert(reference.path.clone());
+                }
+            }
+        }
+    }
+
+    /// `Exports(path)` (`inputs`, `passes`): a digest of the export
+    /// identities declared in `path`, in (start, end, name) order; zero for
+    /// none.
+    pub(crate) fn export_digest(&mut self, path: &str) -> crate::inputs::Digest {
+        let scan = &mut self.export_scan;
+        if let Some(digest) = scan.digests.get(path) {
+            return *digest;
+        }
+        let Some(references) = scan.by_path.get(path) else {
+            return crate::inputs::Digest::default();
+        };
+        use sha2::Digest as _;
+        let mut hasher = sha2::Sha256::new();
+        for (start, end, name) in references {
+            hasher.update(start.to_le_bytes());
+            hasher.update(end.to_le_bytes());
+            hasher.update(name.as_bytes());
+            hasher.update([0]);
+        }
+        let digest: crate::inputs::Digest = hasher.finalize().into();
+        scan.digests.insert(path.to_owned(), digest);
+        digest
+    }
+
+    /// The paths whose `Exports` may have changed since the last call, or
+    /// `None` when every path's may have (a scan of every module).
+    pub(crate) fn take_export_changes(&mut self) -> Option<HashSet<String>> {
+        self.export_scan.changed.replace(HashSet::new())
+    }
+
+    /// The modules an update must rescan: `None` for every module, else the
+    /// given ones and every module whose roots the scan could not keep.
+    fn exports_to_rescan(
+        &self,
+        program: &Program,
+        rescan: Option<&[String]>,
+    ) -> Option<Vec<P<SourceFile>>> {
+        let rescan = rescan?;
+        if !self.export_scan.valid {
+            return None;
+        }
+        let mut paths: HashSet<&str> = rescan.iter().map(String::as_str).collect();
+        paths.extend(
+            self.export_scan
+                .files
+                .iter()
+                .filter(|(_, exports)| !exports.kept)
+                .map(|(path, _)| path.as_str()),
+        );
+        let mut files = Vec::with_capacity(paths.len());
+        for path in paths {
+            files.push(program.get_source_file(path)?);
+        }
+        Some(files)
+    }
+
+    /// The program chain was replaced (a rebase): every root address the
+    /// export scan holds is dead, so the next update rescans every module.
+    pub(crate) fn forget_export_roots(&mut self) {
+        self.export_scan.valid = false;
     }
 
     /// Go: the identity half of `Update` after a candidate is accepted. Nothing
@@ -318,12 +533,21 @@ impl Identities {
     /// update fails closed until a pass of the new generation mints it (a kept
     /// pass's keys rejoin through the table's merged keys). (The exports the
     /// update already derived, `current`, only feed its cutoff decisions.)
-    pub fn after_update(
+    ///
+    /// `rescan` names the modules whose exports can have changed when the
+    /// update replaced one file in place (every other file kept its parse,
+    /// its binder symbols and its resolutions): the file and every module
+    /// that reaches it over a resolution edge. `None` rescans every module.
+    ///
+    /// `scanned` is every module's half scanned beforehand on workers
+    /// ([`scan_exports_on_workers`]) for when every module is rescanned.
+    pub(crate) fn after_update(
         &mut self,
         generation: u64,
         program: &Program,
         checker: &mut Checker,
-        _incremental_path: Option<&str>,
+        rescan: Option<&[String]>,
+        scanned: Option<Vec<Option<Option<FileExports>>>>,
         _current: Option<CurrentExports>,
     ) {
         self.generation = generation;
@@ -337,8 +561,167 @@ impl Identities {
         self.tuple_index = crate::derived_key::TupleIndex::default();
         self.keys.clear();
         self.table_keys = None;
-        self.seed_exported(program, checker);
+        match self.exports_to_rescan(program, rescan) {
+            Some(files) => self.rescan_exports(checker, &files),
+            None => self.seed_exported_with(program, checker, scanned),
+        }
+        self.export_scan.valid = true;
+        if crate::passes::verify_reuse() {
+            let fresh = collect_exported_identities(program, checker);
+            if fresh != *self.exported_by_ref {
+                crate::per_file::reuse_mismatch("the exported identities");
+                self.seed_exported(program, checker);
+            }
+        }
     }
+}
+
+/// What the modules of a program export, per module (`collect_exported_identities`
+/// kept per file). A reference is an export identity when every module that
+/// exports it names one root.
+///
+/// A root is held by a lasting stand-in (`binder_key::lasting_root`): a
+/// program-owned binder symbol's address, which names the same symbol in
+/// every checker of the chain while its file keeps its parse. A module's
+/// entry is `kept` when every root has one; otherwise its roots are held by
+/// address and the module is rescanned at every update, in the same checker
+/// as every other rescanned module. A stand-in never equals another root's
+/// address: a root merges into nothing, a stand-in is a symbol that merged. An update that replaces one file
+/// in place rescans that file and every module reaching it over resolution
+/// edges: the others resolve their exports through files that kept their
+/// parse, so their roots are the same live symbols.
+#[derive(Default)]
+struct ExportScan {
+    files: HashMap<String, FileExports>,
+    /// Per reference, each distinct root address and how many exports name it.
+    roots: HashMap<DurableRef, Vec<(usize, u32)>>,
+    /// The export identities by declaring path, and their digests.
+    by_path: HashMap<String, std::collections::BTreeSet<(u32, u32, String)>>,
+    digests: HashMap<String, crate::inputs::Digest>,
+    /// Paths whose identities moved since the last table; `None` for all.
+    changed: Option<HashSet<String>>,
+    /// Whether the root addresses belong to the current chain.
+    valid: bool,
+}
+
+pub(crate) struct FileExports {
+    entries: Vec<(DurableRef, usize)>,
+    kept: bool,
+}
+
+impl ExportScan {
+    fn remove(&mut self, exports: &FileExports, touched: &mut HashSet<DurableRef>) {
+        for (reference, root) in &exports.entries {
+            if let Some(roots) = self.roots.get_mut(reference) {
+                if let Some(at) = roots.iter().position(|(held, _)| held == root) {
+                    roots[at].1 -= 1;
+                    if roots[at].1 == 0 {
+                        roots.swap_remove(at);
+                    }
+                }
+                if roots.is_empty() {
+                    self.roots.remove(reference);
+                }
+            }
+            touched.insert(reference.clone());
+        }
+    }
+
+    fn add(&mut self, exports: &FileExports, touched: &mut HashSet<DurableRef>) {
+        for (reference, root) in &exports.entries {
+            let roots = self.roots.entry(reference.clone()).or_default();
+            match roots.iter_mut().find(|(held, _)| held == root) {
+                Some(entry) => entry.1 += 1,
+                None => roots.push((*root, 1)),
+            }
+            touched.insert(reference.clone());
+        }
+    }
+}
+
+/// Every file's [`file_exports`] (index-aligned with `files`), on up to
+/// `workers` threads, each in a file checker of its own; a file the
+/// workers did not reach is `None`. A module whose roots are not all
+/// lasting is answered, but its root addresses die with the worker's
+/// checker: the caller scans it again ([`Identities::seed_exported_with`]).
+pub(crate) fn scan_exports_on_workers(
+    generation: &crate::unsafe_boundary::Generation,
+    files: &[P<SourceFile>],
+    workers: usize,
+) -> Vec<Option<Option<FileExports>>> {
+    let workers = workers.min(files.len() / 256);
+    if workers <= 1 {
+        return Vec::new();
+    }
+    generation.prime_caches();
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let next = &next;
+    let mut answers: Vec<Option<Option<FileExports>>> = (0..files.len()).map(|_| None).collect();
+    let done: Vec<Vec<(usize, Option<FileExports>)>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..workers)
+            .filter_map(|_| {
+                std::thread::Builder::new()
+                    .name("typefacts-exports".to_owned())
+                    .stack_size(crate::passes::WORKER_STACK)
+                    .spawn_scoped(scope, move || {
+                        let mut local = Vec::new();
+                        let checker = generation.file_checker();
+                        generation.with_checker(|lease| {
+                            loop {
+                                let at = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                let Some(file) = files.get(at) else {
+                                    break;
+                                };
+                                local.push((at, file_exports(lease, *file)));
+                            }
+                        });
+                        drop(checker);
+                        local
+                    })
+                    .ok()
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| {
+                handle
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            })
+            .collect()
+    });
+    for (at, exports) in done.into_iter().flatten() {
+        answers[at] = Some(exports);
+    }
+    answers
+}
+
+/// One module's half of [`collect_exported_identities`]; `None` for a file
+/// that is not a module or whose exports have no durable identity.
+fn file_exports(checker: &mut Checker, file: P<SourceFile>) -> Option<FileExports> {
+    if !is_external_module(file) {
+        return None;
+    }
+    let exports = exported_symbols_with(checker, file)?;
+    let mut entries = Vec::with_capacity(exports.len());
+    let mut kept = true;
+    for ExportedSymbol { symbol, .. } in exports {
+        let Some(root) = binder_root(checker, symbol) else {
+            continue;
+        };
+        let Some(reference) = minimum_declaration_ref(root) else {
+            continue;
+        };
+        let identity = match crate::binder_key::lasting_root(checker, root) {
+            Some(lasting) => lasting,
+            None => {
+                kept = false;
+                root.addr()
+            }
+        };
+        entries.push((reference, identity));
+    }
+    Some(FileExports { entries, kept })
 }
 
 /// Go: `collectExportedIdentities`, keyed by declaration reference. A module's
