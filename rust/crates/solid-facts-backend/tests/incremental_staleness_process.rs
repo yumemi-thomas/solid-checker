@@ -144,3 +144,70 @@ fn changing_rule_options_between_generations_never_reuses_a_stale_late_stage() {
         "edit, server rendering again",
     );
 }
+
+/// 2.5, second path: `runtime_symbol_redirects` are generation-request facts
+/// outside the retained TypeScript snapshot. The index rebuild honours them
+/// (a non-empty map forces it) but `ReusePlan` decided "TypeScript unchanged"
+/// from the snapshot delta alone, so source discovery, reachability and the
+/// late stages were offered results computed under the other redirects.
+/// The redirected pairs are every ordered pair of the project's own symbols;
+/// the ones that move the fresh answer are the ones that matter.
+#[test]
+fn changing_runtime_symbol_redirects_between_generations_never_reuses_a_stale_stage() {
+    let Some(mut project) = Project::open("callback-forwarding", &["App.tsx", "source.ts"]) else {
+        return;
+    };
+    let first = project.analyze();
+    let ids = first
+        .typescript
+        .symbols()
+        .filter(|symbol| {
+            let declarations = symbol.declarations();
+            !declarations.is_empty()
+                && declarations
+                    .iter()
+                    .all(|declaration| !declaration.location.path.ends_with(".d.ts"))
+        })
+        .map(|symbol| symbol.id().to_owned())
+        .collect::<Vec<_>>();
+    assert!(ids.len() > 3, "the fixture declares its own symbols");
+    let options = RuleOptions::default();
+    let vocabulary = solid_v2().vocabulary;
+    let mut mattered = 0;
+    for from in &ids {
+        for to in ids.iter().filter(|to| *to != from) {
+            let plain = project.touch(0);
+            let mut redirected = (*project.touch(0)).clone();
+            redirected
+                .runtime_symbol_redirects
+                .insert(from.clone(), to.clone());
+            let (without, _) = build_with_analysis_inputs_measured(
+                &redirected,
+                vocabulary,
+                AnalysisInputs::empty(),
+                &options,
+            )
+            .unwrap();
+            let (with, _) = build_with_analysis_inputs_measured(
+                &plain,
+                vocabulary,
+                AnalysisInputs::empty(),
+                &options,
+            )
+            .unwrap();
+            // Both directions: plain then redirected, redirected then plain.
+            if first_difference(&without, &with).is_some() {
+                mattered += 1;
+            }
+            let mut forward = IncrementalBuilder::default();
+            assert_retained_is_fresh(&mut forward, &plain, &options, "plain");
+            assert_retained_is_fresh(&mut forward, &redirected, &options, "then redirected");
+            let mut backward = IncrementalBuilder::default();
+            assert_retained_is_fresh(&mut backward, &redirected, &options, "redirected");
+            let mut later = (*project.touch(0)).clone();
+            later.runtime_symbol_redirects.clear();
+            assert_retained_is_fresh(&mut backward, &later, &options, "then plain");
+        }
+    }
+    assert!(mattered > 0, "some redirect must move the answer");
+}

@@ -322,14 +322,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     };
     let project_indexes = ProjectIndexes::new(facts, ast_indexes);
     build_timings.project_indexes = substage_started.elapsed();
-    let typescript_unchanged = facts
-        .typescript_changes
-        .as_ref()
-        .is_some_and(|changes| changes.unchanged)
-        // Runtime redirects are generation-request facts outside the retained
-        // TypeScript snapshot. Rebuild the derived symbol indexes when any are
-        // present rather than reusing a cache whose key cannot see them.
-        && facts.runtime_symbol_redirects.is_empty();
+    let typescript_unchanged = crate::cache::typescript_unchanged(facts);
     let owned_typescript_indexes;
     let typescript_indexes = if let Some(cache) = typescript_indexes_cache {
         let patch_timings = (!typescript_unchanged)

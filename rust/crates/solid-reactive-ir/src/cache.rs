@@ -59,6 +59,10 @@ struct SourceDiscoveryDomain {
     /// aggregate, rule enablement the compatibility pass), so a different
     /// value is a different domain, as a different boundary is.
     rule_options: RuleOptions,
+    /// The redirects every cached index and stage was built under. The
+    /// snapshot delta cannot see them, so a change in either direction (none
+    /// to some, some to none) is a different domain.
+    runtime_symbol_redirects: std::collections::HashMap<String, String>,
 }
 
 /// Owns every derived cache retained across Reactive IR generations.
@@ -99,12 +103,14 @@ impl IncrementalCacheState {
         project_id: &str,
         boundary_fingerprints: &[[u8; 32]],
         rule_options: &RuleOptions,
+        runtime_symbol_redirects: &std::collections::HashMap<String, String>,
     ) -> bool {
         let next = SourceDiscoveryDomain {
             dialect,
             project_id: project_id.to_owned(),
             boundary_fingerprints: boundary_fingerprints.to_vec(),
             rule_options: rule_options.clone(),
+            runtime_symbol_redirects: runtime_symbol_redirects.clone(),
         };
         if self.domain.as_ref() == Some(&next) {
             return false;
@@ -791,6 +797,23 @@ pub(crate) fn refresh_late_stage_inputs(
     }
 }
 
+/// Whether the TypeScript table is the previous generation's, so that every
+/// index and stage keyed on it may be reused.
+///
+/// Runtime redirects are generation-request facts outside the retained
+/// TypeScript snapshot: the delta cannot see them, and the index rebuild
+/// already honours them (a non-empty map forces it). Every consumer of this
+/// decision therefore shares it, rather than each re-deriving it from the
+/// delta; a build with redirects is never "unchanged", and so neither is the
+/// build after it.
+pub(crate) fn typescript_unchanged(facts: &ProjectFacts) -> bool {
+    facts
+        .typescript_changes
+        .as_ref()
+        .is_some_and(|changes| changes.unchanged)
+        && facts.runtime_symbol_redirects.is_empty()
+}
+
 /// One build's cross-generation reuse decisions.
 ///
 /// The decision and the late-stage cache transition happen together, before
@@ -809,10 +832,7 @@ impl ReusePlan {
         late_stages: Option<&mut Option<CachedLateStages>>,
         cross_file_proofs: Option<CrossFileProofDigest>,
     ) -> Self {
-        let typescript_unchanged = facts
-            .typescript_changes
-            .as_ref()
-            .is_some_and(|changes| changes.unchanged);
+        let typescript_unchanged = typescript_unchanged(facts);
         let late_stages_reusable = typescript_unchanged
             && late_stages
                 .as_deref()

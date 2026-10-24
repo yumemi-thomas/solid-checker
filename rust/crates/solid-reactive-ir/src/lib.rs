@@ -1479,6 +1479,7 @@ impl IncrementalBuilder {
             &identity.project_id,
             &identity.boundary_fingerprints,
             &identity.rule_options,
+            &facts.runtime_symbol_redirects,
         );
         if domain_reset {
             self.retained = None;
