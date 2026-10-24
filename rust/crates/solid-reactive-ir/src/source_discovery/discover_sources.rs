@@ -68,23 +68,32 @@ pub(crate) fn discover_sources(
         // Source construction/accepted-return facts collected above, before the
         // type-only fallback. A published Accessor/Store annotation alone cannot
         // witness a runtime reactive Get in an incoming prop expression.
+        let mut timer = PassTimer::start();
         let mut runtime_sources = tables.accessors.keys().cloned().collect::<HashSet<_>>();
         let mut literal_member_slots =
             crate::literal_member_slots::LiteralMemberSlots::new(ctx.facts, ctx.semantic_lookup);
         discover_withdrawn_tuple_candidates(ctx, &runtime_sources, &mut tables.typed_sources);
+        timer.lap("withdrawnTuples");
         discover_typed_sources(
             ctx,
             &mut tables,
             &runtime_sources,
             &mut literal_member_slots,
         );
+        timer.lap("typedSources");
         discover_children_accessors(ctx, &mut runtime_sources, &mut tables.accessors);
+        timer.lap("childrenAccessors");
         discover_effect_store_parameters(ctx, &mut tables);
+        timer.lap("effectStoreParameters");
         resolve_setter_action_aliases(ctx, &mut tables);
+        timer.lap("setterActionAliases");
         resolve_store_view_aliases(ctx, &mut tables);
+        timer.lap("storeViewAliases");
         discover_prop_sources(ctx, &mut tables);
+        timer.lap("propSources");
         clock.finish(build_timings, ReactiveIrStage::TypedAccessorsAndPropRoots);
         propagate_prop_sources(ctx, &mut tables);
+        timer.lap("propPropagation");
         let SourceTables {
             accessors,
             accessor_origins,
@@ -122,6 +131,7 @@ pub(crate) fn discover_sources(
             }
         }
         runtime_sources.retain(|symbol| !written.contains(symbol));
+        timer.lap("writtenSet");
         let props_reactivity = classify_component_props(
             runtime,
             facts,
@@ -132,6 +142,8 @@ pub(crate) fn discover_sources(
             &prop_sources,
             &runtime_sources,
         );
+        timer.lap("componentProps");
+        timer.emit();
         clock.finish(
             build_timings,
             ReactiveIrStage::PropPropagationAndControlFlow,
@@ -163,6 +175,56 @@ pub(crate) fn discover_sources(
     discovery.shared_reads = shared_reads;
     discovery.shared_reads.extend(&chunk_reads);
     discovery
+}
+
+/// The post-passes' own times under `SOLID_CHECKER_TIMINGS`, one
+/// `reactiveIrSourcePasses` line per build: the two stage lines they sit in
+/// do not split them.
+struct PassTimer {
+    started: Option<std::time::Instant>,
+    lap: Option<std::time::Instant>,
+    passes: Vec<(&'static str, u64)>,
+}
+
+impl PassTimer {
+    fn start() -> Self {
+        let started = std::env::var_os("SOLID_CHECKER_TIMINGS").map(|_| std::time::Instant::now());
+        Self {
+            started,
+            lap: started,
+            passes: Vec::new(),
+        }
+    }
+
+    fn nanos(duration: std::time::Duration) -> u64 {
+        u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX)
+    }
+
+    /// Ends the pass `pass` (a pass named twice adds up).
+    fn lap(&mut self, pass: &'static str) {
+        let Some(lap) = self.lap else {
+            return;
+        };
+        let now = std::time::Instant::now();
+        let ns = Self::nanos(now - lap);
+        match self.passes.iter_mut().find(|(name, _)| *name == pass) {
+            Some((_, total)) => *total += ns,
+            None => self.passes.push((pass, ns)),
+        }
+        self.lap = Some(now);
+    }
+
+    fn emit(self) {
+        let Some(started) = self.started else {
+            return;
+        };
+        let mut line = serde_json::Map::new();
+        line.insert("totalNs".into(), Self::nanos(started.elapsed()).into());
+        for (pass, ns) in self.passes {
+            line.insert(format!("{pass}Ns"), ns.into());
+        }
+        eprintln!("{}", serde_json::json!({ "reactiveIrSourcePasses": line }));
+    }
 }
 
 fn merge_file_source_contributions(
