@@ -66,6 +66,9 @@ pub(crate) enum Constant {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) enum Input {
     File(FileId, Section),
+    /// The answer of an unported project table or a base index at a key
+    /// ([`super::probes`]), by interned key: re-asked at every build.
+    Polled(super::probes::Probe, u32),
     /// The slots of the file in `ProjectFacts::files`, in file order.
     Slots(FileId),
     /// One key of an index, by its interned id.
@@ -87,11 +90,30 @@ pub(crate) const IDENTITY_WRAPPERS: TableId = TableId(0);
 /// [`crate::indexes::WrapperAt`]'s table.
 pub(crate) const WRAPPER_AT: TableId = TableId(1);
 
+/// [`crate::object_members::ObjectMemberTargets`]'s table.
+pub(crate) const OBJECT_MEMBER_TARGETS: TableId = TableId(20);
+/// [`crate::object_members::SpreadTargetsAt`]'s table.
+pub(crate) const SPREAD_TARGETS_AT: TableId = TableId(21);
+/// [`crate::object_members::LiteralReceivers`]'s table.
+pub(crate) const LITERAL_RECEIVERS: TableId = TableId(22);
+/// [`crate::object_members::ReceiverClosed`]'s table.
+pub(crate) const RECEIVER_CLOSED: TableId = TableId(23);
+/// [`crate::object_members::AssignedMembersAnswer`]'s table.
+pub(crate) const ASSIGNED_MEMBERS: TableId = TableId(24);
+/// [`crate::object_members::PrototypeOwnerAt`]'s table.
+pub(crate) const PROTOTYPE_OWNER_AT: TableId = TableId(25);
+
 /// The build's memo tables.
 #[derive(Default)]
 pub(crate) struct BuildTables {
     identity_wrappers: super::Table<BuildSchema, crate::indexes::IdentityWrapper>,
     wrapper_at: super::Table<BuildSchema, crate::indexes::WrapperAt>,
+    object_member_targets: super::Table<BuildSchema, crate::object_members::ObjectMemberTargets>,
+    spread_targets_at: super::Table<BuildSchema, crate::object_members::SpreadTargetsAt>,
+    literal_receivers: super::Table<BuildSchema, crate::object_members::LiteralReceivers>,
+    receiver_closed: super::Table<BuildSchema, crate::object_members::ReceiverClosed>,
+    assigned_members: super::Table<BuildSchema, crate::object_members::AssignedMembersAnswer>,
+    prototype_owner_at: super::Table<BuildSchema, crate::object_members::PrototypeOwnerAt>,
 }
 
 impl TableSet<BuildSchema> for BuildTables {
@@ -99,12 +121,27 @@ impl TableSet<BuildSchema> for BuildTables {
         match id {
             IDENTITY_WRAPPERS => &self.identity_wrappers,
             WRAPPER_AT => &self.wrapper_at,
+            OBJECT_MEMBER_TARGETS => &self.object_member_targets,
+            SPREAD_TARGETS_AT => &self.spread_targets_at,
+            LITERAL_RECEIVERS => &self.literal_receivers,
+            RECEIVER_CLOSED => &self.receiver_closed,
+            ASSIGNED_MEMBERS => &self.assigned_members,
+            PROTOTYPE_OWNER_AT => &self.prototype_owner_at,
             _ => unreachable!("memo table {id:?}"),
         }
     }
 
     fn tables(&self) -> Vec<&dyn super::ErasedTable<BuildSchema>> {
-        vec![&self.identity_wrappers, &self.wrapper_at]
+        vec![
+            &self.identity_wrappers,
+            &self.wrapper_at,
+            &self.object_member_targets,
+            &self.spread_targets_at,
+            &self.literal_receivers,
+            &self.receiver_closed,
+            &self.assigned_members,
+            &self.prototype_owner_at,
+        ]
     }
 }
 
@@ -117,6 +154,42 @@ impl BuildTables {
 
     pub(crate) fn wrapper_at(&self) -> &super::Table<BuildSchema, crate::indexes::WrapperAt> {
         &self.wrapper_at
+    }
+
+    pub(crate) fn object_member_targets(
+        &self,
+    ) -> &super::Table<BuildSchema, crate::object_members::ObjectMemberTargets> {
+        &self.object_member_targets
+    }
+
+    pub(crate) fn spread_targets_at(
+        &self,
+    ) -> &super::Table<BuildSchema, crate::object_members::SpreadTargetsAt> {
+        &self.spread_targets_at
+    }
+
+    pub(crate) fn literal_receivers(
+        &self,
+    ) -> &super::Table<BuildSchema, crate::object_members::LiteralReceivers> {
+        &self.literal_receivers
+    }
+
+    pub(crate) fn receiver_closed(
+        &self,
+    ) -> &super::Table<BuildSchema, crate::object_members::ReceiverClosed> {
+        &self.receiver_closed
+    }
+
+    pub(crate) fn assigned_members(
+        &self,
+    ) -> &super::Table<BuildSchema, crate::object_members::AssignedMembersAnswer> {
+        &self.assigned_members
+    }
+
+    pub(crate) fn prototype_owner_at(
+        &self,
+    ) -> &super::Table<BuildSchema, crate::object_members::PrototypeOwnerAt> {
+        &self.prototype_owner_at
     }
 }
 
@@ -220,6 +293,10 @@ struct MemoBase {
     wrapper_candidates: Option<BaseIndex<Arc<str>, WrapperCandidate>>,
     wrapper_keys: IndexKeys<Arc<str>>,
     program_closed: Option<bool>,
+    /// The keys of polled inputs, and each recorded polled input's answer
+    /// fingerprint as of the last build ([`super::probes`]).
+    polled_keys: IndexKeys<super::probes::PolledKey>,
+    polled: BTreeMap<Input, u64>,
 }
 
 /// What one [`MemoStore::begin`] found and cost.
@@ -308,7 +385,12 @@ impl MemoStore {
 
     /// Starts a build over `views` (whose table is [`Self::table`]'s): finds
     /// the inputs that changed since the last build and marks their readers.
-    pub(crate) fn begin(&self, views: &Views<'_>, program_closed: bool) -> BeginReport {
+    pub(crate) fn begin(
+        &self,
+        views: &Views<'_>,
+        program_closed: bool,
+        probes: &dyn super::probes::Probes,
+    ) -> BeginReport {
         let mut report = BeginReport::default();
         let fresh = self.store.poisoned() || self.builds.fetch_add(1, Ordering::AcqRel) == 0;
         let mut base = self.base.write().expect("memo base lock");
@@ -403,7 +485,36 @@ impl MemoStore {
             changed_inputs.push(Input::Constant(Constant::ProgramClosed));
         }
         base.program_closed = Some(program_closed);
+        // Polled inputs: every recorded one is asked again, and the ones
+        // whose answer moved are changed inputs.
+        let recorded = base
+            .polled
+            .iter()
+            .filter_map(|(input, last)| match input {
+                Input::Polled(probe, id) => base
+                    .polled_keys
+                    .keys
+                    .get(id)
+                    .cloned()
+                    .map(|key| (*input, *probe, key, *last)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
         drop(base);
+        let now =
+            crate::pipeline::parallel_slice_results(&recorded, |(input, probe, key, last)| {
+                let fingerprint = super::probes::fingerprint(probes, *probe, key);
+                (*input, fingerprint, fingerprint != *last)
+            });
+        {
+            let mut base = self.base.write().expect("memo base lock");
+            for (input, fingerprint, changed) in now {
+                if changed {
+                    changed_inputs.push(input);
+                }
+                base.polled.insert(input, fingerprint);
+            }
+        }
         let started = Instant::now();
         changed_inputs.sort_unstable();
         let Invalidation {
@@ -419,14 +530,80 @@ impl MemoStore {
         report
     }
 
+    /// The interned id of a polled input's key.
+    pub(super) fn polled_key(&self, key: &super::probes::PolledKey) -> u32 {
+        if let Some(id) = self
+            .base
+            .read()
+            .expect("memo base lock")
+            .polled_keys
+            .ids
+            .get(key)
+        {
+            return *id;
+        }
+        self.base
+            .write()
+            .expect("memo base lock")
+            .polled_keys
+            .intern(key)
+    }
+
+    /// Remembers a polled input's answer fingerprint, if no build has yet:
+    /// the next build asks the probe again and compares.
+    pub(super) fn note_polled(&self, input: Input, fingerprint: u64) {
+        let known = self
+            .base
+            .read()
+            .expect("memo base lock")
+            .polled
+            .contains_key(&input);
+        if !known {
+            self.base
+                .write()
+                .expect("memo base lock")
+                .polled
+                .entry(input)
+                .or_insert(fingerprint);
+        }
+    }
+
     /// Ends a build: sweeps entries this build did not reach and releases
     /// the index keys no entry reads any more.
     pub(crate) fn end(&self) -> Vec<(&'static str, TableStats)> {
         let (stats, released) = self.store.end();
         let mut base = self.base.write().expect("memo base lock");
+        let mut polled_released = false;
         for input in released {
-            if let Input::Index(IndexId::WrapperCandidates, id) = input {
-                base.wrapper_keys.release(id);
+            match input {
+                Input::Index(IndexId::WrapperCandidates, id) => base.wrapper_keys.release(id),
+                Input::Polled(..) => {
+                    base.polled.remove(&input);
+                    polled_released = true;
+                }
+                _ => {}
+            }
+        }
+        // Several probes share a key: it is released when no polled input
+        // names it.
+        if polled_released {
+            let live = base
+                .polled
+                .keys()
+                .filter_map(|input| match input {
+                    Input::Polled(_, id) => Some(*id),
+                    _ => None,
+                })
+                .collect::<std::collections::BTreeSet<_>>();
+            let dead = base
+                .polled_keys
+                .keys
+                .keys()
+                .copied()
+                .filter(|id| !live.contains(id))
+                .collect::<Vec<_>>();
+            for id in dead {
+                base.polled_keys.release(id);
             }
         }
         stats
@@ -449,16 +626,23 @@ impl MemoStore {
 /// One build as the memo computations see it.
 pub(crate) struct BuildWorld<'w> {
     views: Views<'w>,
-    store: &'w MemoStore,
+    pub(super) store: &'w MemoStore,
     program_closed: bool,
+    pub(super) probes: &'w dyn super::probes::Probes,
 }
 
 impl<'w> BuildWorld<'w> {
-    pub(crate) fn new(views: Views<'w>, store: &'w MemoStore, program_closed: bool) -> Self {
+    pub(crate) fn new(
+        views: Views<'w>,
+        store: &'w MemoStore,
+        program_closed: bool,
+        probes: &'w dyn super::probes::Probes,
+    ) -> Self {
         Self {
             views,
             store,
             program_closed,
+            probes,
         }
     }
 
@@ -499,6 +683,13 @@ impl World<BuildSchema> for BuildWorld<'_> {
                 hasher.finish()
             }
             Input::Constant(Constant::ProgramClosed) => u64::from(self.program_closed),
+            Input::Polled(probe, id) => {
+                let key = base.polled_keys.keys.get(&id).cloned();
+                drop(base);
+                key.map_or(0, |key| {
+                    super::probes::fingerprint(self.probes, probe, &key)
+                })
+            }
         }
     }
 }
@@ -520,7 +711,6 @@ impl<'w> FileRead<'_, '_, 'w> {
     }
 
     /// The compiler's execution map.
-    #[allow(dead_code, reason = "the first table reading it ports in study S5")]
     pub(crate) fn compiler(&self) -> &'w ExecutionMap {
         self.ctx
             .record_input(Input::File(self.id, Section::Compiler));
@@ -532,6 +722,14 @@ impl<'w> FileRead<'_, '_, 'w> {
         self.ctx
             .record_input(Input::File(self.id, Section::Entities));
         self.view.exact_symbol(span)
+    }
+
+    /// The symbol of the entity at exactly `span` of this file, whatever
+    /// its claim ([`FileView::symbol_at`]).
+    pub(crate) fn symbol_at(&self, span: Span) -> Option<&'w SymbolId> {
+        self.ctx
+            .record_input(Input::File(self.id, Section::Entities));
+        self.view.symbol_at(span)
     }
 
     /// The symbol that is the value at `span` ([`FileView::value_symbol`]):
@@ -592,6 +790,12 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// The Solid-version vocabulary the build analyzes with: a build constant
+    /// (a different dialect is a different cache domain), so it is not recorded.
+    pub(crate) fn dialect(&self) -> &'w dyn solid_dialect::Dialect {
+        self.world().views.constants.dialect
     }
 
     /// A build constant.

@@ -77,10 +77,6 @@
     "facts.files": 3,
     "file_by_path": 2
   },
-  "rust/crates/solid-reactive-ir/src/indexes/class_prototype.rs": {
-    "files()": 1,
-    "file_by_path": 2
-  },
   "rust/crates/solid-reactive-ir/src/indexes/closed_members.rs": {
     "files()": 1,
     "file_by_path": 1,
@@ -113,6 +109,9 @@
     "files()": 2,
     "file_by_path": 2,
     "hashmap-iteration": 2
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/memo_probes.rs": {
+    "facts.files": 2
   },
   "rust/crates/solid-reactive-ir/src/indexes/primitive_proof.rs": {
     "files()": 3
@@ -158,13 +157,11 @@
     "hashmap-iteration": 2
   },
   "rust/crates/solid-reactive-ir/src/object_members/handlers.rs": {
-    "facts.files": 2
+    "facts.files": 1
   },
   "rust/crates/solid-reactive-ir/src/object_members.rs": {
-    "facts.files": 1,
-    "files()": 2,
-    "file_by_path": 2,
-    "hashmap-iteration": 22
+    "files()": 3,
+    "hashmap-iteration": 20
   },
   "rust/crates/solid-reactive-ir/src/owners/bindings.rs": {
     "files()": 1,

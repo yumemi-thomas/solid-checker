@@ -43,6 +43,7 @@
 //! read, is reported like a shadow mismatch, and the fresh value is served.
 
 pub(crate) mod build;
+pub(crate) mod probes;
 #[cfg(test)]
 mod tests;
 
@@ -514,6 +515,16 @@ impl<'c, 'w, S: Schema> Ctx<'c, 'w, S> {
             return;
         }
         let fingerprint = self.world.fingerprint(input);
+        self.reads
+            .borrow_mut()
+            .push(Read::Input(input, fingerprint));
+    }
+
+    /// Records a read of `input` whose fingerprint the caller already holds.
+    fn record_input_known(&self, input: S::Input, fingerprint: u64) {
+        if self.frame.current.is_none() || self.implied.contains(&input) {
+            return;
+        }
         self.reads
             .borrow_mut()
             .push(Read::Input(input, fingerprint));

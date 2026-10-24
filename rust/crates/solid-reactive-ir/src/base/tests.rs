@@ -684,8 +684,9 @@ fn memo_build(project: &Project, store: &super::memo::build::MemoStore) -> Optio
             dialect: &solid_dialect::Solid2,
         },
     };
-    let begin = store.begin(&views, false);
-    let world = super::memo::build::BuildWorld::new(views, store, false);
+    let begin = store.begin(&views, false, &super::memo::probes::NoProbes);
+    let world =
+        super::memo::build::BuildWorld::new(views, store, false, &super::memo::probes::NoProbes);
     let mut keys = store.wrapper_candidate_keys();
     keys.push(Arc::from("s0:absent"));
     let answers = keys
