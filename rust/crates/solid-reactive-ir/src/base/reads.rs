@@ -171,15 +171,21 @@ impl Frame {
 
 thread_local! {
     static FRAMES: RefCell<Vec<Frame>> = const { RefCell::new(Vec::new()) };
+    /// `FRAMES`' length: the notes outside every recording (most lookup
+    /// reads of a build) test one cell instead of borrowing the stack.
+    static DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Whether some computation on this thread is recording.
 pub(crate) fn recording() -> bool {
-    FRAMES.with(|frames| !frames.borrow().is_empty())
+    DEPTH.with(std::cell::Cell::get) != 0
 }
 
 /// Records that the current computation read `section`.
 pub(crate) fn note(section: Section) {
+    if !recording() {
+        return;
+    }
     FRAMES.with(|frames| {
         if let Some(frame) = frames.borrow_mut().last_mut() {
             frame.sections |= section.bit();
@@ -189,6 +195,9 @@ pub(crate) fn note(section: Section) {
 
 /// Records that the current computation read a memo answer.
 pub(crate) fn note_memo(read: MemoRead) {
+    if !recording() {
+        return;
+    }
     FRAMES.with(|frames| {
         if let Some(frame) = frames.borrow_mut().last_mut() {
             frame.memos.push(read);
@@ -198,7 +207,7 @@ pub(crate) fn note_memo(read: MemoRead) {
 
 /// Adds `reads` to the current computation's, as if it had made them.
 pub(crate) fn replay(reads: &Reads) {
-    if reads.is_empty() {
+    if reads.is_empty() || !recording() {
         return;
     }
     FRAMES.with(|frames| {
@@ -210,7 +219,7 @@ pub(crate) fn replay(reads: &Reads) {
 
 /// [`replay`] for a shared read set, copied once per frame.
 fn replay_shared(reads: &Arc<Reads>) {
-    if reads.is_empty() {
+    if reads.is_empty() || !recording() {
         return;
     }
     FRAMES.with(|frames| {
@@ -232,11 +241,13 @@ impl Drop for FrameGuard {
         FRAMES.with(|frames| {
             frames.borrow_mut().pop();
         });
+        DEPTH.with(|depth| depth.set(depth.get() - 1));
     }
 }
 
 fn push() -> FrameGuard {
     FRAMES.with(|frames| frames.borrow_mut().push(Frame::default()));
+    DEPTH.with(|depth| depth.set(depth.get() + 1));
     FrameGuard
 }
 
