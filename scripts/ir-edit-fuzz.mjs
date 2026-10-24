@@ -31,6 +31,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync
@@ -292,7 +293,14 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
       cwd: root,
       env: { ...environment, SOLID_CHECKER_DAEMON: daemon ? "1" : "0" }
     });
-  const stopDaemon = () => run("pkill", ["-f", "--", `--serve --project ${tsconfig}`], {});
+  // The daemon's command line carries the canonical project path (macOS
+  // resolves /var to /private/var), so match that one too or it leaks.
+  const canonical = realpathSync(tsconfig);
+  const stopDaemon = async () => {
+    for (const path of new Set([tsconfig, canonical])) {
+      await run("pkill", ["-f", "--", `--serve --project ${path}`], {});
+    }
+  };
   const log = [];
   const report = (line) => {
     log.push(line);
