@@ -223,8 +223,8 @@ pub fn run(
                     quote(&query.path)
                 )));
             }
-            let mut location = demand.location.clone();
-            location.path = path.into();
+            // Its path equals the run's (checked above): the clone shares it.
+            let location = demand.location.clone();
             result.entities.push(blank_entity(location.clone()));
             let Some(file) = file else {
                 continue;
