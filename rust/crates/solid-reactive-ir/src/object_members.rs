@@ -26,8 +26,8 @@ pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Target
     if lookup.program_has_eval() {
         return HashMap::default();
     }
-    let stability = lookup.member_stability_of(facts);
-    let modules = lookup.module_census_of(facts);
+    let stability = lookup.member_stability();
+    let modules = lookup.module_census();
     let mut targets = HashMap::default();
     let mut closed = HashMap::default();
     for file in &facts.files {
@@ -84,7 +84,7 @@ pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Target
             let stable = *closed
                 .entry((owner.path.to_string(), declaration, symbol.clone()))
                 .or_insert_with(|| {
-                    receiver_closed(facts, owner, literal, declaration, symbol, lookup, &modules)
+                    receiver_closed(facts, owner, literal, declaration, symbol, lookup, modules)
                 });
             if !stable {
                 continue;
@@ -197,11 +197,8 @@ fn receiver_symbols(facts: &ProjectFacts, symbol: &SymbolId) -> HashSet<String> 
 /// namespace import, a namespace re-export, a dynamic load or `import =`,
 /// through barrels), or `None` when a load or module hazard leaves that
 /// unknown: what a namespace reaches, no identifier reference enumerates.
-pub(crate) fn namespace_exposed_modules(
-    facts: &ProjectFacts,
-    lookup: &SemanticLookup<'_>,
-) -> Option<HashSet<String>> {
-    let census = lookup.module_census_of(facts);
+pub(crate) fn namespace_exposed_modules(lookup: &SemanticLookup<'_>) -> Option<HashSet<String>> {
+    let census = lookup.module_census();
     (!census.unknown_load).then(|| census.exposed.clone())
 }
 

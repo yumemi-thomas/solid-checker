@@ -43,7 +43,8 @@ use solid_facts::FileFacts;
 use solid_facts::core::Span;
 
 pub(crate) use contributions::{
-    BuildConstants, CalleeSite, DefinerKey, Hazard, MemberName, MemberUse, ModuleEdge, ModuleKey,
+    BuildConstants, CalleeSite, DefinerKey, Hazard, MemberName, MemberRole, MemberUse, ModuleEdge,
+    ModuleKey,
 };
 pub(crate) use file_table::{FileId, FileTable, FileView, ItemKind, ViewSources};
 pub(crate) use index::{BaseIndex, FileContribution};
@@ -212,16 +213,16 @@ macro_rules! base_indexes {
 
 base_indexes! {
     read: {
+        /// Member reads, writes and assignments by name.
+        members: MemberName => MemberUse = contributions::members;
         /// Module hazards and module-level flags.
         hazards: Hazard => u32 = contributions::hazards;
+        /// Reflective-definer keys.
+        definers: DefinerKey => () = contributions::definers;
     }
     unread: {
         /// Module edges by specifier.
         modules: ModuleKey => ModuleEdge = contributions::modules;
-        /// Member reads, writes and assignments by name.
-        members: MemberName => MemberUse = contributions::members;
-        /// Reflective-definer keys.
-        definers: DefinerKey => () = contributions::definers;
         /// References by symbol.
         references: Arc<str> => Span = contributions::references;
         /// Calls and JSX elements by the symbol of their callee or tag.

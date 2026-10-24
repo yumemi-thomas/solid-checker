@@ -119,127 +119,49 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
+    /// ADR 0209, 0314: the member names assignments write, from the base
+    /// members index ([`crate::base::MemberRole::Assigned`]), and the
+    /// prototypes they write through, from the base hazards index
+    /// ([`crate::base::Hazard::UnownedPrototypeWrite`],
+    /// [`crate::base::Hazard::PrototypeOwnerSite`]). Each owner site is
+    /// proved here; [`crate::base::contributions::assignment_writes`] lists
+    /// them per file.
     pub(super) fn assigned_members(&self) -> &AssignedMembers {
         self.assigned_member_names.get_or_init(|| {
+            use crate::base::{Hazard, MemberName, MemberRole};
             let facts: &'a ProjectFacts = self.facts;
-            let mut names = HashSet::default();
-            let mut prototype = false;
+            let names = self
+                .base_members()
+                .keys()
+                .filter_map(|name| match name {
+                    MemberName::Named(name) => Some(name),
+                    MemberName::Unnamed => None,
+                })
+                .filter(|name| {
+                    self.base_members()
+                        .values(&MemberName::Named(std::sync::Arc::clone(name)))
+                        .any(|(_, used)| used.role == MemberRole::Assigned)
+                })
+                .map(|name| name.to_string())
+                .collect::<HashSet<String>>();
+            let mut prototype = self.hazard_present(Hazard::UnownedPrototypeWrite);
             let mut constructors = HashSet::default();
             let mut pending_hosts = Vec::new();
-            let mut record =
-                |file: &'a FileFacts, owner: Option<PrototypeOwner>, prototype: &mut bool| {
-                    match owner {
+            for (file, entries) in self.slot_entries(self.base_hazards()) {
+                for (hazard, member) in entries {
+                    if *hazard != Hazard::PrototypeOwnerSite {
+                        continue;
+                    }
+                    let receiver = file.ast.members[*member as usize].object;
+                    match self.prototype_owner(file, receiver) {
                         Some(PrototypeOwner::Constructor(declaration)) => {
                             constructors.insert((file.path.to_string(), declaration));
                         }
                         Some(PrototypeOwner::Hosts(method, hosts)) => {
                             pending_hosts.push((method, hosts));
                         }
-                        None => *prototype = true,
+                        None => prototype = true,
                     }
-                };
-            for file in &facts.files {
-                let targets = file
-                    .ast
-                    .assignments
-                    .iter()
-                    .map(|assignment| assignment.target)
-                    .chain(file.ast.iteration_targets.iter().copied());
-                for target in targets {
-                    let target = file.ast.peel_ts_sugar_span(target);
-                    let text = file.source_text(target).unwrap_or_default();
-                    // Every member written by the target: the target itself,
-                    // or a leaf of a destructuring pattern (`[c.run] = …`) or
-                    // loop head (`for (c.run of …)`).
-                    // A member that is another written member's object
-                    // (`C.prototype` in `C.prototype.m = f`) is read, not
-                    // written.
-                    let inside = file
-                        .ast
-                        .members
-                        .iter()
-                        .filter(|member| target.contains(member.span))
-                        .collect::<Vec<_>>();
-                    let mut written = inside
-                        .iter()
-                        .copied()
-                        .filter(|member| {
-                            !inside.iter().any(|outer| {
-                                file.ast.peel_ts_sugar_span(outer.object) == member.span
-                            })
-                        })
-                        .peekable();
-                    if written.peek().is_none() && text.contains("prototype") {
-                        prototype = true;
-                    }
-                    for member in written {
-                        if file
-                            .ast
-                            .computed_members
-                            .binary_search(&member.span)
-                            .is_ok()
-                        {
-                            // A computed write names its key only when the key is
-                            // a literal, or a `const` bound to a string literal.
-                            // Any other key, on a prototype, may be any member.
-                            if let Some(literal) = file
-                                .ast
-                                .literal_computed_members
-                                .iter()
-                                .find(|literal| literal.span == member.span)
-                            {
-                                names.insert(literal.key.to_string());
-                                if literal.key.as_str() == "prototype" {
-                                    prototype = true;
-                                }
-                            } else if let Some(key) = constant_string_key(file, member.property) {
-                                if key == "prototype" {
-                                    prototype = true;
-                                }
-                                names.insert(key);
-                            } else if file
-                                .source_text(member.object)
-                                .unwrap_or_default()
-                                .contains("prototype")
-                            {
-                                // `R.prototype[key] = …`: narrowed to `R`'s
-                                // instances when `R` is proven (ADR 0314).
-                                let object = file.ast.peel_ts_sugar_span(member.object);
-                                match file.ast.members.iter().find(|prototype_member| {
-                                    prototype_member.span == object
-                                        && file
-                                            .ast
-                                            .computed_members
-                                            .binary_search(&prototype_member.span)
-                                            .is_err()
-                                        && file.source_text(prototype_member.property)
-                                            == Some("prototype")
-                                }) {
-                                    Some(prototype_member) => record(
-                                        file,
-                                        self.prototype_owner(file, prototype_member.object),
-                                        &mut prototype,
-                                    ),
-                                    None => prototype = true,
-                                }
-                            }
-                        } else if let Some(property) = file.source_text(member.property) {
-                            names.insert(property.to_string());
-                            if property == "prototype" {
-                                // `R.prototype = …` (ADR 0314).
-                                record(
-                                    file,
-                                    self.prototype_owner(file, member.object),
-                                    &mut prototype,
-                                );
-                            }
-                        }
-                    }
-                    // A dynamic key not spelled through a prototype (`c[key] = f`
-                    // with `key: keyof C`, or through a prototype alias) is not
-                    // modeled. Like `Object.defineProperty`, it is a reflective
-                    // write this trust boundary leaves out (ADR 0215): vetoing
-                    // every dynamic write would refuse every `xs[i] = v`.
                 }
             }
             // A host proof holds only while neither the method nor the
@@ -522,74 +444,16 @@ impl<'a> SemanticLookup<'a> {
     }
 
     /// The per-name answer of
-    /// [`Self::property_may_be_defined_reflectively_as`] as data. A definer
-    /// spelled as a member is safe for `name` when some call of it passes a
-    /// string-literal key other than `name`; it therefore blocks `name` only
-    /// when every such call's key is `name` (or none passes a literal key), so
-    /// the members that block a single name are collected by that name and the
-    /// rest block every name. Every other spelling blocks every name.
+    /// [`Self::property_may_be_defined_reflectively_as`] as data, from the
+    /// base definers index ([`crate::base::contributions::definers`]).
     fn reflective_definition_names(&self) -> super::ReflectiveDefinitionNames {
-        use solid_facts::ast::ArgumentLiteralFact;
-        const NAMES: [&str; 3] = ["defineProperty", "defineProperties", "__defineGetter__"];
+        use crate::base::DefinerKey;
         let mut result = super::ReflectiveDefinitionNames::default();
-        for file in self.files() {
-            let spelled = |text: &str| NAMES.contains(&text.trim_matches(['\'', '"', '`']));
-            if file.ast.bindings.iter().any(|binding| {
-                binding
-                    .object_slots
-                    .iter()
-                    .any(|slot| NAMES.contains(&slot.property.as_str()))
-            }) {
-                result.any = true;
-            }
-            // For each definer-spelled member: whether it is `defineProperties`
-            // (which never names one key) and the keys its calls pass.
-            let mut definers: HashMap<Span, (bool, HashSet<&str>)> = HashMap::default();
-            for member in &file.ast.members {
-                if let Some(text) = file.source_text(member.property)
-                    && spelled(text)
-                {
-                    definers.entry(member.span).or_insert_with(|| {
-                        (
-                            text.trim_matches(['\'', '"', '`']) != "defineProperties",
-                            HashSet::default(),
-                        )
-                    });
-                }
-            }
-            let member_spans = file
-                .ast
-                .members
-                .iter()
-                .map(|member| member.span)
-                .collect::<HashSet<_>>();
-            for call in &file.ast.calls {
-                let callee = file.ast.peel_ts_sugar_span(call.callee);
-                if let Some((names_one_key, keys)) = definers.get_mut(&callee)
-                    && *names_one_key
-                    && let Some((ArgumentLiteralFact::String(key), false)) = call
-                        .arguments
-                        .get(1)
-                        .map(|key| (&key.literal_value, key.spread))
-                    && !call.arguments.first().is_some_and(|target| target.spread)
-                {
-                    keys.insert(key.as_str());
-                }
-                if !member_spans.contains(&callee)
-                    && file
-                        .source_text(call.callee)
-                        .is_some_and(|callee| NAMES.iter().any(|definer| callee.ends_with(definer)))
-                {
-                    result.any = true;
-                }
-            }
-            for (_, keys) in definers.into_values() {
-                match keys.len() {
-                    0 => result.any = true,
-                    1 => {
-                        result.sole_keys.extend(keys.into_iter().map(str::to_owned));
-                    }
-                    _ => {}
+        for key in self.base_definers().keys() {
+            match key {
+                DefinerKey::Any => result.any = true,
+                DefinerKey::Sole(name) => {
+                    result.sole_keys.insert(name.to_string());
                 }
             }
         }

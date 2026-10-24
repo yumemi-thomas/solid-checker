@@ -193,6 +193,11 @@ impl<K: Eq + Hash + Clone, C: PartialEq> BaseIndex<K, C> {
         self.by_key.contains_key(key)
     }
 
+    /// Every key with at least one value, in no particular order.
+    pub(crate) fn keys(&self) -> impl Iterator<Item = &K> {
+        self.by_key.keys()
+    }
+
     /// The entries the `rank`-th slot of `file` produced.
     pub(crate) fn slot(&self, file: FileId, rank: usize) -> &[(K, C)] {
         self.by_file

@@ -23,7 +23,6 @@
     "file_by_path": 11
   },
   "rust/crates/solid-reactive-ir/src/accessor_provenance.rs": {
-    "facts.files": 1,
     "hashmap-iteration": 2
   },
   "rust/crates/solid-reactive-ir/src/attribution.rs": {
@@ -31,7 +30,7 @@
     "hashmap-iteration": 7
   },
   "rust/crates/solid-reactive-ir/src/base/index.rs": {
-    "hashmap-iteration": 2
+    "hashmap-iteration": 3
   },
   "rust/crates/solid-reactive-ir/src/boundary_defects.rs": {
     "facts.files": 1
@@ -78,10 +77,8 @@
     "file_by_path": 2
   },
   "rust/crates/solid-reactive-ir/src/indexes/class_prototype.rs": {
-    "facts.files": 1,
-    "files()": 2,
-    "file_by_path": 2,
-    "hashmap-iteration": 4
+    "files()": 1,
+    "file_by_path": 2
   },
   "rust/crates/solid-reactive-ir/src/indexes/closed_members.rs": {
     "files()": 1,

@@ -209,42 +209,22 @@ impl<'a> SemanticLookup<'a> {
         Some(position)
     }
 
-    pub(super) fn module_census(&self) -> &ModuleCensus {
+    /// [`ModuleCensus::new`] of the lookup's files, built once per build.
+    pub(crate) fn module_census(&self) -> &ModuleCensus {
         self.initialization
             .census
             .get_or_init(|| ModuleCensus::new(self.facts, self))
     }
 
-    /// [`ModuleCensus::new`] of `facts`: built once per build when they are
-    /// this lookup's own facts, else built for the caller.
-    pub(crate) fn module_census_of(
-        &self,
-        facts: &ProjectFacts,
-    ) -> std::borrow::Cow<'_, ModuleCensus> {
-        if std::ptr::eq(facts, self.facts) {
-            std::borrow::Cow::Borrowed(self.module_census())
-        } else {
-            std::borrow::Cow::Owned(ModuleCensus::new(facts, self))
-        }
-    }
-
-    /// [`MemberStability::index`] of `facts`: built once per build when they
-    /// are this lookup's own facts, else built for the caller.
+    /// [`MemberStability::index`] of the lookup's files, built once per build.
     ///
     /// [`MemberStability::index`]: crate::interproc::accessor_provenance::MemberStability::index
-    pub(crate) fn member_stability_of(
+    pub(crate) fn member_stability(
         &self,
-        facts: &ProjectFacts,
-    ) -> std::borrow::Cow<'_, crate::interproc::accessor_provenance::MemberStability> {
+    ) -> &crate::interproc::accessor_provenance::MemberStability {
         use crate::interproc::accessor_provenance::MemberStability;
-        if std::ptr::eq(facts, self.facts) {
-            std::borrow::Cow::Borrowed(
-                self.member_stability
-                    .get_or_init(|| MemberStability::index(self.facts, self)),
-            )
-        } else {
-            std::borrow::Cow::Owned(MemberStability::index(facts, self))
-        }
+        self.member_stability
+            .get_or_init(|| MemberStability::index(self.facts, self))
     }
 
     /// Whether code at `span` in file `caller` runs after the declarator of

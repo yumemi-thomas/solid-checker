@@ -1883,6 +1883,18 @@ impl<'a> SemanticLookup<'a> {
         self.base_hazards().contains_key(&hazard)
     }
 
+    /// L1: member uses by name.
+    pub(crate) fn base_members(
+        &self,
+    ) -> &crate::base::BaseIndex<crate::base::MemberName, crate::base::MemberUse> {
+        self.base.members(|| self.base_views())
+    }
+
+    /// L1: reflective-definer keys.
+    pub(crate) fn base_definers(&self) -> &crate::base::BaseIndex<crate::base::DefinerKey, ()> {
+        self.base.definers(|| self.base_views())
+    }
+
     /// Every slot of the analyzed files in file order, with the entries
     /// `index` holds for it: how a census that reads files in order replays
     /// their contributions.
@@ -1966,7 +1978,7 @@ impl<'a> SemanticLookup<'a> {
                             })
                             .collect()
                     },
-                    crate::object_members::namespace_exposed_modules(self.facts, self).as_ref(),
+                    crate::object_members::namespace_exposed_modules(self).as_ref(),
                     crate::interproc::accessor_provenance::reflective_prototype_write(self),
                 )
             })

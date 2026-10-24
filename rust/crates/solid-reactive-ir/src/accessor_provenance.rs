@@ -78,7 +78,7 @@ pub(super) struct Resolver<'a, 'facts> {
     runtime_source_origins: HashSet<SymbolId>,
     blocked_contexts: HashSet<Location>,
     unkeyed_provider: bool,
-    member_stability: std::borrow::Cow<'a, MemberStability>,
+    member_stability: &'a MemberStability,
     receiver_channels_opaque: bool,
 }
 
@@ -137,15 +137,26 @@ impl MemberStability {
         }
     }
 
+    /// The census over the lookup's files, replayed in file order from the
+    /// base indexes: each file's write and `delete` targets
+    /// ([`crate::base::MemberRole::StabilityWrite`]) and its reflective
+    /// mutation candidates ([`crate::base::Hazard::MutationBuiltinCall`],
+    /// the only calls [`mutation_builtin`] accepts).
     pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
         let mut project = Self::default();
-        for file in &facts.files {
+        let members = lookup.slot_entries(lookup.base_members());
+        let hazards = lookup.slot_entries(lookup.base_hazards());
+        for ((file, members), (_, hazards)) in members.zip(hazards) {
             let index = match facts.dependency_source_root(file.path.as_str()) {
                 Some(root) => project.dependencies.entry(root.to_owned()).or_default(),
                 None => &mut project,
             };
-            index.syntax(file);
-            for call in &file.ast.calls {
+            index.syntax(file, members);
+            let calls = hazards
+                .iter()
+                .filter(|(hazard, _)| *hazard == crate::base::Hazard::MutationBuiltinCall)
+                .map(|(_, call)| &file.ast.calls[*call as usize]);
+            for call in calls {
                 let Some(method) = mutation_builtin(file, call, lookup) else {
                     continue;
                 };
@@ -264,39 +275,30 @@ impl MemberStability {
         project
     }
 
-    fn syntax(&mut self, file: &FileFacts) {
-        // Normalized leaves exclude receiver Gets, destructuring keys/defaults
-        // and reads inside computed keys. Updates and loop targets are included.
-        let targets = file
-            .ast
-            .write_targets
-            .iter()
-            .copied()
-            .chain(file.ast.deleted_targets.iter().copied())
-            .map(|span| file.ast.peel_ts_sugar_span(span))
-            .collect::<HashSet<_>>();
-        let literal_keys = file
-            .ast
-            .literal_computed_members
-            .iter()
-            .map(|key| (key.span, key.key.as_str()))
-            .collect::<HashMap<_, _>>();
-        for member in &file.ast.members {
-            if !targets.contains(&member.span) {
+    /// Normalized leaves exclude receiver Gets, destructuring keys/defaults
+    /// and reads inside computed keys. Updates and loop targets are included
+    /// ([`crate::base::contributions::members`]).
+    fn syntax(
+        &mut self,
+        file: &FileFacts,
+        members: &[(crate::base::MemberName, crate::base::MemberUse)],
+    ) {
+        use crate::base::{MemberName, MemberRole};
+        for (name, used) in members {
+            if used.role != MemberRole::StabilityWrite {
                 continue;
             }
-            let name = if file.ast.computed_members.contains(&member.span) {
-                literal_keys.get(&member.span).copied()
-            } else {
-                file.source_text(member.property)
-            };
-            if let Some(name) = name {
-                self.written
-                    .entry(name.to_owned())
-                    .or_insert_with(|| location(file.path.shared(), member.span));
-            } else {
-                self.unknown_receivers
-                    .push(location(file.path.shared(), member.object));
+            let member = &file.ast.members[used.ordinal as usize];
+            match name {
+                MemberName::Named(name) => {
+                    self.written
+                        .entry(name.to_string())
+                        .or_insert_with(|| location(file.path.shared(), member.span));
+                }
+                MemberName::Unnamed => {
+                    self.unknown_receivers
+                        .push(location(file.path.shared(), member.object));
+                }
             }
         }
     }

@@ -26,8 +26,8 @@ pub(crate) fn spread_index<'a>(
 ) -> SpreadTargets {
     let mut spreads = HashMap::default();
     let eval = lookup.program_has_eval();
-    let stability = lookup.member_stability_of(facts);
-    let modules = lookup.module_census_of(facts);
+    let stability = lookup.member_stability();
+    let modules = lookup.module_census();
     let mut closed = HashMap::default();
     for file in &facts.files {
         let references = references(file);
@@ -46,8 +46,8 @@ pub(crate) fn spread_index<'a>(
                         file,
                         argument,
                         &references,
-                        &stability,
-                        &modules,
+                        stability,
+                        modules,
                         &mut closed,
                     )
                 };

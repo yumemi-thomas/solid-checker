@@ -27,7 +27,7 @@ impl Resolver<'_, '_> {
             runtime_source_origins: HashSet::default(),
             blocked_contexts: HashSet::default(),
             unkeyed_provider: false,
-            member_stability: lookup.member_stability_of(facts),
+            member_stability: lookup.member_stability(),
             receiver_channels_opaque: lookup.program_has_eval()
                 || lookup.hazard_present(crate::base::Hazard::CodeEvaluatingCall),
         };
