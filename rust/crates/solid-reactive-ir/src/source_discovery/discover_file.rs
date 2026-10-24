@@ -33,7 +33,7 @@ pub(super) fn store_is_value_form(
 
 /// What a source-discovery fragment reads of the call creating a source that
 /// a project function returns (ADR 0222): computed by the fragment and by the
-/// cross-file digest that binds it (ADR 0392), so the two cannot differ.
+/// section fingerprint that binds it (ADR 0392), so the two cannot differ.
 #[derive(Debug)]
 pub(crate) struct ReturnedSourceFacts {
     pub(crate) owned_write: bool,
@@ -486,56 +486,6 @@ pub(crate) fn merge_source_discovery(
         .extend(contribution.value_form_stores.iter().cloned());
 }
 
-pub(crate) fn extend_source_discovery_symbols(
-    symbols: &mut HashSet<SymbolId>,
-    contribution: &SourceDiscoveryContribution,
-) {
-    symbols.extend(
-        contribution
-            .accessors
-            .iter()
-            .map(|(symbol, _)| symbol.clone()),
-    );
-    symbols.extend(
-        contribution
-            .accessor_origins
-            .iter()
-            .map(|(symbol, _)| symbol.clone()),
-    );
-    symbols.extend(
-        contribution
-            .setters
-            .iter()
-            .map(|(symbol, _)| symbol.clone()),
-    );
-    symbols.extend(
-        contribution
-            .actions
-            .iter()
-            .map(|(symbol, _)| symbol.clone()),
-    );
-    symbols.extend(
-        contribution
-            .source_kinds
-            .iter()
-            .map(|(symbol, _)| symbol.clone()),
-    );
-    symbols.extend(
-        contribution
-            .source_primitives
-            .iter()
-            .map(|(symbol, _)| symbol.clone()),
-    );
-    symbols.extend(contribution.async_sources.iter().cloned());
-    symbols.extend(
-        contribution
-            .source_async_options
-            .iter()
-            .map(|(symbol, _)| symbol.clone()),
-    );
-    symbols.extend(contribution.value_form_stores.iter().cloned());
-}
-
 /// Owned reactive-source facts produced by the source-discovery stage and
 /// consumed by the later interprocedural, static, and owner stages.
 pub(crate) struct SourceDiscovery {
@@ -575,8 +525,14 @@ pub(crate) struct SourceDiscovery {
     /// `Reactive` everywhere) for dialects that keep the upstream
     /// over-approximation.
     pub(crate) props_reactivity: PropsReactivityIndex,
-    pub(crate) retained_source_paths: HashSet<String>,
-    pub(crate) changed_source_symbols: HashSet<SymbolId>,
+    /// The files whose own facts (source, Type Facts rows and the symbols
+    /// they name) are the last build's: a later stage's chunk of one of them
+    /// is reused only if its recorded reads still answer as they did.
+    pub(crate) unchanged_paths: HashSet<String>,
+    /// What every file's discovery and the project passes read of the
+    /// lookup ([`crate::base::reads`]): part of the proof of a later chunk
+    /// that reads these tables without recording which entries.
+    pub(crate) shared_reads: crate::base::reads::Reads,
 }
 
 /// The stable, read-mostly environment threaded through every pipeline stage:

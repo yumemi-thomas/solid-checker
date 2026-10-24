@@ -598,6 +598,9 @@ fn nanos(duration: Duration) -> u64 {
 /// build owns for itself.
 pub(crate) struct MemoStore {
     store: Store<BuildSchema>,
+    /// Unique in the process: a chunk's recorded memo reads name the store
+    /// they were made against ([`crate::base::reads::ReadProof`]).
+    id: u64,
     base: RwLock<MemoBase>,
     /// Shadow or verify-reused mode: the updated indexes are compared with a
     /// refold every build.
@@ -631,8 +634,10 @@ pub(crate) fn verify_reused_from_env() -> bool {
 
 impl MemoStore {
     pub(crate) fn new(verify_reused: bool, check_indexes: bool) -> Self {
+        static NEXT_STORE: AtomicU64 = AtomicU64::new(1);
         Self {
             store: Store::new(verify_reused, report),
+            id: NEXT_STORE.fetch_add(1, Ordering::Relaxed),
             base: RwLock::default(),
             check_indexes: check_indexes || verify_reused,
             retained: true,
@@ -647,6 +652,16 @@ impl MemoStore {
             verify_reused_from_env(),
             crate::shadow::ShadowMode::from_env() != crate::shadow::ShadowMode::Off,
         )
+    }
+
+    /// The store's identity in the process.
+    pub(crate) fn id(&self) -> u64 {
+        self.id
+    }
+
+    /// A query of `table`, named for a diagnostic.
+    pub(crate) fn describe(&self, table: TableId, query: super::QueryId) -> String {
+        self.store.describe(table, query)
     }
 
     /// A build's file table under this store's interner, so every id the
@@ -960,8 +975,8 @@ impl MemoStore {
         stats
     }
 
-    /// Every key of the wrapper-candidate index, sorted: the keys a reader
-    /// of the whole table (the cross-file digest) asks for.
+    /// Every key of the wrapper-candidate index, sorted.
+    #[cfg(test)]
     pub(crate) fn wrapper_candidate_keys(&self) -> Vec<Arc<str>> {
         let base = self.base.read().expect("memo base lock");
         let mut keys = base
@@ -1019,9 +1034,37 @@ impl<'w> BuildWorld<'w> {
         &self.views
     }
 
-    /// The answer of `M` for `key`, to a reader outside every memo.
+    /// The answer of `M` for `key`, to a reader outside every memo. A stage
+    /// chunk computing on this thread records it ([`crate::base::reads`]).
     pub(crate) fn answer<M: Memo<BuildSchema>>(&self, key: &M::Key) -> M::Value {
-        self.store.store.answer::<M>(self, key)
+        let (value, read) = self.store.store.answer_read::<M>(self, key);
+        match read {
+            Some((query, changed_at)) => {
+                crate::base::reads::note_memo(crate::base::reads::MemoRead {
+                    table: M::ID,
+                    query,
+                    changed_at,
+                })
+            }
+            // A cycle's fail-closed answer: the store is poisoned, and a
+            // chunk that read it must not be trusted again.
+            None => crate::base::reads::note_memo(crate::base::reads::MemoRead {
+                table: M::ID,
+                query: super::QueryId(u32::MAX),
+                changed_at: super::Revision::MAX,
+            }),
+        }
+        value
+    }
+
+    /// The revision `query` of `table` last changed in, for a chunk's
+    /// recorded read ([`crate::base::reads::ReadAnswers`]).
+    pub(crate) fn changed_at(
+        &self,
+        table: TableId,
+        query: super::QueryId,
+    ) -> Option<super::Revision> {
+        crate::base::reads::suppress(|| self.store.store.changed_at(self, table, query))
     }
 }
 

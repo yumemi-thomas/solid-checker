@@ -62,7 +62,7 @@ pub(crate) type Revision = u32;
 
 /// A recorded query: an input, or one memo table's key.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub(crate) struct QueryId(u32);
+pub(crate) struct QueryId(pub(crate) u32);
 
 /// Which memo table of a schema.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -272,6 +272,10 @@ pub(crate) trait ErasedTable<S: Schema>: Send + Sync {
         parent: &Ctx<'_, '_, S>,
         query: QueryId,
     ) -> Result<Option<Revision>, Cycle>;
+    /// The revision a clean entry's value last changed in, without bringing
+    /// anything up to date or cloning the value; the entry counts as asked
+    /// for in `revision`. `None` when the entry is gone or not clean.
+    fn clean_changed_at(&self, query: QueryId, revision: Revision) -> Option<Revision>;
     /// Raises the entry's state to `state` (dirty is never lowered).
     fn raise(&self, query: QueryId, state: u8);
     /// The entries asked for in `revision`.
@@ -312,6 +316,20 @@ impl<S: Schema, M: Memo<S>> ErasedTable<S> for Table<S, M> {
         store
             .get::<M>(parent, &key)
             .map(|answer| Some(answer.changed_at))
+    }
+
+    fn clean_changed_at(&self, query: QueryId, revision: Revision) -> Option<Revision> {
+        let data = self.data.read().expect("memo table lock");
+        let entry = data.entries.get(&query)?;
+        if entry.state.load(Ordering::Acquire) != CLEAN {
+            return None;
+        }
+        if entry.used_at.swap(revision, Ordering::AcqRel) != revision
+            && entry.computed_at != revision
+        {
+            AtomicStats::bump(&self.stats.reused);
+        }
+        Some(entry.changed_at)
     }
 
     fn raise(&self, query: QueryId, state: u8) {
@@ -607,6 +625,11 @@ impl<S: Schema> Store<S> {
         &self.tables
     }
 
+    /// A query of `table`, named for a diagnostic.
+    pub(crate) fn describe(&self, table: TableId, query: QueryId) -> String {
+        self.tables.table(table).describe(query)
+    }
+
     /// Reports `message` and poisons the store: the next build starts empty.
     pub(crate) fn poison(&self, message: &str) {
         self.poisoned.store(true, Ordering::Release);
@@ -757,19 +780,51 @@ impl<S: Schema> Store<S> {
 
     /// The answer for `key` to a top-level reader (outside every memo). A
     /// cycle answers [`Memo::on_cycle`], is reported, and poisons the store.
+    #[cfg(test)]
     pub(crate) fn answer<M: Memo<S>>(&self, world: &S::World<'_>, key: &M::Key) -> M::Value {
+        self.answer_read::<M>(world, key).0
+    }
+
+    /// [`Self::answer`], with the query and the revision its value last
+    /// changed in (`None` for a cycle's fail-closed answer): what a reader
+    /// outside every memo records ([`crate::base::reads::MemoRead`]).
+    pub(crate) fn answer_read<M: Memo<S>>(
+        &self,
+        world: &S::World<'_>,
+        key: &M::Key,
+    ) -> (M::Value, Option<(QueryId, Revision)>) {
         let root = Ctx::root(world, self);
         match self.get::<M>(&root, key) {
-            Ok(answer) => answer.value,
+            Ok(answer) => (answer.value, Some((answer.query, answer.changed_at))),
             Err(cycle) => {
                 self.poisoned.store(true, Ordering::Release);
                 (self.report)(&format!(
                     "IR memo cycle: {} (failed closed)",
                     cycle.path.join(" -> ")
                 ));
-                M::on_cycle(key)
+                (M::on_cycle(key), None)
             }
         }
+    }
+
+    /// The revision the entry `query` of `table` last changed in, brought up
+    /// to date for a reader outside every memo; `None` when the entry is
+    /// gone or its computation met a cycle.
+    pub(crate) fn changed_at(
+        &self,
+        world: &S::World<'_>,
+        table: TableId,
+        query: QueryId,
+    ) -> Option<Revision> {
+        let table = self.tables.table(table);
+        // A clean entry answers as it is (verify-reused mode recomputes it).
+        if !self.verify_reused
+            && let Some(changed_at) = table.clean_changed_at(query, self.revision())
+        {
+            return Some(changed_at);
+        }
+        let root = Ctx::root(world, self);
+        table.ensure(self, &root, query).ok().flatten()
     }
 
     fn query_of<M: Memo<S>>(&self, key: &M::Key) -> QueryId {
@@ -930,7 +985,9 @@ impl<S: Schema> Store<S> {
         }
         let implied = M::implied(key);
         let ctx = parent.child((query, M::ID), implied.clone());
-        let value = M::compute(&ctx, key)?;
+        // The memo records its own reads; none reaches a stage chunk the
+        // computation happens to run inside ([`crate::base::reads`]).
+        let value = crate::base::reads::suppress(|| M::compute(&ctx, key))?;
         Ok((value, ctx.take_reads(), implied))
     }
 

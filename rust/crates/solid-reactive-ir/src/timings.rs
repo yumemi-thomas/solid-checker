@@ -152,6 +152,11 @@ impl BuildTimings {
     /// Copies the interprocedural stage's own timing breakdown.
     pub(crate) fn absorb_interprocedural(&mut self, timings: &InterproceduralTimings) {
         self.interprocedural_graph = timings.graph;
+        self.interprocedural_graph_nodes = timings.graph_nodes;
+        self.interprocedural_resolver = timings.resolver;
+        self.interprocedural_transport = timings.transport;
+        self.interprocedural_merge = timings.merge;
+        self.interprocedural_refresh = timings.refresh;
         self.interprocedural_direct_summaries = timings.direct_summaries;
         self.interprocedural_direct_index = timings.direct_index;
         self.interprocedural_direct_references = timings.direct_references;
@@ -221,9 +226,23 @@ pub(crate) fn reuse_line(
                 "typescriptIndexes": ms(timings.alias_and_entity_indexes),
                 "symbolNames": ms(timings.symbol_name_indexes),
                 "boundaryDefects": ms(timings.boundary_defects),
+                "namespaceHandOuts": ms(timings.namespace_hand_outs),
+                "reusePlan": ms(timings.reuse_plan),
                 "reachability": ms(timings.reachability),
                 "memoBegin": ms(timings.memo_begin),
                 "baseIndexUpdate": ms(timings.base_index_update),
+            },
+            "interprocMs": {
+                "graph": ms(timings.interprocedural_graph),
+                "graphNodes": ms(timings.interprocedural_graph_nodes),
+                "resolver": ms(timings.interprocedural_resolver),
+                "transport": ms(timings.interprocedural_transport),
+                "merge": ms(timings.interprocedural_merge),
+                "refresh": ms(timings.interprocedural_refresh),
+                "directSummaries": ms(timings.interprocedural_direct_summaries),
+                "propagation": ms(timings.interprocedural_propagation),
+                "resultReads": ms(timings.interprocedural_result_reads),
+                "exportSummaries": ms(timings.interprocedural_export_summaries),
             },
             "totalNs": u64::try_from(timings.total.as_nanos()).unwrap_or(u64::MAX),
             "shadowNs": u64::try_from(timings.shadow.as_nanos()).unwrap_or(u64::MAX),

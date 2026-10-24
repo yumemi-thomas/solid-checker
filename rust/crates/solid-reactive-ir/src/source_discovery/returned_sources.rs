@@ -196,8 +196,8 @@ pub(super) fn returned_source_through<'a>(
         // ADR 0287: `return g(…)`, where `g` is a function in this same file
         // whose every return yields a fresh source. Each call of this
         // function runs that one call and returns its value. The proof stays
-        // in one file; the cross-file digest binds its answer, not this
-        // syntax (ADR 0392).
+        // in one file; a reader records its answer, not this syntax
+        // (ADR 0392).
         let inner = file
             .ast
             .calls

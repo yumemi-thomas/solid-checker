@@ -9,11 +9,6 @@ impl Resolver<'_, '_> {
     pub fn has_runtime_source_origin(&self, symbol: &SymbolId) -> bool {
         self.runtime_source_origins.contains(symbol)
     }
-    pub fn proven_source_origins(&self) -> impl Iterator<Item = &SymbolId> {
-        self.runtime_source_origins
-            .iter()
-            .chain(self.source_origins.iter())
-    }
     pub fn has_extra_source_origins(&self) -> bool {
         !self.source_origins.is_empty()
     }

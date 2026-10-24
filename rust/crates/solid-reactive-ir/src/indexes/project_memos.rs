@@ -73,7 +73,6 @@ project_tables! {
     35 exported_primitive_consts: ExportedPrimitiveConsts,
     36 uninitialized_references: UninitializedReferences,
     37 parameter_completion_calls: ParameterCompletionCalls,
-    38 exempt_store_key_census: ExemptStoreKeyCensus,
     39 intrinsics: IntrinsicsTripwires,
     40 string_code: StringCodeVeto,
     41 tuple_iteration: TupleIterationVeto,
@@ -230,16 +229,6 @@ whole_program! {
     cycle: Vec::new(),
     direct: |lookup| lookup.compute_parameter_completion_calls(),
     |ctx| Ok(ctx.project(|lookup| lookup.compute_parameter_completion_calls()))
-}
-
-whole_program! {
-    /// ADR 0293: the dialect-exempt store keys some Get spells, each with
-    /// whether a member of that name is written, then the reflective flags.
-    ExemptStoreKeyCensus, 38, exempt_store_key_census, "exempt_store_key_census",
-    Option<Vec<(String, bool)>>,
-    cycle: Some(vec![("\0cycle".into(), true)]),
-    direct: |lookup| lookup.compute_exempt_store_key_census(),
-    |ctx| Ok(ctx.project(|lookup| lookup.compute_exempt_store_key_census()))
 }
 
 whole_program! {

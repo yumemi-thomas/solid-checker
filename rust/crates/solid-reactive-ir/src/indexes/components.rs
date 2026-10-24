@@ -120,7 +120,13 @@ impl<'a> SemanticLookup<'a> {
     /// into the three sets by `(path, span)`: a path listed twice is one
     /// function per span.
     fn component_statuses(&self) -> &ComponentSets<'a> {
-        self.component_functions.get_or_init(|| {
+        crate::base::reads::note(crate::base::reads::Section::Components);
+        self.component_functions
+            .get_or_init(|| crate::base::reads::suppress(|| self.component_statuses_uncached()))
+    }
+
+    fn component_statuses_uncached(&self) -> ComponentSets<'a> {
+        {
             let world = self.memo_world();
             let table = self.memos.table();
             let files = self.files();
@@ -155,7 +161,7 @@ impl<'a> SemanticLookup<'a> {
                 }
             }
             (proven, escaped, possible)
-        })
+        }
     }
 
     /// Whether the binding's compiler-resolved type is an exact Solid

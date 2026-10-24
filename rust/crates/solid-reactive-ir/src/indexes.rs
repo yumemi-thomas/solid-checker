@@ -74,7 +74,13 @@ pub(super) struct BindingDeclarations<'a> {
 /// the uses are a memo ([`ReturnedUses`](returned_uses::ReturnedUses)), what
 /// each inherits is assembled from lookup tables that are not memos yet.
 pub(super) type ReturnedInvocationSites = std::sync::Mutex<
-    HashMap<(String, Span), std::sync::Arc<Vec<crate::owners::ReturnedCallbackInvocationSite>>>,
+    HashMap<
+        (String, Span),
+        (
+            std::sync::Arc<Vec<crate::owners::ReturnedCallbackInvocationSite>>,
+            crate::base::reads::Reads,
+        ),
+    >,
 >;
 
 /// Functions by `(path, span)`: the proven components, the escaped ones among
@@ -165,8 +171,8 @@ pub(crate) fn constant_string_key(file: &FileFacts, key: Span) -> Option<String>
 /// the caches compare. A same-file `return g(…)` forward (ADR 0287) proves
 /// nothing unless its file also holds one of these. The interprocedural
 /// result cache counts such a file as call-role syntax
-/// (`interproc::call_role_syntax`); the cross-file digest binds the proof's
-/// answers instead (ADR 0392).
+/// (`interproc::call_role_syntax`); a chunk records the proof's answers it
+/// reads instead (ADR 0392, [`crate::base::reads::Section::ReturnedSources`]).
 pub(crate) fn returns_source_root(file: &FileFacts) -> bool {
     file.ast
         .returns
@@ -806,7 +812,7 @@ pub(super) struct SemanticLookup<'a> {
     ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
-    functions_by_symbol: OnceLock<HashMap<&'a str, SymbolFunction>>,
+    functions_by_symbol: crate::base::reads::Recorded<HashMap<&'a str, SymbolFunction>>,
     /// L2: the memo tables ([`crate::base::memo`]); ADR 0346's identity
     /// wrappers are the first.
     memos: crate::base::memo::build::LookupMemos<'a>,
@@ -816,72 +822,77 @@ pub(super) struct SemanticLookup<'a> {
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
     /// ADR 0292: whether some file holds a reflective write through a
     /// `prototype`.
-    reflective_prototype_write: OnceLock<bool>,
+    reflective_prototype_write: crate::base::reads::Recorded<bool>,
     /// ADR 0320: whether some call may copy keys into an existing object.
-    objects_assigned_into: OnceLock<bool>,
-    router_params: OnceLock<crate::router_params::RouterParamsStatus>,
+    objects_assigned_into: crate::base::reads::Recorded<bool>,
+    router_params: crate::base::reads::Recorded<crate::router_params::RouterParamsStatus>,
     /// ADR 0334: the route option values the audited router renders.
-    route_component_values: OnceLock<HashSet<(String, Span)>>,
+    route_component_values: crate::base::reads::Recorded<HashSet<(String, Span)>>,
     /// ADR 0209: the property names some assignment in the project writes
     /// (`x.name = …`), and which prototypes it writes through (ADR 0314).
-    assigned_member_names: OnceLock<AssignedMembers>,
+    assigned_member_names: crate::base::reads::Recorded<AssignedMembers>,
     /// [`Self::property_may_be_defined_reflectively_as`], summarised once
     /// over the project so each per-name query is a set lookup.
-    reflective_definition_names: OnceLock<ReflectiveDefinitionNames>,
+    reflective_definition_names: crate::base::reads::Recorded<ReflectiveDefinitionNames>,
     /// Per file path: the first binding with an initializer that declares each
     /// symbol, and the first binding declaring a name at each span.
-    binding_declarations: OnceLock<BindingDeclarations<'a>>,
+    binding_declarations: crate::base::reads::Recorded<BindingDeclarations<'a>>,
     /// The invocation sites of each factory call's returned function, by
     /// file path and call span. Several passes ask the same factory call.
     returned_invocation_sites: ReturnedInvocationSites,
     /// This build's views of the returned-invocation and returned-source memos.
     invocation_answers: returned_invocations::State,
     /// ADR 0349: the Promise and array-iteration premises, by their tripwires.
-    intrinsics: OnceLock<intrinsics::Intrinsics>,
+    intrinsics: crate::base::reads::Recorded<intrinsics::Intrinsics>,
     /// ADR 0351: each member read that names a closed object literal's function.
-    closed_members: OnceLock<HashMap<(&'a str, Span), Span>>,
-    entities_by_location: OnceLock<HashMap<(&'a str, u64, u64), &'a EntityFact>>,
-    contained_entities_by_path: OnceLock<HashMap<&'a str, Vec<&'a EntityFact>>>,
-    descriptors_by_symbol: OnceLock<HashMap<&'a str, &'a TypeDescriptor>>,
-    callability_by_symbol: OnceLock<HashMap<&'a str, Callability>>,
-    symbols_by_id: OnceLock<HashMap<&'a str, solid_facts::TypeScriptSymbol<'a>>>,
-    context_symbols: OnceLock<HashSet<&'a str>>,
-    declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
+    closed_members: crate::base::reads::Recorded<HashMap<(&'a str, Span), Span>>,
+    entities_by_location:
+        crate::base::reads::Recorded<HashMap<(&'a str, u64, u64), &'a EntityFact>>,
+    contained_entities_by_path: crate::base::reads::Recorded<HashMap<&'a str, Vec<&'a EntityFact>>>,
+    descriptors_by_symbol: crate::base::reads::Recorded<HashMap<&'a str, &'a TypeDescriptor>>,
+    callability_by_symbol: crate::base::reads::Recorded<HashMap<&'a str, Callability>>,
+    symbols_by_id:
+        crate::base::reads::Recorded<HashMap<&'a str, solid_facts::TypeScriptSymbol<'a>>>,
+    context_symbols: crate::base::reads::Recorded<HashSet<&'a str>>,
+    declaration_symbols: crate::base::reads::Recorded<DeclarationSymbols<'a>>,
     /// ADR 0339: references to function-valued bindings not proven to follow
     /// their declarators.
     initialization: initialization::State,
     /// [`crate::interproc::accessor_provenance::MemberStability::index`] of the lookup's facts.
-    member_stability: OnceLock<crate::interproc::accessor_provenance::MemberStability>,
+    member_stability:
+        crate::base::reads::Recorded<crate::interproc::accessor_provenance::MemberStability>,
     /// Study S5c: the component census's side of the lookup.
     census: census::State<'a>,
-    direct_value_aliases: OnceLock<HashSet<SymbolId>>,
+    direct_value_aliases: crate::base::reads::Recorded<HashSet<SymbolId>>,
     /// The closed program's namespace census (ADR 0347), set once per build.
-    namespace_hand_outs: OnceLock<crate::attribution::NamespaceHandOuts>,
-    bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
-    bindings_by_reference: OnceLock<BindingsByReference>,
+    namespace_hand_outs: crate::base::reads::Recorded<crate::attribution::NamespaceHandOuts>,
+    bindings_by_symbol: crate::base::reads::Recorded<HashMap<SymbolId, BindingResolution>>,
+    bindings_by_reference: crate::base::reads::Recorded<BindingsByReference>,
     /// L0: the analyzed files by interned id ([`crate::base`]).
     file_table: crate::base::FileTable,
     /// Each path's TypeFacts references, read by the references index.
     reference_rows: OnceLock<crate::base::file_table::ReferenceRows>,
     /// L1: the base indexes, each folded on first read ([`crate::base`]).
     base: crate::base::BaseIndexes,
-    file_primitives: OnceLock<Vec<OnceLock<FilePrimitives>>>,
-    file_named_callback_roles: OnceLock<Vec<OnceLock<super::NamedCallbackRoles>>>,
-    project_primitives: OnceLock<HashSet<solid_dialect::Primitive>>,
-    callback_capabilities: OnceLock<DialectCallbackCapabilities>,
+    file_primitives: OnceLock<Vec<crate::base::reads::Recorded<FilePrimitives>>>,
+    file_named_callback_roles:
+        OnceLock<Vec<crate::base::reads::Recorded<super::NamedCallbackRoles>>>,
+    project_primitives: crate::base::reads::Recorded<HashSet<solid_dialect::Primitive>>,
+    callback_capabilities: crate::base::reads::Recorded<DialectCallbackCapabilities>,
     returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
-    project_has_component_type: OnceLock<bool>,
+    project_has_component_type: crate::base::reads::Recorded<bool>,
     /// Proven components, then functions whose only missing proof is an
     /// escaping reference (`ComponentStatus::Uncertain`).
     component_functions: OnceLock<ComponentSets<'a>>,
-    result_access_forwarded: OnceLock<HashMap<&'a str, Vec<ResultAccessForwarded>>>,
-    cross_file_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
-    member_resolution_digest: OnceLock<Option<CrossFileProofDigest>>,
-    tuple_iteration_veto: OnceLock<bool>,
-    string_code_veto: OnceLock<bool>,
+    result_access_forwarded:
+        crate::base::reads::Recorded<HashMap<&'a str, Vec<ResultAccessForwarded>>>,
+    /// [`Self::section_fingerprint`], once per build.
+    section_fingerprints: [OnceLock<[u8; 32]>; crate::base::reads::Section::ALL.len()],
+    tuple_iteration_veto: crate::base::reads::Recorded<bool>,
+    string_code_veto: crate::base::reads::Recorded<bool>,
     /// ADR 0277: `(path, function span, parameter index)` for each parameter
     /// a synchronous project function calls on its every-completion path.
-    parameter_completion_calls: OnceLock<HashSet<(&'a str, Span, usize)>>,
+    parameter_completion_calls: crate::base::reads::Recorded<HashSet<(&'a str, Span, usize)>>,
     /// ADR 0278: the calls TypeScript resolves to a signature returning
     /// `never`, or (ADR 0279) to an `asserts` signature, per path. Such a call never completes normally, so a caller
     /// that catches its throw carries on with the rest of the body skipped.
@@ -889,11 +900,11 @@ pub(super) struct SemanticLookup<'a> {
     /// ADR 0280: `(path, function span)` for each function that tests one
     /// of its own parameters in a condition or a logical operand, the only
     /// functions a call's arguments can decide anything in.
-    parameter_testing_functions: OnceLock<HashSet<(&'a str, Span)>>,
+    parameter_testing_functions: crate::base::reads::Recorded<HashSet<(&'a str, Span)>>,
     /// ADR 0338: whether some analysed file may patch `Function.prototype.bind`.
-    function_bind_patched: OnceLock<bool>,
-    effect_apply_regions: OnceLock<crate::effect_execution::ApplyRegions>,
-    effect_apply_calls: OnceLock<crate::effect_execution::ApplyCalls<'a>>,
+    function_bind_patched: crate::base::reads::Recorded<bool>,
+    effect_apply_regions: crate::base::reads::Recorded<crate::effect_execution::ApplyRegions>,
+    effect_apply_calls: crate::base::reads::Recorded<crate::effect_execution::ApplyCalls<'a>>,
 }
 
 /// Which parts of the returned-adapter interface this build's dialect can
@@ -1054,10 +1065,6 @@ impl<'a> SemanticLookup<'a> {
         }
     }
 
-    pub(crate) fn memo_store(&self) -> &crate::base::memo::build::MemoStore {
-        self.memos.store()
-    }
-
     /// Ends the build's memo use ([`crate::base::memo::build::LookupMemos::end`]).
     pub(crate) fn end_memos(&self) -> Option<crate::base::memo::build::MemoReport> {
         self.memos.end()
@@ -1065,8 +1072,14 @@ impl<'a> SemanticLookup<'a> {
 
     /// Records the closed program's namespace census (ADR 0347). The pipeline
     /// sets it once per build, before any owner pass reads it.
-    pub(crate) fn set_namespace_hand_outs(&self, hand_outs: crate::attribution::NamespaceHandOuts) {
-        let _ = self.namespace_hand_outs.set(hand_outs);
+    /// `reads` are what computing it read ([`crate::base::reads`]): a reader
+    /// records them.
+    pub(crate) fn set_namespace_hand_outs(
+        &self,
+        hand_outs: crate::attribution::NamespaceHandOuts,
+        reads: crate::base::reads::Reads,
+    ) {
+        let _ = self.namespace_hand_outs.set(hand_outs, reads);
     }
 
     /// Whether the program names the function at `function` in the module at
@@ -1114,56 +1127,55 @@ impl<'a> SemanticLookup<'a> {
             ast_indexes,
             entities,
             symbol_names,
-            functions_by_symbol: OnceLock::new(),
+            functions_by_symbol: crate::base::reads::Recorded::new(),
             memos: crate::base::memo::build::LookupMemos::owned(&file_table),
             invocation_flow_answers: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
-            reflective_prototype_write: OnceLock::new(),
-            objects_assigned_into: OnceLock::new(),
-            router_params: OnceLock::new(),
-            route_component_values: OnceLock::new(),
-            assigned_member_names: OnceLock::new(),
-            reflective_definition_names: OnceLock::new(),
+            reflective_prototype_write: crate::base::reads::Recorded::new(),
+            objects_assigned_into: crate::base::reads::Recorded::new(),
+            router_params: crate::base::reads::Recorded::new(),
+            route_component_values: crate::base::reads::Recorded::new(),
+            assigned_member_names: crate::base::reads::Recorded::new(),
+            reflective_definition_names: crate::base::reads::Recorded::new(),
             returned_invocation_sites: ReturnedInvocationSites::default(),
             invocation_answers: returned_invocations::State::default(),
-            binding_declarations: OnceLock::new(),
-            intrinsics: OnceLock::new(),
-            closed_members: OnceLock::new(),
-            entities_by_location: OnceLock::new(),
-            contained_entities_by_path: OnceLock::new(),
-            descriptors_by_symbol: OnceLock::new(),
-            callability_by_symbol: OnceLock::new(),
-            symbols_by_id: OnceLock::new(),
-            context_symbols: OnceLock::new(),
-            declaration_symbols: OnceLock::new(),
+            binding_declarations: crate::base::reads::Recorded::new(),
+            intrinsics: crate::base::reads::Recorded::new(),
+            closed_members: crate::base::reads::Recorded::new(),
+            entities_by_location: crate::base::reads::Recorded::new(),
+            contained_entities_by_path: crate::base::reads::Recorded::new(),
+            descriptors_by_symbol: crate::base::reads::Recorded::new(),
+            callability_by_symbol: crate::base::reads::Recorded::new(),
+            symbols_by_id: crate::base::reads::Recorded::new(),
+            context_symbols: crate::base::reads::Recorded::new(),
+            declaration_symbols: crate::base::reads::Recorded::new(),
             initialization: initialization::State::default(),
-            member_stability: OnceLock::new(),
+            member_stability: crate::base::reads::Recorded::new(),
             census: census::State::default(),
-            direct_value_aliases: OnceLock::new(),
-            namespace_hand_outs: OnceLock::new(),
-            bindings_by_symbol: OnceLock::new(),
-            bindings_by_reference: OnceLock::new(),
+            direct_value_aliases: crate::base::reads::Recorded::new(),
+            namespace_hand_outs: crate::base::reads::Recorded::new(),
+            bindings_by_symbol: crate::base::reads::Recorded::new(),
+            bindings_by_reference: crate::base::reads::Recorded::new(),
             file_table,
             reference_rows: OnceLock::new(),
             base: crate::base::BaseIndexes::default(),
             file_primitives: OnceLock::new(),
             file_named_callback_roles: OnceLock::new(),
-            project_primitives: OnceLock::new(),
-            callback_capabilities: OnceLock::new(),
+            project_primitives: crate::base::reads::Recorded::new(),
+            callback_capabilities: crate::base::reads::Recorded::new(),
             returned_callback_proof_digest: OnceLock::new(),
-            project_has_component_type: OnceLock::new(),
+            project_has_component_type: crate::base::reads::Recorded::new(),
             component_functions: OnceLock::new(),
-            result_access_forwarded: OnceLock::new(),
-            cross_file_proof_digest: OnceLock::new(),
-            member_resolution_digest: OnceLock::new(),
-            tuple_iteration_veto: OnceLock::new(),
-            string_code_veto: OnceLock::new(),
-            parameter_completion_calls: OnceLock::new(),
+            result_access_forwarded: crate::base::reads::Recorded::new(),
+            section_fingerprints: std::array::from_fn(|_| OnceLock::new()),
+            tuple_iteration_veto: crate::base::reads::Recorded::new(),
+            string_code_veto: crate::base::reads::Recorded::new(),
+            parameter_completion_calls: crate::base::reads::Recorded::new(),
             never_returning_calls: OnceLock::new(),
-            parameter_testing_functions: OnceLock::new(),
-            function_bind_patched: OnceLock::new(),
-            effect_apply_regions: OnceLock::new(),
-            effect_apply_calls: OnceLock::new(),
+            parameter_testing_functions: crate::base::reads::Recorded::new(),
+            function_bind_patched: crate::base::reads::Recorded::new(),
+            effect_apply_regions: crate::base::reads::Recorded::new(),
+            effect_apply_calls: crate::base::reads::Recorded::new(),
         }
     }
 
@@ -1435,56 +1447,196 @@ impl<'a> SemanticLookup<'a> {
         }
     }
 
-    /// Digest of every project-wide proof whose answer is baked into a
-    /// per-file cache fragment.
-    ///
-    /// Component identity is a whole-project fact: a JSX call site in one
-    /// file can make a function in another file an owned component. Returned
-    /// callback reachability has the same shape. One digest gives every
-    /// dependent cache family the same coherent generation marker.
-    /// ADR 0320: [`Self::cross_file_proof_digest`] plus the program-wide
-    /// member-replacement census member resolution reads (an assignment of a
-    /// name or through an unknown key, a reflective definition, code copying
-    /// keys into objects). Only the stages that resolve members -- the
-    /// interprocedural graph and results, local accesses -- are keyed on it,
-    /// so a write elsewhere does not discard source discovery.
-    pub(super) fn member_resolution_digest(&self) -> Option<CrossFileProofDigest> {
-        // Every input is this lookup's own once-computed answer, and the
-        // caches compare it once per retained function: compute it once.
-        *self
-            .member_resolution_digest
-            .get_or_init(|| self.member_resolution_digest_uncached())
+    /// The fingerprint of `section`'s value in this build (L3, ADR 03XX-s6b):
+    /// what a stage chunk that read the section compares to decide reuse
+    /// ([`crate::base::reads::ReadProof`]). Computed once per build, on the
+    /// first check that needs it, without recording.
+    pub(crate) fn section_fingerprint(&self, section: crate::base::reads::Section) -> [u8; 32] {
+        *self.section_fingerprints[section as usize].get_or_init(|| {
+            crate::base::reads::suppress(|| self.section_fingerprint_uncached(section))
+        })
     }
 
-    fn member_resolution_digest_uncached(&self) -> Option<CrossFileProofDigest> {
-        let base = self.cross_file_proof_digest()?;
-        let assigned = self.assigned_members();
-        let mut names = assigned.names.iter().collect::<Vec<_>>();
-        names.sort_unstable();
-        let mut hasher = Sha256::new();
-        hasher.update(base);
-        hasher.update(b"member-replacement\0");
-        hasher.update([
-            u8::from(assigned.global),
-            u8::from(self.property_may_be_defined_reflectively()),
-            u8::from(self.objects_may_be_assigned_into()),
-        ]);
-        for name in names {
-            hasher.update(u64::try_from(name.len()).unwrap_or(u64::MAX).to_le_bytes());
-            hasher.update(name.as_bytes());
+    fn section_fingerprint_uncached(&self, section: crate::base::reads::Section) -> [u8; 32] {
+        use crate::base::reads::Section;
+        fn text(hasher: &mut Sha256, value: &str) {
+            hasher.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
+            hasher.update(value.as_bytes());
         }
-        Some(hasher.finalize().into())
+        fn spans<'s>(hasher: &mut Sha256, keys: impl Iterator<Item = (&'s str, Span)>) {
+            let mut keys = keys.collect::<Vec<_>>();
+            keys.sort_unstable();
+            for (path, span) in keys {
+                text(hasher, path);
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+            }
+            hasher.update([0xff]);
+        }
+        let mut hasher = Sha256::new();
+        hasher.update([section as u8]);
+        match section {
+            Section::Components => {
+                spans(&mut hasher, self.component_functions().iter().copied());
+                spans(
+                    &mut hasher,
+                    self.escaped_component_functions().iter().copied(),
+                );
+                spans(
+                    &mut hasher,
+                    self.possible_component_functions().iter().copied(),
+                );
+            }
+            Section::MemberTargets => {
+                let mut targets = self.object_member_targets().iter().collect::<Vec<_>>();
+                targets.sort_unstable_by(|a, b| {
+                    (a.0.path.as_ref(), a.0.start_byte, a.0.end_byte).cmp(&(
+                        b.0.path.as_ref(),
+                        b.0.start_byte,
+                        b.0.end_byte,
+                    ))
+                });
+                for (site, (path, span)) in targets {
+                    text(&mut hasher, site.path.as_ref());
+                    text(&mut hasher, path.as_str());
+                    hasher.update(site.start_byte.to_le_bytes());
+                    hasher.update(site.end_byte.to_le_bytes());
+                    hasher.update(span.start.to_le_bytes());
+                    hasher.update(span.end.to_le_bytes());
+                }
+            }
+            Section::SpreadTargets => {
+                let mut spreads = self.spread_handler_targets().iter().collect::<Vec<_>>();
+                spreads.sort_unstable_by_key(|(site, _)| {
+                    (site.path.as_ref(), site.start_byte, site.end_byte)
+                });
+                for (site, targets) in spreads {
+                    text(&mut hasher, site.path.as_ref());
+                    hasher.update(site.start_byte.to_le_bytes());
+                    hasher.update(site.end_byte.to_le_bytes());
+                    hasher.update([u8::from(targets.is_some())]);
+                    if let Some(targets) = targets {
+                        let mut targets = targets.iter().collect::<Vec<_>>();
+                        targets.sort_unstable();
+                        for (path, span) in targets {
+                            text(&mut hasher, path.as_str());
+                            hasher.update(span.start.to_le_bytes());
+                            hasher.update(span.end.to_le_bytes());
+                        }
+                    }
+                    hasher.update([0xfe]);
+                }
+            }
+            Section::LiteralReceivers => {
+                // The whole census: a reader may ask about a member in any
+                // file, the literal declared in that file or another.
+                spans(
+                    &mut hasher,
+                    self.literal_receiver_members()
+                        .iter()
+                        .map(|(path, span)| (path.as_str(), *span)),
+                );
+                spans(
+                    &mut hasher,
+                    self.literal_receivers_across_files()
+                        .iter()
+                        .map(|(path, span)| (path.as_str(), *span)),
+                );
+            }
+            Section::FlowAnswers => {
+                hasher.update([u8::from(self.program_closed)]);
+                let mut answers = self.invocation_flow_answers().iter().collect::<Vec<_>>();
+                answers.sort_unstable_by(|left, right| left.0.cmp(right.0));
+                for ((path, span), role) in answers {
+                    text(&mut hasher, path);
+                    hasher.update(span.start.to_le_bytes());
+                    hasher.update(span.end.to_le_bytes());
+                    text(&mut hasher, &format!("{role:?}"));
+                }
+            }
+            Section::EventLiterals => {
+                hasher.update([u8::from(self.program_closed)]);
+                spans(
+                    &mut hasher,
+                    self.event_invoked_literals()
+                        .iter()
+                        .map(|(path, span)| (path.as_str(), *span)),
+                );
+            }
+            Section::NeverReturning => {
+                let mut paths = self.never_returning_calls().iter().collect::<Vec<_>>();
+                paths.sort_unstable();
+                for (path, calls) in paths {
+                    text(&mut hasher, path);
+                    for call in calls {
+                        hasher.update(call.start.to_le_bytes());
+                        hasher.update(call.end.to_le_bytes());
+                    }
+                    hasher.update([0xfe]);
+                }
+            }
+            Section::ReturnedSources => self.returned_source_digest(&mut hasher),
+            Section::ReturnedCallbacks => match self.returned_callback_proof_digest() {
+                Some(digest) => {
+                    hasher.update([1]);
+                    hasher.update(digest);
+                }
+                None => hasher.update([0]),
+            },
+            Section::SynchronousDispatch => {
+                hasher.update([u8::from(
+                    self.hazard_present(crate::base::Hazard::SynchronousDispatch),
+                )]);
+            }
+            Section::ExportedPrimitiveConsts => {
+                for (path, span) in self.exported_primitive_consts() {
+                    text(&mut hasher, &path);
+                    hasher.update(span.start.to_le_bytes());
+                    hasher.update(span.end.to_le_bytes());
+                }
+            }
+            Section::ReflectivePrototypeWrite => {
+                hasher.update([u8::from(self.reflective_prototype_write_present())]);
+            }
+            Section::ReflectiveDefinition => {
+                hasher.update([u8::from(
+                    self.hazard_present(crate::base::Hazard::ReflectiveDefinitionSpelling),
+                )]);
+                let mut keys = self
+                    .base
+                    .definers(|| self.base_views())
+                    .keys()
+                    .map(|key| format!("{key:?}"))
+                    .collect::<Vec<_>>();
+                keys.sort_unstable();
+                for key in keys {
+                    text(&mut hasher, &key);
+                }
+            }
+        }
+        hasher.finalize().into()
     }
 
+    /// Begins the build's memos, outside every recording: the first read
+    /// would otherwise begin them from inside whichever stage asks first
+    /// (ADR 0392's deadlock: a lane that begins them re-asks the recorded
+    /// probes while holding its own table's lock).
+    ///
+    /// Then warms the project-wide answers most stages read, concurrently,
+    /// so the build pays the longest of them rather than their sum. Each
+    /// fills its own once-per-build cache, so the answers are the ones a
+    /// sequential run computes; nothing records them here.
     // Threads only with a second analysis worker; otherwise the lanes run inline (wasm32-wasip1).
     #[allow(clippy::disallowed_methods)]
-    pub(super) fn cross_file_proof_digest(&self) -> Option<CrossFileProofDigest> {
-        *self.cross_file_proof_digest.get_or_init(|| {
-            // The project-wide proofs below are independent and each a whole
-            // pass over the program; on every incremental build they are
-            // recomputed. Warm them concurrently so the digest costs the
-            // longest of them, not their sum. Each fills its own `OnceLock`,
-            // so the answers are the ones a sequential run computes.
+    pub(crate) fn begin_memos(&self) {
+        if memo_probes::probing() {
+            return;
+        }
+        crate::base::reads::suppress(|| {
+            let _ = self.memo_world();
+            if crate::pipeline::available_analysis_workers() <= 1 {
+                return;
+            }
             let tuple_results = self.files().iter().any(|file| {
                 file.ast.returns.iter().any(|returned| {
                     returned.argument.is_some_and(|argument| {
@@ -1505,335 +1657,62 @@ impl<'a> SemanticLookup<'a> {
                             .is_some_and(|primitive| self.dialect.returns_reactive_tuple(primitive))
                 })
             });
-            // Begin the build's memos here, before the lanes: a lane that
-            // begins them would re-ask the recorded probes while holding its
-            // own table's `OnceLock`, and a probe that needs that table
-            // (member stability reads the tuple veto) would wait on it
-            // forever.
-            if !memo_probes::probing() {
-                let _ = self.memo_world();
-            }
-            if crate::pipeline::available_analysis_workers() > 1 {
-                let limit = crate::pipeline::analysis_worker_limit_for_lanes(4);
-                std::thread::scope(|scope| {
-                    let warm = |work: &(dyn Fn() + Sync)| {
-                        let _limit = crate::pipeline::AnalysisWorkerLimit::enter(limit);
-                        work();
-                    };
-                    if tuple_results {
-                        scope.spawn(move || {
-                            warm(&|| {
-                                let _ = self.tuple_iteration_may_be_mutated();
-                            })
-                        });
-                    }
-                    scope.spawn(move || {
-                        warm(&|| {
-                            let _ = self.effect_apply_calls();
-                        })
-                    });
-                    scope.spawn(move || {
-                        warm(&|| {
-                            let _ = self.object_member_targets();
-                        })
-                    });
-                    warm(&|| {
-                        let _ = self.component_functions();
-                    });
-                });
-            }
-            let components = self.component_functions();
-            let mut component_keys = components.iter().copied().collect::<Vec<_>>();
-            component_keys.sort_unstable();
-            let mut escaped_keys = self
-                .escaped_component_functions()
-                .iter()
-                .copied()
-                .collect::<Vec<_>>();
-            escaped_keys.sort_unstable();
-            let mut possible_keys = self
-                .possible_component_functions()
-                .iter()
-                .copied()
-                .collect::<Vec<_>>();
-            possible_keys.sort_unstable();
-            let mut hasher = Sha256::new();
-            hasher.update(b"components\0");
-            // ADR 0282: a mutation in another file can withdraw the tuple
-            // callable edge without changing the consuming file's facts.
-            // Projects with no supported tuple result cannot consume this
-            // premise. Do not invalidate their unrelated object/source caches.
-            if tuple_results {
-                hasher.update(b"tuple-iteration-veto\0");
-                hasher.update([u8::from(self.tuple_iteration_may_be_mutated())]);
-            }
-            // ADR 0324: whether the router premise applies is a property of
-            // every file (a history in one decides what another reads).
-            hasher.update(b"router-params\0");
-            hasher.update([u8::from(self.router_params().applies())]);
-            // ADR 0346: a wrapper in another file decides whether a call hands
-            // back a callback literal, so every wrapper's identity is digested.
-            hasher.update(b"identity-wrappers\0");
-            for (symbol, index) in self.identity_wrappers() {
-                hasher.update(
-                    u64::try_from(symbol.len())
-                        .unwrap_or(u64::MAX)
-                        .to_le_bytes(),
-                );
-                hasher.update(symbol.as_bytes());
-                hasher.update(u64::try_from(index).unwrap_or(u64::MAX).to_le_bytes());
-            }
-            // ADR 0325: an imported constant's primitive-ness is another
-            // file's fact.
-            hasher.update(b"imported-primitive-consts\0");
-            for (path, span) in self.exported_primitive_consts() {
-                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                hasher.update(path.as_bytes());
-                hasher.update(span.start.to_le_bytes());
-                hasher.update(span.end.to_le_bytes());
-            }
-            // ADR 0302: a compute helper or source in another file decides an
-            // apply's owner/execution edge. Bind each call's answer, including
-            // named callbacks that also have independent invocations.
-            let mut apply_sites = self.effect_apply_calls().iter().collect::<Vec<_>>();
-            apply_sites.sort_unstable_by_key(|(site, _)| **site);
-            hasher.update(b"effect-apply-execution\0");
-            for ((path, span, argument), execution) in apply_sites {
-                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                hasher.update(path.as_bytes());
-                hasher.update(span.start.to_le_bytes());
-                hasher.update(span.end.to_le_bytes());
-                hasher.update(u64::try_from(*argument).unwrap_or(u64::MAX).to_le_bytes());
-                let tag = match execution {
-                    crate::effect_execution::ApplyExecution::Proven => 0_u8,
-                    crate::effect_execution::ApplyExecution::Absent => 1,
-                    crate::effect_execution::ApplyExecution::Unknown => 2,
+            let limit = crate::pipeline::analysis_worker_limit_for_lanes(4);
+            std::thread::scope(|scope| {
+                let warm = |work: &(dyn Fn() + Sync)| {
+                    let _limit = crate::pipeline::AnalysisWorkerLimit::enter(limit);
+                    work();
                 };
-                hasher.update([tag]);
-            }
-            // ADR 0314: which prototypes another file writes decides which
-            // receivers keep an exact member here.
-            {
-                let assigned = self.assigned_members();
-                hasher.update(b"prototype-writes\0");
-                hasher.update([u8::from(assigned.global)]);
-                let mut constructors = assigned.constructors.iter().collect::<Vec<_>>();
-                constructors.sort_unstable();
-                for (path, span) in constructors {
-                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                    hasher.update(path.as_bytes());
-                    hasher.update(span.start.to_le_bytes());
-                    hasher.update(span.end.to_le_bytes());
+                if tuple_results {
+                    scope.spawn(move || {
+                        warm(&|| {
+                            let _ = self.tuple_iteration_may_be_mutated();
+                        })
+                    });
                 }
-                let mut hosts = assigned.hosts.clone();
-                hosts.sort_unstable();
-                for (name, dom) in hosts {
-                    hasher.update(u64::try_from(name.len()).unwrap_or(u64::MAX).to_le_bytes());
-                    hasher.update(name.as_bytes());
-                    hasher.update([u8::from(dom)]);
-                }
-            }
-            // ADR 0339: a mention of a function-valued binding that may run
-            // before its declarator supplies no call site or reachability
-            // edge; another module's imports decide it.
-            hasher.update(b"uninitialized-references\0");
-            let mut withheld = self
-                .uninitialized_references()
-                .iter()
-                .flat_map(|(path, spans)| spans.iter().map(move |span| (path.as_str(), *span)))
-                .collect::<Vec<_>>();
-            withheld.sort_unstable();
-            for (path, span) in withheld {
-                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                hasher.update(path.as_bytes());
-                hasher.update(span.start.to_le_bytes());
-                hasher.update(span.end.to_le_bytes());
-            }
-            let mut member_targets = self.object_member_targets().iter().collect::<Vec<_>>();
-            member_targets.sort_unstable_by(|a, b| {
-                (a.0.path.as_ref(), a.0.start_byte, a.0.end_byte).cmp(&(
-                    b.0.path.as_ref(),
-                    b.0.start_byte,
-                    b.0.end_byte,
-                ))
+                scope.spawn(move || {
+                    warm(&|| {
+                        let _ = self.effect_apply_calls();
+                    })
+                });
+                scope.spawn(move || {
+                    warm(&|| {
+                        let _ = self.object_member_targets();
+                    })
+                });
+                warm(&|| {
+                    let _ = self.component_functions();
+                });
             });
-            hasher.update(b"object-member-targets\0");
-            for (site, (path, span)) in member_targets {
-                for value in [site.path.as_ref(), path.as_str()] {
-                    hasher.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
-                    hasher.update(value.as_bytes());
-                }
-                hasher.update(site.start_byte.to_le_bytes());
-                hasher.update(site.end_byte.to_le_bytes());
-                hasher.update(span.start.to_le_bytes());
-                hasher.update(span.end.to_le_bytes());
-            }
-            // A remote handler replacement moves the exact function spans
-            // cached by the owner fragments, even when the spread is unchanged.
-            let mut spreads = self.spread_handler_targets().iter().collect::<Vec<_>>();
-            spreads.sort_unstable_by_key(|(site, _)| {
-                (site.path.as_ref(), site.start_byte, site.end_byte)
-            });
-            hasher.update(b"spread-handler-targets\0");
-            for (site, targets) in spreads {
-                hasher.update(
-                    u64::try_from(site.path.len())
-                        .unwrap_or(u64::MAX)
-                        .to_le_bytes(),
-                );
-                hasher.update(site.path.as_bytes());
-                hasher.update(site.start_byte.to_le_bytes());
-                hasher.update(site.end_byte.to_le_bytes());
-                hasher.update([u8::from(targets.is_some())]);
-                if let Some(targets) = targets {
-                    let mut targets = targets.iter().collect::<Vec<_>>();
-                    targets.sort_unstable();
-                    for (path, span) in targets {
-                        hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                        hasher.update(path.as_bytes());
-                        hasher.update(span.start.to_le_bytes());
-                        hasher.update(span.end.to_le_bytes());
-                    }
-                }
-            }
-            // `call_withheld` (interprocedural graph, result reads, execution
-            // roles) keeps a call off the older accessor-transport route when
-            // its receiver is bound to an exact object literal, possibly
-            // declared in another file: a receiver that stops being a literal
-            // there moves the answer here with this file unchanged (ADR 0383,
-            // study 2.5). A literal declared in the member's own file moves
-            // with that file's hash, so only the cross-file ones are digested.
-            hasher.update(b"literal-receiver-members\0");
-            for (path, span) in self.literal_receivers_across_files() {
-                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                hasher.update(path.as_bytes());
-                hasher.update(span.start.to_le_bytes());
-                hasher.update(span.end.to_le_bytes());
-            }
-            // Returned-source proofs (ADR 0222, 0287) read another file's
-            // function: bind their answers (ADR 0392).
-            hasher.update(b"returned-source-inputs\0");
-            self.returned_source_digest(&mut hasher);
-            hasher.update(b"synchronous-event-dispatch\0");
-            hasher.update([u8::from(self.synchronous_event_dispatch_present())]);
-            // ADR 0319: an invocation-flow proof follows a function value
-            // through any file of a closed program -- bindings, returns,
-            // object members, callee parameters, component props -- so a
-            // literal's role here can move with another file's contents.
-            // Every consumer reads the role from one per-build table of
-            // answers (`invocation_flow_answers`); bind that table, as ADR
-            // 0302 binds each apply's answer. A closed program with no proven
-            // answer still writes the marker, so closing or opening the
-            // boundary always moves the digest.
-            if self.program_closed {
-                let mut answers = self.invocation_flow_answers().iter().collect::<Vec<_>>();
-                answers.sort_unstable_by(|left, right| left.0.cmp(right.0));
-                hasher.update(b"invocation-flow-answers\0");
-                for ((path, span), role) in answers {
-                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                    hasher.update(path.as_bytes());
-                    hasher.update(span.start.to_le_bytes());
-                    hasher.update(span.end.to_le_bytes());
-                    hasher.update(format!("{role:?}").as_bytes());
-                    hasher.update([0]);
-                }
-                // The owner seeds read the same walk's owner answers.
-                let mut literals = self.event_invoked_literals().iter().collect::<Vec<_>>();
-                literals.sort_unstable();
-                hasher.update(b"event-invoked-literals\0");
-                for (path, span) in literals {
-                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                    hasher.update(path.as_bytes());
-                    hasher.update(span.start.to_le_bytes());
-                    hasher.update(span.end.to_le_bytes());
-                }
-            }
-            for (path, span) in component_keys {
-                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                hasher.update(path.as_bytes());
-                hasher.update(span.start.to_le_bytes());
-                hasher.update(span.end.to_le_bytes());
-            }
-            hasher.update(b"escaped-components\0");
-            for (path, span) in escaped_keys {
-                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                hasher.update(path.as_bytes());
-                hasher.update(span.start.to_le_bytes());
-                hasher.update(span.end.to_le_bytes());
-            }
-            hasher.update(b"possible-components\0");
-            for (path, span) in possible_keys {
-                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                hasher.update(path.as_bytes());
-                hasher.update(span.start.to_le_bytes());
-                hasher.update(span.end.to_le_bytes());
-            }
-            if let Some(returned) = self.returned_callback_proof_digest() {
-                hasher.update(b"returned-callbacks\0");
-                hasher.update(returned);
-            }
-            // Review round 1 of ADR 0293: an exempt store Get is withheld
-            // only while no file writes a member of its key, writes through a
-            // prototype, or defines a property reflectively.
-            if let Some(census) = self.exempt_store_key_census() {
-                hasher.update(b"exempt-store-keys\0");
-                for (key, written) in census {
-                    hasher.update(u64::try_from(key.len()).unwrap_or(u64::MAX).to_le_bytes());
-                    hasher.update(key.as_bytes());
-                    hasher.update([u8::from(written)]);
-                }
-            }
-            // ADR 0277: whether a helper calls its parameter on every
-            // completion decides the role of a callback written in its
-            // caller, and moving that call into a branch changes no summary.
-            let mut parameter_calls = self
-                .parameter_completion_calls()
-                .iter()
-                .copied()
-                .collect::<Vec<_>>();
-            parameter_calls.sort_unstable();
-            // ADR 0278: a guard's declared `never` lives in another file's
-            // types, so it is bound here rather than by this file's bytes.
-            let mut never_paths = self.never_returning_calls().iter().collect::<Vec<_>>();
-            never_paths.sort_unstable();
-            hasher.update(b"never-returning-calls\0");
-            for (path, calls) in never_paths {
-                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                hasher.update(path.as_bytes());
-                for call in calls {
-                    hasher.update(call.start.to_le_bytes());
-                    hasher.update(call.end.to_le_bytes());
-                }
-            }
-            hasher.update(b"parameter-completion-calls\0");
-            for (path, span, index) in parameter_calls {
-                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                hasher.update(path.as_bytes());
-                hasher.update(span.start.to_le_bytes());
-                hasher.update(span.end.to_le_bytes());
-                hasher.update(u64::try_from(index).unwrap_or(u64::MAX).to_le_bytes());
-            }
-            // A wrapper in one file decides the role of a callback written in
-            // another. Hashed only when present, so a project with no such
-            // wrapper keeps the digest it had.
-            let forwarded = self.result_access_forwarded_index();
-            if !forwarded.is_empty() {
-                let mut paths = forwarded.keys().copied().collect::<Vec<_>>();
-                paths.sort_unstable();
-                hasher.update(b"result-access-forwarded\0");
-                for path in paths {
-                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                    hasher.update(path.as_bytes());
-                    for entry in &forwarded[path] {
-                        hasher.update(entry.argument.start.to_le_bytes());
-                        hasher.update(entry.argument.end.to_le_bytes());
-                    }
-                }
-            }
-            Some(hasher.finalize().into())
-        })
+        });
+    }
+}
+
+impl crate::base::reads::ReadAnswers for SemanticLookup<'_> {
+    fn section_fingerprint(&self, section: crate::base::reads::Section) -> [u8; 32] {
+        SemanticLookup::section_fingerprint(self, section)
     }
 
+    fn memo_changed_at(
+        &self,
+        store: u64,
+        read: crate::base::reads::MemoRead,
+    ) -> Option<crate::base::memo::Revision> {
+        (store == self.memos.store().id())
+            .then(|| self.memo_world().changed_at(read.table, read.query))
+            .flatten()
+    }
+
+    fn memo_store_id(&self) -> u64 {
+        self.memos.store().id()
+    }
+
+    fn describe_memo(&self, read: crate::base::reads::MemoRead) -> String {
+        self.memos.store().describe(read.table, read.query)
+    }
+}
+
+impl<'a> SemanticLookup<'a> {
     /// The position of a call in `file.ast.calls`, for the primitive tables
     /// that are index-aligned with it.
     pub(super) fn call_index(&self, file: &FileFacts, span: Span) -> Option<usize> {
@@ -1879,9 +1758,13 @@ impl<'a> SemanticLookup<'a> {
     /// classifier was asked about.
     pub(super) fn named_callback_roles(&self, file: &FileFacts) -> &super::NamedCallbackRoles {
         let index = self.file_index(file);
-        let slots = self
-            .file_named_callback_roles
-            .get_or_init(|| self.facts.files.iter().map(|_| OnceLock::new()).collect());
+        let slots = self.file_named_callback_roles.get_or_init(|| {
+            self.facts
+                .files
+                .iter()
+                .map(|_| crate::base::reads::Recorded::new())
+                .collect()
+        });
         slots[index].get_or_init(|| {
             super::named_callback_roles(
                 &self.facts.files[index],
@@ -1895,9 +1778,13 @@ impl<'a> SemanticLookup<'a> {
     /// The memoized primitive names for one project file.
     pub(super) fn primitives(&self, file: &FileFacts) -> &FilePrimitives {
         let index = self.file_index(file);
-        let slots = self
-            .file_primitives
-            .get_or_init(|| self.facts.files.iter().map(|_| OnceLock::new()).collect());
+        let slots = self.file_primitives.get_or_init(|| {
+            self.facts
+                .files
+                .iter()
+                .map(|_| crate::base::reads::Recorded::new())
+                .collect()
+        });
         slots[index].get_or_init(|| {
             let file = &self.facts.files[index];
             FilePrimitives {
@@ -1938,14 +1825,17 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(super) fn object_member_targets(&self) -> &crate::object_members::Targets {
+        crate::base::reads::note(crate::base::reads::Section::MemberTargets);
         self.object_members
-            .get_or_init(|| crate::object_members::index(self))
+            .get_or_init(|| crate::base::reads::suppress(|| crate::object_members::index(self)))
     }
 
     /// ADR 0358: what each spread argument of an intrinsic element supplies.
     pub(crate) fn spread_handler_targets(&self) -> &crate::object_members::SpreadTargets {
-        self.spread_handlers
-            .get_or_init(|| crate::object_members::spread_index(self))
+        crate::base::reads::note(crate::base::reads::Section::SpreadTargets);
+        self.spread_handlers.get_or_init(|| {
+            crate::base::reads::suppress(|| crate::object_members::spread_index(self))
+        })
     }
 
     pub(super) fn literal_receiver_members(&self) -> &HashSet<(String, Span)> {
@@ -1960,8 +1850,10 @@ impl<'a> SemanticLookup<'a> {
     }
 
     fn literal_receiver_census(&self) -> &crate::object_members::LiteralReceiverCensus {
-        self.literal_receiver_members
-            .get_or_init(|| crate::object_members::literal_receiver_members(self))
+        crate::base::reads::note(crate::base::reads::Section::LiteralReceivers);
+        self.literal_receiver_members.get_or_init(|| {
+            crate::base::reads::suppress(|| crate::object_members::literal_receiver_members(self))
+        })
     }
 
     pub(super) fn object_member_function(
@@ -1998,8 +1890,10 @@ impl<'a> SemanticLookup<'a> {
 
     /// ADR 0319: the invocation-flow answer of every literal, computed once.
     pub(crate) fn invocation_flow_answers(&self) -> &HashMap<(String, Span), crate::ExecutionRole> {
-        self.invocation_flow_answers
-            .get_or_init(|| crate::execution_role::invocation_flow_answers(self))
+        crate::base::reads::note(crate::base::reads::Section::FlowAnswers);
+        self.invocation_flow_answers.get_or_init(|| {
+            crate::base::reads::suppress(|| crate::execution_role::invocation_flow_answers(self))
+        })
     }
 
     /// Whether [`Self::invocation_flow_answers`] is already computed.
@@ -2010,8 +1904,10 @@ impl<'a> SemanticLookup<'a> {
     /// The literals whose every invocation comes through event delivery, for the
     /// owner seeds; see [`crate::execution_role::event_invoked_literals`].
     pub(crate) fn event_invoked_literals(&self) -> &HashSet<(String, Span)> {
-        self.event_invoked_literals
-            .get_or_init(|| crate::execution_role::event_invoked_literals(self))
+        crate::base::reads::note(crate::base::reads::Section::EventLiterals);
+        self.event_invoked_literals.get_or_init(|| {
+            crate::base::reads::suppress(|| crate::execution_role::event_invoked_literals(self))
+        })
     }
 
     pub(super) fn tuple_iteration_may_be_mutated(&self) -> bool {
@@ -2099,13 +1995,19 @@ impl<'a> SemanticLookup<'a> {
     }
 
     /// L1: module hazards and module-level flags.
+    /// A reader of the whole index may read the two hazards a section
+    /// binds ([`crate::base::reads`]).
     pub(crate) fn base_hazards(&self) -> &crate::base::BaseIndex<crate::base::Hazard, u32> {
+        crate::base::reads::note(crate::base::reads::Section::SynchronousDispatch);
+        crate::base::reads::note(crate::base::reads::Section::ReflectiveDefinition);
         self.base.hazards(|| self.base_views())
     }
 
     /// Whether some analyzed file has `hazard`.
     pub(crate) fn hazard_present(&self, hazard: crate::base::Hazard) -> bool {
-        self.base_hazards().contains_key(&hazard)
+        self.base
+            .hazards(|| self.base_views())
+            .contains_key(&hazard)
     }
 
     /// L1: module edges by specifier.
@@ -2124,6 +2026,7 @@ impl<'a> SemanticLookup<'a> {
 
     /// L1: reflective-definer keys.
     pub(crate) fn base_definers(&self) -> &crate::base::BaseIndex<crate::base::DefinerKey, ()> {
+        crate::base::reads::note(crate::base::reads::Section::ReflectiveDefinition);
         self.base.definers(|| self.base_views())
     }
 
@@ -2306,22 +2209,29 @@ impl<'a> SemanticLookup<'a> {
         span: Span,
         compute: impl FnOnce() -> Vec<crate::owners::ReturnedCallbackInvocationSite>,
     ) -> std::sync::Arc<Vec<crate::owners::ReturnedCallbackInvocationSite>> {
+        // The sites are classified in their own files' contexts: the section
+        // binds them ([`Self::returned_callback_proof_digest`]).
+        crate::base::reads::note(crate::base::reads::Section::ReturnedCallbacks);
         let key = (path.to_owned(), span);
-        if let Some(found) = self
+        let found = self
             .returned_invocation_sites
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(&key)
-        {
-            return found.clone();
+            .cloned();
+        if let Some((sites, reads)) = found {
+            crate::base::reads::replay(&reads);
+            return sites;
         }
         // Computed outside the lock: the computation re-enters the lookup.
-        let computed = std::sync::Arc::new(compute());
+        // Its reads are kept for every later reader ([`crate::base::reads`]).
+        let (computed, reads) = crate::base::reads::record(|| std::sync::Arc::new(compute()));
         self.returned_invocation_sites
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .entry(key)
-            .or_insert(computed)
+            .or_insert((computed, reads))
+            .0
             .clone()
     }
 

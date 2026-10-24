@@ -12,6 +12,7 @@ impl SemanticLookup<'_> {
     /// ADR 0292: [`crate::interproc::accessor_provenance::reflective_prototype_write`],
     /// scanned once per build.
     pub(crate) fn reflective_prototype_write_present(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::ReflectivePrototypeWrite);
         *self.reflective_prototype_write.get_or_init(|| {
             crate::interproc::accessor_provenance::scan_reflective_prototype_write(self)
         })
@@ -24,6 +25,7 @@ impl SemanticLookup<'_> {
     /// with the same spelling does not select either library declaration.
     /// The census is [`crate::base::Hazard::SynchronousDispatch`].
     pub(crate) fn synchronous_event_dispatch_present(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::SynchronousDispatch);
         self.hazard_present(crate::base::Hazard::SynchronousDispatch)
     }
 }

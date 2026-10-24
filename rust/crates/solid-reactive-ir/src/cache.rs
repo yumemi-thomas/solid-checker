@@ -18,8 +18,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::base::reads::{ReadAnswers, ReadProof};
 use crate::identity::{SymbolId, SymbolInterner, SymbolName};
-use crate::indexes::{CrossFileProofDigest, EntitySymbols};
+use crate::indexes::EntitySymbols;
 use crate::interproc::{InterproceduralResult, SummaryNode, SummaryRead};
 use crate::reachability::ReachabilityTopology;
 use crate::symbols::{
@@ -222,9 +223,10 @@ pub(crate) struct SourceDiscoveryContribution {
 
 pub(crate) struct CachedSourceDiscovery {
     pub(crate) identity: SourceDiscoveryIdentity,
-    /// Includes project source hashes for exact returned-source proofs;
-    /// unchanged caller types alone cannot retain a callee's return identity.
-    pub(crate) cross_file_proofs: Option<CrossFileProofDigest>,
+    /// What the file's discovery read of the rest of the program
+    /// ([`crate::base::reads`]): a returned-source answer, a component
+    /// identity, a member target.
+    pub(crate) proof: ReadProof,
     pub(crate) contribution: SourceDiscoveryContribution,
 }
 
@@ -300,9 +302,12 @@ pub(crate) struct CachedInterproceduralGraph {
     pub(crate) nodes: Vec<SummaryNode>,
     pub(crate) contribution: InterproceduralGraphContribution,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
-    /// ADR 0320: the member-resolution digest the contribution was built
-    /// under; member calls resolve through the program-wide census.
-    pub(crate) member_resolution: Option<crate::indexes::CrossFileProofDigest>,
+    /// What the file's nodes and contribution read of the lookup
+    /// ([`crate::base::reads`]).
+    pub(crate) proof: ReadProof,
+    /// The accessor entries the contribution embeds, by symbol
+    /// (`interproc::transport_reads`): another file's discovery can move one.
+    pub(crate) accessor_reads: crate::interproc::TransportReads,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -335,6 +340,14 @@ pub(crate) struct CachedInterproceduralResultFile {
     /// Whether this file, as analyzed, held syntax a caller's call-role proof
     /// reads beyond its summaries (`interproc::call_role_syntax`).
     pub(crate) call_role_syntax: bool,
+    /// What the file's result reads read of the lookup, with what the
+    /// stage's shared inputs (the accessor resolver, call transport, the
+    /// graph) and source discovery's project passes read:
+    /// [`crate::base::reads`].
+    pub(crate) proof: ReadProof,
+    /// What the file's result reads read of the stage's transport tables
+    /// (`interproc::transport_reads`).
+    pub(crate) transport: crate::interproc::TransportReads,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -347,12 +360,6 @@ pub(crate) struct CachedReactiveSource {
 
 #[derive(Default)]
 pub(crate) struct CachedInterproceduralResults {
-    pub(crate) transported_calls:
-        HashMap<Location, crate::interproc::accessor_provenance::Callable>,
-    pub(crate) unavailable_calls: HashSet<Location>,
-    /// Array-derived directness depends on runtime origins even when the
-    /// selected function and its read summary remain unchanged.
-    pub(crate) array_source_origins: HashSet<SymbolId>,
     pub(crate) dependency_states:
         HashMap<InterproceduralResultDependency, InterproceduralResultDependencyState>,
     pub(crate) dependency_users: HashMap<InterproceduralResultDependency, usize>,
@@ -527,9 +534,9 @@ pub(crate) struct ReachabilityEdge {
 
 pub(crate) struct CachedReachabilityFile {
     pub(crate) identity: SourceDiscoveryIdentity,
-    /// See [`SemanticLookup::cross_file_proof_digest`]. Reachability roots and
-    /// edges can depend on component or callback uses in another file.
-    pub(crate) cross_file_proofs: Option<CrossFileProofDigest>,
+    /// What the file's roots and edges read of the rest of the program (a
+    /// component identity, a returned callback's use): [`crate::base::reads`].
+    pub(crate) proof: ReadProof,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
     pub(crate) functions: Vec<FunctionNode>,
     pub(crate) roots: Vec<ReachabilityTarget>,
@@ -566,6 +573,9 @@ pub(crate) struct LocalAccessBuild {
     pub(crate) reused: bool,
     pub(crate) reused_files: u64,
     pub(crate) recomputed_files: u64,
+    /// What the aggregate read of the rest of the program: every file's
+    /// reads, and source discovery's project passes'.
+    pub(crate) reads: crate::base::reads::Reads,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -594,18 +604,95 @@ pub(crate) struct LocalAccessSymbolState {
 
 pub(crate) struct CachedLocalAccessFile {
     pub(crate) source_hash: SourceHash,
-    /// See [`SemanticLookup::cross_file_proof_digest`]. Execution and component
-    /// classification can depend on callback or JSX uses in another file.
-    pub(crate) cross_file_proofs: Option<CrossFileProofDigest>,
+    /// What the file's accesses read of the rest of the program (execution
+    /// and component classification can depend on uses in another file),
+    /// with what source discovery's project passes read:
+    /// [`crate::base::reads`].
+    pub(crate) proof: ReadProof,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
     pub(crate) dependencies: HashSet<SymbolId>,
     pub(crate) call_multiplicities: Vec<(Location, Option<usize>)>,
     pub(crate) contribution: LocalAccessResult,
 }
 
+/// The source-discovery tables a file's local accesses read by symbol
+/// (`LocalAccessSymbolState`), as the last build that checked the files saw
+/// them: the symbols whose entries differ now are exactly the ones whose
+/// state may have moved (ADR 03XX-s6b), whichever file's discovery or
+/// project pass moved them.
+#[derive(Clone)]
+pub(crate) struct LocalAccessSources {
+    pub(crate) accessors: HashMap<SymbolId, (SymbolId, Location)>,
+    pub(crate) typed_sources: HashMap<SymbolId, crate::source_discovery::TypedSource>,
+    pub(crate) accessor_origins: HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
+    pub(crate) setters: HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
+    pub(crate) actions: HashMap<SymbolId, (SymbolId, Location)>,
+    pub(crate) source_primitives: HashMap<SymbolId, SymbolId>,
+    pub(crate) async_sources: HashSet<SymbolId>,
+    pub(crate) source_async_options: HashMap<SymbolId, crate::source_discovery::AsyncSourceOptions>,
+    pub(crate) source_kinds: HashMap<SymbolId, ReactiveSourceKind>,
+    pub(crate) server_rendering: crate::source_discovery::ServerRenderingPremise,
+}
+
+impl LocalAccessSources {
+    /// The symbols whose entry in some table differs between `self` and
+    /// `current`; every async source when the rendering premise moved.
+    pub(crate) fn changed_symbols(&self, current: &Self) -> HashSet<SymbolId> {
+        fn map<V: PartialEq>(
+            previous: &HashMap<SymbolId, V>,
+            current: &HashMap<SymbolId, V>,
+            changed: &mut HashSet<SymbolId>,
+        ) {
+            for (symbol, value) in current {
+                if previous.get(symbol) != Some(value) {
+                    changed.insert(symbol.clone());
+                }
+            }
+            for symbol in previous.keys() {
+                if !current.contains_key(symbol) {
+                    changed.insert(symbol.clone());
+                }
+            }
+        }
+        let mut changed = HashSet::default();
+        map(&self.accessors, &current.accessors, &mut changed);
+        map(&self.typed_sources, &current.typed_sources, &mut changed);
+        map(
+            &self.accessor_origins,
+            &current.accessor_origins,
+            &mut changed,
+        );
+        map(&self.setters, &current.setters, &mut changed);
+        map(&self.actions, &current.actions, &mut changed);
+        map(
+            &self.source_primitives,
+            &current.source_primitives,
+            &mut changed,
+        );
+        map(
+            &self.source_async_options,
+            &current.source_async_options,
+            &mut changed,
+        );
+        map(&self.source_kinds, &current.source_kinds, &mut changed);
+        changed.extend(
+            self.async_sources
+                .symmetric_difference(&current.async_sources)
+                .cloned(),
+        );
+        if self.server_rendering != current.server_rendering {
+            changed.extend(self.async_sources.iter().cloned());
+            changed.extend(current.async_sources.iter().cloned());
+        }
+        changed
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct CachedLocalAccesses {
     pub(crate) aggregate: Option<LocalAccessResult>,
+    /// The tables as of the last build that checked the files.
+    pub(crate) sources: Option<LocalAccessSources>,
     pub(crate) files: HashMap<SourcePath, CachedLocalAccessFile>,
     pub(crate) dependency_states: HashMap<SymbolId, LocalAccessSymbolState>,
     /// Prop-source identity plus caller classification per props symbol.
@@ -629,7 +716,13 @@ pub(crate) type SourceReferenceLocations = HashMap<String, HashMap<(u64, u64), S
 
 pub(crate) struct CachedLateStages {
     pub(crate) inputs: HashMap<SourcePath, LateStageFileInput>,
-    pub(crate) cross_file_proofs: Option<CrossFileProofDigest>,
+    /// What the retained aggregates (local accesses, the interprocedural
+    /// result, missing owners, the compatibility reference map) read of the
+    /// rest of the program, set once a build computed all of them
+    /// ([`Self::reads`]); `None` until then.
+    pub(crate) proof: Option<ReadProof>,
+    /// This build's reads of the aggregates, gathered while they compute.
+    pub(crate) reads: crate::base::reads::Reads,
     pub(crate) local_accesses: CachedLocalAccesses,
     pub(crate) interprocedural: Option<InterproceduralResult>,
     pub(crate) missing_owners: Option<Vec<OwnerRequirement>>,
@@ -863,7 +956,7 @@ impl ReusePlan {
     pub(crate) fn prepare(
         facts: &ProjectFacts,
         late_stages: Option<&mut Option<CachedLateStages>>,
-        cross_file_proofs: Option<CrossFileProofDigest>,
+        answers: &dyn ReadAnswers,
     ) -> Self {
         let typescript_unchanged = typescript_unchanged(facts);
         let late_stages_reusable = typescript_unchanged
@@ -871,8 +964,11 @@ impl ReusePlan {
                 .as_deref()
                 .and_then(Option::as_ref)
                 .is_some_and(|cache| {
-                    cache.cross_file_proofs == cross_file_proofs
-                        && late_stage_inputs_match(cache, facts)
+                    late_stage_inputs_match(cache, facts)
+                        && cache
+                            .proof
+                            .as_ref()
+                            .is_some_and(|proof| proof.holds(answers))
                 });
 
         if let Some(slot) = late_stages {
@@ -886,7 +982,8 @@ impl ReusePlan {
                 }
             } else if let Some(retained) = slot.as_mut() {
                 refresh_late_stage_inputs(&mut retained.inputs, facts);
-                retained.cross_file_proofs = cross_file_proofs;
+                retained.proof = None;
+                retained.reads = crate::base::reads::Reads::default();
                 retained.local_accesses.aggregate = None;
                 retained.interprocedural = None;
                 retained.missing_owners = None;
@@ -895,7 +992,8 @@ impl ReusePlan {
             } else {
                 *slot = Some(CachedLateStages {
                     inputs: current_late_stage_inputs(facts),
-                    cross_file_proofs,
+                    proof: None,
+                    reads: crate::base::reads::Reads::default(),
                     local_accesses: CachedLocalAccesses::default(),
                     interprocedural: None,
                     missing_owners: None,

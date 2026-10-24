@@ -1655,10 +1655,10 @@ type FunctionSymbolsBySpan = BTreeMap<Span, Vec<Arc<str>>>;
 pub(super) struct State<'a> {
     /// `functions_by_symbol` inverted: each path's functions by span, with
     /// the symbols naming them, sorted.
-    function_symbols: OnceLock<HashMap<&'a str, FunctionSymbolsBySpan>>,
+    function_symbols: crate::base::reads::Recorded<HashMap<&'a str, FunctionSymbolsBySpan>>,
     /// Symbol ids the TypeScript table lists more than once.
-    duplicate_symbols: OnceLock<HashSet<&'a str>>,
-    route_values: OnceLock<HashMap<FileId, Vec<Span>>>,
+    duplicate_symbols: crate::base::reads::Recorded<HashSet<&'a str>>,
+    route_values: crate::base::reads::Recorded<HashMap<FileId, Vec<Span>>>,
 }
 
 impl<'a> State<'a> {

@@ -407,11 +407,16 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         None => semantic_lookup,
     };
     // ADR 0347: which exports a namespace import hands out, read once per build.
-    semantic_lookup.set_namespace_hand_outs(crate::attribution::namespace_hand_outs(
-        &semantic_lookup,
-        aliases,
-        &typescript_indexes.symbols_by_root,
-    ));
+    let substage_started = Instant::now();
+    let (hand_outs, hand_out_reads) = crate::base::reads::record(|| {
+        crate::attribution::namespace_hand_outs(
+            &semantic_lookup,
+            aliases,
+            &typescript_indexes.symbols_by_root,
+        )
+    });
+    semantic_lookup.set_namespace_hand_outs(hand_outs, hand_out_reads);
+    build_timings.namespace_hand_outs = substage_started.elapsed();
     let semantic_lookup = &semantic_lookup;
     if let Some((retained, mode)) = base_check {
         check_retained_base(
@@ -422,11 +427,11 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             emit_timings,
         );
     }
-    let reuse = ReusePlan::prepare(
-        facts,
-        late_stage_cache.as_deref_mut(),
-        semantic_lookup.member_resolution_digest(),
-    );
+    let substage_started = Instant::now();
+    // The memos begin before any stage reads one (ADR 0392's ordering).
+    semantic_lookup.begin_memos();
+    let reuse = ReusePlan::prepare(facts, late_stage_cache.as_deref_mut(), semantic_lookup);
+    build_timings.reuse_plan = substage_started.elapsed();
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
     let mut draft = ProgramDraft {
@@ -577,13 +582,21 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     owners::collect_project(
         &analysis,
         &project_indexes,
-        &source_discovery.retained_source_paths,
-        late_stage_cache.and_then(Option::as_mut),
+        &source_discovery.unchanged_paths,
+        late_stage_cache.as_deref_mut().and_then(Option::as_mut),
         reuse.late_stages_reusable,
         &mut draft,
         &mut build_timings,
     );
     clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
+    // Every retained aggregate was computed in this build (or reused under a
+    // proof that still holds): bind what they read.
+    if !reuse.late_stages_reusable
+        && let Some(cache) = late_stage_cache.and_then(Option::as_mut)
+    {
+        let reads = std::mem::take(&mut cache.reads);
+        cache.proof = Some(crate::base::reads::ReadProof::new(reads, semantic_lookup));
+    }
     // Static and compatibility passes deliberately operate on source facts.
     // Apply the compiler's stronger "this code was not emitted" fact once,
     // after every producer has run.
@@ -797,23 +810,52 @@ where
         return items.iter().map(analyze).collect();
     }
     let chunk_size = items.len().div_ceil(workers);
+    // A computation recording its reads on this thread records what the
+    // workers read too ([`crate::base::reads`]).
+    let recording = crate::base::reads::recording();
     std::thread::scope(|scope| {
         let handles = items
             .chunks(chunk_size)
             .map(|chunk| {
                 let analyze = &analyze;
-                scope.spawn(move || chunk.iter().map(analyze).collect::<Vec<_>>())
+                scope.spawn(move || {
+                    on_worker(recording, || chunk.iter().map(analyze).collect::<Vec<_>>())
+                })
             })
             .collect::<Vec<_>>();
         handles
             .into_iter()
             .flat_map(|handle| {
-                handle
-                    .join()
-                    .expect("parallel Reactive IR analysis worker panicked")
+                joined(
+                    handle
+                        .join()
+                        .expect("parallel Reactive IR analysis worker panicked"),
+                )
             })
             .collect()
     })
+}
+
+/// A worker's part of a parallel helper: its reads, when the spawning
+/// thread records ([`crate::base::reads`]), come back with its results.
+fn on_worker<R>(
+    recording: bool,
+    work: impl FnOnce() -> R,
+) -> (R, Option<crate::base::reads::Reads>) {
+    if recording {
+        let (value, reads) = crate::base::reads::record(work);
+        (value, Some(reads))
+    } else {
+        (work(), None)
+    }
+}
+
+/// Hands a worker's reads to the joining thread's computation.
+fn joined<R>((value, reads): (R, Option<crate::base::reads::Reads>)) -> R {
+    if let Some(reads) = reads {
+        crate::base::reads::replay(&reads);
+    }
+    value
 }
 
 /// [`parallel_slice_results`] for items whose costs vary widely: each worker
@@ -835,30 +877,34 @@ where
         return items.iter().map(analyze).collect();
     }
     let next = std::sync::atomic::AtomicUsize::new(0);
+    let recording = crate::base::reads::recording();
     std::thread::scope(|scope| {
         let handles = (0..workers)
             .map(|_| {
                 let (analyze, next) = (&analyze, &next);
                 scope.spawn(move || {
                     let _limit = AnalysisWorkerLimit::enter(limit);
-                    let mut done = Vec::new();
-                    loop {
-                        let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        let Some(item) = items.get(index) else {
-                            break;
-                        };
-                        done.push((index, analyze(item)));
-                    }
-                    done
+                    on_worker(recording, || {
+                        let mut done = Vec::new();
+                        loop {
+                            let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            let Some(item) = items.get(index) else {
+                                break;
+                            };
+                            done.push((index, analyze(item)));
+                        }
+                        done
+                    })
                 })
             })
             .collect::<Vec<_>>();
         let mut results = (0..items.len()).map(|_| None).collect::<Vec<_>>();
         for handle in handles {
-            for (index, result) in handle
-                .join()
-                .expect("parallel Reactive IR analysis worker panicked")
-            {
+            for (index, result) in joined(
+                handle
+                    .join()
+                    .expect("parallel Reactive IR analysis worker panicked"),
+            ) {
                 results[index] = Some(result);
             }
         }
@@ -881,19 +927,22 @@ where
         return vec![analyze(files)];
     }
     let chunk_size = files.len().div_ceil(workers);
+    let recording = crate::base::reads::recording();
     std::thread::scope(|scope| {
         files
             .chunks(chunk_size)
             .map(|chunk| {
                 let analyze = &analyze;
-                scope.spawn(move || analyze(chunk))
+                scope.spawn(move || on_worker(recording, || analyze(chunk)))
             })
             .collect::<Vec<_>>()
             .into_iter()
             .map(|handle| {
-                handle
-                    .join()
-                    .expect("parallel Reactive IR analysis worker panicked")
+                joined(
+                    handle
+                        .join()
+                        .expect("parallel Reactive IR analysis worker panicked"),
+                )
             })
             .collect()
     })

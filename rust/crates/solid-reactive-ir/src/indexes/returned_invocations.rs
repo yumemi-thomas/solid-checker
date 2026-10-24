@@ -21,9 +21,11 @@
 //! are not memos yet): exact, recomputed in a build in which anything moved,
 //! and its value stops propagation when it did not.
 //!
-//! The cross-file digest binds these answers instead of the bytes of every
-//! file that could hold one ([`SemanticLookup::returned_callback_proof_digest`],
-//! [`SemanticLookup::returned_source_digest`]).
+//! A stage chunk that reads an answer records the memo read; the returned
+//! sources and callback sites are sections ([`crate::base::reads::Section`])
+//! fingerprinted from these answers ([`SemanticLookup::returned_callback_proof_digest`],
+//! [`SemanticLookup::returned_source_digest`]), not from the bytes of every
+//! file that could hold one.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -36,6 +38,7 @@ use super::*;
 use crate::base::FileId;
 use crate::base::memo::build::{BuildSchema, BuildTables, FileRead, Input, Section};
 use crate::base::memo::{Canonical, Ctx, Cycle, ErasedTable, Memo, Table, TableId};
+use crate::base::reads::Recorded;
 
 /// The first table id of these tables (ids 160 to 191).
 pub(crate) const INVOCATION_TABLES_FROM: u8 = 160;
@@ -109,8 +112,8 @@ pub(crate) type FileSources = Arc<Vec<ReturnedSource>>;
 /// The per-build views of both tables, one slot per file of the lookup.
 #[derive(Default)]
 pub(super) struct State {
-    calls: OnceLock<Vec<OnceLock<FileInvocations>>>,
-    sources: OnceLock<Vec<OnceLock<FileSources>>>,
+    calls: OnceLock<Vec<Recorded<FileInvocations>>>,
+    sources: OnceLock<Vec<Recorded<FileSources>>>,
 }
 
 fn u32_of(value: usize) -> u32 {
@@ -356,14 +359,14 @@ impl Memo<BuildSchema> for ReturnedSourceCalls {
 impl<'a> SemanticLookup<'a> {
     fn file_answers<V: Clone>(
         &self,
-        slots: &OnceLock<Vec<OnceLock<V>>>,
+        slots: &OnceLock<Vec<Recorded<V>>>,
         file: &FileFacts,
         answer: impl FnOnce(FileId) -> V,
         empty: V,
     ) -> V {
         let index = self.file_index(file);
         let slots =
-            slots.get_or_init(|| self.facts.files.iter().map(|_| OnceLock::new()).collect());
+            slots.get_or_init(|| self.facts.files.iter().map(|_| Recorded::new()).collect());
         slots[index]
             .get_or_init(|| match self.memos.table().id_of(file.path.as_str()) {
                 Some(id) => answer(id),
@@ -414,6 +417,9 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         call: Span,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::CallFact, Primitive)> {
+        // The caller reads the creating call in another file: the section
+        // binds what it reads of it (`returned_source_facts`).
+        crate::base::reads::note(crate::base::reads::Section::ReturnedSources);
         let answers = self.returned_sources(file);
         let found = answers
             .binary_search_by_key(&call, |answer| answer.call)

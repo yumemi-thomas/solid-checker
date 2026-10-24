@@ -20,7 +20,7 @@ use crate::cleanup::{CleanupReturnProof, function_cleanup_return_proof};
 use crate::effect_api::ProofStatus;
 use crate::execution_role::{argument_references_callback_symbol, execution_role, function_symbol};
 use crate::identity::SymbolId;
-use crate::indexes::{CrossFileProofDigest, EntitySymbols, ProjectIndexes, SemanticLookup};
+use crate::indexes::{EntitySymbols, ProjectIndexes, SemanticLookup};
 use solid_dialect::{Dialect, OwnerRequirementRole, Primitive};
 use solid_facts::ProjectFacts;
 use solid_facts::core::{SourceHash, SourcePath, Span};
@@ -47,7 +47,7 @@ pub use bindings::*;
 pub(crate) fn collect_project(
     ctx: &AnalysisContext<'_>,
     project_indexes: &ProjectIndexes<'_>,
-    retained_source_paths: &HashSet<String>,
+    unchanged_paths: &HashSet<String>,
     cache: Option<&mut CachedLateStages>,
     reusable: bool,
     draft: &mut ProgramDraft,
@@ -74,17 +74,25 @@ pub(crate) fn collect_project(
         return;
     }
     if let Some(cache) = cache {
-        let (requirements, gates, owner_timings) = find_missing_owners_incremental(
-            ctx.facts,
-            ctx.semantic_lookup,
-            project_indexes,
-            ctx.symbol_names,
-            retained_source_paths,
-            &mut cache.owner_files,
-        );
-        draft.missing_owners.extend(requirements);
-        apply_settled_gates(&mut draft.leaf_operations, &gates);
-        apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
+        // The retained requirements and gates read what this computation and
+        // the reused fragments read ([`CachedLateStages::reads`]).
+        let ((gates, owner_timings, fragment_reads), reads) = crate::base::reads::record(|| {
+            let (requirements, gates, owner_timings, fragment_reads) =
+                find_missing_owners_incremental(
+                    ctx.facts,
+                    ctx.semantic_lookup,
+                    project_indexes,
+                    ctx.symbol_names,
+                    unchanged_paths,
+                    &mut cache.owner_files,
+                );
+            draft.missing_owners.extend(requirements);
+            apply_settled_gates(&mut draft.leaf_operations, &gates);
+            apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
+            (gates, owner_timings, fragment_reads)
+        });
+        cache.reads.extend(&reads);
+        cache.reads.extend(&fragment_reads);
         timings.absorb_owner(&owner_timings);
         cache.missing_owners = Some(draft.missing_owners.clone());
         cache.settled_gates = Some(gates);

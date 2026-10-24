@@ -1332,7 +1332,7 @@ pub struct BuildTimings {
     pub source_discovery_recomputed_files: u64,
     /// Retained source-discovery files whose identity (source hash and Type
     /// Facts delta) no longer matched; the rest of the recomputed retained
-    /// files missed on the cross-file proof digest.
+    /// files read an answer that moved ([`base::reads`]).
     pub source_discovery_identity_misses: u64,
     pub interprocedural_graph_reused_files: u64,
     pub interprocedural_graph_recomputed_files: u64,
@@ -1368,6 +1368,11 @@ pub struct BuildTimings {
     pub entity_symbols: Duration,
     pub symbol_name_indexes: Duration,
     pub boundary_defects: Duration,
+    /// The namespace hand-out census (ADR 0347) and the cross-file reuse
+    /// gate (`ReusePlan::prepare`, which computes the member-resolution
+    /// digest), both in the indexes-and-reachability stage.
+    pub namespace_hand_outs: Duration,
+    pub reuse_plan: Duration,
     pub reachability: Duration,
     pub source_discovery: Duration,
     pub typed_accessors_and_prop_roots: Duration,
@@ -1377,6 +1382,14 @@ pub struct BuildTimings {
     pub local_reads_and_writes: Duration,
     pub interprocedural_summaries: Duration,
     pub interprocedural_graph: Duration,
+    /// Inside `interprocedural_graph`: summary-node discovery, the
+    /// accessor-provenance resolver, call transport, the per-file graph
+    /// merge and the member-invocation refresh.
+    pub interprocedural_graph_nodes: Duration,
+    pub interprocedural_resolver: Duration,
+    pub interprocedural_transport: Duration,
+    pub interprocedural_merge: Duration,
+    pub interprocedural_refresh: Duration,
     pub interprocedural_direct_summaries: Duration,
     pub interprocedural_direct_index: Duration,
     pub interprocedural_direct_references: Duration,

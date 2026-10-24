@@ -155,6 +155,7 @@ impl<'a> SemanticLookup<'a> {
     ///
     /// The census is [`crate::base::Hazard::ReflectiveDefinitionSpelling`].
     pub(crate) fn property_may_be_defined_reflectively(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::ReflectiveDefinition);
         self.hazard_present(crate::base::Hazard::ReflectiveDefinitionSpelling)
     }
 

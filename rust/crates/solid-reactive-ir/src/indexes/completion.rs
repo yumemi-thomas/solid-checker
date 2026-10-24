@@ -113,7 +113,13 @@ impl<'a> SemanticLookup<'a> {
     /// ADR 0278: the `never` and `asserts` calls of each path, a view of the
     /// per-file [`NeverReturning`] memos built once per build.
     pub(super) fn never_returning_calls(&self) -> &HashMap<&'a str, Vec<Span>> {
-        self.never_returning_calls.get_or_init(|| {
+        crate::base::reads::note(crate::base::reads::Section::NeverReturning);
+        self.never_returning_calls
+            .get_or_init(|| crate::base::reads::suppress(|| self.never_returning_calls_uncached()))
+    }
+
+    fn never_returning_calls_uncached(&self) -> HashMap<&'a str, Vec<Span>> {
+        {
             let world = self.memo_world();
             let mut calls = HashMap::<&'a str, Vec<Span>>::default();
             for file in self.files() {
@@ -130,7 +136,7 @@ impl<'a> SemanticLookup<'a> {
                 }
             }
             calls
-        })
+        }
     }
 
     /// ADR 0277: a view of the [`ParameterCompletionCalls`] memo, built once
