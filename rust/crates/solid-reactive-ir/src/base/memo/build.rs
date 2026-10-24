@@ -1068,6 +1068,12 @@ impl MemoStore {
         self.check_indexes
     }
 
+    /// Whether the store is kept between builds (a retained session's), so
+    /// state kept in it is reused.
+    pub(crate) fn is_retained(&self) -> bool {
+        self.retained
+    }
+
     /// Reports `message` and poisons the store: the next build starts empty.
     pub(crate) fn poison(&self, message: &str) {
         self.store.poison(message);

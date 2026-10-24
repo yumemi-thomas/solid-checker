@@ -55,7 +55,7 @@ use std::hash::Hash;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, RwLock};
 
-use crate::HashMap;
+use crate::{HashMap, HashSet};
 
 /// A build of the store: answers are stamped with the revision in which
 /// they last changed.
@@ -282,7 +282,7 @@ pub(crate) trait ErasedTable<S: Schema>: Send + Sync {
     /// The entries asked for in `revision`.
     fn used(&self, revision: Revision) -> Vec<QueryId>;
     /// Drops every entry and key not in `live`, returning the dropped ids.
-    fn sweep(&self, live: &BTreeSet<QueryId>) -> Vec<QueryId>;
+    fn sweep(&self, live: &HashSet<QueryId>) -> Vec<QueryId>;
     fn describe(&self, query: QueryId) -> String;
     fn take_stats(&self) -> TableStats;
     fn len(&self) -> usize;
@@ -349,7 +349,7 @@ impl<S: Schema, M: Memo<S>> ErasedTable<S> for Table<S, M> {
             .collect()
     }
 
-    fn sweep(&self, live: &BTreeSet<QueryId>) -> Vec<QueryId> {
+    fn sweep(&self, live: &HashSet<QueryId>) -> Vec<QueryId> {
         let mut data = self.data.write().expect("memo table lock");
         let TableData { ids, keys, entries } = &mut *data;
         entries.retain(|query, _| live.contains(query));
@@ -405,7 +405,10 @@ struct Node<I> {
 struct Graph<I> {
     next: u32,
     inputs: HashMap<I, QueryId>,
-    nodes: BTreeMap<QueryId, Node<I>>,
+    nodes: HashMap<QueryId, Node<I>>,
+    /// Nodes that lost a reader or were allocated since the last
+    /// [`Store::end`]: the only inputs it can find unread.
+    unread: Vec<QueryId>,
 }
 
 impl<I> Default for Graph<I> {
@@ -413,7 +416,8 @@ impl<I> Default for Graph<I> {
         Self {
             next: 0,
             inputs: HashMap::default(),
-            nodes: BTreeMap::new(),
+            nodes: HashMap::default(),
+            unread: Vec::new(),
         }
     }
 }
@@ -439,6 +443,7 @@ impl<I: Copy + Eq + Hash> Graph<I> {
         }
         let id = self.allocate(NodeKind::Input(input));
         self.inputs.insert(input, id);
+        self.unread.push(id);
         id
     }
 
@@ -452,6 +457,7 @@ impl<I: Copy + Eq + Hash> Graph<I> {
         for (read, _) in previous {
             if let Some(node) = self.nodes.get_mut(&read) {
                 node.readers.remove(&query);
+                self.unread.push(read);
             }
         }
         for (read, _) in &reads {
@@ -716,7 +722,7 @@ impl<S: Schema> Store<S> {
         let revision = self.revision();
         let tables = self.tables.tables();
         let mut graph = self.graph.lock().expect("memo graph lock");
-        let mut live = BTreeSet::new();
+        let mut live = HashSet::default();
         let mut queue = tables
             .iter()
             .flat_map(|table| table.used(revision))
@@ -740,9 +746,10 @@ impl<S: Schema> Store<S> {
                 let Some(node) = graph.nodes.remove(&query) else {
                     continue;
                 };
-                for (read, _) in &node.reads {
-                    if let Some(read) = graph.nodes.get_mut(read) {
+                for (read_id, _) in &node.reads {
+                    if let Some(read) = graph.nodes.get_mut(read_id) {
                         read.readers.remove(&query);
+                        graph.unread.push(*read_id);
                     }
                 }
                 // Live entries never read a dropped one (live is closed
@@ -753,17 +760,26 @@ impl<S: Schema> Store<S> {
             }
         }
         let mut released = Vec::new();
+        // An input is unread only if it lost a reader or was allocated
+        // since the last end: every other one kept the reader it had.
+        let candidates = std::mem::take(&mut graph.unread);
         let Graph { inputs, nodes, .. } = &mut *graph;
-        inputs.retain(|input, query| {
-            let keep = nodes
-                .get(query)
-                .is_some_and(|node| !node.readers.is_empty());
-            if !keep {
-                nodes.remove(query);
-                released.push(*input);
+        for query in candidates {
+            let Some(Node {
+                kind: NodeKind::Input(input),
+                readers,
+                ..
+            }) = nodes.get(&query)
+            else {
+                continue;
+            };
+            if readers.is_empty() {
+                let input = *input;
+                nodes.remove(&query);
+                inputs.remove(&input);
+                released.push(input);
             }
-            keep
-        });
+        }
         released.sort_unstable();
         // Recorded reads by table, in one pass over the graph.
         let mut reads = BTreeMap::<TableId, u64>::new();

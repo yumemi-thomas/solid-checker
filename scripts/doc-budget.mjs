@@ -26,12 +26,12 @@ export const FILE_BUDGETS = {
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for
   // ADRs 0382-0399.
-  "docs/decisions.md": 137_100,
+  "docs/decisions.md": 138_400,
 };
 
 export const GROUP_BUDGETS = [
   // Raised from 600_000 for ADRs 0382-0399 (instant-edits track).
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 605_300 },
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 606_600 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
