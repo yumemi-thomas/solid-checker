@@ -1044,14 +1044,14 @@ impl NativeIncrementalSession {
             .collect())
     }
 
-    /// The open program's module graph with every import's resolution: what
-    /// a retained caller observes to notice that the filesystem now resolves
-    /// the program differently (a relinked package, an edited manifest).
+    /// The open program's module graph with each file's distinct non-relative
+    /// import resolutions: what a retained caller observes to notice that the
+    /// filesystem now resolves the program differently (a relinked package, an
+    /// edited manifest). Relative imports and repeated specifiers read nothing
+    /// more, and all of them together can exceed the frame limit.
     pub fn resolution_graph(&mut self) -> Result<typefacts::ModuleGraph, BackendError> {
-        self.typescript.module_graph(&typefacts::ModuleGraphDemand {
-            imports: true,
-            ..typefacts::ModuleGraphDemand::default()
-        })
+        self.typescript
+            .module_graph(&typefacts::ModuleGraphDemand::with_distinct_bare_imports())
     }
 
     /// Recovery is the session's own concern now.

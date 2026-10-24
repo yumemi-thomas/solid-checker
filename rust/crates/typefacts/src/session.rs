@@ -1441,6 +1441,7 @@ impl Session {
             imports: demand.imports,
             import_paths: demand.import_paths.clone(),
             packages: demand.packages,
+            distinct_bare_imports: demand.distinct_bare_imports,
         });
         let response = self.exchange(modules)?;
         Ok(ModuleGraph {

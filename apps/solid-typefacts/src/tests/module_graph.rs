@@ -18,6 +18,7 @@ fn imports(imports: bool, packages: bool) -> ModuleGraphRequest {
         imports,
         import_paths: Vec::new(),
         packages,
+        distinct_bare_imports: false,
     }
 }
 
@@ -204,6 +205,7 @@ fn module_graph_reports_relative_import_resolution() {
             imports: true,
             import_paths: vec![scratch.path("index.ts")],
             packages: true,
+            distinct_bare_imports: false,
         },
     );
     assert_eq!(inventory.imports.len(), 1);
@@ -219,6 +221,64 @@ fn module_graph_reports_relative_import_resolution() {
     let source = std::fs::read(scratch.path("index.ts")).unwrap();
     let span = &source[fact.specifier.start_byte as usize..fact.specifier.end_byte as usize];
     assert_eq!(span, b"\"./nested/helper\"");
+}
+
+/// `distinctBareImports` (ADR 0379): what resolution read, once per importing
+/// file and resolution. Relative imports and a repeated `import("pkg")` type
+/// add nothing a resolution witness observes, so only the first `pkg` row and
+/// the distinct `pkg/sub` row are answered, with the full demand's values.
+#[test]
+fn distinct_bare_imports_keep_one_row_per_resolution() {
+    let scratch = Scratch::new(&[
+        ("tsconfig.json", BUNDLER_CONFIG),
+        (
+            "index.ts",
+            "import { a } from \"pkg\";\nimport \"./local\";\nexport type T = import(\"pkg\").A;\nexport type U = import(\"pkg\").A;\nexport type V = import(\"pkg/sub\").B;\nexport const value = a;\n",
+        ),
+        ("local.ts", "export {};\n"),
+        (
+            "node_modules/pkg/package.json",
+            r#"{"name":"pkg","types":"index.d.ts"}"#,
+        ),
+        (
+            "node_modules/pkg/index.d.ts",
+            "export declare const a: number;\nexport interface A {}\n",
+        ),
+        ("node_modules/pkg/sub.d.ts", "export interface B {}\n"),
+    ]);
+    let mut project = scratch.open();
+    let index = scratch.path("index.ts");
+    let full = graph(&mut project, &imports(true, false));
+    let distinct = graph(
+        &mut project,
+        &ModuleGraphRequest {
+            imports: true,
+            import_paths: Vec::new(),
+            packages: false,
+            distinct_bare_imports: true,
+        },
+    );
+    let of = |inventory: &ModuleInventory| {
+        inventory
+            .imports
+            .iter()
+            .filter(|fact| *fact.specifier.path == index)
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let full = of(&full);
+    assert_eq!(full.len(), 5, "{full:?}");
+    let texts = of(&distinct)
+        .iter()
+        .map(|fact| fact.text.to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(texts, ["pkg", "pkg/sub"]);
+    let first = of(&distinct).into_iter().next().unwrap();
+    assert_eq!(
+        first, full[0],
+        "the first occurrence, as the full demand answers it"
+    );
+    assert!(!first.resolved_path.is_empty(), "{first:?}");
 }
 
 // A declaration file beside a runtime file is the shape almost every published
@@ -525,6 +585,7 @@ fn unknown_import_paths_are_reported_rather_than_dropped() {
             imports: true,
             import_paths: vec![scratch.path("index.ts"), missing.clone(), missing.clone()],
             packages: false,
+            distinct_bare_imports: false,
         },
     );
     assert!(inventory.imports.is_empty(), "{:?}", inventory.imports);

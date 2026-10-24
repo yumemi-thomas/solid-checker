@@ -1650,6 +1650,12 @@ pub struct ModuleGraphDemand {
     pub import_paths: Vec<String>,
     /// Add `package` and `resolver_package` to every import fact.
     pub packages: bool,
+    /// Keep only imports whose text starts with neither `.` nor `/`, one row
+    /// per importing file, text, `resolved_path`, `included_path` and
+    /// `symlink_path` (the first occurrence): what resolution read, not where
+    /// each specifier is written. A generated declaration file can repeat one
+    /// `import("pkg")` type tens of thousands of times.
+    pub distinct_bare_imports: bool,
 }
 
 impl ModuleGraphDemand {
@@ -1679,6 +1685,17 @@ impl ModuleGraphDemand {
         self.imports = true;
         self.import_paths = paths.into_iter().map(Into::into).collect();
         self
+    }
+
+    /// The distinct non-relative imports of every file the program included
+    /// ([`Self::distinct_bare_imports`]).
+    #[must_use]
+    pub fn with_distinct_bare_imports() -> Self {
+        Self {
+            imports: true,
+            distinct_bare_imports: true,
+            ..Self::default()
+        }
     }
 
     /// Also answer package identities on every import fact.
