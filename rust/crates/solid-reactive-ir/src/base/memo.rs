@@ -43,6 +43,7 @@
 //! read, is reported like a shadow mismatch, and the fresh value is served.
 
 pub(crate) mod build;
+pub(crate) mod derived;
 pub(crate) mod probes;
 #[cfg(test)]
 mod tests;
@@ -628,6 +629,18 @@ impl<S: Schema> Store<S> {
             self.clear();
         }
         self.revision.fetch_add(1, Ordering::AcqRel);
+        self.mark(changed)
+    }
+
+    /// Marks the readers of `changed` inside a build, after [`Self::begin`]:
+    /// a project pass published new answers for derived inputs
+    /// ([`derived`]). Exact only if no reader of them was asked yet in this
+    /// build, which [`derived`] enforces.
+    pub(crate) fn invalidate(&self, changed: &[S::Input]) -> Invalidation {
+        self.mark(changed)
+    }
+
+    fn mark(&self, changed: &[S::Input]) -> Invalidation {
         let graph = self.graph.lock().expect("memo graph lock");
         let mut dirty = BTreeSet::new();
         let mut found = 0;

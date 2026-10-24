@@ -101,6 +101,9 @@ pub(crate) enum Input {
     /// The analyzed ids in the order of their first slot: changed when a
     /// file is added, removed or reordered.
     Files,
+    /// One key of a project pass's published output ([`super::derived`]),
+    /// by its interned id.
+    Derived(super::derived::DerivedId, u32),
     /// The whole analyzed program: every file's every section and slots, the
     /// TypeScript table's change flag and the build constants. A coarse read
     /// for a computation that goes through lookup tables not yet ported onto
@@ -607,6 +610,8 @@ pub(crate) struct MemoStore {
     /// is nothing to compare them with.
     retained: bool,
     builds: AtomicU64,
+    /// Project passes' kept solvers and published outputs.
+    derived: super::derived::DerivedTables,
 }
 
 fn report(message: &str) {
@@ -637,6 +642,7 @@ impl MemoStore {
             check_indexes: check_indexes || verify_reused,
             retained: true,
             builds: AtomicU64::new(0),
+            derived: super::derived::DerivedTables::default(),
         }
     }
 
@@ -685,6 +691,7 @@ impl MemoStore {
         let mut base = self.base.write().expect("memo base lock");
         if self.store.poisoned() {
             *base = MemoBase::default();
+            self.derived.clear();
         }
         base.interner = views.table.interner().clone();
         let started = Instant::now();
@@ -932,6 +939,7 @@ impl MemoStore {
                     base.polled.remove(&input);
                     polled_released = true;
                 }
+                Input::Derived(id, key) => self.derived.release(id, key),
                 _ => {}
             }
         }
@@ -971,6 +979,43 @@ impl MemoStore {
             .unwrap_or_default();
         keys.sort_unstable();
         keys
+    }
+}
+
+impl super::derived::DerivedSchema for BuildSchema {
+    fn derived<'a>(world: &'a BuildWorld<'_>) -> &'a super::derived::DerivedTables {
+        &world.store.derived
+    }
+
+    fn input(id: super::derived::DerivedId, key: u32) -> Input {
+        Input::Derived(id, key)
+    }
+}
+
+impl MemoStore {
+    /// The kept solvers and published outputs of project passes.
+    pub(crate) fn derived(&self) -> &super::derived::DerivedTables {
+        &self.derived
+    }
+
+    /// Publishes a pass's moved keys to the memos that read them
+    /// ([`super::Store::publish`]).
+    pub(crate) fn publish<D: super::derived::Derived>(
+        &self,
+        changes: impl IntoIterator<Item = (D::Key, Option<D::Value>)>,
+    ) -> Invalidation {
+        self.store.publish::<D>(&self.derived, changes)
+    }
+
+    /// Shadow or verify-reused mode: a kept solver is checked against a
+    /// fresh solve every build ([`crate::base::fixpoint`]).
+    pub(crate) fn check_solvers(&self) -> bool {
+        self.check_indexes
+    }
+
+    /// Reports `message` and poisons the store: the next build starts empty.
+    pub(crate) fn poison(&self, message: &str) {
+        self.store.poison(message);
     }
 }
 
@@ -1070,6 +1115,7 @@ impl World<BuildSchema> for BuildWorld<'_> {
                 })
             }
             Input::Project => base.project_epoch,
+            Input::Derived(id, key) => self.store.derived.fingerprint(id, key),
         }
     }
 }

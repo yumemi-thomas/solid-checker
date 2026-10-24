@@ -304,7 +304,7 @@ impl MemberStability {
     }
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct ClosedUses {
     object_escaped: bool,
     array_escaped: bool,
@@ -322,7 +322,61 @@ impl ClosedUses {
         self.context_value_escaped = true;
         self.destructured_escaped = true;
     }
+
+    /// What a handoff hands back from its receiver to its argument binding:
+    /// the receiver's escapes, or, for a destructuring receiver, its
+    /// destructured escape as the object's and the context value's.
+    fn handed_back(destructured: &bool, receiver: &Self) -> Self {
+        if *destructured {
+            Self {
+                object_escaped: receiver.destructured_escaped,
+                context_value_escaped: receiver.destructured_escaped,
+                ..Self::default()
+            }
+        } else {
+            Self {
+                object_escaped: receiver.object_escaped,
+                array_escaped: receiver.array_escaped,
+                callable_escaped: receiver.callable_escaped,
+                context_value_escaped: receiver.context_value_escaped,
+                ..Self::default()
+            }
+        }
+    }
 }
+
+/// The census is a join of escape flags.
+impl crate::base::fixpoint::Lattice for ClosedUses {
+    fn bottom() -> Self {
+        Self::default()
+    }
+
+    fn join(&mut self, other: &Self) {
+        self.object_escaped |= other.object_escaped;
+        self.array_escaped |= other.array_escaped;
+        self.callable_escaped |= other.callable_escaped;
+        self.context_escaped |= other.context_escaped;
+        self.context_value_escaped |= other.context_value_escaped;
+        self.destructured_escaped |= other.destructured_escaped;
+    }
+}
+
+impl crate::base::memo::Canonical for ClosedUses {}
+
+/// Each handoff binding's joined use census ([`Resolver::new`]), published
+/// for memo readers.
+struct HandoffUses;
+
+impl crate::base::memo::derived::Derived for HandoffUses {
+    type Key = Location;
+    type Value = ClosedUses;
+    const NAME: &'static str = "handoff_uses";
+    const ID: crate::base::memo::derived::DerivedId = crate::base::memo::derived::DerivedId(224);
+}
+
+/// The kept solver of the handoff join.
+const HANDOFF_SOLVER: crate::base::memo::derived::SolverId =
+    crate::base::memo::derived::SolverId(224);
 
 #[cfg(test)]
 #[path = "accessor_provenance/tests.rs"]

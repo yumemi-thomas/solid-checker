@@ -317,32 +317,7 @@ impl Resolver<'_, '_> {
                 }
             }
         }
-        loop {
-            let mut changed = false;
-            for (argument, receiver, destructured) in &handoffs {
-                let mut input = resolver.uses.get(receiver).copied().unwrap_or_default();
-                if *destructured {
-                    input = ClosedUses {
-                        object_escaped: input.destructured_escaped,
-                        context_value_escaped: input.destructured_escaped,
-                        ..Default::default()
-                    };
-                }
-                let uses = resolver.uses.entry(argument.clone()).or_default();
-                for (target, source) in [
-                    (&mut uses.object_escaped, input.object_escaped),
-                    (&mut uses.array_escaped, input.array_escaped),
-                    (&mut uses.callable_escaped, input.callable_escaped),
-                    (&mut uses.context_value_escaped, input.context_value_escaped),
-                ] {
-                    changed |= source && !*target;
-                    *target |= source;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
+        resolver.join_handoffs(handoffs);
         for file in &facts.files {
             for binding in &file.ast.bindings {
                 if !binding.immutable {
@@ -683,5 +658,83 @@ impl Resolver<'_, '_> {
                 }
             }
         }
+    }
+}
+
+/// A location's total order, for canonical definitions.
+fn location_order(location: &Location) -> (&str, u64, u64) {
+    (&location.path, location.start_byte, location.end_byte)
+}
+
+impl Resolver<'_, '_> {
+    /// Joins each handoff receiver's use census back into its argument
+    /// binding, chained handoffs included: the least fixed point of
+    /// `uses(argument) ⊔= handed_back(uses(receiver))`, solved on the
+    /// store's kept monotone solver (S7.0). Only the bindings on a handoff
+    /// are nodes; a seed is one whose direct census or handoff list moved.
+    fn join_handoffs(&mut self, handoffs: Vec<(Location, Location, bool)>) {
+        let mut edges = handoffs;
+        edges.sort_by(|left, right| {
+            location_order(&left.0)
+                .cmp(&location_order(&right.0))
+                .then_with(|| location_order(&left.1).cmp(&location_order(&right.1)))
+                .then(left.2.cmp(&right.2))
+        });
+        edges.dedup();
+        let mut nodes = edges
+            .iter()
+            .flat_map(|(argument, receiver, _)| [argument, receiver])
+            .collect::<Vec<_>>();
+        nodes.sort_by(|left, right| location_order(left).cmp(&location_order(right)));
+        nodes.dedup();
+        let mut next_edge = 0;
+        let definitions = nodes
+            .into_iter()
+            .map(|node| {
+                let mut preds = Vec::new();
+                while let Some((argument, receiver, destructured)) = edges.get(next_edge)
+                    && argument == node
+                {
+                    preds.push((receiver.clone(), *destructured));
+                    next_edge += 1;
+                }
+                (
+                    node.clone(),
+                    crate::base::fixpoint::Definition {
+                        input: self.uses.get(node).copied().unwrap_or_default(),
+                        preds,
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        let arguments = definitions
+            .iter()
+            .filter(|(_, definition)| !definition.preds.is_empty())
+            .map(|(node, _)| node.clone())
+            .collect::<Vec<_>>();
+        // The build begins (its memo invalidation) before anything publishes.
+        let _ = self.lookup.memo_world();
+        let store = self.lookup.memo_store();
+        let joined = store.solve_monotone(
+            HANDOFF_SOLVER,
+            definitions,
+            &ClosedUses::handed_back,
+            |solver, solved| {
+                store.publish::<HandoffUses>(
+                    solved
+                        .changed
+                        .iter()
+                        .map(|key| (key.clone(), solver.value(key).copied())),
+                );
+                arguments
+                    .into_iter()
+                    .map(|argument| {
+                        let uses = solver.value(&argument).copied().unwrap_or_default();
+                        (argument, uses)
+                    })
+                    .collect::<Vec<_>>()
+            },
+        );
+        self.uses.extend(joined);
     }
 }

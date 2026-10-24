@@ -32,6 +32,7 @@
 
 pub(crate) mod contributions;
 pub(crate) mod file_table;
+pub(crate) mod fixpoint;
 pub(crate) mod index;
 pub(crate) mod memo;
 pub(crate) mod retained;
