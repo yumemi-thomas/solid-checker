@@ -188,6 +188,9 @@ impl SemanticLookup<'_> {
                     ))
                 }))
             }
+            (Probe::DefinedReflectively, PolledKey::Text(name)) => {
+                ProbeAnswer::Flag(self.property_may_be_defined_reflectively_as(name))
+            }
             (Probe::GlobalWritten, PolledKey::Text(name)) => {
                 ProbeAnswer::Flag(global_identifier_written(self.facts, name))
             }

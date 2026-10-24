@@ -16,8 +16,10 @@ use typefacts::{
 use super::{SymbolId, SymbolName};
 use crate::owners::function_binding_name;
 
+pub(crate) mod callee_world;
 mod callees;
 mod census;
+pub(crate) use callee_world::CalleeWorld;
 pub(crate) use callees::{
     function_value_is_current_in, plain_callee_symbol, resolved_callee_call_in,
     standard_library_declaration_of,

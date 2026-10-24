@@ -1650,6 +1650,116 @@ fn flow_answers_follow_a_handler_across_files_and_are_reused_across_an_unrelated
     );
 }
 
+/// Handlers handed to project callees, which give them to an intrinsic
+/// element's event attribute: an imported function, a local object literal's
+/// method and a namespace import's member; a module whose members
+/// are reassigned, reflectively and by assignment; and a module unrelated to
+/// all of them.
+const CALLEE_FILES: &[(&str, &str)] = &[
+    (
+        "/fixture/callee/bind.tsx",
+        "export function bind(callback: () => void) {\n  return <button onClick={callback}>go</button>;\n}\nexport function give(callback: () => void) {\n  return <button onClick={callback}>go</button>;\n}\nexport function call(callback: () => void) {\n  callback();\n}\n",
+    ),
+    (
+        "/fixture/callee/app.tsx",
+        "import { bind, call } from \"./bind\";\nimport * as ns from \"./bind\";\nconst box = {\n  hand(callback: () => void) {\n    return <button onClick={callback}>go</button>;\n  },\n};\nexport function App() {\n  const press = () => console.log(\"x\");\n  const hold = () => console.log(\"y\");\n  const tap = () => console.log(\"z\");\n  const ping = () => console.log(\"w\");\n  call(ping);\n  return [bind(press), box.hand(hold), ns.give(tap)];\n}\n",
+    ),
+    (
+        "/fixture/callee/patch.ts",
+        "export const target = { size: 1 };\ntarget.size = 2;\nObject.defineProperty(target, \"name\", { value: 1 });\n",
+    ),
+    ("/fixture/callee/other.ts", "export const label = \"x\";\n"),
+];
+
+fn callee_project() -> Project {
+    Project {
+        files: CALLEE_FILES
+            .iter()
+            .map(|(path, source)| ((*path).to_owned(), (*source).to_owned()))
+            .collect(),
+        schemes: HashMap::default(),
+        unreferenced: Vec::new(),
+    }
+}
+
+/// A walk that resolves a project callee at a parameter, an object member's
+/// method or a namespace member reads the callee's file, the caller's member
+/// targets and the assigned-member census, not the whole program; one that
+/// finds a call invoking the value reads that site's role
+/// ([`crate::execution_role::FlowSiteRole`]). An edit of a module it never
+/// visits leaves its answers unrun: the site roles run again (they read the
+/// whole program) and answer the same. An edit of the callee's module
+/// recomputes them, as a fresh store answers.
+#[test]
+fn flow_answers_through_project_callees_are_reused_across_an_unrelated_edit() {
+    let store = super::memo::build::MemoStore::new(true, true);
+    let mut project = callee_project();
+    let (first, _) = flow_build(&project, &store, true).unwrap();
+    // The synthetic facts resolve the imported function; the member calls
+    // resolve no project callee (their declarations are synthetic), so only
+    // the first handler is proven, the others ask and find nothing.
+    let delivered = first
+        .iter()
+        .filter(|(path, .., event)| path == "/fixture/callee/app.tsx" && *event)
+        .count();
+    assert_eq!(delivered, 1, "{first:?}");
+    let files = project.files.len() as u64;
+    // A body edit of the unrelated module: only its own answers run.
+    project.files[3].1 = project.files[3].1.replace("\"x\"", "\"y\"");
+    let (second, tables) = flow_build(&project, &store, true).unwrap();
+    assert_eq!(first, second);
+    for table in ["invocation_flow_answers", "event_invoked_literals"] {
+        let stats = table_stats(&tables, table);
+        assert_eq!(
+            (
+                stats.fresh,
+                stats.changed,
+                stats.unchanged,
+                stats.mismatches
+            ),
+            (0, 0, 1, 0),
+            "{table}: {stats:?}"
+        );
+        assert_eq!(
+            stats.reused + stats.verified,
+            files - 1,
+            "{table}: {stats:?}"
+        );
+    }
+    let sites = table_stats(&tables, "flow_site_role");
+    assert!(
+        sites.unchanged >= 1 && sites.changed == 0 && sites.fresh == 0,
+        "{sites:?}"
+    );
+    // The callee's module, edited so that the function no longer hands its
+    // callback to an event: the walks that visited it run again,
+    // and agree with a fresh store.
+    project.files[0].1 = project.files[0].1.replacen(
+        "bind(callback: () => void) {\n  return <button onClick={callback}>go</button>;",
+        "bind(callback: () => void) {\n  return <button title={callback}>go</button>;",
+        1,
+    );
+    let (third, tables) = flow_build(&project, &store, true).unwrap();
+    let fresh = super::memo::build::MemoStore::new(false, false);
+    let (expected, _) = flow_build(&project, &fresh, true).unwrap();
+    assert_eq!(third, expected);
+    assert_ne!(third, first);
+    let stats = table_stats(&tables, "event_invoked_literals");
+    assert!(stats.changed >= 1 && stats.mismatches == 0, "{stats:?}");
+    // A module whose members are written: the census moves, and the answers
+    // that read it agree with a fresh store.
+    project.files[2].1 = project.files[2]
+        .1
+        .replace("target.size = 2;", "target.bind = 2;");
+    let (fourth, tables) = flow_build(&project, &store, true).unwrap();
+    let fresh = super::memo::build::MemoStore::new(false, false);
+    let (expected, _) = flow_build(&project, &fresh, true).unwrap();
+    assert_eq!(fourth, expected);
+    for (table, stats) in &tables {
+        assert_eq!(stats.mismatches, 0, "{table}: {stats:?}");
+    }
+}
+
 /// Through random edits (the base property test's kinds, TypeFacts-only
 /// changes and hazard flips included), the retained store's flow answers
 /// equal a fresh store's, with verify-reused mode on: no reused answer missed
@@ -1665,6 +1775,7 @@ fn flow_memos_through_random_edits_equal_a_fresh_store() {
             unreferenced: Vec::new(),
         };
         project.files.extend(flow_project().files);
+        project.files.extend(callee_project().files);
         project.files.sort();
         (*fixture, project)
     });

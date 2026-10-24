@@ -68,6 +68,8 @@ pub(crate) enum Probe {
     AssignedNames,
     /// The assignments that write through `R.prototype`, in file order. Unit.
     PrototypeSites,
+    /// Some reflective definer may define a property of a name. Text.
+    DefinedReflectively,
 }
 
 /// The key of a probe.
@@ -187,6 +189,12 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
     /// Whether member stability assumes `name` of an object created in `owner`.
     pub(crate) fn member_stable(&self, owner: FileId, name: &str) -> bool {
         self.flag(Probe::Stable, PolledKey::FileText(owner, Arc::from(name)))
+    }
+
+    /// ADR 0314: whether some reflective definer may define `name`
+    /// (`SemanticLookup::property_may_be_defined_reflectively_as`).
+    pub(crate) fn defined_reflectively(&self, name: &str) -> bool {
+        self.flag(Probe::DefinedReflectively, PolledKey::Text(Arc::from(name)))
     }
 
     pub(crate) fn global_written(&self, name: &str) -> bool {
