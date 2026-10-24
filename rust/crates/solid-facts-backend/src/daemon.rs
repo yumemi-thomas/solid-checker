@@ -1409,7 +1409,7 @@ fn answer_retained(
     let Some(state) = slot.as_mut() else {
         return Err("daemon state was not opened".into());
     };
-    let outcome = answer_with(state, request, check, true, None);
+    let outcome = answer_with(state, request, check, true, None, AfterFacts::Keep);
     let Ok(mut answered) = outcome else {
         if let Some(generated) = slot.take().as_ref().and_then(State::generated) {
             let _ = fs::remove_file(generated);
@@ -1453,12 +1453,25 @@ const CANCELLED: &str = "cancelled";
 /// Answer a check from `state`. `timings` reports the phases under
 /// `SOLID_CHECKER_TIMINGS`; `cancel` abandons the answer between phases (the
 /// idle check's fresh build only).
+/// What [`answer_with`] does with the state's producer once the facts are
+/// answered.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AfterFacts {
+    /// The retained state answers the next edit from it.
+    Keep,
+    /// A state dropped after this one answer (the idle check's fresh build,
+    /// ADR 03XX-memory): its producer's program would otherwise stay resident
+    /// beside the retained one while the analysis runs.
+    Close,
+}
+
 fn answer_with(
     state: &mut State,
     request: &Request,
     check: &CheckRequest,
     timings: bool,
     cancel: Option<&std::sync::atomic::AtomicBool>,
+    producer: AfterFacts,
 ) -> Result<Answer, Box<dyn Error>> {
     let started = Instant::now();
     let mut phases = PhaseClock::new(timings);
@@ -1630,6 +1643,11 @@ fn answer_with(
         }
     }
     phases.mark("resolution");
+    // Nothing below exchanges with the producer: package inputs, analysis
+    // and emission read the facts answered above.
+    if producer == AfterFacts::Close {
+        state.session.close_typefacts();
+    }
     let directory = state
         .project
         .parent()

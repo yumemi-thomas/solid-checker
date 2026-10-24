@@ -291,6 +291,16 @@ impl TypeFactsSession {
         })
     }
 
+    /// Ends the producer process. Every later exchange fails with
+    /// `Closed`; none relaunches it. For a build whose remaining phases read
+    /// only the facts already answered (the idle check's fresh build), so
+    /// its program does not stay resident beside the retained one.
+    pub fn close(&mut self) {
+        // `close` terminates the child on every path; a refusal of the
+        // goodbye leaves nothing open either.
+        let _ = self.session.close();
+    }
+
     /// The project's configured source set, as the TypeScript program sees it.
     pub fn configured_sources(&mut self) -> Result<Vec<SourceFile>, BackendError> {
         Ok(self
@@ -1065,6 +1075,12 @@ impl NativeIncrementalSession {
             &typefacts::ModuleGraphDemand::with_distinct_bare_imports()
                 .import_paths(paths.iter().cloned()),
         )
+    }
+
+    /// Ends this session's producer ([`TypeFactsSession::close`]): a later
+    /// analysis or module query fails instead of answering.
+    pub fn close_typefacts(&mut self) {
+        self.typescript.close();
     }
 
     /// Recovery is the session's own concern now.
