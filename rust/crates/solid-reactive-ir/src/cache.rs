@@ -342,14 +342,14 @@ pub(crate) struct CachedInterproceduralResultFile {
     pub(crate) reads: Vec<ReactiveRead>,
     pub(crate) dispatch_obligations: Vec<StaticDefect>,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
-    /// Whether this file, as analyzed, held syntax a caller's call-role proof
-    /// reads beyond its summaries (`interproc::call_role_syntax`).
-    pub(crate) call_role_syntax: bool,
-    /// What the file's result reads read of the lookup, with what the
-    /// stage's shared inputs (the accessor resolver, call transport, the
-    /// graph) and source discovery's project passes read:
-    /// [`crate::base::reads`].
+    /// What the file's result reads read of the lookup
+    /// ([`crate::base::reads`]).
     pub(crate) proof: ReadProof,
+    /// What the stage's shared inputs (the accessor resolver, call
+    /// transport, the graph) and source discovery's project passes read in
+    /// the build that computed the file: one proof for every file computed
+    /// in that build, checked once per build.
+    pub(crate) stage_proof: Arc<ReadProof>,
     /// What the file's result reads read of the stage's transport tables
     /// (`interproc::transport_reads`).
     pub(crate) transport: crate::interproc::TransportReads,
@@ -760,27 +760,27 @@ pub(crate) struct CachedLateStages {
     pub(crate) compat_reference_locations: Option<SourceReferenceLocations>,
 }
 
+/// Whether two analyses of one path's source hold the same AST facts, every
+/// table compared, the source hash aside: what the whole-stage reuse of
+/// reachability and the late stages asks of a file whose bytes moved. The
+/// stages read many more tables than calls, bindings and functions (the
+/// role machine reads assignments, logical and conditional expressions,
+/// object properties, classes, through another file too), so a table left
+/// out of the comparison was a same-length edit the reuse could not see
+/// (ADR 03XX-role-reads).
 pub(crate) fn same_reachability_ast(
     previous: &solid_facts::ast::AstFacts,
     current: &solid_facts::ast::AstFacts,
 ) -> bool {
-    previous.schema == current.schema
-        && previous.source.path == current.source.path
-        && previous.calls == current.calls
-        && previous.bindings == current.bindings
-        && previous.functions == current.functions
-        && previous.imports == current.imports
-        && previous.exports == current.exports
-        && previous.identifiers == current.identifiers
-        && previous.awaits == current.awaits
-        && previous.unconditional_awaits == current.unconditional_awaits
-        && previous.dominating_awaits == current.dominating_awaits
-        && previous.try_head_awaits == current.try_head_awaits
-        && previous.returns == current.returns
-        && previous.jsx_elements == current.jsx_elements
-        && previous.members == current.members
-        && previous.spreads == current.spreads
-        && previous.conditional_tests == current.conditional_tests
+    if previous.schema != current.schema || previous.source.path != current.source.path {
+        return false;
+    }
+    if previous.source.hash == current.source.hash {
+        return previous == current;
+    }
+    let mut rehashed = previous.clone();
+    rehashed.source.hash.clone_from(&current.source.hash);
+    rehashed == *current
 }
 
 pub(crate) fn same_compiler_semantics(

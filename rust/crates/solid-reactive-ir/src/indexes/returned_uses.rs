@@ -113,6 +113,8 @@ impl SemanticLookup<'_> {
     /// `file_by_path` reads it).
     pub(crate) fn returned_use_file(&self, used: &ReturnedUse) -> Option<&FileFacts> {
         let slot = *self.memos.table().slots_of(used.file).last()?;
+        // A hand-out (`hand_outs`): the use's file.
+        self.note_slot_read(slot);
         self.facts.files.get(slot)
     }
 }

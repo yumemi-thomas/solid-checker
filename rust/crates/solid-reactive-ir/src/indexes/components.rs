@@ -324,6 +324,8 @@ impl<'a> SemanticLookup<'a> {
             .iter()
             .filter_map(|site| {
                 let slot = *table.slots_of(site.file).get(site.rank as usize)?;
+                // A hand-out (`hand_outs`): each caller's file.
+                self.note_slot_read(slot);
                 Some((&files[slot], *site))
             })
             .collect()

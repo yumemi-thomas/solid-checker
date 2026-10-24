@@ -36,6 +36,10 @@ mod components;
 pub(crate) use components::unproven_component_status;
 mod compound;
 mod event_delivery;
+mod hand_outs;
+pub(crate) use hand_outs::{
+    HAND_OUT_TABLES, HAND_OUT_TABLES_END, HAND_OUT_TABLES_FROM, HandOutTables,
+};
 mod identity_wrappers;
 mod memo_probes;
 mod returned_invocations;
@@ -161,38 +165,6 @@ pub(crate) fn constant_string_key(file: &FileFacts, key: Span) -> Option<String>
 /// file after its declaration: as an assignment target or inside one (a
 /// destructuring pattern), or as a loop head (`for (x of …)`). A write of a
 /// member of it (`x.y = …`) does not rebind it.
-/// Whether some function in `file` returns a bare identifier, or a `new` of a
-/// callee spelled `Proxy` (ADR 0287): the only shapes whose callee syntax a
-/// returned-source proof (ADR 0222) reads beyond the summaries and Type Facts
-/// the caches compare. A same-file `return g(…)` forward (ADR 0287) proves
-/// nothing unless its file also holds one of these. The interprocedural
-/// result cache counts such a file as call-role syntax
-/// (`interproc::call_role_syntax`); a chunk records the proof's answers it
-/// reads instead (ADR 0392, [`crate::base::reads::Section::ReturnedSources`]).
-pub(crate) fn returns_source_root(file: &FileFacts) -> bool {
-    file.ast
-        .returns
-        .iter()
-        .chain(
-            file.ast
-                .functions
-                .iter()
-                .filter_map(|function| function.expression_return.as_ref()),
-        )
-        .filter_map(|returned| returned.argument)
-        .any(|argument| {
-            let argument = file.ast.peel_ts_sugar_span(argument);
-            file.ast.identifiers.iter().any(|identifier| {
-                identifier.span == argument
-                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
-            }) || file.ast.calls.iter().any(|call| {
-                call.construct
-                    && call.span == argument
-                    && file.source_text(file.ast.peel_ts_sugar_span(call.callee)) == Some("Proxy")
-            })
-        })
-}
-
 pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
     binding_written_by(file, declaration, false)
 }
@@ -796,6 +768,10 @@ pub(super) struct SemanticLookup<'a> {
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
     functions_by_symbol: crate::base::reads::Recorded<HashMap<&'a str, SymbolFunction>>,
+    /// `functions_by_symbol` by bucket, for the hand-out reads (`hand_outs`).
+    function_buckets: OnceLock<Vec<hand_outs::FunctionBucket>>,
+    /// This build's hand-out reads, each asked of the store once.
+    hand_out_reads: hand_outs::HandOutReads,
     /// L2: the memo tables ([`crate::base::memo`]); ADR 0346's identity
     /// wrappers are the first.
     memos: crate::base::memo::build::LookupMemos<'a>,
@@ -1146,6 +1122,8 @@ impl<'a> SemanticLookup<'a> {
             entities,
             symbol_names,
             functions_by_symbol: crate::base::reads::Recorded::new(),
+            function_buckets: OnceLock::new(),
+            hand_out_reads: hand_outs::HandOutReads::default(),
             memos: crate::base::memo::build::LookupMemos::owned(&file_table),
             invocation_flow_answers: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
@@ -1614,6 +1592,14 @@ impl<'a> SemanticLookup<'a> {
             }
             Section::ReflectivePrototypeWrite => {
                 hasher.update([u8::from(self.reflective_prototype_write_present())]);
+            }
+            Section::RouteComponents => {
+                spans(
+                    &mut hasher,
+                    self.route_component_values()
+                        .iter()
+                        .map(|(path, span)| (path.as_str(), *span)),
+                );
             }
             Section::ReflectiveDefinition => {
                 hasher.update([u8::from(
@@ -2089,9 +2075,15 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn file_by_path(&self, path: &str) -> Option<&'a FileFacts> {
         let facts: &'a ProjectFacts = self.facts;
-        self.file_table
-            .last_slot(path)
-            .map(|slot| &facts.files[slot])
+        // A hand-out (`hand_outs`): the slot a path names, and its file.
+        let slot = self.file_table.last_slot(path);
+        match slot {
+            Some(slot) => self.note_slot_read(slot),
+            None => self.note_probe_read(crate::base::memo::probes::Probe::PathFile, || {
+                Self::symbol_key(path)
+            }),
+        }
+        slot.map(|slot| &facts.files[slot])
     }
 
     /// A missing symbol is missing reference evidence, not an empty census.
@@ -2104,6 +2096,10 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(super) fn symbol_references_if_present(&self, symbol: &str) -> Option<Vec<Location>> {
+        // Every file's references of the symbol (`hand_outs`).
+        self.note_probe_read(crate::base::memo::probes::Probe::SymbolReferences, || {
+            Self::symbol_key(symbol)
+        });
         self.symbols_by_id()
             .get(symbol)
             .map(|candidate| candidate.references().cloned().collect())
@@ -2119,6 +2115,9 @@ impl<'a> SemanticLookup<'a> {
     /// ADR 0334: whether `span` in `path` is a component value of a route's
     /// options that the audited `@tanstack/solid-router` only renders.
     pub(super) fn route_component_value(&self, path: &str, span: Span) -> bool {
+        // A whole-program census: a router configuration in another file
+        // can name the value (`crate::base::reads::Section`).
+        crate::base::reads::note(crate::base::reads::Section::RouteComponents);
         self.route_component_values()
             .contains(&(path.to_string(), span))
     }
@@ -2216,6 +2215,10 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(super) fn symbol_references(&self, symbol: &str) -> Vec<Location> {
+        // Every file's references of the symbol (`hand_outs`).
+        self.note_probe_read(crate::base::memo::probes::Probe::SymbolReferences, || {
+            Self::symbol_key(symbol)
+        });
         self.symbols_by_id()
             .get(symbol)
             .map(|candidate| candidate.references().cloned().collect())
@@ -2236,13 +2239,19 @@ impl<'a> SemanticLookup<'a> {
         &self,
         symbol: &str,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::ClassFact)> {
+        // A hand-out (`hand_outs`): the answer, and the file it names.
+        self.note_probe_read(crate::base::memo::probes::Probe::ClassFor, || {
+            Self::symbol_key(symbol)
+        });
         let [declaration] = self.symbols_by_id().get(symbol)?.declarations() else {
             return None;
         };
         if &*declaration.kind != "class" {
             return None;
         }
-        let file = &self.facts.files[self.first_file_index(&declaration.location.path)?];
+        let slot = self.first_file_index(&declaration.location.path)?;
+        self.note_slot_read(slot);
+        let file = &self.facts.files[slot];
         let (Ok(start), Ok(end)) = (
             u32::try_from(declaration.location.start_byte),
             u32::try_from(declaration.location.end_byte),

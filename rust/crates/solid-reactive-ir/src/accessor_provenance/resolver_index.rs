@@ -62,7 +62,12 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
         let (resolver, reads) =
             crate::base::reads::record(|| super::resolver_memos::build(empty, &mut timer));
         timer.emit();
-        super::resolver_memos::keep_built(&resolver, reads);
+        // Built from every file: what it was handed of each is no reader's
+        // own read (`indexes::hand_outs`).
+        super::resolver_memos::keep_built(
+            &resolver,
+            reads.without_tables(crate::indexes::HAND_OUT_TABLES),
+        );
     }
 
     /// A resolver whose tables are empty, for the stages to fill.

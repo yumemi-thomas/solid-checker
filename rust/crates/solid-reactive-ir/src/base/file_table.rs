@@ -114,6 +114,11 @@ impl FileTable {
         }
     }
 
+    /// How many slots the build's files hold.
+    pub(crate) fn slot_count(&self) -> usize {
+        self.slot_ids.len()
+    }
+
     /// The id of the file in slot `slot`.
     pub(crate) fn slot_id(&self, slot: usize) -> FileId {
         self.slot_ids[slot]

@@ -415,7 +415,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             &typescript_indexes.symbols_by_root,
         )
     });
-    semantic_lookup.set_namespace_hand_outs(hand_outs, hand_out_reads);
+    // A whole-program census: what it was handed of each file is no reader's
+    // own read (`indexes::hand_outs`).
+    semantic_lookup.set_namespace_hand_outs(
+        hand_outs,
+        hand_out_reads.without_tables(crate::indexes::HAND_OUT_TABLES),
+    );
     build_timings.namespace_hand_outs = substage_started.elapsed();
     let semantic_lookup = &semantic_lookup;
     if let Some((retained, mode)) = base_check {
@@ -615,7 +620,11 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     if !reuse.late_stages_reusable
         && let Some(cache) = late_stage_cache.and_then(Option::as_mut)
     {
-        let reads = std::mem::take(&mut cache.reads);
+        // What a chunk was handed is decided by what the late-stage reuse
+        // compares itself: the Type Facts table and every file's facts
+        // (`cache::late_stage_inputs_match`, `indexes::hand_outs`).
+        let reads =
+            std::mem::take(&mut cache.reads).without_tables(crate::indexes::HAND_OUT_TABLES);
         cache.proof = Some(crate::base::reads::ReadProof::new(reads, semantic_lookup));
     }
     // Static and compatibility passes deliberately operate on source facts.

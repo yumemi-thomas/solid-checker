@@ -182,6 +182,9 @@ pub(crate) struct BuildTables {
     resolver: crate::interproc::accessor_provenance::ResolverTables,
     /// Tables 384 to 447: accessor transport (S7c).
     transport: crate::interproc::accessor_provenance::TransportTables,
+    /// Tables 640 to 703: what the lookup hands a recording chunk
+    /// (ADR 03XX-role-reads).
+    hand_outs: crate::indexes::HandOutTables,
 }
 
 impl TableSet<BuildSchema> for BuildTables {
@@ -231,6 +234,13 @@ impl BuildTables {
                     .table(id)
                     .unwrap_or_else(|| unreachable!("memo table {id:?}"))
             }
+            id if (crate::indexes::HAND_OUT_TABLES_FROM..crate::indexes::HAND_OUT_TABLES_END)
+                .contains(&id.0) =>
+            {
+                self.hand_outs
+                    .table(id)
+                    .unwrap_or_else(|| unreachable!("memo table {id:?}"))
+            }
             id if id.0 >= crate::interproc::accessor_provenance::RESOLVER_TABLES_FROM => self
                 .resolver
                 .table(id)
@@ -270,6 +280,7 @@ impl BuildTables {
         tables.extend(self.invocations.tables());
         tables.extend(self.resolver.tables());
         tables.extend(self.transport.tables());
+        tables.extend(self.hand_outs.tables());
         tables
     }
 }
@@ -323,6 +334,10 @@ impl BuildTables {
 
     pub(crate) fn project(&self) -> &crate::indexes::ProjectTables {
         &self.project
+    }
+
+    pub(crate) fn hand_outs(&self) -> &crate::indexes::HandOutTables {
+        &self.hand_outs
     }
 
     pub(crate) fn census(&self) -> &crate::indexes::CensusTables {
@@ -1489,6 +1504,21 @@ impl<'w> BuildWorld<'w> {
         value
     }
 
+    /// The read a reader outside every memo records of `M`'s answer for
+    /// `key` ([`Self::answer`]), without recording it: `None` for a cycle's
+    /// fail-closed answer, which poisons the store.
+    pub(crate) fn memo_read<M: Memo<BuildSchema>>(
+        &self,
+        key: &M::Key,
+    ) -> Option<crate::base::reads::MemoRead> {
+        let (_, read) = self.store.store.answer_read::<M>(self, key);
+        read.map(|(query, changed_at)| crate::base::reads::MemoRead {
+            table: M::ID,
+            query,
+            changed_at,
+        })
+    }
+
     /// The revision `query` of `table` last changed in, for a chunk's
     /// recorded read ([`crate::base::reads::ReadAnswers`]).
     pub(crate) fn changed_at(
@@ -1655,6 +1685,25 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
             id,
             view: world.views.view(slot),
         })
+    }
+
+    /// The fingerprint of each [`Section`] of the file `id`, all recorded:
+    /// what a reader of the whole file records
+    /// (`indexes::hand_outs::FileFactsRead`). Not its slots, whose positions
+    /// move with every file added before it.
+    pub(crate) fn file_fingerprints(&self, id: FileId) -> (u64, u64, u64, u64) {
+        let inputs = [
+            Input::File(id, Section::Source),
+            Input::File(id, Section::Compiler),
+            Input::File(id, Section::Entities),
+            Input::File(id, Section::Signatures),
+        ];
+        let [source, compiler, entities, signatures] = inputs.map(|input| {
+            let fingerprint = self.world().fingerprint(input);
+            self.record_input_known(input, fingerprint);
+            fingerprint
+        });
+        (source, compiler, entities, signatures)
     }
 
     /// The slots of `id` in file order: what a first-wins choice across

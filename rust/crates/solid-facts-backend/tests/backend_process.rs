@@ -42,6 +42,8 @@ mod owner_parity_process;
 mod props_reactivity_process;
 #[path = "reachability_parity_process.rs"]
 mod reachability_parity_process;
+#[path = "role_reads_process.rs"]
+mod role_reads_process;
 #[path = "router_params_process.rs"]
 mod router_params_process;
 #[path = "rule_quality_process.rs"]

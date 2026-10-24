@@ -796,6 +796,8 @@ impl<'a> SemanticLookup<'a> {
         symbol: &str,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::BindingFact)> {
         let resolution = self.bindings_by_symbol().get(symbol)?;
+        // A hand-out (`hand_outs`): the binding's file.
+        self.note_slot_read(resolution.file);
         let file = &self.facts.files[resolution.file];
         Some((file, &file.ast.bindings[resolution.binding]))
     }

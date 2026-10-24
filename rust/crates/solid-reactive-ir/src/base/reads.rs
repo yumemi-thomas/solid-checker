@@ -19,12 +19,16 @@
 //! records on each worker and merges at the join, so a chunk's record is the
 //! same whatever thread computes what.
 //!
+//! **Other files' facts.** The lookup hands a chunk another file through a
+//! few questions (which function a symbol names, a binding, a path, a
+//! function's callers); each hand-out is recorded as the question's answer
+//! and the handed file's section fingerprints (`indexes::hand_outs`), so a
+//! chunk reruns when anything it may have read of that file moves.
+//!
 //! **What is not recorded.** A memo computation's own reads are its memo's
 //! (the store records them), so nothing inside a memo computation reaches a
 //! chunk ([`suppress`]); a section's own computation likewise (its value is
-//! the fingerprint). Reads of another file's facts outside the lookup's
-//! tables are not recorded yet: a chunk that makes them keeps its stage's
-//! file-level gate (`interproc::call_role_syntax`).
+//! the fingerprint).
 //!
 //! **Soundness** is the trace-replay lemma (study §3.3): a deterministic
 //! chunk whose recorded reads all answer as recorded re-traces the same
@@ -69,10 +73,13 @@ pub(crate) enum Section {
     ReflectivePrototypeWrite,
     /// The exported module-level constants proven primitive (ADR 0325).
     ExportedPrimitiveConsts,
+    /// The route component values (ADR 0334), whose router configurations
+    /// may sit in another file than the value (ADR 03XX-role-reads).
+    RouteComponents,
 }
 
 impl Section {
-    pub(crate) const ALL: [Self; 13] = [
+    pub(crate) const ALL: [Self; 14] = [
         Self::Components,
         Self::MemberTargets,
         Self::SpreadTargets,
@@ -86,6 +93,7 @@ impl Section {
         Self::ReflectiveDefinition,
         Self::ReflectivePrototypeWrite,
         Self::ExportedPrimitiveConsts,
+        Self::RouteComponents,
     ];
 
     const fn bit(self) -> u32 {
@@ -191,10 +199,59 @@ impl Reads {
     }
 
     /// Adds every set of `others`' reads. Runs are shared by pointer
-    /// ([`Self::extend`]), so this is linear in the runs added.
+    /// ([`Self::extend`]) and bounded once at the end, so adding a thousand
+    /// small sets merges their runs once, not once per set.
     pub(crate) fn extend_all<'a>(&mut self, others: impl IntoIterator<Item = &'a Self>) {
         for other in others {
-            self.extend(other);
+            self.sections |= other.sections;
+            for run in &other.runs {
+                self.add_run(run);
+            }
+            self.tail.extend_from_slice(&other.tail);
+        }
+        if self.tail.len() > TAIL_MAX {
+            let mut tail = std::mem::take(&mut self.tail);
+            cost::timed(cost::EXTEND, tail.len(), || {
+                tail.sort_unstable();
+                tail.dedup();
+            });
+            self.runs.push(Arc::from(tail));
+        }
+        self.bound_runs();
+    }
+
+    /// These reads without the answers of the tables in `tables`: what a
+    /// reader keeps of another computation's reads when it compares those
+    /// tables' inputs itself (`indexes::hand_outs`).
+    pub(crate) fn without_tables(&self, tables: std::ops::Range<u16>) -> Self {
+        let kept = |read: &MemoRead| !tables.contains(&read.table.0);
+        if self.memo_reads().all(kept) {
+            return self.clone();
+        }
+        let runs = self
+            .runs
+            .iter()
+            .filter_map(|run| {
+                if run.iter().all(kept) {
+                    return Some(Arc::clone(run));
+                }
+                let run = run
+                    .iter()
+                    .filter(|read| kept(read))
+                    .copied()
+                    .collect::<Vec<_>>();
+                (!run.is_empty()).then(|| Arc::from(run))
+            })
+            .collect();
+        Self {
+            sections: self.sections,
+            runs,
+            tail: self
+                .tail
+                .iter()
+                .filter(|read| kept(read))
+                .copied()
+                .collect(),
         }
     }
 
@@ -326,6 +383,11 @@ pub(crate) mod cost {
 /// One thread's recording: the innermost frame receives every note.
 #[derive(Default)]
 struct Frame {
+    /// Opened by [`suppress`]: what it receives goes nowhere.
+    suppressed: bool,
+    /// This thread's count of frames opened when this one was: tells a
+    /// frame apart from the one before it at the same depth.
+    serial: u64,
     sections: u32,
     memos: Vec<MemoRead>,
     /// The runs of the read sets replayed into this frame, each once.
@@ -360,11 +422,30 @@ thread_local! {
     /// `FRAMES`' length: the notes outside every recording (most lookup
     /// reads of a build) test one cell instead of borrowing the stack.
     static DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// How many frames this thread has opened ([`Frame::serial`]).
+    static OPENED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 /// Whether some computation on this thread is recording.
 pub(crate) fn recording() -> bool {
     DEPTH.with(std::cell::Cell::get) != 0
+}
+
+/// The recording a note made now reaches, by its frame's serial: `None`
+/// outside every recording and inside a [`suppress`]. A reader whose note
+/// costs a lookup (an answer it must ask) asks this first, and may skip a
+/// note it already made in the same frame.
+pub(crate) fn recording_frame() -> Option<u64> {
+    if !recording() {
+        return None;
+    }
+    FRAMES.with(|frames| {
+        frames
+            .borrow()
+            .last()
+            .filter(|frame| !frame.suppressed)
+            .map(|frame| frame.serial)
+    })
 }
 
 /// Records that the current computation read `section`.
@@ -432,7 +513,16 @@ impl Drop for FrameGuard {
 }
 
 fn push() -> FrameGuard {
-    FRAMES.with(|frames| frames.borrow_mut().push(Frame::default()));
+    let serial = OPENED.with(|opened| {
+        opened.set(opened.get() + 1);
+        opened.get()
+    });
+    FRAMES.with(|frames| {
+        frames.borrow_mut().push(Frame {
+            serial,
+            ..Frame::default()
+        });
+    });
     DEPTH.with(|depth| depth.set(depth.get() + 1));
     FrameGuard
 }
@@ -500,6 +590,11 @@ impl Recording {
 /// memo computation (the store records its reads) or a section's value.
 pub(crate) fn suppress<R>(f: impl FnOnce() -> R) -> R {
     let _guard = push();
+    FRAMES.with(|frames| {
+        if let Some(frame) = frames.borrow_mut().last_mut() {
+            frame.suppressed = true;
+        }
+    });
     f()
 }
 

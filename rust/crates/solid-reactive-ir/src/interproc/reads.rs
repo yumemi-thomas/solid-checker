@@ -632,8 +632,16 @@ pub(super) fn interprocedural_reads(
         array_member_bodies: &array_member_bodies,
         provenance: &provenance,
     };
-    let mut stage_reads = recording.so_far();
-    stage_reads.extend(context.source_shared_reads);
+    // What the stage's other chunks were handed is their own read: each
+    // result chunk records what it is handed itself (`indexes::hand_outs`).
+    let mut stage_reads = recording
+        .so_far()
+        .without_tables(crate::indexes::HAND_OUT_TABLES);
+    stage_reads.extend(
+        &context
+            .source_shared_reads
+            .without_tables(crate::indexes::HAND_OUT_TABLES),
+    );
     let ResultReads {
         mut result,
         result_reused_files,
@@ -818,6 +826,7 @@ fn discover_summary_graph_nodes<'a, 'c>(
         })
     });
     let mut computed = Vec::with_capacity(discovered.len());
+    let mut reused_proofs = Vec::new();
     for (file, discovered) in facts.files.iter().zip(discovered) {
         if let Some((file_nodes, reads)) = discovered {
             // The nodes' reads, until the merge adds the contribution's.
@@ -837,11 +846,13 @@ fn discover_summary_graph_nodes<'a, 'c>(
             let cached = cache
                 .get(file.path.as_str())
                 .expect("reusable graph path has a cached contribution");
-            reused_reads.extend(&cached.proof.reads);
+            reused_proofs.push(cached.proof.reads.clone());
             graph_node_reused_paths.insert(file.path.as_str());
             computed.push(None);
         }
     }
+    // Added at once ([`crate::base::reads::Reads::extend_all`]).
+    reused_reads.extend_all(&reused_proofs);
     let cache = &*cache;
     let nodes = facts
         .files
@@ -1689,17 +1700,33 @@ fn collect_result_reads(
         ..
     } = context;
     // A file's result reads, recorded: its proof is what it read of the
-    // lookup, with what the stage read before it ([`crate::base::reads`]),
-    // and what it read of the transport tables (`transport_reads`).
+    // lookup, and what it read of the transport tables (`transport_reads`).
+    // What the stage read before it ([`crate::base::reads`]) is one proof
+    // every file computed in this build shares, checked once per build.
     let read_file = |file: &solid_facts::FileFacts| {
-        let ((computed, transport), mut reads) = crate::base::reads::record(|| {
+        let ((computed, transport), reads) = crate::base::reads::record(|| {
             super::transport_reads::record(|| {
                 interprocedural_result_reads_for_file(file, result_read_context)
             })
         });
-        reads.extend(stage_reads);
         (computed, (reads, transport))
     };
+    let stage_proof = std::cell::OnceCell::new();
+    let stage_proof = || {
+        Arc::clone(stage_proof.get_or_init(|| {
+            Arc::new(crate::base::reads::ReadProof::new(
+                stage_reads.clone(),
+                *lookup,
+            ))
+        }))
+    };
+    // Each kept stage proof's verdict, by address; the proof is held so no
+    // other takes its address during the build.
+    let mut stage_proofs_hold =
+        HashMap::<usize, (Arc<crate::base::reads::ReadProof>, bool)>::default();
+    // The kept files' reads, added to the stage's at once
+    // ([`crate::base::reads::Reads::extend_all`]).
+    let mut reused_proofs = Vec::new();
     let result_view = result_read_context.result;
     let result_capacity = interprocedural_result_cache.as_ref().map_or(0, |cache| {
         cache.files.values().map(|file| file.reads.len()).sum()
@@ -1708,29 +1735,6 @@ fn collect_result_reads(
     let mut result_reused_files = 0;
     let mut result_recomputed_files = 0;
     if let Some(cache) = interprocedural_result_cache {
-        // Call-role proofs inspect callee syntax beyond its read summary:
-        // moving an await/default/edge can preserve that summary byte for
-        // byte. Until syntax dependencies are retained per hop, a changed,
-        // added or removed file holding such syntax, before or after the
-        // edit, invalidates result-file reuse, including callers.
-        let all_result_sources_retained = facts
-            .files
-            .iter()
-            .filter(|file| !unchanged_paths.contains(file.path.as_str()))
-            .all(|file| {
-                !call_role_syntax(file)
-                    && cache
-                        .files
-                        .get(file.path.as_str())
-                        .is_none_or(|cached| !cached.call_role_syntax)
-            })
-            && cache.files.iter().all(|(path, cached)| {
-                !cached.call_role_syntax
-                    || facts
-                        .files
-                        .iter()
-                        .any(|file| file.path.as_str() == path.as_str())
-            });
         if cache.files.is_empty()
             && cache.dependency_states.is_empty()
             && cache.dependency_users.is_empty()
@@ -1752,8 +1756,8 @@ fn collect_result_reads(
                         reads,
                         dispatch_obligations: obligations,
                         compiler: file.compiler.clone(),
-                        call_role_syntax: call_role_syntax(file),
                         proof: crate::base::reads::ReadProof::new(recorded, *lookup),
+                        stage_proof: stage_proof(),
                         transport,
                     },
                 );
@@ -1791,17 +1795,26 @@ fn collect_result_reads(
                 .map(|(dependency, _)| dependency.clone())
                 .collect::<HashSet<_>>();
             for file in &facts.files {
-                if all_result_sources_retained
-                    && unchanged_paths.contains(file.path.as_str())
+                if unchanged_paths.contains(file.path.as_str())
                     && let Some(cached) = cache.files.get(file.path.as_str())
                     && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                         || same_compiler_semantics(&cached.compiler, &file.compiler))
                     && cached.dependencies.is_disjoint(&changed_dependencies)
                     && cached.proof.holds(*lookup)
+                    && stage_proofs_hold
+                        .entry(Arc::as_ptr(&cached.stage_proof) as usize)
+                        .or_insert_with(|| {
+                            (
+                                Arc::clone(&cached.stage_proof),
+                                cached.stage_proof.holds(*lookup),
+                            )
+                        })
+                        .1
                     && super::transport_reads::hold(&cached.transport, result_read_context)
                 {
                     result_reused_files += 1;
-                    reused_reads.extend(&cached.proof.reads);
+                    reused_proofs.push(cached.proof.reads.clone());
+                    reused_proofs.push(cached.stage_proof.reads.clone());
                     result.extend(cached.reads.iter().cloned());
                     dispatch_obligations.extend(cached.dispatch_obligations.iter().cloned());
                     continue;
@@ -1839,8 +1852,8 @@ fn collect_result_reads(
                         reads,
                         dispatch_obligations: obligations,
                         compiler: file.compiler.clone(),
-                        call_role_syntax: call_role_syntax(file),
                         proof: crate::base::reads::ReadProof::new(recorded, *lookup),
+                        stage_proof: stage_proof(),
                         transport,
                     },
                 );
@@ -1862,6 +1875,7 @@ fn collect_result_reads(
                     .insert(dependency.clone(), result_view.dependency_state(dependency));
             }
         }
+        reused_reads.extend_all(&reused_proofs);
     } else {
         for file in &facts.files {
             result_recomputed_files += 1;

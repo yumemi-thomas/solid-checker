@@ -77,7 +77,10 @@ impl<'a> SemanticLookup<'a> {
         path: &str,
         span: Span,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::BindingFact, SymbolId)> {
+        // A hand-out (`hand_outs`): the answer, and the file it names.
+        self.note_binding_at(path);
         let resolution = self.binding_resolution_at(path, span)?;
+        self.note_slot_read(resolution.file);
         let file = &self.facts.files[resolution.file];
         Some((
             file,
@@ -390,8 +393,11 @@ impl<'a> SemanticLookup<'a> {
         &self,
         symbol: &str,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+        // A hand-out (`hand_outs`): the answer, and the file it names.
+        self.note_function_for_symbol(symbol);
         match self.functions_by_symbol().get(symbol)? {
             SymbolFunction::Resolved { file, function } => {
+                self.note_slot_read(*file);
                 let file = &self.facts.files[*file];
                 Some((file, &file.ast.functions[*function]))
             }

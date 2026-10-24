@@ -2169,43 +2169,6 @@ pub(super) fn getter_line(lookup: &SemanticLookup<'_>, site: &Location) -> usize
         .unwrap_or(0)
 }
 
-pub(super) fn call_role_syntax(file: &solid_facts::FileFacts) -> bool {
-    crate::indexes::returns_source_root(file)
-        // Nested literal receivers require a project-wide eval veto. Adding
-        // or removing it must refresh unchanged callers in both directions.
-        || file.ast.module_hazards.iter().any(|hazard| {
-            hazard.kind == solid_facts::ast::ModuleHazardKind::Eval
-        })
-        || !file.ast.object_get_shapes.is_empty()
-        // Provider multiplicity and returned literal identities are project
-        // syntax inputs, even when their read summaries stay byte-identical.
-        || !file.ast.jsx_elements.is_empty()
-        || file.ast.returns.iter().any(|returned| returned.value == solid_facts::ast::ReturnValueKind::Function)
-        || file.ast.functions.iter().any(|function| {
-            function.r#async
-                || function.expression_return.is_some()
-                || function
-                    .parameters
-                    .iter()
-                    .any(|parameter| parameter.initializer.is_some())
-                || (function.kind == solid_facts::ast::FunctionKind::Declaration
-                    && function
-                        .name
-                        .as_ref()
-                        .is_some_and(|name| crate::indexes::binding_written(file, name.span)))
-        })
-        || file.ast.bindings.iter().any(|binding| {
-            !binding.immutable
-                && binding.initializer.is_some_and(|initializer| {
-                    let initializer = file.ast.peel_ts_sugar_span(initializer);
-                    file.ast
-                        .functions
-                        .iter()
-                        .any(|function| function.span == initializer)
-                })
-        })
-}
-
 /// ADR 0204: every project function a call of `function` enters
 /// directly, `function` excluded: through a plain call written in its own body
 /// (not in a nested function, not in a default parameter, not in JSX) whose
