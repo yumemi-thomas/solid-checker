@@ -36,7 +36,7 @@ use crate::base::memo::build::{BuildSchema, BuildTables, FileRead, Input, Sectio
 use crate::base::memo::{Canonical, Ctx, Cycle, ErasedTable, Memo, Table, TableId};
 
 /// The first table id of the returned-callback tables (ids 128 to 159).
-pub(crate) const RETURNED_TABLES_FROM: u8 = 128;
+pub(crate) const RETURNED_TABLES_FROM: u16 = 128;
 
 /// How a use consumes the result of a factory call.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

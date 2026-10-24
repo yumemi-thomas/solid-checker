@@ -47,8 +47,8 @@ impl Canonical for ExecutionRole {}
 
 /// The first table id of the flow memos, and the first past them (S5a holds
 /// ids 96 to 127).
-pub(crate) const FLOW_TABLES_FROM: u8 = 96;
-pub(crate) const FLOW_TABLES_END: u8 = 128;
+pub(crate) const FLOW_TABLES_FROM: u16 = 96;
+pub(crate) const FLOW_TABLES_END: u16 = 128;
 
 macro_rules! flow_tables {
     ($($field:ident: $memo:ty = $id:literal;)*) => {

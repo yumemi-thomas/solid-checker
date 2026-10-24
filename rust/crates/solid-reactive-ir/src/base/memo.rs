@@ -67,7 +67,7 @@ pub(crate) struct QueryId(pub(crate) u32);
 
 /// Which memo table of a schema.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub(crate) struct TableId(pub(crate) u8);
+pub(crate) struct TableId(pub(crate) u16);
 
 /// A value that can cross a [`Ctx`]: equal values are equal bytes in equal
 /// order. Implemented for ordered containers and plain data only; a hash map

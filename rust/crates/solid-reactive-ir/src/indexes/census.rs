@@ -86,7 +86,7 @@ pub(crate) type LazyCandidate = (u32, Span, Span, Span);
 
 /// The first table id of the census (ids 0-1 are the identity wrappers',
 /// 20-31 member resolution's, 32-63 the project-wide answers').
-pub(crate) const CENSUS_TABLES_FROM: u8 = 64;
+pub(crate) const CENSUS_TABLES_FROM: u16 = 64;
 
 macro_rules! census_tables {
     ($($field:ident: $memo:ty = $id:literal;)*) => {

@@ -41,7 +41,7 @@ use crate::base::memo::{Canonical, Ctx, Cycle, ErasedTable, Memo, Table, TableId
 use crate::base::reads::Recorded;
 
 /// The first table id of these tables (ids 160 to 191).
-pub(crate) const INVOCATION_TABLES_FROM: u8 = 160;
+pub(crate) const INVOCATION_TABLES_FROM: u16 = 160;
 
 macro_rules! invocation_tables {
     ($($field:ident: $memo:ty = $id:literal;)*) => {

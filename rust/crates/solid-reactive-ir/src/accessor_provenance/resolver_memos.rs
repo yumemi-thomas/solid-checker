@@ -44,7 +44,7 @@ use crate::base::memo::{Canonical, Ctx, Cycle, ErasedTable, Memo, Table, TableId
 use crate::base::{FileId, FileTable, Hazard};
 
 /// The resolver's memo tables hold ids 240 to 255.
-pub(crate) const RESOLVER_TABLES_FROM: u8 = 240;
+pub(crate) const RESOLVER_TABLES_FROM: u16 = 240;
 
 macro_rules! resolver_tables {
     ($($field:ident: $memo:ty = $id:literal;)*) => {

@@ -73,11 +73,11 @@ pub(super) fn computing<R>(f: impl FnOnce() -> R) -> (R, bool) {
 
 /// Which derived table.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub(crate) struct DerivedId(pub(crate) u8);
+pub(crate) struct DerivedId(pub(crate) u16);
 
 /// Which kept solver.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub(crate) struct SolverId(pub(crate) u8);
+pub(crate) struct SolverId(pub(crate) u16);
 
 /// A pass's published output: a value per key.
 pub(crate) trait Derived: 'static {

@@ -31,7 +31,7 @@ use crate::effect_execution::{ApplyCallRows, ApplyRegionRows};
 
 /// The first table id of the project-wide answers (the lower ids are the
 /// identity wrappers', and the other S5 slices').
-pub(crate) const PROJECT_TABLES_FROM: u8 = 32;
+pub(crate) const PROJECT_TABLES_FROM: u16 = 32;
 
 impl Canonical for crate::router_params::RouterParamsStatus {}
 
