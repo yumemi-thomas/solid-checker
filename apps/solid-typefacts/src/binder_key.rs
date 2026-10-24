@@ -118,6 +118,15 @@ pub enum Key {
         name: String,
         origins: Vec<Key>,
     },
+    /// A derived symbol keyed by its source and exact type context
+    /// (`derived_key.rs`); `tag == "root"` is an instantiation the root
+    /// answers for, whose id is the root's own.
+    Derived {
+        tag: &'static str,
+        name: String,
+        root: String,
+        context: [u8; 32],
+    },
 }
 
 impl Key {
@@ -151,6 +160,28 @@ impl Key {
                 }
                 hashed(b"synth", payload)
             }
+            Self::Derived {
+                tag,
+                name,
+                root,
+                context,
+            } => {
+                if *tag == "root" {
+                    return root.clone();
+                }
+                let name = name_bytes(name);
+                let mut payload = Vec::with_capacity(96 + name.len());
+                payload.extend_from_slice(tag.as_bytes());
+                payload.push(0);
+                payload.extend_from_slice(name.len().to_string().as_bytes());
+                payload.push(0);
+                payload.extend_from_slice(&name);
+                payload.push(0);
+                payload.extend_from_slice(root.as_bytes());
+                payload.push(0);
+                payload.extend_from_slice(context);
+                hashed(b"derived", payload)
+            }
         }
     }
 
@@ -159,7 +190,7 @@ impl Key {
     pub fn reference(&self) -> Option<&DurableRef> {
         match self {
             Self::Decl(reference) | Self::Export(reference) => Some(reference),
-            Self::Global(_) | Self::Intrinsic(_) | Self::Set { .. } => None,
+            Self::Global(_) | Self::Intrinsic(_) | Self::Set { .. } | Self::Derived { .. } => None,
         }
     }
 
@@ -168,7 +199,7 @@ impl Key {
     /// answer holding it is retained across updates (ADR 0369).
     #[must_use]
     pub fn is_binder(&self) -> bool {
-        !matches!(self, Self::Set { .. })
+        !matches!(self, Self::Set { .. } | Self::Derived { .. })
     }
 }
 

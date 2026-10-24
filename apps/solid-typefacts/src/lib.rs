@@ -17,6 +17,7 @@ pub mod constants;
 pub mod context;
 pub mod contributions;
 pub mod demands;
+pub mod derived_key;
 pub mod durable;
 pub mod fail_stop;
 pub mod fake;
