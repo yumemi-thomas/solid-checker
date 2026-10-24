@@ -21,7 +21,7 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
         accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
         source_kinds: &'a HashMap<SymbolId, crate::ReactiveSourceKind>,
         names: &'a HashMap<SymbolId, SymbolId>,
-        functions: HashSet<(String, Span)>,
+        functions: Arc<HashSet<(String, Span)>>,
     ) -> Resolver<'a, 'facts> {
         let empty = Self::empty(facts, lookup, accessors, source_kinds, names, functions);
         // Built once per build: the late stages' reuse check may have built it
@@ -53,7 +53,7 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
             accessors,
             source_kinds,
             names,
-            HashSet::default(),
+            Arc::default(),
         );
         if super::resolver_memos::built_this_build(empty.sibling_with(&empty)).is_some() {
             return;
@@ -72,7 +72,7 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
         accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
         source_kinds: &'a HashMap<SymbolId, crate::ReactiveSourceKind>,
         names: &'a HashMap<SymbolId, SymbolId>,
-        functions: HashSet<(String, Span)>,
+        functions: Arc<HashSet<(String, Span)>>,
     ) -> Resolver<'a, 'facts> {
         Resolver {
             facts,
@@ -104,7 +104,7 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
             self.accessors,
             self.source_kinds,
             self.names,
-            functions.functions.clone(),
+            Arc::clone(&functions.functions),
         )
     }
 
@@ -117,7 +117,7 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
             self.accessors,
             self.source_kinds,
             self.names,
-            HashSet::default(),
+            Arc::default(),
         )
     }
 

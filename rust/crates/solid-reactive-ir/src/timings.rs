@@ -153,6 +153,7 @@ impl BuildTimings {
     pub(crate) fn absorb_interprocedural(&mut self, timings: &InterproceduralTimings) {
         self.interprocedural_graph = timings.graph;
         self.interprocedural_graph_nodes = timings.graph_nodes;
+        self.interprocedural_node_index = timings.node_index;
         self.interprocedural_resolver = timings.resolver;
         self.interprocedural_transport = timings.transport;
         self.interprocedural_merge = timings.merge;
@@ -240,6 +241,7 @@ pub(crate) fn reuse_line(
             "interprocMs": {
                 "graph": ms(timings.interprocedural_graph),
                 "graphNodes": ms(timings.interprocedural_graph_nodes),
+                "nodeIndex": ms(timings.interprocedural_node_index),
                 "resolver": ms(timings.interprocedural_resolver),
                 "transport": ms(timings.interprocedural_transport),
                 "merge": ms(timings.interprocedural_merge),

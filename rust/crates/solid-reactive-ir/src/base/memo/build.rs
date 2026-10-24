@@ -172,6 +172,8 @@ pub(crate) struct BuildTables {
     invocations: crate::indexes::InvocationTables,
     /// Tables 240 to 255: the accessor-provenance resolver (S7b).
     resolver: crate::interproc::accessor_provenance::ResolverTables,
+    /// Tables 384 to 447: accessor transport (S7c).
+    transport: crate::interproc::accessor_provenance::TransportTables,
 }
 
 impl TableSet<BuildSchema> for BuildTables {
@@ -213,6 +215,14 @@ impl BuildTables {
                     .table(id)
                     .unwrap_or_else(|| unreachable!("memo table {id:?}"))
             }
+            id if (crate::interproc::accessor_provenance::TRANSPORT_TABLES_FROM
+                ..crate::interproc::accessor_provenance::TRANSPORT_TABLES_END)
+                .contains(&id.0) =>
+            {
+                self.transport
+                    .table(id)
+                    .unwrap_or_else(|| unreachable!("memo table {id:?}"))
+            }
             id if id.0 >= crate::interproc::accessor_provenance::RESOLVER_TABLES_FROM => self
                 .resolver
                 .table(id)
@@ -251,6 +261,7 @@ impl BuildTables {
         tables.extend(self.flow.tables());
         tables.extend(self.invocations.tables());
         tables.extend(self.resolver.tables());
+        tables.extend(self.transport.tables());
         tables
     }
 }
@@ -324,6 +335,10 @@ impl BuildTables {
 
     pub(crate) fn resolver(&self) -> &crate::interproc::accessor_provenance::ResolverTables {
         &self.resolver
+    }
+
+    pub(crate) fn transport(&self) -> &crate::interproc::accessor_provenance::TransportTables {
+        &self.transport
     }
 }
 

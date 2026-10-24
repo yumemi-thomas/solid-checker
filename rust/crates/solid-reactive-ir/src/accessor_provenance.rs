@@ -30,6 +30,8 @@ mod resolver_queries;
 mod resolver_values;
 #[path = "accessor_provenance/resolver_world.rs"]
 mod resolver_world;
+#[path = "accessor_provenance/transport_memos.rs"]
+mod transport_memos;
 pub(crate) use projection_helpers::*;
 use resolver_dependencies::{Dependencies, dependency_member_stable};
 use resolver_index::*;
@@ -37,6 +39,7 @@ pub(crate) use resolver_memos::{RESOLVER_TABLES_FROM, ResolverTables};
 use resolver_queries::Queries;
 use resolver_values::Values;
 use resolver_world::{ProviderValues, World, parameter_typefacts_admit_in};
+pub(crate) use transport_memos::{TRANSPORT_TABLES_END, TRANSPORT_TABLES_FROM, TransportTables};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum Callable {
@@ -80,7 +83,7 @@ pub(super) struct Resolver<'a, 'facts> {
     pub accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub source_kinds: &'a HashMap<SymbolId, crate::ReactiveSourceKind>,
     pub names: &'a HashMap<SymbolId, SymbolId>,
-    functions: HashSet<(String, Span)>,
+    functions: Arc<HashSet<(String, Span)>>,
     /// The tables shared with the memo build's kept state, which patches
     /// them per moved key (S7b).
     binding_locations: Arc<HashMap<SymbolId, Location>>,
@@ -420,7 +423,7 @@ pub(crate) fn resolver_tables(
         accessors,
         &source_kinds,
         lookup.symbol_names(),
-        HashSet::default(),
+        Arc::default(),
     );
     let mut lines = Vec::new();
     lines.extend(

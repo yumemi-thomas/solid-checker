@@ -11,8 +11,7 @@
   },
   "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_index.rs": {
     "facts.files": 2,
-    "file_by_path": 1,
-    "hashmap-iteration": 2
+    "file_by_path": 1
   },
   "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_memos.rs": {
     "files()": 2,
@@ -20,11 +19,13 @@
   },
   "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_queries.rs": {
     "facts.files": 1,
-    "file_by_path": 4,
     "hashmap-iteration": 1
   },
   "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_world.rs": {
     "file_by_path": 2
+  },
+  "rust/crates/solid-reactive-ir/src/accessor_provenance/transport_memos.rs": {
+    "facts.files": 2
   },
   "rust/crates/solid-reactive-ir/src/accessor_provenance.rs": {
     "hashmap-iteration": 2
@@ -143,14 +144,15 @@
     "hashmap-iteration": 2
   },
   "rust/crates/solid-reactive-ir/src/interproc/parameter_use.rs": {
-    "facts.files": 2,
-    "file_by_path": 1,
-    "hashmap-iteration": 1
+    "file_by_path": 1
   },
   "rust/crates/solid-reactive-ir/src/interproc/reads.rs": {
-    "facts.files": 17,
+    "facts.files": 16,
     "file_by_path": 2,
-    "hashmap-iteration": 4
+    "hashmap-iteration": 3
+  },
+  "rust/crates/solid-reactive-ir/src/interproc/refresh.rs": {
+    "facts.files": 6
   },
   "rust/crates/solid-reactive-ir/src/interproc/result_reads.rs": {
     "facts.files": 1,

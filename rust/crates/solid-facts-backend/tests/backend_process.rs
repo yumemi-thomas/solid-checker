@@ -18,6 +18,8 @@ mod cross_file_callbacks_process;
 mod cross_file_digest_process;
 #[path = "daemon_residue_process.rs"]
 mod daemon_residue_process;
+#[path = "forwarding_refresh_process.rs"]
+mod forwarding_refresh_process;
 #[path = "harness_process.rs"]
 mod harness_process;
 #[path = "idle_shadow_process.rs"]
