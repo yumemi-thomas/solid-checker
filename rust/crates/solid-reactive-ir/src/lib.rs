@@ -1324,6 +1324,9 @@ pub struct BuildTimings {
     pub memo_reused: u64,
     /// Memo answers computed in this build (new keys and recomputations).
     pub memo_computed: u64,
+    /// Files whose memo inputs (source, compiler map, TypeFacts rows,
+    /// slots) moved since the memo store's last build.
+    pub memo_changed_files: u64,
     /// The returned-invocation memo's files (one answer per file, ADR
     /// 0392): reused, recomputed, and recomputed to a new answer.
     pub returned_invocation_files: [u64; 3],

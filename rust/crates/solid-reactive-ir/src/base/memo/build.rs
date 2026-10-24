@@ -13,9 +13,10 @@
 //! [`MemoStore::begin`] finds the changed inputs exactly: each file's section
 //! fingerprints are compared with the last build's, the store's L1 indexes
 //! are updated with the changed files' contributions (their Δ is the exact
-//! set of changed keys), and the constants are compared. Today every file is
-//! fingerprinted per build; a TypeFacts delta naming the edited files
-//! (study S0) replaces that scan.
+//! set of changed keys), and the constants are compared. A file's TypeFacts
+//! parts are digested again only when their rows are not the rows digested
+//! last build ([`FileParts`]); the producer's list of changed paths is not
+//! trusted for it.
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -74,6 +75,13 @@ pub(crate) enum IndexId {
     /// The spans where a symbol's value is used like a returned callback
     /// ([`super::super::contributions::use_spans`]).
     UseSpans,
+    /// Uses of entity symbols by the symbol ([`super::super::contributions::symbol_uses`]).
+    SymbolUses,
+    /// Property spellings by name ([`super::super::contributions::spellings`]).
+    Spellings,
+    /// The global bindings some assignment writes, by name
+    /// ([`super::super::contributions::global_writes`]).
+    GlobalWrites,
 }
 
 /// A build constant a computation may read. Constants are part of the
@@ -366,7 +374,73 @@ impl std::io::Write for DigestWriter<'_> {
     }
 }
 
-fn fingerprints(views: &Views<'_>, id: FileId) -> FileFingerprints {
+/// CPU time of one file's fingerprints by part, when measured
+/// ([`crate::base::reads::cost`]): source and compiler, symbol rows,
+/// declarations and signatures, references, and the parts reused.
+type FingerprintCost = [u64; 5];
+
+/// What a file's Entities and Signatures fingerprints are made of, kept
+/// between builds with the identity of the rows each part digests
+/// (ADR 03XX-bookkeeping). A part is digested again only when its rows are
+/// not the very rows it digested last build:
+/// - the TypeFacts entities of the path (`entities_for_path`), by address
+///   and length. The store keeps the last build's table
+///   ([`MemoBase::typescript`]), so every allocation those addresses name is
+///   alive and immutable: a slice at the same address with the same length
+///   is the same rows. A replaced path's rows are a new allocation, so its
+///   parts are digested again whatever the producer named; a full table
+///   replace digests every file again.
+/// - the path's entity-symbol rows ([`crate::indexes::PathSymbols`]), which
+///   the parts hold: a holder of a clone sees the rows change only through a
+///   copy (`Arc::make_mut`), so the same pointer is the same rows.
+///
+/// The references located in the file are digested every build: they are
+/// assembled per build from the whole symbol table, with no identity to
+/// key on.
+#[derive(Clone, Default)]
+struct FileParts {
+    entities_at: (usize, usize),
+    /// The declaration each entity's resolved call names: part of Entities.
+    declarations: [u8; 32],
+    signatures: [u8; 32],
+    rows: (
+        Option<crate::indexes::PathSymbols>,
+        Option<crate::indexes::PathSymbols>,
+    ),
+    rows_digest: [u8; 32],
+}
+
+fn same_rows(
+    left: Option<&crate::indexes::PathSymbols>,
+    right: Option<&crate::indexes::PathSymbols>,
+) -> bool {
+    match (left, right) {
+        (None, None) => true,
+        (Some(left), Some(right)) => Arc::ptr_eq(left, right),
+        _ => false,
+    }
+}
+
+/// `id`'s fingerprints in this build, and the parts they are made of. With
+/// `previous` (the last build's parts, valid against the table the store
+/// kept), a part whose rows are the same rows is not digested again;
+/// `reused` counts those.
+fn fingerprints(
+    views: &Views<'_>,
+    id: FileId,
+    previous: Option<&FileParts>,
+    cost: &mut FingerprintCost,
+    reused: &mut [usize; 2],
+) -> (FileFingerprints, FileParts) {
+    let measure = crate::base::reads::cost::on();
+    let mut started = measure.then(crate::base::reads::cost::now_ns);
+    let mut lap = |part: usize| {
+        if let Some(at) = started.as_mut() {
+            let now = crate::base::reads::cost::now_ns();
+            cost[part] += now.saturating_sub(*at);
+            *at = now;
+        }
+    };
     let slots = views.table.slots_of(id).to_vec();
     let mut source = Sha256::new();
     let mut compiler = Sha256::new();
@@ -378,82 +452,141 @@ fn fingerprints(views: &Views<'_>, id: FileId) -> FileFingerprints {
         compiler.update(file.compiler.source_hash.as_str().as_bytes());
         compiler.update([0]);
     }
+    lap(0);
+    let mut parts = FileParts::default();
+    let mut references = Sha256::new();
     // Entity rows are per path: every slot of the id reads the same ones.
-    let mut entities = Sha256::new();
     if let Some(slot) = slots.first() {
-        for ((start, end), symbol, exact) in views.view(*slot).symbol_rows() {
-            entities.update(start.to_le_bytes());
-            entities.update(end.to_le_bytes());
-            entities.update(
-                u64::try_from(symbol.len())
-                    .unwrap_or(u64::MAX)
-                    .to_le_bytes(),
-            );
-            entities.update(symbol.as_bytes());
-            entities.update([u8::from(exact)]);
-        }
         let view = views.view(*slot);
-        // The declaration each resolved call names (a callee's symbol), and
-        // the references located here (the reference index's entries).
-        for entity in view.typescript_entities() {
-            let declaration = entity.resolved_call.as_deref().map(|call| {
-                call.declaration
-                    .as_ref()
-                    .map(|declaration| &*declaration.symbol)
-            });
-            entities.update(entity.location.start_byte.to_le_bytes());
-            entities.update(entity.location.end_byte.to_le_bytes());
-            match declaration {
-                None => entities.update([0]),
-                Some(None) => entities.update([1]),
-                Some(Some(symbol)) => {
-                    entities.update([2]);
-                    entities.update(
-                        u64::try_from(symbol.len())
-                            .unwrap_or(u64::MAX)
-                            .to_le_bytes(),
-                    );
-                    entities.update(symbol.as_bytes());
-                }
+        let path = views.table.path_of(id);
+        parts.rows = (
+            views.sources.symbols.by_path.get(path).cloned(),
+            views.sources.symbols.exact_by_path.get(path).cloned(),
+        );
+        match previous.filter(|previous| {
+            same_rows(previous.rows.0.as_ref(), parts.rows.0.as_ref())
+                && same_rows(previous.rows.1.as_ref(), parts.rows.1.as_ref())
+        }) {
+            Some(previous) => {
+                parts.rows_digest = previous.rows_digest;
+                reused[0] += 1;
+            }
+            None => parts.rows_digest = symbol_rows_digest(&view),
+        }
+        lap(1);
+        let entities = view.typescript_entities();
+        parts.entities_at = (entities.as_ptr() as usize, entities.len());
+        match previous.filter(|previous| previous.entities_at == parts.entities_at) {
+            Some(previous) => {
+                parts.declarations = previous.declarations;
+                parts.signatures = previous.signatures;
+                reused[1] += 1;
+            }
+            None => {
+                parts.declarations = declarations_digest(entities);
+                parts.signatures = signatures_digest(entities);
             }
         }
-        entities.update([0xff]);
+        lap(2);
+        // The references located here (the reference index's entries).
         for (symbol, span) in view.references() {
-            entities.update(
+            references.update(
                 u64::try_from(symbol.len())
                     .unwrap_or(u64::MAX)
                     .to_le_bytes(),
             );
-            entities.update(symbol.as_bytes());
-            entities.update(span.start.to_le_bytes());
-            entities.update(span.end.to_le_bytes());
+            references.update(symbol.as_bytes());
+            references.update(span.start.to_le_bytes());
+            references.update(span.end.to_le_bytes());
         }
+        lap(3);
     }
-    let mut signatures = Sha256::new();
-    if let Some(slot) = slots.first() {
-        for entity in views.view(*slot).typescript_entities() {
-            signatures.update(entity.location.start_byte.to_le_bytes());
-            signatures.update(entity.location.end_byte.to_le_bytes());
-            match entity.resolved_call.as_deref() {
-                None => signatures.update([0]),
-                Some(call) => {
-                    signatures.update([1]);
-                    // The call's canonical serialization (field order is the
-                    // struct's; no map iterates), terminated so two calls
-                    // cannot run together.
-                    let _ = serde_json::to_writer(DigestWriter(&mut signatures), call);
-                    signatures.update([0xff]);
-                }
-            }
-        }
-    }
-    FileFingerprints {
+    let references: [u8; 32] = references.finalize().into();
+    let mut entities = Sha256::new();
+    entities.update(parts.rows_digest);
+    entities.update(parts.declarations);
+    entities.update(references);
+    let fingerprints = FileFingerprints {
         source: source.finalize().into(),
         compiler: compiler.finalize().into(),
         entities: entities.finalize().into(),
-        signatures: signatures.finalize().into(),
+        signatures: parts.signatures,
         slots,
+    };
+    (fingerprints, parts)
+}
+
+/// `id`'s fingerprints with every part digested.
+fn fingerprints_fresh(views: &Views<'_>, id: FileId) -> (FileFingerprints, FileParts) {
+    fingerprints(views, id, None, &mut [0; 5], &mut [0; 2])
+}
+
+/// The entity-symbol rows of a file's view, digested.
+fn symbol_rows_digest(view: &FileView<'_>) -> [u8; 32] {
+    let mut rows = Sha256::new();
+    for ((start, end), symbol, exact) in view.symbol_rows() {
+        rows.update(start.to_le_bytes());
+        rows.update(end.to_le_bytes());
+        rows.update(
+            u64::try_from(symbol.len())
+                .unwrap_or(u64::MAX)
+                .to_le_bytes(),
+        );
+        rows.update(symbol.as_bytes());
+        rows.update([u8::from(exact)]);
     }
+    rows.finalize().into()
+}
+
+/// The declaration each resolved call of `entities` names (a callee's
+/// symbol), digested.
+fn declarations_digest(entities: &[typefacts::EntityFact]) -> [u8; 32] {
+    let mut digest = Sha256::new();
+    for entity in entities {
+        let declaration = entity.resolved_call.as_deref().map(|call| {
+            call.declaration
+                .as_ref()
+                .map(|declaration| &*declaration.symbol)
+        });
+        digest.update(entity.location.start_byte.to_le_bytes());
+        digest.update(entity.location.end_byte.to_le_bytes());
+        match declaration {
+            None => digest.update([0]),
+            Some(None) => digest.update([1]),
+            Some(Some(symbol)) => {
+                digest.update([2]);
+                digest.update(
+                    u64::try_from(symbol.len())
+                        .unwrap_or(u64::MAX)
+                        .to_le_bytes(),
+                );
+                digest.update(symbol.as_bytes());
+            }
+        }
+    }
+    digest.finalize().into()
+}
+
+/// Each entity's location and whole resolved call, digested: the
+/// Signatures section.
+fn signatures_digest(entities: &[typefacts::EntityFact]) -> [u8; 32] {
+    let mut signatures = Sha256::new();
+    for entity in entities {
+        signatures.update(entity.location.start_byte.to_le_bytes());
+        signatures.update(entity.location.end_byte.to_le_bytes());
+        match entity.resolved_call.as_deref() {
+            None => signatures.update([0]),
+            Some(call) => {
+                signatures.update([1]);
+                // The call's canonical serialization (field order is the
+                // struct's; no map iterates), terminated so two calls
+                // cannot run together.
+                let _ = serde_json::to_writer(DigestWriter(&mut signatures), call);
+                signatures.update([0xff]);
+            }
+        }
+    }
+    signatures.finalize().into()
 }
 
 /// Interned keys of one index: an [`Input::Index`] names a key by id.
@@ -514,11 +647,14 @@ where
     /// removed files' contributions are replaced, and each changed key some
     /// entry reads is pushed onto `changed`. A store with no index folds one.
     /// With `check`, the update is compared with a refold; a difference is
-    /// reported (the store is poisoned) and the refold kept.
+    /// reported (the store is poisoned) and the refold kept. A `lazy` index
+    /// no build has read stays unfolded: its first read folds it
+    /// ([`Ctx::symbol_uses`]), and until then no entry reads a key of it.
     #[allow(clippy::too_many_arguments)]
     fn update(
         &mut self,
         id: IndexId,
+        lazy: bool,
         views: &Views<'_>,
         contribute: Contribute<K, C>,
         changed_files: &[FileId],
@@ -544,6 +680,7 @@ where
                     }
                 }
             }
+            None if lazy => {}
             None => self.index = Some(views.fold(contribute)),
         }
         if check && let Some(index) = &self.index {
@@ -593,6 +730,11 @@ pub(crate) type WrapperCandidate = u32;
 struct MemoBase {
     interner: FileInterner,
     files: BTreeMap<FileId, FileFingerprints>,
+    /// What each file's fingerprints are made of ([`FileParts`]).
+    parts: BTreeMap<FileId, FileParts>,
+    /// The last build's TypeFacts table: it keeps alive every allocation
+    /// [`FileParts::entities_at`] names.
+    typescript: Option<solid_facts::TypeScriptTable>,
     wrapper_candidates: Option<BaseIndex<Arc<str>, WrapperCandidate>>,
     wrapper_keys: IndexKeys<Arc<str>>,
     program_closed: Option<bool>,
@@ -600,6 +742,11 @@ struct MemoBase {
     references: KeptIndex<Arc<str>, Span>,
     callees: KeptIndex<Arc<str>, crate::base::CalleeSite>,
     use_spans: KeptIndex<Arc<str>, Span>,
+    /// The object-member census's indexes, read by key instead of asked as
+    /// probes at every build (ADR 03XX-bookkeeping).
+    symbol_uses: KeptIndex<Arc<str>, crate::base::SymbolUse>,
+    spellings: KeptIndex<Arc<str>, crate::base::Spelling>,
+    global_writes: KeptIndex<Arc<str>, ()>,
     runtime_redirects: Option<bool>,
     /// The analyzed ids in the order of their first slot ([`Input::Files`]).
     ids: Vec<FileId>,
@@ -619,6 +766,14 @@ pub(crate) struct BeginReport {
     pub(crate) fingerprint_ns: u64,
     pub(crate) index_ns: u64,
     pub(crate) mark_ns: u64,
+    /// Re-asking the recorded probes: the wall time, how many, how many moved.
+    pub(crate) probe_ns: u64,
+    pub(crate) probes: usize,
+    pub(crate) probes_moved: usize,
+    /// Files whose entity-symbol rows, and whose TypeFacts entities, were
+    /// the last build's rows: their parts were not digested again.
+    pub(crate) rows_reused: usize,
+    pub(crate) entities_reused: usize,
     pub(crate) changed_files: usize,
     pub(crate) removed_files: usize,
     pub(crate) delta_keys: usize,
@@ -654,6 +809,8 @@ pub(crate) struct MemoStore {
     builds: AtomicU64,
     /// Project passes' kept solvers and published outputs.
     derived: super::derived::DerivedTables,
+    /// This build's begin costs, when measured ([`crate::base::reads::cost`]).
+    cost: std::sync::Mutex<Option<serde_json::Value>>,
 }
 
 fn report(message: &str) {
@@ -687,6 +844,7 @@ impl MemoStore {
             retained: true,
             builds: AtomicU64::new(0),
             derived: super::derived::DerivedTables::default(),
+            cost: std::sync::Mutex::new(None),
         }
     }
 
@@ -697,6 +855,11 @@ impl MemoStore {
             verify_reused_from_env(),
             crate::shadow::ShadowMode::from_env() != crate::shadow::ShadowMode::Off,
         )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn poisoned(&self) -> bool {
+        self.store.poisoned()
     }
 
     /// The store's identity in the process.
@@ -755,8 +918,55 @@ impl MemoStore {
             debug_assert!(fresh, "a store of one build begins once");
             Vec::new()
         };
-        let current =
-            crate::pipeline::parallel_slice_results(&ids, |id| (*id, fingerprints(views, *id)));
+        // Measured, the phase runs on one thread: each file's time is CPU.
+        let one_thread =
+            crate::base::reads::cost::on().then(|| crate::pipeline::AnalysisWorkerLimit::enter(1));
+        // The last build's parts are valid only against the table it kept.
+        let previous = base.typescript.as_ref().map(|_| &base.parts);
+        let check = self.check_indexes;
+        let costed = crate::pipeline::parallel_slice_results(&ids, |id| {
+            let mut cost = [0; 5];
+            let mut reused = [0; 2];
+            let (fingerprints, parts) = fingerprints(
+                views,
+                *id,
+                previous.and_then(|parts| parts.get(id)),
+                &mut cost,
+                &mut reused,
+            );
+            // Shadow and verify-reused modes digest every part again; a
+            // difference is reported and the fresh digest kept.
+            if check && reused != [0; 2] {
+                let (fresh, fresh_parts) = fingerprints_fresh(views, *id);
+                if fresh != fingerprints {
+                    return ((*id, fresh, fresh_parts), cost, reused, Some(*id));
+                }
+            }
+            ((*id, fingerprints, parts), cost, reused, None)
+        });
+        let mut fingerprint_cost: FingerprintCost = [0; 5];
+        let mut current = Vec::with_capacity(costed.len());
+        let mut parts = BTreeMap::new();
+        for ((id, fingerprints, file_parts), cost, reused, mismatch) in costed {
+            for (sum, part) in fingerprint_cost.iter_mut().zip(cost) {
+                *sum += part;
+            }
+            report.rows_reused += reused[0];
+            report.entities_reused += reused[1];
+            if let Some(id) = mismatch {
+                self.store.poison(&format!(
+                    "IR memo mismatch: the kept fingerprint parts of `{}` differ from a fresh digest",
+                    views.table.path_of(id)
+                ));
+            }
+            current.push((id, fingerprints));
+            parts.insert(id, file_parts);
+        }
+        drop(one_thread);
+        if self.retained {
+            base.parts = parts;
+            base.typescript = Some(views.sources.typescript.clone());
+        }
         report.fingerprint_ns = nanos(started.elapsed());
         let mut changed_inputs = Vec::new();
         let mut changed_files = Vec::new();
@@ -847,10 +1057,14 @@ impl MemoStore {
             references,
             callees,
             use_spans,
+            symbol_uses,
+            spellings,
+            global_writes,
             ..
         } = &mut *base;
         report.census_delta_keys += references.update(
             IndexId::References,
+            false,
             views,
             crate::base::contributions::references,
             &changed_files,
@@ -861,6 +1075,7 @@ impl MemoStore {
         );
         report.census_delta_keys += callees.update(
             IndexId::Callees,
+            false,
             views,
             crate::base::contributions::callees,
             &changed_files,
@@ -871,8 +1086,42 @@ impl MemoStore {
         );
         report.census_delta_keys += use_spans.update(
             IndexId::UseSpans,
+            false,
             views,
             crate::base::contributions::use_spans,
+            &changed_files,
+            &removed,
+            check,
+            &self.store,
+            &mut changed_inputs,
+        );
+        report.census_delta_keys += symbol_uses.update(
+            IndexId::SymbolUses,
+            true,
+            views,
+            crate::base::contributions::symbol_uses,
+            &changed_files,
+            &removed,
+            check,
+            &self.store,
+            &mut changed_inputs,
+        );
+        report.census_delta_keys += spellings.update(
+            IndexId::Spellings,
+            true,
+            views,
+            crate::base::contributions::spellings,
+            &changed_files,
+            &removed,
+            check,
+            &self.store,
+            &mut changed_inputs,
+        );
+        report.census_delta_keys += global_writes.update(
+            IndexId::GlobalWrites,
+            true,
+            views,
+            crate::base::contributions::global_writes,
             &changed_files,
             &removed,
             check,
@@ -910,19 +1159,59 @@ impl MemoStore {
             })
             .collect::<Vec<_>>();
         drop(base);
+        let measure = crate::base::reads::cost::on();
+        let one_thread = measure.then(|| crate::pipeline::AnalysisWorkerLimit::enter(1));
+        let started = Instant::now();
         let now =
             crate::pipeline::parallel_slice_results(&recorded, |(input, probe, key, last)| {
+                let asked = measure.then(crate::base::reads::cost::now_ns);
                 let fingerprint = super::probes::fingerprint(probes, *probe, key);
-                (*input, fingerprint, fingerprint != *last)
+                let cost = asked.map_or(0, |asked| {
+                    crate::base::reads::cost::now_ns().saturating_sub(asked)
+                });
+                (*input, *probe, fingerprint, fingerprint != *last, cost)
             });
+        report.probe_ns = nanos(started.elapsed());
+        drop(one_thread);
+        report.probes = now.len();
+        let mut probe_cost = BTreeMap::<String, [u64; 3]>::new();
         {
             let mut base = self.base.write().expect("memo base lock");
-            for (input, fingerprint, changed) in now {
+            for (input, probe, fingerprint, changed, cost) in now {
                 if changed {
                     changed_inputs.push(input);
+                    report.probes_moved += 1;
+                }
+                if measure {
+                    let kind = match probe {
+                        super::probes::Probe::Hazard(_) => "Hazard".to_owned(),
+                        probe => format!("{probe:?}"),
+                    };
+                    let entry = probe_cost.entry(kind).or_default();
+                    entry[0] += 1;
+                    entry[1] += u64::from(changed);
+                    entry[2] += cost;
                 }
                 base.polled.insert(input, fingerprint);
             }
+        }
+        if measure {
+            *self.cost.lock().expect("memo cost lock") = Some(serde_json::json!({
+                "fingerprintCpuNs": {
+                    "sourceCompiler": fingerprint_cost[0],
+                    "symbolRows": fingerprint_cost[1],
+                    "declarationsAndSignatures": fingerprint_cost[2],
+                    "references": fingerprint_cost[3],
+                },
+                "fingerprintReused": {
+                    "rows": report.rows_reused,
+                    "entities": report.entities_reused,
+                },
+                "fingerprintWallNs": report.fingerprint_ns,
+                "probeWallNs": report.probe_ns,
+                "probeCpuNs": probe_cost.values().map(|cost| cost[2]).sum::<u64>(),
+                "probes": probe_cost,
+            }));
         }
         let started = Instant::now();
         changed_inputs.sort_unstable();
@@ -980,6 +1269,7 @@ impl MemoStore {
     /// Ends a build: sweeps entries this build did not reach and releases
     /// the index keys no entry reads any more.
     pub(crate) fn end(&self) -> Vec<(&'static str, TableStats)> {
+        self.log_cost();
         let (stats, released) = self.store.end();
         let mut base = self.base.write().expect("memo base lock");
         let mut polled_released = false;
@@ -989,6 +1279,9 @@ impl MemoStore {
                 Input::Index(IndexId::References, id) => base.references.keys.release(id),
                 Input::Index(IndexId::Callees, id) => base.callees.keys.release(id),
                 Input::Index(IndexId::UseSpans, id) => base.use_spans.keys.release(id),
+                Input::Index(IndexId::SymbolUses, id) => base.symbol_uses.keys.release(id),
+                Input::Index(IndexId::Spellings, id) => base.spellings.keys.release(id),
+                Input::Index(IndexId::GlobalWrites, id) => base.global_writes.keys.release(id),
                 Input::Polled(..) => {
                     base.polled.remove(&input);
                     polled_released = true;
@@ -1020,6 +1313,35 @@ impl MemoStore {
             }
         }
         stats
+    }
+
+    /// Appends the build's bookkeeping costs to
+    /// `SOLID_CHECKER_IR_BOOKKEEPING_LOG`: the begin's and the read sets'.
+    fn log_cost(&self) {
+        if !crate::base::reads::cost::on() {
+            return;
+        }
+        let begin = self.cost.lock().expect("memo cost lock").take();
+        let reads = crate::base::reads::cost::take()
+            .into_iter()
+            .map(|(kind, calls, elements, nanos)| {
+                (
+                    kind.to_owned(),
+                    serde_json::json!({ "calls": calls, "elements": elements, "cpuNs": nanos }),
+                )
+            })
+            .collect::<serde_json::Map<_, _>>();
+        let line =
+            serde_json::json!({ "begin": begin, "readSets": reads, "retained": self.retained });
+        if let Some(path) = std::env::var_os("SOLID_CHECKER_IR_BOOKKEEPING_LOG")
+            && let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+        {
+            use std::io::Write;
+            let _ = writeln!(file, "{line}");
+        }
     }
 
     /// Every key of the wrapper-candidate index, sorted.
@@ -1202,6 +1524,9 @@ impl World<BuildSchema> for BuildWorld<'_> {
             Input::Index(IndexId::References, key) => base.references.fingerprint(key),
             Input::Index(IndexId::Callees, key) => base.callees.fingerprint(key),
             Input::Index(IndexId::UseSpans, key) => base.use_spans.fingerprint(key),
+            Input::Index(IndexId::SymbolUses, key) => base.symbol_uses.fingerprint(key),
+            Input::Index(IndexId::Spellings, key) => base.spellings.fingerprint(key),
+            Input::Index(IndexId::GlobalWrites, key) => base.global_writes.fingerprint(key),
             Input::Constant(Constant::ProgramClosed) => u64::from(self.program_closed),
             Input::Constant(Constant::RuntimeRedirects) => u64::from(self.runtime_redirects),
             Input::Files => {
@@ -1405,6 +1730,7 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
             symbol,
             |base| &base.references,
             |base| &mut base.references,
+            crate::base::contributions::references,
         )
     }
 
@@ -1416,6 +1742,7 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
             symbol,
             |base| &base.use_spans,
             |base| &mut base.use_spans,
+            crate::base::contributions::use_spans,
         )
     }
 
@@ -1430,7 +1757,48 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
             symbol,
             |base| &base.callees,
             |base| &mut base.callees,
+            crate::base::contributions::callees,
         )
+    }
+
+    /// The uses of the entity symbol `symbol`
+    /// ([`super::super::contributions::symbol_uses`]): `(file, slot rank,
+    /// use)`, sorted.
+    pub(crate) fn symbol_uses(&self, symbol: &str) -> Vec<(FileId, u32, crate::base::SymbolUse)> {
+        ranked(self.index_values(
+            IndexId::SymbolUses,
+            &Arc::from(symbol),
+            |base| &base.symbol_uses,
+            |base| &mut base.symbol_uses,
+            crate::base::contributions::symbol_uses,
+        ))
+    }
+
+    /// Where `name` is spelled as a property
+    /// ([`super::super::contributions::spellings`]): `(file, slot rank,
+    /// spelling)`, sorted.
+    pub(crate) fn spellings(&self, name: &str) -> Vec<(FileId, u32, crate::base::Spelling)> {
+        ranked(self.index_values(
+            IndexId::Spellings,
+            &Arc::from(name),
+            |base| &base.spellings,
+            |base| &mut base.spellings,
+            crate::base::contributions::spellings,
+        ))
+    }
+
+    /// Whether some assignment writes the global binding of `name`
+    /// ([`super::super::contributions::global_writes`]).
+    pub(crate) fn global_written(&self, name: &str) -> bool {
+        !self
+            .index_values(
+                IndexId::GlobalWrites,
+                &Arc::from(name),
+                |base| &base.global_writes,
+                |base| &mut base.global_writes,
+                crate::base::contributions::global_writes,
+            )
+            .is_empty()
     }
 
     fn index_values<C>(
@@ -1439,6 +1807,7 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
         key: &Arc<str>,
         kept: fn(&MemoBase) -> &KeptIndex<Arc<str>, C>,
         kept_mut: fn(&mut MemoBase) -> &mut KeptIndex<Arc<str>, C>,
+        contribute: Contribute<Arc<str>, C>,
     ) -> Vec<(FileId, usize, C)>
     where
         C: Clone + PartialEq + Send + std::hash::Hash,
@@ -1446,11 +1815,22 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
         let store = self.world().store;
         let interned = {
             let base = store.base.read().expect("memo base lock");
-            kept(&base).keys.ids.get(key).copied()
+            let index = kept(&base);
+            index
+                .index
+                .is_some()
+                .then(|| index.keys.ids.get(key).copied())
+                .flatten()
         };
         let interned = interned.unwrap_or_else(|| {
             let mut base = store.base.write().expect("memo base lock");
-            kept_mut(&mut base).keys.intern(key)
+            let index = kept_mut(&mut base);
+            if index.index.is_none() {
+                // A lazy index's first read in the store's life: folded over
+                // this build, and updated from it at every later begin.
+                index.index = Some(self.world().views.fold(contribute));
+            }
+            index.keys.intern(key)
         });
         self.record_input(Input::Index(id, interned));
         let base = store.base.read().expect("memo base lock");
@@ -1465,6 +1845,22 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
             Constant::RuntimeRedirects => self.world().runtime_redirects,
         }
     }
+}
+
+/// Index values with `u32` slot ranks, sorted: a canonical answer.
+fn ranked<C: Ord>(values: Vec<(FileId, usize, C)>) -> Vec<(FileId, u32, C)> {
+    let mut values = values
+        .into_iter()
+        .map(|(file, rank, value)| {
+            (
+                file,
+                u32::try_from(rank).expect("fewer than 2^32 slots of one path"),
+                value,
+            )
+        })
+        .collect::<Vec<_>>();
+    values.sort_unstable();
+    values
 }
 
 /// The memo store one lookup reads: a retained session's, or its own.

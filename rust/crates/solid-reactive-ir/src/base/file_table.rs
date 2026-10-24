@@ -346,7 +346,7 @@ impl<'a> FileView<'a> {
             .by_path
             .get(self.path())
             .into_iter()
-            .flatten()
+            .flat_map(|rows| rows.iter())
             .map(|(key, symbol)| {
                 (
                     *key,

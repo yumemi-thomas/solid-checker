@@ -779,8 +779,10 @@ fn report_memos(
     emit_timings: bool,
 ) {
     let begin = &report.begin;
-    timings.memo_begin =
-        std::time::Duration::from_nanos(begin.fingerprint_ns + begin.index_ns + begin.mark_ns);
+    timings.memo_changed_files = begin.changed_files as u64;
+    timings.memo_begin = std::time::Duration::from_nanos(
+        begin.fingerprint_ns + begin.index_ns + begin.probe_ns + begin.mark_ns,
+    );
     for (name, stats) in &report.tables {
         timings.memo_reused += stats.reused + stats.verified;
         timings.memo_computed += stats.fresh + stats.unchanged + stats.changed;

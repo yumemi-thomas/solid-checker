@@ -27,11 +27,6 @@ impl SemanticLookup<'_> {
         self.memos.table().slots_of(id).get(rank as usize).copied()
     }
 
-    /// A file of the lookup's own table as the memo table names it.
-    fn memo_id(&self, id: FileId) -> Option<FileId> {
-        self.memos.table().id_of(self.file_table.path_of(id))
-    }
-
     pub(crate) fn memo_slot_of(&self, slot: usize) -> (FileId, u32) {
         let table = self.memos.table();
         (
@@ -190,39 +185,6 @@ impl SemanticLookup<'_> {
             }
             (Probe::DefinedReflectively, PolledKey::Text(name)) => {
                 ProbeAnswer::Flag(self.property_may_be_defined_reflectively_as(name))
-            }
-            (Probe::GlobalWritten, PolledKey::Text(name)) => {
-                ProbeAnswer::Flag(global_identifier_written(self.facts, name))
-            }
-            (Probe::SymbolUses, PolledKey::Text(symbol)) => {
-                let index = self.base.symbol_uses(|| self.base_views());
-                let mut uses = index
-                    .ranked_values(symbol)
-                    .filter_map(|(file, rank, value)| {
-                        Some((
-                            self.memo_id(file)?,
-                            u32::try_from(rank).expect("fewer than 2^32 slots of one path"),
-                            *value,
-                        ))
-                    })
-                    .collect::<Vec<_>>();
-                uses.sort_unstable();
-                ProbeAnswer::Uses(uses)
-            }
-            (Probe::Spellings, PolledKey::Text(name)) => {
-                let index = self.base.spellings(|| self.base_views());
-                let mut spellings = index
-                    .ranked_values(name)
-                    .filter_map(|(file, rank, value)| {
-                        Some((
-                            self.memo_id(file)?,
-                            u32::try_from(rank).expect("fewer than 2^32 slots of one path"),
-                            *value,
-                        ))
-                    })
-                    .collect::<Vec<_>>();
-                spellings.sort_unstable();
-                ProbeAnswer::Spellings(spellings)
             }
             (Probe::AssignedNames, _) => {
                 let members = self.base_members();

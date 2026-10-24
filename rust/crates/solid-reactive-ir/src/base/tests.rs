@@ -340,12 +340,9 @@ fn entity_symbols(facts: &ProjectFacts) -> EntitySymbols {
         let key = (entity.location.start_byte, entity.location.end_byte);
         let path = entity.location.path.to_string();
         let symbol = SymbolId::from(entity.symbol.as_ref());
-        symbols
-            .exact_by_path
-            .entry(path.clone())
-            .or_default()
+        Arc::make_mut(symbols.exact_by_path.entry(path.clone()).or_default())
             .insert(key, symbol.clone());
-        symbols.by_path.entry(path).or_default().insert(key, symbol);
+        Arc::make_mut(symbols.by_path.entry(path).or_default()).insert(key, symbol);
     }
     symbols
 }
@@ -830,6 +827,95 @@ fn a_resolved_call_validity_flip_changes_the_calling_file() {
         .or_default() += 1;
     let flipped = memo_build(&project, &store).unwrap();
     assert_eq!(flipped.begin.changed_files, 1);
+}
+
+/// One memo begin over `facts` with `symbols` as the build's entity rows.
+fn begin_over(
+    facts: &ProjectFacts,
+    symbols: &EntitySymbols,
+    store: &super::memo::build::MemoStore,
+) -> super::memo::build::BeginReport {
+    let ast_indexes = facts
+        .files
+        .iter()
+        .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
+        .collect::<HashMap<_, _>>();
+    let entities = crate::indexes::first_entity_by_location(facts.typescript.entities());
+    let references = OnceLock::new();
+    let table = store.table(&super::FileTable::new(&facts.files));
+    let views = Views {
+        table: &table,
+        files: &facts.files,
+        sources: ViewSources {
+            ast_indexes: &ast_indexes,
+            symbols,
+            entities: &entities,
+            typescript: &facts.typescript,
+            references: &references,
+        },
+        constants: BuildConstants {
+            dialect: &solid_dialect::Solid2,
+        },
+    };
+    // The producer says nothing changed: the store must not need its word.
+    let begin = store.begin_with(&views, false, &super::memo::probes::NoProbes, true, false);
+    store.end();
+    begin
+}
+
+/// ADR 03XX-bookkeeping: a file's TypeFacts parts are digested again exactly
+/// when its rows are not the rows the store digested last build, whatever
+/// the producer names. The same table and rows: nothing is digested again.
+/// One path's entities replaced (no change list names it): that file alone
+/// is digested again and found changed. The same content in a new table (a
+/// full replace): every file is digested again and none is found changed.
+/// One path's entity-symbol rows copied on write: that file alone.
+#[test]
+fn fingerprint_parts_are_reused_exactly_for_the_rows_they_digested() {
+    // Shadow mode on: every reused part is also compared with a fresh digest.
+    let store = super::memo::build::MemoStore::new(false, true);
+    let project = wrapper_project(FIXTURES[0]);
+    let original = facts(&project).unwrap();
+    let files = original.files.len();
+    let symbols = entity_symbols(&original);
+    let first = begin_over(&original, &symbols, &store);
+    assert_eq!((first.entities_reused, first.rows_reused), (0, 0));
+
+    let same = begin_over(&original, &symbols, &store);
+    assert_eq!((same.entities_reused, same.rows_reused), (files, files));
+    assert_eq!(same.changed_files, 0);
+
+    let path = "/fixture/use.ts";
+    let mut entities = original.typescript.entities_for_path(path).to_vec();
+    assert!(!entities.is_empty(), "the caller has entities");
+    entities.pop();
+    let mut edited = original.clone();
+    edited.typescript = edited
+        .typescript
+        .clone()
+        .with_entity_overrides([(path.to_owned(), entities.clone())].into_iter().collect());
+    let unnamed = begin_over(&edited, &symbols, &store);
+    assert_eq!(unnamed.entities_reused, files - 1);
+    assert_eq!(unnamed.changed_files, 1);
+    assert!(!store.poisoned());
+
+    let mut replaced = facts(&project).unwrap();
+    replaced.typescript = replaced
+        .typescript
+        .clone()
+        .with_entity_overrides([(path.to_owned(), entities)].into_iter().collect());
+    let full = begin_over(&replaced, &symbols, &store);
+    assert_eq!(full.entities_reused, 0);
+    assert_eq!(full.changed_files, 0);
+
+    let mut rows = symbols.clone();
+    let row = Arc::make_mut(rows.by_path.get_mut(path).expect("the caller's rows"));
+    let key = *row.keys().next().expect("a row");
+    row.insert(key, SymbolId::from("s0:moved"));
+    let copied = begin_over(&replaced, &rows, &store);
+    assert_eq!(copied.rows_reused, files - 1);
+    assert_eq!(copied.changed_files, 1);
+    assert!(!store.poisoned());
 }
 
 /// With stable symbol ids (the synthetic table spells a symbol by its text),
