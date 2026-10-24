@@ -307,7 +307,7 @@ fn overflow_never_creates_an_execution_witness() {
     assert_eq!(overflow, HostExecutionPredicate::Unknown);
     assert_eq!(overflow.evaluate(&|_| Some(false)), None);
     assert_eq!(
-        HostExecutionPredicate::CallCompletion(Box::new(overflow)).evaluate(&|_| None),
+        HostExecutionPredicate::CallCompletion(std::sync::Arc::new(overflow)).evaluate(&|_| None),
         None
     );
     // Literal specializations must not reuse a non-return proof for a
@@ -539,8 +539,10 @@ fn exact_call_completion_instantiates_client_constants_and_preserves_normal_retu
     );
     assert_eq!(observed(&source, "closed()", false), None);
     assert_eq!(
-        HostExecutionPredicate::CallCompletion(Box::new(HostExecutionPredicate::Unknown))
-            .evaluate(&|_| None),
+        HostExecutionPredicate::CallCompletion(std::sync::Arc::new(
+            HostExecutionPredicate::Unknown
+        ))
+        .evaluate(&|_| None),
         None
     );
 }
