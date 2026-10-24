@@ -259,6 +259,8 @@ pub(crate) struct ScanCache {
     /// compared with the ones read there.
     table: Option<TypeScriptTable>,
     files: HashMap<String, FileScan>,
+    /// The last scan's (reused, scanned) file counts, for timings.
+    pub(crate) last_counts: (u64, u64),
 }
 
 #[derive(Eq, PartialEq)]
@@ -299,6 +301,7 @@ pub(crate) fn scan_retained(
     let mut identities = HashMap::default();
     let mut files = HashMap::default();
     let mut premise = RuntimeConfigurationPremise::Assumed;
+    let mut counts = (0, 0);
     for file in facts
         .files
         .iter()
@@ -319,6 +322,11 @@ pub(crate) fn scan_retained(
                     })
             })
             .map(|(_, previous)| previous);
+        if retained.is_some() {
+            counts.0 += 1;
+        } else {
+            counts.1 += 1;
+        }
         let scanned = retained.unwrap_or_else(|| {
             let mut asked = Vec::new();
             let veto = scan_file(
@@ -350,6 +358,7 @@ pub(crate) fn scan_retained(
         basis: Some(basis),
         table: Some(facts.typescript.clone()),
         files,
+        last_counts: counts,
     };
     premise
 }

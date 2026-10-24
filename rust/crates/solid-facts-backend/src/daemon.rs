@@ -1254,6 +1254,7 @@ fn answer(
     check: &CheckRequest,
 ) -> Result<Answer, Box<dyn Error>> {
     let started = Instant::now();
+    let mut phases = PhaseClock::new();
     let changes = match state.resync(request)? {
         Sync::Rebuild => {
             let previous = state.generated().map(Path::to_path_buf);
@@ -1318,6 +1319,7 @@ fn answer(
         state.session.set_semantic_demand_options(options);
         Ok(())
     };
+    phases.mark("resync");
     // The files an overlay update edited while the program kept its files.
     let mut edited = None;
     let facts = if changes.is_empty() {
@@ -1354,6 +1356,7 @@ fn answer(
             facts?
         }
     };
+    phases.mark("facts");
     // Review of ADR 0368: a project call's validity is the project's own
     // program's (the retained original, current: `resync` ran), and a package
     // whose own source has a call error is unproven.
@@ -1410,6 +1413,7 @@ fn answer(
             state.resolution = Some(ResolutionWitness::of(&graph, tracked));
         }
     }
+    phases.mark("resolution");
     let directory = state
         .project
         .parent()
@@ -1466,9 +1470,9 @@ fn answer(
         .collect::<Vec<_>>()
         .join("\n")
         .into();
-    let analysis = state
-        .diagnostics
-        .analyze_inputs_measured_with_enablement(
+    phases.mark("package-inputs");
+    let (analysis, diagnostic_timings) =
+        state.diagnostics.analyze_inputs_measured_with_enablement(
             &state.project,
             &state.sources,
             &facts,
@@ -1482,8 +1486,8 @@ fn answer(
                 runtime: check.runtime.clone(),
                 feedback_facts: false,
             },
-        )?
-        .0;
+        )?;
+    phases.mark("analyze");
     let body: Arc<[u8]> = snapshot_emission::emit(
         resolve_dialect(request)?,
         "json",
@@ -1521,6 +1525,12 @@ fn answer(
         }),
         None => None,
     };
+    phases.mark("emit-and-cache");
+    phases.report(
+        state.session.generation(),
+        &state.session.last_build_timings(),
+        &diagnostic_timings,
+    );
     state.diagnostics.retain_for_idle(state.cache_retention);
     Ok(Answer {
         status,
@@ -1837,6 +1847,69 @@ fn executable_path(executable: &str) -> Result<String, Box<dyn Error>> {
         })
         .ok_or_else(|| format!("Type Facts executable {executable:?} is not on PATH").into())
         .and_then(|found| absolute(&found.to_string_lossy()))
+}
+
+/// The phases of one uncached daemon answer, emitted under
+/// `SOLID_CHECKER_TIMINGS` on the daemon's stderr.
+struct PhaseClock {
+    emit: bool,
+    last: Instant,
+    phases: Vec<(&'static str, Duration)>,
+}
+
+impl PhaseClock {
+    fn new() -> Self {
+        Self {
+            emit: std::env::var_os("SOLID_CHECKER_TIMINGS").is_some(),
+            last: Instant::now(),
+            phases: Vec::new(),
+        }
+    }
+
+    fn mark(&mut self, phase: &'static str) {
+        if self.emit {
+            self.phases.push((phase, self.last.elapsed()));
+            self.last = Instant::now();
+        }
+    }
+
+    fn report(
+        &self,
+        generation: u64,
+        facts: &solid_facts_backend::NativeBuildTimings,
+        diagnostics: &solid_facts_backend::DiagnosticTimings,
+    ) {
+        if !self.emit {
+            return;
+        }
+        let ms = |duration: Duration| duration.as_secs_f64() * 1000.0;
+        let phases = self
+            .phases
+            .iter()
+            .map(|(phase, duration)| ((*phase).to_owned(), serde_json::json!(ms(*duration))))
+            .collect::<serde_json::Map<_, _>>();
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "daemonPhases": {
+                    "generation": generation,
+                    "phasesMs": phases,
+                    "facts": {
+                        "sourceAnalysisMs": ms(facts.source_analysis),
+                        "sourceFiles": [facts.source_files_reused, facts.source_files_recomputed],
+                        "typeFactsMs": ms(facts.type_facts),
+                        "exchangeRoundtripMs": ms(facts.exchange.roundtrip),
+                        "serverAnalyzeMs": ms(facts.exchange.server_analyze),
+                        "responseDecodeMs": ms(facts.exchange.response_decode),
+                        "hydrateMs": ms(facts.hydrate),
+                        "joinMs": ms(facts.join),
+                    },
+                    "reactiveIrMs": ms(diagnostics.reactive_ir),
+                    "solveAndSnapshotMs": ms(diagnostics.solve_and_snapshot),
+                }
+            })
+        );
+    }
 }
 
 fn report_timings(header: &CheckHeader, elapsed: Duration, received_bytes: u64) {
