@@ -22,7 +22,10 @@
 //
 // Options: --checker <bin> (SOLID_CHECKER_BIN, else the debug build),
 // --typefacts <bin> (SOLID_TYPEFACTS_BIN), --kinds a,b,c (default all),
-// --keep-going (do not stop at the first mismatch), --no-shadow.
+// --keep-going (do not stop at the first mismatch), --no-shadow,
+// --idle-shadow (the daemon's idle-time check instead of the inline shadow:
+// after each daemon answer the harness waits for the idle check's verdict
+// and fails on any `differs` or `inconclusive` line, ADR 03XX-idle-shadow).
 import { spawn } from "node:child_process";
 import {
   cpSync,
@@ -255,6 +258,7 @@ function parseArguments(argv) {
     else if (flag === "--restore") options.restore = resolve(value());
     else if (flag === "--keep-going") options.keepGoing = true;
     else if (flag === "--no-shadow") options.shadow = false;
+    else if (flag === "--idle-shadow") options.idleShadow = true;
     else throw new Error(`unknown argument ${flag}`);
   }
   for (const kind of options.kinds) {
@@ -272,13 +276,14 @@ function locate(variable, ...candidates) {
  * One project's run. Returns `{ steps, mismatches, restoreProblems, log }`.
  * `directory` is edited in place; the caller copies a fixture first.
  */
-export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typefacts, shadow, keepGoing, label }) {
+export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typefacts, shadow, idleShadow, keepGoing, label }) {
   const root = dirname(tsconfig);
   const files = projectFiles(root);
   const rand = seededRandom(seed);
   const scratch = mkdtempSync(join(tmpdir(), "ir-edit-fuzz-"));
   const restorer = new Restorer(join(scratch, "journal"));
   const shadowLog = join(scratch, "shadow.log");
+  const idleLog = join(scratch, "idle-shadow.log");
   const environment = {
     ...process.env,
     SOLID_TYPEFACTS_BIN: typefacts,
@@ -294,6 +299,26 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
           TYPEFACTS_VERIFY_SYMBOL_PATCH_LOG: shadowLog
         }
       : { SOLID_CHECKER_IR_SHADOW: "0" })
+  };
+  if (idleShadow) {
+    // The daemon's own check replaces the inline one (which would skip it).
+    Object.assign(environment, {
+      SOLID_CHECKER_IR_SHADOW: "0",
+      SOLID_CHECKER_IDLE_SHADOW: "1",
+      SOLID_CHECKER_IDLE_SHADOW_DEBOUNCE_MS: "100",
+      SOLID_CHECKER_IDLE_SHADOW_TRACE: "1",
+      SOLID_CHECKER_IDLE_SHADOW_LOG: idleLog
+    });
+  }
+  const idleLines = () => (existsSync(idleLog) ? readFileSync(idleLog, "utf8").split("\n").filter(Boolean) : []);
+  const verdicts = () => idleLines().filter((line) => /: (verified|inconclusive)|differs from a fresh/.test(line)).length;
+  /** Waits for the idle check's verdict on the answer just served. */
+  const awaitVerdict = async (before) => {
+    const deadline = Date.now() + 600_000;
+    while (verdicts() <= before) {
+      if (Date.now() > deadline) throw new Error("the idle check gave no verdict in 10 minutes");
+      await new Promise((done) => setTimeout(done, 100));
+    }
   };
   const check = (daemon) =>
     run(checker, ["--project", tsconfig, "--format", "json"], {
@@ -331,6 +356,7 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
   try {
     await stopDaemon();
     await check(true); // The daemon's first (cold) build.
+    if (idleShadow) await awaitVerdict(0);
     for (let step = 0; step < steps; step += 1) {
       const path = files[rand(files.length)];
       restorer.protect(path);
@@ -356,18 +382,27 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
       writeFileSync(path, next);
       executed += 1;
       const logSize = existsSync(shadowLog) ? statSync(shadowLog).size : 0;
+      const verdictsBefore = idleShadow ? verdicts() : 0;
+      const idleBefore = idleLines().length;
       const started = performance.now();
       const retained = await check(true);
       const retainedTook = performance.now() - started;
       retainedMs.push(retainedTook);
+      if (idleShadow) await awaitVerdict(verdictsBefore);
       const freshStarted = performance.now();
       const fresh = await check(false);
       const freshTook = performance.now() - freshStarted;
       freshMs.push(freshTook);
+      const idleReport = idleShadow
+        ? idleLines()
+            .slice(idleBefore)
+            .filter((line) => !/: (verified|cancelled)$/.test(line))
+            .join("\n")
+        : "";
       const shadowReport =
-        existsSync(shadowLog) && statSync(shadowLog).size > logSize
+        (existsSync(shadowLog) && statSync(shadowLog).size > logSize
           ? readFileSync(shadowLog, "utf8").slice(logSize)
-          : "";
+          : "") + idleReport;
       // Two empty answers are equal and prove nothing: a checker that cannot
       // run the project must fail the run, not pass it. A refusal for syntax
       // the pre-check let through is skipped, and the file put back.

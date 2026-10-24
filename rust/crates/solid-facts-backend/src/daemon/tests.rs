@@ -357,6 +357,7 @@ fn retained_timing_reports_cache_generation_and_payload() {
             analysis_ns: 11,
             response_bytes: 13,
             notice: None,
+            recovered: false,
         },
         Duration::from_nanos(17),
         13,
