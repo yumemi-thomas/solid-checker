@@ -22,12 +22,12 @@
 //! proof counts the read as moved. The chunk reruns, which is exact; its
 //! pass publishes before anything reads the table for real.
 
+use super::locks::{Mutex, RwLock};
 use std::any::Any;
 use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::sync::{Mutex, RwLock};
 
 use super::{Canonical, Ctx, Invalidation, Revision, Schema, Store};
 use crate::base::fixpoint::Published;
@@ -91,7 +91,6 @@ pub(crate) trait Derived: 'static {
 // by tests only until then.
 #[cfg_attr(not(test), allow(dead_code))]
 trait ErasedPublished: Send + Sync {
-    fn fingerprint(&self, key: u32) -> u64;
     fn release(&mut self, key: u32);
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -102,10 +101,6 @@ where
     K: Clone + Eq + Hash + Send + Sync + 'static,
     V: Clone + Eq + Send + Sync + 'static,
 {
-    fn fingerprint(&self, key: u32) -> u64 {
-        self.key(key).map_or(0, |key| u64::from(self.revision(key)))
-    }
-
     fn release(&mut self, key: u32) {
         Published::release(self, key);
     }
@@ -124,7 +119,6 @@ where
 struct Read<V> {
     id: u32,
     value: Option<V>,
-    fingerprint: u64,
     published_now: bool,
 }
 
@@ -141,15 +135,6 @@ impl DerivedTables {
     pub(crate) fn clear(&self) {
         self.published.write().expect("derived lock").clear();
         self.solvers.lock().expect("solver lock").clear();
-    }
-
-    /// The revision in which a recorded key's value last changed.
-    pub(crate) fn fingerprint(&self, id: DerivedId, key: u32) -> u64 {
-        self.published
-            .read()
-            .expect("derived lock")
-            .get(&id)
-            .map_or(0, |table| table.fingerprint(key))
     }
 
     /// Forgets a key no memo records any more.
@@ -185,7 +170,6 @@ impl DerivedTables {
                 return Read {
                     id,
                     value: table.get(key).cloned(),
-                    fingerprint: u64::from(table.revision(key)),
                     published_now: table.published_at() == Some(revision),
                 };
             }
@@ -193,7 +177,6 @@ impl DerivedTables {
         self.with_table::<D, _>(|table| Read {
             id: table.intern(key),
             value: table.get(key).cloned(),
-            fingerprint: u64::from(table.revision(key)),
             published_now: table.published_at() == Some(revision),
         })
     }
@@ -243,7 +226,7 @@ impl<S: DerivedSchema> Ctx<'_, '_, S> {
                 D::NAME
             );
         }
-        self.record_input_known(S::input(D::ID, read.id), read.fingerprint);
+        self.record_input(S::input(D::ID, read.id));
         read.value
     }
 }

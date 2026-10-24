@@ -357,10 +357,6 @@ impl<K: Clone + Eq + Hash, V: Clone + Eq> Published<K, V> {
         self.ids.get(key).copied()
     }
 
-    pub(crate) fn key(&self, id: u32) -> Option<&K> {
-        self.keys.get(&id)
-    }
-
     /// Forgets an interned id no reader records any more.
     pub(crate) fn release(&mut self, id: u32) {
         if let Some(key) = self.keys.remove(&id) {

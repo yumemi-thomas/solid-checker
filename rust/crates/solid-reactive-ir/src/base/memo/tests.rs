@@ -47,11 +47,7 @@ impl ToyWorld {
     }
 }
 
-impl World<Toy> for ToyWorld {
-    fn fingerprint(&self, input: u32) -> u64 {
-        self.cells.get(&input).copied().unwrap_or(0).cast_unsigned()
-    }
-}
+impl World<Toy> for ToyWorld {}
 
 impl Ctx<'_, '_, Toy> {
     fn cell(&self, cell: u32) -> i64 {

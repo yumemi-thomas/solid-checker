@@ -18,7 +18,7 @@ use std::sync::Arc;
 use solid_facts::core::Span;
 
 use super::Ctx;
-use super::build::{BuildSchema, Input};
+use super::build::BuildSchema;
 use crate::base::{FileId, Hazard};
 
 /// A question a build can ask of an unported table or an index.
@@ -148,10 +148,8 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
         let mut hasher = rustc_hash::FxHasher::default();
         answer.hash(&mut hasher);
         let fingerprint = hasher.finish();
-        let id = world.store.polled_key(&key);
-        let input = Input::Polled(probe, id);
-        world.store.note_polled(input, fingerprint);
-        self.record_input_known(input, fingerprint);
+        let input = world.store.poll(probe, &key, fingerprint);
+        self.record_input(input);
         answer
     }
 

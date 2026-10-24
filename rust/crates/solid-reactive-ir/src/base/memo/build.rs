@@ -18,9 +18,10 @@
 //! last build ([`FileParts`]); the producer's list of changed paths is not
 //! trusted for it.
 
+use super::locks::RwLock;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
@@ -386,10 +387,6 @@ impl FileFingerprints {
     }
 }
 
-fn low_bits(digest: &[u8; 32]) -> u64 {
-    u64::from_le_bytes(digest[..8].try_into().expect("eight bytes"))
-}
-
 /// Feeds serialized bytes straight into a digest.
 struct DigestWriter<'a>(&'a mut Sha256);
 
@@ -727,17 +724,6 @@ where
         count
     }
 
-    fn fingerprint(&self, key: u32) -> u64 {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = rustc_hash::FxHasher::default();
-        if let (Some(index), Some(key)) = (&self.index, self.keys.keys.get(&key)) {
-            for (file, rank, value) in index.ranked_values(key) {
-                (file, rank, value).hash(&mut hasher);
-            }
-        }
-        hasher.finish()
-    }
-
     fn values(&self, key: &K) -> Vec<(FileId, usize, C)> {
         self.index
             .as_ref()
@@ -780,13 +766,39 @@ struct MemoBase {
     runtime_redirects: Option<bool>,
     /// The analyzed ids in the order of their first slot ([`Input::Files`]).
     ids: Vec<FileId>,
-    /// The keys of polled inputs, and each recorded polled input's answer
-    /// fingerprint as of the last build ([`super::probes`]).
-    polled_keys: IndexKeys<super::probes::PolledKey>,
-    polled: BTreeMap<Input, u64>,
     /// Bumped by every build in which anything of the program may differ from
     /// the last: [`Input::Project`]'s answer.
     project_epoch: u64,
+}
+
+/// Polled keys are sharded by hash; a key's id is its shard's id times
+/// [`POLLED_SHARDS`] plus the shard, so an id names its shard.
+const POLLED_SHARDS: usize = 16;
+
+#[derive(Default)]
+struct PolledShard {
+    keys: IndexKeys<super::probes::PolledKey>,
+    /// Read in no order: `begin` re-asks each and `end` releases by key.
+    answers: HashMap<Input, u64>,
+}
+
+fn polled_shard_of(key: &super::probes::PolledKey) -> usize {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = rustc_hash::FxHasher::default();
+    key.hash(&mut hasher);
+    // The high bits: FxHash's low bits are weak for small integer keys.
+    (hasher.finish() >> 60) as usize % POLLED_SHARDS
+}
+
+fn polled_id(shard: usize, local: u32) -> u32 {
+    local
+        .checked_mul(POLLED_SHARDS as u32)
+        .and_then(|id| id.checked_add(shard as u32))
+        .expect("fewer than 2^28 polled keys per shard")
+}
+
+fn polled_local(id: u32) -> (usize, u32) {
+    (id as usize % POLLED_SHARDS, id / POLLED_SHARDS as u32)
 }
 
 /// What one [`MemoStore::begin`] found and cost.
@@ -829,6 +841,12 @@ pub(crate) struct MemoStore {
     /// they were made against ([`crate::base::reads::ReadProof`]).
     id: u64,
     base: RwLock<MemoBase>,
+    /// The keys of polled inputs, and each recorded polled input's answer
+    /// fingerprint as of the last build ([`super::probes`]), sharded by key
+    /// and apart from `base`: every probe of a parallel stage reads them,
+    /// and a first-seen key writes them, which must not stall the stage's
+    /// fingerprint reads of `base`.
+    polled: Box<[RwLock<PolledShard>; POLLED_SHARDS]>,
     /// Shadow or verify-reused mode: the updated indexes are compared with a
     /// refold every build.
     check_indexes: bool,
@@ -870,6 +888,7 @@ impl MemoStore {
             store: Store::new(verify_reused, report),
             id: NEXT_STORE.fetch_add(1, Ordering::Relaxed),
             base: RwLock::default(),
+            polled: Default::default(),
             check_indexes: check_indexes || verify_reused,
             retained: true,
             builds: AtomicU64::new(0),
@@ -938,6 +957,9 @@ impl MemoStore {
         let mut base = self.base.write().expect("memo base lock");
         if self.store.poisoned() {
             *base = MemoBase::default();
+            for shard in &self.polled {
+                *shard.write().expect("memo polled lock") = PolledShard::default();
+            }
             self.derived.clear();
         }
         base.interner = views.table.interner().clone();
@@ -1175,20 +1197,27 @@ impl MemoStore {
         base.program_closed = Some(program_closed);
         // Polled inputs: every recorded one is asked again, and the ones
         // whose answer moved are changed inputs.
-        let recorded = base
+        drop(base);
+        let recorded = self
             .polled
             .iter()
-            .filter_map(|(input, last)| match input {
-                Input::Polled(probe, id) => base
-                    .polled_keys
-                    .keys
-                    .get(id)
-                    .cloned()
-                    .map(|key| (*input, *probe, key, *last)),
-                _ => None,
+            .flat_map(|shard| {
+                let shard = shard.read().expect("memo polled lock");
+                shard
+                    .answers
+                    .iter()
+                    .filter_map(|(input, last)| match input {
+                        Input::Polled(probe, id) => shard
+                            .keys
+                            .keys
+                            .get(&polled_local(*id).1)
+                            .cloned()
+                            .map(|key| (*input, *probe, key, *last)),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-        drop(base);
         let measure = crate::base::reads::cost::on();
         let one_thread = measure.then(|| crate::pipeline::AnalysisWorkerLimit::enter(1));
         let started = Instant::now();
@@ -1206,7 +1235,6 @@ impl MemoStore {
         report.probes = now.len();
         let mut probe_cost = BTreeMap::<String, [u64; 3]>::new();
         {
-            let mut base = self.base.write().expect("memo base lock");
             for (input, probe, fingerprint, changed, cost) in now {
                 if changed {
                     changed_inputs.push(input);
@@ -1222,7 +1250,13 @@ impl MemoStore {
                     entry[1] += u64::from(changed);
                     entry[2] += cost;
                 }
-                base.polled.insert(input, fingerprint);
+                if let Input::Polled(_, id) = input {
+                    self.polled[polled_local(id).0]
+                        .write()
+                        .expect("memo polled lock")
+                        .answers
+                        .insert(input, fingerprint);
+                }
             }
         }
         if measure {
@@ -1258,42 +1292,30 @@ impl MemoStore {
         report
     }
 
-    /// The interned id of a polled input's key.
-    pub(super) fn polled_key(&self, key: &super::probes::PolledKey) -> u32 {
-        if let Some(id) = self
-            .base
-            .read()
-            .expect("memo base lock")
-            .polled_keys
-            .ids
-            .get(key)
+    /// The polled input of `probe` at `key`, interned, with `fingerprint`
+    /// remembered as its answer if no build has one yet: the next build asks
+    /// the probe again and compares.
+    pub(super) fn poll(
+        &self,
+        probe: super::probes::Probe,
+        key: &super::probes::PolledKey,
+        fingerprint: u64,
+    ) -> Input {
+        let shard = polled_shard_of(key);
+        let lock = &self.polled[shard];
         {
-            return *id;
+            let polled = lock.read().expect("memo polled lock");
+            if let Some(local) = polled.keys.ids.get(key) {
+                let input = Input::Polled(probe, polled_id(shard, *local));
+                if polled.answers.contains_key(&input) {
+                    return input;
+                }
+            }
         }
-        self.base
-            .write()
-            .expect("memo base lock")
-            .polled_keys
-            .intern(key)
-    }
-
-    /// Remembers a polled input's answer fingerprint, if no build has yet:
-    /// the next build asks the probe again and compares.
-    pub(super) fn note_polled(&self, input: Input, fingerprint: u64) {
-        let known = self
-            .base
-            .read()
-            .expect("memo base lock")
-            .polled
-            .contains_key(&input);
-        if !known {
-            self.base
-                .write()
-                .expect("memo base lock")
-                .polled
-                .entry(input)
-                .or_insert(fingerprint);
-        }
+        let mut polled = lock.write().expect("memo polled lock");
+        let input = Input::Polled(probe, polled_id(shard, polled.keys.intern(key)));
+        polled.answers.entry(input).or_insert(fingerprint);
+        input
     }
 
     /// Ends a build: sweeps entries this build did not reach and releases
@@ -1302,7 +1324,7 @@ impl MemoStore {
         self.log_cost();
         let (stats, released) = self.store.end();
         let mut base = self.base.write().expect("memo base lock");
-        let mut polled_released = false;
+        let mut polled_released = [false; POLLED_SHARDS];
         for input in released {
             match input {
                 Input::Index(IndexId::WrapperCandidates, id) => base.wrapper_keys.release(id),
@@ -1312,34 +1334,44 @@ impl MemoStore {
                 Input::Index(IndexId::SymbolUses, id) => base.symbol_uses.keys.release(id),
                 Input::Index(IndexId::Spellings, id) => base.spellings.keys.release(id),
                 Input::Index(IndexId::GlobalWrites, id) => base.global_writes.keys.release(id),
-                Input::Polled(..) => {
-                    base.polled.remove(&input);
-                    polled_released = true;
+                Input::Polled(_, id) => {
+                    let shard = polled_local(id).0;
+                    self.polled[shard]
+                        .write()
+                        .expect("memo polled lock")
+                        .answers
+                        .remove(&input);
+                    polled_released[shard] = true;
                 }
                 Input::Derived(id, key) => self.derived.release(id, key),
                 _ => {}
             }
         }
+        drop(base);
         // Several probes share a key: it is released when no polled input
         // names it.
-        if polled_released {
-            let live = base
-                .polled
+        for (shard, released) in self.polled.iter().zip(polled_released) {
+            if !released {
+                continue;
+            }
+            let mut polled = shard.write().expect("memo polled lock");
+            let live = polled
+                .answers
                 .keys()
                 .filter_map(|input| match input {
-                    Input::Polled(_, id) => Some(*id),
+                    Input::Polled(_, id) => Some(polled_local(*id).1),
                     _ => None,
                 })
                 .collect::<std::collections::BTreeSet<_>>();
-            let dead = base
-                .polled_keys
+            let dead = polled
+                .keys
                 .keys
                 .keys()
                 .copied()
                 .filter(|id| !live.contains(id))
                 .collect::<Vec<_>>();
             for id in dead {
-                base.polled_keys.release(id);
+                polled.keys.release(id);
             }
         }
         stats
@@ -1546,58 +1578,7 @@ impl<'w> BuildWorld<'w> {
     }
 }
 
-impl World<BuildSchema> for BuildWorld<'_> {
-    fn fingerprint(&self, input: Input) -> u64 {
-        let base = self.store.base.read().expect("memo base lock");
-        match input {
-            Input::File(id, section) => base
-                .files
-                .get(&id)
-                .map_or(0, |file| low_bits(file.section(section))),
-            Input::Slots(id) => {
-                use std::hash::{Hash, Hasher};
-                let mut hasher = rustc_hash::FxHasher::default();
-                self.views.table.slots_of(id).hash(&mut hasher);
-                hasher.finish()
-            }
-            Input::Index(IndexId::WrapperCandidates, key) => {
-                use std::hash::{Hash, Hasher};
-                let mut hasher = rustc_hash::FxHasher::default();
-                if let (Some(index), Some(key)) =
-                    (&base.wrapper_candidates, base.wrapper_keys.keys.get(&key))
-                {
-                    for (file, rank, candidate) in index.ranked_values(key) {
-                        (file, rank, candidate).hash(&mut hasher);
-                    }
-                }
-                hasher.finish()
-            }
-            Input::Index(IndexId::References, key) => base.references.fingerprint(key),
-            Input::Index(IndexId::Callees, key) => base.callees.fingerprint(key),
-            Input::Index(IndexId::UseSpans, key) => base.use_spans.fingerprint(key),
-            Input::Index(IndexId::SymbolUses, key) => base.symbol_uses.fingerprint(key),
-            Input::Index(IndexId::Spellings, key) => base.spellings.fingerprint(key),
-            Input::Index(IndexId::GlobalWrites, key) => base.global_writes.fingerprint(key),
-            Input::Constant(Constant::ProgramClosed) => u64::from(self.program_closed),
-            Input::Constant(Constant::RuntimeRedirects) => u64::from(self.runtime_redirects),
-            Input::Files => {
-                use std::hash::{Hash, Hasher};
-                let mut hasher = rustc_hash::FxHasher::default();
-                self.views.table.ids().hash(&mut hasher);
-                hasher.finish()
-            }
-            Input::Polled(probe, id) => {
-                let key = base.polled_keys.keys.get(&id).cloned();
-                drop(base);
-                key.map_or(0, |key| {
-                    super::probes::fingerprint(self.probes, probe, &key)
-                })
-            }
-            Input::Project => base.project_epoch,
-            Input::Derived(id, key) => self.store.derived.fingerprint(id, key),
-        }
-    }
-}
+impl World<BuildSchema> for BuildWorld<'_> {}
 
 /// One slot of one file, read through a memo context: each accessor records
 /// the section it reads.
@@ -1698,11 +1679,20 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
             Input::File(id, Section::Entities),
             Input::File(id, Section::Signatures),
         ];
-        let [source, compiler, entities, signatures] = inputs.map(|input| {
-            let fingerprint = self.world().fingerprint(input);
-            self.record_input_known(input, fingerprint);
-            fingerprint
-        });
+        let [source, compiler, entities, signatures] = {
+            let base = self.world().store.base.read().expect("memo base lock");
+            inputs.map(|input| {
+                let Input::File(_, section) = input else {
+                    unreachable!("file sections only")
+                };
+                base.files.get(&id).map_or(0, |file| {
+                    u64::from_le_bytes(file.section(section)[..8].try_into().expect("eight bytes"))
+                })
+            })
+        };
+        for input in inputs {
+            self.record_input(input);
+        }
         (source, compiler, entities, signatures)
     }
 

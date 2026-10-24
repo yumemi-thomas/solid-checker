@@ -3,10 +3,10 @@
 //!
 //! A memo table ([`Memo`]) maps a key to a value computed by a deterministic
 //! function whose only access to the world is a [`Ctx`]. Each read through it
-//! is recorded with the entry, as a compact [`QueryId`] and the answer's
-//! fingerprint:
+//! is recorded with the entry, once, as a compact [`QueryId`]:
 //! - an input of the [`Schema`] (for a build: one section of one file, an L1
-//!   index key, a file's slots, a build constant), see [`build`];
+//!   index key, a file's slots, a build constant), see [`build`]; its changes
+//!   are pushed by [`Store::begin`], so it carries no fingerprint;
 //! - another memo's answer, `ctx.memo::<T>(key)`, fingerprinted by the
 //!   revision in which that answer last changed.
 //!
@@ -44,16 +44,17 @@
 
 pub(crate) mod build;
 pub(crate) mod derived;
+mod locks;
 pub(crate) mod probes;
 #[cfg(test)]
 mod tests;
 
+use locks::{Mutex, RwLock};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Mutex, RwLock};
 
 use crate::{HashMap, HashSet};
 
@@ -114,12 +115,9 @@ pub(crate) trait Schema: Sized + 'static {
     type World<'w>: World<Self>;
 }
 
-/// One build's world.
-pub(crate) trait World<S: Schema>: Sync {
-    /// The fingerprint of `input`'s answer in this build, recorded with the
-    /// read (diagnostics: invalidation is pushed by [`Store::begin`]).
-    fn fingerprint(&self, input: S::Input) -> u64;
-}
+/// One build's world. An input read records no fingerprint: invalidation
+/// is pushed by [`Store::begin`] (and [`Store::invalidate`]).
+pub(crate) trait World<S: Schema>: Sync {}
 
 /// A schema's memo tables, by id.
 pub(crate) trait TableSet<S: Schema>: Default + Send + Sync {
@@ -244,18 +242,42 @@ impl AtomicStats {
     }
 }
 
+/// A table's entries are split by key hash into this many shards, so the
+/// workers of a parallel stage asking one table rarely wait on each other.
+/// A key's query id is allocated in its shard ([`Graph::allocate_in`]): the
+/// id names the shard too.
+const TABLE_SHARDS: usize = 16;
+
 /// The entries of one memo table.
 pub(crate) struct Table<S: Schema, M: Memo<S>> {
-    data: RwLock<TableData<M, S>>,
+    /// On the heap: a schema has dozens of tables, and a store built on a
+    /// small-stack thread (the idle check's) must not carry their shards.
+    data: Box<[RwLock<TableData<M, S>>; TABLE_SHARDS]>,
     stats: AtomicStats,
 }
 
 impl<S: Schema, M: Memo<S>> Default for Table<S, M> {
     fn default() -> Self {
         Self {
-            data: RwLock::default(),
+            data: Box::new(std::array::from_fn(|_| RwLock::default())),
             stats: AtomicStats::default(),
         }
+    }
+}
+
+impl<S: Schema, M: Memo<S>> Table<S, M> {
+    /// The shard holding `key`'s id and entry.
+    fn key_shard(key: &M::Key) -> usize {
+        use std::hash::Hasher;
+        let mut hasher = rustc_hash::FxHasher::default();
+        key.hash(&mut hasher);
+        // The high bits: FxHash's low bits are weak for small integer keys.
+        (hasher.finish() >> 60) as usize % TABLE_SHARDS
+    }
+
+    /// The shard of an entry by its query id.
+    fn shard(&self, query: QueryId) -> &RwLock<TableData<M, S>> {
+        &self.data[query.0 as usize % TABLE_SHARDS]
     }
 }
 
@@ -305,7 +327,7 @@ impl<S: Schema, M: Memo<S>> ErasedTable<S> for Table<S, M> {
         query: QueryId,
     ) -> Result<Option<Revision>, Cycle> {
         let key = {
-            let data = self.data.read().expect("memo table lock");
+            let data = self.shard(query).read().expect("memo table lock");
             if !data.entries.contains_key(&query) {
                 return Ok(None);
             }
@@ -320,7 +342,7 @@ impl<S: Schema, M: Memo<S>> ErasedTable<S> for Table<S, M> {
     }
 
     fn clean_changed_at(&self, query: QueryId, revision: Revision) -> Option<Revision> {
-        let data = self.data.read().expect("memo table lock");
+        let data = self.shard(query).read().expect("memo table lock");
         let entry = data.entries.get(&query)?;
         if entry.state.load(Ordering::Acquire) != CLEAN {
             return None;
@@ -334,39 +356,48 @@ impl<S: Schema, M: Memo<S>> ErasedTable<S> for Table<S, M> {
     }
 
     fn raise(&self, query: QueryId, state: u8) {
-        let data = self.data.read().expect("memo table lock");
+        let data = self.shard(query).read().expect("memo table lock");
         if let Some(entry) = data.entries.get(&query) {
             entry.state.fetch_max(state, Ordering::Relaxed);
         }
     }
 
     fn used(&self, revision: Revision) -> Vec<QueryId> {
-        let data = self.data.read().expect("memo table lock");
-        data.entries
-            .iter()
-            .filter(|(_, entry)| entry.used_at.load(Ordering::Relaxed) == revision)
-            .map(|(query, _)| *query)
-            .collect()
+        let mut used = Vec::new();
+        for shard in &self.data {
+            let data = shard.read().expect("memo table lock");
+            used.extend(
+                data.entries
+                    .iter()
+                    .filter(|(_, entry)| entry.used_at.load(Ordering::Relaxed) == revision)
+                    .map(|(query, _)| *query),
+            );
+        }
+        used.sort_unstable();
+        used
     }
 
     fn sweep(&self, live: &HashSet<QueryId>) -> Vec<QueryId> {
-        let mut data = self.data.write().expect("memo table lock");
-        let TableData { ids, keys, entries } = &mut *data;
-        entries.retain(|query, _| live.contains(query));
         let mut dropped = Vec::new();
-        keys.retain(|query, key| {
-            let keep = entries.contains_key(query);
-            if !keep {
-                ids.remove(key);
-                dropped.push(*query);
-            }
-            keep
-        });
+        for shard in &self.data {
+            let mut data = shard.write().expect("memo table lock");
+            let TableData { ids, keys, entries } = &mut *data;
+            entries.retain(|query, _| live.contains(query));
+            keys.retain(|query, key| {
+                let keep = entries.contains_key(query);
+                if !keep {
+                    ids.remove(key);
+                    dropped.push(*query);
+                }
+                keep
+            });
+        }
+        dropped.sort_unstable();
         dropped
     }
 
     fn describe(&self, query: QueryId) -> String {
-        let data = self.data.read().expect("memo table lock");
+        let data = self.shard(query).read().expect("memo table lock");
         data.keys.get(&query).map_or_else(
             || format!("{} {query:?}", M::NAME),
             |key| format!("{} {key:?}", M::NAME),
@@ -380,11 +411,16 @@ impl<S: Schema, M: Memo<S>> ErasedTable<S> for Table<S, M> {
     }
 
     fn len(&self) -> usize {
-        self.data.read().expect("memo table lock").entries.len()
+        self.data
+            .iter()
+            .map(|shard| shard.read().expect("memo table lock").entries.len())
+            .sum()
     }
 
     fn clear(&self) {
-        *self.data.write().expect("memo table lock") = TableData::default();
+        for shard in &self.data {
+            *shard.write().expect("memo table lock") = TableData::default();
+        }
     }
 }
 
@@ -397,8 +433,11 @@ enum NodeKind<I> {
 struct Node<I> {
     kind: NodeKind<I>,
     /// A memo's recorded reads, in reading order, each with its answer's
-    /// fingerprint (a memo read: the revision the answer last changed in).
+    /// fingerprint: for a memo read, the revision the answer last changed
+    /// in; an input read records 0, since its changes are pushed by
+    /// [`Store::begin`] and never compared.
     reads: Vec<(QueryId, u64)>,
+    /// Exact once [`Graph::flush`] has applied the pending edges.
     readers: BTreeSet<QueryId>,
 }
 
@@ -409,6 +448,12 @@ struct Graph<I> {
     /// Nodes that lost a reader or were allocated since the last
     /// [`Store::end`]: the only inputs it can find unread.
     unread: Vec<QueryId>,
+    /// Reverse-edge changes [`Self::record`] has not applied yet, in record
+    /// order: each reader with the reads it dropped. Only [`Store::mark`] and
+    /// [`Store::end`] read `readers`, and both flush first, so the reverse
+    /// map they see is the one recording it eagerly would have built, while
+    /// an install holds the graph lock only to intern and push.
+    pending: Vec<(QueryId, Vec<(QueryId, u64)>)>,
 }
 
 impl<I> Default for Graph<I> {
@@ -418,14 +463,26 @@ impl<I> Default for Graph<I> {
             inputs: HashMap::default(),
             nodes: HashMap::default(),
             unread: Vec::new(),
+            pending: Vec::new(),
         }
     }
 }
 
 impl<I: Copy + Eq + Hash> Graph<I> {
     fn allocate(&mut self, kind: NodeKind<I>) -> QueryId {
-        let id = QueryId(self.next);
-        self.next = self.next.checked_add(1).expect("fewer than 2^32 queries");
+        self.allocate_in(kind, 0)
+    }
+
+    /// A new query whose id is `shard` modulo [`TABLE_SHARDS`]: a memo key's
+    /// id names the table shard that holds it.
+    fn allocate_in(&mut self, kind: NodeKind<I>, shard: usize) -> QueryId {
+        let id = QueryId(
+            self.next
+                .checked_mul(TABLE_SHARDS as u32)
+                .and_then(|id| id.checked_add(shard as u32))
+                .expect("fewer than 2^28 queries"),
+        );
+        self.next = self.next.checked_add(1).expect("fewer than 2^28 queries");
         self.nodes.insert(
             id,
             Node {
@@ -447,33 +504,51 @@ impl<I: Copy + Eq + Hash> Graph<I> {
         id
     }
 
-    /// Replaces `query`'s recorded reads, keeping the reverse map exact.
+    /// Replaces `query`'s recorded reads; the reverse map follows at the
+    /// next [`Self::flush`].
     fn record(&mut self, query: QueryId, reads: Vec<(QueryId, u64)>) {
         let previous = self
             .nodes
             .get_mut(&query)
             .map(|node| std::mem::take(&mut node.reads))
             .unwrap_or_default();
-        for (read, _) in previous {
-            if let Some(node) = self.nodes.get_mut(&read) {
-                node.readers.remove(&query);
-                self.unread.push(read);
-            }
-        }
-        for (read, _) in &reads {
-            if let Some(node) = self.nodes.get_mut(read) {
-                node.readers.insert(query);
-            }
-        }
         if let Some(node) = self.nodes.get_mut(&query) {
             node.reads = reads;
+        }
+        self.pending.push((query, previous));
+    }
+
+    /// Applies the pending reverse-edge changes, in record order. Each
+    /// reader gains its reads as they are now: a reader recorded twice since
+    /// the last flush drops each earlier set and ends with the last one, the
+    /// map recording eagerly builds. Nodes are removed only by `Store::end`
+    /// and `Store::clear`, which flush or drop the pending changes first, so
+    /// a read present at its record is present here.
+    fn flush(&mut self) {
+        for (query, previous) in std::mem::take(&mut self.pending) {
+            for (read, _) in previous {
+                if let Some(node) = self.nodes.get_mut(&read) {
+                    node.readers.remove(&query);
+                    self.unread.push(read);
+                }
+            }
+            let gained = self
+                .nodes
+                .get(&query)
+                .map(|node| node.reads.iter().map(|(read, _)| *read).collect::<Vec<_>>())
+                .unwrap_or_default();
+            for read in gained {
+                if let Some(node) = self.nodes.get_mut(&read) {
+                    node.readers.insert(query);
+                }
+            }
         }
     }
 }
 
 /// One recorded read, before its input is interned.
 enum Read<I> {
-    Input(I, u64),
+    Input(I),
     Memo(QueryId, Revision),
 }
 
@@ -504,6 +579,9 @@ pub(crate) struct Ctx<'c, 'w, S: Schema> {
     store: &'c Store<S>,
     frame: Frame<'c>,
     reads: RefCell<Vec<Read<S::Input>>>,
+    /// The inputs already in `reads`: a repeated read adds nothing, since an
+    /// install keeps only each read's first record.
+    recorded: RefCell<HashSet<S::Input>>,
     /// Inputs the current key names itself: reading them is free.
     implied: Vec<S::Input>,
 }
@@ -520,6 +598,7 @@ impl<'c, 'w, S: Schema> Ctx<'c, 'w, S> {
                 parent: None,
             },
             reads: RefCell::new(Vec::new()),
+            recorded: RefCell::new(HashSet::default()),
             implied: Vec::new(),
         }
     }
@@ -533,6 +612,7 @@ impl<'c, 'w, S: Schema> Ctx<'c, 'w, S> {
                 parent: Some(&self.frame),
             },
             reads: RefCell::new(Vec::new()),
+            recorded: RefCell::new(HashSet::default()),
             implied,
         }
     }
@@ -548,20 +628,9 @@ impl<'c, 'w, S: Schema> Ctx<'c, 'w, S> {
         if self.frame.current.is_none() || self.implied.contains(&input) {
             return;
         }
-        let fingerprint = self.world.fingerprint(input);
-        self.reads
-            .borrow_mut()
-            .push(Read::Input(input, fingerprint));
-    }
-
-    /// Records a read of `input` whose fingerprint the caller already holds.
-    fn record_input_known(&self, input: S::Input, fingerprint: u64) {
-        if self.frame.current.is_none() || self.implied.contains(&input) {
-            return;
+        if self.recorded.borrow_mut().insert(input) {
+            self.reads.borrow_mut().push(Read::Input(input));
         }
-        self.reads
-            .borrow_mut()
-            .push(Read::Input(input, fingerprint));
     }
 
     /// Another memo's answer for `key`, recorded.
@@ -670,7 +739,13 @@ impl<S: Schema> Store<S> {
     }
 
     fn mark(&self, changed: &[S::Input]) -> Invalidation {
-        let graph = self.graph.lock().expect("memo graph lock");
+        let mut graph = self.graph.lock().expect("memo graph lock");
+        // An input is interned when an install records it, so one no
+        // reader records, flushed or pending, marks nothing.
+        if !changed.iter().any(|input| graph.inputs.contains_key(input)) {
+            return Invalidation::default();
+        }
+        graph.flush();
         let mut dirty = BTreeSet::new();
         let mut found = 0;
         for input in changed {
@@ -722,6 +797,7 @@ impl<S: Schema> Store<S> {
         let revision = self.revision();
         let tables = self.tables.tables();
         let mut graph = self.graph.lock().expect("memo graph lock");
+        graph.flush();
         let mut live = HashSet::default();
         let mut queue = tables
             .iter()
@@ -858,11 +934,17 @@ impl<S: Schema> Store<S> {
 
     fn query_of<M: Memo<S>>(&self, key: &M::Key) -> QueryId {
         let table = M::table(&self.tables);
-        if let Some(query) = table.data.read().expect("memo table lock").ids.get(key) {
+        let shard = Table::<S, M>::key_shard(key);
+        if let Some(query) = table.data[shard]
+            .read()
+            .expect("memo table lock")
+            .ids
+            .get(key)
+        {
             return *query;
         }
         // Locks are taken table first, then graph, everywhere a build reads.
-        let mut data = table.data.write().expect("memo table lock");
+        let mut data = table.data[shard].write().expect("memo table lock");
         if let Some(query) = data.ids.get(key) {
             return *query;
         }
@@ -870,7 +952,7 @@ impl<S: Schema> Store<S> {
             .graph
             .lock()
             .expect("memo graph lock")
-            .allocate(NodeKind::Memo(M::ID));
+            .allocate_in(NodeKind::Memo(M::ID), shard);
         data.ids.insert(key.clone(), query);
         data.keys.insert(query, key.clone());
         query
@@ -883,21 +965,36 @@ impl<S: Schema> Store<S> {
     ) -> Result<Answer<M::Value>, Cycle> {
         let table = M::table(&self.tables);
         let revision = self.revision();
-        let query = self.query_of::<M>(key);
+        let look = |entry: &Entry<M::Value>| {
+            let state = entry.state.load(Ordering::Acquire);
+            let first_use = entry.used_at.swap(revision, Ordering::AcqRel) != revision;
+            (
+                state,
+                first_use,
+                entry.value.clone(),
+                entry.changed_at,
+                entry.computed_at,
+            )
+        };
+        // An interned key's id and its entry under one read lock: the path
+        // of every answer asked again.
+        let (interned, mut first) = {
+            let data = table.data[Table::<S, M>::key_shard(key)]
+                .read()
+                .expect("memo table lock");
+            match data.ids.get(key) {
+                Some(query) => (Some(*query), data.entries.get(query).map(look)),
+                None => (None, None),
+            }
+        };
+        let query = interned.unwrap_or_else(|| self.query_of::<M>(key));
         loop {
-            let found = {
-                let data = table.data.read().expect("memo table lock");
-                data.entries.get(&query).map(|entry| {
-                    let state = entry.state.load(Ordering::Acquire);
-                    let first_use = entry.used_at.swap(revision, Ordering::AcqRel) != revision;
-                    (
-                        state,
-                        first_use,
-                        entry.value.clone(),
-                        entry.changed_at,
-                        entry.computed_at,
-                    )
-                })
+            let found = match first.take() {
+                Some(found) => Some(found),
+                None => {
+                    let data = table.shard(query).read().expect("memo table lock");
+                    data.entries.get(&query).map(look)
+                }
             };
             match found {
                 Some((CLEAN, first_use, value, changed_at, computed_at)) => {
@@ -918,7 +1015,7 @@ impl<S: Schema> Store<S> {
                         return Err(self.cycle::<M>(parent, key));
                     }
                     if self.reads_unchanged(parent, query, M::ID)? {
-                        let data = table.data.read().expect("memo table lock");
+                        let data = table.shard(query).read().expect("memo table lock");
                         // Only this verification lowers maybe-dirty; the
                         // next turn answers the clean entry (its use is
                         // already counted, so it is not counted as reused).
@@ -1038,14 +1135,13 @@ impl<S: Schema> Store<S> {
         key: &M::Key,
     ) -> Result<Answer<M::Value>, Cycle> {
         let (value, reads, implied) = self.compute::<M>(parent, query, key)?;
-        Ok(self.install::<M>(parent.world, query, key, value, reads, &implied))
+        Ok(self.install::<M>(query, key, value, reads, &implied))
     }
 
     /// Stores a computed value with its reads. A value equal to the old one
     /// keeps the old revision (early cutoff).
     fn install<M: Memo<S>>(
         &self,
-        world: &S::World<'_>,
         query: QueryId,
         key: &M::Key,
         value: M::Value,
@@ -1054,14 +1150,22 @@ impl<S: Schema> Store<S> {
     ) -> Answer<M::Value> {
         let revision = self.revision();
         let table = M::table(&self.tables);
-        let implied_reads = implied
+        // Each input is recorded once ([`Ctx::record_input`]) and an implied
+        // one never, so only a memo read can repeat: the first is kept.
+        let mut seen = HashSet::default();
+        let reads = implied
             .iter()
-            .map(|input| Read::Input(*input, world.fingerprint(*input)))
+            .map(|input| Read::Input(*input))
+            .chain(reads)
+            .filter(|read| match read {
+                Read::Input(_) => true,
+                Read::Memo(id, _) => seen.insert(*id),
+            })
             .collect::<Vec<_>>();
         // The reads and the value change together, under the table's write
         // lock: a verifier sees old reads with the old value or new reads
         // with the new one, never new reads with the old value.
-        let mut data = table.data.write().expect("memo table lock");
+        let mut data = table.shard(query).write().expect("memo table lock");
         if data.entries.get(&query).is_some_and(|entry| {
             entry.computed_at == revision && entry.state.load(Ordering::Acquire) == CLEAN
         }) {
@@ -1077,17 +1181,13 @@ impl<S: Schema> Store<S> {
         }
         {
             let mut graph = self.graph.lock().expect("memo graph lock");
-            let mut seen = BTreeSet::new();
-            let mut recorded = Vec::with_capacity(reads.len() + implied.len());
-            for read in implied_reads.into_iter().chain(reads) {
-                let (id, fingerprint) = match read {
-                    Read::Input(input, fingerprint) => (graph.input(input), fingerprint),
+            let recorded = reads
+                .into_iter()
+                .map(|read| match read {
+                    Read::Input(input) => (graph.input(input), 0),
                     Read::Memo(id, changed_at) => (id, u64::from(changed_at)),
-                };
-                if seen.insert(id) {
-                    recorded.push((id, fingerprint));
-                }
-            }
+                })
+                .collect::<Vec<_>>();
             // Swept between the key's interning and now: re-register.
             graph.nodes.entry(query).or_insert_with(|| Node {
                 kind: NodeKind::Memo(M::ID),
@@ -1155,7 +1255,7 @@ impl<S: Schema> Store<S> {
         let revision = self.revision();
         let table = M::table(&self.tables);
         let first = {
-            let data = table.data.read().expect("memo table lock");
+            let data = table.shard(query).read().expect("memo table lock");
             data.entries.get(&query).is_some_and(|entry| {
                 entry.reuse_checked_at.swap(revision, Ordering::AcqRel) != revision
             })
@@ -1206,11 +1306,11 @@ impl<S: Schema> Store<S> {
         ));
         // Fail closed: serve and keep the fresh value.
         {
-            let mut data = table.data.write().expect("memo table lock");
+            let mut data = table.shard(query).write().expect("memo table lock");
             if let Some(entry) = data.entries.get_mut(&query) {
                 entry.state.store(DIRTY, Ordering::Release);
             }
         }
-        Ok(self.install::<M>(parent.world, query, key, fresh, reads, &implied))
+        Ok(self.install::<M>(query, key, fresh, reads, &implied))
     }
 }
