@@ -1378,15 +1378,15 @@ pub(super) struct InterproceduralGraphAssembly<'a> {
 
 impl InterproceduralGraphAssembly<'_> {
     pub(super) fn merge(&mut self, path: &str, contribution: &InterproceduralGraphContribution) {
-        let node_index = |span| {
-            self.nodes_by_path.get(path).and_then(|indices| {
-                indices
-                    .iter()
-                    .rev()
-                    .find(|index| self.nodes[**index].span == span)
-                    .copied()
-            })
-        };
+        // The file's last node at a span (a later duplicate wins).
+        let by_span = self
+            .nodes_by_path
+            .get(path)
+            .into_iter()
+            .flatten()
+            .map(|index| (self.nodes[*index].span, *index))
+            .collect::<HashMap<_, _>>();
+        let node_index = |span| by_span.get(&span).copied();
         for (owner, read) in &contribution.direct_reads {
             if let Some(owner) = node_index(*owner) {
                 self.summaries[owner].push_unique(read.clone());

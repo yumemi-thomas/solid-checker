@@ -80,7 +80,9 @@ mod result_reads;
 mod transport_reads;
 pub(crate) use result_reads::*;
 pub(crate) use transport_reads::TransportReads;
+mod node_index;
 mod reads;
+mod refresh;
 pub(crate) use reads::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -397,7 +399,7 @@ impl std::ops::Deref for SummaryReads {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct SummaryNode {
     pub(super) path: String,
     pub(super) span: Span,
@@ -472,6 +474,8 @@ pub(super) struct InterproceduralTimings {
     /// graph-contribution merge (per-file, cached) and
     /// `refresh_member_invocation_contexts`.
     pub(super) graph_nodes: Duration,
+    /// The kept node index's patch ([`node_index`]).
+    pub(super) node_index: Duration,
     pub(super) resolver: Duration,
     pub(super) transport: Duration,
     pub(super) merge: Duration,

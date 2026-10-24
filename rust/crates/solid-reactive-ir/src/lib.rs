@@ -1386,6 +1386,7 @@ pub struct BuildTimings {
     /// accessor-provenance resolver, call transport, the per-file graph
     /// merge and the member-invocation refresh.
     pub interprocedural_graph_nodes: Duration,
+    pub interprocedural_node_index: Duration,
     pub interprocedural_resolver: Duration,
     pub interprocedural_transport: Duration,
     pub interprocedural_merge: Duration,

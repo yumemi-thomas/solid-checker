@@ -190,6 +190,17 @@ impl Derived for ProviderFlags {
     const ID: DerivedId = DerivedId(245);
 }
 
+/// The contexts stage 4 found blocked, for the walks that serve queries
+/// after construction ([`MemoWorld::serving`]; S7c's transport).
+pub(super) struct BlockedContexts;
+
+impl Derived for BlockedContexts {
+    type Key = Location;
+    type Value = ();
+    const NAME: &'static str = "resolver_blocked_contexts";
+    const ID: DerivedId = DerivedId(384);
+}
+
 /// The resolver's kept state between builds.
 const RESOLVER_STATE: SolverId = SolverId(240);
 
@@ -354,7 +365,7 @@ macro_rules! adapter {
 }
 
 /// The first slot of `id` as the lookup holds it, for an adapter.
-fn path_file<'l>(
+pub(super) fn path_file<'l>(
     lookup: &SemanticLookup<'l>,
     table: &FileTable,
     id: FileId,
@@ -529,6 +540,8 @@ fn ordinal_in<T>(items: &[T], item: &T) -> Option<usize> {
 /// read, each made once per memo where a walk repeats it.
 pub(super) struct MemoWorld<'r, 'c, 'w: 'c> {
     ctx: &'r Ctx<'c, 'w, BuildSchema>,
+    /// Queries after construction: the blocked contexts are stage 4's.
+    serving: bool,
     /// The files the walk holds: by path, and each read through the context.
     ids: RefCell<HashMap<&'w str, FileId>>,
     files: RefCell<BTreeMap<(FileId, u32), Option<&'w FileFacts>>>,
@@ -547,6 +560,7 @@ impl<'r, 'c, 'w: 'c> MemoWorld<'r, 'c, 'w> {
     fn new(ctx: &'r Ctx<'c, 'w, BuildSchema>) -> Self {
         Self {
             ctx,
+            serving: false,
             ids: RefCell::default(),
             files: RefCell::default(),
             paths: RefCell::default(),
@@ -560,8 +574,22 @@ impl<'r, 'c, 'w: 'c> MemoWorld<'r, 'c, 'w> {
         }
     }
 
+    /// The world of a query after construction, which sees stage 4's
+    /// blocked contexts; its pass must have served this build
+    /// ([`served_this_build`]).
+    pub(super) fn serving(ctx: &'r Ctx<'c, 'w, BuildSchema>) -> Self {
+        Self {
+            serving: true,
+            ..Self::new(ctx)
+        }
+    }
+
+    pub(super) fn ctx(&self) -> &'r Ctx<'c, 'w, BuildSchema> {
+        self.ctx
+    }
+
     /// The `rank`-th slot of `id`, read (its source).
-    fn read(&self, id: FileId, rank: u32) -> Option<&'w FileFacts> {
+    pub(super) fn read(&self, id: FileId, rank: u32) -> Option<&'w FileFacts> {
         if let Some(file) = self.files.borrow().get(&(id, rank)) {
             return *file;
         }
@@ -574,7 +602,7 @@ impl<'r, 'c, 'w: 'c> MemoWorld<'r, 'c, 'w> {
     }
 
     /// The id of a file the walk holds.
-    fn id(&self, file: &FileFacts) -> Option<FileId> {
+    pub(super) fn id(&self, file: &FileFacts) -> Option<FileId> {
         self.ids.borrow().get(file.path.as_str()).copied()
     }
 
@@ -647,7 +675,7 @@ impl<'r, 'c, 'w: 'c> MemoWorld<'r, 'c, 'w> {
     }
 
     /// `value`, unless a read met a cycle.
-    fn finish<T>(self, value: T) -> Result<T, Cycle> {
+    pub(super) fn finish<T>(self, value: T) -> Result<T, Cycle> {
         match self.cycle.into_inner() {
             Some(cycle) => Err(cycle),
             None => Ok(value),
@@ -952,10 +980,10 @@ impl<'w> World<'w> for MemoWorld<'_, '_, 'w> {
             .is_none_or(|(_, any)| any)
     }
 
-    fn blocked(&self, _: &Location) -> bool {
-        // The memo world serves construction only, which sees no blocked
-        // context.
-        false
+    fn blocked(&self, key: &Location) -> bool {
+        // Construction sees no blocked context; a query after it sees
+        // stage 4's.
+        self.serving && self.ctx.derived::<BlockedContexts>(key).is_some()
     }
 
     fn is_context_reference(&self, file: &'w FileFacts, span: Span) -> bool {
@@ -1056,6 +1084,10 @@ struct ResolverState {
     questions: BTreeSet<FileId>,
     accessors: HashMap<SymbolId, Location>,
     source_kinds: HashMap<SymbolId, crate::ReactiveSourceKind>,
+    /// The blocked contexts as the last build published them.
+    blocked: BTreeSet<Site>,
+    /// The build whose memo construction last published every table.
+    served: Option<crate::base::memo::Revision>,
 }
 
 /// One stage's memo answers for every file, in file order, or `None` when
@@ -1176,6 +1208,16 @@ pub(super) fn build<'a, 'facts: 'a>(
         }
     }
     resolver
+}
+
+/// Whether this build's resolver was constructed on the memo stages, which
+/// published every derived table its walks read: a query after construction
+/// may then run over the memo world ([`MemoWorld::serving`]).
+pub(super) fn served_this_build(store: &crate::base::memo::build::MemoStore) -> bool {
+    let revision = store.revision();
+    store
+        .derived()
+        .solver::<ResolverState, _>(RESOLVER_STATE, |state, _| state.served == Some(revision))
 }
 
 /// The resolver one build constructed ([`built_this_build`]): its store
@@ -1583,6 +1625,24 @@ fn build_on(
         source_origins.extend(rows.source.iter().cloned());
         blocked_contexts.extend(rows.blocked.iter().cloned());
     }
+    let blocked = blocked_contexts
+        .iter()
+        .map(|context| Site(context.clone()))
+        .collect::<BTreeSet<_>>();
+    store.publish::<BlockedContexts>(
+        blocked
+            .difference(&state.blocked)
+            .map(|Site(context)| (context.clone(), Some(())))
+            .chain(
+                state
+                    .blocked
+                    .difference(&blocked)
+                    .map(|Site(context)| (context.clone(), None)),
+            )
+            .collect::<Vec<_>>(),
+    );
+    state.blocked = blocked;
+    state.served = Some(store.revision());
     timer.lap("origins");
     Some(Tables {
         binding_locations: Arc::clone(&state.locations),
