@@ -158,12 +158,7 @@ pub(super) fn literal_flow_role(
     if literal.generator || lookup.function_component_status(file, literal) != ComponentStatus::No {
         return None;
     }
-    if lookup.files().iter().any(|file| {
-        file.ast
-            .module_hazards
-            .iter()
-            .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
-    }) {
+    if lookup.program_has_eval() {
         return None;
     }
     let key = (format!("\0flow:{}", file.path.as_str()), literal.span);

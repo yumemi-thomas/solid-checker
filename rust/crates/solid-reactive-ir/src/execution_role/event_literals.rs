@@ -11,14 +11,7 @@ use super::*;
 /// is the owner graph's question, not this walk's.
 pub(crate) fn event_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(String, Span)> {
     let mut literals = HashSet::default();
-    if !lookup.program_closed
-        || lookup.files().iter().any(|file| {
-            file.ast
-                .module_hazards
-                .iter()
-                .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
-        })
-    {
+    if !lookup.program_closed || lookup.program_has_eval() {
         return literals;
     }
     for file in lookup.files() {

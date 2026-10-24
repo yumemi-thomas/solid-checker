@@ -777,12 +777,7 @@ impl<'a> SemanticLookup<'a> {
                 || path.len() > 8
                 || call.construct
                 || call.arguments.iter().any(|argument| argument.spread)
-                || self.files().iter().any(|file| {
-                    file.ast
-                        .module_hazards
-                        .iter()
-                        .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
-                })
+                || self.program_has_eval()
             {
                 return None;
             }

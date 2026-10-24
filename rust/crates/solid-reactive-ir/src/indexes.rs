@@ -807,6 +807,8 @@ pub(super) struct SemanticLookup<'a> {
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
     synchronous_event_dispatch: OnceLock<bool>,
+    /// Whether some module of the program calls direct `eval`.
+    program_eval: OnceLock<bool>,
     /// ADR 0320: whether some call may copy keys into an existing object.
     objects_assigned_into: OnceLock<bool>,
     router_params: OnceLock<crate::router_params::RouterParamsStatus>,
@@ -1038,6 +1040,7 @@ impl<'a> SemanticLookup<'a> {
             invocation_flow_answers: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
+            program_eval: OnceLock::new(),
             objects_assigned_into: OnceLock::new(),
             router_params: OnceLock::new(),
             route_component_values: OnceLock::new(),

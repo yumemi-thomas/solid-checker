@@ -3,6 +3,19 @@
 use super::*;
 
 impl SemanticLookup<'_> {
+    /// Whether some module of the program calls direct `eval`, which can read
+    /// or write any binding it sees: read once per build.
+    pub(crate) fn program_has_eval(&self) -> bool {
+        *self.program_eval.get_or_init(|| {
+            self.files().iter().any(|file| {
+                file.ast
+                    .module_hazards
+                    .iter()
+                    .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
+            })
+        })
+    }
+
     /// ADR 0356: DOM dispatch runs handlers on its caller's stack. Until the
     /// event target and delivery sites are joined, any visible synchronous
     /// dispatch withholds the ownerless proof for event-only invocations.
