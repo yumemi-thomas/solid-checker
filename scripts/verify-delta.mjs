@@ -597,6 +597,11 @@ export const LANES = {
   typefacts: "typefacts",
   coverage: "gates",
   "ownership-gate": "gates",
+  // The IR edit fuzz drives the debug checker's daemon, like the gates; the
+  // read lint and the IR tool tests build nothing.
+  "ir-edit-fuzz": "gates",
+  "ir-read-lint": "preflight",
+  "ir-tools-test": "preflight",
   // The CLI launcher falls back to `make build-rust` when it finds no
   // checker, so the suite queues with the other `rust/target` users.
   "bun-test-cli": "rust",
