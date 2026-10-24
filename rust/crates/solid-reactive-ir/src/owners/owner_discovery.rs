@@ -328,7 +328,7 @@ pub(crate) fn discover_owner_file(
     }
     CachedOwnerFile {
         source_hash: file.source_hash.clone(),
-        cross_file_proofs: lookup.cross_file_proof_digest(),
+        proof: crate::base::reads::ReadProof::default(),
         compiler: file.compiler.clone(),
         nodes,
         edges,
@@ -360,14 +360,17 @@ pub(crate) fn find_missing_owners_incremental(
     lookup: &SemanticLookup<'_>,
     indexes: &ProjectIndexes<'_>,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    retained_source_paths: &HashSet<String>,
+    unchanged_paths: &HashSet<String>,
     cache: &mut HashMap<SourcePath, CachedOwnerFile>,
 ) -> (
     Vec<OwnerRequirement>,
     SettledGateDecisions,
     OwnerIncrementalTimings,
+    crate::base::reads::Reads,
 ) {
     let entities = lookup.entities();
+    // What the reused fragments read: the retained requirements read it too.
+    let mut fragment_reads = crate::base::reads::Reads::default();
     let mut timings = OwnerIncrementalTimings::default();
     let total_started = Instant::now();
     let current_paths = facts
@@ -378,24 +381,27 @@ pub(crate) fn find_missing_owners_incremental(
     cache.retain(|path, _| current_paths.contains(path.as_str()));
     let mut recomputed = Vec::new();
     for file in &facts.files {
-        if retained_source_paths.contains(file.path.as_str())
+        if unchanged_paths.contains(file.path.as_str())
             && let Some(cached) = cache.get(file.path.as_str())
             && cached.source_hash == file.source_hash
-            && cached.cross_file_proofs == lookup.cross_file_proof_digest()
+            && cached.proof.holds(lookup)
             && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                 || same_compiler_semantics(&cached.compiler, &file.compiler))
         {
             timings.reused_files += 1;
+            fragment_reads.extend(&cached.proof.reads);
             continue;
         }
         recomputed.push(file);
         timings.recomputed_files += 1;
     }
     for (path, discovered) in parallel_slice_results(&recomputed, |file| {
-        (
-            file.path.clone(),
-            discover_owner_file(file, indexes, entities, symbol_names, lookup),
-        )
+        // What the fragment read of other files is its proof.
+        let (mut discovered, reads) = crate::base::reads::record(|| {
+            discover_owner_file(file, indexes, entities, symbol_names, lookup)
+        });
+        discovered.proof = crate::base::reads::ReadProof::new(reads, lookup);
+        (file.path.clone(), discovered)
     }) {
         cache.insert(path, discovered);
     }
@@ -666,5 +672,6 @@ pub(crate) fn find_missing_owners_incremental(
             requirement_emission,
             ..timings
         },
+        fragment_reads,
     )
 }

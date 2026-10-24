@@ -10,7 +10,7 @@
 //! decide is withheld from call sites and reachability, so a finding that
 //! rested on it is uncertifiable, never a violation (ADR 0339).
 
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 
 use super::*;
 use crate::object_members::ModuleCensus;
@@ -21,8 +21,8 @@ type RunningBeforeDeclarator = HashMap<(String, Span), Arc<HashSet<Span>>>;
 
 #[derive(Default)]
 pub(super) struct State {
-    rejected: OnceLock<HashMap<String, HashSet<Span>>>,
-    census: OnceLock<ModuleCensus>,
+    rejected: crate::base::reads::Recorded<HashMap<String, HashSet<Span>>>,
+    census: crate::base::reads::Recorded<ModuleCensus>,
     file_refs: Mutex<HashMap<String, Arc<FileFunctionRefs>>>,
     running: Mutex<RunningBeforeDeclarator>,
 }

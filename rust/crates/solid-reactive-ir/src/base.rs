@@ -35,6 +35,7 @@ pub(crate) mod file_table;
 pub(crate) mod fixpoint;
 pub(crate) mod index;
 pub(crate) mod memo;
+pub(crate) mod reads;
 pub(crate) mod retained;
 #[cfg(test)]
 mod tests;

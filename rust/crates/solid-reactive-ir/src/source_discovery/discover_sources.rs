@@ -53,7 +53,7 @@ pub(crate) fn discover_sources(
 ) -> SourceDiscovery {
     let mut clock = StageClock::new(emit_timings);
     let mut tables = SourceTables::default();
-    let (retained_source_paths, changed_source_symbols) = merge_file_source_contributions(
+    let (unchanged_paths, chunk_reads) = merge_file_source_contributions(
         ctx,
         source_discovery_cache,
         typescript_unchanged,
@@ -61,98 +61,108 @@ pub(crate) fn discover_sources(
         &mut tables,
     );
     clock.finish(build_timings, ReactiveIrStage::SourceDiscovery);
-    // Source construction/accepted-return facts collected above, before the
-    // type-only fallback. A published Accessor/Store annotation alone cannot
-    // witness a runtime reactive Get in an incoming prop expression.
-    let mut runtime_sources = tables.accessors.keys().cloned().collect::<HashSet<_>>();
-    let mut literal_member_slots =
-        crate::literal_member_slots::LiteralMemberSlots::new(ctx.facts, ctx.semantic_lookup);
-    discover_withdrawn_tuple_candidates(ctx, &runtime_sources, &mut tables.typed_sources);
-    discover_typed_sources(
-        ctx,
-        &mut tables,
-        &runtime_sources,
-        &mut literal_member_slots,
-    );
-    discover_children_accessors(ctx, &mut runtime_sources, &mut tables.accessors);
-    discover_effect_store_parameters(ctx, &mut tables);
-    resolve_setter_action_aliases(ctx, &mut tables);
-    resolve_store_view_aliases(ctx, &mut tables);
-    discover_prop_sources(ctx, &mut tables);
-    clock.finish(build_timings, ReactiveIrStage::TypedAccessorsAndPropRoots);
-    propagate_prop_sources(ctx, &mut tables);
-    let SourceTables {
-        accessors,
-        accessor_origins,
-        setters,
-        actions,
-        source_kinds,
-        source_primitives,
-        source_phases,
-        returned_source_symbols,
-        summary_source_symbols,
-        source_owned_write,
-        async_sources,
-        source_async_options,
-        value_form_stores,
-        typed_sources,
-        prop_sources,
-        uncertain_prop_sources,
-    } = tables;
-    let StageContext {
-        facts,
-        entities,
-        semantic_lookup,
-        runtime,
-        ..
-    } = *ctx;
-    // A runtime source stays only while no file writes it. Collect every
-    // written symbol once rather than asking each source of each file.
-    let mut written: HashSet<&SymbolId> = HashSet::default();
-    for file in &facts.files {
-        written.extend(crate::value_identity::written_symbols(file, entities));
-        for target in &file.ast.iteration_targets {
-            for identifier in file.ast.identifiers_within(*target) {
-                written.extend(entities.at(file.path.as_str(), identifier.span));
+    // The project passes below read the lookup for every file: a later
+    // stage's chunk that reads their tables records what they read
+    // ([`SourceDiscovery::shared_reads`]).
+    let (mut discovery, shared_reads) = crate::base::reads::record(|| {
+        // Source construction/accepted-return facts collected above, before the
+        // type-only fallback. A published Accessor/Store annotation alone cannot
+        // witness a runtime reactive Get in an incoming prop expression.
+        let mut runtime_sources = tables.accessors.keys().cloned().collect::<HashSet<_>>();
+        let mut literal_member_slots =
+            crate::literal_member_slots::LiteralMemberSlots::new(ctx.facts, ctx.semantic_lookup);
+        discover_withdrawn_tuple_candidates(ctx, &runtime_sources, &mut tables.typed_sources);
+        discover_typed_sources(
+            ctx,
+            &mut tables,
+            &runtime_sources,
+            &mut literal_member_slots,
+        );
+        discover_children_accessors(ctx, &mut runtime_sources, &mut tables.accessors);
+        discover_effect_store_parameters(ctx, &mut tables);
+        resolve_setter_action_aliases(ctx, &mut tables);
+        resolve_store_view_aliases(ctx, &mut tables);
+        discover_prop_sources(ctx, &mut tables);
+        clock.finish(build_timings, ReactiveIrStage::TypedAccessorsAndPropRoots);
+        propagate_prop_sources(ctx, &mut tables);
+        let SourceTables {
+            accessors,
+            accessor_origins,
+            setters,
+            actions,
+            source_kinds,
+            source_primitives,
+            source_phases,
+            returned_source_symbols,
+            summary_source_symbols,
+            source_owned_write,
+            async_sources,
+            source_async_options,
+            value_form_stores,
+            typed_sources,
+            prop_sources,
+            uncertain_prop_sources,
+        } = tables;
+        let StageContext {
+            facts,
+            entities,
+            semantic_lookup,
+            runtime,
+            ..
+        } = *ctx;
+        // A runtime source stays only while no file writes it. Collect every
+        // written symbol once rather than asking each source of each file.
+        let mut written: HashSet<&SymbolId> = HashSet::default();
+        for file in &facts.files {
+            written.extend(crate::value_identity::written_symbols(file, entities));
+            for target in &file.ast.iteration_targets {
+                for identifier in file.ast.identifiers_within(*target) {
+                    written.extend(entities.at(file.path.as_str(), identifier.span));
+                }
             }
         }
-    }
-    runtime_sources.retain(|symbol| !written.contains(symbol));
-    let props_reactivity = classify_component_props(
-        runtime,
-        facts,
-        semantic_lookup,
-        entities,
-        &accessors,
-        &source_kinds,
-        &prop_sources,
-        &runtime_sources,
-    );
-    clock.finish(
-        build_timings,
-        ReactiveIrStage::PropPropagationAndControlFlow,
-    );
-    SourceDiscovery {
-        accessors,
-        accessor_origins,
-        setters,
-        actions,
-        source_kinds,
-        source_primitives,
-        source_phases,
-        returned_source_symbols,
-        summary_source_symbols,
-        source_owned_write,
-        async_sources,
-        source_async_options,
-        value_form_stores,
-        typed_sources,
-        prop_sources,
-        uncertain_prop_sources,
-        props_reactivity,
-        retained_source_paths,
-        changed_source_symbols,
-    }
+        runtime_sources.retain(|symbol| !written.contains(symbol));
+        let props_reactivity = classify_component_props(
+            runtime,
+            facts,
+            semantic_lookup,
+            entities,
+            &accessors,
+            &source_kinds,
+            &prop_sources,
+            &runtime_sources,
+        );
+        clock.finish(
+            build_timings,
+            ReactiveIrStage::PropPropagationAndControlFlow,
+        );
+        SourceDiscovery {
+            accessors,
+            accessor_origins,
+            setters,
+            actions,
+            source_kinds,
+            source_primitives,
+            source_phases,
+            returned_source_symbols,
+            summary_source_symbols,
+            source_owned_write,
+            async_sources,
+            source_async_options,
+            value_form_stores,
+            typed_sources,
+            prop_sources,
+            uncertain_prop_sources,
+            props_reactivity,
+            unchanged_paths,
+            shared_reads: crate::base::reads::Reads::default(),
+        }
+    });
+    // What every file's discovery and the project passes read: the tables
+    // they fill moved only if one of these reads did, or a file did.
+    discovery.shared_reads = shared_reads;
+    discovery.shared_reads.extend(&chunk_reads);
+    discovery
 }
 
 fn merge_file_source_contributions(
@@ -161,7 +171,7 @@ fn merge_file_source_contributions(
     typescript_unchanged: bool,
     build_timings: &mut BuildTimings,
     tables: &mut SourceTables,
-) -> (HashSet<String>, HashSet<SymbolId>) {
+) -> (HashSet<String>, crate::base::reads::Reads) {
     let StageContext {
         facts,
         project_indexes,
@@ -171,8 +181,8 @@ fn merge_file_source_contributions(
         semantic_lookup,
         ..
     } = *ctx;
-    let mut retained_source_paths = HashSet::<String>::default();
-    let mut changed_source_symbols = HashSet::<SymbolId>::default();
+    let mut unchanged_paths = HashSet::<String>::default();
+    let mut chunk_reads = crate::base::reads::Reads::default();
     match source_discovery_cache {
         None => {
             let contributions = parallel_file_results(&facts.files, |file| {
@@ -208,9 +218,9 @@ fn merge_file_source_contributions(
                     cache
                         .get(file.path.as_str())
                         .is_some_and(|cached| {
-                            // A returned-source proof's answer is bound by
-                            // `cross_file_proof_digest` (ADR 0222, 0392);
-                            // the caller's own symbols by the per-file delta.
+                            // What the file read of other files is its
+                            // proof ([`crate::base::reads`]); the caller's
+                            // own symbols are bound by the per-file delta.
                             let identity = source_discovery_identity_matches(
                                 &cached.identity,
                                 file.path.as_str(),
@@ -219,9 +229,10 @@ fn merge_file_source_contributions(
                                 typescript_indexes.source_discovery_delta.as_ref(),
                             );
                             identity_misses += u64::from(!identity);
-                            identity
-                                && cached.cross_file_proofs
-                                    == semantic_lookup.cross_file_proof_digest()
+                            if identity {
+                                unchanged_paths.insert(file.path.to_string());
+                            }
+                            identity && cached.proof.holds(semantic_lookup)
                         })
                         .then_some(file.path.as_str())
                 })
@@ -233,8 +244,7 @@ fn merge_file_source_contributions(
                 .filter(|file| !reusable_paths.contains(file.path.as_str()))
                 .collect::<Vec<_>>();
             let discovered = parallel_slice_results(&recomputed, |file| {
-                (
-                    source_discovery_identity(file, project_indexes),
+                let (contribution, reads) = crate::base::reads::record(|| {
                     discover_file_sources(
                         semantic_lookup,
                         file,
@@ -244,32 +254,33 @@ fn merge_file_source_contributions(
                             .expect("project index contains every source file"),
                         entities,
                         symbol_names,
-                    ),
+                    )
+                });
+                (
+                    source_discovery_identity(file, project_indexes),
+                    contribution,
+                    reads,
                 )
             });
             let mut discovered = discovered.into_iter();
             for file in &facts.files {
                 if reusable_paths.contains(file.path.as_str()) {
                     build_timings.source_discovery_reused_files += 1;
-                    retained_source_paths.insert(file.path.to_string());
+                    if let Some(cached) = cache.get(file.path.as_str()) {
+                        chunk_reads.extend(&cached.proof.reads);
+                    }
                     continue;
                 }
-                let (identity, contribution) = discovered
+                let (identity, contribution, reads) = discovered
                     .next()
                     .expect("recomputed source path has a fresh contribution");
                 build_timings.source_discovery_recomputed_files += 1;
-                if let Some(cached) = cache.get(file.path.as_str()) {
-                    extend_source_discovery_symbols(
-                        &mut changed_source_symbols,
-                        &cached.contribution,
-                    );
-                }
-                extend_source_discovery_symbols(&mut changed_source_symbols, &contribution);
+                chunk_reads.extend(&reads);
                 cache.insert(
                     file.path.clone(),
                     CachedSourceDiscovery {
                         identity,
-                        cross_file_proofs: semantic_lookup.cross_file_proof_digest(),
+                        proof: crate::base::reads::ReadProof::new(reads, semantic_lookup),
                         contribution,
                     },
                 );
@@ -289,7 +300,7 @@ fn merge_file_source_contributions(
             }
         }
     }
-    (retained_source_paths, changed_source_symbols)
+    (unchanged_paths, chunk_reads)
 }
 
 fn discover_withdrawn_tuple_candidates(

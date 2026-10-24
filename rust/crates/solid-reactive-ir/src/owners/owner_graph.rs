@@ -480,9 +480,10 @@ pub(crate) struct OwnerRequirementStatus {
 
 pub(crate) struct CachedOwnerFile {
     pub(crate) source_hash: SourceHash,
-    /// See [`SemanticLookup::cross_file_proof_digest`]. Owner seeds and edges
-    /// can depend on component or callback uses in another file.
-    pub(crate) cross_file_proofs: Option<CrossFileProofDigest>,
+    /// What the fragment read of the rest of the program (owner seeds and
+    /// edges can depend on component or callback uses in another file):
+    /// [`crate::base::reads`].
+    pub(crate) proof: crate::base::reads::ReadProof,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
     pub(crate) nodes: Vec<OwnerNode>,
     pub(crate) edges: Vec<SymbolicOwnerEdge>,

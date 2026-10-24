@@ -50,6 +50,7 @@ const STUB: &str = r#"declare module "solid-js" {
   export function createSignal<T>(value: T): [() => T, (value: T) => void];
   export function createMemo<T>(compute: () => T): () => T;
   export function createReaction(onInvalidate: () => void): (tracking: () => void) => void;
+  export function createEffect<T>(compute: () => T, apply: (value: T) => void): void;
 }
 
 declare namespace JSX {
@@ -373,11 +374,11 @@ fn a_receiver_that_stops_being_a_literal_in_another_file_does_not_keep_the_old_w
 /// ADR 0392: `B` calls the tracker `R` exports. Whether that call invokes
 /// a function `createReaction` returned is decided in `R`, and `B` is
 /// byte-identical across the edit. The binding-chain walk is a memo per file
-/// whose reads include `R`'s binding and call, and the cross-file digest binds
-/// its answers: editing `R` reruns exactly the answers that read it (`R`'s own
-/// and `B`'s; `U`'s is reused), and the moved answer moves the digest, so
-/// every fragment reruns. An edit of `U` moves no answer: the digest stays,
-/// and every fragment but `U`'s is reused.
+/// whose reads include `R`'s binding and call: editing `R` reruns exactly the
+/// answers that read it (`R`'s own and `B`'s; `U`'s is reused). A stage chunk
+/// records the answers it read (ADR 0397), so the moved answer reruns
+/// `R`'s and `B`'s chunks and keeps `U`'s; an edit of `U` moves no answer, and
+/// every chunk but `U`'s is reused.
 const TRACKER_R: &str = "import { createReaction } from \"solid-js\";\nexport const other = createReaction(() => {});\nexport const track = createReaction(() => {});\n";
 // `R` still names `createReaction`, so the project keeps modelling returned
 // callbacks and every file's answer is asked in every build.
@@ -426,24 +427,65 @@ fn a_returned_invocation_answer_moved_by_another_file_reruns_exactly_its_readers
     let timings = retained(&plain, "plain tracker");
     // Reused, recomputed, recomputed to a new answer: `U`; `R` and `B`; `B`.
     assert_eq!(timings.returned_invocation_files, [1, 2, 1], "{timings:?}");
-    assert_eq!(timings.source_discovery_reused_files, 0, "{timings:?}");
+    // The answer moved, and only its readers rerun (ADR 0397): `U`
+    // read nothing of it, and each per-file stage keeps its chunk.
+    assert_retains_only(&timings, 1);
     let back = project.rewrite("R.ts", TRACKER_R);
     let timings = retained(&back, "tracker again");
     assert_eq!(timings.returned_invocation_files, [1, 2, 1], "{timings:?}");
     let unrelated = project.rewrite("U.ts", &UNRELATED_U.replace("\"x\"", "\"y\""));
     let timings = retained(&unrelated, "unrelated edit");
     assert_eq!(timings.returned_invocation_files, [2, 1, 0], "{timings:?}");
-    assert_eq!(timings.source_discovery_reused_files, 2, "{timings:?}");
+    assert_retains_only(&timings, 2);
 }
 
-/// 2.5, third path (docs/open-work.md): the interprocedural graph cache embeds
-/// the accessor labels of argument symbols, not their accessor state. `A`
-/// hands `count` to a helper, byte-identical across the edits, while `B`
-/// flips `count` between a signal getter and a plain function. Since ADR
-/// 0392 an edit in another file no longer discards every fragment (`H`'s
-/// are reused here); `A`'s still reruns, through the Type Facts delta (the
-/// semantics of `count` moved). This pins that `A`'s retained graph equals a
-/// fresh one the day that delta narrows.
+/// Each per-file stage reused `reused` of three chunks.
+fn assert_retains_only(timings: &solid_reactive_ir::BuildTimings, reused: u64) {
+    for (stage, files) in [
+        (
+            "source discovery",
+            [
+                timings.source_discovery_reused_files,
+                timings.source_discovery_recomputed_files,
+            ],
+        ),
+        (
+            "reachability",
+            [
+                timings.reachability_reused_files,
+                timings.reachability_recomputed_files,
+            ],
+        ),
+        (
+            "local access",
+            [
+                timings.local_access_reused_files,
+                timings.local_access_recomputed_files,
+            ],
+        ),
+        (
+            "graph",
+            [
+                timings.interprocedural_graph_reused_files,
+                timings.interprocedural_graph_recomputed_files,
+            ],
+        ),
+        (
+            "owners",
+            [timings.owner_reused_files, timings.owner_recomputed_files],
+        ),
+    ] {
+        assert_eq!(files, [reused, 3 - reused], "{stage}: {timings:?}");
+    }
+}
+
+/// 2.5, third path: the interprocedural graph cache embeds the accessor
+/// labels of argument symbols. `A` hands `count` to a helper, byte-identical
+/// across the edits, while `B` flips `count` between a signal getter and a
+/// plain function. A graph chunk records the accessor entry of each argument
+/// it embeds (ADR 0397), so `A`'s reruns on that entry alone, whatever
+/// the Type Facts delta says; this pins that its retained graph equals a
+/// fresh one.
 const SIGNAL_B: &str =
     "import { createSignal } from \"solid-js\";\nexport const [count] = createSignal(0);\n";
 const PLAIN_B: &str = "export const count = (): number => 0;\n";
@@ -476,4 +518,135 @@ fn an_argument_that_stops_being_an_accessor_in_another_file_is_not_kept_in_the_g
     );
     let signal = project.rewrite("B.ts", SIGNAL_B);
     assert_retained_is_fresh(&mut builder, &signal, &options, "signal again");
+}
+
+/// ADR 0397: the component census moves when `U` stops rendering `Panel`
+/// (it only mentions it), with `C` unchanged: the effect in `Panel` loses
+/// its proven owner. Before, every per-file cache was keyed on one digest of
+/// every cross-file answer, so every fragment of every file reran. Each
+/// chunk now reruns only if an answer it read moved:
+/// `P` reads no component identity and keeps every chunk, while `C`, whose
+/// function's identity moved, reruns. Both directions equal a fresh build.
+const PANEL_C: &str = "import { createEffect } from \"solid-js\";\nexport const Panel = () => {\n  const view = <div />;\n  createEffect(() => 1, () => {});\n  return view;\n};\n";
+const RENDERS_U: &str = "import { Panel } from \"./C\";\nvoid <Panel />;\n";
+const CALLS_U: &str = "import { Panel } from \"./C\";\nvoid Panel;\n";
+const PLAIN_P: &str = "export const note = \"x\";\n";
+
+#[test]
+fn a_component_identity_moved_by_another_file_reruns_exactly_its_readers() {
+    let Some(mut project) = Project::scratch_per_file(
+        "component-identity",
+        &[("C.tsx", PANEL_C), ("U.tsx", RENDERS_U), ("P.ts", PLAIN_P)],
+    ) else {
+        return;
+    };
+    let options = RuleOptions::default();
+    let vocabulary = solid_v2().vocabulary;
+    let fresh = |facts: &ProjectFacts| {
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap()
+            .0
+    };
+    let mut builder = IncrementalBuilder::default();
+    let mut retained = |facts: &ProjectFacts, label: &str| {
+        builder.set_shadow_mode(ShadowMode::Off);
+        let (program, timings) = builder
+            .build_with_analysis_inputs_shared(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap();
+        if let Some(difference) = first_difference(&program, &fresh(facts)) {
+            panic!("{label}: {difference}");
+        }
+        timings
+    };
+    let first = project.analyze();
+    retained(&first, "rendered");
+    let called = project.rewrite("U.tsx", CALLS_U);
+    assert!(
+        first_difference(&fresh(&first), &fresh(&called)).is_some(),
+        "whether `U` renders `Panel` must change the program"
+    );
+    for (label, facts) in [
+        ("called", called),
+        ("rendered again", project.rewrite("U.tsx", RENDERS_U)),
+    ] {
+        let timings = retained(&facts, label);
+        // `U` (edited) reruns everywhere and `P` nowhere. `C` reruns where
+        // its chunk read `Panel`'s identity (reachability roots, local
+        // accesses, owner seeds) and keeps the rest (discovery, graph).
+        assert_eq!(
+            [
+                [
+                    timings.source_discovery_reused_files,
+                    timings.source_discovery_recomputed_files,
+                ],
+                [
+                    timings.reachability_reused_files,
+                    timings.reachability_recomputed_files,
+                ],
+                [
+                    timings.local_access_reused_files,
+                    timings.local_access_recomputed_files,
+                ],
+                [
+                    timings.interprocedural_graph_reused_files,
+                    timings.interprocedural_graph_recomputed_files,
+                ],
+                [timings.owner_reused_files, timings.owner_recomputed_files],
+            ],
+            [[2, 1], [1, 2], [1, 2], [2, 1], [1, 2]],
+            "{label}: {timings:?}"
+        );
+    }
+}
+
+/// ADR 0397: the program-wide member-replacement census (ADR 0209, 0320)
+/// moves when `G` starts assigning `ns.run`, with `F` unchanged. It was one
+/// section of the member-resolution digest every local-access and graph
+/// chunk was keyed on; now a chunk reruns only if it read the census.
+const MEMBER_G: &str = "export const ns = { run(callback: () => void) { callback(); } };\n";
+const ASSIGNED_G: &str = "export const ns = { run(callback: () => void) { callback(); } };\nns.run = (callback: () => void) => callback();\n";
+const MEMBER_F: &str = "import { count } from \"./S\";\nimport { ns } from \"./G\";\nexport function App() {\n  ns.run(() => count());\n  return <div />;\n}\n";
+
+#[test]
+fn a_member_assignment_in_another_file_reruns_exactly_the_member_readers() {
+    let Some(mut project) = Project::scratch_per_file(
+        "member-assignment",
+        &[
+            ("S.ts", SIGNAL_S),
+            ("G.ts", MEMBER_G),
+            ("F.tsx", MEMBER_F),
+            ("P.ts", PLAIN_P),
+        ],
+    ) else {
+        return;
+    };
+    let mut builder = IncrementalBuilder::default();
+    let options = RuleOptions::default();
+    let first = project.analyze();
+    assert_retained_is_fresh(&mut builder, &first, &options, "member");
+    let assigned = project.rewrite("G.ts", ASSIGNED_G);
+    assert_retained_is_fresh(&mut builder, &assigned, &options, "assigned");
+    let back = project.rewrite("G.ts", MEMBER_G);
+    assert_retained_is_fresh(&mut builder, &back, &options, "member again");
+    // Every stage reused `P`'s chunk across both edits: the census is not
+    // one of its reads.
+    builder.set_shadow_mode(ShadowMode::Off);
+    let again = project.rewrite("G.ts", ASSIGNED_G);
+    let (_, timings) = builder
+        .build_with_analysis_inputs_shared(
+            &again,
+            solid_v2().vocabulary,
+            AnalysisInputs::empty(),
+            &options,
+        )
+        .unwrap();
+    for (stage, reused) in [
+        ("source discovery", timings.source_discovery_reused_files),
+        ("reachability", timings.reachability_reused_files),
+        ("local access", timings.local_access_reused_files),
+        ("graph", timings.interprocedural_graph_reused_files),
+        ("owners", timings.owner_reused_files),
+    ] {
+        assert!(reused >= 1, "{stage} must keep `P`: {timings:?}");
+    }
 }

@@ -328,9 +328,10 @@ pub(super) fn invocation_flow_role(
     if !literal.body.contains(span) || (literal.r#async && may_follow_suspension(file, span)) {
         return None;
     }
-    // Every top-level answer is a memo, computed context-free; the set of
-    // answers is what the cross-file proof digest binds: a cached fragment
-    // that consumed one is reused only while every answer is unchanged. A
+    // Every top-level answer is a memo, computed context-free; a cached
+    // chunk that consumed one records the answers' section
+    // ([`crate::base::reads::Section::FlowAnswers`]) and is reused only
+    // while every answer is unchanged. A
     // query nested in an answer's computation stays inside it, in its
     // context.
     if COMPUTING_FLOW_ANSWERS.with(std::cell::Cell::get) {

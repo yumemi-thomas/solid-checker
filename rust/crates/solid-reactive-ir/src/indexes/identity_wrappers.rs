@@ -36,21 +36,6 @@ impl SemanticLookup<'_> {
         self.memo_world()
             .answer::<IdentityWrapper>(&symbol.shared())
     }
-
-    /// Every identity wrapper of the project, sorted by declaration symbol.
-    /// The owner cache digests it, so a wrapper that changes in another file
-    /// invalidates the callers that resolved through it.
-    pub(super) fn identity_wrappers(&self) -> Vec<(Arc<str>, usize)> {
-        let world = self.memo_world();
-        self.memo_store()
-            .wrapper_candidate_keys()
-            .into_iter()
-            .filter_map(|symbol| {
-                let index = world.answer::<IdentityWrapper>(&symbol)?;
-                Some((symbol, index))
-            })
-            .collect()
-    }
 }
 
 /// The identity-wrapper answer for one declaration symbol: the parameter its
