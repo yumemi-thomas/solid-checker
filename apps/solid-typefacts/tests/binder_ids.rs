@@ -1,7 +1,9 @@
-//! Binder-level symbol ids are a pure function of the program (ADR 0366,
-//! STABLE-IDS V1, V2, V5, V8): demand order, file order, checker history and
-//! the process's symbol counters do not change them, and a derived symbol
-//! never receives one. So are multi-origin properties' `Set` ids (ADR 0371).
+//! Symbol ids are a pure function of the program (ADR 0366, STABLE-IDS V1,
+//! V2, V5, V8; ADR 03XX-p6): demand order, file order, checker history and the
+//! process's symbol counters do not change them. A binder-level symbol takes
+//! its binder key, a multi-origin property its `Set` key (ADR 0371), and a
+//! derived symbol never takes either: it takes its exact derived key, or no
+//! id.
 //! Its own process: the private-name test depends on the process's symbol
 //! counters.
 
@@ -155,8 +157,9 @@ const ALL: [&str; 7] = [
     "uses.ts",
 ];
 
-/// (label, file, source, needle, offset into the needle, hashed?): a
-/// binder-level symbol or a keyed multi-origin property.
+/// (label, file, source, needle, offset into the needle, binder?): a
+/// binder-level symbol or a keyed multi-origin property, else a derived
+/// symbol.
 type Probe = (
     &'static str,
     &'static str,
@@ -222,6 +225,9 @@ fn is_hash(id: &str) -> bool {
     id.starts_with("symbol:h:")
 }
 
+/// Label to whether its id was minted from an exact derived key.
+type Derived = BTreeMap<String, bool>;
+
 /// Label to id, asking in `order` (indexes into the probes), optionally after
 /// forcing every probe's type first (a different checker history).
 fn ids(
@@ -230,6 +236,17 @@ fn ids(
     order: &[usize],
     warm: bool,
 ) -> BTreeMap<String, String> {
+    ids_with_kinds(project, fixture, order, warm).0
+}
+
+/// [`ids`], and which ids are derived keys. A symbol with no exact key has
+/// the empty id.
+fn ids_with_kinds(
+    project: &mut Project,
+    fixture: &Fixture,
+    order: &[usize],
+    warm: bool,
+) -> (BTreeMap<String, String>, Derived) {
     let ctx = Context::new();
     let probes = probes();
     if warm {
@@ -240,12 +257,21 @@ fn ids(
     let mut out = BTreeMap::new();
     for index in order {
         let probe = &probes[*index];
-        let id = project
-            .symbol_at(&ctx, &location(fixture, probe))
-            .unwrap_or_else(|error| panic!("{}: {error:?}", probe.0));
-        out.insert(probe.0.to_owned(), id.to_string());
+        let id = match project.symbol_at(&ctx, &location(fixture, probe)) {
+            Ok(id) => id.to_string(),
+            Err(error) if error.0.contains("has no exact id") => String::new(),
+            Err(error) => panic!("{}: {error:?}", probe.0),
+        };
+        out.insert(probe.0.to_owned(), id);
     }
-    out
+    let derived = out
+        .iter()
+        .map(|(label, id)| {
+            let derived = project.identities().is_derived_id(&id.as_str().into());
+            (label.clone(), derived)
+        })
+        .collect();
+    (out, derived)
 }
 
 fn shuffled(count: usize, mut seed: u64) -> Vec<usize> {
@@ -259,29 +285,32 @@ fn shuffled(count: usize, mut seed: u64) -> Vec<usize> {
     order
 }
 
-/// Only the binder-level probes (a derived probe's counter depends on demand
-/// order by design).
-fn binder(map: &BTreeMap<String, String>) -> BTreeMap<String, String> {
-    let kinds: BTreeMap<_, _> = probes().into_iter().map(|p| (p.0, p.5)).collect();
-    map.iter()
-        .filter(|(label, _)| kinds[label.as_str()])
-        .map(|(l, i)| (l.clone(), i.clone()))
-        .collect()
+fn baseline() -> BTreeMap<String, String> {
+    baseline_with_kinds().0
 }
 
-fn baseline() -> BTreeMap<String, String> {
+fn baseline_with_kinds() -> (BTreeMap<String, String>, Derived) {
     let fixture = Fixture::new(&ALL, &[]);
     let order: Vec<usize> = (0..probes().len()).collect();
-    ids(&mut fixture.open(), &fixture, &order, false)
+    ids_with_kinds(&mut fixture.open(), &fixture, &order, false)
 }
 
 #[test]
-fn binder_ids_are_hashes_and_derived_symbols_are_not() {
+fn binder_ids_are_binder_keys_and_derived_symbols_take_derived_keys() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    let base = baseline();
+    let (base, derived) = baseline_with_kinds();
     for probe in probes() {
         let id = &base[probe.0];
-        assert_eq!(is_hash(id), probe.5, "{}: {id}", probe.0);
+        if probe.5 {
+            assert!(is_hash(id) && !derived[probe.0], "{}: {id}", probe.0);
+        } else {
+            // No counter: an exact derived key, or no id at all.
+            assert!(
+                id.is_empty() || (is_hash(id) && derived[probe.0]),
+                "{}: {id}",
+                probe.0
+            );
+        }
     }
     // Every hashed id is a distinct symbol, except the declarations of one
     // merged symbol: Box in lib.ts and aug.ts, Merged in sa.ts and sb.ts,
@@ -292,9 +321,9 @@ fn binder_ids_are_hashes_and_derived_symbols_are_not() {
     assert_ne!(base["#count decl"], base["#id decl"]);
     // A derived property never takes its declaration's id, whichever is asked
     // first.
-    for derived in ["b.value", "q.value"] {
-        assert_ne!(base[derived], base["value decl"], "{derived}");
-        assert!(!is_hash(&base[derived]), "{derived}");
+    for label in ["b.value", "q.value"] {
+        assert_ne!(base[label], base["value decl"], "{label}");
+        assert!(derived[label], "{label}");
     }
     assert_ne!(base["b.value"], base["q.value"]);
     // Library globals are named by their name (one id for the merged symbol).
@@ -336,7 +365,7 @@ fn multi_origin_properties_are_keyed_by_their_origin_set() {
 #[test]
 fn ids_do_not_depend_on_demand_order() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    let base = binder(&baseline());
+    let base = baseline();
     let count = probes().len();
     let reversed: Vec<usize> = (0..count).rev().collect();
     let mut orders = vec![reversed];
@@ -344,14 +373,14 @@ fn ids_do_not_depend_on_demand_order() {
     for (n, order) in orders.iter().enumerate() {
         let fixture = Fixture::new(&ALL, &[]);
         let got = ids(&mut fixture.open(), &fixture, order, false);
-        assert_eq!(binder(&got), base, "demand order {n}: {order:?}");
+        assert_eq!(got, base, "demand order {n}: {order:?}");
     }
 }
 
 #[test]
 fn ids_do_not_depend_on_file_order() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    let base = binder(&baseline());
+    let base = baseline();
     let order: Vec<usize> = (0..probes().len()).collect();
     let mut file_orders: Vec<Vec<&str>> = vec![ALL.iter().rev().copied().collect()];
     for seed in 1..=4u64 {
@@ -365,14 +394,14 @@ fn ids_do_not_depend_on_file_order() {
     for files in &file_orders {
         let fixture = Fixture::new(files, &[]);
         let got = ids(&mut fixture.open(), &fixture, &order, false);
-        assert_eq!(binder(&got), base, "file order {files:?}");
+        assert_eq!(got, base, "file order {files:?}");
     }
 }
 
 #[test]
 fn ids_do_not_depend_on_checker_history() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    let base = binder(&baseline());
+    let base = baseline();
     let count = probes().len();
     let order: Vec<usize> = (0..count).collect();
     let reversed: Vec<usize> = (0..count).rev().collect();
@@ -381,7 +410,7 @@ fn ids_do_not_depend_on_checker_history() {
     for (warm, ask) in [(false, &order), (true, &order), (true, &reversed)] {
         let fixture = Fixture::new(&ALL, &[]);
         let got = ids(&mut fixture.open(), &fixture, ask, warm);
-        assert_eq!(binder(&got), base, "warm {warm}");
+        assert_eq!(got, base, "warm {warm}");
     }
 }
 
@@ -393,12 +422,12 @@ fn private_name_ids_survive_the_checker_counters() {
     // project and in earlier projects of the process, shift it.
     let filler =
         "export class F1 { #a = 1 }\nexport class F2 { #a = 2 }\nexport class F3 { #a = 3 }\n";
-    let base = binder(&baseline());
+    let base = baseline();
     let mut with_filler_first: Vec<&str> = vec!["aaa.ts"];
     with_filler_first.extend(ALL);
     let fixture = Fixture::new(&with_filler_first, &[("aaa.ts", filler)]);
     let order: Vec<usize> = (0..probes().len()).collect();
-    let got = binder(&ids(&mut fixture.open(), &fixture, &order, false));
+    let got = ids(&mut fixture.open(), &fixture, &order, false);
     for label in ["#count decl", "#id decl", "#count use"] {
         assert_eq!(got[label], base[label], "{label}");
     }

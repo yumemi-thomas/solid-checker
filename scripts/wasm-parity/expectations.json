@@ -406,18 +406,6 @@
         "equalWithoutTimings": true
       },
       {
-        "operation": "symbols",
-        "status": 0,
-        "equal": true,
-        "equalWithoutTimings": true
-      },
-      {
-        "operation": "symbols",
-        "status": 0,
-        "equal": true,
-        "equalWithoutTimings": true
-      },
-      {
         "operation": "sources",
         "status": 0,
         "equal": true,

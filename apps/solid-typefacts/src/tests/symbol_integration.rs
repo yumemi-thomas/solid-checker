@@ -478,13 +478,12 @@ fn table_transition_mode(transition: &[u8]) -> u64 {
     uvarint(&transition[width..]).0
 }
 
-/// A mapped-type property access resolves to a synthesized symbol, so the
-/// producer mints a generation-scoped identity for it and the file can never
-/// be retained. That is unavoidable. What was avoidable is the consequence: a
-/// delta can describe re-minted identities perfectly well; it just has to be
-/// told which paths moved.
+/// A mapped-type property access resolves to a synthesized symbol. Its id is
+/// its exact derived key (`derived_key.rs`), the same in every pass and
+/// table, so the file holds no generation-scoped id, and every edit is a
+/// delta naming the paths that moved.
 #[test]
-fn non_durable_files_still_get_a_delta() {
+fn mapped_property_files_hold_no_counter_and_get_a_delta() {
     let root = testdata("non-durable");
     let config = root.join("tsconfig.json").to_string_lossy().into_owned();
     let mut session = Session::new(Box::new(open(&config)), &config, true).unwrap();
@@ -505,10 +504,7 @@ fn non_durable_files_still_get_a_delta() {
         .timings
         .as_ref()
         .map_or(0, |timings| timings.non_durable_files);
-    assert!(
-        non_durable > 0,
-        "the fixture is durable, so this test proves nothing"
-    );
+    assert_eq!(non_durable, 0, "a counter id reached the table");
     let mut token = first.state_token;
 
     let island = crate::gocompat::clean(&root.join("island.ts").to_string_lossy());
@@ -541,21 +537,23 @@ fn non_durable_files_still_get_a_delta() {
             .timings
             .as_ref()
             .map_or(0, |timings| timings.non_durable_files);
-        assert!(non_durable > 0, "edit {edit} stopped being non-durable");
+        assert_eq!(
+            non_durable, 0,
+            "edit {edit}: a counter id reached the table"
+        );
         assert!(
             !analyzed.table_transition.is_empty()
                 && table_transition_mode(&analyzed.table_transition) == 1,
-            "edit {edit} did not carry a delta because {non_durable} file(s) are non-durable; \
-             one synthesized symbol must not cost a project-wide pack per keystroke"
+            "edit {edit} did not carry a delta; one synthesized symbol must not cost a \
+             project-wide pack per keystroke"
         );
     }
 }
 
-/// The correctness half: retained contributions must reproduce a fresh
-/// whole-batch table even when identities inside them were re-minted this
-/// generation.
+/// The correctness half: reused passes must reproduce a fresh whole-batch
+/// table when the identities inside them are derived keys.
 #[test]
-fn non_durable_retention_matches_fresh_materialization() {
+fn derived_id_retention_matches_fresh_materialization() {
     let ctx = Context::new();
     let root = testdata("non-durable");
     let config = root.join("tsconfig.json").to_string_lossy().into_owned();
@@ -573,9 +571,10 @@ fn non_durable_retention_matches_fresh_materialization() {
     incremental
         .demand_table_for_groups(&ctx, 1, &groups(&demands), &paths(&demands))
         .unwrap();
-    assert!(
-        incremental.stats().retention.non_durable_files > 0,
-        "the fixture is durable, so this test proves nothing"
+    assert_eq!(
+        incremental.stats().retention.non_durable_files,
+        0,
+        "a counter id reached the table"
     );
     incremental
         .update(&ctx, std::slice::from_ref(&edit))
@@ -589,7 +588,7 @@ fn non_durable_retention_matches_fresh_materialization() {
         .demand_table_for_groups(&ctx, 2, &groups(&demands), &[])
         .unwrap();
     assert_full_transitions_identical(
-        "retained table with non-durable files",
+        "retained table with derived ids",
         0,
         &config,
         &table,

@@ -33,9 +33,15 @@ fn the_checker_is_lazy_disposable_and_recreated_on_demand() {
     let m = scratch.path("m.ts");
     let mut project = scratch.open();
     let generation = project.current().unwrap();
-    // Go's `OpenProject` creates the checker to seed the exported identities.
-    assert!(generation.has_checker(), "opening seeds export identities");
+    // Opening seeds the exported identities in a file checker of its own
+    // (Go's `OpenProject` used the program's checker): the program's single
+    // checker is never made by the producer itself.
+    assert!(
+        !generation.has_checker(),
+        "opening made the program checker"
+    );
     assert_eq!(export_names(generation, &m), ["one", "two"]);
+    // Outside a file checker, a program-level question creates it lazily.
     assert!(generation.has_checker());
     // `with_checker` did not leave a lease behind.
     project.release_analysis_state_for_test();

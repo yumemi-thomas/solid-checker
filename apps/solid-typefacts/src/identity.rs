@@ -9,9 +9,10 @@
 //! origins all have binder keys and fix its type, ADR 0371): the hash of its
 //! `Set` key. Any
 //! other symbol the checker derived (an instantiation, a transient clone, a
-//! mapped property) or whose binder-ness cannot be proven gets a
-//! generation-scoped counter id (`symbol:<generation>:<n>`) that means nothing
-//! outside the generation that issued it.
+//! mapped property) or whose binder-ness cannot be proven gets its exact
+//! derived key's hash (`derived_key.rs`), and a symbol with no exact key gets
+//! no id (the empty id: an absent fact). No id is a counter, so an id names
+//! one symbol in every checker of the program (ADR 03XX-p6).
 //!
 //! # Ownership
 //!
@@ -70,12 +71,9 @@ pub type WriteIndex = HashMap<usize, Vec<WriteSite>>;
 pub struct Identities {
     /// The accepted program generation's number (Go: `project.generation`).
     pub generation: u64,
-    next_symbol: u64,
-    /// Symbol address to its id: a memo of a pure function for a binder-level
-    /// symbol, the only record of a counter id.
+    /// Symbol address to its id: a memo of a pure function of the symbol.
     ids_by_symbol: HashMap<usize, SymbolId>,
-    /// Id to the symbol it names, so a counter (and a binder id) answers
-    /// without re-resolving. Not a claim table: several symbols may map to one
+    /// Id to the symbol it names, so an id answers without re-resolving. Not a claim table: several symbols may map to one
     /// binder id (a pre-merge symbol and its merged symbol), and the entry is
     /// always the binder-level root. Several multi-origin properties may share
     /// a `Set` id (one per containing type); the entry is the first minted,
@@ -97,7 +95,7 @@ pub struct Identities {
     /// one, so it is kept for as long as the program chain trusts the file
     /// system: across releases and parse-reusing updates, which reuse every
     /// other file and its module resolutions as read, and dropped by any
-    /// rebuild, which reads the file system again (`Realpath`, ADR 0369).
+    /// rebuild, which reads the file system again (`Realpath`).
     runtime_paths: HashMap<String, String>,
     /// Write sites per declaring file (by file address), built on first use by
     /// `runtime_facts`. Holds node and symbol addresses: generation-scoped like
@@ -114,10 +112,6 @@ pub struct Identities {
     pub(crate) derived_signatures: HashMap<SymbolId, Vec<usize>>,
     pub(crate) derived_first: HashMap<SymbolId, P<Symbol>>,
     pub(crate) last_failure: Option<String>,
-    /// Derived symbols take exact keys (`derived_key.rs`), and a symbol with
-    /// no key carries no id at all instead of a counter (instant-edits P2).
-    /// Chosen at open; never changes for a project.
-    derived_keys: bool,
     /// Per-file passes (instant-edits P3): the keys the last table's passes
     /// minted, merged (with how many passes minted each), consulted after
     /// `keys` by every lookup, so a scratch question resolves a pass's id and
@@ -135,7 +129,6 @@ pub(crate) struct PassSeed {
     generation: u64,
     exported_by_ref: Arc<HashMap<DurableRef, Preserved>>,
     runtime_paths: HashMap<String, String>,
-    derived_keys: bool,
 }
 
 /// What an identity question needs: the checker and program of the generation
@@ -144,7 +137,7 @@ pub struct Env<'a> {
     pub checker: &'a mut CheckerLease,
     pub program: &'static Program,
     pub ids: &'a mut Identities,
-    /// Digests of the program inputs retained answers depend on (ADR 0369).
+    /// Digests of the program inputs (`inputs`).
     pub inputs: &'a mut crate::inputs::ProgramInputs,
 }
 
@@ -159,24 +152,6 @@ impl Identities {
             generation,
             ..Self::default()
         }
-    }
-
-    /// Selects exact derived-symbol keys (`derived_key::ENV_FLAG`).
-    #[must_use]
-    pub fn with_derived_keys(mut self, derived_keys: bool) -> Self {
-        self.derived_keys = derived_keys;
-        self
-    }
-
-    #[cfg(test)]
-    pub(crate) fn select_derived_keys_for_test(&mut self) {
-        self.derived_keys = true;
-    }
-
-    /// Whether derived symbols take exact keys and an unkeyed symbol no id.
-    #[must_use]
-    pub fn derived_keys(&self) -> bool {
-        self.derived_keys
     }
 
     /// The declaration references of the binder ids held (tests).
@@ -195,35 +170,18 @@ impl Identities {
         &self.exported_by_ref
     }
 
-    /// The key a binder id was minted from in this generation. `None` for a
-    /// counter and for a multi-origin property's `Set` id: no binder-level
-    /// answer may hold one across an update (ADR 0369, 0371).
+    /// Whether `id` was minted from an exact derived key (`derived_key.rs`)
+    /// in this generation: a derived symbol, not a binder-level one.
     #[must_use]
-    pub(crate) fn key_of_id(&self, id: &SymbolId) -> Option<&Arc<Key>> {
-        self.key(id).filter(|key| key.is_binder())
+    pub fn is_derived_id(&self, id: &SymbolId) -> bool {
+        self.key(id)
+            .is_some_and(|key| matches!(**key, Key::Derived { .. }))
     }
 
     /// Whether `id` is a multi-origin property's `Set` id (ADR 0371).
     #[must_use]
     pub(crate) fn is_set_id(&self, id: &SymbolId) -> bool {
         self.key(id).is_some_and(|key| !key.is_binder())
-    }
-
-    /// Makes a retained binder id answerable in this generation without
-    /// minting it: `symbol_for` re-resolves it lazily through its key, as it
-    /// does for an id minted before a release. `false` when the id already
-    /// names another key (a collision): the caller must not reuse it.
-    pub(crate) fn register_key(&mut self, id: &SymbolId, key: &Arc<Key>) -> bool {
-        if !key.is_binder() {
-            return false;
-        }
-        match self.key(id) {
-            Some(held) => held == key,
-            None => {
-                self.keys.insert(Arc::clone(id), Arc::clone(key));
-                true
-            }
-        }
     }
 
     /// Go: `ReleaseAnalysisState`'s identity half, and the rebase policy's:
@@ -238,7 +196,6 @@ impl Identities {
         self.derived_signatures.clear();
         self.derived_first.clear();
         self.tuple_index = crate::derived_key::TupleIndex::default();
-        self.next_symbol = 0;
     }
 
     /// A file checker's pass ended (per-file checkers, `unsafe_boundary`
@@ -248,10 +205,8 @@ impl Identities {
     /// and binder symbols only as a memo of what `keys` re-resolves;
     /// `write_indexes` holds canonical (possibly merged) symbol addresses. An
     /// address in a freed region is reused by the next pass, so an entry left
-    /// behind could name another symbol. The counter keeps running, so a
-    /// counter id is never issued twice in a generation: a counter id of an
-    /// earlier pass stops resolving (fails closed), it never names a later
-    /// pass's symbol. `files_by_name` holds program files and stays. The
+    /// behind could name another symbol. `files_by_name` holds program files
+    /// and stays. The
     /// derived-key memos (type keys, first symbols, pointer signatures, tuple
     /// index) are address-keyed into the region too; a derived id's `keys`
     /// entry is address-free and stays, so the next pass mints the same id.
@@ -266,8 +221,8 @@ impl Identities {
     }
 
     /// What a pass's own identity state starts from (per-file passes,
-    /// instant-edits P3): the project's pointer-free inputs (the derived-key
-    /// mode, the exported identities, the resolved runtime paths) and no key.
+    /// instant-edits P3): the project's pointer-free inputs (the exported
+    /// identities, the resolved runtime paths) and no key.
     /// `Send`, so a worker thread builds its state from it
     /// ([`Identities::from_seed`]).
     #[must_use]
@@ -276,7 +231,6 @@ impl Identities {
             generation: self.generation,
             exported_by_ref: Arc::clone(&self.exported_by_ref),
             runtime_paths: self.runtime_paths.clone(),
-            derived_keys: self.derived_keys,
         }
     }
 
@@ -290,7 +244,6 @@ impl Identities {
             generation: seed.generation,
             exported_by_ref: seed.exported_by_ref,
             runtime_paths: seed.runtime_paths,
-            derived_keys: seed.derived_keys,
             ..Identities::default()
         }
     }
@@ -362,10 +315,9 @@ impl Identities {
     /// derived from the preceding generation survives: the claims and the
     /// durable references restart empty, and the exported identities are
     /// collected again from the candidate program, so an id minted before the
-    /// update fails closed until the new generation mints it, or a retained
-    /// binder-level answer holding it proves its dependencies and registers its
-    /// key (ADR 0369). (The exports the update already derived, `current`, only
-    /// feed its cutoff decisions.)
+    /// update fails closed until a pass of the new generation mints it (a kept
+    /// pass's keys rejoin through the table's merged keys). (The exports the
+    /// update already derived, `current`, only feed its cutoff decisions.)
     pub fn after_update(
         &mut self,
         generation: u64,
@@ -383,7 +335,6 @@ impl Identities {
         self.derived_signatures.clear();
         self.derived_first.clear();
         self.tuple_index = crate::derived_key::TupleIndex::default();
-        self.next_symbol = 0;
         self.keys.clear();
         self.table_keys = None;
         self.seed_exported(program, checker);
@@ -439,7 +390,7 @@ pub fn collect_exported_identities(
 
 impl Env<'_> {
     /// The key of a binder-level `symbol` and the root it names, or `None` for
-    /// a derived or unproven symbol (which takes a counter).
+    /// a derived or unproven symbol (keyed by `derived_id`).
     fn key_of(&self, symbol: P<Symbol>) -> Option<(Key, P<Symbol>)> {
         let exported = &self.ids.exported_by_ref;
         binder_key(self.checker, symbol, |reference| {
@@ -456,8 +407,9 @@ impl Env<'_> {
     }
 
     /// Go: `idFor`. A binder-level symbol's id is the hash of its key, a
-    /// multi-origin property's the hash of its `Set` key; any other symbol
-    /// takes the next counter of the generation.
+    /// multi-origin property's the hash of its `Set` key, any other symbol's
+    /// the hash of its exact derived key; a symbol with none has the empty
+    /// id.
     pub fn id_for(&mut self, symbol: P<Symbol>) -> SymbolId {
         let address = symbol.addr();
         if let Some(id) = self.ids.ids_by_symbol.get(&address) {
@@ -485,7 +437,7 @@ impl Env<'_> {
                 self.ids.key(&id)
             ));
             // Two keys spelling one id (a 96-bit collision) would conflate two
-            // symbols: the later one fails closed to a counter.
+            // symbols: the later one is keyed as derived, or has no id.
             if self.ids.key(&id).is_none_or(|held| **held == key) {
                 self.ids
                     .keys
@@ -500,47 +452,25 @@ impl Env<'_> {
                 return id;
             }
         }
-        if self.ids.derived_keys {
-            // No exact key: no id. An absent symbol fails closed downstream;
-            // a counter would split one symbol across checkers (and, in
-            // per-file mode, across passes).
-            let id = self.derived_id(symbol).unwrap_or_else(|| {
-                if let Some(path) = std::env::var_os(crate::derived_key::ENV_STATS) {
-                    let reason = self.ids.last_failure.take().unwrap_or_default();
-                    crate::derived_key::record(
-                        &path,
-                        &format!(
-                            "nosymbol name={} flags={:?} check={:?} decls={} :: {reason}",
-                            symbol.name(),
-                            symbol.flags(),
-                            symbol.check_flags(),
-                            symbol.declarations().len()
-                        ),
-                    );
-                }
-                SymbolId::from("")
-            });
-            self.ids.ids_by_symbol.insert(address, Arc::clone(&id));
-            return id;
-        }
-        self.ids.next_symbol += 1;
-        let id: SymbolId =
-            Arc::from(format!("symbol:{}:{}", self.ids.generation, self.ids.next_symbol).as_str());
-        if let Some(path) = std::env::var_os(crate::derived_key::ENV_STATS) {
-            let reason = self.ids.last_failure.take().unwrap_or_default();
-            crate::derived_key::record(
-                &path,
-                &format!(
-                    "counter {id} name={} flags={:?} check={:?} decls={} :: {reason}",
-                    symbol.name(),
-                    symbol.flags(),
-                    symbol.check_flags(),
-                    symbol.declarations().len()
-                ),
-            );
-        }
+        // No exact key: no id. An absent symbol fails closed downstream; a
+        // counter would split one symbol across checkers and passes.
+        let id = self.derived_id(symbol).unwrap_or_else(|| {
+            if let Some(path) = std::env::var_os(crate::derived_key::ENV_STATS) {
+                let reason = self.ids.last_failure.take().unwrap_or_default();
+                crate::derived_key::record(
+                    &path,
+                    &format!(
+                        "nosymbol name={} flags={:?} check={:?} decls={} :: {reason}",
+                        symbol.name(),
+                        symbol.flags(),
+                        symbol.check_flags(),
+                        symbol.declarations().len()
+                    ),
+                );
+            }
+            SymbolId::from("")
+        });
         self.ids.ids_by_symbol.insert(address, Arc::clone(&id));
-        self.ids.symbols_by_id.insert(Arc::clone(&id), symbol);
         id
     }
 
@@ -726,9 +656,9 @@ impl Env<'_> {
             Key::Decl(reference) | Key::Export(reference) => self.symbol_at_reference(reference)?,
             Key::Global(name) => global_symbol(self.checker, name)?,
             Key::Intrinsic(which) => intrinsic_symbol(self.checker, *which),
-            // A multi-origin property is made per containing type: no
-            // position names it, so after a release it fails closed, like a
-            // counter, until this generation mints it again.
+            // A multi-origin property or a derived symbol is made per
+            // containing type or instantiation: no position names it, so
+            // after a release it fails closed until a pass mints it again.
             Key::Set { .. } | Key::Derived { .. } => return None,
         };
         let (found, root) = self.key_of(candidate)?;

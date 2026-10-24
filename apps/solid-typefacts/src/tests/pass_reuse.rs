@@ -34,12 +34,10 @@ fn files() -> Vec<(&'static str, &'static str)> {
     ]
 }
 
-/// Per-file passes with exact keys, `workers` workers, reuse (verified: a
-/// reused pass that differs from a fresh one panics) or none.
+/// Per-file passes with `workers` workers, reuse (verified: a reused pass
+/// that differs from a fresh one panics) or none.
 fn open(scratch: &Scratch, workers: usize, reuse: bool) -> Project {
     let mut project = scratch.open();
-    project.select_per_file_checkers_for_test();
-    project.select_derived_keys_for_test();
     project.select_passes_for_test(workers, reuse, reuse);
     project
 }
@@ -168,7 +166,7 @@ fn kept_passes_rerun_exactly_what_an_edit_can_change() {
         .collect();
     let mut incremental = open(&scratch, 2, true);
     let first = table(&mut incremental, &demands(&scratch, &sources));
-    let stats = incremental.per_file_stats().unwrap().reuse;
+    let stats = incremental.per_file_stats().reuse;
     assert_eq!((stats.ran, stats.reused), (6, 0), "{stats:?}");
     let mut fresh = open(&scratch, 1, false);
     assert_eq!(first, table(&mut fresh, &demands(&scratch, &sources)));
@@ -248,7 +246,7 @@ fn kept_passes_rerun_exactly_what_an_edit_can_change() {
         history.push(changes);
         let demands = demands(&scratch, &sources);
         let kept = table(&mut incremental, &demands);
-        let stats = incremental.per_file_stats().unwrap().reuse;
+        let stats = incremental.per_file_stats().reuse;
         assert_eq!(stats.mismatches, 0, "{}: {stats:?}", step.what);
         assert_eq!(stats.ran, step.ran, "{}: {stats:?}", step.what);
         assert_eq!(
@@ -331,7 +329,7 @@ fn the_pool_answers_what_one_thread_answers() {
             first_line_difference(&one, &many)
         );
         assert_eq!(
-            pooled.per_file_stats().unwrap().reuse.workers,
+            pooled.per_file_stats().reuse.workers,
             workers.min(sources.len())
         );
     }

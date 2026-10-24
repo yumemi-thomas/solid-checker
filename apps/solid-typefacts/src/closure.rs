@@ -1,7 +1,7 @@
 //! The demand closure (Go: `closure.go` and `semantic_demand.go`): one
-//! generation's fact table from a demand set. Every table is computed afresh
-//! from the program and its demands (ADR 0364, 0367); only the backend's
-//! binder-level answers outlive it (ADR 0369).
+//! generation's fact table from a demand set. Every table asks the backend
+//! for every run (ADR 0364); the backend answers each file in a pass of its
+//! own and reuses a pass while what it read is unchanged (ADR 03XX-p6).
 //!
 //! The table it returns is transport-only: it exists to be converted to the
 //! wire shape or diffed against its predecessor, and answers no per-location
@@ -30,7 +30,7 @@ const ERR_CLOSED: &str = "closure project is closed";
 
 /// How much of a generation's table was carried over (Go: `ClosureRetention`).
 /// No demand contribution is (ADR 0364): `retained_files` stays on the wire at
-/// zero. The cached counts are the backend's binder-level reuse (ADR 0369).
+/// zero. The cached counts are the backend's pass reuse (ADR 03XX-p6).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ClosureRetention {
     pub retained_files: usize,
@@ -186,8 +186,8 @@ impl DemandClosure {
     /// source-fact memo and identity maps are discarded, and the next table is
     /// computed as a fresh program would compute it. What stays is the program itself (incremental reuse inside
     /// the backend), the previous table, which only the transport delta
-    /// compares against, and the backend's binder-level answers, each with the
-    /// digests it read (ADR 0369). Every changed path plus the affected set is
+    /// compares against, and the backend's per-file passes, each with its read
+    /// set (ADR 03XX-p6). Every changed path plus the affected set is
     /// named as changed, and the recompute names every demanded path.
     pub fn update(
         &mut self,
@@ -211,8 +211,8 @@ impl DemandClosure {
     /// Drops what earlier analysis left behind and a table could otherwise
     /// reuse: demand contributions, and the backend's memo, reference index and
     /// id maps. The previous table stays (it only feeds the transport delta),
-    /// and so do the backend's binder-level answers, which check their own
-    /// dependencies (ADR 0369).
+    /// and so do the backend's per-file passes, which check their own read
+    /// sets (ADR 03XX-p6).
     fn discard_derived_state(&mut self) {
         self.retained.reset();
         self.backend.discard_derived_state();

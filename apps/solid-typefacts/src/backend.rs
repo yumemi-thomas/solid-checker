@@ -138,18 +138,6 @@ pub trait ClosureBackend {
         id: &str,
     ) -> Result<Option<Vec<Declaration>>, BackendError>;
 
-    /// Fully checks the demanded files, in the given (path) order, before a
-    /// table answers any of their demands (ADR 0367). Inside a file every
-    /// later answer is then the one tsc's source-order check computes (an
-    /// enclosing call resolved before the calls in its arguments, contextual
-    /// parameter types assigned), whatever order the demands, the batches and
-    /// earlier requests came in. The default does nothing: a backend without
-    /// a checker has no checker history.
-    fn check_demanded_files(&mut self, ctx: &Context, paths: &[&str]) -> Result<(), BackendError> {
-        let _ = (ctx, paths);
-        Ok(())
-    }
-
     /// Resolves canonically ordered per-file runs of demands (Go:
     /// `SemanticDemandRuns`, `tsgo/semantic_runs.go`). Results are
     /// index-aligned with `runs` and with each run's demands.
@@ -167,28 +155,24 @@ pub trait ClosureBackend {
         locations: &[Location],
     ) -> Result<Vec<AsyncFunctionFact>, BackendError>;
 
-    /// Whether the backend computes each demanded file's facts with a checker
-    /// of its own (`SOLID_TYPEFACTS_PER_FILE_CHECKERS`, `per_file`). The
-    /// closure then skips the shared check-first and asks
-    /// [`ClosureBackend::per_file_demand_runs`] instead of the separate
-    /// async and run calls.
-    fn per_file_checkers(&self) -> bool {
-        false
-    }
-
-    /// Per-file checkers: the runs' results (as `semantic_demand_runs`) and
-    /// the async facts of `async_locations` (as `async_functions_at`), each
-    /// file in a pass of its own.
+    /// What a table asks: the runs' results (as `semantic_demand_runs`) and
+    /// the async facts of `async_locations` (as `async_functions_at`). The
+    /// tsrs project answers each file in a pass of a checker of its own
+    /// (`per_file`, ADR 03XX-p6); the default composes the two calls, for
+    /// backends without a checker.
     fn per_file_demand_runs(
         &mut self,
         ctx: &Context,
         runs: &[SemanticDemandRun<'_>],
         async_locations: &[Location],
     ) -> Result<(Vec<SemanticDemandRunResult>, Vec<AsyncFunctionFact>), BackendError> {
-        let _ = (ctx, runs, async_locations);
-        Err(BackendError(
-            "type facts backend has no per-file checkers".to_owned(),
-        ))
+        let facts = self.async_functions_at(ctx, async_locations)?;
+        let results = if runs.is_empty() {
+            Vec::new()
+        } else {
+            self.semantic_demand_runs(ctx, runs)?
+        };
+        Ok((results, facts))
     }
 
     /// The call expressions of one file in source order, each with its

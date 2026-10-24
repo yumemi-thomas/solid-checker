@@ -195,8 +195,8 @@ impl Key {
     }
 
     /// Whether the key names a binder-level symbol. A `Set` key names a
-    /// checker-derived property: it is never re-resolved from its key, and no
-    /// answer holding it is retained across updates (ADR 0369).
+    /// checker-derived property, a `Derived` key a derived symbol: neither is
+    /// re-resolved from its key.
     #[must_use]
     pub fn is_binder(&self) -> bool {
         !matches!(self, Self::Set { .. } | Self::Derived { .. })

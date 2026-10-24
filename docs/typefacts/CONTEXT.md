@@ -108,9 +108,9 @@ _Avoid_: client snapshot, cached table
 
 **Retained contribution**:
 One file's share of a published table, held only until the packed transition
-owns its rows. A table recomputes every contribution (ADR 0364); what outlives
-a table is the producer's binder-level answers, each with the digests it read
-(ADR 0369).
+owns its rows. A table asks for every contribution (ADR 0364); what outlives
+a table is the producer's per-file pass outputs, each with the read set it
+was computed under (ADR 03XX-p6).
 _Avoid_: cache entry, memo, fragment
 
 **Canonical symbol identity**:
@@ -120,9 +120,9 @@ export, else its minimum declaration), or a multi-origin property's combination
 and origins when they fix its type (ADRs 0366, 0371). Whatever asked first, and
 whatever the checker computed before, it is the same. Every other symbol
 (an instantiation, a `this`-type or widened copy, a mapped property) has a
-**generation-scoped identity** (`symbol:<generation>:<n>`), meaningful only in
-the generation that minted it; a derived symbol is not erased to its root
-(ADR 0372).
+**derived identity**, the hash of its exact derived key (its source and type
+context), the same in every checker, or no identity at all; a derived symbol
+is not erased to its root (ADR 0372). No identity is a counter (ADR 03XX-p6).
 _Avoid_: durable id, stable id, persistent id, global id
 
 **Transport manifest**:

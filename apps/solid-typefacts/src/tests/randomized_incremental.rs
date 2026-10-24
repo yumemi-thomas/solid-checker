@@ -2,8 +2,8 @@
 //! `symbol_integration`: a session driven through seeded random edit
 //! sequences, every generation byte-compared with a session that replays the
 //! same updates and materializes the whole batch from a program that never
-//! saw the earlier generations. Updates retain only binder-level answers under
-//! recorded dependencies (ADR 0369), so the two must be equal for every
+//! saw the earlier generations. Updates keep per-file passes under their read
+//! sets (ADR 03XX-p6), so the two must be equal for every
 //! family, including the cross-file ones (the reference space and the runtime
 //! identity).
 
@@ -74,8 +74,8 @@ fn text_demands_with(closure: &mut DemandClosure, families: bool) -> Vec<EntityD
             if numeric || !(declares || member || calls) || !seen.insert((start, index)) {
                 continue;
             }
-            // Every other demand leaves the runtime identity out: only those
-            // can take a retained binder-level symbol (ADR 0369).
+            // Every other demand leaves the runtime identity out, so both
+            // shapes of demand are exercised.
             let runtime_identity = families && seen.len() % 2 == 0;
             demands.push(EntityDemand {
                 location: Location {
@@ -1158,7 +1158,7 @@ pub(super) fn first_difference(what: &str, left: &[String], right: &[String]) ->
 /// every family is compared with a closure that replays the same updates and
 /// materializes the whole batch.
 /// What one seeded run reused: demand contributions (never, ADR 0364), and
-/// binder-level reference files and entity symbols (ADR 0369).
+/// reference files and entity symbols of kept passes (ADR 03XX-p6).
 #[derive(Default)]
 struct Reuse {
     contributions: usize,
@@ -1288,7 +1288,7 @@ fn run_seed(seed: u64, steps: usize, modules: usize, plain: bool) -> Reuse {
     reuse
 }
 
-/// V4 (STABLE-IDS 9, ADR 0369): binder-level answers are reused across
+/// V4 (STABLE-IDS 9, ADR 03XX-p6): per-file passes are reused across
 /// updates, and every generation equals a fresh whole-batch one.
 #[test]
 fn seeded_random_edit_sequences_match_fresh() {
@@ -1306,8 +1306,8 @@ fn seeded_random_edit_sequences_match_fresh() {
 }
 
 /// The same edit kinds over files whose ids are all declaration hashes (the
-/// shape that used to be retained): no demand contribution is reused, binder
-/// answers are (ADR 0369).
+/// shape that used to be retained): no demand contribution is reused, passes
+/// are (ADR 03XX-p6).
 #[test]
 fn seeded_random_edit_sequences_over_retainable_files_match_fresh() {
     let (mut retained, mut files) = (0, 0);

@@ -1,10 +1,8 @@
-//! Per-file checkers (phase P1 of the incremental-edits plan), behind
-//! `SOLID_TYPEFACTS_PER_FILE_CHECKERS=1`; off by default, and then nothing
-//! here runs.
+//! Per-file checkers, the producer's only mode (ADR 03XX-p6).
 //!
 //! Every demanded file's facts are computed by a fresh checker of its own
 //! (`unsafe_boundary` invariant 8), in one pass that is freed when the file is
-//! done: the file's check (its check-first), its async facts, its semantic
+//! done: the file's check (first), its async facts, its semantic
 //! demand run, its reference-index contribution, and the symbol evidence rows
 //! of every id its facts reach (with their alias targets). Every other
 //! non-declaration file of the program gets a pass of its own for its
@@ -27,20 +25,18 @@
 //! default-library census, and the batch-wide structural-accessor suppression
 //! of type descriptors.
 //!
-//! # Ids (P1)
+//! # Ids
 //!
-//! Derived symbols still take counter ids, now handed out across passes (the
-//! counter is never reset inside a generation, so no id is issued twice). A
-//! derived symbol two files share gets a different id in each: that is known
-//! and is what P2's exact keys fix. A binder id hashes its key, so it is the
-//! same in every pass.
+//! A binder id hashes its key and a derived symbol's id its exact key
+//! (`derived_key.rs`), so both are the same in every pass; a symbol with no
+//! exact key carries no id at all.
 //!
 //! # `symbols` requests
 //!
 //! Served from the rows. An id without a row is resolved in a scratch pass:
-//! a binder id re-resolves through its key; a counter id of a freed pass no
-//! longer resolves and answers an id-only row (fails closed), counted in
-//! [`Stats::unresolved_queries`]. Reference lists come from the merged index;
+//! a binder id re-resolves through its key; a derived id no position names
+//! does not resolve there and answers an id-only row (fails closed), counted
+//! in [`Stats::unresolved_queries`]. Reference lists come from the merged index;
 //! after `release_analysis_state` dropped it, it is rebuilt per file.
 
 use crate::backend::BackendError;
@@ -57,9 +53,6 @@ use tsrs_ast::SymbolFlags;
 use typefacts::v3::SymbolQuery;
 use typefacts::{AsyncFunctionFact, Declaration, Location, SymbolFact};
 
-/// The environment flag that selects per-file checkers.
-pub const ENV_FLAG: &str = "SOLID_TYPEFACTS_PER_FILE_CHECKERS";
-
 /// Opt-in self-check: a row already computed by an earlier pass is computed
 /// again by every later pass that reaches its binder id, and differences are
 /// counted ([`Stats::row_mismatches`]).
@@ -70,12 +63,6 @@ pub const ENV_STATS: &str = "SOLID_TYPEFACTS_PER_FILE_STATS";
 
 fn env_is_one(name: &str) -> bool {
     std::env::var_os(name).is_some_and(|value| value == "1")
-}
-
-/// Whether the environment selects per-file checkers.
-#[must_use]
-pub fn enabled_by_env() -> bool {
-    env_is_one(ENV_FLAG)
 }
 
 /// One symbol's evidence, computed inside the pass that reached its id.
@@ -188,6 +175,9 @@ pub(crate) struct PerFile {
     /// Every id a scratch pass ever answered: its answer is not a row the
     /// merge tracks, so every table names it as changed.
     scratch_ids: HashSet<SymbolId>,
+    /// Tests: every table is the sequential run's (as after a key collision).
+    #[cfg(test)]
+    sequential_for_test: bool,
 }
 
 /// What one table changed in the `symbols` answers of the table before it
@@ -340,16 +330,10 @@ pub(crate) fn row_for(env: &mut Env<'_>, id: &SymbolId) -> Row {
     }
 }
 
-/// Two rows of one binder id, computed by different passes, agree on what
-/// does not depend on which pass minted a counter.
+/// Two rows of one id, computed by different passes, agree: an id names
+/// one symbol in every pass.
 pub(crate) fn rows_agree(left: &Row, right: &Row) -> bool {
-    let id_agrees = |a: &SymbolId, b: &SymbolId| {
-        a == b || (!crate::model::durable_symbol_id(a) && !crate::model::durable_symbol_id(b))
-    };
-    left.found == right.found
-        && left.declarations == right.declarations
-        && id_agrees(&left.alias_target, &right.alias_target)
-        && id_agrees(&left.canonical, &right.canonical)
+    left == right
 }
 
 /// The rows of `seeds` and of every alias target they reach, in the current
@@ -362,7 +346,7 @@ fn rows_for(env: &mut Env<'_>, seeds: Vec<SymbolId>, state: &mut PerFile) {
             continue;
         }
         if let Some(existing) = state.rows.get(&id) {
-            if state.verify_rows && crate::model::durable_symbol_id(&id) {
+            if state.verify_rows {
                 let again = row_for(env, &id);
                 state.stats.rows_verified += 1;
                 if !rows_agree(existing, &again) {
@@ -391,25 +375,11 @@ fn check(ctx: &Context) -> Result<(), BackendError> {
 }
 
 impl Project {
-    /// Whether this project computes facts with per-file checkers.
-    #[must_use]
-    pub fn per_file_checkers(&self) -> bool {
-        self.per_file.is_some()
-    }
-
-    /// Selects per-file checkers on an opened project (tests; the binary reads
-    /// the environment at open).
+    /// Answers every table with the sequential shared-identity run, as a key
+    /// collision does (tests).
     #[cfg(test)]
-    pub(crate) fn select_per_file_checkers_for_test(&mut self) {
-        self.per_file = Some(PerFile::new());
-        self.references.set_per_file(true);
-    }
-
-    /// Selects exact derived-symbol keys on an opened project (tests; the
-    /// binary reads the environment at open).
-    #[cfg(test)]
-    pub(crate) fn select_derived_keys_for_test(&mut self) {
-        self.ids.select_derived_keys_for_test();
+    pub(crate) fn select_sequential_for_test(&mut self) {
+        self.per_file.sequential_for_test = true;
     }
 
     /// Sets the pass pool's workers and pass reuse (tests; the binary reads
@@ -424,22 +394,17 @@ impl Project {
     /// The read set of `path` at the last table (tests).
     #[cfg(test)]
     pub(crate) fn per_file_read_set_for_test(&self, path: &str) -> Vec<String> {
-        self.per_file
-            .as_ref()
-            .map(|state| state.reuse.read_set_for_test(path))
-            .unwrap_or_default()
+        self.per_file.reuse.read_set_for_test(path)
     }
 
     /// The per-file counters (tests, measurement).
     #[must_use]
-    pub fn per_file_stats(&self) -> Option<Stats> {
-        self.per_file.as_ref().map(|state| state.stats)
+    pub fn per_file_stats(&self) -> Stats {
+        self.per_file.stats
     }
 
     fn per_file_state(&mut self) -> &mut PerFile {
-        self.per_file
-            .as_mut()
-            .expect("per-file checkers are selected")
+        &mut self.per_file
     }
 
     /// Runs `f` inside a pass: a fresh checker of its own is this thread's
@@ -457,9 +422,7 @@ impl Project {
         // is freed, so the maps go first.
         self.ids.purge_scope_pointers();
         drop(scope);
-        if let Some(state) = &mut self.per_file {
-            state.stats.passes += 1;
-        }
+        self.per_file.stats.passes += 1;
         Ok(result)
     }
 
@@ -470,21 +433,23 @@ impl Project {
     /// the async facts are what one `async_functions_at_locations` call over
     /// `async_locations` returns.
     ///
-    /// With exact derived keys each pass is a function of what its checker
-    /// read: passes are reused across tables and run on a pool
-    /// ([`Project::pooled_demand_runs`]). Without them (counter ids hand out
-    /// across passes), or when two passes minted one id for two keys, the
-    /// passes run in path order over one identity state
-    /// ([`Project::sequential_demand_runs`]).
+    /// Each pass is a function of what its checker read: passes are reused
+    /// across tables and run on a pool ([`Project::pooled_demand_runs`]).
+    /// When two passes minted one id for two keys, the passes run in path
+    /// order over one identity state instead
+    /// ([`Project::sequential_demand_runs`]): the first pass to mint an id
+    /// decides its key.
     pub(crate) fn per_file_demand_runs(
         &mut self,
         ctx: &Context,
         runs: &[SemanticDemandRun<'_>],
         async_locations: &[Location],
     ) -> Result<(Vec<SemanticDemandRunResult>, Vec<AsyncFunctionFact>), BackendError> {
-        if self.ids.derived_keys()
-            && let Some(answer) = self.pooled_demand_runs(ctx, runs, async_locations)?
-        {
+        #[cfg(test)]
+        let pooled = !self.per_file.sequential_for_test;
+        #[cfg(not(test))]
+        let pooled = true;
+        if pooled && let Some(answer) = self.pooled_demand_runs(ctx, runs, async_locations)? {
             return Ok(answer);
         }
         let state = self.per_file_state();
@@ -500,7 +465,8 @@ impl Project {
     }
 
     /// The sequential per-file run over the project's one identity state
-    /// (P1/P2): the first pass in path order to mint an id decides its key.
+    /// (a key collision): the first pass in path order to mint an id decides
+    /// its key.
     #[allow(clippy::too_many_lines)]
     pub(crate) fn sequential_demand_runs(
         &mut self,
@@ -511,7 +477,7 @@ impl Project {
         check(ctx)?;
         let program = self.live()?.program();
         // Held outside the project for the passes (they borrow it whole);
-        // the placeholder left behind keeps the mode selected.
+        // a placeholder is left behind.
         let mut state = std::mem::take(self.per_file_state());
         state.clear_rows();
         let mut async_by_path: BTreeMap<Arc<str>, Vec<Location>> = BTreeMap::new();
@@ -540,7 +506,7 @@ impl Project {
                     ..Deferrals::default()
                 };
                 let (result, facts) = self.in_file_pass(|this| {
-                    // The file's own check-first (ADR 0367), under its checker.
+                    // The file's own check first, under its checker.
                     if let Some(file) = file {
                         let _ = this.live()?.semantic_diagnostics(file);
                         check(ctx)?;
@@ -550,19 +516,9 @@ impl Project {
                     } else {
                         this.async_functions_at_locations(ctx, &locations)?
                     };
-                    let mut results = this.with_env(|env, references| {
-                        crate::semantic_runs::run(
-                            ctx,
-                            env,
-                            references,
-                            std::slice::from_ref(run),
-                            &mut unavailable,
-                            Some(&mut deferrals),
-                        )
+                    let result = this.with_env(|env, _| {
+                        crate::semantic_runs::run(ctx, env, run, &mut unavailable, &mut deferrals)
                     })??;
-                    let result = results.pop().ok_or_else(|| {
-                        BackendError("semantic demand run returned no result".to_owned())
-                    })?;
                     if let Some(file) = file
                         && !file.is_declaration_file()
                     {
@@ -1083,7 +1039,7 @@ impl Project {
     /// path when the last table did not track them (the sequential run).
     #[must_use]
     pub fn per_file_content_version(&self, path: &str) -> Option<Option<u64>> {
-        let state = self.per_file.as_ref()?;
+        let state = &self.per_file;
         if !state.versions_valid {
             return None;
         }
@@ -1170,6 +1126,7 @@ impl Project {
                 }
             }
         }
+        self.references.note_symbol_rows(rows.len(), missing.len());
         if missing.is_empty() {
             return Ok(rows);
         }
@@ -1204,7 +1161,7 @@ impl Project {
     /// exactly (its first table, a merge that started over, a rebuilt
     /// reference index, the sequential run, a reuse mismatch).
     pub(crate) fn per_file_symbol_changes(&mut self) -> Option<Vec<SymbolId>> {
-        let state = self.per_file.as_mut()?;
+        let state = &mut self.per_file;
         let changes = state.symbol_changes.as_mut()?;
         if changes.answered.is_none() {
             let mut answered: HashSet<SymbolId> = changes.rows.iter().cloned().collect();

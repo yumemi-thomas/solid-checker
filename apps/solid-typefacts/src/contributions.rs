@@ -162,8 +162,8 @@ impl RetainedContributionStore {
 
     /// Publishes a table's contributions into the empty store. Called only
     /// after semantic resolution, assembly and the transport manifest have all
-    /// succeeded (Go: `commit`). A contribution holding a counter id is not
-    /// published.
+    /// succeeded (Go: `commit`). A contribution whose evidence is not
+    /// durable (a cross-file census answer) is not published.
     pub fn commit(&mut self, groups: &[DemandGroup]) {
         for group in groups {
             if let Some(contribution) = &group.contribution

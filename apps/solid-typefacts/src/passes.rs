@@ -1,15 +1,13 @@
 //! Per-file passes as functions of what their checker read (instant-edits
 //! P3): a pass's pointer-free output is reused while everything it can have
 //! read is unchanged, and the passes that must run do so on a pool of worker
-//! threads. Per-file checkers with exact derived keys only
-//! (`SOLID_TYPEFACTS_PER_FILE_CHECKERS=1`, `SOLID_TYPEFACTS_DERIVED_KEYS=1`);
-//! `per_file` drives it.
+//! threads (ADR 03XX-p6); `per_file` drives it.
 //!
 //! # A pass
 //!
 //! [`run_pass`] computes one file's facts under a fresh checker of its own
 //! (`unsafe_boundary` invariant 8) and an identity state of its own: the
-//! file's check-first, its async facts, its demand run (with the answers that
+//! file's own check first, its async facts, its demand run (with the answers that
 //! read every file deferred, `semantic_runs::Deferrals`), its reference-index
 //! contribution and the rows of every id its facts name, plus the keys it
 //! minted. Nothing in the output points into the checker. A pass reads no
@@ -207,7 +205,8 @@ pub(crate) fn run_pass(
         if work.run.is_some()
             && let Some(file) = file
         {
-            // The file's own check-first (ADR 0367), under its checker.
+            // The file's own check first, under its checker, so every answer
+            // inside the file is the one tsc's source-order check computes.
             let _ = generation.semantic_diagnostics(file);
             check(ctx)?;
         }
@@ -228,19 +227,13 @@ pub(crate) fn run_pass(
                 ..Deferrals::default()
             };
             let result = match work.run {
-                Some(run) => {
-                    let mut results = crate::semantic_runs::run(
-                        ctx,
-                        &mut env,
-                        &mut references,
-                        std::slice::from_ref(run),
-                        &mut unavailable,
-                        Some(&mut deferrals),
-                    )?;
-                    Some(results.pop().ok_or_else(|| {
-                        BackendError("semantic demand run returned no result".to_owned())
-                    })?)
-                }
+                Some(run) => Some(crate::semantic_runs::run(
+                    ctx,
+                    &mut env,
+                    run,
+                    &mut unavailable,
+                    &mut deferrals,
+                )?),
                 None => None,
             };
             deferrals.library_writes = None;
@@ -992,9 +985,6 @@ impl Merged {
         if verify_rows {
             for (at, _) in &changed {
                 for (id, row) in &self.outputs[*at].rows {
-                    if !crate::model::durable_symbol_id(id) {
-                        continue;
-                    }
                     let Some(first) = self.row(id) else {
                         continue;
                     };
