@@ -45,10 +45,11 @@ jobs:
       - run: make test-typefacts
       - run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
       - run: cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets
-      - name: Check single-dialect composition builds
-        run: |
-          cargo +1.99.1 check --manifest-path rust/Cargo.toml -p solid-facts-backend --all-targets --no-default-features --features dialect-v2
-          cargo +1.99.1 check --manifest-path rust/Cargo.toml -p solid-checker-wasm --all-targets --no-default-features --features dialect-v2
+      # solid-facts-backend's default features are exactly dialect-v2, so the
+      # workspace clippy above already checks it; only the WASM crate without
+      # napi-host is a composition nothing else builds.
+      - name: Check the WASM crate without the napi host
+        run: cargo +1.99.1 check --manifest-path rust/Cargo.toml -p solid-checker-wasm --all-targets --no-default-features --features dialect-v2
       - run: make test-rust
       # The two fixture gates: "no finding moved" over every fixture project,
       # and product-owned semantic/TypeScript ownership over every retained
@@ -176,6 +177,23 @@ jobs:
         working-directory: packages/wasm
       - run: bun run build
         working-directory: packages/wasm
+      # Everything the build writes (the gitignored outputs). The WASM is the
+      # same on any host, so wasm-parity checks these bytes instead of
+      # rebuilding them for six minutes on macOS.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm-package-build
+          path: |
+            packages/wasm/browser.js
+            packages/wasm/generated.d.ts
+            packages/wasm/index.js
+            packages/wasm/solid-checker-wasm.wasi-browser.js
+            packages/wasm/solid-checker-wasm.wasi.cjs
+            packages/wasm/solid-checker-wasm.wasm32-wasi*.wasm
+            packages/wasm/wasi-worker*.mjs
+            packages/wasm/owned/
+          if-no-files-found: error
+          retention-days: 1
       - run: bun run test
         working-directory: packages/wasm
       - run: bun pm pack --dry-run
@@ -187,14 +205,18 @@ jobs:
   # image): the gate's path rows compare the owned WASI layer with the host's
   # own POSIX answers, which differ on Linux (a symlink loop is os error 40,
   # not 62) and on macOS 15 (a trailing slash through a file symlink).
+  # It checks wasm-package's built files rather than building its own; only the
+  # native checker and the path-control guest are built here.
   wasm-parity:
+    needs: wasm-package
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.99.1
         with:
-          targets: wasm32-wasip1-threads, wasm32-wasip1
-      - run: rustup target add wasm32-wasip1-threads wasm32-wasip1 --toolchain 1.99.1
+          targets: wasm32-wasip1
+      # The path-control guest (make build-wasm-parity-guests).
+      - run: rustup target add wasm32-wasip1 --toolchain 1.99.1
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
@@ -209,10 +231,15 @@ jobs:
           cache-targets: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: ./.github/actions/typefacts
-      # The package's build tooling (napi) and the oracle harness's `typescript`.
+      # The package's runtime dependencies and the oracle harness's `typescript`.
       - run: bun install --cwd packages/wasm --ignore-scripts --no-progress --frozen-lockfile
       - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
-      - run: make wasm-parity
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-package-build
+          path: packages/wasm
+      # The gate alone: `make wasm-parity` would rebuild the package first.
+      - run: make wasm-parity-gate
 
   scripts-and-cli:
     runs-on: ubuntu-latest
