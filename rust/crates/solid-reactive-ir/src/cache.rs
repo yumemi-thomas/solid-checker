@@ -168,8 +168,10 @@ impl IncrementalCacheState {
         self.typescript_indexes = None;
         self.reachability = None;
         self.base_indexes = None;
-        self.memos = None;
         if retention == CacheRetention::Compact {
+            // Memo answers are small next to what they save; only the
+            // compact policy, which keeps no index at all, drops them.
+            self.memos = None;
             self.ast_indexes.clear();
             self.source_discovery.clear();
             self.late_stages = None;
