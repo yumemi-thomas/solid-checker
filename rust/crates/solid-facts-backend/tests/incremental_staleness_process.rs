@@ -34,9 +34,92 @@ struct Project {
     session: NativeIncrementalSession,
     sources: Vec<SourceFile>,
     version: u64,
+    /// The scratch directory to remove on drop.
+    scratch_root: Option<PathBuf>,
 }
 
+impl Drop for Project {
+    fn drop(&mut self) {
+        if let Some(root) = &self.scratch_root {
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+}
+
+const STUB: &str = r#"declare module "solid-js" {
+  export function createSignal<T>(value: T): [() => T, (value: T) => void];
+  export function createMemo<T>(compute: () => T): () => T;
+}
+
+declare namespace JSX {
+  interface IntrinsicElements {
+    div: Record<string, unknown>;
+  }
+}
+"#;
+
 impl Project {
+    /// A private project written to a scratch directory: `files` plus the
+    /// dialect stub and a tsconfig. `None` without a producer.
+    fn scratch(tag: &str, files: &[(&str, &str)]) -> Option<Self> {
+        let typefacts = env::var("SOLID_TYPEFACTS_BIN").ok()?;
+        let root = env::temp_dir()
+            .join("sc-scratch.noindex")
+            .join(format!("incremental-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("solid-js.d.ts"), STUB).unwrap();
+        fs::write(
+            root.join("tsconfig.json"),
+            r#"{"compilerOptions":{"jsx":"preserve","module":"ESNext","moduleResolution":"Bundler","strict":true,"target":"ES2022"},"include":["*.ts","*.tsx"]}"#,
+        )
+        .unwrap();
+        for (name, source) in files {
+            fs::write(root.join(name), source).unwrap();
+        }
+        let root = root.canonicalize().unwrap();
+        let project_id = root.join("tsconfig.json").to_string_lossy().into_owned();
+        let sources = files
+            .iter()
+            .map(|(name, source)| SourceFile {
+                path: root.join(name).to_string_lossy().into_owned(),
+                source: (*source).into(),
+                compiler_options: CompilerOptions::default(),
+            })
+            .collect::<Vec<_>>();
+        let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+        let session =
+            NativeIncrementalSession::open(solid_v2(), project_id, sources.clone(), typescript)
+                .unwrap();
+        Some(Self {
+            session,
+            sources,
+            version: 0,
+            scratch_root: Some(root),
+        })
+    }
+
+    /// Replaces the whole source of `name`.
+    fn rewrite(&mut self, name: &str, source: &str) -> Arc<ProjectFacts> {
+        self.version += 1;
+        let file = self
+            .sources
+            .iter()
+            .find(|file| file.path.ends_with(name))
+            .expect("a file of the project");
+        self.session
+            .edit(
+                vec![SourceChange {
+                    path: file.path.clone(),
+                    version: self.version,
+                    source: Some(source.to_owned()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap()
+    }
+
     /// `None` without a producer (the process tests skip silently, as the rest
     /// of this crate's do).
     fn open(fixture_name: &str, files: &[&str]) -> Option<Self> {
@@ -67,6 +150,7 @@ impl Project {
             session,
             sources,
             version: 0,
+            scratch_root: None,
         })
     }
 
@@ -210,4 +294,49 @@ fn changing_runtime_symbol_redirects_between_generations_never_reuses_a_stale_st
         }
     }
     assert!(mattered > 0, "some redirect must move the answer");
+}
+
+const SIGNAL_S: &str = "import { createSignal } from \"solid-js\";\nexport const [count, setCount] = createSignal(0);\n";
+const LITERAL_G: &str = "export const ns = { run(callback: () => void) { callback(); } };\nns.run = (callback: () => void) => callback();\n";
+const OPAQUE_G: &str =
+    "declare const other: { run(callback: () => void): void };\nexport const ns = other;\n";
+const CALLER_F: &str = "import { count } from \"./S\";\nimport { ns } from \"./G\";\nexport function App() {\n  ns.run(() => count());\n  return <div />;\n}\n";
+
+/// 2.5, fourth path (not reproduced): `literal_receiver_members` says which
+/// member calls have a receiver bound to an exact object literal, possibly
+/// declared in another file, and `call_withheld` (interprocedural graph, result
+/// reads, execution roles) reads it; it is in neither digest. `F` is unchanged
+/// when the receiver's module flips between a mutated literal (withheld) and an
+/// opaque value, and the two builds differ (asserted), so a retained `F` would
+/// be stale. Today nothing of `F` is retained: the module that changed holds the
+/// TypeScript identity (the delta names `F`'s entities) that every per-file
+/// cache checks first. This pins the scenario so the day that gate narrows
+/// (stable ids, then the digest's removal) the shadow comparison fails here
+/// instead of in a project.
+#[test]
+fn a_receiver_that_stops_being_a_literal_in_another_file_does_not_keep_the_old_withholding() {
+    let Some(mut project) = Project::scratch(
+        "literal-receiver",
+        &[("S.ts", SIGNAL_S), ("G.ts", LITERAL_G), ("F.tsx", CALLER_F)],
+    ) else {
+        return;
+    };
+    let options = RuleOptions::default();
+    let vocabulary = solid_v2().vocabulary;
+    let fresh = |facts: &ProjectFacts| {
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap()
+            .0
+    };
+    let mut builder = IncrementalBuilder::default();
+    let first = project.analyze();
+    assert_retained_is_fresh(&mut builder, &first, &options, "literal");
+    let opaque = project.rewrite("G.ts", OPAQUE_G);
+    assert_retained_is_fresh(&mut builder, &opaque, &options, "opaque");
+    assert!(
+        first_difference(&fresh(&first), &fresh(&opaque)).is_some(),
+        "the receiver's shape must change the caller's answer"
+    );
+    let literal = project.rewrite("G.ts", LITERAL_G);
+    assert_retained_is_fresh(&mut builder, &literal, &options, "literal again");
 }
