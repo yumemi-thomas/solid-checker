@@ -380,7 +380,9 @@ impl<'a> FileView<'a> {
 
     /// A digest of everything this view exposes: the path, the source (the
     /// AST and its index are functions of it), the entity-symbol rows, the
-    /// resolved-call facts of the file's entities, and its references. Two
+    /// resolved-call facts of the file's entities (validity, kind, targets,
+    /// and the declaration's library flag, qualified name and symbol), and
+    /// its references. Two
     /// views with the same fingerprint give every contribution function the
     /// same answers, so a file whose fingerprint is unchanged keeps its
     /// contributions.
@@ -403,6 +405,10 @@ impl<'a> FileView<'a> {
                         (
                             declaration.standard_library,
                             declaration.qualified_name.as_ref(),
+                            // The callee index keys a member call by it
+                            // (`callee_symbol`); another file's edit can
+                            // re-spell it (study N5).
+                            declaration.symbol.as_ref(),
                         )
                     }),
                 )

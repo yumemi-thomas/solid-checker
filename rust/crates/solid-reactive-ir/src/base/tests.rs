@@ -194,7 +194,32 @@ fn typescript(
                 Some("dispatchEvent") => "EventTarget.dispatchEvent",
                 Some("assign") => "ObjectConstructor.assign",
                 Some("defineProperty") => "ObjectConstructor.defineProperty",
-                _ => continue,
+                Some(property) => {
+                    // A project member call: its resolved declaration's
+                    // symbol is spelled under the caller's declaration
+                    // scheme, which a TypeFacts-only edit of another file
+                    // re-spells (ids keyed by declaration position, study
+                    // N5) while this file's source and entity rows stay.
+                    let declared = schemes.get(&format!("decl:{path}")).copied().unwrap_or(0);
+                    entities.push(
+                        serde_json::from_value(serde_json::json!({
+                            "location": location(path, call.callee),
+                            "resolvedCall": {
+                                "validity": "valid",
+                                "kind": "call",
+                                "declaration": {
+                                    "symbol": format!("d{declared}:{property}"),
+                                    "kind": "method",
+                                    "location": location("/fixture/declared.ts", Span::new(0, 1)),
+                                    "qualifiedName": property,
+                                },
+                            },
+                        }))
+                        .expect("entity with a project resolved call"),
+                    );
+                    continue;
+                }
+                None => continue,
             };
             entities.push(
                 serde_json::from_value(serde_json::json!({
@@ -356,6 +381,7 @@ const KINDS: &[&str] = &[
     "remove-file",
     "typefacts-only",
     "typefacts-references",
+    "typefacts-declarations",
 ];
 
 /// The edit harness's edit kinds (scripts/ir-edit-fuzz.mjs) plus file adds
@@ -400,6 +426,10 @@ fn edit(project: &mut Project, kind: &str, random: &mut Random, serial: usize) -
             }
             None => project.unreferenced.push(path.clone()),
         }
+        return Some(());
+    }
+    if kind == "typefacts-declarations" {
+        *project.schemes.entry(format!("decl:{path}")).or_default() += 1;
         return Some(());
     }
     if kind == "typefacts-only" {
@@ -1395,4 +1425,26 @@ fn every_build_table_has_its_own_id() {
             table.id()
         );
     }
+}
+
+/// A file's callee index entries name the symbol its member calls' resolved
+/// declarations carry. An edit elsewhere can re-spell that symbol (ids keyed
+/// by declaration position, study N5) while the file's source and entity
+/// rows stay: the file's view must count as changed, or the retained index
+/// keeps the old entries (the groove seed-11 shadow mismatch).
+#[test]
+fn a_respelled_call_declaration_changes_the_calling_file() {
+    let source = "export const box = { run() { return 1; } };\nexport const ran = box.run();\n";
+    let mut project = Project {
+        files: vec![("/fixture/calls.ts".to_owned(), source.to_owned())],
+        schemes: HashMap::default(),
+        unreferenced: Vec::new(),
+    };
+    let mut retained = None;
+    check(&project, &mut retained).expect("the source parses");
+    *project
+        .schemes
+        .entry("decl:/fixture/calls.ts".to_owned())
+        .or_default() += 1;
+    assert_eq!(check(&project, &mut retained), Some(1));
 }
