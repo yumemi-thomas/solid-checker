@@ -809,6 +809,9 @@ pub(super) struct SemanticLookup<'a> {
     synchronous_event_dispatch: OnceLock<bool>,
     /// Whether some module of the program calls direct `eval`.
     program_eval: OnceLock<bool>,
+    /// ADR 0292: whether some file holds a reflective write through a
+    /// `prototype`.
+    reflective_prototype_write: OnceLock<bool>,
     /// ADR 0320: whether some call may copy keys into an existing object.
     objects_assigned_into: OnceLock<bool>,
     router_params: OnceLock<crate::router_params::RouterParamsStatus>,
@@ -1046,6 +1049,7 @@ impl<'a> SemanticLookup<'a> {
             event_invoked_literals: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
             program_eval: OnceLock::new(),
+            reflective_prototype_write: OnceLock::new(),
             objects_assigned_into: OnceLock::new(),
             router_params: OnceLock::new(),
             route_component_values: OnceLock::new(),

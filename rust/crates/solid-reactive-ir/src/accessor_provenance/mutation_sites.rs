@@ -1063,6 +1063,11 @@ pub(super) fn intrinsic_disjoint_store_setter(
 /// a fresh literal nothing else holds (ADR 0282, narrowed by ADR 0288's
 /// review). The same visible veto, for a fresh module object.
 pub(crate) fn reflective_prototype_write(lookup: &SemanticLookup<'_>) -> bool {
+    lookup.reflective_prototype_write_present()
+}
+
+/// The scan behind [`reflective_prototype_write`], which the lookup memoizes.
+pub(crate) fn scan_reflective_prototype_write(lookup: &SemanticLookup<'_>) -> bool {
     lookup.files().iter().any(|file| {
         file.ast.calls.iter().any(|call| {
             targets_prototype(file, call) && mutation_builtin(file, call, lookup).is_some()
