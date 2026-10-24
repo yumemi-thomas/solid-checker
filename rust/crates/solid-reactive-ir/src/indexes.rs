@@ -32,7 +32,12 @@ mod initialization;
 mod intrinsics;
 mod member_values;
 mod primitive_proof;
+mod project_memos;
 pub(crate) use intrinsics::mentions_word;
+pub(crate) use project_memos::{
+    EffectApplyCalls, EffectApplyRegions, PROJECT_TABLES_FROM, ProjectTables, RouterParams,
+    StringCodeVeto, TupleIterationVeto,
+};
 
 /// What every reflective definer spelling in the project says about the key
 /// it defines: `any` when some spelling may define any name, otherwise only
@@ -972,13 +977,29 @@ pub(super) struct FilePrimitives {
 }
 
 impl<'a> SemanticLookup<'a> {
+    /// ADR 0302: a view of the [`EffectApplyCalls`] memo, built once per build.
     pub(crate) fn effect_apply_calls(&self) -> &crate::effect_execution::ApplyCalls<'a> {
-        self.effect_apply_calls
-            .get_or_init(|| crate::effect_execution::calls(self))
+        self.effect_apply_calls.get_or_init(|| {
+            self.memo_world()
+                .answer::<EffectApplyCalls>(&())
+                .into_iter()
+                .filter_map(|(path, span, argument, execution)| {
+                    Some((
+                        (self.file_by_path(&path)?.path.as_str(), span, argument),
+                        execution,
+                    ))
+                })
+                .collect()
+        })
     }
+    /// A view of the [`EffectApplyRegions`] memo, built once per build.
     pub(crate) fn effect_apply_regions(&self) -> &crate::effect_execution::ApplyRegions {
-        self.effect_apply_regions
-            .get_or_init(|| crate::effect_execution::regions(self))
+        self.effect_apply_regions.get_or_init(|| {
+            self.memo_world()
+                .answer::<EffectApplyRegions>(&())
+                .into_iter()
+                .collect()
+        })
     }
     /// The installed router's evidence; see [`Self::router_install`].
     #[must_use]
@@ -1008,9 +1029,15 @@ impl<'a> SemanticLookup<'a> {
             self.base_views_over(self.memos.table()),
             self.memos.store(),
             self.program_closed,
-        );
-        self.memos
-            .begin_once(|| self.memos.store().begin(world.views(), self.program_closed));
+        )
+        .with_project(self);
+        self.memos.begin_once(|| {
+            self.memos.store().begin_with(
+                world.views(),
+                self.program_closed,
+                crate::cache::typescript_unchanged(self.facts),
+            )
+        });
         world
     }
 
@@ -1840,7 +1867,7 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn tuple_iteration_may_be_mutated(&self) -> bool {
         *self
             .tuple_iteration_veto
-            .get_or_init(|| crate::interproc::accessor_provenance::tuple_iteration_write(self))
+            .get_or_init(|| self.memo_world().answer::<TupleIterationVeto>(&()))
     }
 
     /// Facts are immutable for this lookup's lifetime. Proxy and invocation
@@ -1849,7 +1876,7 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn visible_string_code(&self) -> bool {
         *self
             .string_code_veto
-            .get_or_init(|| crate::interproc::accessor_provenance::visible_string_code(self))
+            .get_or_init(|| self.memo_world().answer::<StringCodeVeto>(&()))
     }
 
     /// ADR 0292: whether `property` holding `function` is the `default` of a
@@ -1993,13 +2020,8 @@ impl<'a> SemanticLookup<'a> {
     /// ADR 0324: whether the router-parameters premise applies to this
     /// project.
     pub(super) fn router_params(&self) -> &crate::router_params::RouterParamsStatus {
-        self.router_params.get_or_init(|| {
-            crate::router_params::router_params_status(
-                self.facts,
-                self.dialect,
-                &self.router_install,
-            )
-        })
+        self.router_params
+            .get_or_init(|| self.memo_world().answer::<RouterParams>(&()))
     }
 
     /// ADR 0334: whether `span` in `path` is a component value of a route's

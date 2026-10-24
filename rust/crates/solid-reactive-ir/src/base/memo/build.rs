@@ -43,9 +43,19 @@ pub(crate) enum Section {
     Compiler,
     /// The file's entity-symbol rows (`EntitySymbols` for its path).
     Entities,
+    /// What the file's TypeFacts entities say about calls: for each entity of
+    /// its path, in table order, its location and whether it carries a
+    /// resolved call that never returns or asserts. A resolved call is read
+    /// through `FileRead::resolved_callee_call`.
+    Signatures,
 }
 
-const SECTIONS: [Section; 3] = [Section::Source, Section::Compiler, Section::Entities];
+const SECTIONS: [Section; 4] = [
+    Section::Source,
+    Section::Compiler,
+    Section::Entities,
+    Section::Signatures,
+];
 
 /// The L1 indexes the memo store keeps between builds.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -71,6 +81,20 @@ pub(crate) enum Input {
     /// One key of an index, by its interned id.
     Index(IndexId, u32),
     Constant(Constant),
+    /// The whole analyzed program: every file's every section and slots, the
+    /// TypeScript table's change flag and the build constants. A coarse read
+    /// for a computation that goes through lookup tables not yet ported onto
+    /// memos ([`Ctx::project`]): exact, because it changes whenever any
+    /// input of any of those tables can, and it reuses only across builds in
+    /// which nothing changed.
+    Project,
+}
+
+/// Runs a closure over the build's `SemanticLookup`, whose lifetime a memo
+/// computation cannot name. Implemented by the lookup; used by
+/// [`Ctx::project`].
+pub(crate) trait ProjectAccess: Sync {
+    fn run(&self, f: &mut dyn for<'x> FnMut(&crate::indexes::SemanticLookup<'x>));
 }
 
 /// The build's memo schema.
@@ -92,6 +116,8 @@ pub(crate) const WRAPPER_AT: TableId = TableId(1);
 pub(crate) struct BuildTables {
     identity_wrappers: super::Table<BuildSchema, crate::indexes::IdentityWrapper>,
     wrapper_at: super::Table<BuildSchema, crate::indexes::WrapperAt>,
+    /// Tables 32 and up: the project-wide answers (study S5d).
+    project: crate::indexes::ProjectTables,
 }
 
 impl TableSet<BuildSchema> for BuildTables {
@@ -99,12 +125,16 @@ impl TableSet<BuildSchema> for BuildTables {
         match id {
             IDENTITY_WRAPPERS => &self.identity_wrappers,
             WRAPPER_AT => &self.wrapper_at,
+            id if id.0 >= crate::indexes::PROJECT_TABLES_FROM => self.project.table(id),
             _ => unreachable!("memo table {id:?}"),
         }
     }
 
     fn tables(&self) -> Vec<&dyn super::ErasedTable<BuildSchema>> {
-        vec![&self.identity_wrappers, &self.wrapper_at]
+        let mut tables: Vec<&dyn super::ErasedTable<BuildSchema>> =
+            vec![&self.identity_wrappers, &self.wrapper_at];
+        tables.extend(self.project.tables());
+        tables
     }
 }
 
@@ -118,6 +148,10 @@ impl BuildTables {
     pub(crate) fn wrapper_at(&self) -> &super::Table<BuildSchema, crate::indexes::WrapperAt> {
         &self.wrapper_at
     }
+
+    pub(crate) fn project(&self) -> &crate::indexes::ProjectTables {
+        &self.project
+    }
 }
 
 /// A file's section fingerprints and slots in one build.
@@ -126,6 +160,7 @@ struct FileFingerprints {
     source: [u8; 32],
     compiler: [u8; 32],
     entities: [u8; 32],
+    signatures: [u8; 32],
     slots: Vec<usize>,
 }
 
@@ -135,6 +170,7 @@ impl FileFingerprints {
             Section::Source => &self.source,
             Section::Compiler => &self.compiler,
             Section::Entities => &self.entities,
+            Section::Signatures => &self.signatures,
         }
     }
 }
@@ -170,10 +206,19 @@ fn fingerprints(views: &Views<'_>, id: FileId) -> FileFingerprints {
             entities.update([u8::from(exact)]);
         }
     }
+    let mut signatures = Sha256::new();
+    if let Some(slot) = slots.first() {
+        for (start, end, call) in views.view(*slot).call_signature_rows() {
+            signatures.update(start.to_le_bytes());
+            signatures.update(end.to_le_bytes());
+            signatures.update([call]);
+        }
+    }
     FileFingerprints {
         source: source.finalize().into(),
         compiler: compiler.finalize().into(),
         entities: entities.finalize().into(),
+        signatures: signatures.finalize().into(),
         slots,
     }
 }
@@ -220,6 +265,9 @@ struct MemoBase {
     wrapper_candidates: Option<BaseIndex<Arc<str>, WrapperCandidate>>,
     wrapper_keys: IndexKeys<Arc<str>>,
     program_closed: Option<bool>,
+    /// Bumped by every build in which anything of the program may differ from
+    /// the last: [`Input::Project`]'s answer.
+    project_epoch: u64,
 }
 
 /// What one [`MemoStore::begin`] found and cost.
@@ -308,7 +356,20 @@ impl MemoStore {
 
     /// Starts a build over `views` (whose table is [`Self::table`]'s): finds
     /// the inputs that changed since the last build and marks their readers.
+    #[cfg(test)]
     pub(crate) fn begin(&self, views: &Views<'_>, program_closed: bool) -> BeginReport {
+        self.begin_with(views, program_closed, false)
+    }
+
+    /// [`Self::begin`], told whether the producer says the TypeScript table
+    /// is the last build's (`cache::typescript_unchanged`). Without that
+    /// word, the table is taken to have changed.
+    pub(crate) fn begin_with(
+        &self,
+        views: &Views<'_>,
+        program_closed: bool,
+        typescript_unchanged: bool,
+    ) -> BeginReport {
         let mut report = BeginReport::default();
         let fresh = self.store.poisoned() || self.builds.fetch_add(1, Ordering::AcqRel) == 0;
         let mut base = self.base.write().expect("memo base lock");
@@ -359,6 +420,17 @@ impl MemoStore {
         }
         report.changed_files = changed_files.len();
         report.removed_files = removed.len();
+        let project_moved = fresh
+            || !changed_files.is_empty()
+            || !removed.is_empty()
+            || !typescript_unchanged
+            || base
+                .program_closed
+                .is_some_and(|closed| closed != program_closed);
+        if project_moved {
+            base.project_epoch += 1;
+            changed_inputs.push(Input::Project);
+        }
         base.files = current;
         let started = Instant::now();
         let contribute: Contribute<Arc<str>, WrapperCandidate> =
@@ -451,6 +523,7 @@ pub(crate) struct BuildWorld<'w> {
     views: Views<'w>,
     store: &'w MemoStore,
     program_closed: bool,
+    project: Option<&'w dyn ProjectAccess>,
 }
 
 impl<'w> BuildWorld<'w> {
@@ -459,7 +532,15 @@ impl<'w> BuildWorld<'w> {
             views,
             store,
             program_closed,
+            project: None,
         }
+    }
+
+    /// The lookup coarse reads go through ([`Ctx::project`]).
+    #[must_use]
+    pub(crate) fn with_project(mut self, project: &'w dyn ProjectAccess) -> Self {
+        self.project = Some(project);
+        self
     }
 
     pub(crate) fn views(&self) -> &Views<'w> {
@@ -499,6 +580,7 @@ impl World<BuildSchema> for BuildWorld<'_> {
                 hasher.finish()
             }
             Input::Constant(Constant::ProgramClosed) => u64::from(self.program_closed),
+            Input::Project => base.project_epoch,
         }
     }
 }
@@ -525,6 +607,16 @@ impl<'w> FileRead<'_, '_, 'w> {
         self.ctx
             .record_input(Input::File(self.id, Section::Compiler));
         &self.view.file.compiler
+    }
+
+    /// The resolved call the file's entities carry for a callee
+    /// ([`FileView::resolved_callee_call`]): reads the source and the
+    /// file's call signatures.
+    pub(crate) fn resolved_callee_call(&self, callee: Span) -> Option<&'w typefacts::ResolvedCall> {
+        self.ctx.record_input(Input::File(self.id, Section::Source));
+        self.ctx
+            .record_input(Input::File(self.id, Section::Signatures));
+        self.view.resolved_callee_call(callee)
     }
 
     /// The symbol whose name covers exactly `span` in this file.
@@ -592,6 +684,28 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// Runs `f` over the build's lookup, recorded as a read of the whole
+    /// program ([`Input::Project`]): the way a computation reaches a table
+    /// not yet ported onto memos. `f` must return owned data.
+    pub(crate) fn project<R>(
+        &self,
+        f: impl for<'x> FnOnce(&crate::indexes::SemanticLookup<'x>) -> R,
+    ) -> R {
+        self.record_input(Input::Project);
+        let access = self
+            .world()
+            .project
+            .expect("a build world with a lookup (`with_project`)");
+        let mut f = Some(f);
+        let mut out = None;
+        access.run(&mut |lookup| {
+            if let Some(f) = f.take() {
+                out = Some(f(lookup));
+            }
+        });
+        out.expect("the lookup ran the closure")
     }
 
     /// A build constant.

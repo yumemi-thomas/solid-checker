@@ -124,6 +124,20 @@ impl<'a> SemanticLookup<'a> {
     /// digest: another module's imports decide a mention here.
     pub(super) fn uninitialized_references(&self) -> &HashMap<String, HashSet<Span>> {
         self.initialization.rejected.get_or_init(|| {
+            self.memo_world()
+                .answer::<super::project_memos::UninitializedReferences>(&())
+                .into_iter()
+                .map(|(path, spans)| (path, spans.into_iter().collect()))
+                .collect()
+        })
+    }
+
+    /// The memo's computation: the withheld mentions by path, sorted. The
+    /// recursive `initialized_before` / `declaration_runs_after` proof runs
+    /// inside this one top-level answer (its working tables are scratch of the
+    /// call); the memo is keyed per program, a per-mention memo is study S7.
+    pub(super) fn compute_uninitialized_references(&self) -> Vec<(String, Vec<Span>)> {
+        {
             let mut scratch = Scratch::default();
             // Every mention of each function-valued binding, by binding.
             let mut mentions = Vec::<(usize, usize, usize, Span)>::new();
@@ -171,8 +185,17 @@ impl<'a> SemanticLookup<'a> {
                     .or_default()
                     .insert(span);
             }
-            rejected
-        })
+            let mut answer = rejected
+                .into_iter()
+                .map(|(path, spans)| {
+                    let mut spans = spans.into_iter().collect::<Vec<_>>();
+                    spans.sort_unstable();
+                    (path, spans)
+                })
+                .collect::<Vec<_>>();
+            answer.sort_unstable();
+            answer
+        }
     }
 
     fn files_by_path_index(&self, path: &str) -> Option<usize> {

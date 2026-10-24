@@ -87,8 +87,10 @@
     "hashmap-iteration": 1
   },
   "rust/crates/solid-reactive-ir/src/indexes/completion.rs": {
-    "facts.files": 4,
-    "hashmap-iteration": 7
+    "facts.files": 3,
+    "files()": 1,
+    "file_by_path": 1,
+    "hashmap-iteration": 6
   },
   "rust/crates/solid-reactive-ir/src/indexes/components.rs": {
     "facts.files": 7,
@@ -120,7 +122,7 @@
   "rust/crates/solid-reactive-ir/src/indexes.rs": {
     "facts.files": 10,
     "files()": 5,
-    "file_by_path": 2,
+    "file_by_path": 3,
     "hashmap-iteration": 5
   },
   "rust/crates/solid-reactive-ir/src/interproc/obligations.rs": {

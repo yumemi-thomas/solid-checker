@@ -47,18 +47,32 @@ pub(crate) struct Intrinsics {
 impl<'a> SemanticLookup<'a> {
     /// ADR 0349: no analyzed file visibly writes to a Promise intrinsic.
     pub(crate) fn promise_intrinsics_intact(&self) -> bool {
-        self.intrinsics.get_or_init(|| tripwires(self)).promise
+        self.intrinsics_view().promise
     }
 
     /// ADR 0349: no analyzed file visibly writes to the array iterator.
     pub(crate) fn array_iteration_intact(&self) -> bool {
-        self.intrinsics
-            .get_or_init(|| tripwires(self))
-            .array_iteration
+        self.intrinsics_view().array_iteration
     }
 }
 
-fn tripwires(lookup: &SemanticLookup<'_>) -> Intrinsics {
+impl SemanticLookup<'_> {
+    /// The premises, a view of the [`Intrinsics`](super::project_memos::IntrinsicsTripwires)
+    /// memo built once per build.
+    fn intrinsics_view(&self) -> &Intrinsics {
+        self.intrinsics.get_or_init(|| {
+            let (promise, array_iteration) =
+                self.memo_world()
+                    .answer::<super::project_memos::IntrinsicsTripwires>(&());
+            Intrinsics {
+                promise,
+                array_iteration,
+            }
+        })
+    }
+}
+
+pub(super) fn tripwires(lookup: &SemanticLookup<'_>) -> Intrinsics {
     let mut found = Intrinsics {
         promise: true,
         array_iteration: true,
