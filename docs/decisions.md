@@ -591,7 +591,7 @@ Not built: parallel checkers; reuse of type-derived facts. Ids can be history-in
 
 <a id="adr-0374"></a>
 ## ADR 0374 — tsrs 3bbcc754, TypeScript 7.1.0-beta, and the oracle moved with it
-The producer pins `yumemi-thomas/tsrs@e1e9183` (upstream `3bbcc754`, v0.19.0, plus the export commit). Its TypeScript is `3e9236361fa9`, so the tsc oracle moved with it (ADR 0361): typescript 7.1.0-beta. Lib offsets and `symbol:h:` ids moved, so differential tests take only a reference on the same tsrs rev. Supersedes the pins in ADRs 0361, 0362, 0365.
+The producer pins `yumemi-thomas/tsrs@db57178` (upstream `3bbcc754`, v0.19.0, plus the export commit). Its TypeScript is `3e9236361fa9`, so the tsc oracle moved with it (ADR 0361): typescript 7.1.0-beta. Lib offsets and `symbol:h:` ids moved, so differential tests take only a reference on the same tsrs rev. Supersedes the pins in ADRs 0361, 0362, 0365.
 
 <a id="adr-0378"></a>
 ## ADR 0378 — A write's legal role needs all of its function's entries

@@ -46,16 +46,17 @@ sha2 = "0.10"
 
 # The compiler: tsrs at the solid-checker fork. Upstream oxc-project/tsrs@3bbcc754
 # (v0.19.0, TypeScript 3e9236361fa97a9e6c685f4833ac457ae2d8c50a, 7.1.0-beta) plus one marked commit exporting
-# is_untyped_function_call and get_reduced_apparent_type. Never another rev.
-tsrs_core = { git = "https://github.com/yumemi-thomas/tsrs", rev = "e1e9183c5da78de3261b9832598e3ebebc04cb73" }
-tsrs_ast = { git = "https://github.com/yumemi-thomas/tsrs", rev = "e1e9183c5da78de3261b9832598e3ebebc04cb73" }
-tsrs_checker = { git = "https://github.com/yumemi-thomas/tsrs", rev = "e1e9183c5da78de3261b9832598e3ebebc04cb73" }
-tsrs_compiler = { git = "https://github.com/yumemi-thomas/tsrs", rev = "e1e9183c5da78de3261b9832598e3ebebc04cb73" }
-tsrs_tsoptions = { git = "https://github.com/yumemi-thomas/tsrs", rev = "e1e9183c5da78de3261b9832598e3ebebc04cb73" }
-tsrs_scanner = { git = "https://github.com/yumemi-thomas/tsrs", rev = "e1e9183c5da78de3261b9832598e3ebebc04cb73" }
-tsrs_contentmapper = { git = "https://github.com/yumemi-thomas/tsrs", rev = "e1e9183c5da78de3261b9832598e3ebebc04cb73" }
-tsrs_diagnostics = { git = "https://github.com/yumemi-thomas/tsrs", rev = "e1e9183c5da78de3261b9832598e3ebebc04cb73" }
-tsrs_vfs = { git = "https://github.com/yumemi-thomas/tsrs", rev = "e1e9183c5da78de3261b9832598e3ebebc04cb73" }
+# is_untyped_function_call, get_reduced_apparent_type, could_contain_type_variables, the tuple element index and
+# get_write_type_of_symbol (branch solid-checker-v2). Never another rev.
+tsrs_core = { git = "https://github.com/yumemi-thomas/tsrs", rev = "db57178a979f484d6c9c226438f785da834d5e19" }
+tsrs_ast = { git = "https://github.com/yumemi-thomas/tsrs", rev = "db57178a979f484d6c9c226438f785da834d5e19" }
+tsrs_checker = { git = "https://github.com/yumemi-thomas/tsrs", rev = "db57178a979f484d6c9c226438f785da834d5e19" }
+tsrs_compiler = { git = "https://github.com/yumemi-thomas/tsrs", rev = "db57178a979f484d6c9c226438f785da834d5e19" }
+tsrs_tsoptions = { git = "https://github.com/yumemi-thomas/tsrs", rev = "db57178a979f484d6c9c226438f785da834d5e19" }
+tsrs_scanner = { git = "https://github.com/yumemi-thomas/tsrs", rev = "db57178a979f484d6c9c226438f785da834d5e19" }
+tsrs_contentmapper = { git = "https://github.com/yumemi-thomas/tsrs", rev = "db57178a979f484d6c9c226438f785da834d5e19" }
+tsrs_diagnostics = { git = "https://github.com/yumemi-thomas/tsrs", rev = "db57178a979f484d6c9c226438f785da834d5e19" }
+tsrs_vfs = { git = "https://github.com/yumemi-thomas/tsrs", rev = "db57178a979f484d6c9c226438f785da834d5e19" }
 
 # The allocator of tsrs's own binaries, same features: the producer frees whole
 # program chains and checkers, and the system allocator keeps that memory
@@ -90,14 +91,3 @@ lto = "thin"
 codegen-units = 16
 incremental = true
 
-# PROTOTYPE ONLY (derived-keys): local fork worktree with could_contain_type_variables_exported.
-[patch."https://github.com/yumemi-thomas/tsrs"]
-tsrs_core = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_core" }
-tsrs_ast = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_ast" }
-tsrs_checker = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_checker" }
-tsrs_compiler = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_compiler" }
-tsrs_tsoptions = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_tsoptions" }
-tsrs_scanner = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_scanner" }
-tsrs_contentmapper = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_contentmapper" }
-tsrs_diagnostics = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_diagnostics" }
-tsrs_vfs = { path = "/Users/thomas/Documents/Github/sc-worktrees.noindex/tsrs-derived-keys/crates/tsrs_vfs" }

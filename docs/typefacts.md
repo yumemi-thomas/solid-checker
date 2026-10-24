@@ -75,11 +75,12 @@ incremental program is still reused.
 ## Native integration pins
 
 - tsrs: the fork `https://github.com/yumemi-thomas/tsrs` at
-  `e1e9183c5da78de3261b9832598e3ebebc04cb73`, every tsrs crate pinned to that
+  `db57178a979f484d6c9c226438f785da834d5e19`, every tsrs crate pinned to that
   one `rev` in `apps/solid-typefacts/Cargo.toml` (and so in its `Cargo.lock`).
-  Upstream `oxc-project/tsrs@3bbcc754` (v0.19.0) plus one marked commit that exports
-  `is_untyped_function_call` and `get_reduced_apparent_type`; it changes no
-  behavior. The fork is unpublished: a producer builds only with network access
+  Upstream `oxc-project/tsrs@3bbcc754` (v0.19.0) plus one marked commit (branch `solid-checker-v2`) that exports
+  `is_untyped_function_call`, `get_reduced_apparent_type`,
+  `could_contain_type_variables`, the tuple element index and
+  `get_write_type_of_symbol`; it changes no behavior. The fork is unpublished: a producer builds only with network access
   to it.
 - TypeScript: commit `3e9236361fa97a9e6c685f4833ac457ae2d8c50a`
   (`7.1.0-beta`), the commit tsrs ports. The `tsc` oracle runs the same
