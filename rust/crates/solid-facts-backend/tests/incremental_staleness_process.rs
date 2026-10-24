@@ -650,3 +650,43 @@ fn a_member_assignment_in_another_file_reruns_exactly_the_member_readers() {
         assert!(reused >= 1, "{stage} must keep `P`: {timings:?}");
     }
 }
+
+/// The late stages are reused across an edit whose AST tables keep their
+/// shape (`late_stage_inputs_match`), but a caller's argument values
+/// (ADR 0280, 0338) are decided by re-parsing the callee's source
+/// (`parameter_value_uses`, `argument_site_standings`). `G` flips a test of
+/// its parameter's `length` with a same-length edit; `F`, which hands `G` a
+/// signal getter of length 0, is unchanged. Retained must equal fresh.
+const DECIDING_G: &str =
+    "export function run(read: () => number) {\n  if (read.length === 0) {\n    read();\n  }\n}\n";
+const FLIPPED_G: &str =
+    "export function run(read: () => number) {\n  if (read.length !== 0) {\n    read();\n  }\n}\n";
+const GETTER_F: &str = "import { createSignal } from \"solid-js\";\nimport { run } from \"./G\";\nconst [count] = createSignal(0);\nexport function App() {\n  run(count);\n  return <div />;\n}\n";
+
+#[test]
+fn a_same_length_edit_of_a_parameter_use_in_another_file_is_not_kept() {
+    let Some(mut project) = Project::scratch_per_file(
+        "parameter-use",
+        &[("G.ts", DECIDING_G), ("F.tsx", GETTER_F)],
+    ) else {
+        return;
+    };
+    let options = RuleOptions::default();
+    let vocabulary = solid_v2().vocabulary;
+    let fresh = |facts: &ProjectFacts| {
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap()
+            .0
+    };
+    let mut builder = IncrementalBuilder::default();
+    let first = project.analyze();
+    assert_retained_is_fresh(&mut builder, &first, &options, "deciding");
+    let flipped = project.rewrite("G.ts", FLIPPED_G);
+    assert!(
+        first_difference(&fresh(&first), &fresh(&flipped)).is_some(),
+        "the callee's test of its parameter must decide the caller's answer"
+    );
+    assert_retained_is_fresh(&mut builder, &flipped, &options, "flipped");
+    let back = project.rewrite("G.ts", DECIDING_G);
+    assert_retained_is_fresh(&mut builder, &back, &options, "deciding again");
+}

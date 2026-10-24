@@ -52,7 +52,7 @@ mod project_memos;
 pub(crate) use intrinsics::mentions_word;
 pub(crate) use project_memos::{
     EffectApplyCalls, EffectApplyRegions, PROJECT_TABLES_FROM, ProjectTables, RouterParams,
-    StringCodeVeto, TupleIterationVeto,
+    SourceTexts, StringCodeVeto, TupleIterationVeto,
 };
 
 /// What every reflective definer spelling in the project says about the key
@@ -1089,6 +1089,19 @@ impl<'a> SemanticLookup<'a> {
     /// Whether the program names the function at `function` in the module at
     /// `path` as a value it hands out (ADR 0347, amendment): a static member read or
     /// a named dynamic-import read. Until the census is set, nothing is.
+    /// Records, for the stage chunk computing, that it re-parsed `file`'s
+    /// text: ADR 0280's argument sites and parameter uses read operators,
+    /// literals and names no AST table the late stages compare holds, so a
+    /// same-shape edit there must rerun what read them ([`SourceTexts`]).
+    pub(crate) fn note_source_read(&self, file: &FileFacts) {
+        if !crate::base::reads::recording() || memo_probes::probing() {
+            return;
+        }
+        if let Some(id) = self.memos.table().id_of(file.path.as_str()) {
+            let _ = self.memo_world().answer::<SourceTexts>(&id);
+        }
+    }
+
     pub(crate) fn hands_out_by_name(&self, path: &str, function: Span) -> bool {
         self.namespace_hand_outs
             .get()

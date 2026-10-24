@@ -79,6 +79,7 @@ project_tables! {
     42 function_bind: FunctionBindPatched,
     43 objects_assigned_into: ObjectsAssignedInto,
     44 router_params: RouterParams,
+    45 source_texts: SourceTexts,
 }
 
 /// A whole-program memo: key `()`, computed from the lookup in one
@@ -134,6 +135,41 @@ pub(crate) trait WholeProgram: Memo<BuildSchema, Key = ()> {
 
 /// ADR 0278: the `never`-returning and `asserts` calls written in one path,
 /// sorted by span. Per file, reading only the file.
+/// A file's source bytes, as its slots' hashes: what a reader records when it
+/// re-parses another file's text beyond the AST tables (ADR 0280's argument
+/// sites and parameter uses), which the late stages' input match does not
+/// compare ([`crate::indexes::SemanticLookup::note_source_read`]).
+pub(crate) struct SourceTexts;
+
+impl Memo<BuildSchema> for SourceTexts {
+    type Key = FileId;
+    type Value = Vec<String>;
+    const NAME: &'static str = "source_texts";
+    const ID: TableId = TableId(45);
+
+    fn table(tables: &BuildTables) -> &Table<BuildSchema, Self> {
+        tables.project().source_texts()
+    }
+
+    fn compute(ctx: &Ctx<'_, '_, BuildSchema>, id: &FileId) -> Result<Vec<String>, Cycle> {
+        let mut hashes = Vec::new();
+        let mut rank = 0;
+        while let Some(read) = ctx.file(*id, rank) {
+            hashes.push(read.facts().source_hash.as_str().to_owned());
+            rank += 1;
+        }
+        Ok(hashes)
+    }
+
+    fn on_cycle(_: &FileId) -> Vec<String> {
+        Vec::new()
+    }
+
+    fn implied(id: &FileId) -> Vec<Input> {
+        vec![Input::File(*id, Section::Source)]
+    }
+}
+
 pub(crate) struct NeverReturning;
 
 impl Memo<BuildSchema> for NeverReturning {
