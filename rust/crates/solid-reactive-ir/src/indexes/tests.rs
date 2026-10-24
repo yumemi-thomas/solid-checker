@@ -262,15 +262,18 @@ fn exact_object_member_calls_require_a_closed_const_receiver() {
 fn call_sites(source: &str, spans: &[(Span, &str)]) -> Vec<(Span, Vec<(u32, u32)>)> {
     with_lookup(source, spans, |lookup| {
         let mut sites = lookup
-            .all_function_call_sites()
+            .files()
             .iter()
-            .map(|((_, function), sites)| {
-                let mut callees = sites
-                    .iter()
-                    .map(|site| (site.callee.start, site.callee.end))
-                    .collect::<Vec<_>>();
-                callees.sort_unstable();
-                (*function, callees)
+            .flat_map(|file| {
+                file.ast.functions.iter().filter_map(|function| {
+                    let mut callees = lookup
+                        .function_call_sites(file.path.as_str(), function.span)
+                        .into_iter()
+                        .map(|(_, callee)| (callee.start, callee.end))
+                        .collect::<Vec<_>>();
+                    callees.sort_unstable();
+                    (!callees.is_empty()).then_some((function.span, callees))
+                })
             })
             .collect::<Vec<_>>();
         sites.sort_by_key(|(function, _)| (function.start, function.end));

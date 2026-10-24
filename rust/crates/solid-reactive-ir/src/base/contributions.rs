@@ -41,9 +41,13 @@ pub(crate) enum CalleeSite {
     Jsx(u32),
 }
 
-/// Calls and JSX elements by the symbol that is the value of their callee or
-/// tag name ([`FileView::value_symbol`]). A site whose callee names no exact
-/// value contributes nothing here; the item index lists every site.
+/// Calls by the symbol their callee resolves to ([`FileView::callee_symbol`]:
+/// the value an identifier names, a member's resolved declaration; runtime
+/// redirects aside), and JSX elements by the symbol that is the value of their
+/// tag name ([`FileView::value_symbol`]): the sites the call graph and the
+/// component census resolve ([`crate::indexes::CallSitesOf`]). A site whose
+/// callee names no symbol contributes nothing here; the item index lists every
+/// site.
 pub(crate) fn callees(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Arc<str>, CalleeSite)> {
     let file = view.file;
     let calls = file
@@ -52,8 +56,8 @@ pub(crate) fn callees(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Arc<s
         .iter()
         .enumerate()
         .filter_map(|(index, call)| {
-            view.value_symbol(call.callee)
-                .map(|symbol| (symbol.shared(), CalleeSite::Call(ordinal(index))))
+            view.callee_symbol(call.callee)
+                .map(|symbol| (Arc::from(symbol), CalleeSite::Call(ordinal(index))))
         });
     let jsx = file
         .ast

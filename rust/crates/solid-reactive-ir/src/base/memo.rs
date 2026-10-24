@@ -90,10 +90,13 @@ canonical!(
     solid_facts::core::Span,
     super::FileId,
     crate::SymbolId,
+    solid_dialect::Primitive,
 );
 impl<T: Canonical> Canonical for Option<T> {}
 impl<T: Canonical> Canonical for Vec<T> {}
 impl<T: Canonical> Canonical for Box<T> {}
+/// Shared, compared by value: a large answer is cloned for each reader.
+impl<T: Canonical> Canonical for std::sync::Arc<T> {}
 impl<T: Canonical + Ord> Canonical for BTreeSet<T> {}
 impl<K: Canonical + Ord, V: Canonical> Canonical for BTreeMap<K, V> {}
 impl<A: Canonical, B: Canonical> Canonical for (A, B) {}
