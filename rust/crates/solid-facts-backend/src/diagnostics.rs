@@ -154,6 +154,9 @@ pub struct DiagnosticSession {
     dialect: &'static Dialect,
     builder: IncrementalBuilder,
     retained: Option<RetainedDiagnostic>,
+    /// Line starts of the sources findings were placed in, kept while the
+    /// source text is the same allocation.
+    lines: LineStarts,
 }
 
 impl Default for DiagnosticSession {
@@ -212,6 +215,7 @@ impl DiagnosticSession {
             dialect,
             builder: IncrementalBuilder::default(),
             retained: None,
+            lines: LineStarts::default(),
         }
     }
 
@@ -520,7 +524,7 @@ impl DiagnosticSession {
             }
         }
         let metrics = analysis_metrics(facts, &program);
-        let mut snapshot = snapshot_of(sources, metrics, findings);
+        let mut snapshot = snapshot_of(sources, metrics, findings, &mut self.lines);
         // A disabled coverage rule hides its obligations, not the gap they
         // name: the analysis is still incomplete there, so it cannot certify.
         if snapshot.status == "certified" && !withheld_coverage.is_empty() {
@@ -1018,7 +1022,13 @@ pub fn unsupported_runtime_snapshot(
     }
 }
 
-fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>) -> Snapshot {
+fn snapshot_of(
+    sources: &[SourceFile],
+    metrics: Metrics,
+    findings: Vec<Finding>,
+    lines: &mut LineStarts,
+) -> Snapshot {
+    let mut places = SourcePlacer::new(sources, lines);
     let has_violation = findings.iter().any(|finding| finding.kind == "violation");
     let has_unresolved = findings
         .iter()
@@ -1043,11 +1053,11 @@ fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>)
             subject_kind: finding.subject_kind,
             coverage_family: finding.coverage_family,
             coverage_subject: finding.coverage_subject,
-            primary_location: source_location(&finding.primary_location, sources),
+            primary_location: places.place(&finding.primary_location),
             related_locations: finding
                 .related_locations
                 .iter()
-                .map(|location| source_location(location, sources))
+                .map(|location| places.place(location))
                 .collect(),
             evidence: finding
                 .evidence
@@ -1057,7 +1067,7 @@ fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>)
                     location: step
                         .location
                         .as_ref()
-                        .map(|location| source_location(location, sources)),
+                        .map(|location| places.place(location)),
                 })
                 .collect(),
             fixes: finding
@@ -1070,7 +1080,7 @@ fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>)
                         .edits
                         .into_iter()
                         .map(|edit| SnapshotTextEdit {
-                            location: source_location(&edit.location, sources),
+                            location: places.place(&edit.location),
                             new_text: edit.new_text,
                         })
                         .collect(),
@@ -1128,6 +1138,105 @@ pub fn analysis_metrics(facts: &ProjectFacts, program: &Program) -> Metrics {
             + program.static_defects.len(),
         cached_summaries: 0,
         unresolved_obligations,
+    }
+}
+
+/// Line starts per source path, kept for as long as the source text is the
+/// same allocation (an unedited file keeps its `Arc`), so placing a finding
+/// costs a binary search rather than a scan of the file.
+#[derive(Default)]
+pub(crate) struct LineStarts {
+    by_path: std::collections::HashMap<Arc<str>, KeptLines>,
+}
+
+/// A source's text, and the line starts computed from that very allocation.
+type KeptLines = (Arc<str>, Arc<[u32]>);
+
+impl LineStarts {
+    fn of(&mut self, source: &SourceFile) -> Arc<[u32]> {
+        if let Some((text, starts)) = self.by_path.get(source.path.as_str())
+            && Arc::ptr_eq(text, &source.source)
+        {
+            return Arc::clone(starts);
+        }
+        let mut starts = vec![0_u32];
+        starts.extend(
+            source
+                .source
+                .bytes()
+                .enumerate()
+                .filter(|(_, byte)| *byte == b'\n')
+                .map(|(index, _)| u32::try_from(index + 1).unwrap_or(u32::MAX)),
+        );
+        let starts: Arc<[u32]> = starts.into();
+        self.by_path.insert(
+            Arc::from(source.path.as_str()),
+            (Arc::clone(&source.source), Arc::clone(&starts)),
+        );
+        starts
+    }
+}
+
+/// [`source_location`] over one generation's sources: the same answers, with
+/// the path lookup and the line scan done once rather than per location.
+struct SourcePlacer<'a> {
+    sources: std::collections::HashMap<&'a str, &'a SourceFile>,
+    lines: &'a mut LineStarts,
+    starts: std::collections::HashMap<&'a str, Arc<[u32]>>,
+}
+
+impl<'a> SourcePlacer<'a> {
+    fn new(sources: &'a [SourceFile], lines: &'a mut LineStarts) -> Self {
+        let mut by_path = std::collections::HashMap::with_capacity(sources.len());
+        for source in sources {
+            // `source_location` took the first source of a path.
+            by_path.entry(source.path.as_str()).or_insert(source);
+        }
+        Self {
+            sources: by_path,
+            lines,
+            starts: std::collections::HashMap::new(),
+        }
+    }
+
+    fn place(&mut self, location: &typefacts::Location) -> SourceLocation {
+        let (line, column) = match self.sources.get(location.path.as_ref()) {
+            None => (1, 1),
+            Some(&source) => {
+                let starts = match self.starts.get(source.path.as_str()) {
+                    Some(starts) => Arc::clone(starts),
+                    None => {
+                        let starts = self.lines.of(source);
+                        self.starts
+                            .insert(source.path.as_str(), Arc::clone(&starts));
+                        starts
+                    }
+                };
+                let mut offset = usize::try_from(location.start_byte)
+                    .unwrap_or(usize::MAX)
+                    .min(source.source.len());
+                while !source.source.is_char_boundary(offset) {
+                    offset = offset.saturating_sub(1);
+                }
+                let at = u32::try_from(offset).unwrap_or(u32::MAX);
+                // `starts[0]` is the file start; each later entry follows a
+                // newline, and the newlines before `offset` are the entries
+                // at or before it.
+                let line = starts.partition_point(|start| *start <= at);
+                let line_start = starts[line - 1] as usize;
+                (
+                    line,
+                    source.source[line_start..offset].encode_utf16().count() + 1,
+                )
+            }
+        };
+        SourceLocation {
+            path: location.path.to_string(),
+            start_byte: location.start_byte,
+            end_byte: location.end_byte,
+            line,
+            column,
+        }
     }
 }
 
