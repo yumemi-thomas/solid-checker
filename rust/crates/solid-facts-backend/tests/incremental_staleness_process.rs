@@ -49,6 +49,7 @@ impl Drop for Project {
 const STUB: &str = r#"declare module "solid-js" {
   export function createSignal<T>(value: T): [() => T, (value: T) => void];
   export function createMemo<T>(compute: () => T): () => T;
+  export function createReaction(onInvalidate: () => void): (tracking: () => void) => void;
 }
 
 declare namespace JSX {
@@ -62,6 +63,17 @@ impl Project {
     /// A private project written to a scratch directory: `files` plus the
     /// dialect stub and a tsconfig. `None` without a producer.
     fn scratch(tag: &str, files: &[(&str, &str)]) -> Option<Self> {
+        Self::scratch_with(tag, files, false)
+    }
+
+    /// [`Self::scratch`] on a producer with per-file passes and derived keys
+    /// (ADR 0389): Type Facts ids stay stable across an edit, so the memos
+    /// can be reused.
+    fn scratch_per_file(tag: &str, files: &[(&str, &str)]) -> Option<Self> {
+        Self::scratch_with(tag, files, true)
+    }
+
+    fn scratch_with(tag: &str, files: &[(&str, &str)], per_file: bool) -> Option<Self> {
         let typefacts = env::var("SOLID_TYPEFACTS_BIN").ok()?;
         let root = env::temp_dir()
             .join("sc-scratch.noindex")
@@ -87,7 +99,25 @@ impl Project {
                 compiler_options: CompilerOptions::default(),
             })
             .collect::<Vec<_>>();
-        let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+        let typefacts = PathBuf::from(typefacts)
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let typescript = if per_file {
+            TypeFactsSession::open(
+                "/usr/bin/env",
+                &project_id,
+                &[
+                    "SOLID_TYPEFACTS_PER_FILE_CHECKERS=1".to_owned(),
+                    "SOLID_TYPEFACTS_DERIVED_KEYS=1".to_owned(),
+                    typefacts,
+                ],
+            )
+        } else {
+            TypeFactsSession::open(&typefacts, &project_id, &[])
+        }
+        .unwrap();
         let session =
             NativeIncrementalSession::open(solid_v2(), project_id, sources.clone(), typescript)
                 .unwrap();
@@ -338,4 +368,112 @@ fn a_receiver_that_stops_being_a_literal_in_another_file_does_not_keep_the_old_w
     );
     let literal = project.rewrite("G.ts", LITERAL_G);
     assert_retained_is_fresh(&mut builder, &literal, &options, "literal again");
+}
+
+/// ADR 03XX-s6a: `B` calls the tracker `R` exports. Whether that call invokes
+/// a function `createReaction` returned is decided in `R`, and `B` is
+/// byte-identical across the edit. The binding-chain walk is a memo per file
+/// whose reads include `R`'s binding and call, and the cross-file digest binds
+/// its answers: editing `R` reruns exactly the answers that read it (`R`'s own
+/// and `B`'s; `U`'s is reused), and the moved answer moves the digest, so
+/// every fragment reruns. An edit of `U` moves no answer: the digest stays,
+/// and every fragment but `U`'s is reused.
+const TRACKER_R: &str = "import { createReaction } from \"solid-js\";\nexport const other = createReaction(() => {});\nexport const track = createReaction(() => {});\n";
+// `R` still names `createReaction`, so the project keeps modelling returned
+// callbacks and every file's answer is asked in every build.
+const PLAIN_R: &str = "import { createReaction } from \"solid-js\";\nexport const other = createReaction(() => {});\nexport const track = (tracking: () => void) => tracking();\n";
+const TRACKED_B: &str = "import { createSignal } from \"solid-js\";\nimport { track } from \"./R\";\nconst [count, setCount] = createSignal(0);\nexport function watch() {\n  track(() => setCount(count() + 1));\n}\n";
+const UNRELATED_U: &str =
+    "export const note = \"x\";\nexport function helper(value: number) {\n  return value + 1;\n}\n";
+
+#[test]
+fn a_returned_invocation_answer_moved_by_another_file_reruns_exactly_its_readers() {
+    let Some(mut project) = Project::scratch_per_file(
+        "returned-invocation",
+        &[
+            ("R.ts", TRACKER_R),
+            ("B.ts", TRACKED_B),
+            ("U.ts", UNRELATED_U),
+        ],
+    ) else {
+        return;
+    };
+    let options = RuleOptions::default();
+    let vocabulary = solid_v2().vocabulary;
+    let fresh = |facts: &ProjectFacts| {
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap()
+            .0
+    };
+    let mut builder = IncrementalBuilder::default();
+    let mut retained = |facts: &ProjectFacts, label: &str| {
+        builder.set_shadow_mode(ShadowMode::Off);
+        let (program, timings) = builder
+            .build_with_analysis_inputs_shared(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap();
+        if let Some(difference) = first_difference(&program, &fresh(facts)) {
+            panic!("{label}: {difference}");
+        }
+        timings
+    };
+    let first = project.analyze();
+    retained(&first, "tracker");
+    let plain = project.rewrite("R.ts", PLAIN_R);
+    assert!(
+        first_difference(&fresh(&first), &fresh(&plain)).is_some(),
+        "whether `track` is a returned tracker must change `B`'s answer"
+    );
+    let timings = retained(&plain, "plain tracker");
+    // Reused, recomputed, recomputed to a new answer: `U`; `R` and `B`; `B`.
+    assert_eq!(timings.returned_invocation_files, [1, 2, 1], "{timings:?}");
+    assert_eq!(timings.source_discovery_reused_files, 0, "{timings:?}");
+    let back = project.rewrite("R.ts", TRACKER_R);
+    let timings = retained(&back, "tracker again");
+    assert_eq!(timings.returned_invocation_files, [1, 2, 1], "{timings:?}");
+    let unrelated = project.rewrite("U.ts", &UNRELATED_U.replace("\"x\"", "\"y\""));
+    let timings = retained(&unrelated, "unrelated edit");
+    assert_eq!(timings.returned_invocation_files, [2, 1, 0], "{timings:?}");
+    assert_eq!(timings.source_discovery_reused_files, 2, "{timings:?}");
+}
+
+/// 2.5, third path (docs/open-work.md): the interprocedural graph cache embeds
+/// the accessor labels of argument symbols, not their accessor state. `A`
+/// hands `count` to a helper, byte-identical across the edits, while `B`
+/// flips `count` between a signal getter and a plain function. Since ADR
+/// 03XX-s6a an edit in another file no longer discards every fragment (`H`'s
+/// are reused here); `A`'s still reruns, through the Type Facts delta (the
+/// semantics of `count` moved). This pins that `A`'s retained graph equals a
+/// fresh one the day that delta narrows.
+const SIGNAL_B: &str =
+    "import { createSignal } from \"solid-js\";\nexport const [count] = createSignal(0);\n";
+const PLAIN_B: &str = "export const count = (): number => 0;\n";
+const HELPER_H: &str = "export function helper(read: () => number) {\n  return read();\n}\n";
+const CALLER_A: &str = "import { count } from \"./B\";\nimport { helper } from \"./H\";\nexport function App() {\n  helper(count);\n  return <div />;\n}\n";
+
+#[test]
+fn an_argument_that_stops_being_an_accessor_in_another_file_is_not_kept_in_the_graph() {
+    let Some(mut project) = Project::scratch_per_file(
+        "accessor-label",
+        &[("B.ts", SIGNAL_B), ("H.ts", HELPER_H), ("A.tsx", CALLER_A)],
+    ) else {
+        return;
+    };
+    let options = RuleOptions::default();
+    let vocabulary = solid_v2().vocabulary;
+    let fresh = |facts: &ProjectFacts| {
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap()
+            .0
+    };
+    let mut builder = IncrementalBuilder::default();
+    let first = project.analyze();
+    assert_retained_is_fresh(&mut builder, &first, &options, "signal");
+    let plain = project.rewrite("B.ts", PLAIN_B);
+    assert_retained_is_fresh(&mut builder, &plain, &options, "plain");
+    assert!(
+        first_difference(&fresh(&first), &fresh(&plain)).is_some(),
+        "whether `count` is an accessor must change `A`'s answer"
+    );
+    let signal = project.rewrite("B.ts", SIGNAL_B);
+    assert_retained_is_fresh(&mut builder, &signal, &options, "signal again");
 }

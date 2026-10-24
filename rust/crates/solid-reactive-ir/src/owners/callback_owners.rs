@@ -177,44 +177,14 @@ pub(super) fn component_owner_binding(
 /// Canonical TypeScript symbols prove identity, AST binding facts prove the
 /// initializer/alias chain, and the dialect's resolved primitive index proves
 /// that the initializer is the actual Solid export rather than a same-spelled
-/// local function.
+/// local function. The walk is a memo per file
+/// ([`crate::indexes::SemanticLookup::returned_primitive_at`], ADR 03XX-s6a).
 pub(crate) fn returned_primitive_invocation(
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
     lookup: &SemanticLookup<'_>,
 ) -> Option<(Primitive, Option<usize>)> {
-    let mut reference_path = file.path.as_str();
-    let mut reference_span = call.callee;
-    let mut seen = HashSet::default();
-    loop {
-        // Callee result values do not always receive an entity fact of their
-        // own (tuple slots are the motivating case). Resolve them from the
-        // canonical reference set of each demanded binding declaration, then
-        // follow local or cross-file aliases one binding at a time.
-        let (binding_file, binding, symbol) =
-            lookup.binding_at_reference(reference_path, reference_span)?;
-        if !seen.insert(symbol.clone()) {
-            return None;
-        }
-        if let Some(initializer) = binding.call_initializer {
-            let call_index = lookup.call_index(binding_file, initializer)?;
-            let result_slot = match binding.shape {
-                solid_facts::ast::BindingShape::Array => {
-                    Some(binding.array_slots.iter().position(|slot| {
-                        slot.as_ref().and_then(|name| {
-                            lookup.entities().at(binding_file.path.as_str(), name.span)
-                        }) == Some(&symbol)
-                    })?)
-                }
-                _ => None,
-            };
-            return known_primitive(&lookup.primitives(binding_file).calls[call_index])
-                .map(|primitive| (primitive, result_slot));
-        }
-        let initializer = binding.initializer_identifier.as_ref()?;
-        reference_path = binding_file.path.as_str();
-        reference_span = initializer.span;
-    }
+    lookup.returned_primitive_at(file, call)
 }
 
 /// The execution semantics of one callback argument accepted by a proven

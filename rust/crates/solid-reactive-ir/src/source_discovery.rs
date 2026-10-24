@@ -26,6 +26,7 @@ use solid_facts::{FileFacts, ProjectFacts};
 use typefacts::{Declaration, Location, ResolvedCallValidity};
 
 mod returned_sources;
+pub(crate) use returned_sources::project_returned_source;
 use returned_sources::*;
 mod async_server;
 pub(crate) use async_server::*;

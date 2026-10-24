@@ -123,6 +123,10 @@
   "rust/crates/solid-reactive-ir/src/indexes/primitive_proof.rs": {
     "files()": 3
   },
+  "rust/crates/solid-reactive-ir/src/indexes/returned_invocations.rs": {
+    "facts.files": 2,
+    "files()": 1
+  },
   "rust/crates/solid-reactive-ir/src/indexes/returned_uses.rs": {
     "facts.files": 1
   },

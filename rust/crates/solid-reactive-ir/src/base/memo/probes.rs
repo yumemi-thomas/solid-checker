@@ -37,6 +37,9 @@ pub(crate) enum Probe {
     Stable,
     /// The binding a reference resolves to. FileSpan.
     BindingAt,
+    /// The binding a reference resolves to, with the symbol of the name
+    /// that resolved it. FileSpan.
+    BindingNameAt,
     /// The function a symbol names. Text.
     FunctionForSymbol,
     /// The project class a symbol names. Text.
@@ -114,6 +117,8 @@ pub(crate) enum ProbeAnswer {
     Spellings(Vec<(FileId, u32, crate::base::Spelling)>),
     Names(Vec<Arc<str>>),
     Sites(Vec<(FileId, u32, u32)>),
+    /// A binding (file, slot rank, ordinal) and the symbol of its name.
+    Binding(Option<(FileId, u32, u32, Arc<str>)>),
 }
 
 /// What answers probes: the build's unported tables.
@@ -201,6 +206,19 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
         match self.probe(Probe::BindingAt, PolledKey::FileSpan(file, span)) {
             ProbeAnswer::Item(item) => item,
             other => unreachable!("binding_at answers an item, not {other:?}"),
+        }
+    }
+
+    /// [`Self::binding_at`], with the symbol of the binding's name that the
+    /// reference resolved to.
+    pub(crate) fn binding_name_at(
+        &self,
+        file: FileId,
+        span: Span,
+    ) -> Option<(FileId, u32, u32, Arc<str>)> {
+        match self.probe(Probe::BindingNameAt, PolledKey::FileSpan(file, span)) {
+            ProbeAnswer::Binding(binding) => binding,
+            other => unreachable!("binding_name_at answers a binding, not {other:?}"),
         }
     }
 

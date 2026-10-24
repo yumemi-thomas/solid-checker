@@ -31,6 +31,34 @@ pub(super) fn store_is_value_form(
     })
 }
 
+/// What a source-discovery fragment reads of the call creating a source that
+/// a project function returns (ADR 0222): computed by the fragment and by the
+/// cross-file digest that binds it (ADR 03XX-s6a), so the two cannot differ.
+#[derive(Debug)]
+pub(crate) struct ReturnedSourceFacts {
+    pub(crate) owned_write: bool,
+    pub(crate) value_form: bool,
+    pub(crate) async_options: AsyncSourceOptions,
+    pub(crate) async_source: bool,
+}
+
+pub(crate) fn returned_source_facts(
+    lookup: &SemanticLookup<'_>,
+    origin: &FileFacts,
+    created: &solid_facts::ast::CallFact,
+    primitive: Primitive,
+) -> ReturnedSourceFacts {
+    ReturnedSourceFacts {
+        owned_write: created.owned_write_option,
+        value_form: store_is_value_form(created, Some(primitive)),
+        async_options: async_source_options(origin, created, Some(primitive), lookup.dialect),
+        async_source: created
+            .arguments
+            .first()
+            .is_some_and(|argument| computation_is_async(lookup, origin, argument.span)),
+    }
+}
+
 pub(crate) fn discover_file_sources(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
@@ -72,7 +100,7 @@ pub(crate) fn discover_file_sources(
             && !crate::indexes::binding_written(file, name.span)
             && let Some(symbol) = entities.at(file.path.as_str(), name.span)
             && let Some((origin_file, created, primitive)) =
-                project_returned_source(lookup, file, call, entities, symbol_names)
+                lookup.returned_source_at(file, call.span)
         {
             // The caller binding is this call's source, never the callee's
             // declaration symbol. Separate calls keep separate identities.
@@ -98,22 +126,19 @@ pub(crate) fn discover_file_sources(
                     .source_primitives
                     .push((symbol.clone(), spelling.into()));
             }
+            let facts = returned_source_facts(lookup, origin_file, created, primitive);
             result
                 .source_owned_write
-                .push((symbol.clone(), created.owned_write_option));
-            if store_is_value_form(created, Some(primitive)) {
+                .push((symbol.clone(), facts.owned_write));
+            if facts.value_form {
                 result.value_form_stores.push(symbol.clone());
             }
-            let options =
-                async_source_options(origin_file, created, Some(primitive), lookup.dialect);
-            if options != AsyncSourceOptions::default() {
-                result.source_async_options.push((symbol.clone(), options));
+            if facts.async_options != AsyncSourceOptions::default() {
+                result
+                    .source_async_options
+                    .push((symbol.clone(), facts.async_options));
             }
-            if created
-                .arguments
-                .first()
-                .is_some_and(|argument| computation_is_async(lookup, origin_file, argument.span))
-            {
+            if facts.async_source {
                 result.async_sources.push(symbol.clone());
             }
             continue;

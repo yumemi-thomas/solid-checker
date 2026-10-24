@@ -208,9 +208,9 @@ fn merge_file_source_contributions(
                     cache
                         .get(file.path.as_str())
                         .is_some_and(|cached| {
-                            // A returned-source proof's callee syntax is bound
-                            // by `cross_file_proof_digest` (ADR 0222); its
-                            // symbol resolution by the per-file delta.
+                            // A returned-source proof's answer is bound by
+                            // `cross_file_proof_digest` (ADR 0222, 03XX-s6a);
+                            // the caller's own symbols by the per-file delta.
                             let identity = source_discovery_identity_matches(
                                 &cached.identity,
                                 file.path.as_str(),

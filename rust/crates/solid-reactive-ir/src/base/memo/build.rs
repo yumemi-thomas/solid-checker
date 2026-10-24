@@ -161,6 +161,9 @@ pub(crate) struct BuildTables {
     census: crate::indexes::CensusTables,
     /// Tables 128 to 159: returned-callback use sites (study S5e).
     returned: crate::indexes::ReturnedTables,
+    /// Tables 160 to 191: returned-function invocations and returned sources
+    /// (study S6a).
+    invocations: crate::indexes::InvocationTables,
 }
 
 impl TableSet<BuildSchema> for BuildTables {
@@ -191,6 +194,10 @@ impl BuildTables {
             RECEIVER_CLOSED => &self.receiver_closed,
             ASSIGNED_MEMBERS => &self.assigned_members,
             PROTOTYPE_OWNER_AT => &self.prototype_owner_at,
+            id if id.0 >= crate::indexes::INVOCATION_TABLES_FROM => self
+                .invocations
+                .table(id)
+                .unwrap_or_else(|| unreachable!("memo table {id:?}")),
             id if id.0 >= crate::indexes::RETURNED_TABLES_FROM => self
                 .returned
                 .table(id)
@@ -218,6 +225,7 @@ impl BuildTables {
         tables.extend(self.project.tables());
         tables.extend(self.census.tables());
         tables.extend(self.returned.tables());
+        tables.extend(self.invocations.tables());
         tables
     }
 }
@@ -279,6 +287,10 @@ impl BuildTables {
 
     pub(crate) fn returned(&self) -> &crate::indexes::ReturnedTables {
         &self.returned
+    }
+
+    pub(crate) fn invocations(&self) -> &crate::indexes::InvocationTables {
+        &self.invocations
     }
 }
 
@@ -1093,6 +1105,13 @@ impl<'w> FileRead<'_, '_, 'w> {
         self.ctx
             .record_input(Input::File(self.id, Section::Entities));
         self.view.symbol_at(span)
+    }
+
+    /// The file's TypeFacts references, `(symbol, span)` (its entity rows).
+    pub(crate) fn references(&self) -> &'w [(Arc<str>, Span)] {
+        self.ctx
+            .record_input(Input::File(self.id, Section::Entities));
+        self.view.references()
     }
 
     /// The symbol a callee resolves to, runtime redirects aside

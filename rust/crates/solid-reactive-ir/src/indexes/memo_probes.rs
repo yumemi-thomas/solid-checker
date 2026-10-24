@@ -64,6 +64,18 @@ impl SemanticLookup<'_> {
                         )
                     }),
             ),
+            (Probe::BindingNameAt, PolledKey::FileSpan(id, span)) => ProbeAnswer::Binding(
+                self.binding_resolution_at(path(*id), *span)
+                    .map(|resolution| {
+                        let (id, rank) = self.memo_slot_of(resolution.file);
+                        (
+                            id,
+                            rank,
+                            u32::try_from(resolution.binding).expect("fewer than 2^32 bindings"),
+                            Arc::from(resolution.symbol.as_str()),
+                        )
+                    }),
+            ),
             (Probe::FunctionForSymbol, PolledKey::Text(symbol)) => {
                 ProbeAnswer::Item(match self.functions_by_symbol().get(symbol.as_ref()) {
                     Some(SymbolFunction::Resolved { file, function }) => {
