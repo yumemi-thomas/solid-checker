@@ -93,6 +93,8 @@ impl Project {
             .env("SOLID_CHECKER_TIMINGS", "1")
             // The workspace config turns the inline shadow to `panic`.
             .env("SOLID_CHECKER_IR_SHADOW", "0")
+            // Off by default (ADR 0394): these tests opt in.
+            .env("SOLID_CHECKER_IDLE_SHADOW", "1")
             .env("SOLID_CHECKER_IDLE_SHADOW_DEBOUNCE_MS", "50")
             .env("SOLID_CHECKER_IDLE_SHADOW_TRACE", "1")
             .env("SOLID_CHECKER_IDLE_SHADOW_LOG", self.log())
@@ -276,6 +278,8 @@ fn no_check_runs_when_the_inline_shadow_is_on_or_the_check_is_off() {
     for (label, environment) in [
         ("inline", ("SOLID_CHECKER_IR_SHADOW", "1")),
         ("off", ("SOLID_CHECKER_IDLE_SHADOW", "0")),
+        // Unset is off: the default answers without a background check.
+        ("default", ("SOLID_CHECKER_IDLE_SHADOW", "")),
     ] {
         let Some(project) = Project::new(label, &[environment]) else {
             return;

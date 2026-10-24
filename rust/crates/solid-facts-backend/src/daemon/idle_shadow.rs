@@ -26,8 +26,8 @@
 //! header carries `recovered`.
 //!
 //! Environment:
-//! - `SOLID_CHECKER_IDLE_SHADOW`: unset, `1`, `on`: the check runs (default);
-//!   `0`, `off`, `false`: it does not; `panic`: a mismatch ends the daemon
+//! - `SOLID_CHECKER_IDLE_SHADOW`: `1`, `on`, `true`: the check runs; unset
+//!   (the default) or anything else: it does not; `panic`: a mismatch ends the daemon
 //!   with a failure status (tests and CI). It is also off whenever the inline
 //!   IR shadow (`SOLID_CHECKER_IR_SHADOW`) is on: that already compares every
 //!   build.
@@ -71,10 +71,13 @@ impl Mode {
         if inline != shadow::ShadowMode::Off {
             return Self::Off;
         }
+        // Off by default, like an ordinary language server: an answer is
+        // not re-verified in the background unless asked (CI, fuzzing, a
+        // user who wants the extra check).
         match setting.map(str::trim) {
-            Some("0" | "off" | "false") => Self::Off,
+            Some("1" | "on" | "true") => Self::Serve,
             Some("panic") => Self::Panic,
-            _ => Self::Serve,
+            _ => Self::Off,
         }
     }
 }
@@ -546,7 +549,7 @@ mod tests {
     #[test]
     fn the_setting_selects_the_mode_and_inline_shadow_turns_it_off() {
         let off = shadow::ShadowMode::Off;
-        assert_eq!(Mode::from_setting(None, off), Mode::Serve);
+        assert_eq!(Mode::from_setting(None, off), Mode::Off);
         assert_eq!(Mode::from_setting(Some("1"), off), Mode::Serve);
         assert_eq!(Mode::from_setting(Some("0"), off), Mode::Off);
         assert_eq!(Mode::from_setting(Some("off"), off), Mode::Off);
