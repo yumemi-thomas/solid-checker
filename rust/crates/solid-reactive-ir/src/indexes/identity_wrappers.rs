@@ -6,38 +6,184 @@
 //! wrapper that stores or calls its callback, returns another function on some
 //! path, or falls through to `undefined` answers nothing, and so does an async
 //! or generator function, whose result is a promise or an iterator.
+//!
+//! Two L2 memos answer it (study S4), every read recorded:
+//! - [`WrapperAt`], per function (file, slot, ordinal): whether it is a
+//!   wrapper, reading its own file only (implied by the key, so free);
+//! - [`IdentityWrapper`], per declaration symbol: the L1 index of the
+//!   functions bound to the symbol ([`identity_wrapper_candidates`]), their
+//!   files' order when there are several, and their [`WrapperAt`] answers.
+//!
+//! A retained store reuses either answer across builds until one of its reads
+//! changes. An edit that moves a wrapper's spans recomputes its [`WrapperAt`]
+//! answer to the same value, and the symbol's answer is kept unrun.
+
+use std::sync::Arc;
 
 use super::*;
-use crate::location;
+use crate::base::FileId;
+use crate::base::memo::build::{
+    BuildSchema, BuildTables, FileRead, IDENTITY_WRAPPERS, Input, Section, WRAPPER_AT,
+};
+use crate::base::memo::{Ctx, Cycle, Memo, Table, TableId};
+use crate::base::{BuildConstants, FileView};
 use crate::owners::{callback_literal_span, containing_ast_function, is_identifier_span};
 
-impl<'a> SemanticLookup<'a> {
+impl SemanticLookup<'_> {
     /// The parameter index `symbol`'s function returns unchanged, if it is an
     /// identity wrapper. Keyed by the exact declaration symbol of the function.
-    pub(crate) fn identity_wrapper_parameter(&self, symbol: &str) -> Option<usize> {
-        self.identity_wrappers().get(symbol).copied()
+    pub(crate) fn identity_wrapper_parameter(&self, symbol: &SymbolId) -> Option<usize> {
+        self.memo_world()
+            .answer::<IdentityWrapper>(&symbol.shared())
     }
 
-    /// Every identity wrapper of the project, keyed by its declaration symbol.
-    /// Built once; the owner cache digests it, so a wrapper that changes in
-    /// another file invalidates the callers that resolved through it.
-    pub(super) fn identity_wrappers(&self) -> &HashMap<&'a str, usize> {
-        self.identity_wrappers.get_or_init(|| {
-            let mut wrappers = HashMap::default();
-            for file in self.facts.files.iter() {
-                for function in &file.ast.functions {
-                    let Some(index) = returned_parameter(file, self.entities, function) else {
-                        continue;
-                    };
-                    let Some(symbol) = function_symbol(file, self.entities, function) else {
-                        continue;
-                    };
-                    wrappers.entry(symbol).or_insert(index);
-                }
-            }
-            wrappers
-        })
+    /// Every identity wrapper of the project, sorted by declaration symbol.
+    /// The owner cache digests it, so a wrapper that changes in another file
+    /// invalidates the callers that resolved through it.
+    pub(super) fn identity_wrappers(&self) -> Vec<(Arc<str>, usize)> {
+        let world = self.memo_world();
+        self.memo_store()
+            .wrapper_candidate_keys()
+            .into_iter()
+            .filter_map(|symbol| {
+                let index = world.answer::<IdentityWrapper>(&symbol)?;
+                Some((symbol, index))
+            })
+            .collect()
     }
+}
+
+/// The identity-wrapper answer for one declaration symbol: the parameter its
+/// function returns unchanged, from the first candidate function in file
+/// order that is a wrapper (several functions can bind one symbol).
+pub(crate) struct IdentityWrapper;
+
+impl Memo<BuildSchema> for IdentityWrapper {
+    type Key = Arc<str>;
+    type Value = Option<usize>;
+    const NAME: &'static str = "identity_wrappers";
+    const ID: TableId = IDENTITY_WRAPPERS;
+
+    fn table(tables: &BuildTables) -> &Table<BuildSchema, Self> {
+        tables.identity_wrappers()
+    }
+
+    fn compute(ctx: &Ctx<'_, '_, BuildSchema>, symbol: &Arc<str>) -> Result<Option<usize>, Cycle> {
+        let mut candidates = ctx.wrapper_candidates(symbol);
+        // By file id, then production order: file order needs the slots
+        // only when the candidates span several files.
+        let mut files = candidates
+            .iter()
+            .map(|(file, _, _)| *file)
+            .collect::<Vec<_>>();
+        files.dedup();
+        if files.len() > 1 {
+            let slots = files
+                .iter()
+                .map(|file| (*file, ctx.slots(*file)))
+                .collect::<Vec<_>>();
+            candidates.sort_by_key(|(file, rank, ordinal)| {
+                let slot = slots
+                    .iter()
+                    .find(|(candidate, _)| candidate == file)
+                    .and_then(|(_, slots)| slots.get(*rank).copied())
+                    .unwrap_or(usize::MAX);
+                (slot, *ordinal)
+            });
+        }
+        for (file, rank, ordinal) in candidates {
+            let rank = u32::try_from(rank).expect("fewer than 2^32 slots of one path");
+            if let Some(index) = ctx.memo::<WrapperAt>(&(file, rank, ordinal))? {
+                return Ok(Some(index));
+            }
+        }
+        Ok(None)
+    }
+
+    fn on_cycle(_: &Arc<str>) -> Option<usize> {
+        None
+    }
+}
+
+/// Whether the `ordinal`-th function of the `rank`-th slot of `file` is an
+/// identity wrapper, and of which parameter. It reads its own file only.
+pub(crate) struct WrapperAt;
+
+impl Memo<BuildSchema> for WrapperAt {
+    type Key = (FileId, u32, u32);
+    type Value = Option<usize>;
+    const NAME: &'static str = "identity_wrapper_functions";
+    const ID: TableId = WRAPPER_AT;
+
+    fn table(tables: &BuildTables) -> &Table<BuildSchema, Self> {
+        tables.wrapper_at()
+    }
+
+    fn compute(
+        ctx: &Ctx<'_, '_, BuildSchema>,
+        (file, rank, ordinal): &(FileId, u32, u32),
+    ) -> Result<Option<usize>, Cycle> {
+        let Some(read) = ctx.file(*file, *rank as usize) else {
+            return Ok(None);
+        };
+        Ok(read
+            .facts()
+            .ast
+            .functions
+            .get(*ordinal as usize)
+            .and_then(|function| returned_parameter(&read, function)))
+    }
+
+    fn on_cycle(_: &(FileId, u32, u32)) -> Option<usize> {
+        None
+    }
+
+    fn implied((file, _, _): &(FileId, u32, u32)) -> Vec<Input> {
+        vec![
+            Input::File(*file, Section::Source),
+            Input::File(*file, Section::Entities),
+        ]
+    }
+}
+
+/// L1 contribution: each function of the file that can be an identity
+/// wrapper (synchronous, not a generator, with a parameter), by the exact
+/// symbol it is bound to, as its ordinal in the file's functions.
+pub(crate) fn identity_wrapper_candidates(
+    view: &FileView<'_>,
+    _: &BuildConstants<'_>,
+) -> Vec<(Arc<str>, u32)> {
+    let file = view.file;
+    // The first binding that holds each function literal as its single
+    // `const` name, by the literal's span.
+    let mut holders = HashMap::<Span, Span>::default();
+    for binding in &file.ast.bindings {
+        if binding.immutable
+            && binding.initializer_function
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && let [name] = binding.names.as_slice()
+            && let Some(initializer) = binding.initializer
+        {
+            holders
+                .entry(file.ast.peel_ts_sugar_span(initializer))
+                .or_insert(name.span);
+        }
+    }
+    file.ast
+        .functions
+        .iter()
+        .enumerate()
+        .filter(|(_, function)| {
+            !function.r#async && !function.generator && !function.parameters.is_empty()
+        })
+        .filter_map(|(ordinal, function)| {
+            let symbol = function_symbol(view, &holders, function)?;
+            Some((
+                symbol.shared(),
+                u32::try_from(ordinal).expect("fewer than 2^32 functions in one file"),
+            ))
+        })
+        .collect()
 }
 
 /// The exact symbol a function is bound to: a declaration's name, or the
@@ -45,42 +191,28 @@ impl<'a> SemanticLookup<'a> {
 /// any other binding has no symbol here, so no call names it. A declaration
 /// that is written somewhere (`wrap = function …`, a redeclaration) no longer
 /// holds the function it declares, so it has no symbol either.
-fn function_symbol<'e>(
-    file: &solid_facts::FileFacts,
-    entities: &'e EntitySymbols,
+fn function_symbol<'v>(
+    view: &FileView<'v>,
+    holders: &HashMap<Span, Span>,
     function: &solid_facts::ast::FunctionFact,
-) -> Option<&'e str> {
+) -> Option<&'v SymbolId> {
     if function.kind == solid_facts::ast::FunctionKind::Declaration {
         let name = function.name.as_ref()?;
-        if crate::indexes::binding_written_through_wrappers(file, name.span) {
+        if crate::indexes::binding_written_through_wrappers(view.file, name.span) {
             return None;
         }
-        return entities
-            .exact(&location(file.path.shared(), name.span))
-            .map(SymbolId::as_str);
+        return view.exact_symbol(name.span);
     }
-    let binding = file.ast.bindings.iter().find(|binding| {
-        binding.immutable
-            && binding.initializer_function
-            && binding.shape == solid_facts::ast::BindingShape::Identifier
-            && binding.names.len() == 1
-            && binding.initializer.is_some_and(|initializer| {
-                file.ast.peel_ts_sugar_span(initializer) == function.span
-            })
-    })?;
-    let name = binding.names.first()?;
-    entities
-        .exact(&location(file.path.shared(), name.span))
-        .map(SymbolId::as_str)
+    view.exact_symbol(*holders.get(&function.span)?)
 }
 
 /// The parameter index `function` returns unchanged on every completion, and
 /// no other reference to that parameter exists in the function.
 fn returned_parameter(
-    file: &solid_facts::FileFacts,
-    entities: &EntitySymbols,
+    read: &FileRead<'_, '_, '_>,
     function: &solid_facts::ast::FunctionFact,
 ) -> Option<usize> {
+    let file = read.facts();
     if function.r#async || function.generator || function.parameters.is_empty() {
         return None;
     }
@@ -112,12 +244,12 @@ fn returned_parameter(
         }
         let argument = returned.argument?;
         returned_arguments.push(file.ast.peel_ts_sugar_span(argument));
-        let symbol = entities.value_symbol(file, argument)?;
+        let symbol = read.value_symbol(argument)?;
         let position = function.parameters.iter().position(|parameter| {
             parameter.shape == solid_facts::ast::BindingShape::Identifier
                 && parameter.names.len() == 1
-                && entities
-                    .exact(&location(file.path.shared(), parameter.names[0].span))
+                && read
+                    .exact_symbol(parameter.names[0].span)
                     .is_some_and(|parameter_symbol| parameter_symbol == symbol)
         })?;
         match index {
@@ -172,7 +304,7 @@ pub(crate) fn identity_wrapped_literal_span(
         return None;
     }
     let symbol = lookup.entities().value_symbol(file, call.callee)?;
-    let index = lookup.identity_wrapper_parameter(symbol.as_str())?;
+    let index = lookup.identity_wrapper_parameter(symbol)?;
     if call.arguments.len() <= index
         || call
             .arguments

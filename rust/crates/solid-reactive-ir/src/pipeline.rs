@@ -291,6 +291,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         reachability: mut reachability_cache,
         late_stages: mut late_stage_cache,
         base_check,
+        memos,
     } = caches;
     let emit_timings = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
     let total_started = Instant::now();
@@ -400,6 +401,10 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         rule_options.runtime.program_is_closed(),
     )
     .with_router_install(rule_options.runtime.router_install.clone());
+    let semantic_lookup = match memos {
+        Some(store) => semantic_lookup.with_memo_store(store),
+        None => semantic_lookup,
+    };
     // ADR 0347: which exports a namespace import hands out, read once per build.
     semantic_lookup.set_namespace_hand_outs(crate::attribution::namespace_hand_outs(
         &semantic_lookup,
@@ -599,6 +604,9 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &typescript_indexes.symbols_by_root,
         &mut draft.static_defects,
     );
+    if let Some(report) = semantic_lookup.end_memos() {
+        report_memos(&report, &mut build_timings, emit_timings);
+    }
     let mut program = draft.into_program(factory_instances);
     program.runtime_configuration = runtime_configuration;
     clock.finish(&mut build_timings, ReactiveIrStage::FinalOrdering);
@@ -724,6 +732,36 @@ fn check_retained_base(
     if let Some(mismatch) = check.mismatch {
         *retained = None;
         crate::shadow::report_message(mode, &mismatch);
+    }
+}
+
+/// Records one build's memo report ([`crate::base::memo`]) in the timings,
+/// emits it with them, and appends it to `SOLID_CHECKER_IR_MEMO_LOG` (a
+/// daemon's stderr goes nowhere).
+fn report_memos(
+    report: &crate::base::memo::build::MemoReport,
+    timings: &mut BuildTimings,
+    emit_timings: bool,
+) {
+    let begin = &report.begin;
+    timings.memo_begin =
+        std::time::Duration::from_nanos(begin.fingerprint_ns + begin.index_ns + begin.mark_ns);
+    for (_, stats) in &report.tables {
+        timings.memo_reused += stats.reused + stats.verified;
+        timings.memo_computed += stats.fresh + stats.unchanged + stats.changed;
+    }
+    let line = serde_json::json!({ "reactiveIrMemo": report });
+    if emit_timings {
+        eprintln!("{line}");
+    }
+    if let Some(path) = std::env::var_os("SOLID_CHECKER_IR_MEMO_LOG")
+        && let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+    {
+        use std::io::Write;
+        let _ = writeln!(file, "{line}");
     }
 }
 

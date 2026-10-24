@@ -82,6 +82,9 @@ pub(crate) struct IncrementalCacheState {
     /// Shadow mode only: the previous build's base indexes, which the next
     /// build updates and compares with its refold ([`crate::base::retained`]).
     base_indexes: Option<crate::base::retained::RetainedBase>,
+    /// L2: memo answers with their recorded reads ([`crate::base::memo`]),
+    /// reused across builds until a read changes.
+    memos: Option<crate::base::memo::build::MemoStore>,
     domain: Option<SourceDiscoveryDomain>,
 }
 
@@ -101,6 +104,8 @@ pub(crate) struct BuildCaches<'a> {
         &'a mut Option<crate::base::retained::RetainedBase>,
         crate::shadow::ShadowMode,
     )>,
+    /// The retained memo store; `None` gives the build a store of its own.
+    pub(crate) memos: Option<&'a crate::base::memo::build::MemoStore>,
 }
 
 impl IncrementalCacheState {
@@ -142,6 +147,10 @@ impl IncrementalCacheState {
             typescript_indexes: Some(&mut self.typescript_indexes),
             reachability: Some(&mut self.reachability),
             late_stages: Some(&mut self.late_stages),
+            memos: Some(
+                self.memos
+                    .get_or_insert_with(crate::base::memo::build::MemoStore::from_env),
+            ),
         }
     }
 
@@ -160,6 +169,9 @@ impl IncrementalCacheState {
         self.reachability = None;
         self.base_indexes = None;
         if retention == CacheRetention::Compact {
+            // Memo answers are small next to what they save; only the
+            // compact policy, which keeps no index at all, drops them.
+            self.memos = None;
             self.ast_indexes.clear();
             self.source_discovery.clear();
             self.late_stages = None;
@@ -175,6 +187,7 @@ impl IncrementalCacheState {
         self.reachability = None;
         self.late_stages = None;
         self.base_indexes = None;
+        self.memos = None;
     }
 }
 

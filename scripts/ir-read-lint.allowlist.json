@@ -100,9 +100,6 @@
     "file_by_path": 1,
     "hashmap-iteration": 3
   },
-  "rust/crates/solid-reactive-ir/src/indexes/identity_wrappers.rs": {
-    "facts.files": 1
-  },
   "rust/crates/solid-reactive-ir/src/indexes/initialization.rs": {
     "facts.files": 6,
     "file_by_path": 1,

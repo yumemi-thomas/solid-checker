@@ -25,7 +25,9 @@ mod components;
 mod compound;
 mod event_delivery;
 mod identity_wrappers;
-pub(crate) use identity_wrappers::identity_wrapped_literal_span;
+pub(crate) use identity_wrappers::{
+    IdentityWrapper, WrapperAt, identity_wrapped_literal_span, identity_wrapper_candidates,
+};
 mod initialization;
 mod intrinsics;
 mod member_values;
@@ -801,8 +803,9 @@ pub(super) struct SemanticLookup<'a> {
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
     functions_by_symbol: OnceLock<HashMap<&'a str, SymbolFunction>>,
-    /// ADR 0346: the project's identity wrappers, by declaration symbol.
-    identity_wrappers: OnceLock<HashMap<&'a str, usize>>,
+    /// L2: the memo tables ([`crate::base::memo`]); ADR 0346's identity
+    /// wrappers are the first.
+    memos: crate::base::memo::build::LookupMemos<'a>,
     /// ADR 0319: every literal's invocation-flow answer.
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
     /// The literals whose every invocation is a host event dispatch.
@@ -987,6 +990,39 @@ impl<'a> SemanticLookup<'a> {
         self
     }
 
+    /// Reads and records memos through a retained session's store instead of
+    /// one of the lookup's own.
+    #[must_use]
+    pub(super) fn with_memo_store(
+        mut self,
+        store: &'a crate::base::memo::build::MemoStore,
+    ) -> Self {
+        self.memos = crate::base::memo::build::LookupMemos::shared(store, &self.file_table);
+        self
+    }
+
+    /// The build as memo computations read it. The first call begins the
+    /// build: the store's invalidation runs before any read.
+    pub(crate) fn memo_world(&self) -> crate::base::memo::build::BuildWorld<'_> {
+        let world = crate::base::memo::build::BuildWorld::new(
+            self.base_views_over(self.memos.table()),
+            self.memos.store(),
+            self.program_closed,
+        );
+        self.memos
+            .begin_once(|| self.memos.store().begin(world.views(), self.program_closed));
+        world
+    }
+
+    pub(crate) fn memo_store(&self) -> &crate::base::memo::build::MemoStore {
+        self.memos.store()
+    }
+
+    /// Ends the build's memo use ([`crate::base::memo::build::LookupMemos::end`]).
+    pub(crate) fn end_memos(&self) -> Option<crate::base::memo::build::MemoReport> {
+        self.memos.end()
+    }
+
     /// Records the closed program's namespace census (ADR 0347). The pipeline
     /// sets it once per build, before any owner pass reads it.
     pub(crate) fn set_namespace_hand_outs(&self, hand_outs: crate::attribution::NamespaceHandOuts) {
@@ -1026,6 +1062,7 @@ impl<'a> SemanticLookup<'a> {
                 .is_sorted(),
             "entity table must be sorted by path for per-path containment slices"
         );
+        let file_table = crate::base::FileTable::new(&facts.files);
         Self {
             object_members: OnceLock::new(),
             spread_handlers: OnceLock::new(),
@@ -1038,7 +1075,7 @@ impl<'a> SemanticLookup<'a> {
             entities,
             symbol_names,
             functions_by_symbol: OnceLock::new(),
-            identity_wrappers: OnceLock::new(),
+            memos: crate::base::memo::build::LookupMemos::owned(&file_table),
             invocation_flow_answers: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
             reflective_prototype_write: OnceLock::new(),
@@ -1068,7 +1105,7 @@ impl<'a> SemanticLookup<'a> {
             namespace_hand_outs: OnceLock::new(),
             bindings_by_symbol: OnceLock::new(),
             bindings_by_reference: OnceLock::new(),
-            file_table: crate::base::FileTable::new(&facts.files),
+            file_table,
             reference_rows: OnceLock::new(),
             base: crate::base::BaseIndexes::default(),
             file_primitives: OnceLock::new(),
@@ -1371,16 +1408,14 @@ impl<'a> SemanticLookup<'a> {
             // ADR 0346: a wrapper in another file decides whether a call hands
             // back a callback literal, so every wrapper's identity is digested.
             hasher.update(b"identity-wrappers\0");
-            let mut wrappers = self.identity_wrappers().iter().collect::<Vec<_>>();
-            wrappers.sort_unstable();
-            for (symbol, index) in wrappers {
+            for (symbol, index) in self.identity_wrappers() {
                 hasher.update(
                     u64::try_from(symbol.len())
                         .unwrap_or(u64::MAX)
                         .to_le_bytes(),
                 );
                 hasher.update(symbol.as_bytes());
-                hasher.update(u64::try_from(*index).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(u64::try_from(index).unwrap_or(u64::MAX).to_le_bytes());
             }
             // ADR 0325: an imported constant's primitive-ness is another
             // file's fact.

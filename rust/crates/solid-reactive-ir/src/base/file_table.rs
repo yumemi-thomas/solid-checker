@@ -21,6 +21,8 @@ pub(crate) struct FileId(u32);
 #[derive(Clone, Debug, Default)]
 pub(crate) struct FileInterner {
     by_path: HashMap<Arc<str>, FileId>,
+    /// Each id's path, by id.
+    paths: Vec<Arc<str>>,
 }
 
 impl FileInterner {
@@ -28,9 +30,16 @@ impl FileInterner {
         if let Some(id) = self.by_path.get(path) {
             return *id;
         }
-        let id = FileId(u32::try_from(self.by_path.len()).expect("fewer than 2^32 analyzed paths"));
-        self.by_path.insert(Arc::from(path), id);
+        let id = FileId(u32::try_from(self.paths.len()).expect("fewer than 2^32 analyzed paths"));
+        let path: Arc<str> = Arc::from(path);
+        self.by_path.insert(Arc::clone(&path), id);
+        self.paths.push(path);
         id
+    }
+
+    /// The path `id` names.
+    fn path(&self, id: FileId) -> &str {
+        &self.paths[id.0 as usize]
     }
 
     pub(crate) fn get(&self, path: &str) -> Option<FileId> {
@@ -80,6 +89,29 @@ impl FileTable {
 
     pub(crate) fn interner(&self) -> &FileInterner {
         &self.interner
+    }
+
+    /// The same slots under `interner`: what [`Self::with_interner`] gives
+    /// for the same files, without reading them again.
+    pub(crate) fn reinterned(&self, mut interner: FileInterner) -> Self {
+        let mut slot_ids = Vec::with_capacity(self.slot_ids.len());
+        let mut slots = HashMap::<FileId, Vec<usize>>::default();
+        let mut ids = Vec::with_capacity(self.ids.len());
+        for (slot, id) in self.slot_ids.iter().enumerate() {
+            let id = interner.intern(self.interner.path(*id));
+            slot_ids.push(id);
+            let entry = slots.entry(id).or_default();
+            if entry.is_empty() {
+                ids.push(id);
+            }
+            entry.push(slot);
+        }
+        Self {
+            interner,
+            slot_ids,
+            slots,
+            ids,
+        }
     }
 
     /// The id of the file in slot `slot`.
@@ -234,6 +266,16 @@ impl<'a> FileView<'a> {
     /// ([`EntitySymbols::value_symbol`]).
     pub(crate) fn value_symbol(&self, span: Span) -> Option<&'a SymbolId> {
         self.sources.symbols.value_symbol(self.file, span)
+    }
+
+    /// The symbol whose name covers exactly `span` in this file
+    /// ([`EntitySymbols::exact`]).
+    pub(crate) fn exact_symbol(&self, span: Span) -> Option<&'a SymbolId> {
+        self.sources
+            .symbols
+            .exact_by_path
+            .get(self.path())
+            .and_then(|rows| rows.get(&(u64::from(span.start), u64::from(span.end))))
     }
 
     pub(crate) fn entity_at(&self, span: Span) -> Option<&'a EntityFact> {
