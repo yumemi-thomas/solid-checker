@@ -79,6 +79,9 @@ pub(crate) struct IncrementalCacheState {
     typescript_indexes: Option<CachedTypeScriptIndexes>,
     reachability: Option<CachedReachability>,
     late_stages: Option<CachedLateStages>,
+    /// Shadow mode only: the previous build's base indexes, which the next
+    /// build updates and compares with its refold ([`crate::base::retained`]).
+    base_indexes: Option<crate::base::retained::RetainedBase>,
     domain: Option<SourceDiscoveryDomain>,
 }
 
@@ -92,6 +95,12 @@ pub(crate) struct BuildCaches<'a> {
     pub(crate) typescript_indexes: Option<&'a mut Option<CachedTypeScriptIndexes>>,
     pub(crate) reachability: Option<&'a mut Option<CachedReachability>>,
     pub(crate) late_stages: Option<&'a mut Option<CachedLateStages>>,
+    /// Set in shadow mode: the retained base to check, and how to report a
+    /// mismatch.
+    pub(crate) base_check: Option<(
+        &'a mut Option<crate::base::retained::RetainedBase>,
+        crate::shadow::ShadowMode,
+    )>,
 }
 
 impl IncrementalCacheState {
@@ -120,8 +129,12 @@ impl IncrementalCacheState {
         true
     }
 
-    pub(crate) fn for_build(&mut self) -> BuildCaches<'_> {
+    /// The caches one build uses. With shadow mode on, the build also checks
+    /// the retained base indexes ([`crate::base::retained`]).
+    pub(crate) fn for_build(&mut self, shadow: crate::shadow::ShadowMode) -> BuildCaches<'_> {
         BuildCaches {
+            base_check: (shadow != crate::shadow::ShadowMode::Off)
+                .then_some((&mut self.base_indexes, shadow)),
             ast_indexes: Some(&mut self.ast_indexes),
             source_discovery: Some(&mut self.source_discovery),
             interprocedural_graph: Some(&mut self.interprocedural_graph),
@@ -145,6 +158,7 @@ impl IncrementalCacheState {
         self.interprocedural_results = CachedInterproceduralResults::default();
         self.typescript_indexes = None;
         self.reachability = None;
+        self.base_indexes = None;
         if retention == CacheRetention::Compact {
             self.ast_indexes.clear();
             self.source_discovery.clear();
@@ -160,6 +174,7 @@ impl IncrementalCacheState {
         self.typescript_indexes = None;
         self.reachability = None;
         self.late_stages = None;
+        self.base_indexes = None;
     }
 }
 

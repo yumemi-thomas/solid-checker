@@ -1,6 +1,6 @@
 {
   "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs": {
-    "files()": 6,
+    "files()": 5,
     "file_by_path": 1
   },
   "rust/crates/solid-reactive-ir/src/accessor_provenance/projection_helpers.rs": {
@@ -10,7 +10,7 @@
     "file_by_path": 11
   },
   "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_index.rs": {
-    "facts.files": 8,
+    "facts.files": 7,
     "file_by_path": 2,
     "hashmap-iteration": 4
   },
@@ -29,6 +29,9 @@
   "rust/crates/solid-reactive-ir/src/attribution.rs": {
     "files()": 6,
     "hashmap-iteration": 7
+  },
+  "rust/crates/solid-reactive-ir/src/base/index.rs": {
+    "hashmap-iteration": 2
   },
   "rust/crates/solid-reactive-ir/src/boundary_defects.rs": {
     "facts.files": 1
@@ -76,7 +79,7 @@
   },
   "rust/crates/solid-reactive-ir/src/indexes/class_prototype.rs": {
     "facts.files": 1,
-    "files()": 3,
+    "files()": 2,
     "file_by_path": 2,
     "hashmap-iteration": 4
   },
@@ -95,12 +98,9 @@
     "hashmap-iteration": 1
   },
   "rust/crates/solid-reactive-ir/src/indexes/compound.rs": {
-    "facts.files": 4,
+    "facts.files": 3,
     "file_by_path": 1,
     "hashmap-iteration": 3
-  },
-  "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs": {
-    "files()": 2
   },
   "rust/crates/solid-reactive-ir/src/indexes/identity_wrappers.rs": {
     "facts.files": 1
@@ -124,7 +124,7 @@
   },
   "rust/crates/solid-reactive-ir/src/indexes.rs": {
     "facts.files": 10,
-    "files()": 3,
+    "files()": 5,
     "file_by_path": 2,
     "hashmap-iteration": 5
   },
@@ -163,10 +163,10 @@
     "hashmap-iteration": 2
   },
   "rust/crates/solid-reactive-ir/src/object_members/handlers.rs": {
-    "facts.files": 3
+    "facts.files": 2
   },
   "rust/crates/solid-reactive-ir/src/object_members.rs": {
-    "facts.files": 2,
+    "facts.files": 1,
     "files()": 5,
     "file_by_path": 2,
     "hashmap-iteration": 23
@@ -203,7 +203,8 @@
     "facts.files": 2
   },
   "rust/crates/solid-reactive-ir/src/pipeline.rs": {
-    "facts.files": 3
+    "facts.files": 3,
+    "files()": 1
   },
   "rust/crates/solid-reactive-ir/src/project_consumer.rs": {
     "file_by_path": 1,

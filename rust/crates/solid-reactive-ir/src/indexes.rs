@@ -17,6 +17,7 @@ use super::{SymbolId, SymbolName};
 use crate::owners::function_binding_name;
 
 mod callees;
+pub(crate) use callees::{resolved_callee_call_in, standard_library_declaration_of};
 mod class_prototype;
 mod closed_members;
 mod completion;
@@ -104,7 +105,7 @@ pub(crate) fn reference_is_declaration_or_module_surface(file: &FileFacts, span:
 
 /// The string a computed key names when it is a `const` bound to a string
 /// literal in the same file (`const key = "run"; c[key] = f`).
-fn constant_string_key(file: &FileFacts, key: Span) -> Option<String> {
+pub(crate) fn constant_string_key(file: &FileFacts, key: Span) -> Option<String> {
     let key = file.ast.peel_ts_sugar_span(key);
     let declaration = file.ast.reference_declaration(key)?;
     let binding = file.ast.bindings.iter().find(|binding| {
@@ -806,9 +807,6 @@ pub(super) struct SemanticLookup<'a> {
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
-    synchronous_event_dispatch: OnceLock<bool>,
-    /// Whether some module of the program calls direct `eval`.
-    program_eval: OnceLock<bool>,
     /// ADR 0292: whether some file holds a reflective write through a
     /// `prototype`.
     reflective_prototype_write: OnceLock<bool>,
@@ -820,9 +818,6 @@ pub(super) struct SemanticLookup<'a> {
     /// ADR 0209: the property names some assignment in the project writes
     /// (`x.name = …`), and which prototypes it writes through (ADR 0314).
     assigned_member_names: OnceLock<AssignedMembers>,
-    /// Review round 1 of ADR 0293: whether some file may define a property
-    /// reflectively ([`Self::property_may_be_defined_reflectively`]).
-    reflective_property_definition: OnceLock<bool>,
     /// [`Self::property_may_be_defined_reflectively_as`], summarised once
     /// over the project so each per-name query is a set lookup.
     reflective_definition_names: OnceLock<ReflectiveDefinitionNames>,
@@ -858,13 +853,12 @@ pub(super) struct SemanticLookup<'a> {
     namespace_hand_outs: OnceLock<crate::attribution::NamespaceHandOuts>,
     bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
     bindings_by_reference: OnceLock<BindingsByReference>,
-    files_by_path: OnceLock<HashMap<&'a str, usize>>,
-    /// The index of the first file carrying each path, as a scan in file
-    /// order finds it ([`Self::first_file_index`]).
-    first_file_by_path: OnceLock<HashMap<&'a str, usize>>,
-    /// How many analyzed files carry each path, for the indexed relative
-    /// module resolver (a path listed twice is ambiguous, not unique).
-    file_path_counts: OnceLock<HashMap<&'a str, usize>>,
+    /// L0: the analyzed files by interned id ([`crate::base`]).
+    file_table: crate::base::FileTable,
+    /// Each path's TypeFacts references, read by the references index.
+    reference_rows: OnceLock<crate::base::file_table::ReferenceRows>,
+    /// L1: the base indexes, each folded on first read ([`crate::base`]).
+    base: crate::base::BaseIndexes,
     file_primitives: OnceLock<Vec<OnceLock<FilePrimitives>>>,
     file_named_callback_roles: OnceLock<Vec<OnceLock<super::NamedCallbackRoles>>>,
     project_primitives: OnceLock<HashSet<solid_dialect::Primitive>>,
@@ -1047,14 +1041,11 @@ impl<'a> SemanticLookup<'a> {
             identity_wrappers: OnceLock::new(),
             invocation_flow_answers: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
-            synchronous_event_dispatch: OnceLock::new(),
-            program_eval: OnceLock::new(),
             reflective_prototype_write: OnceLock::new(),
             objects_assigned_into: OnceLock::new(),
             router_params: OnceLock::new(),
             route_component_values: OnceLock::new(),
             assigned_member_names: OnceLock::new(),
-            reflective_property_definition: OnceLock::new(),
             reflective_definition_names: OnceLock::new(),
             returned_invocation_sites: ReturnedInvocationSites::default(),
             binding_declarations: OnceLock::new(),
@@ -1077,9 +1068,9 @@ impl<'a> SemanticLookup<'a> {
             namespace_hand_outs: OnceLock::new(),
             bindings_by_symbol: OnceLock::new(),
             bindings_by_reference: OnceLock::new(),
-            files_by_path: OnceLock::new(),
-            first_file_by_path: OnceLock::new(),
-            file_path_counts: OnceLock::new(),
+            file_table: crate::base::FileTable::new(&facts.files),
+            reference_rows: OnceLock::new(),
+            base: crate::base::BaseIndexes::default(),
             file_primitives: OnceLock::new(),
             file_named_callback_roles: OnceLock::new(),
             project_primitives: OnceLock::new(),
@@ -1673,17 +1664,8 @@ impl<'a> SemanticLookup<'a> {
 
     /// The position of a file in project facts, for the per-file memo tables.
     fn file_index(&self, file: &FileFacts) -> usize {
-        *self
-            .files_by_path
-            .get_or_init(|| {
-                self.facts
-                    .files
-                    .iter()
-                    .enumerate()
-                    .map(|(index, file)| (file.path.as_str(), index))
-                    .collect()
-            })
-            .get(file.path.as_str())
+        self.file_table
+            .last_slot(file.path.as_str())
             .expect("per-file lookup for a file outside project facts")
     }
 
@@ -1851,17 +1833,10 @@ impl<'a> SemanticLookup<'a> {
     /// exactly as [`solid_facts::resolve_relative_module_path`] over every
     /// analyzed path, without scanning them.
     pub(super) fn relative_module_path(&self, from: &str, module: &str) -> Option<&'a str> {
-        let counts = self.file_path_counts.get_or_init(|| {
-            let mut counts = HashMap::default();
-            for file in &self.facts.files {
-                *counts.entry(file.path.as_str()).or_insert(0) += 1;
-            }
-            counts
-        });
+        let facts: &'a ProjectFacts = self.facts;
         solid_facts::resolve_relative_module_path_indexed(from, module, |probe| {
-            counts
-                .get_key_value(probe)
-                .map(|(path, count)| (*path, *count))
+            let slots = self.file_table.slots_of(self.file_table.id_of(probe)?);
+            Some((facts.files[*slots.first()?].path.as_str(), slots.len()))
         })
     }
 
@@ -1869,30 +1844,74 @@ impl<'a> SemanticLookup<'a> {
     /// what `facts.files.iter().position(..)` answers, read from an index
     /// built once.
     pub(super) fn first_file_index(&self, path: &str) -> Option<usize> {
-        self.first_file_by_path
-            .get_or_init(|| {
-                let mut first = HashMap::default();
-                for (index, file) in self.facts.files.iter().enumerate() {
-                    first.entry(file.path.as_str()).or_insert(index);
-                }
-                first
-            })
-            .get(path)
-            .copied()
+        self.file_table.first_slot(path)
+    }
+
+    /// The per-file views of this build's files over `table`: what the base
+    /// indexes fold.
+    pub(crate) fn base_views_over<'s>(
+        &'s self,
+        table: &'s crate::base::FileTable,
+    ) -> crate::base::Views<'s> {
+        crate::base::Views {
+            table,
+            files: self.files(),
+            sources: crate::base::ViewSources {
+                ast_indexes: self.ast_indexes,
+                symbols: self.entities,
+                entities: self.entities_by_location(),
+                typescript: &self.facts.typescript,
+                references: &self.reference_rows,
+            },
+            constants: crate::base::BuildConstants {
+                dialect: self.dialect,
+            },
+        }
+    }
+
+    fn base_views(&self) -> crate::base::Views<'_> {
+        self.base_views_over(&self.file_table)
+    }
+
+    /// L1: module hazards and module-level flags.
+    pub(crate) fn base_hazards(&self) -> &crate::base::BaseIndex<crate::base::Hazard, u32> {
+        self.base.hazards(|| self.base_views())
+    }
+
+    /// Whether some analyzed file has `hazard`.
+    pub(crate) fn hazard_present(&self, hazard: crate::base::Hazard) -> bool {
+        self.base_hazards().contains_key(&hazard)
+    }
+
+    /// Every slot of the analyzed files in file order, with the entries
+    /// `index` holds for it: how a census that reads files in order replays
+    /// their contributions.
+    pub(crate) fn slot_entries<'s, K, C>(
+        &'s self,
+        index: &'s crate::base::BaseIndex<K, C>,
+    ) -> impl Iterator<Item = (&'a FileFacts, &'s [(K, C)])> + 's
+    where
+        K: Eq + std::hash::Hash + Clone,
+        C: PartialEq,
+        'a: 's,
+    {
+        let files: &'a [FileFacts] = self.files();
+        files.iter().enumerate().map(move |(slot, file)| {
+            (
+                file,
+                index.slot(
+                    self.file_table.slot_id(slot),
+                    self.file_table.slot_rank(slot),
+                ),
+            )
+        })
     }
 
     pub(super) fn file_by_path(&self, path: &str) -> Option<&'a FileFacts> {
-        self.files_by_path
-            .get_or_init(|| {
-                self.facts
-                    .files
-                    .iter()
-                    .enumerate()
-                    .map(|(index, file)| (file.path.as_str(), index))
-                    .collect()
-            })
-            .get(path)
-            .map(|index| &self.facts.files[*index])
+        let facts: &'a ProjectFacts = self.facts;
+        self.file_table
+            .last_slot(path)
+            .map(|slot| &facts.files[slot])
     }
 
     /// A missing symbol is missing reference evidence, not an empty census.

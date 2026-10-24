@@ -195,6 +195,12 @@ pub struct ShadowReport {
 /// Reports a mismatch per `mode`: panics, or logs (stderr and the optional
 /// log file) and returns so the caller serves the fresh program.
 pub(crate) fn report(mode: ShadowMode, mismatch: &ShadowMismatch) {
+    report_message(mode, &mismatch.to_string());
+}
+
+/// [`report`] for any shadow finding, such as a base-index mismatch
+/// ([`crate::base::retained`]).
+pub(crate) fn report_message(mode: ShadowMode, mismatch: &str) {
     let message = format!("solid-checker: {mismatch}");
     if mode == ShadowMode::Panic {
         panic!("{message}");

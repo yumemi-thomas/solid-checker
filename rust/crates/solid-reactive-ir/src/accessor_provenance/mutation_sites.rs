@@ -316,12 +316,9 @@ pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
 /// mutated a particular property. Erased signatures cannot hide visible code
 /// construction, including source slots and returned gateway values.
 pub(crate) fn visible_string_code(lookup: &SemanticLookup<'_>) -> bool {
-    lookup.files().iter().any(|file| {
-        file.ast
-            .module_hazards
-            .iter()
-            .any(|hazard| hazard.kind == ast::ModuleHazardKind::Eval)
-            || file.ast.calls.iter().any(|call| {
+    lookup.program_has_eval()
+        || lookup.files().iter().any(|file| {
+            file.ast.calls.iter().any(|call| {
                 string_code_reference(file, call.callee, lookup, 24, false)
                     || tuple_mutation_method(file, call, lookup) == Some("stringCode")
                     || (call.construct
@@ -337,7 +334,7 @@ pub(crate) fn visible_string_code(lookup: &SemanticLookup<'_>) -> bool {
                                     .starts_with("FunctionConstructor")
                             }))
             })
-    })
+        })
 }
 
 pub(super) fn string_code_reference(
@@ -1066,12 +1063,45 @@ pub(crate) fn reflective_prototype_write(lookup: &SemanticLookup<'_>) -> bool {
     lookup.reflective_prototype_write_present()
 }
 
-/// The scan behind [`reflective_prototype_write`], which the lookup memoizes.
+/// The census behind [`reflective_prototype_write`], which the lookup
+/// memoizes: the calls the base index lists as mutation candidates
+/// ([`crate::base::Hazard::MutationBuiltinCall`]), the only calls
+/// [`mutation_builtin`] can accept.
 pub(crate) fn scan_reflective_prototype_write(lookup: &SemanticLookup<'_>) -> bool {
-    lookup.files().iter().any(|file| {
-        file.ast.calls.iter().any(|call| {
-            targets_prototype(file, call) && mutation_builtin(file, call, lookup).is_some()
+    mutation_builtin_calls(lookup).any(|(file, call)| {
+        targets_prototype(file, call) && mutation_builtin(file, call, lookup).is_some()
+    })
+}
+
+/// Every call the base index lists as a mutation candidate, in file and call
+/// order.
+pub(crate) fn mutation_builtin_calls<'s, 'a: 's>(
+    lookup: &'s SemanticLookup<'a>,
+) -> impl Iterator<Item = (&'a FileFacts, &'a ast::CallFact)> + 's {
+    lookup
+        .slot_entries(lookup.base_hazards())
+        .flat_map(|(file, entries)| {
+            entries.iter().filter_map(move |(hazard, call)| {
+                (*hazard == crate::base::Hazard::MutationBuiltinCall)
+                    .then(|| &file.ast.calls[*call as usize])
+                    .map(|call| (file, call))
+            })
         })
+}
+
+/// The global, method and library of a standard-library reflective mutator
+/// [`mutation_builtin`] knows, by the qualified name of its declaration.
+pub(crate) fn mutation_builtin_spelling(
+    qualified_name: &str,
+) -> Option<(&'static str, &'static str, &'static str)> {
+    Some(match qualified_name {
+        "ObjectConstructor.defineProperty" => ("Object", "defineProperty", "lib.es5.d.ts"),
+        "ObjectConstructor.defineProperties" => ("Object", "defineProperties", "lib.es5.d.ts"),
+        "ObjectConstructor.assign" => ("Object", "assign", "lib.es2015.core.d.ts"),
+        "Reflect.set" => ("Reflect", "set", "lib.es2015.reflect.d.ts"),
+        "Reflect.defineProperty" => ("Reflect", "defineProperty", "lib.es2015.reflect.d.ts"),
+        "Reflect.deleteProperty" => ("Reflect", "deleteProperty", "lib.es2015.reflect.d.ts"),
+        _ => return None,
     })
 }
 
@@ -1083,15 +1113,8 @@ pub(crate) fn mutation_builtin<'a>(
     lookup: &'a SemanticLookup<'_>,
 ) -> Option<&'a str> {
     let declaration = lookup.standard_library_declaration(file, call, typefacts::CallKind::Call)?;
-    let (global, property, library) = match declaration.qualified_name.as_ref() {
-        "ObjectConstructor.defineProperty" => ("Object", "defineProperty", "lib.es5.d.ts"),
-        "ObjectConstructor.defineProperties" => ("Object", "defineProperties", "lib.es5.d.ts"),
-        "ObjectConstructor.assign" => ("Object", "assign", "lib.es2015.core.d.ts"),
-        "Reflect.set" => ("Reflect", "set", "lib.es2015.reflect.d.ts"),
-        "Reflect.defineProperty" => ("Reflect", "defineProperty", "lib.es2015.reflect.d.ts"),
-        "Reflect.deleteProperty" => ("Reflect", "deleteProperty", "lib.es2015.reflect.d.ts"),
-        _ => return None,
-    };
+    let (global, property, library) =
+        mutation_builtin_spelling(declaration.qualified_name.as_ref())?;
     let member = file.ast.members.iter().find(|member| {
         member.span == file.ast.peel_ts_sugar_span(call.callee)
             && !file.ast.computed_members.contains(&member.span)

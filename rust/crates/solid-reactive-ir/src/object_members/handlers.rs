@@ -25,12 +25,7 @@ pub(crate) fn spread_index<'a>(
     lookup: &SemanticLookup<'a>,
 ) -> SpreadTargets {
     let mut spreads = HashMap::default();
-    let eval = facts.files.iter().any(|file| {
-        file.ast
-            .module_hazards
-            .iter()
-            .any(|hazard| hazard.kind == ast::ModuleHazardKind::Eval)
-    });
+    let eval = lookup.program_has_eval();
     let stability = lookup.member_stability_of(facts);
     let modules = lookup.module_census_of(facts);
     let mut closed = HashMap::default();

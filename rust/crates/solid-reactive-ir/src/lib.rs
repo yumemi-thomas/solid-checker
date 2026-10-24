@@ -33,12 +33,14 @@
 //! | `package_boundary`, `boundary_defects`, `router_params` | Package-source boundary obligations and the router-parameters premise. |
 //! | `findings`, `projection` | The finding model and its projection onto dialect rule catalogs. |
 //! | `upstream_compat` | Retained eslint-plugin-solid 0.14.5 heuristics (see AGENTS.md before editing). |
+//! | `base` | L0/L1 of the incremental IR: interned file ids, per-file views and item tables, base indexes folded from per-file contributions with exact updates. |
 //! | `shadow` | Shadow mode: a retained build is compared with a fresh one (`SOLID_CHECKER_IR_SHADOW`). |
 //! | `development_feedback`, `timings` | Executed-feedback models and the stage-timing contract. |
 #![forbid(unsafe_code)]
 
 mod argument_values;
 mod attribution;
+mod base;
 mod boundary_defects;
 mod cache;
 mod callback_return;
@@ -1309,6 +1311,11 @@ pub struct BuildTimings {
     /// Shadow mode ([`shadow`]): the fresh rebuild plus the comparison, which
     /// `total` includes. Zero when shadow mode is off.
     pub shadow: Duration,
+    /// Shadow mode: applying the changed files' contributions to the
+    /// retained base indexes ([`base`]). Zero otherwise.
+    pub base_index_update: Duration,
+    /// Shadow mode: how many files' views changed since the retained base.
+    pub base_index_changed_files: u64,
     pub reused: bool,
     pub source_discovery_reused_files: u64,
     pub source_discovery_recomputed_files: u64,
@@ -1498,15 +1505,15 @@ impl IncrementalBuilder {
                 },
             ));
         }
+        let shadow_mode = *self.shadow.get_or_insert_with(shadow::ShadowMode::from_env);
         let (program, mut timings) = build_with_analysis_inputs_measured_incremental(
             facts,
             dialect,
             inputs,
             rule_options,
-            self.caches.for_build(),
+            self.caches.for_build(shadow_mode),
             identity.runtime_configuration.clone(),
         )?;
-        let shadow_mode = *self.shadow.get_or_insert_with(shadow::ShadowMode::from_env);
         let mut shadow_elapsed = Duration::ZERO;
         let program = if shadow_mode != shadow::ShadowMode::Off && !domain_reset {
             let shadow_started = Instant::now();

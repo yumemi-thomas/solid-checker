@@ -9,14 +9,7 @@ impl<'a> SemanticLookup<'a> {
         call: &solid_facts::ast::CallFact,
         kind: typefacts::CallKind,
     ) -> Option<&'a typefacts::ResolvedDeclaration> {
-        self.resolved_callee_call(file, call.callee)
-            .filter(|resolved| {
-                resolved.validity == ResolvedCallValidity::Valid
-                    && resolved.kind == kind
-                    && resolved.targets.is_none()
-            })
-            .and_then(|resolved| resolved.declaration.as_ref())
-            .filter(|declaration| declaration.standard_library)
+        standard_library_declaration_of(self.resolved_callee_call(file, call.callee), kind)
     }
 
     /// ADR 0211: the instance method `property` of exactly `class`, declared
@@ -367,34 +360,12 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         callee: Span,
     ) -> Option<&'a ResolvedCall> {
-        let original_callee = callee;
-        let callee = file.ast.peel_ts_sugar_span(callee);
-        let outer = self
-            .call_by_callee(file, original_callee)
-            .or_else(|| self.call_by_callee(file, callee));
-        let call_span = outer.map_or(original_callee, |call| call.span);
-        // Review of ADR 0368: a callee that is itself a call (`get()(x)`)
-        // has, at its own span, the inner call's fact. Only the outer call's
-        // exact fact (demanded at its whole span) answers for the outer call;
-        // without it there is no fact.
-        if outer.is_some() && file.ast.call_at(callee).is_some() {
-            return self
-                .entity_at(file.path.as_str(), call_span)
-                .and_then(|entity| entity.resolved_call.as_deref());
-        }
-        // A wrapped callee has its own exact call demand. Prefer that fact:
-        // the peeled expression may also be another invocation's location
-        // (a factory result, for example), or may have only a symbol demand.
-        self.entity_at(file.path.as_str(), original_callee)
-            .and_then(|entity| entity.resolved_call.as_deref())
-            .or_else(|| {
-                self.entity_at(file.path.as_str(), callee)
-                    .and_then(|entity| entity.resolved_call.as_deref())
-            })
-            .or_else(|| {
-                self.entity_at(file.path.as_str(), call_span)
-                    .and_then(|entity| entity.resolved_call.as_deref())
-            })
+        resolved_callee_call_in(
+            file,
+            self.ast_indexes.get(file.path.as_str()),
+            callee,
+            |span| self.entity_at(file.path.as_str(), span),
+        )
     }
 
     pub(crate) fn ast_file_index(&self, path: &str) -> Option<&'a CachedAstFileIndex> {
@@ -854,4 +825,49 @@ impl<'a> SemanticLookup<'a> {
         };
         resolve().unwrap_or_default()
     }
+}
+
+/// A call's resolved declaration when it is a valid, single-target call of
+/// `kind` to a standard-library declaration.
+pub(crate) fn standard_library_declaration_of(
+    resolved: Option<&ResolvedCall>,
+    kind: typefacts::CallKind,
+) -> Option<&typefacts::ResolvedDeclaration> {
+    resolved
+        .filter(|resolved| {
+            resolved.validity == ResolvedCallValidity::Valid
+                && resolved.kind == kind
+                && resolved.targets.is_none()
+        })
+        .and_then(|resolved| resolved.declaration.as_ref())
+        .filter(|declaration| declaration.standard_library)
+}
+
+/// [`SemanticLookup::resolved_callee_call`] over one file's own facts: its
+/// AST index and its entities (`entity_at` answers for this file only).
+pub(crate) fn resolved_callee_call_in<'e>(
+    file: &FileFacts,
+    ast_index: Option<&CachedAstFileIndex>,
+    callee: Span,
+    entity_at: impl Fn(Span) -> Option<&'e EntityFact>,
+) -> Option<&'e ResolvedCall> {
+    let call_by_callee = |span| ast_index.and_then(|index| index.call_by_callee(span));
+    let original_callee = callee;
+    let callee = file.ast.peel_ts_sugar_span(callee);
+    let outer = call_by_callee(original_callee).or_else(|| call_by_callee(callee));
+    let call_span = outer.map_or(original_callee, |call| call.span);
+    // Review of ADR 0368: a callee that is itself a call (`get()(x)`)
+    // has, at its own span, the inner call's fact. Only the outer call's
+    // exact fact (demanded at its whole span) answers for the outer call;
+    // without it there is no fact.
+    if outer.is_some() && file.ast.call_at(callee).is_some() {
+        return entity_at(call_span).and_then(|entity| entity.resolved_call.as_deref());
+    }
+    // A wrapped callee has its own exact call demand. Prefer that fact:
+    // the peeled expression may also be another invocation's location
+    // (a factory result, for example), or may have only a symbol demand.
+    entity_at(original_callee)
+        .and_then(|entity| entity.resolved_call.as_deref())
+        .or_else(|| entity_at(callee).and_then(|entity| entity.resolved_call.as_deref()))
+        .or_else(|| entity_at(call_span).and_then(|entity| entity.resolved_call.as_deref()))
 }

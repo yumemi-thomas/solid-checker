@@ -172,12 +172,7 @@ impl<'a> SemanticLookup<'a> {
         }
         // A direct `eval` can replace a member of any holder in scope with no
         // reference to it.
-        if self.facts.files.iter().any(|file| {
-            file.ast
-                .module_hazards
-                .iter()
-                .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
-        }) {
+        if self.program_has_eval() {
             return accounted;
         }
         let mut tags = HashMap::<&'a str, HashMap<Span, Vec<String>>>::default();

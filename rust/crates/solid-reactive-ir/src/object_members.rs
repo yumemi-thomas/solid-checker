@@ -23,12 +23,7 @@ pub(crate) use handlers::{
 pub(crate) type Targets = HashMap<Location, (String, Span)>;
 
 pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Targets {
-    if facts.files.iter().any(|file| {
-        file.ast
-            .module_hazards
-            .iter()
-            .any(|hazard| hazard.kind == ast::ModuleHazardKind::Eval)
-    }) {
+    if lookup.program_has_eval() {
         return HashMap::default();
     }
     let stability = lookup.member_stability_of(facts);

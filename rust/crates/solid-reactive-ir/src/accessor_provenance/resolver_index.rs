@@ -28,24 +28,8 @@ impl Resolver<'_, '_> {
             blocked_contexts: HashSet::default(),
             unkeyed_provider: false,
             member_stability: lookup.member_stability_of(facts),
-            receiver_channels_opaque: facts.files.iter().any(|file| {
-                file.ast
-                    .module_hazards
-                    .iter()
-                    .any(|hazard| hazard.kind == ast::ModuleHazardKind::Eval)
-                    || file.ast.calls.iter().any(|call| {
-                        lookup
-                            .resolved_callee_call(file, call.callee)
-                            .and_then(|resolved| resolved.declaration.as_ref())
-                            .is_some_and(|declaration| {
-                                declaration.standard_library
-                                    && (declaration
-                                        .qualified_name
-                                        .starts_with("FunctionConstructor")
-                                        || declaration.qualified_name.as_ref() == "eval")
-                            })
-                    })
-            }),
+            receiver_channels_opaque: lookup.program_has_eval()
+                || lookup.hazard_present(crate::base::Hazard::CodeEvaluatingCall),
         };
         for file in &facts.files {
             for binding in &file.ast.bindings {

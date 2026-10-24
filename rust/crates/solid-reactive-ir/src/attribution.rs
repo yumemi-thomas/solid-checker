@@ -2023,7 +2023,10 @@ struct ModuleWalk {
 /// Every runtime reference to the namespace binding declared at
 /// `declaration` names a static member (`ns.helper`). A reference inside a
 /// type query is erased.
-fn namespace_used_by_static_members(file: &solid_facts::FileFacts, declaration: Span) -> bool {
+pub(crate) fn namespace_used_by_static_members(
+    file: &solid_facts::FileFacts,
+    declaration: Span,
+) -> bool {
     file.ast
         .reference_declarations
         .iter()

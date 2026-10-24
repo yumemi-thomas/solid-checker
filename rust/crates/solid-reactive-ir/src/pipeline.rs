@@ -288,6 +288,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         typescript_indexes: typescript_indexes_cache,
         reachability: mut reachability_cache,
         late_stages: mut late_stage_cache,
+        base_check,
     } = caches;
     let emit_timings = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
     let total_started = Instant::now();
@@ -404,6 +405,15 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &typescript_indexes.symbols_by_root,
     ));
     let semantic_lookup = &semantic_lookup;
+    if let Some((retained, mode)) = base_check {
+        check_retained_base(
+            retained,
+            mode,
+            semantic_lookup,
+            &mut build_timings,
+            emit_timings,
+        );
+    }
     let reuse = ReusePlan::prepare(
         facts,
         late_stage_cache.as_deref_mut(),
@@ -671,6 +681,48 @@ impl AnalysisWorkerLimit {
 impl Drop for AnalysisWorkerLimit {
     fn drop(&mut self) {
         ANALYSIS_WORKER_LIMIT.set(self.previous);
+    }
+}
+
+/// Shadow mode: updates the previous build's base indexes with the files
+/// whose views changed and compares them with this build's refold
+/// ([`crate::base::retained`]). A mismatch is reported like a program
+/// mismatch, and the retained base is dropped.
+fn check_retained_base(
+    retained: &mut Option<crate::base::retained::RetainedBase>,
+    mode: crate::shadow::ShadowMode,
+    lookup: &SemanticLookup<'_>,
+    timings: &mut BuildTimings,
+    emit_timings: bool,
+) {
+    let table = crate::base::retained::table(retained, lookup.files());
+    let views = lookup.base_views_over(&table);
+    let Some(check) = crate::base::retained::check(retained, &views) else {
+        return;
+    };
+    timings.base_index_update = check.update;
+    timings.base_index_changed_files = check.changed_files as u64;
+    if emit_timings {
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "reactiveIrBaseIndexUpdate": {
+                    "updateNs": u64::try_from(check.update.as_nanos()).unwrap_or(u64::MAX),
+                    "fingerprintNs": u64::try_from(check.fingerprint.as_nanos()).unwrap_or(u64::MAX),
+                    "refoldNs": u64::try_from(check.refold.as_nanos()).unwrap_or(u64::MAX),
+                    "changedFiles": check.changed_files,
+                    "editedFiles": check.edited_files,
+                    "editedUpdateNs": u64::try_from(check.edited_update.as_nanos()).unwrap_or(u64::MAX),
+                    "removedFiles": check.removed_files,
+                    "deltaKeys": check.delta_keys,
+                    "mismatch": check.mismatch.is_some(),
+                }
+            })
+        );
+    }
+    if let Some(mismatch) = check.mismatch {
+        *retained = None;
+        crate::shadow::report_message(mode, &mismatch);
     }
 }
 

@@ -499,25 +499,10 @@ impl<'a> SemanticLookup<'a> {
     /// property or callee spelled `defineProperty`, `defineProperties` or
     /// `__defineGetter__`, whatever its receiver, so an alias
     /// (`const define = Object.defineProperty`) is caught where it is taken.
+    ///
+    /// The census is [`crate::base::Hazard::ReflectiveDefinitionSpelling`].
     pub(crate) fn property_may_be_defined_reflectively(&self) -> bool {
-        const NAMES: [&str; 3] = ["defineProperty", "defineProperties", "__defineGetter__"];
-        *self.reflective_property_definition.get_or_init(|| {
-            self.files().iter().any(|file| {
-                file.ast.members.iter().any(|member| {
-                    file.source_text(member.property).is_some_and(|property| {
-                        NAMES.contains(&property.trim_matches(['\'', '"', '`']))
-                    })
-                }) || file.ast.bindings.iter().any(|binding| {
-                    binding
-                        .object_slots
-                        .iter()
-                        .any(|slot| NAMES.contains(&slot.property.as_str()))
-                }) || file.ast.calls.iter().any(|call| {
-                    file.source_text(call.callee)
-                        .is_some_and(|callee| NAMES.iter().any(|name| callee.ends_with(name)))
-                })
-            })
-        })
+        self.hazard_present(crate::base::Hazard::ReflectiveDefinitionSpelling)
     }
 
     /// ADR 0314: [`Self::property_may_be_defined_reflectively`] for one
