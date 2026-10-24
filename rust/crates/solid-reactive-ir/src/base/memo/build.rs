@@ -252,6 +252,10 @@ pub(crate) struct MemoStore {
     /// Shadow or verify-reused mode: the updated indexes are compared with a
     /// refold every build.
     check_indexes: bool,
+    /// Whether a later build will read this store. A store that serves one
+    /// build (a one-shot or shadow-fresh build) keeps no fingerprints: there
+    /// is nothing to compare them with.
+    retained: bool,
     builds: AtomicU64,
 }
 
@@ -281,6 +285,7 @@ impl MemoStore {
             store: Store::new(verify_reused, report),
             base: RwLock::default(),
             check_indexes: check_indexes || verify_reused,
+            retained: true,
             builds: AtomicU64::new(0),
         }
     }
@@ -312,7 +317,12 @@ impl MemoStore {
         }
         base.interner = views.table.interner().clone();
         let started = Instant::now();
-        let ids = views.table.ids().to_vec();
+        let ids = if self.retained {
+            views.table.ids().to_vec()
+        } else {
+            debug_assert!(fresh, "a store of one build begins once");
+            Vec::new()
+        };
         let current =
             crate::pipeline::parallel_slice_results(&ids, |id| (*id, fingerprints(views, *id)));
         report.fingerprint_ns = nanos(started.elapsed());
@@ -621,7 +631,8 @@ impl<'a> LookupMemos<'a> {
     /// A store of the lookup's own (a one-shot or fresh build), over the
     /// lookup's `table`.
     pub(crate) fn owned(table: &FileTable) -> Self {
-        let store = Box::new(MemoStore::from_env());
+        let mut store = Box::new(MemoStore::from_env());
+        store.retained = false;
         let table = store.table(table);
         Self {
             store: StoreRef::Owned(store),
