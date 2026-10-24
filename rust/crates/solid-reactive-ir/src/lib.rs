@@ -1402,6 +1402,17 @@ pub struct BuildTimings {
     pub interprocedural_result_reads: Duration,
     pub interprocedural_export_summaries: Duration,
     pub leaf_and_cleanup: Duration,
+    /// Inside `leaf_and_cleanup` (with the compatibility pass and the
+    /// read-table passes after the interprocedural merge): the attributed
+    /// after-await reads and the leaf-owner operations.
+    pub read_after_await_through_calls: Duration,
+    pub leaf_operations: Duration,
+    /// Inside `static_api`: the per-file API checks and the server rules.
+    pub static_api_files: Duration,
+    pub server_rules: Duration,
+    /// Inside `local_and_interprocedural`'s caller (reported under
+    /// `leaf_and_cleanup` by the stage clock): the compatibility pass.
+    pub upstream_compat: Duration,
     pub static_api: Duration,
     pub directives: Duration,
     pub owner_fixed_point: Duration,

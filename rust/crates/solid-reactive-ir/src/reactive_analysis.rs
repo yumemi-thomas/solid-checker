@@ -309,6 +309,7 @@ pub(crate) fn collect_project<'facts>(
     // After every read, write and action table is merged: the rule's
     // negative proof is that none of them lies inside the predicate.
     static_rules::result_access_callbacks(ctx, draft);
+    let compat_started = Instant::now();
     let ((), compat_reads) = crate::base::reads::record(|| {
         upstream_compat::check_project(
             ctx,
@@ -320,6 +321,7 @@ pub(crate) fn collect_project<'facts>(
             draft,
         );
     });
+    timings.upstream_compat = compat_started.elapsed();
     if let Some(cache) = caches.late_stages.as_deref_mut() {
         cache.reads.extend(&compat_reads);
     }

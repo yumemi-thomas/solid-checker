@@ -570,11 +570,19 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut build_timings,
         &mut clock,
     );
+    let substage_started = Instant::now();
     static_rules::reactive_read_after_await_through_calls(&analysis, &mut draft);
+    build_timings.read_after_await_through_calls = substage_started.elapsed();
+    let substage_started = Instant::now();
     cleanup::collect_project(&analysis, &mut draft);
+    build_timings.leaf_operations = substage_started.elapsed();
     clock.finish(&mut build_timings, ReactiveIrStage::LeafAndCleanup);
+    let substage_started = Instant::now();
     static_api::check_project(&analysis, &mut draft);
+    build_timings.static_api_files = substage_started.elapsed();
+    let substage_started = Instant::now();
     server_rules::check_project(&analysis, &mut draft);
+    build_timings.server_rules = substage_started.elapsed();
     clock.finish(&mut build_timings, ReactiveIrStage::StaticApi);
     directives::discover_directive_creations(&analysis, &mut draft);
     draft.undecided_component_regions = semantic_lookup.undecided_component_regions();

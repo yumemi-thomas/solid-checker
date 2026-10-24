@@ -166,9 +166,11 @@ impl IncrementalCacheState {
         }
         self.interprocedural_graph.clear();
         self.interprocedural_results = CachedInterproceduralResults::default();
-        self.reachability = None;
+        // Reachability stays (ADR 03XX-s6b): its per-file chunks are small,
+        // and rebuilding them recomputed every file after each idle period.
         self.base_indexes = None;
         if retention == CacheRetention::Compact {
+            self.reachability = None;
             // Memo answers are small next to what they save; only the
             // compact policy, which keeps no index at all, drops them.
             self.memos = None;
