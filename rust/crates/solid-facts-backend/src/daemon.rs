@@ -46,6 +46,7 @@ use solid_reactive_ir::RuntimeEnvironment;
 
 use super::{Request, snapshot_emission};
 use crate::daemon_cache::{CachedAnswer, CachedSnapshot, InputFile};
+use crate::daemon_digests::{content_hash as cached_content_hash, input_digests, parallel_map};
 use crate::daemon_resolution::ResolutionWitness;
 use crate::idle_memory;
 use solid_facts_backend::dependency_program::{self, PreparedDependencies};
@@ -66,6 +67,11 @@ struct CheckRequest {
     /// serves exactly one, with exactly one runtime host.
     #[serde(default)]
     dependency_sources: Vec<String>,
+    /// `--only-file`: the answer carries the findings that can matter to this
+    /// file. Not part of an answer's validity: the cached answer is the full
+    /// report, narrowed when it is sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    only_file: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -101,6 +107,8 @@ struct CheckHeader {
 struct Answer {
     status: Arc<str>,
     body: Arc<[u8]>,
+    /// Where each finding sits in `body`, for an `--only-file` answer.
+    index: Arc<crate::json_output::FindingIndex>,
     cache_hit: bool,
     generation: u64,
     analysis_ns: u64,
@@ -787,18 +795,34 @@ fn resync_tracked(
     {
         return Ok(Sync::Rebuild);
     }
-    for (dir, recorded) in &tracking.dirs {
-        if directory_stamp(dir) != *recorded {
-            return Ok(Sync::Rebuild);
-        }
+    // The stamps are independent filesystem reads, a thousand or more for a
+    // large project: read on several workers, then decide in order.
+    let dirs = tracking.dirs.iter().collect::<Vec<_>>();
+    let stamps = parallel_map(&dirs, |(dir, _)| directory_stamp(dir));
+    if dirs
+        .iter()
+        .zip(&stamps)
+        .any(|((_, recorded), now)| now != *recorded)
+    {
+        return Ok(Sync::Rebuild);
     }
     let mut changes = Vec::new();
     let paths = tracking.fingerprints.keys().cloned().collect::<Vec<_>>();
-    for path in paths {
+    let stamps = parallel_map(&paths, |path| file_stamp(Path::new(path)));
+    for (path, stamp) in paths.into_iter().zip(stamps) {
         let recorded = tracking.fingerprints[&path];
-        let refresh = match refresh_file_with(Path::new(&path), &recorded, |path| fs::read(path)) {
-            Ok(refresh) => refresh,
-            Err(_) => return Ok(Sync::Rebuild),
+        // A file whose stamp is unchanged is not read, as `refresh_file_with`
+        // decides; a stamp that cannot be read is a rebuild.
+        let Ok(stamp) = stamp else {
+            return Ok(Sync::Rebuild);
+        };
+        let refresh = if stamp == recorded.stamp {
+            FileRefresh::Unchanged
+        } else {
+            match refresh_file_with(Path::new(&path), &recorded, |path| fs::read(path)) {
+                Ok(refresh) => refresh,
+                Err(_) => return Ok(Sync::Rebuild),
+            }
         };
         match refresh {
             FileRefresh::Unchanged => {}
@@ -1114,6 +1138,7 @@ fn content_hash(bytes: &[u8]) -> [u8; 32] {
     Sha256::digest(bytes).into()
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn hash_file(path: &std::path::Path) -> Result<[u8; 32], Box<dyn Error>> {
     Ok(content_hash(&fs::read(path)?))
 }
@@ -1329,6 +1354,13 @@ fn handle(
     match outcome {
         Ok(answer) => {
             let materialized = !answer.cache_hit;
+            // The cached answer stays the full report; this caller gets the
+            // findings it asked about.
+            let narrowed = check
+                .only_file
+                .as_deref()
+                .and_then(|file| answer.index.only_file(&answer.body, file));
+            let sent: &[u8] = narrowed.as_deref().unwrap_or(&answer.body);
             let header = serde_json::to_vec(&CheckHeader {
                 implementation: implementation_identity()?.to_owned(),
                 ok: true,
@@ -1337,13 +1369,13 @@ fn handle(
                 cache_hit: answer.cache_hit,
                 generation: answer.generation,
                 analysis_ns: answer.analysis_ns,
-                response_bytes: u64::try_from(answer.body.len()).unwrap_or(u64::MAX),
+                response_bytes: u64::try_from(sent.len()).unwrap_or(u64::MAX),
                 notice: Some(answer.notice.to_string()),
                 recovered,
             })?;
             stream.write_all(&header)?;
             stream.write_all(b"\n")?;
-            stream.write_all(&answer.body)?;
+            stream.write_all(sent)?;
             stream.flush()?;
             if materialized {
                 idle_memory::reclaim_idle_pages();
@@ -1509,6 +1541,10 @@ fn answer_with(
         return Ok(Answer {
             status: cached.0,
             body: cached.1,
+            index: state
+                .last
+                .as_ref()
+                .map_or_else(Default::default, |last| Arc::clone(&last.index)),
             notice: state
                 .last
                 .as_ref()
@@ -1706,17 +1742,12 @@ fn answer_with(
         )?;
     phases.mark("analyze");
     checkpoint()?;
-    let body: Arc<[u8]> = snapshot_emission::emit(
-        resolve_dialect(request)?,
-        "json",
-        &request.project_id,
-        &analysis.snapshot,
-        false,
-        true,
-        Duration::ZERO,
-    )?
-    .output
-    .into();
+    let report = crate::json_output::go_compatible_report(&analysis.snapshot)?;
+    let mut output = report.output;
+    output.push(b'\n');
+    let body: Arc<[u8]> = output.into();
+    let index = Arc::new(report.index);
+    phases.mark("emit");
     let status: Arc<str> = analysis.snapshot.status.as_str().into();
     let modules = imported_package_roots(&facts);
     // ADR 0334: the route-components premise reads the TanStack router's and
@@ -1740,10 +1771,11 @@ fn answer_with(
             router_roots,
             status: Arc::clone(&status),
             body: Arc::clone(&body),
+            index: Arc::clone(&index),
         }),
         None => None,
     };
-    phases.mark("emit-and-cache");
+    phases.mark("cache");
     phases.report(
         state.session.generation(),
         &state.session.last_build_timings(),
@@ -1753,6 +1785,7 @@ fn answer_with(
     Ok(Answer {
         status,
         body,
+        index,
         cache_hit: false,
         generation: state.session.generation(),
         analysis_ns: u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
@@ -1817,9 +1850,7 @@ fn inference_inputs_for_check(state: &State, check: &CheckRequest) -> Option<Vec
     }));
     paths.sort();
     paths.dedup();
-    let digests = solid_facts_backend::inferred_host_input_digests(
-        &paths.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
-    );
+    let digests = input_digests(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
     paths
         .into_iter()
         .zip(digests)
@@ -1834,7 +1865,7 @@ fn inference_inputs_current(inputs: &[InputFile]) -> bool {
         .iter()
         .map(|(path, _)| path.as_path())
         .collect::<Vec<_>>();
-    solid_facts_backend::inferred_host_input_digests(&paths)
+    input_digests(&paths)
         .iter()
         .zip(inputs)
         .all(|(digest, (_, expected))| digest.as_ref() == Some(expected))
@@ -1911,7 +1942,7 @@ fn input_files(
             solid_facts_backend::inferred_host_directory_digest(&path)
                 .ok_or_else(|| "cannot fingerprint inferred host directory".into())
         } else {
-            hash_file(&path)
+            cached_content_hash(&path).map_err(Into::into)
         } {
             Ok(hash) => hash,
             Err(_) if !path.exists() => [0_u8; 32],
@@ -1958,6 +1989,10 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
         enable_rules: request.enable_rules.clone(),
         runtime: request.runtime.clone(),
         dependency_sources: normalized_selection(&request.dependency_sources),
+        only_file: request
+            .only_file
+            .clone()
+            .filter(|_| request.format == "json"),
     })?;
     let mut stream = stream;
     stream.write_all(&payload)?;

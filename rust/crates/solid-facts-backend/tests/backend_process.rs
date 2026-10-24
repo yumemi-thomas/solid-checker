@@ -16,6 +16,8 @@ mod cli_process;
 mod cross_file_callbacks_process;
 #[path = "cross_file_digest_process.rs"]
 mod cross_file_digest_process;
+#[path = "daemon_residue_process.rs"]
+mod daemon_residue_process;
 #[path = "harness_process.rs"]
 mod harness_process;
 #[path = "idle_shadow_process.rs"]

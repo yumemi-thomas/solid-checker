@@ -187,6 +187,7 @@ fn daemon_enablement_order_and_duplicates_normalize_to_one_key() {
         ],
         runtime: RuntimeEnvironment::default(),
         dependency_sources: vec!["dep-b".into(), "*".into(), "dep-b".into()],
+        only_file: None,
     };
     normalize_enablement(&mut repeated);
     assert_eq!(repeated.presets, ["preferences", "z"]);
