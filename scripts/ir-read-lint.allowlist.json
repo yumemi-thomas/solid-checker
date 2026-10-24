@@ -61,12 +61,10 @@
   "rust/crates/solid-reactive-ir/src/execution_role/callback_standing.rs": {
     "files()": 1
   },
-  "rust/crates/solid-reactive-ir/src/execution_role/event_literals.rs": {
-    "files()": 1,
-    "file_by_path": 2
+  "rust/crates/solid-reactive-ir/src/execution_role/flow_memos.rs": {
+    "files()": 2
   },
   "rust/crates/solid-reactive-ir/src/execution_role/invocation_flow.rs": {
-    "files()": 1,
     "file_by_path": 2
   },
   "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs": {

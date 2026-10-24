@@ -14,33 +14,23 @@ pub(crate) fn event_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(St
     if !lookup.program_closed || lookup.program_has_eval() {
         return literals;
     }
-    let candidates = lookup
-        .files()
-        .iter()
-        .flat_map(|file| {
-            file.ast
-                .functions
-                .iter()
-                .map(move |literal| (file, literal))
-        })
-        .collect::<Vec<_>>();
-    // Each literal's census is independent. In parallel only once the flow
-    // answers exist and this thread is not computing them: a nested role
-    // query then reads the finished answers on every thread, as it does here,
-    // and a table a census forces first is forced the same way in any order.
-    let invoked = if lookup.invocation_flow_answers_ready() && !computing_flow_answers() {
-        crate::pipeline::parallel_balanced_results(&candidates, |&(file, literal)| {
-            literal_event_invoked(lookup, file, literal)
-        })
-    } else {
-        candidates
-            .iter()
-            .map(|&(file, literal)| literal_event_invoked(lookup, file, literal))
-            .collect()
+    let files = super::flow_memos::file_keys(lookup);
+    // Each file's census is a memo, each literal's computed from an empty
+    // context ([`super::flow_memos::EventInvokedLiterals`]). In parallel only
+    // once the flow answers exist and this thread is not computing one, as
+    // before.
+    let world = lookup.memo_world();
+    let answer = |(id, _): &(crate::base::FileId, String)| {
+        world.answer::<super::flow_memos::EventInvokedLiterals>(id)
     };
-    for ((file, literal), invoked) in candidates.into_iter().zip(invoked) {
-        if invoked {
-            literals.insert((file.path.to_string(), literal.span));
+    let invoked = if lookup.invocation_flow_answers_ready() && !computing_flow_answers() {
+        crate::pipeline::parallel_balanced_results(&files, answer)
+    } else {
+        files.iter().map(answer).collect()
+    };
+    for ((_, path), invoked) in files.into_iter().zip(invoked) {
+        for span in invoked.iter() {
+            literals.insert((path.clone(), *span));
         }
     }
     literals
@@ -48,17 +38,17 @@ pub(crate) fn event_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(St
 
 /// Whether every invocation of the function literal runs through event
 /// delivery ([`event_invoked_literals`]), from an empty context.
-fn literal_event_invoked<'a>(
-    lookup: &SemanticLookup<'a>,
+pub(super) fn literal_event_invoked<'a, W: FlowWorld<'a>>(
+    world: &W,
     file: &'a solid_facts::FileFacts,
     literal: &'a solid_facts::ast::FunctionFact,
 ) -> bool {
-    if literal.generator || lookup.function_component_status(file, literal) != ComponentStatus::No {
+    if literal.generator || world.component_status(file, literal) != ComponentStatus::No {
         return false;
     }
     let mut classifying = HashSet::default();
     let mut flow = InvocationFlow {
-        lookup,
+        world,
         classifying: &mut classifying,
         budget: FLOW_BUDGET,
         seen: HashSet::default(),
@@ -69,7 +59,7 @@ fn literal_event_invoked<'a>(
     flow.function_role(file, literal) == Some(Some(ExecutionRole::EventCallback))
 }
 
-impl<'a> InvocationFlow<'a, '_, '_> {
+impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
     /// The one safe role of every invocation of `function`; `Some(None)`
     /// when the (complete) census finds no invocation at all.
     pub(super) fn function_role(
@@ -126,34 +116,20 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         call: Span,
         frames: Vec<FlowFrame<'a>>,
     ) -> Option<Option<ExecutionRole>> {
-        let callee = file.ast.call_at(call)?.callee;
+        // The call must be one the facts hold (the site role reads its
+        // callee).
+        file.ast.call_at(call)?;
         if self.owner_mode {
             return self.owner_site_role(file, call, frames);
         }
-        let here = semantic_execution_role_within(
-            file,
-            callee,
-            &[],
-            self.lookup.entities(),
-            self.lookup.symbol_names(),
-            self.lookup,
-            self.classifying,
-        );
-        // ADR 0320: a role read off a named function's callback references
-        // ignores its direct calls (`press()` beside `onClick={press}`); the
-        // walk below asks for every invocation of that function instead.
-        if flow_safe_role(here)
-            && named_callbacks_within_component(file, call, self.lookup)
-                .into_iter()
-                .all(|function| named_callback_invocations_hold(file, function, self.lookup, false))
-        {
+        if let Some(here) = self.world.site_role(file, call, self.classifying) {
             return Some(Some(here));
         }
         let owner = containing_ast_function(&file.ast, call)?;
         if !owner.body.contains(call)
             || (owner.r#async && may_follow_suspension(file, call))
             || owner.generator
-            || self.lookup.function_component_status(file, owner) != ComponentStatus::No
+            || self.world.component_status(file, owner) != ComponentStatus::No
         {
             return None;
         }
@@ -184,7 +160,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         if !owner.body.contains(call)
             || (owner.r#async && may_follow_suspension(file, call))
             || owner.generator
-            || self.lookup.function_component_status(file, owner) != ComponentStatus::No
+            || self.world.component_status(file, owner) != ComponentStatus::No
         {
             return None;
         }
@@ -384,7 +360,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 // `this`, which must be a function that cannot use it.
                 Some(_) => {
                     if called {
-                        origin_member_ignores_receiver(&origin, key, self.lookup, 6).then_some(())
+                        origin_member_ignores_receiver(&origin, key, self.world, 6).then_some(())
                     } else {
                         Some(())
                     }
@@ -412,35 +388,26 @@ impl<'a> InvocationFlow<'a, '_, '_> {
             // `createMemo(options.key)`). A container holding it, an apply
             // slot, a slot that stores the function or runs it on result
             // access, and every unmodelled slot refuse.
-            if let Some(primitive) = self.lookup.primitive_at_call(file, call.span) {
+            if self.world.primitive_at_call(file, call.span).is_some() {
                 if !path.is_empty() || self.owner_mode {
                     return None;
                 }
                 // A callback that runs synchronously in the call's own window
                 // (`createRoot`, `runWithOwner`) runs wherever the call does:
                 // its invocation is the call.
-                if self
-                    .lookup
-                    .dialect
-                    .callback_inherits_calling_window(primitive, index)
-                    && callback_execution_at_call(file, call, primitive, index, self.lookup)
-                        .is_some()
-                {
+                let (inherits, role) = self.world.primitive_slot(file, call, index);
+                if inherits {
                     out.push(Invocation::Call(file, call.span, self.frames.clone()));
                     return Some(());
                 }
-                let role = primitive_callback_slot_role(file, call, index, self.lookup)?;
-                out.push(Invocation::Role(role));
+                out.push(Invocation::Role(role?));
                 return Some(());
             }
-            let (callee_file, callee, exact) =
-                project_callee_at_parameter(file, call, index, self.lookup)?;
-            if !exact
-                || self.lookup.function_component_status(callee_file, callee) != ComponentStatus::No
-            {
+            let (callee_file, callee, exact) = self.world.project_callee(file, call, index)?;
+            if !exact || self.world.component_status(callee_file, callee) != ComponentStatus::No {
                 return None;
             }
-            let callee_file = self.lookup.file_by_path(callee_file.path.as_str())?;
+            let callee_file = self.world.canonical(callee_file)?;
             self.frames
                 .push((callee_file.path.to_string(), callee.span, file, call.span));
             let result = self.parameter_uses(callee_file, callee, index, path, origin, out);
@@ -460,7 +427,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 let name = file.source_text(attribute.name)?;
                 if intrinsic_element(file, element) {
                     return (path.is_empty()
-                        && self.lookup.dialect.compiler_lowers_event_attribute(name))
+                        && self.world.dialect().compiler_lowers_event_attribute(name))
                     .then(|| {
                         out.push(Invocation::Role(ExecutionRole::EventCallback));
                     });
@@ -483,7 +450,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 if intrinsic_element(file, element) {
                     return match path.as_slice() {
                         [] => Some(()),
-                        [key] if self.lookup.dialect.spread_key_is_event(key) == Some(true) => {
+                        [key] if self.world.dialect().spread_key_is_event(key) == Some(true) => {
                             out.push(Invocation::Role(ExecutionRole::EventCallback));
                             Some(())
                         }
@@ -759,9 +726,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         enclosing: FlowOrigin<'a>,
         out: &mut Vec<Invocation<'a>>,
     ) -> Option<()> {
-        let (component_file, component) = self
-            .lookup
-            .function_called_at(file.path.as_str(), element.name.span)?;
+        let (component_file, component) = self.world.function_called_at(file, element.name.span)?;
         if component.r#async || component.generator {
             return None;
         }
@@ -770,15 +735,15 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         let tag = file.ast.peel_ts_sugar_span(element.name.span);
         let member_tag = file.ast.members.iter().any(|member| member.span == tag)
             || file.ast.computed_members.binary_search(&tag).is_ok();
-        if !self
-            .lookup
-            .function_value_is_current(component_file, component)
+        if !crate::indexes::function_value_is_current_in(component_file, component)
             || (member_tag
-                && !member_runs_declared_method(file, tag, component_file, component, self.lookup))
+                && !self
+                    .world
+                    .member_runs_declared_method(file, tag, component_file, component))
         {
             return None;
         }
-        let component_file = self.lookup.file_by_path(component_file.path.as_str())?;
+        let component_file = self.world.canonical(component_file)?;
         // A component rendering itself through this element again, holding
         // the value under the same member path (a tree of branches): the
         // recursive activation holds it at the same positions with the same
@@ -847,13 +812,12 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                         .ast
                         .reference_declaration(file.ast.peel_ts_sugar_span(member.object))
                         == Some(writer_props)
-            }) || value_ignores_receiver(file, value, &FlowOrigin::Unknown, self.lookup, 6)
+            }) || value_ignores_receiver(file, value, &FlowOrigin::Unknown, self.world, 6)
         };
         // Members the rendered component calls on its props: each must be
         // forwarded, given a value that ignores `this`, or undefined.
-        let Some((component_file, component)) = self
-            .lookup
-            .function_called_at(file.path.as_str(), element.name.span)
+        let Some((component_file, component)) =
+            self.world.function_called_at(file, element.name.span)
         else {
             return false;
         };
@@ -898,11 +862,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                     }
                     _ => false,
                 },
-                None => {
-                    !self.lookup.member_may_be_reassigned_on_builtin(key)
-                        && !self.lookup.member_may_be_reassigned_on_builtin("__proto__")
-                        && !self.lookup.property_may_be_defined_reflectively_as(key)
-                }
+                None => self.world.absent_member_inert(key),
             }
         })
     }

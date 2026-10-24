@@ -1130,3 +1130,206 @@ fn every_build_table_has_its_own_id() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// L2: the invocation-flow answers over a retained store (study S5a,
+// [`crate::execution_role::InvocationFlowAnswer`]).
+
+/// Every literal's flow answer and event-only census of one build, by path
+/// and span, read through the lookup as its consumers read them.
+type FlowAnswers = Vec<(String, Span, Option<crate::ExecutionRole>, bool)>;
+
+/// One build of `project` over `store` through a lookup: every literal's
+/// answers, and the build's memo stats by table.
+fn flow_build(
+    project: &Project,
+    store: &super::memo::build::MemoStore,
+    closed: bool,
+) -> Option<(FlowAnswers, Vec<(&'static str, super::memo::TableStats)>)> {
+    let facts = facts(project)?;
+    let ast_indexes = facts
+        .files
+        .iter()
+        .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
+        .collect::<HashMap<_, _>>();
+    let symbols = entity_symbols(&facts);
+    let names = HashMap::default();
+    let lookup = crate::indexes::SemanticLookup::new(
+        &facts,
+        &ast_indexes,
+        &symbols,
+        &names,
+        &solid_dialect::Solid2,
+        closed,
+    )
+    .with_memo_store(store);
+    let roles = lookup.invocation_flow_answers();
+    let events = lookup.event_invoked_literals();
+    let mut answers = Vec::new();
+    for file in lookup.files() {
+        for literal in &file.ast.functions {
+            let key = (file.path.to_string(), literal.span);
+            answers.push((
+                key.0.clone(),
+                key.1,
+                roles.get(&key).copied(),
+                events.contains(&key),
+            ));
+        }
+    }
+    // A build that asked no memo (an open program) reports none.
+    let tables = lookup
+        .end_memos()
+        .map(|report| report.tables)
+        .unwrap_or_default();
+    Some((answers, tables))
+}
+
+/// A handler bound in one module, handed through a component's props to an
+/// intrinsic element's event attribute in another, and a module unrelated to
+/// both.
+const FLOW_FILES: &[(&str, &str)] = &[
+    (
+        "/fixture/flow/button.tsx",
+        "export function Button(props: { onPress: () => void }) {\n  return <button onClick={props.onPress}>go</button>;\n}\n",
+    ),
+    (
+        "/fixture/flow/app.tsx",
+        "import { Button } from \"./button\";\nexport function App() {\n  const press = () => console.log(\"x\");\n  return <Button onPress={press} />;\n}\n",
+    ),
+    ("/fixture/flow/other.ts", "export const label = \"x\";\n"),
+];
+
+fn flow_project() -> Project {
+    Project {
+        files: FLOW_FILES
+            .iter()
+            .map(|(path, source)| ((*path).to_owned(), (*source).to_owned()))
+            .collect(),
+        schemes: HashMap::default(),
+        unreferenced: Vec::new(),
+    }
+}
+
+/// The walk follows the handler across files and finds one event delivery;
+/// an edit of a module the walk never visits leaves every answer unrun (its
+/// reads are verified), and an edit of a module it visits recomputes the
+/// answers that read it, agreeing with a fresh store.
+#[test]
+fn flow_answers_follow_a_handler_across_files_and_are_reused_across_an_unrelated_edit() {
+    let store = super::memo::build::MemoStore::new(false, true);
+    let mut project = flow_project();
+    let (first, tables) = flow_build(&project, &store, true).unwrap();
+    // The arrow bound to `press` (the module's shorter function).
+    let press = first
+        .iter()
+        .filter(|(path, ..)| path == "/fixture/flow/app.tsx")
+        .min_by_key(|(_, span, ..)| span.end - span.start)
+        .expect("the handler literal");
+    assert_eq!(
+        (press.2, press.3),
+        (Some(crate::ExecutionRole::EventCallback), true),
+        "{first:?}"
+    );
+    // One answer per file.
+    let files = project.files.len() as u64;
+    assert_eq!(table_stats(&tables, "invocation_flow_answers").fresh, files);
+    assert_eq!(table_stats(&tables, "event_invoked_literals").fresh, files);
+    // An open program asks nothing.
+    let open = super::memo::build::MemoStore::new(false, true);
+    let (unproven, tables) = flow_build(&project, &open, false).unwrap();
+    assert!(
+        unproven
+            .iter()
+            .all(|(.., role, event)| role.is_none() && !event)
+    );
+    assert_eq!(table_stats(&tables, "invocation_flow_answers").fresh, 0);
+    // A body edit of the unrelated module: the same length, no span moves.
+    // Only its own answer is recomputed (to the same value): the other
+    // modules' walks never visited it.
+    project.files[2].1 = project.files[2].1.replace("\"x\"", "\"y\"");
+    let (second, tables) = flow_build(&project, &store, true).unwrap();
+    assert_eq!(first, second);
+    for table in ["invocation_flow_answers", "event_invoked_literals"] {
+        let stats = table_stats(&tables, table);
+        assert_eq!(
+            (stats.fresh, stats.changed, stats.unchanged),
+            (0, 0, 1),
+            "{table}: {stats:?}"
+        );
+        assert_eq!(
+            stats.reused + stats.verified,
+            files - 1,
+            "{table}: {stats:?}"
+        );
+    }
+    // A prefix edit of the component's module moves every span in it: the
+    // walks that visited it run again, and agree with a fresh store.
+    project.files[1].1 = format!("// moved\n{}", project.files[1].1);
+    let (third, tables) = flow_build(&project, &store, true).unwrap();
+    let fresh = super::memo::build::MemoStore::new(false, false);
+    let (expected, _) = flow_build(&project, &fresh, true).unwrap();
+    assert_eq!(third, expected);
+    let stats = table_stats(&tables, "invocation_flow_answers");
+    assert!(
+        stats.fresh + stats.unchanged + stats.changed >= 1,
+        "{stats:?}"
+    );
+}
+
+/// Through random edits (the base property test's kinds, TypeFacts-only
+/// changes and hazard flips included), the retained store's flow answers
+/// equal a fresh store's, with verify-reused mode on: no reused answer missed
+/// a read.
+#[test]
+fn flow_memos_through_random_edits_equal_a_fresh_store() {
+    let mut steps = 0;
+    let (mut reused, mut computed) = (0, 0);
+    let fixtures = FIXTURES.iter().map(|fixture| {
+        let mut project = Project {
+            files: fixture_sources(fixture),
+            schemes: HashMap::default(),
+            unreferenced: Vec::new(),
+        };
+        project.files.extend(flow_project().files);
+        project.files.sort();
+        (*fixture, project)
+    });
+    for (fixture, original) in fixtures {
+        for seed in 1..=2 {
+            let mut random = Random(seed);
+            let mut project = original.clone();
+            let store = super::memo::build::MemoStore::new(true, true);
+            flow_build(&project, &store, true).expect("the fixture parses");
+            for serial in 0..15 {
+                let kind = KINDS[random.below(KINDS.len())];
+                let mut next = project.clone();
+                if edit(&mut next, kind, &mut random, serial).is_none() || facts(&next).is_none() {
+                    continue;
+                }
+                project = next;
+                let (answers, tables) = flow_build(&project, &store, true).unwrap();
+                let fresh = super::memo::build::MemoStore::new(false, false);
+                let (expected, _) = flow_build(&project, &fresh, true).unwrap();
+                assert_eq!(
+                    answers, expected,
+                    "{fixture} seed {seed} step {serial} ({kind})"
+                );
+                for (table, stats) in &tables {
+                    assert_eq!(
+                        stats.mismatches, 0,
+                        "{fixture} seed {seed} step {serial}: {table}"
+                    );
+                    if table.contains("invocation_flow") || table.contains("event_invoked") {
+                        reused += stats.reused + stats.verified;
+                        computed += stats.fresh + stats.changed + stats.unchanged;
+                    }
+                }
+                steps += 1;
+            }
+        }
+    }
+    eprintln!("flow memos: {steps} edits, {reused} answers reused, {computed} computed");
+    assert!(steps > 120, "only {steps} edits applied");
+    assert!(reused > 0, "{reused} reused, {computed} computed");
+}

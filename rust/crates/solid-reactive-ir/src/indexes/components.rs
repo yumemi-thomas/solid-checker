@@ -2,6 +2,23 @@
 
 use super::*;
 
+/// A function's status when the census proves it no component: a dialect
+/// naming convention only preserves the ambiguity, never proves one.
+pub(crate) fn unproven_component_status(
+    dialect: &dyn solid_dialect::Dialect,
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> ComponentStatus {
+    let possible = crate::owners::component_binding_name(file, function).is_some_and(|name| {
+        dialect.component_name_may_be_component(file.source_text(name.span).unwrap_or_default())
+    });
+    if possible {
+        ComponentStatus::Uncertain
+    } else {
+        ComponentStatus::No
+    }
+}
+
 impl<'a> SemanticLookup<'a> {
     /// The type descriptor at `span`, falling back to the smallest typed entity
     /// contained in it for legacy consumers that deliberately query a region
@@ -66,15 +83,7 @@ impl<'a> SemanticLookup<'a> {
         {
             return ComponentStatus::Uncertain;
         }
-        let possible = crate::owners::component_binding_name(file, function).is_some_and(|name| {
-            self.dialect
-                .component_name_may_be_component(file.source_text(name.span).unwrap_or_default())
-        });
-        if possible {
-            ComponentStatus::Uncertain
-        } else {
-            ComponentStatus::No
-        }
+        unproven_component_status(self.dialect, file, function)
     }
 
     pub(crate) fn function_may_be_component(
