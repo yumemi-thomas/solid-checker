@@ -471,3 +471,305 @@ fn root_owned_at_withholds_for_either_detaching_bit() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// The kept owner graph (S7f): random fragments and random edits.
+
+mod kept_graph {
+    use super::super::owner_state::{HandOuts, OwnerGraph, PathId};
+    use super::super::{
+        CachedOwnerFile, OWNER_CONTEXT_LEAF, OWNER_CONTEXT_LEAF_OWNED, OWNER_CONTEXT_OWNED,
+        OWNER_CONTEXT_PROVEN_UNOWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind, OwnerNode, OwnerSource,
+        OwnerTarget, SymbolicOwnerEdge,
+    };
+    use crate::HashSet;
+    use crate::identity::SymbolId;
+    use solid_facts::compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap};
+    use solid_facts::core::{SourceHash, Span};
+    use std::sync::Arc;
+
+    /// Mulberry32: a failing run replays from its seed.
+    struct Random(u32);
+
+    impl Random {
+        fn below(&mut self, n: usize) -> usize {
+            self.0 = self.0.wrapping_add(0x6d2b_79f5);
+            let mut t = self.0;
+            t = (t ^ (t >> 15)).wrapping_mul(t | 1);
+            t ^= t.wrapping_add((t ^ (t >> 7)).wrapping_mul(t | 61));
+            let unit = f64::from(t ^ (t >> 14)) / 4_294_967_296.0;
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let index = (unit * n as f64) as usize;
+            index.min(n.saturating_sub(1))
+        }
+    }
+
+    const PATHS: [&str; 5] = ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"];
+
+    const KINDS: [OwnerEdgeKind; 11] = [
+        OwnerEdgeKind::Preserve,
+        OwnerEdgeKind::MayResumeUnowned,
+        OwnerEdgeKind::Owned,
+        OwnerEdgeKind::Unowned,
+        OwnerEdgeKind::Conditional,
+        OwnerEdgeKind::InheritsFirstRun,
+        OwnerEdgeKind::QueuedLeaf,
+        OwnerEdgeKind::RefApplied,
+        OwnerEdgeKind::MayBeUnowned,
+        OwnerEdgeKind::EagerCall,
+        OwnerEdgeKind::Preserve,
+    ];
+
+    fn span(index: usize) -> Span {
+        let start = u32::try_from(index * 10).unwrap();
+        Span::new(start, start + 9)
+    }
+
+    fn fragment(random: &mut Random, path: &str, leaf: bool, namespaces: bool) -> CachedOwnerFile {
+        let seeds = [
+            0,
+            OWNER_CONTEXT_OWNED,
+            OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
+            OWNER_CONTEXT_UNOWNED,
+            OWNER_CONTEXT_LEAF,
+            OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED,
+            0,
+            0,
+        ];
+        let count = 1 + random.below(6);
+        let nodes = (0..count)
+            .map(|index| OwnerNode {
+                path: path.to_owned(),
+                span: span(index),
+                body: span(index),
+                symbol: (random.below(3) != 0)
+                    .then(|| SymbolId::from(format!("s{}", random.below(7)))),
+                exported: random.below(4) == 0,
+                generator: random.below(5) == 0,
+                component: random.below(5) == 0,
+                component_uncertain: false,
+                seed_context: seeds[random.below(seeds.len())],
+                namespace_candidate: namespaces && random.below(2) == 0,
+            })
+            .collect::<Vec<_>>();
+        let edges = (0..random.below(10))
+            .map(|_| {
+                let source = (random.below(4) != 0).then(|| {
+                    let other = random.below(3) == 0;
+                    OwnerSource {
+                        path: if other {
+                            PATHS[random.below(PATHS.len())].to_owned()
+                        } else {
+                            path.to_owned()
+                        },
+                        span: span(random.below(count + 1)),
+                    }
+                });
+                let target = match random.below(3) {
+                    0 => OwnerTarget::Symbol(SymbolId::from(format!("s{}", random.below(7)))),
+                    1 => OwnerTarget::LocalSpan(span(random.below(count + 1))),
+                    _ => OwnerTarget::Function(
+                        PATHS[random.below(PATHS.len())].to_owned(),
+                        span(random.below(7)),
+                    ),
+                };
+                let mut kind = KINDS[random.below(KINDS.len())];
+                if leaf && random.below(6) == 0 {
+                    kind = OwnerEdgeKind::Leaf;
+                }
+                SymbolicOwnerEdge {
+                    source,
+                    target,
+                    kind,
+                }
+            })
+            .collect();
+        CachedOwnerFile {
+            source_hash: SourceHash::of(path),
+            proof: crate::base::reads::ReadProof::default(),
+            compiler: Arc::new(ExecutionMap {
+                compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+                source_hash: SourceHash::of(path),
+                semantic_model: Default::default(),
+                tracked_regions: vec![],
+                untracked_regions: vec![],
+                discarded_regions: vec![],
+                ownership_regions: vec![],
+                callback_roles: vec![],
+                jsx_operations: vec![],
+            }),
+            nodes,
+            edges,
+            requirements: vec![],
+        }
+    }
+
+    /// The bit a proven source leaves behind is unobservable (module docs).
+    fn masked(context: u8) -> u8 {
+        if context & OWNER_CONTEXT_PROVEN_UNOWNED != 0 {
+            context & !super::OWNER_CONTEXT_MAY_RESUME_UNOWNED
+        } else {
+            context
+        }
+    }
+
+    fn table(graph: &OwnerGraph) -> std::collections::BTreeMap<(String, Span), u8> {
+        graph
+            .context_table()
+            .into_iter()
+            .map(|(key, context)| (key, masked(context)))
+            .collect()
+    }
+
+    /// Runs `steps` random edits against one kept graph and, after each,
+    /// compares it with a graph built from the same fragments at once.
+    fn run(seed: u32, steps: usize, leaf: bool, namespaces: bool) {
+        if std::env::var_os("OWNER_PROPERTY_TRACE").is_some() {
+            eprintln!("seed {seed}");
+        }
+        let mut random = Random(seed);
+        let named = |path: &str, span: Span| (path.len() + span.start as usize).is_multiple_of(3);
+        let escapes = |path: &str| path.starts_with('c') || path.starts_with('d');
+        let hand_outs = HandOuts {
+            named: &named,
+            escapes_unnamed: &escapes,
+        };
+        let mut kept = OwnerGraph::default();
+        let mut held = std::collections::BTreeMap::<&str, CachedOwnerFile>::new();
+        for step in 0..steps {
+            for _ in 0..1 + random.below(3) {
+                let path = PATHS[random.below(PATHS.len())];
+                match random.below(6) {
+                    0 if held.contains_key(path) => {
+                        held.remove(path);
+                        if let Some(id) = kept.path_id(path) {
+                            kept.remove_fragment(id);
+                        }
+                    }
+                    1 if held.contains_key(path) => {
+                        // A recomputed fragment of equal content.
+                        let same = held[path].nodes.clone();
+                        let edges = held[path].edges.clone();
+                        let mut again = fragment(&mut random, path, leaf, namespaces);
+                        again.nodes = same;
+                        again.edges = edges;
+                        kept.set_fragment(path, again.clone());
+                        held.insert(path, again);
+                    }
+                    _ => {
+                        let next = fragment(&mut random, path, leaf, namespaces);
+                        kept.set_fragment(path, next.clone());
+                        held.insert(path, next);
+                    }
+                }
+            }
+            let order = |graph: &mut OwnerGraph| {
+                held.keys()
+                    .map(|path| graph.intern(path))
+                    .collect::<Vec<PathId>>()
+            };
+            let kept_order = order(&mut kept);
+            kept.settle(&kept_order, &hand_outs, true, false);
+            if !leaf && !namespaces {
+                assert!(kept.solvers_kept(), "seed {seed} step {step}: cones solve");
+            }
+            let mut fresh = OwnerGraph::default();
+            for (path, fragment) in &held {
+                fresh.set_fragment(path, fragment.clone());
+            }
+            let fresh_order = order(&mut fresh);
+            fresh.settle(&fresh_order, &hand_outs, false, false);
+            assert_eq!(
+                table(&kept),
+                table(&fresh),
+                "seed {seed} step {step}: the kept graph differs from a fresh one"
+            );
+        }
+    }
+
+    /// Seeds per property: `OWNER_PROPERTY_SEEDS` widens a local run.
+    fn seeds(default: u32) -> u32 {
+        std::env::var("OWNER_PROPERTY_SEEDS")
+            .ok()
+            .and_then(|seeds| seeds.parse().ok())
+            .unwrap_or(default)
+    }
+
+    #[test]
+    fn a_kept_graph_edited_at_random_equals_a_fresh_one() {
+        for seed in 1..=seeds(60) {
+            run(seed, 25, false, false);
+        }
+    }
+
+    #[test]
+    fn a_kept_graph_with_tracked_effect_edges_solves_fresh_and_equal() {
+        for seed in 1_000_000..=1_000_000 + seeds(30) {
+            run(seed, 20, true, false);
+        }
+    }
+
+    #[test]
+    fn a_kept_graph_with_namespace_hand_outs_equals_a_fresh_one() {
+        for seed in 2_000_000..=2_000_000 + seeds(40) {
+            run(seed, 20, false, true);
+        }
+    }
+
+    #[test]
+    fn the_resume_bit_a_proven_source_leaves_behind_is_the_only_history() {
+        // The history difference the module docs name: the source is {OWNED}
+        // when the edge first fires and gains the proof later.
+        let mut graph = OwnerGraph::default();
+        let node = |span: Span, seed: u8| OwnerNode {
+            path: "a.ts".into(),
+            span,
+            body: span,
+            symbol: None,
+            exported: false,
+            generator: false,
+            component: false,
+            component_uncertain: false,
+            seed_context: seed,
+            namespace_candidate: false,
+        };
+        let edge = |from: usize, to: usize, kind| SymbolicOwnerEdge {
+            source: Some(OwnerSource {
+                path: "a.ts".into(),
+                span: span(from),
+            }),
+            target: OwnerTarget::LocalSpan(span(to)),
+            kind,
+        };
+        let mut fragment = fragment(&mut Random(1), "a.ts", false, false);
+        fragment.nodes = vec![
+            node(span(0), OWNER_CONTEXT_OWNED),
+            node(span(1), 0),
+            node(span(2), 0),
+        ];
+        // 1 --unowned--> 0 gives node 0 the proof after node 0's first visit.
+        fragment.edges = vec![
+            edge(0, 2, OwnerEdgeKind::MayResumeUnowned),
+            edge(1, 0, OwnerEdgeKind::Unowned),
+        ];
+        graph.set_fragment("a.ts", fragment);
+        let order = [graph.intern("a.ts")];
+        let _ = (HashSet::<u8>::default(), OWNER_CONTEXT_LEAF_OWNED);
+        graph.settle(
+            &order,
+            &HandOuts {
+                named: &|_, _| false,
+                escapes_unnamed: &|_| false,
+            },
+            false,
+            false,
+        );
+        let table = graph.context_table();
+        // Node 1 is unreached, so its edge never fires: node 0 stays owned
+        // and node 2 holds the unowned and resume bits.
+        assert_eq!(
+            table[&("a.ts".to_owned(), span(2))],
+            OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | super::OWNER_CONTEXT_MAY_RESUME_UNOWNED
+        );
+    }
+}

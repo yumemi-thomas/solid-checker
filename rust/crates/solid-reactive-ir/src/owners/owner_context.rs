@@ -240,49 +240,6 @@ pub(super) fn event_owner_edge(lookup: &SemanticLookup<'_>, generator: bool) -> 
     }
 }
 
-/// Calls that run after an `await` on every path through their async
-/// function's own body, keyed by file and callee start.
-///
-/// The positions are the producer's `calls_after_await` dominance fact (the
-/// same one `reactive-read-after-await` proves reads with): branches, `&&`,
-/// `try`/`catch`, loops and `switch` merge conservatively, and a nested
-/// closure is never scanned, so a callback handed to `runWithOwner` after the
-/// `await` is not one of them. Such a call runs from a promise continuation,
-/// on an otherwise empty stack. Whether an owner is current there is the
-/// dialect's fresh-stack answer, the same one host schedulers get
-/// ([`Dialect::fresh_stack_callback_owner`]): Solid 2.0's owner is a
-/// synchronous dynamic scope, so none is. Empty for a dialect that does not
-/// answer [`solid_dialect::CallbackOwner::None`].
-pub(crate) struct AwaitContinuations<'a> {
-    pub(super) starts: HashMap<&'a str, HashSet<u64>>,
-}
-
-impl<'a> AwaitContinuations<'a> {
-    pub(crate) fn new(facts: &'a ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
-        let mut starts = HashMap::<&'a str, HashSet<u64>>::default();
-        if lookup.dialect.fresh_stack_callback_owner() == Some(solid_dialect::CallbackOwner::None) {
-            for file in facts.typescript.files() {
-                for function in file.async_functions.iter() {
-                    for call in &function.calls_after_await {
-                        starts
-                            .entry(call.path.as_ref())
-                            .or_default()
-                            .insert(call.start_byte);
-                    }
-                }
-            }
-        }
-        Self { starts }
-    }
-
-    /// Whether the call whose callee starts at `start` runs after an `await`.
-    pub(crate) fn contains(&self, path: &str, start: u32) -> bool {
-        self.starts
-            .get(path)
-            .is_some_and(|starts| starts.contains(&u64::from(start)))
-    }
-}
-
 /// The owner context of an operation that runs after an `await`
 /// ([`AwaitContinuations`]): proven unowned on every run, whatever context
 /// the enclosing function was entered with.

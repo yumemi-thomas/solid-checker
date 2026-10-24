@@ -336,32 +336,26 @@ pub(crate) fn discover_owner_file(
     }
 }
 
-pub(crate) fn resolve_owner_target(
-    path: &str,
-    target: &OwnerTarget,
-    nodes_by_span: &HashMap<String, HashMap<Span, usize>>,
-    by_symbol: &HashMap<SymbolId, usize>,
-) -> Option<usize> {
-    match target {
-        OwnerTarget::Symbol(symbol) => by_symbol.get(symbol).copied(),
-        OwnerTarget::LocalSpan(span) => nodes_by_span
-            .get(path)
-            .and_then(|nodes| nodes.get(span))
-            .copied(),
-        OwnerTarget::Function(path, span) => nodes_by_span
-            .get(path)
-            .and_then(|nodes| nodes.get(span))
-            .copied(),
-    }
+/// What the owner stage keeps between builds: the graph with its fragments
+/// and solvers, and each file's emission ([`owner_state`], [`owner_emission`]).
+#[derive(Default)]
+pub(crate) struct OwnerState {
+    graph: OwnerGraph,
+    emissions: HashMap<PathId, Emission>,
 }
 
+/// The owner requirements of the project, and the call-site gates they
+/// settled. `state` holds the previous build's graph; `retain` says it will be
+/// used again (a one-shot build solves with the plain worklist and keeps no
+/// solver).
 pub(crate) fn find_missing_owners_incremental(
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     indexes: &ProjectIndexes<'_>,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     unchanged_paths: &HashSet<String>,
-    cache: &mut HashMap<SourcePath, CachedOwnerFile>,
+    state: &mut OwnerState,
+    retain: bool,
 ) -> (
     Vec<OwnerRequirement>,
     SettledGateDecisions,
@@ -373,294 +367,126 @@ pub(crate) fn find_missing_owners_incremental(
     let mut fragment_reads = crate::base::reads::Reads::default();
     let mut timings = OwnerIncrementalTimings::default();
     let total_started = Instant::now();
-    let current_paths = facts
+    // The files of the build, each path once: a path listed twice is the
+    // later slot's.
+    let mut last_slot = HashMap::<&str, usize>::default();
+    for (slot, file) in facts.files.iter().enumerate() {
+        last_slot.insert(file.path.as_str(), slot);
+    }
+    let files = facts
         .files
         .iter()
-        .map(|file| file.path.as_str())
-        .collect::<HashSet<_>>();
-    cache.retain(|path, _| current_paths.contains(path.as_str()));
+        .enumerate()
+        .filter(|(slot, file)| last_slot.get(file.path.as_str()) == Some(slot))
+        .map(|(_, file)| file)
+        .collect::<Vec<_>>();
+    let OwnerState { graph, emissions } = state;
+    let order = files
+        .iter()
+        .map(|file| graph.intern(file.path.as_str()))
+        .collect::<Vec<_>>();
+    let current = order.iter().copied().collect::<HashSet<_>>();
+    for held in graph.held() {
+        if !current.contains(&held) {
+            graph.remove_fragment(held);
+            emissions.remove(&held);
+        }
+    }
     let mut recomputed = Vec::new();
-    for file in &facts.files {
+    let mut reused_proofs = Vec::new();
+    for (file, pid) in files.iter().zip(&order) {
         if unchanged_paths.contains(file.path.as_str())
-            && let Some(cached) = cache.get(file.path.as_str())
-            && cached.source_hash == file.source_hash
-            && cached.proof.holds(lookup)
-            && (Arc::ptr_eq(&cached.compiler, &file.compiler)
-                || same_compiler_semantics(&cached.compiler, &file.compiler))
+            && let Some(entry) = graph.file(*pid)
+            && entry.fragment.source_hash == file.source_hash
+            && entry.fragment.proof.holds(lookup)
+            && (Arc::ptr_eq(&entry.fragment.compiler, &file.compiler)
+                || same_compiler_semantics(&entry.fragment.compiler, &file.compiler))
         {
             timings.reused_files += 1;
-            fragment_reads.extend(&cached.proof.reads);
+            reused_proofs.push(&entry.fragment.proof.reads);
             continue;
         }
-        recomputed.push(file);
+        recomputed.push(*file);
         timings.recomputed_files += 1;
     }
-    for (path, discovered) in parallel_slice_results(&recomputed, |file| {
+    fragment_reads.extend_all(reused_proofs);
+    let discovered = parallel_slice_results(&recomputed, |file| {
         // What the fragment read of other files is its proof.
         let (mut discovered, reads) = crate::base::reads::record(|| {
             discover_owner_file(file, indexes, entities, symbol_names, lookup)
         });
         discovered.proof = crate::base::reads::ReadProof::new(reads, lookup);
         (file.path.clone(), discovered)
-    }) {
-        cache.insert(path, discovered);
-    }
+    });
     let fragment_build = total_started.elapsed();
 
     let graph_started = Instant::now();
-    let mut nodes = Vec::new();
-    for file in &facts.files {
-        if let Some(fragment) = cache.get(file.path.as_str()) {
-            nodes.extend(fragment.nodes.iter().cloned());
-        }
-    }
-    let mut nodes_by_span = HashMap::<String, HashMap<Span, usize>>::default();
-    for (index, node) in nodes.iter().enumerate() {
-        nodes_by_span
-            .entry(node.path.clone())
-            .or_default()
-            .insert(node.span, index);
-    }
-    let by_symbol = nodes
-        .iter()
-        .enumerate()
-        .filter_map(|(index, node)| node.symbol.clone().map(|symbol| (symbol, index)))
-        .collect::<HashMap<_, _>>();
-    let mut contexts = seed_contexts(&nodes);
-    seed_named_hand_outs(&nodes, lookup, &mut contexts);
-    let mut outgoing = vec![Vec::<(usize, OwnerEdgeKind)>::new(); nodes.len()];
-    for file in &facts.files {
-        let Some(fragment) = cache.get(file.path.as_str()) else {
-            continue;
-        };
-        for edge in &fragment.edges {
-            let Some(target) =
-                resolve_owner_target(file.path.as_str(), &edge.target, &nodes_by_span, &by_symbol)
-            else {
-                continue;
-            };
-            // The same answer the fresh pass gives a ref application's
-            // callback: a generator's body never runs, so nothing is proven.
-            let kind = match edge.kind {
-                OwnerEdgeKind::RefApplied if nodes[target].generator => OwnerEdgeKind::MayBeUnowned,
-                kind => kind,
-            };
-            if let Some(source) = edge.source.as_ref().and_then(|source| {
-                nodes_by_span
-                    .get(&source.path)
-                    .and_then(|nodes| nodes.get(&source.span))
-                    .copied()
-            }) {
-                outgoing[source].push((target, kind));
-            } else {
-                contexts[target] |=
-                    owner_edge_context(kind, OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED);
-            }
-        }
+    for (path, fragment) in discovered {
+        let pid = graph.intern(path.as_str());
+        graph.set_fragment(path.as_str(), fragment);
+        // The fragment's lookup reads were recorded again: so are the
+        // emission's, which fold into its proof.
+        emissions.remove(&pid);
     }
     let graph_assembly = graph_started.elapsed();
 
     let propagation_started = Instant::now();
-    let candidates = unnamed_hand_out_candidates(&nodes, lookup);
-    let uncertain = seed_unnamed_hand_outs(&mut contexts, &outgoing, &candidates);
-    propagate_owner_contexts(&mut contexts, &outgoing, &uncertain);
-    settle_eager_owners(&mut contexts, &outgoing, &uncertain);
+    let moved = graph.settle(
+        &order,
+        &HandOuts {
+            named: &|path, span| lookup.hands_out_by_name(path, span),
+            escapes_unnamed: &|path| lookup.escapes_unnamed(path),
+        },
+        retain,
+        verify_owner_graph(),
+    );
     let propagation = propagation_started.elapsed();
 
     let requirements_started = Instant::now();
-    let mut requirements = Vec::new();
-    let continuations = AwaitContinuations::new(facts, lookup);
-    let mut settled_gates = SettledGateDecisions::default();
-    let mut seen = HashSet::default();
     // Program-wide: a context's provider census spans every file (ADR 0352).
     let provider_free = provider_free_contexts(facts, lookup, symbol_names);
-    for file in &facts.files {
-        let Some(fragment) = cache.get(file.path.as_str()) else {
-            continue;
-        };
-        for candidate in &fragment.requirements {
-            let owner_index = candidate.owner.and_then(|span| {
-                nodes_by_span
-                    .get(file.path.as_str())
-                    .and_then(|nodes| nodes.get(&span))
-                    .copied()
-            });
-            let context = owner_index.map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index]);
-            // As in the batch pass: effects, cleanups and context reads, never a
-            // JSX boundary or `onSettled`'s returned cleanup. The two passes must
-            // agree here: a context read after an `await` is unowned (ADR 0352).
-            let after_await = matches!(candidate.operation, "effect" | "cleanup" | "context-read")
-                && continuations.contains(file.path.as_str(), candidate.operation_span.start);
-            let possible_continuation = (!after_await
-                && matches!(candidate.operation, "effect" | "cleanup" | "context-read"))
-            .then(|| possible_await_continuation_context(file, candidate.operation_span, context))
-            .flatten();
-            let context = if after_await {
-                await_continuation_context(context)
-            } else {
-                possible_continuation.unwrap_or(context)
-            };
-            // A read of a provider-free context under an owner throws
-            // `ContextNotFoundError` (ADR 0352). The batch pass decides the same.
-            let provider_free_read = candidate.operation == "context-read"
-                && candidate.context_argument.is_some_and(|argument| {
-                    context_key_at(lookup, file, argument)
-                        .is_some_and(|key| provider_free.contains(&key))
-                });
-            // The batch pass skips these before recording a settled gate too.
-            // Every chain span is one of this fragment's own nodes; one that
-            // did not resolve would withhold the lexical answer, not grant it.
-            let root_owned = possible_continuation.is_none()
-                && root_owned_at(candidate.providing_region_chain.as_deref(), |span| {
-                    nodes_by_span
-                        .get(file.path.as_str())
-                        .and_then(|nodes| nodes.get(span))
-                        .map_or(OWNER_CONTEXT_LEAVES_REGION, |index| contexts[*index])
-                });
-            // A providing region owns its reads, so a provider-free read there is
-            // a provider finding, not an owner question (ADR 0352).
-            let provider = provider_free_read && (root_owned || owned_on_every_path(context));
-            if root_owned && !provider {
-                continue;
-            }
-            let (operation, report_hit) = if provider {
-                ("context-provider", true)
-            } else {
-                (candidate.operation, context & candidate.report_mask != 0)
-            };
-            if let Some(gate) = candidate.settled_gate {
-                settled_gates.insert(
-                    (
-                        file.path.to_string(),
-                        u64::from(gate.start),
-                        u64::from(gate.end),
-                    ),
-                    leaf_gate_decision(owner_index, &nodes, &contexts),
-                );
-            }
-            if candidate.operation == "settled-cleanup" {
-                let cleanup_proof = candidate
-                    .settled_target
-                    .as_ref()
-                    .and_then(|target| {
-                        resolve_owner_target(file.path.as_str(), target, &nodes_by_span, &by_symbol)
-                    })
-                    .and_then(|index| {
-                        let node = &nodes[index];
-                        let callback_file = indexes.files_by_path.get(node.path.as_str())?;
-                        let callback = callback_file.ast.function_at(node.span)?;
-                        Some(function_cleanup_return_proof(
-                            lookup,
-                            callback_file,
-                            callback,
-                        ))
-                    })
-                    .unwrap_or(CleanupReturnProof::Unresolved);
-                let settled_call_valid = file.ast.calls.iter().any(|call| {
-                    call.arguments
-                        .first()
-                        .is_some_and(|argument| argument.span == candidate.operation_span)
-                        && lookup
-                            .resolved_callee_call(file, call.callee)
-                            .is_some_and(|resolved| {
-                                resolved.validity == typefacts::ResolvedCallValidity::Valid
-                            })
-                });
-                match cleanup_proof {
-                    CleanupReturnProof::NoFunction => continue,
-                    CleanupReturnProof::Function => {}
-                    CleanupReturnProof::OptionalFunction => {
-                        // The callback may return a cleanup. Preserve that as
-                        // runtime uncertainty instead of certifying it absent.
-                    }
-                    CleanupReturnProof::Unresolved if settled_call_valid => {}
-                    CleanupReturnProof::Unresolved => continue,
-                }
-            }
-            let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
-            let component_uncertain = !proven_unowned
-                && (context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
-                    || owner_index.is_some_and(|index| nodes[index].component_uncertain));
-            let later_run_unowned = !component_uncertain
-                && !proven_unowned
-                && context & OWNER_CONTEXT_LATER_RUN_UNOWNED != 0;
-            let conditional_owner = !component_uncertain
-                && !proven_unowned
-                && !later_run_unowned
-                && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
-                && context & OWNER_CONTEXT_UNOWNED != 0;
-            let caller_uncertain = candidate.allow_uncertain
-                && !proven_unowned
-                && owner_index.is_some_and(|index| {
-                    (nodes[index].exported
-                        && contexts[index] & OWNER_CONTEXT_UNOWNED != 0
-                        && !nodes[index].component
-                        && !nodes[index].component_uncertain)
-                        || open_world_unowned_only(context, &nodes[index])
-                });
-            let cleanup_return_uncertain = candidate.operation == "settled-cleanup"
-                && candidate
-                    .settled_target
-                    .as_ref()
-                    .and_then(|target| {
-                        resolve_owner_target(file.path.as_str(), target, &nodes_by_span, &by_symbol)
-                    })
-                    .and_then(|index| {
-                        let node = &nodes[index];
-                        let callback_file = indexes.files_by_path.get(node.path.as_str())?;
-                        let callback = callback_file.ast.function_at(node.span)?;
-                        Some(function_cleanup_return_proof(
-                            lookup,
-                            callback_file,
-                            callback,
-                        ))
-                    })
-                    .is_none_or(|proof| {
-                        matches!(
-                            proof,
-                            CleanupReturnProof::OptionalFunction | CleanupReturnProof::Unresolved
-                        )
-                    });
-            let runtime_uncertain = candidate.runtime_uncertain || cleanup_return_uncertain;
-            let uncertain = runtime_uncertain
-                || conditional_owner
-                || later_run_unowned
-                || caller_uncertain
-                || component_uncertain;
-            push_owner_requirement(
-                &mut requirements,
-                &mut seen,
-                operation,
-                file,
-                candidate.operation_span,
-                OwnerRequirementStatus {
-                    uncertain,
-                    runtime_uncertain,
-                    caller_uncertain,
-                    conditional_owner,
-                    later_run_unowned,
-                    component_uncertain,
-                    after_await,
-                    // The batch pass's cleanup rule (ADR 0347 amendment): a cleanup in a
-                    // leaf that is not owned is reported; in an owned leaf it is
-                    // SC3001's claim.
-                    report: report_hit
-                        || (candidate.operation == "cleanup"
-                            && context & OWNER_CONTEXT_LEAF != 0
-                            && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) == 0),
-                },
-                lookup,
-            );
-        }
-    }
-    attribute_dependency_requirements(
-        &mut requirements,
+    let inputs = EmissionInputs {
         facts,
         lookup,
-        &nodes,
-        &contexts,
-        &outgoing,
-    );
+        indexes,
+        provider_free: &provider_free,
+    };
+    let mut dirty = moved.files.clone();
+    dirty.extend(moved.contexts.iter().map(|node| node.path));
+    let mut requirements = Vec::new();
+    let mut settled_gates = SettledGateDecisions::default();
+    for (file, pid) in files.iter().zip(&order) {
+        let reusable = !dirty.contains(pid)
+            && emissions
+                .get(pid)
+                .is_some_and(|emission| inputs.holds(graph, *pid, emission));
+        if !reusable {
+            let (emission, reads) =
+                crate::base::reads::record(|| emit_file(&inputs, graph, *pid, file));
+            // The emission's reads join the fragment's: one proof per file.
+            if let Some(entry) = graph.file_mut(*pid) {
+                let mut total = entry.fragment.proof.reads.clone();
+                total.extend(&reads);
+                entry.fragment.proof = crate::base::reads::ReadProof::new(total, lookup);
+            }
+            emissions.insert(*pid, emission);
+        }
+        if let Some(emission) = emissions.get(pid) {
+            requirements.extend(emission.requirements.iter().cloned());
+            settled_gates.extend(emission.gates.iter().cloned());
+        }
+    }
+    if !facts.dependency_source_roots.is_empty() {
+        let (nodes, contexts, outgoing) = graph.dense_view(&order);
+        attribute_dependency_requirements(
+            &mut requirements,
+            facts,
+            lookup,
+            &nodes,
+            &contexts,
+            &outgoing,
+        );
+    }
     let requirement_emission = requirements_started.elapsed();
     (
         requirements,
@@ -674,4 +500,10 @@ pub(crate) fn find_missing_owners_incremental(
         },
         fragment_reads,
     )
+}
+
+/// Shadow and verify-reused modes compare the kept solve with the worklist.
+fn verify_owner_graph() -> bool {
+    crate::base::memo::build::verify_reused_from_env()
+        || crate::shadow::ShadowMode::from_env() != crate::shadow::ShadowMode::Off
 }

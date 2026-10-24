@@ -23,7 +23,7 @@ use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, ProjectIndexes, SemanticLookup};
 use solid_dialect::{Dialect, OwnerRequirementRole, Primitive};
 use solid_facts::ProjectFacts;
-use solid_facts::core::{SourceHash, SourcePath, Span};
+use solid_facts::core::{SourceHash, Span};
 
 mod owner_graph;
 pub(crate) use owner_graph::*;
@@ -31,6 +31,11 @@ mod missing_owners;
 pub(crate) use missing_owners::*;
 mod context_census;
 pub(crate) use context_census::*;
+mod owner_state;
+use owner_state::{HandOuts, OwnerGraph, PathId};
+mod owner_emission;
+pub(crate) use owner_emission::Emission;
+use owner_emission::{EmissionInputs, emit_file};
 mod owner_discovery;
 pub(crate) use owner_discovery::*;
 mod owner_context;
@@ -84,7 +89,8 @@ pub(crate) fn collect_project(
                     project_indexes,
                     ctx.symbol_names,
                     unchanged_paths,
-                    &mut cache.owner_files,
+                    &mut cache.owners,
+                    true,
                 );
             draft.missing_owners.extend(requirements);
             apply_settled_gates(&mut draft.leaf_operations, &gates);
@@ -98,15 +104,16 @@ pub(crate) fn collect_project(
         cache.settled_gates = Some(gates);
     } else {
         // A build with no retained cache runs the same pass over a scratch
-        // fragment table: one owner analysis, so a fresh and a retained
-        // build cannot disagree (the duplicate batch pass drifted, S7f-0).
+        // state: one owner analysis, so a fresh and a retained build cannot
+        // disagree (the duplicate batch pass drifted, S7f-0).
         let (requirements, gates, owner_timings, _) = find_missing_owners_incremental(
             ctx.facts,
             ctx.semantic_lookup,
             project_indexes,
             ctx.symbol_names,
             unchanged_paths,
-            &mut HashMap::default(),
+            &mut OwnerState::default(),
+            false,
         );
         draft.missing_owners.extend(requirements);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
@@ -376,7 +383,7 @@ pub(crate) struct OwnerCallbackEdge {
     pub(crate) source: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct OwnerNode {
     pub(crate) path: String,
     pub(crate) span: Span,
