@@ -14,6 +14,13 @@ use crate::{
     SymbolFact, TupleShape, TypeDescriptor,
 };
 
+/// The empty string, shared: most decoded entities have no runtime identity,
+/// and `Arc::from("")` allocates a fresh header for each (app-game: 400 K).
+fn empty_str() -> Arc<str> {
+    static EMPTY: std::sync::OnceLock<Arc<str>> = std::sync::OnceLock::new();
+    Arc::clone(EMPTY.get_or_init(|| Arc::from("")))
+}
+
 pub const TYPE_FACTS_SCHEMA_V1: u64 = 1;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V3: u64 = 3;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V4: u64 = 4;
@@ -1388,7 +1395,7 @@ fn decode_entity_run(
         let runtime_identity = if flags & rows::ENTITY_RUNTIME_IDENTITY != 0 {
             cursor.string_index(strings, "runtime identity")?
         } else {
-            Arc::from("")
+            empty_str()
         };
         let runtime_value_domain = if flags & rows::ENTITY_RUNTIME_VALUE_DOMAIN != 0 {
             Some(parse_runtime_value_domain(cursor.u64()?)?)
@@ -1414,7 +1421,7 @@ fn decode_entity_run(
                     }
                     ConstantValue {
                         kind: ConstantValueKind::Number,
-                        string: Arc::from(""),
+                        string: empty_str(),
                         number,
                     }
                 }
@@ -1502,14 +1509,14 @@ fn decode_entity_run(
                         }
                         PrimitiveLiteralCandidate {
                             kind: PrimitiveLiteralKind::Number,
-                            string: Arc::from(""),
+                            string: empty_str(),
                             number,
                             boolean: false,
                         }
                     }
                     2 => PrimitiveLiteralCandidate {
                         kind: PrimitiveLiteralKind::Boolean,
-                        string: Arc::from(""),
+                        string: empty_str(),
                         number: 0.0,
                         boolean: match cursor.u64()? {
                             0 => false,
@@ -1984,10 +1991,10 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
                         declarations: declarations.into(),
                         references: references.into(),
                     }),
-                    Arc::from(""),
+                    empty_str(),
                 )
             }
-            1 => (SymbolOp::Remove { id: id.clone() }, Arc::from("")),
+            1 => (SymbolOp::Remove { id: id.clone() }, empty_str()),
             2 => {
                 let path = cursor.string_index(&strings, "symbol reference path")?;
                 if path.is_empty() {

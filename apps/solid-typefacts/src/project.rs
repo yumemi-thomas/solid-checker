@@ -1341,16 +1341,45 @@ pub(crate) fn validate_location(location: &Location, source: &str) -> Result<(),
 }
 
 /// Go: `declarationKind`.
-fn declaration_kind(node: tsrs_core::P<Node>) -> &'static str {
-    if is_variable_declaration(node) {
-        "variable"
+/// The declaration's kind, one shared string per kind: every retained row's
+/// declarations hold one.
+fn declaration_kind(node: tsrs_core::P<Node>) -> Arc<str> {
+    static KINDS: std::sync::OnceLock<[Arc<str>; 4]> = std::sync::OnceLock::new();
+    let kinds =
+        KINDS.get_or_init(|| ["variable", "function", "class", "declaration"].map(Arc::from));
+    let kind = if is_variable_declaration(node) {
+        0
     } else if is_function_declaration(node) {
-        "function"
+        1
     } else if is_class_declaration(node) {
-        "class"
+        2
     } else {
-        "declaration"
+        3
+    };
+    Arc::clone(&kinds[kind])
+}
+
+/// The clean path of `file_name` as a shared string. Declarations name few
+/// distinct files (the libraries' most), and each retained row holds its
+/// declarations' paths. Content-keyed, so a path is never another file's; a
+/// thread's map is cleared once it holds 4,096 paths.
+fn declaration_path(file_name: &str) -> Arc<str> {
+    thread_local! {
+        static PATHS: std::cell::RefCell<HashMap<Box<str>, Arc<str>>> =
+            std::cell::RefCell::new(HashMap::new());
     }
+    PATHS.with(|paths| {
+        let mut paths = paths.borrow_mut();
+        if let Some(path) = paths.get(file_name) {
+            return Arc::clone(path);
+        }
+        if paths.len() >= 4096 {
+            paths.clear();
+        }
+        let path: Arc<str> = clean(file_name).into();
+        paths.insert(file_name.into(), Arc::clone(&path));
+        path
+    })
 }
 
 /// Go: `wireSymbolName`. Go marks an internal symbol name with a leading
@@ -1399,6 +1428,10 @@ pub(crate) fn id_declarations(
 /// Go: `declarationsForSymbol`.
 pub(crate) fn declarations_for_symbol(symbol: tsrs_core::P<tsrs_ast::Symbol>) -> Vec<Declaration> {
     let mut declarations = Vec::with_capacity(symbol.declarations().len());
+    // Go's codec spells the internal-name marker `__` at the wire seam
+    // (`wireSymbolName`); tsrs's marker is U+007F, so spell it here. One
+    // string for every declaration of the symbol.
+    let mut name: Option<Arc<str>> = None;
     for node in symbol.declarations() {
         let Some(file) = get_source_file_of_node(*node) else {
             continue;
@@ -1411,12 +1444,10 @@ pub(crate) fn declarations_for_symbol(symbol: tsrs_core::P<tsrs_ast::Symbol>) ->
             continue;
         };
         declarations.push(Declaration {
-            // Go's codec spells the internal-name marker `__` at the wire seam
-            // (`wireSymbolName`); tsrs's marker is U+007F, so spell it here.
-            name: wire_symbol_name(symbol.name()).into(),
-            kind: declaration_kind(*node).into(),
+            name: Arc::clone(name.get_or_insert_with(|| wire_symbol_name(symbol.name()).into())),
+            kind: declaration_kind(*node),
             location: Location {
-                path: clean(file.file_name()).into(),
+                path: declaration_path(file.file_name()),
                 start_byte: u64::from(skip_trivia(file.text(), pos)),
                 end_byte: u64::from(end),
             },
