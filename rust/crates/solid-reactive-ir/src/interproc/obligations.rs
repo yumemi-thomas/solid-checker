@@ -121,7 +121,7 @@ pub(super) fn accessor_argument_summaries(
         .iter()
         .map(|argument| {
             let symbol = entities.get(&location(file.path.shared(), argument.span))?;
-            let (display, _) = accessors.get(symbol)?;
+            let (display, _) = super::transport_reads::accessor(accessors, symbol)?;
             Some(ReturnSummary {
                 kind: "accessor".into(),
                 label: display.to_string(),

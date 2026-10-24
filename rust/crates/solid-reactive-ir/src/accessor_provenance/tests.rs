@@ -51,7 +51,7 @@ fn visible_member_writes_use_normalized_targets_and_cooked_keys() {
     ] {
         let file = file(source);
         let mut index = MemberStability::default();
-        index.syntax(&file);
+        index.syntax(&file, &crate::base::contributions::stability_writes(&file));
         assert!(
             matches!(index.state("rows"), Stability::Vetoed(_)),
             "{source}"
@@ -69,7 +69,7 @@ fn visible_member_writes_use_normalized_targets_and_cooked_keys() {
     ] {
         let file = file(source);
         let mut index = MemberStability::default();
-        index.syntax(&file);
+        index.syntax(&file, &crate::base::contributions::stability_writes(&file));
         assert!(
             matches!(index.state("rows"), Stability::Assumed),
             "{source}"

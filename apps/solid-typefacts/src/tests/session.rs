@@ -398,6 +398,7 @@ fn session_answers_the_module_graph_without_touching_retained_state() {
         imports: true,
         import_paths: vec![SOURCE.to_owned()],
         packages: true,
+        distinct_bare_imports: false,
     });
     let modules = lifecycle(&mut session, modules_request);
     assert!(modules.ok, "modules response = {modules:?}");

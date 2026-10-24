@@ -1901,3 +1901,150 @@ fn cancellation_cannot_strand_a_sent_update() {
     assert_eq!(facts.generation(), 2);
     session.close().unwrap();
 }
+
+/// Instant-edits P4: the producer's per-file passes name every changed
+/// `symbols` answer, and the retained session patches its closure from the
+/// previous one. After every edit the patched table must hold exactly the
+/// symbols a fresh session's full closure holds, and the change list must
+/// name exactly the rows that moved.
+#[test]
+fn per_file_symbol_closure_patch_equals_a_fresh_closure() {
+    let project = project();
+    let directory = project.parent().unwrap().to_path_buf();
+    let path = |name: &str| directory.join(name).to_string_lossy().into_owned();
+    let per_file = || Producer::at(producer());
+    let original = ["consumer.ts", "source.ts", "unrelated.ts", "use.ts"].map(|name| {
+        (
+            path(name),
+            fs::read_to_string(directory.join(name)).unwrap(),
+        )
+    });
+    // Every identifier of every file is demanded, with references for the
+    // first one of each file, so the tier and the seeds both move.
+    let demands = |sources: &[(String, String)]| {
+        let mut entities = Vec::new();
+        for (file, text) in sources {
+            let bytes = text.as_bytes();
+            let mut start = None;
+            let mut first = true;
+            for (at, byte) in bytes.iter().copied().chain(*b" ").enumerate() {
+                let word = byte.is_ascii_alphanumeric() || byte == b'_';
+                match (start, word) {
+                    (None, true) if !byte.is_ascii_digit() => start = Some(at),
+                    (Some(from), false) => {
+                        entities.push(EntityDemand {
+                            location: Location {
+                                path: file.as_str().into(),
+                                start_byte: from as u64,
+                                end_byte: at as u64,
+                            },
+                            symbol: true,
+                            references: first,
+                            resolved_call: true,
+                            ..EntityDemand::default()
+                        });
+                        first = false;
+                        start = None;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        AnalysisDemand { entities }
+    };
+    let rows = |table: &typefacts::FactTable| {
+        table
+            .symbols()
+            .map(|symbol| {
+                (
+                    symbol.id().to_owned(),
+                    symbol.alias_target().to_owned(),
+                    format!("{:?}", symbol.declarations()),
+                    symbol.references().cloned().collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let edits: Vec<Vec<(&str, String)>> = vec![
+        vec![("use.ts", format!("// shift\n{}", original[3].1))],
+        vec![(
+            "source.ts",
+            "export const count = () => 1;\nexport const other = 2;\n".to_owned(),
+        )],
+        vec![(
+            "use.ts",
+            "import { count as localCount, other } from \"./source\";\n\nexport const value = localCount() + other;\n"
+                .to_owned(),
+        )],
+        vec![("use.ts", "export const value = 3;\n".to_owned())],
+        vec![
+            ("use.ts", original[3].1.clone()),
+            ("source.ts", original[1].1.clone()),
+        ],
+    ];
+    let mut sources = original.to_vec();
+    let mut retained = Session::open(per_file(), project.to_string_lossy(), Vec::new()).unwrap();
+    let mut previous = rows(&retained.analyze(&demands(&sources)).unwrap());
+    for (step, edit) in edits.into_iter().enumerate() {
+        let version = step as u64 + 1;
+        let changes = edit
+            .iter()
+            .map(|(name, text)| FileChange {
+                path: path(name),
+                source: text.clone().into_bytes(),
+                deleted: false,
+                version,
+            })
+            .collect::<Vec<_>>();
+        for (name, text) in &edit {
+            let file = path(name);
+            sources
+                .iter_mut()
+                .find(|(held, _)| *held == file)
+                .unwrap()
+                .1 = text.clone();
+        }
+        retained.update(changes).unwrap();
+        let patched = rows(&retained.analyze(&demands(&sources)).unwrap());
+        let changes = retained.take_last_table_changes().unwrap();
+        // Every edit's closure is patched, the first one's too: the client
+        // asks every retained analysis for the changed answers.
+        assert!(retained.last_closure_patched(), "step {step}");
+
+        let mut fresh = Session::open(per_file(), project.to_string_lossy(), Vec::new()).unwrap();
+        fresh
+            .update(
+                sources
+                    .iter()
+                    .map(|(file, text)| FileChange {
+                        path: file.clone(),
+                        source: text.clone().into_bytes(),
+                        deleted: false,
+                        version: 1,
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap();
+        let full = rows(&fresh.analyze(&demands(&sources)).unwrap());
+        assert_eq!(
+            patched, full,
+            "step {step}: patched closure != fresh closure"
+        );
+
+        let mut moved = previous
+            .iter()
+            .filter(|row| !patched.contains(row))
+            .chain(patched.iter().filter(|row| !previous.contains(row)))
+            .map(|row| row.0.clone())
+            .collect::<Vec<_>>();
+        moved.sort();
+        moved.dedup();
+        let mut named = changes.symbol_ids.clone();
+        named.sort();
+        assert_eq!(
+            named, moved,
+            "step {step}: the change list names the moved rows"
+        );
+        previous = patched;
+    }
+}

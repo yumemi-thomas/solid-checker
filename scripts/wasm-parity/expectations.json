@@ -406,18 +406,6 @@
         "equalWithoutTimings": true
       },
       {
-        "operation": "symbols",
-        "status": 0,
-        "equal": true,
-        "equalWithoutTimings": true
-      },
-      {
-        "operation": "symbols",
-        "status": 0,
-        "equal": true,
-        "equalWithoutTimings": true
-      },
-      {
         "operation": "sources",
         "status": 0,
         "equal": true,
@@ -433,7 +421,7 @@
   },
   "w7BadHandshake": {
     "status": 1,
-    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 83, schema sha256:ff5a9ac55ed6ea694c6b8a02d37652fb03ac735eae84985e6957c460040aa8b8, build \"dev\"; got protocol 83, schema sha256:ff5a9ac55ed6ea694c6b8a02d37652fb03ac735eae84985e6957c460040aa8b9, build \"dev\"",
+    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 84, schema sha256:c3bb44268dc4b2a1d36ad3c6160190c65ddcb770319a73823bf0a6dd3864ffd4, build \"dev\"; got protocol 84, schema sha256:c3bb44268dc4b2a1d36ad3c6160190c65ddcb770319a73823bf0a6dd3864ffd5, build \"dev\"",
     "host": {
       "opened": [
         1

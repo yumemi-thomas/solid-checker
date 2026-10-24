@@ -16,7 +16,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify
+.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus
 
 build: build-rust
 
@@ -189,6 +189,31 @@ tsc-oracle: tsc-oracle-provision build-checker-debug
 obligation-audit: tsc-oracle-provision build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/obligation-audit.mjs
+
+# The retained IR's safety net (scripts/ir-read-lint.mjs, scripts/ir-edit-fuzz.mjs).
+# The lint ratchets raw cross-file reads against scripts/ir-read-lint.allowlist.json.
+# The fixture budget edits copies of fixture projects and compares the daemon's
+# answer with a fresh one after every edit (seconds; `make verify` runs it).
+# The corpus budget is the long manual one, on a project edited in place and
+# restored byte-exact, against the release checker (the debug build inflates
+# certification about 19x):
+#   make ir-edit-fuzz-corpus IR_FUZZ_PROJECT=<corpus>/apps/solid-groove/tsconfig.json IR_FUZZ_STEPS=30
+IR_FUZZ_STEPS ?= 6
+IR_FUZZ_SEED ?= 1
+IR_FUZZ_PROJECT ?=
+ir-read-lint:
+	$(BUN) scripts/ir-read-lint.mjs
+
+ir-edit-fuzz: build-checker-debug
+	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/ir-edit-fuzz.mjs \
+	  --fixtures --steps $(IR_FUZZ_STEPS) --seed $(IR_FUZZ_SEED)
+
+ir-edit-fuzz-corpus: build-checker-release
+	test -n "$(IR_FUZZ_PROJECT)" || { echo "set IR_FUZZ_PROJECT=<tsconfig.json>"; exit 2; }
+	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/ir-edit-fuzz.mjs \
+	  --project "$(IR_FUZZ_PROJECT)" --steps $(IR_FUZZ_STEPS) --seed $(IR_FUZZ_SEED)
 
 # Compatibility target. Product ownership moved to ownership-gate after every
 # retained upstream case was migrated into the product-owned manifest.

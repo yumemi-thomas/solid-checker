@@ -127,9 +127,10 @@ pub(crate) fn collect_project<'facts>(
         entities: ctx.entities,
         references_by_source: &references_by_source,
         symbol_names: ctx.symbol_names,
-        retained_source_paths: &source.retained_source_paths,
+        unchanged_paths: &source.unchanged_paths,
         typed_sources: ctx.typed_sources,
         lookup: ctx.semantic_lookup,
+        source_shared_reads: &source.shared_reads,
     };
     let run_local_access = || {
         local_access_context.build(
@@ -138,9 +139,9 @@ pub(crate) fn collect_project<'facts>(
                 aggregate_reusable: reuse.late_stages_reusable,
                 typescript_unchanged: reuse.typescript_unchanged,
                 source_discovery_delta: typescript_delta,
-                changed_source_symbols: &source.changed_source_symbols,
-                retained_source_paths: &source.retained_source_paths,
+                unchanged_paths: &source.unchanged_paths,
                 global_async_context_unchanged: reuse.late_stages_reusable,
+                shared_reads: &source.shared_reads,
             },
         )
     };
@@ -152,7 +153,7 @@ pub(crate) fn collect_project<'facts>(
                 cached.timings = InterproceduralTimings::default();
                 return (
                     local_access,
-                    cached,
+                    (cached, crate::base::reads::Reads::default()),
                     started.elapsed(),
                     Duration::ZERO,
                     true,
@@ -163,8 +164,10 @@ pub(crate) fn collect_project<'facts>(
                 let interprocedural = scope.spawn(move || {
                     let _worker_limit = AnalysisWorkerLimit::enter(worker_limit);
                     let started = Instant::now();
-                    let result = interprocedural_context
-                        .build(caches.interprocedural_graph, caches.interprocedural_results);
+                    let result = crate::base::reads::record(|| {
+                        interprocedural_context
+                            .build(caches.interprocedural_graph, caches.interprocedural_results)
+                    });
                     (result, started.elapsed())
                 });
                 let local_worker_limit = AnalysisWorkerLimit::enter(worker_limit);
@@ -187,8 +190,10 @@ pub(crate) fn collect_project<'facts>(
                 let local_access = run_local_access();
                 let local_elapsed = started.elapsed();
                 let started = Instant::now();
-                let interprocedural = interprocedural_context
-                    .build(caches.interprocedural_graph, caches.interprocedural_results);
+                let interprocedural = crate::base::reads::record(|| {
+                    interprocedural_context
+                        .build(caches.interprocedural_graph, caches.interprocedural_results)
+                });
                 (
                     local_access,
                     interprocedural,
@@ -198,6 +203,14 @@ pub(crate) fn collect_project<'facts>(
                 )
             }
         });
+    let (interprocedural, interprocedural_reads) = interprocedural;
+    if let Some(cache) = caches.late_stages.as_deref_mut() {
+        // The aggregates' reads ([`crate::cache::CachedLateStages::reads`]):
+        // the interprocedural build's, with what its reused chunks read.
+        cache.reads.extend(&interprocedural_reads);
+        cache.reads.extend(&interprocedural.reused_reads);
+        cache.reads.extend(&local_access.reads);
+    }
     timings.interprocedural_reused = reused;
     let combined_elapsed = clock.elapsed();
     clock.record(timings, ReactiveIrStage::LocalReadsAndWrites, local_elapsed);
@@ -296,15 +309,22 @@ pub(crate) fn collect_project<'facts>(
     // After every read, write and action table is merged: the rule's
     // negative proof is that none of them lies inside the predicate.
     static_rules::result_access_callbacks(ctx, draft);
-    upstream_compat::check_project(
-        ctx,
-        caches
-            .late_stages
-            .as_deref_mut()
-            .map(|cache| &mut cache.compat_reference_locations),
-        reuse.late_stages_reusable,
-        draft,
-    );
+    let compat_started = Instant::now();
+    let ((), compat_reads) = crate::base::reads::record(|| {
+        upstream_compat::check_project(
+            ctx,
+            caches
+                .late_stages
+                .as_deref_mut()
+                .map(|cache| &mut cache.compat_reference_locations),
+            reuse.late_stages_reusable,
+            draft,
+        );
+    });
+    timings.upstream_compat = compat_started.elapsed();
+    if let Some(cache) = caches.late_stages.as_deref_mut() {
+        cache.reads.extend(&compat_reads);
+    }
     interprocedural.factory_instances
 }
 

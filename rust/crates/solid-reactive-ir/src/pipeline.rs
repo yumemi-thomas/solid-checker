@@ -290,6 +290,8 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         typescript_indexes: typescript_indexes_cache,
         reachability: mut reachability_cache,
         late_stages: mut late_stage_cache,
+        base_check,
+        memos,
     } = caches;
     let emit_timings = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
     let total_started = Instant::now();
@@ -324,14 +326,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     };
     let project_indexes = ProjectIndexes::new(facts, ast_indexes);
     build_timings.project_indexes = substage_started.elapsed();
-    let typescript_unchanged = facts
-        .typescript_changes
-        .as_ref()
-        .is_some_and(|changes| changes.unchanged)
-        // Runtime redirects are generation-request facts outside the retained
-        // TypeScript snapshot. Rebuild the derived symbol indexes when any are
-        // present rather than reusing a cache whose key cannot see them.
-        && facts.runtime_symbol_redirects.is_empty();
+    let typescript_unchanged = crate::cache::typescript_unchanged(facts);
     let owned_typescript_indexes;
     let typescript_indexes = if let Some(cache) = typescript_indexes_cache {
         let patch_timings = (!typescript_unchanged)
@@ -350,6 +345,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             })
             .flatten();
         let indexes_patched = patch_timings.is_some();
+        build_timings.typescript_indexes_patched = indexes_patched;
         if let Some((alias_roots, entity_symbols)) = patch_timings {
             build_timings.alias_roots = alias_roots;
             build_timings.entity_symbols = entity_symbols;
@@ -406,18 +402,36 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         rule_options.runtime.program_is_closed(),
     )
     .with_router_install(rule_options.runtime.router_install.clone());
+    let semantic_lookup = match memos {
+        Some(store) => semantic_lookup.with_memo_store(store),
+        None => semantic_lookup,
+    };
     // ADR 0347: which exports a namespace import hands out, read once per build.
-    semantic_lookup.set_namespace_hand_outs(crate::attribution::namespace_hand_outs(
-        &semantic_lookup,
-        aliases,
-        &typescript_indexes.symbols_by_root,
-    ));
+    let substage_started = Instant::now();
+    let (hand_outs, hand_out_reads) = crate::base::reads::record(|| {
+        crate::attribution::namespace_hand_outs(
+            &semantic_lookup,
+            aliases,
+            &typescript_indexes.symbols_by_root,
+        )
+    });
+    semantic_lookup.set_namespace_hand_outs(hand_outs, hand_out_reads);
+    build_timings.namespace_hand_outs = substage_started.elapsed();
     let semantic_lookup = &semantic_lookup;
-    let reuse = ReusePlan::prepare(
-        facts,
-        late_stage_cache.as_deref_mut(),
-        semantic_lookup.member_resolution_digest(),
-    );
+    if let Some((retained, mode)) = base_check {
+        check_retained_base(
+            retained,
+            mode,
+            semantic_lookup,
+            &mut build_timings,
+            emit_timings,
+        );
+    }
+    let substage_started = Instant::now();
+    // The memos begin before any stage reads one (ADR 0392's ordering).
+    semantic_lookup.begin_memos();
+    let mut reuse = ReusePlan::prepare(facts, late_stage_cache.as_deref_mut(), semantic_lookup);
+    build_timings.reuse_plan = substage_started.elapsed();
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
     let mut draft = ProgramDraft {
@@ -513,6 +527,19 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     // also ran after the stage above closed; restart this function's clock so
     // the static-prepass stage measures only the prepass loops.
     clock.restart();
+    // The late aggregates' proof read memos over the resolver's derived
+    // tables, which only its pass publishes: build it now (the
+    // interprocedural stage reuses this construction) and decide.
+    if reuse.late_stages_pending {
+        crate::interproc::accessor_provenance::build_kept_resolver(
+            facts,
+            semantic_lookup,
+            &source_discovery.accessors,
+            &source_discovery.source_kinds,
+            &symbol_names,
+        );
+        reuse.settle(facts, late_stage_cache.as_deref_mut(), semantic_lookup);
+    }
 
     let analysis = AnalysisContext {
         facts,
@@ -556,11 +583,19 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut build_timings,
         &mut clock,
     );
+    let substage_started = Instant::now();
     static_rules::reactive_read_after_await_through_calls(&analysis, &mut draft);
+    build_timings.read_after_await_through_calls = substage_started.elapsed();
+    let substage_started = Instant::now();
     cleanup::collect_project(&analysis, &mut draft);
+    build_timings.leaf_operations = substage_started.elapsed();
     clock.finish(&mut build_timings, ReactiveIrStage::LeafAndCleanup);
+    let substage_started = Instant::now();
     static_api::check_project(&analysis, &mut draft);
+    build_timings.static_api_files = substage_started.elapsed();
+    let substage_started = Instant::now();
     server_rules::check_project(&analysis, &mut draft);
+    build_timings.server_rules = substage_started.elapsed();
     clock.finish(&mut build_timings, ReactiveIrStage::StaticApi);
     directives::discover_directive_creations(&analysis, &mut draft);
     draft.undecided_component_regions = semantic_lookup.undecided_component_regions();
@@ -568,13 +603,21 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     owners::collect_project(
         &analysis,
         &project_indexes,
-        &source_discovery.retained_source_paths,
-        late_stage_cache.and_then(Option::as_mut),
+        &source_discovery.unchanged_paths,
+        late_stage_cache.as_deref_mut().and_then(Option::as_mut),
         reuse.late_stages_reusable,
         &mut draft,
         &mut build_timings,
     );
     clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
+    // Every retained aggregate was computed in this build (or reused under a
+    // proof that still holds): bind what they read.
+    if !reuse.late_stages_reusable
+        && let Some(cache) = late_stage_cache.and_then(Option::as_mut)
+    {
+        let reads = std::mem::take(&mut cache.reads);
+        cache.proof = Some(crate::base::reads::ReadProof::new(reads, semantic_lookup));
+    }
     // Static and compatibility passes deliberately operate on source facts.
     // Apply the compiler's stronger "this code was not emitted" fact once,
     // after every producer has run.
@@ -590,13 +633,15 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     draft.discard_deleted_static_diagnostics(facts);
     crate::effect_execution::gate_diagnostics(semantic_lookup, &mut draft);
     crate::attribution::discharge_closed_program_export_dispatch(
-        facts,
         semantic_lookup,
         entities,
         aliases,
         &typescript_indexes.symbols_by_root,
         &mut draft.static_defects,
     );
+    if let Some(report) = semantic_lookup.end_memos() {
+        report_memos(&report, &mut build_timings, emit_timings);
+    }
     let mut program = draft.into_program(factory_instances);
     program.runtime_configuration = runtime_configuration;
     clock.finish(&mut build_timings, ReactiveIrStage::FinalOrdering);
@@ -683,6 +728,85 @@ impl Drop for AnalysisWorkerLimit {
     }
 }
 
+/// Shadow mode: updates the previous build's base indexes with the files
+/// whose views changed and compares them with this build's refold
+/// ([`crate::base::retained`]). A mismatch is reported like a program
+/// mismatch, and the retained base is dropped.
+fn check_retained_base(
+    retained: &mut Option<crate::base::retained::RetainedBase>,
+    mode: crate::shadow::ShadowMode,
+    lookup: &SemanticLookup<'_>,
+    timings: &mut BuildTimings,
+    emit_timings: bool,
+) {
+    let table = crate::base::retained::table(retained, lookup.files());
+    let views = lookup.base_views_over(&table);
+    let Some(check) = crate::base::retained::check(retained, &views) else {
+        return;
+    };
+    timings.base_index_update = check.update;
+    timings.base_index_changed_files = check.changed_files as u64;
+    if emit_timings {
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "reactiveIrBaseIndexUpdate": {
+                    "updateNs": u64::try_from(check.update.as_nanos()).unwrap_or(u64::MAX),
+                    "fingerprintNs": u64::try_from(check.fingerprint.as_nanos()).unwrap_or(u64::MAX),
+                    "refoldNs": u64::try_from(check.refold.as_nanos()).unwrap_or(u64::MAX),
+                    "changedFiles": check.changed_files,
+                    "editedFiles": check.edited_files,
+                    "editedUpdateNs": u64::try_from(check.edited_update.as_nanos()).unwrap_or(u64::MAX),
+                    "removedFiles": check.removed_files,
+                    "deltaKeys": check.delta_keys,
+                    "mismatch": check.mismatch.is_some(),
+                }
+            })
+        );
+    }
+    if let Some(mismatch) = check.mismatch {
+        *retained = None;
+        crate::shadow::report_message(mode, &mismatch);
+    }
+}
+
+/// Records one build's memo report ([`crate::base::memo`]) in the timings,
+/// emits it with them, and appends it to `SOLID_CHECKER_IR_MEMO_LOG` (a
+/// daemon's stderr goes nowhere).
+fn report_memos(
+    report: &crate::base::memo::build::MemoReport,
+    timings: &mut BuildTimings,
+    emit_timings: bool,
+) {
+    let begin = &report.begin;
+    timings.memo_begin =
+        std::time::Duration::from_nanos(begin.fingerprint_ns + begin.index_ns + begin.mark_ns);
+    for (name, stats) in &report.tables {
+        timings.memo_reused += stats.reused + stats.verified;
+        timings.memo_computed += stats.fresh + stats.unchanged + stats.changed;
+        if *name == "returned_primitive_invocations" {
+            timings.returned_invocation_files = [
+                stats.reused + stats.verified,
+                stats.fresh + stats.unchanged + stats.changed,
+                stats.changed,
+            ];
+        }
+    }
+    let line = serde_json::json!({ "reactiveIrMemo": report });
+    if emit_timings {
+        eprintln!("{line}");
+    }
+    if let Some(path) = std::env::var_os("SOLID_CHECKER_IR_MEMO_LOG")
+        && let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+    {
+        use std::io::Write;
+        let _ = writeln!(file, "{line}");
+    }
+}
+
 pub(crate) fn available_analysis_workers() -> usize {
     let available = std::thread::available_parallelism().map_or(1, usize::from);
     ANALYSIS_WORKER_LIMIT.with(|limit| available.min(limit.get()))
@@ -707,21 +831,127 @@ where
         return items.iter().map(analyze).collect();
     }
     let chunk_size = items.len().div_ceil(workers);
+    // A computation recording its reads on this thread records what the
+    // workers read too ([`crate::base::reads`]).
+    let recording = WorkerContext::of_caller();
     std::thread::scope(|scope| {
         let handles = items
             .chunks(chunk_size)
             .map(|chunk| {
                 let analyze = &analyze;
-                scope.spawn(move || chunk.iter().map(analyze).collect::<Vec<_>>())
+                scope.spawn(move || {
+                    on_worker(recording, || chunk.iter().map(analyze).collect::<Vec<_>>())
+                })
             })
             .collect::<Vec<_>>();
         handles
             .into_iter()
             .flat_map(|handle| {
+                joined(
+                    handle
+                        .join()
+                        .expect("parallel Reactive IR analysis worker panicked"),
+                )
+            })
+            .collect()
+    })
+}
+
+/// What a parallel helper's workers inherit from the spawning thread:
+/// whether it records its reads ([`crate::base::reads`]), and whether it is
+/// checking a proof ([`crate::base::memo::derived::deferring`]).
+#[derive(Clone, Copy)]
+struct WorkerContext {
+    recording: bool,
+    deferring: bool,
+}
+
+impl WorkerContext {
+    fn of_caller() -> Self {
+        Self {
+            recording: crate::base::reads::recording(),
+            deferring: crate::base::memo::derived::is_deferring(),
+        }
+    }
+}
+
+/// A worker's part of a parallel helper: its reads, when the spawning
+/// thread records, come back with its results.
+fn on_worker<R>(
+    context: WorkerContext,
+    work: impl FnOnce() -> R,
+) -> (R, Option<crate::base::reads::Reads>) {
+    crate::base::memo::derived::deferring_as(context.deferring, || {
+        if context.recording {
+            let (value, reads) = crate::base::reads::record(work);
+            (value, Some(reads))
+        } else {
+            (work(), None)
+        }
+    })
+}
+
+/// Hands a worker's reads to the joining thread's computation.
+fn joined<R>((value, reads): (R, Option<crate::base::reads::Reads>)) -> R {
+    if let Some(reads) = reads {
+        crate::base::reads::replay(&reads);
+    }
+    value
+}
+
+/// [`parallel_slice_results`] for items whose costs vary widely: each worker
+/// claims the next unclaimed item, and the results come back in input order.
+/// Workers keep the caller's worker limit, so analysis nested in an item
+/// spreads as it would on the caller's thread. Without threads (WASM), or
+/// for a short slice, the items run in order on the caller's thread.
+// Threads only with a second worker and 64 items; otherwise a plain map (wasm32-wasip1).
+#[allow(clippy::disallowed_methods)]
+pub(crate) fn parallel_balanced_results<T, R, F>(items: &[T], analyze: F) -> Vec<R>
+where
+    T: Sync,
+    R: Send,
+    F: Fn(&T) -> R + Sync,
+{
+    let limit = available_analysis_workers();
+    let workers = limit.min(items.len());
+    if workers <= 1 || items.len() < 64 {
+        return items.iter().map(analyze).collect();
+    }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let recording = WorkerContext::of_caller();
+    std::thread::scope(|scope| {
+        let handles = (0..workers)
+            .map(|_| {
+                let (analyze, next) = (&analyze, &next);
+                scope.spawn(move || {
+                    let _limit = AnalysisWorkerLimit::enter(limit);
+                    on_worker(recording, || {
+                        let mut done = Vec::new();
+                        loop {
+                            let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            let Some(item) = items.get(index) else {
+                                break;
+                            };
+                            done.push((index, analyze(item)));
+                        }
+                        done
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut results = (0..items.len()).map(|_| None).collect::<Vec<_>>();
+        for handle in handles {
+            for (index, result) in joined(
                 handle
                     .join()
-                    .expect("parallel Reactive IR analysis worker panicked")
-            })
+                    .expect("parallel Reactive IR analysis worker panicked"),
+            ) {
+                results[index] = Some(result);
+            }
+        }
+        results
+            .into_iter()
+            .map(|result| result.expect("every item is claimed by one worker"))
             .collect()
     })
 }
@@ -738,19 +968,22 @@ where
         return vec![analyze(files)];
     }
     let chunk_size = files.len().div_ceil(workers);
+    let recording = WorkerContext::of_caller();
     std::thread::scope(|scope| {
         files
             .chunks(chunk_size)
             .map(|chunk| {
                 let analyze = &analyze;
-                scope.spawn(move || analyze(chunk))
+                scope.spawn(move || on_worker(recording, || analyze(chunk)))
             })
             .collect::<Vec<_>>()
             .into_iter()
             .map(|handle| {
-                handle
-                    .join()
-                    .expect("parallel Reactive IR analysis worker panicked")
+                joined(
+                    handle
+                        .join()
+                        .expect("parallel Reactive IR analysis worker panicked"),
+                )
             })
             .collect()
     })

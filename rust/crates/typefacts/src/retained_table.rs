@@ -402,42 +402,72 @@ impl FactTable {
         changed
     }
 
-    pub(crate) fn patch_symbols(&mut self, symbols: Vec<SymbolFact>) -> Vec<String> {
-        let mut changed = Vec::with_capacity(symbols.len());
-        for fact in symbols {
-            let replacement = StoredSymbol::from_fact(fact);
-            let id = Arc::clone(&replacement.id);
-            if self.symbols.get(&id) != Some(&replacement) {
-                changed.push(id.to_string());
-                self.symbols = self.symbols.updated(&id, Some(replacement));
-            }
-        }
-        changed
+    /// The id and alias target of `id`'s row, shared.
+    pub(crate) fn symbol_alias_target(&self, id: &str) -> Option<&Arc<str>> {
+        self.symbols.get(id).map(|symbol| &symbol.alias_target)
     }
 
-    pub(crate) fn patch_reference_paths(
+    /// Every symbol id, shared, in id order.
+    pub(crate) fn symbol_ids(&self) -> impl Iterator<Item = &Arc<str>> {
+        self.symbols.iter().map(|symbol| &symbol.id)
+    }
+
+    /// Replaces the rows of `upserts`, adds the new ones and drops every id
+    /// in `removed`, in one ordered pass; returns the ids whose row was
+    /// added, removed or changed, in id order (what [`Self::replace_symbols`]
+    /// returns for the same successor set).
+    pub(crate) fn merge_symbols(
         &mut self,
-        id: &Arc<str>,
-        paths: &[String],
-        references: &[Location],
-    ) -> bool {
-        let Some(mut replacement) = self.symbols.get(id).cloned() else {
-            return false;
-        };
-        let previous = replacement.clone();
-        for path in paths {
-            let run = references
-                .iter()
-                .filter(|location| location.path.as_ref() == path)
-                .cloned()
-                .collect();
-            replacement = replacement.replace_reference_path(path.as_str().into(), run);
+        upserts: Vec<SymbolFact>,
+        removed: &std::collections::HashSet<Arc<str>>,
+    ) -> Vec<String> {
+        let mut upserts = upserts
+            .into_iter()
+            .map(StoredSymbol::from_fact)
+            .collect::<Vec<_>>();
+        upserts.sort_by(|left, right| left.id.cmp(&right.id));
+        upserts.dedup_by(|later, earlier| later.id == earlier.id);
+        let mut next = Vec::with_capacity(self.symbols.len() + upserts.len());
+        let mut changed = Vec::new();
+        let mut previous = self.symbols.iter().peekable();
+        let mut successor = upserts.into_iter().peekable();
+        loop {
+            let order = match (previous.peek(), successor.peek()) {
+                (None, None) => break,
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (Some(left), Some(right)) => left.id.cmp(&right.id),
+            };
+            match order {
+                std::cmp::Ordering::Equal => {
+                    let replacement = successor.next().expect("peeked upsert");
+                    let left = previous.next().expect("peeked row");
+                    if *left == replacement {
+                        next.push(left.clone());
+                    } else {
+                        changed.push(left.id.to_string());
+                        next.push(replacement);
+                    }
+                }
+                std::cmp::Ordering::Less => {
+                    let left = previous.next().expect("peeked row");
+                    if removed.contains(&left.id) {
+                        changed.push(left.id.to_string());
+                    } else {
+                        next.push(left.clone());
+                    }
+                }
+                std::cmp::Ordering::Greater => {
+                    let right = successor.next().expect("peeked upsert");
+                    changed.push(right.id.to_string());
+                    next.push(right);
+                }
+            }
         }
-        if replacement == previous {
-            return false;
+        if !changed.is_empty() {
+            self.symbols = PackedIndex::from_sorted(next);
         }
-        self.symbols = self.symbols.updated(id, Some(replacement));
-        true
+        changed
     }
 
     #[must_use]

@@ -444,7 +444,7 @@ fn call_result_reads(
                 summary_attributed: !direct,
                 transported: read.transported
                     || transported.is_some()
-                    || provenance.has_source_origin(&read.symbol),
+                    || super::transport_reads::source_origin(provenance, &read.symbol),
             });
         }
     }
@@ -506,7 +506,7 @@ fn resolve_call_target<'b>(
     let dependencies = &mut out.dependencies;
     let obligations_before = dispatch_obligations.len();
     let callee = location(file.path.shared(), call.callee);
-    let transported = transported_calls.get(&callee);
+    let transported = super::transport_reads::call(transported_calls, &callee);
     let label = call
         .static_callee(&file.source)
         .map(str::to_owned)
@@ -514,7 +514,7 @@ fn resolve_call_target<'b>(
     let valid_call = lookup
         .resolved_callee_call(file, call.callee)
         .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Valid);
-    if unavailable_calls.contains(&callee)
+    if super::transport_reads::unavailable(unavailable_calls, &callee)
         && !lookup
             .resolved_callee_call(file, call.callee)
             .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Recovery)
@@ -1478,20 +1478,17 @@ impl<'s, 'a, 'b, 'c> DirectReadProof<'s, 'a, 'b, 'c> {
         let array_entry = matches!(
             transported,
             Some(accessor_provenance::Callable::ArrayMembers(_))
-        ) || (!array_member_bodies.is_empty()
+        ) || (super::transport_reads::array_bodies_present(array_member_bodies)
             && direct_callee.is_some_and(|(callee_file, callee)| {
-                array_member_bodies.contains(&(callee_file.path.to_string(), callee.span))
-                    || entered
-                        .get_or_init(|| {
-                            directly_entered_functions(
-                                callee_file,
-                                callee,
-                                lookup,
-                                transported_calls,
-                            )
-                        })
-                        .iter()
-                        .any(|key| array_member_bodies.contains(key))
+                super::transport_reads::array_body(
+                    array_member_bodies,
+                    &(callee_file.path.to_string(), callee.span),
+                ) || entered
+                    .get_or_init(|| {
+                        directly_entered_functions(callee_file, callee, lookup, transported_calls)
+                    })
+                    .iter()
+                    .any(|key| super::transport_reads::array_body(array_member_bodies, key))
             }));
         Self {
             scope,
@@ -1534,8 +1531,8 @@ impl<'s, 'a, 'b, 'c> DirectReadProof<'s, 'a, 'b, 'c> {
             return false;
         }
         let proven_origin = || {
-            provenance.has_runtime_source_origin(&read.symbol)
-                || provenance.has_source_origin(&read.symbol)
+            super::transport_reads::runtime_source_origin(provenance, &read.symbol)
+                || super::transport_reads::source_origin(provenance, &read.symbol)
         };
         if array_entry && !proven_origin() {
             return false;
@@ -1670,7 +1667,7 @@ impl<'s, 'a, 'b, 'c> DirectReadProof<'s, 'a, 'b, 'c> {
                 entities,
                 symbol_names,
                 lookup,
-            ) || provenance.has_source_origin(&read.symbol))
+            ) || super::transport_reads::source_origin(provenance, &read.symbol))
                 && (source_kinds.get(&read.symbol) != Some(&ReactiveSourceKind::Store)
                     || store_get_has_strict_witness(
                         owner_file,
@@ -2254,7 +2251,10 @@ pub(super) fn enter_directly_called(
     for call in &file.ast.calls {
         // A plain call: a method call dispatches on its receiver, which a
         // subclass can override.
-        let transported = transported_calls.get(&location(file.path.shared(), call.callee));
+        let transported = super::transport_reads::call(
+            transported_calls,
+            &location(file.path.shared(), call.callee),
+        );
         if (!call.direct_callee && transported.is_none())
             || !body_site_runs_during_call(file, function, call.span)
             || file.ast.any_jsx_containing(call.span)

@@ -69,7 +69,7 @@ pub use diagnostics::{
 pub use host_config::{tsconfig_extends_chain, tsconfig_extends_witness};
 pub use inferred_host::{
     InferredHost, inferred_host_directory_digest, inferred_host_input_digest,
-    inferred_host_input_paths, inferred_host_input_paths_for_project,
+    inferred_host_input_digests, inferred_host_input_paths, inferred_host_input_paths_for_project,
     inferred_host_input_paths_for_sources, inferred_project_host_with_note,
 };
 pub use package_requirements::{external_package_boundary, unsupplied_package_boundary};
@@ -291,6 +291,16 @@ impl TypeFactsSession {
         })
     }
 
+    /// Ends the producer process. Every later exchange fails with
+    /// `Closed`; none relaunches it. For a build whose remaining phases read
+    /// only the facts already answered (the idle check's fresh build), so
+    /// its program does not stay resident beside the retained one.
+    pub fn close(&mut self) {
+        // `close` terminates the child on every path; a refusal of the
+        // goodbye leaves nothing open either.
+        let _ = self.session.close();
+    }
+
     /// The project's configured source set, as the TypeScript program sees it.
     pub fn configured_sources(&mut self) -> Result<Vec<SourceFile>, BackendError> {
         Ok(self
@@ -398,6 +408,8 @@ impl TypeFactsSession {
                     server_retained_files: timings.server_retained_files,
                     server_recomputed_files: timings.server_recomputed_files,
                     server_non_durable_files: timings.server_non_durable_files,
+                    client_close_symbols: timings.client_close_symbols,
+                    client_closure_patched: timings.client_closure_patched,
                 });
         self.last_table_changes =
             self.session
@@ -1044,14 +1056,31 @@ impl NativeIncrementalSession {
             .collect())
     }
 
-    /// The open program's module graph with every import's resolution: what
-    /// a retained caller observes to notice that the filesystem now resolves
-    /// the program differently (a relinked package, an edited manifest).
+    /// The open program's module graph with each file's distinct non-relative
+    /// import resolutions: what a retained caller observes to notice that the
+    /// filesystem now resolves the program differently (a relinked package, an
+    /// edited manifest). Relative imports and repeated specifiers read nothing
+    /// more, and all of them together can exceed the frame limit.
     pub fn resolution_graph(&mut self) -> Result<typefacts::ModuleGraph, BackendError> {
-        self.typescript.module_graph(&typefacts::ModuleGraphDemand {
-            imports: true,
-            ..typefacts::ModuleGraphDemand::default()
-        })
+        self.typescript
+            .module_graph(&typefacts::ModuleGraphDemand::with_distinct_bare_imports())
+    }
+
+    /// [`Self::resolution_graph`] scoped to the imports of `paths`.
+    pub fn resolution_graph_of(
+        &mut self,
+        paths: &[String],
+    ) -> Result<typefacts::ModuleGraph, BackendError> {
+        self.typescript.module_graph(
+            &typefacts::ModuleGraphDemand::with_distinct_bare_imports()
+                .import_paths(paths.iter().cloned()),
+        )
+    }
+
+    /// Ends this session's producer ([`TypeFactsSession::close`]): a later
+    /// analysis or module query fails instead of answering.
+    pub fn close_typefacts(&mut self) {
+        self.typescript.close();
     }
 
     /// Recovery is the session's own concern now.

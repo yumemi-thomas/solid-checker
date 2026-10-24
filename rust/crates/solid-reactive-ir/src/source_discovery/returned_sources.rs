@@ -78,7 +78,7 @@ pub(super) struct EffectiveReturnContext<'a> {
 /// A fresh source returned by one exact project function. This is deliberately
 /// separate from structured-return summaries: finding one reactive leaf, or
 /// merging equal kinds, cannot prove that every completion returns one value.
-pub(super) fn project_returned_source<'a>(
+pub(crate) fn project_returned_source<'a>(
     lookup: &SemanticLookup<'a>,
     caller: &FileFacts,
     call: &solid_facts::ast::CallFact,
@@ -152,9 +152,9 @@ pub(super) fn returned_source_through<'a>(
     }
     let callee = caller.ast.peel_ts_sugar_span(call.callee);
     let target = if caller.ast.identifiers.iter().any(|id| id.span == callee) {
-        lookup.function_called_at(caller.path.as_str(), callee)
+        super::trace::called_at(lookup, caller, callee)
     } else {
-        lookup.namespace_member_function(caller, callee)
+        super::trace::namespace_member(lookup, caller, callee)
     };
     let (file, function) = target?;
     if function.r#async
@@ -195,9 +195,9 @@ pub(super) fn returned_source_through<'a>(
         }
         // ADR 0287: `return g(…)`, where `g` is a function in this same file
         // whose every return yields a fresh source. Each call of this
-        // function runs that one call and returns its value. Staying in one
-        // file keeps the proof's syntax inside a file the cross-file proof
-        // digest already binds (`indexes::returns_source_root`).
+        // function runs that one call and returns its value. The proof stays
+        // in one file; a reader records its answer, not this syntax
+        // (ADR 0392).
         let inner = file
             .ast
             .calls

@@ -1,14 +1,13 @@
 //! The materializer of the demand closure (Go: `semantic_retained.go`).
 //!
-//! This producer reuses no demand contribution across an update or across a
+//! The closure reuses no demand contribution across an update or across a
 //! change of the demand set (ADR 0364): every table begins by discarding what
-//! earlier analysis left (`DemandClosure::discard_derived_state`), so each file
-//! is resolved against the compiler, in canonical order after the check-first
-//! pass (ADR 0367), and ids are minted as a fresh program mints them. The
-//! contributions are published in the store only so the packed transition can
-//! release their entity rows. Only binder-level answers (reference spans,
-//! entity symbols and symbol declarations resolved without types) are reused,
-//! by the backend, under recorded dependencies (ADR 0369).
+//! earlier analysis left (`DemandClosure::discard_derived_state`) and asks the
+//! backend for every run. The backend answers each file in a pass of a
+//! checker of its own and reuses a pass while everything it read is
+//! unchanged (`per_file`, `passes`; ADR 0398). The contributions are
+//! published in the store only so the packed transition can release their
+//! entity rows.
 
 use crate::backend::BackendError;
 use crate::closure::{ClosureRetention, DemandClosure, SemanticDemandStages};
@@ -24,15 +23,9 @@ use typefacts::producer::{EntityRows, ProducerTable, rust_owned_transport_manife
 use typefacts::v3::EntityDemand;
 use typefacts::{AsyncFunctionFact, FileFact, SourceDigest};
 
-/// The async facts for the demands that asked for them, keyed by clean path.
-/// The backend is always asked, even for an empty demand list (Go:
-/// `asyncFunctionsForDemands`).
-fn async_functions_for_demands(
-    closure: &mut DemandClosure,
-    ctx: &Context,
-    demands: &[EntityDemand],
-) -> Result<HashMap<String, Vec<AsyncFunctionFact>>, BackendError> {
-    let locations: Vec<_> = demands
+/// The clean locations of the demands that asked for async facts.
+fn async_locations(demands: &[EntityDemand]) -> Vec<typefacts::Location> {
+    demands
         .iter()
         .filter(|demand| demand.r#async)
         .map(|demand| {
@@ -40,16 +33,41 @@ fn async_functions_for_demands(
             location.path = clean(&location.path).into();
             location
         })
-        .collect();
+        .collect()
+}
+
+/// Async facts keyed by clean path, their expression paths cleaned.
+fn async_facts_by_path(facts: Vec<AsyncFunctionFact>) -> HashMap<String, Vec<AsyncFunctionFact>> {
     let mut by_path: HashMap<String, Vec<AsyncFunctionFact>> = HashMap::new();
-    // Demand-shaped async lookup only: the per-file whole-table walk it
-    // replaced served the retired seed-based materializer.
-    for mut fact in closure.backend.async_functions_at(ctx, &locations)? {
+    for mut fact in facts {
         let path = clean(&fact.expression.path);
         fact.expression.path = path.as_str().into();
         by_path.entry(path).or_default().push(fact);
     }
-    Ok(by_path)
+    by_path
+}
+
+/// One file row per source digest, holding its async facts.
+fn push_file_facts(
+    table: &mut ProducerTable,
+    source_digests: &[SourceDigest],
+    async_by_path: &mut HashMap<String, Vec<AsyncFunctionFact>>,
+    ctx: &Context,
+) -> Result<(), BackendError> {
+    for source in source_digests {
+        cancelled(ctx)?;
+        let facts = async_by_path
+            .remove(source.path.as_ref())
+            .unwrap_or_default();
+        table.files.push(FileFact {
+            path: source.path.clone(),
+            calls: Arc::from(Vec::new()),
+            bindings: Arc::from(Vec::new()),
+            functions: Arc::from(Vec::new()),
+            async_functions: facts.into(),
+        });
+    }
+    Ok(())
 }
 
 fn cancelled(ctx: &Context) -> Result<(), BackendError> {
@@ -139,21 +157,11 @@ impl DemandClosure {
         let mut table = ProducerTable::new(generation, "semantic-demand");
         table.sources.clone_from(&source_digests);
 
-        // Check-first (ADR 0367): every demanded file is fully checked, in
-        // path order (the groups are path-ordered), before any demand of the
-        // table is answered, so no answer depends on demand, batch or request
-        // order.
-        // Reuse counts are this table's own (ADR 0369).
+        // Reuse counts are this table's own.
         let _ = self.backend.binder_retention();
-        let demanded: Vec<&str> = groups.iter().map(|group| group.path.as_str()).collect();
-        let started = Instant::now();
-        self.backend.check_demanded_files(ctx, &demanded)?;
-        if let Some(trace) = &self.trace {
-            trace.stage("analyze-check-first", started.elapsed());
-        }
-
-        // The async facts are rebuilt every table; a group's run holds only
-        // the rows that asked for async.
+        // Each file is checked first in a pass of its own, with its async
+        // facts and its run (`ClosureBackend::per_file_demand_runs`); a
+        // group's run holds only the rows that asked for async.
         let mut stages = SemanticDemandStages::default();
         let started = Instant::now();
         let mut async_demands: Vec<EntityDemand> = Vec::new();
@@ -162,20 +170,7 @@ impl DemandClosure {
                 .append_async_demands(&mut async_demands)
                 .map_err(BackendError)?;
         }
-        let mut async_by_path = async_functions_for_demands(self, ctx, &async_demands)?;
-        for source in &source_digests {
-            cancelled(ctx)?;
-            let facts = async_by_path
-                .remove(source.path.as_ref())
-                .unwrap_or_default();
-            table.files.push(FileFact {
-                path: source.path.clone(),
-                calls: Arc::from(Vec::new()),
-                bindings: Arc::from(Vec::new()),
-                functions: Arc::from(Vec::new()),
-                async_functions: facts.into(),
-            });
-        }
+        let mut async_by_path = HashMap::new();
         stages.async_stage = started.elapsed();
 
         // Every file is resolved: the store is empty at the start of a table.
@@ -184,6 +179,7 @@ impl DemandClosure {
             group.ensure_expanded().map_err(BackendError)?;
         }
         if !groups.is_empty() {
+            let locations = async_locations(&async_demands);
             let demands: Vec<Arc<[EntityDemand]>> = groups
                 .iter()
                 .map(|group| {
@@ -201,12 +197,14 @@ impl DemandClosure {
                     demands,
                 })
                 .collect();
-            let results = self.backend.semantic_demand_runs(ctx, &runs)?;
+            let (results, facts) = self.backend.per_file_demand_runs(ctx, &runs, &locations)?;
+            async_by_path = async_facts_by_path(facts);
             drop(runs);
             rebuild_contributions(groups, results)?;
         }
-        // Files holding generation-scoped counter ids are counted; the
-        // timings report them.
+        push_file_facts(&mut table, &source_digests, &mut async_by_path, ctx)?;
+        // Files holding an id that is not a binder-level hash are counted;
+        // the timings report them.
         for group in groups.iter() {
             if group
                 .contribution
@@ -248,18 +246,59 @@ impl DemandClosure {
             self.next_table_state_id += 1;
         }
         table.state_id = self.next_table_state_id;
-        // Every demanded file was recomputed and generation-scoped ids are
-        // minted afresh, so any path may differ from the previous table (a
-        // different counter, a shifted reference space) and the manifest names
-        // all of them, along
-        // with the paths the update named. The previous table keeps no rows
-        // (they are released once published), so there is nothing to compare
-        // values against; naming a path that did not change only costs bytes.
-        let manifest_changed_paths: Option<HashSet<String>> = {
+        // Per-file passes with reuse (instant-edits P3) know, per path,
+        // whether its rows changed: the manifest names exactly the paths whose
+        // rows or source digest differ from the previous table's, or that
+        // entered or left it.
+        let versions: Option<crate::closure::PathVersions> =
+            self.backend.tracks_content_versions().then(|| {
+                let mut now: crate::closure::PathVersions = HashMap::new();
+                for source in &source_digests {
+                    now.entry(source.path.to_string()).or_default().1 = Some(source.sha256.clone());
+                }
+                for group in groups.iter() {
+                    now.entry(group.path.clone()).or_default();
+                }
+                for (path, state) in &mut now {
+                    state.0 = self.backend.content_version(path);
+                }
+                now
+            });
+        let exact: Option<HashSet<String>> = match (&versions, &self.path_versions) {
+            (Some(now), Some((state_id, before)))
+                if self
+                    .previous_table
+                    .as_ref()
+                    .is_some_and(|previous| previous.state_id == *state_id) =>
+            {
+                let mut changed: HashSet<String> = now
+                    .iter()
+                    .filter(|(path, state)| before.get(*path) != Some(*state))
+                    .map(|(path, _)| path.clone())
+                    .collect();
+                changed.extend(
+                    before
+                        .keys()
+                        .filter(|path| !now.contains_key(*path))
+                        .cloned(),
+                );
+                Some(changed)
+            }
+            _ => None,
+        };
+        self.path_versions = versions.map(|now| (table.state_id, now));
+        // Otherwise every demanded file was recomputed and generation-scoped
+        // ids are minted afresh, so any path may differ from the previous
+        // table (a different counter, a shifted reference space) and the
+        // manifest names all of them, along with the paths the update named.
+        // The previous table keeps no rows (they are released once
+        // published), so there is nothing to compare values against; naming
+        // a path that did not change only costs bytes.
+        let manifest_changed_paths: Option<HashSet<String>> = exact.or_else(|| {
             let mut paths = self.transport_changed_paths.clone().unwrap_or_default();
             paths.extend(groups.iter().map(|group| group.path.clone()));
             Some(paths)
-        };
+        });
         table.transport = rust_owned_transport_manifest(
             self.previous_table.as_ref(),
             manifest_changed_paths.as_ref(),

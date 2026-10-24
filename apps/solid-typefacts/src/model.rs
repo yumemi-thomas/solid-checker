@@ -24,7 +24,7 @@ pub struct SemanticDemandRun<'a> {
 /// `symbol_claim` carries what Go spreads over `SymbolCoversSpan` and
 /// `SymbolUnresolved`: with a symbol, `Covering` is "covers span" and anything
 /// else is the partial claim; without one, `Unresolved` is "symbol unresolved".
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct SemanticDemandRunResult {
     pub entities: Vec<EntityFact>,
     pub durable: bool,
@@ -67,9 +67,9 @@ pub fn blank_symbol(id: SymbolId) -> SymbolFact {
 }
 
 /// Reports whether an identity survives its minting generation: durable ids
-/// hash the declaration (ADR 0001), while generation-scoped counter ids are
-/// meaningless outside the generation that issued them. The empty id is
-/// trivially durable (Go: `DurableSymbolID`).
+/// are hashes (ADR 0001); the producer mints no other kind since every
+/// derived symbol takes an exact key (ADR 0398). The empty id is trivially
+/// durable (Go: `DurableSymbolID`).
 #[must_use]
 pub fn durable_symbol_id(id: &str) -> bool {
     id.is_empty() || id.starts_with("symbol:h:")

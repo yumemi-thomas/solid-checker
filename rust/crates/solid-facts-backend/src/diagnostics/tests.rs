@@ -384,3 +384,54 @@ fn the_default_program_boundary_follows_the_nearest_manifest() {
     assert_eq!(boundary(None), Open, "no manifest above the project");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn the_line_index_places_every_offset_where_the_scan_does() {
+    use crate::SourceFile;
+
+    use super::{LineStarts, SourcePlacer, source_location};
+    let texts = [
+        "",
+        "one",
+        "a\nb\r\nc\n",
+        "\n\n\nx",
+        "caf\u{e9} \u{1f600} \n\u{1f600}\u{1f600}x\ny",
+        "no newline \u{2028} here",
+    ];
+    let sources = texts
+        .iter()
+        .enumerate()
+        .map(|(index, text)| SourceFile {
+            path: format!("/p/{index}.ts"),
+            source: (*text).into(),
+            compiler_options: Default::default(),
+        })
+        .collect::<Vec<_>>();
+    let mut lines = LineStarts::default();
+    for round in 0..2 {
+        let mut placer = SourcePlacer::new(&sources, &mut lines);
+        for (index, text) in texts.iter().enumerate() {
+            for offset in 0..=text.len() + 2 {
+                let location = typefacts::Location {
+                    path: format!("/p/{index}.ts").into(),
+                    start_byte: offset as u64,
+                    end_byte: offset as u64,
+                };
+                let placed = placer.place(&location);
+                let scanned = source_location(&location, &sources);
+                assert_eq!(
+                    (placed.line, placed.column),
+                    (scanned.line, scanned.column),
+                    "{text:?} at {offset} (round {round})"
+                );
+            }
+        }
+        let unknown = typefacts::Location {
+            path: "/p/missing.ts".into(),
+            start_byte: 3,
+            end_byte: 4,
+        };
+        let placed = placer.place(&unknown);
+        assert_eq!((placed.line, placed.column), (1, 1));
+    }
+}

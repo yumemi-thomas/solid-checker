@@ -48,8 +48,15 @@ pub(crate) fn at_call(
 
 pub(crate) type ApplyCalls<'a> = HashMap<(&'a str, Span, usize), ApplyExecution>;
 
-pub(crate) fn calls<'a>(lookup: &SemanticLookup<'a>) -> ApplyCalls<'a> {
-    let mut result = ApplyCalls::default();
+/// Every apply argument with its execution, `(path, call, argument,
+/// execution)` sorted: the [`EffectApplyCalls`](crate::indexes::EffectApplyCalls)
+/// memo's answer.
+pub(crate) type ApplyCallRows = Vec<(String, Span, usize, ApplyExecution)>;
+
+impl crate::base::memo::Canonical for ApplyExecution {}
+
+pub(crate) fn calls(lookup: &SemanticLookup<'_>) -> ApplyCallRows {
+    let mut result = ApplyCallRows::default();
     for file in lookup.files() {
         for call in &file.ast.calls {
             let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
@@ -61,15 +68,33 @@ pub(crate) fn calls<'a>(lookup: &SemanticLookup<'a>) -> ApplyCalls<'a> {
                     .effect_apply_defer_options(primitive, argument)
                     .is_some()
                 {
-                    result.insert(
-                        (file.path.as_str(), call.span, argument),
+                    result.push((
+                        file.path.to_string(),
+                        call.span,
+                        argument,
                         prove_at_call(file, call, primitive, argument, lookup),
-                    );
+                    ));
                 }
             }
         }
     }
-    result
+    // A path held by two slots keeps the later slot's proof, as the map did.
+    let mut last = HashMap::<(String, Span, usize), usize>::default();
+    for (index, (path, span, argument, _)) in result.iter().enumerate() {
+        last.insert((path.clone(), *span, *argument), index);
+    }
+    let mut kept = result
+        .iter()
+        .enumerate()
+        .filter(|(index, (path, span, argument, _))| {
+            last.get(&(path.clone(), *span, *argument)) == Some(index)
+        })
+        .map(|(_, row)| row.clone())
+        .collect::<Vec<_>>();
+    kept.sort_unstable_by(|left, right| {
+        (&left.0, left.1, left.2).cmp(&(&right.0, right.1, right.2))
+    });
+    kept
 }
 
 fn prove_at_call(
@@ -291,7 +316,11 @@ pub(crate) fn at_span(file: &FileFacts, span: Span, lookup: &SemanticLookup<'_>)
 
 pub(crate) type ApplyRegions = HashMap<String, Vec<(Span, ApplyExecution)>>;
 
-pub(crate) fn regions(lookup: &SemanticLookup<'_>) -> ApplyRegions {
+/// Each path's not-proven regions, sorted by path then span: the
+/// [`EffectApplyRegions`](crate::indexes::EffectApplyRegions) memo's answer.
+pub(crate) type ApplyRegionRows = Vec<(String, Vec<(Span, ApplyExecution)>)>;
+
+pub(crate) fn regions(lookup: &SemanticLookup<'_>) -> ApplyRegionRows {
     let mut targets: HashMap<(String, Span), Vec<ApplyExecution>> = HashMap::default();
     let mut uses = HashSet::default();
     for file in lookup.files() {
@@ -379,6 +408,7 @@ pub(crate) fn regions(lookup: &SemanticLookup<'_>) -> ApplyRegions {
         }
     }
     let mut result = ApplyRegions::default();
+    // `targets` iterates in insertion history: the answer is sorted below.
     for ((path, span), sites) in targets {
         let execution = if sites.contains(&ApplyExecution::Proven) {
             ApplyExecution::Proven
@@ -391,7 +421,15 @@ pub(crate) fn regions(lookup: &SemanticLookup<'_>) -> ApplyRegions {
             result.entry(path).or_default().push((span, execution));
         }
     }
-    result
+    let mut rows = result
+        .into_iter()
+        .map(|(path, mut regions)| {
+            regions.sort_unstable_by_key(|(span, _)| *span);
+            (path, regions)
+        })
+        .collect::<Vec<_>>();
+    rows.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+    rows
 }
 
 /// Every diagnostic producer shares the same invocation premise, including

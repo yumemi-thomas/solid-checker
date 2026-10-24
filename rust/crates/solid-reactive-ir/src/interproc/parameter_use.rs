@@ -12,101 +12,103 @@ use super::*;
 /// call site can resolve what it runs. A whole-parameter argument of an exact
 /// project callee is the forwarding rule's; tests (`typeof`, comparisons,
 /// truthiness) hand nothing on.
+///
+/// `direct[i]` is the `i`th of `owners`' rows so far: its graph-recorded
+/// invocations, which a use already describing is not repeated.
 pub(super) fn unmodeled_parameter_uses(
-    facts: &ProjectFacts,
+    file: &solid_facts::FileFacts,
+    owners: &[usize],
     nodes: &[SummaryNode],
     nodes_by_path: &HashMap<String, Vec<usize>>,
     lookup: &SemanticLookup<'_>,
-    invoked_parameter_members: &mut [Vec<ParameterMemberInvocation>],
-    excluded: &mut impl FnMut(&solid_facts::FileFacts, Span) -> bool,
+    direct: &mut [Vec<DirectInvocation>],
+    excluded: &mut impl FnMut(&solid_facts::FileFacts, Span) -> Exclusion,
 ) {
-    for file in &facts.files {
-        for owner in nodes_by_path
-            .get(file.path.as_str())
-            .into_iter()
-            .flatten()
-            .copied()
+    for (position, owner) in owners.iter().copied().enumerate() {
+        let Some(function) = file.ast.function_at(nodes[owner].span) else {
+            continue;
+        };
+        if crate::owners::enclosing_render_function(file, function.body, lookup)
+            || lookup.function_component_status(file, function)
+                != crate::indexes::ComponentStatus::No
         {
-            let Some(function) = file.ast.function_at(nodes[owner].span) else {
-                continue;
-            };
-            if crate::owners::enclosing_render_function(file, function.body, lookup)
-                || lookup.function_component_status(file, function)
-                    != crate::indexes::ComponentStatus::No
-            {
-                continue;
+            continue;
+        }
+        let arguments_object = file.ast.identifiers.iter().any(|identifier| {
+            function.body.contains(identifier.span)
+                && file.source_text(identifier.span) == Some("arguments")
+                && !file.ast.functions.iter().any(|inner| {
+                    inner.span != function.span
+                        && function.span.contains(inner.span)
+                        && inner.kind != solid_facts::ast::FunctionKind::Arrow
+                        && inner.span.contains(identifier.span)
+                })
+        });
+        for (index, parameter) in function.parameters.iter().enumerate() {
+            let mut found: Vec<(Vec<String>, bool, Span)> = Vec::new();
+            if arguments_object {
+                found.push((Vec::new(), true, function.body));
             }
-            let arguments_object = file.ast.identifiers.iter().any(|identifier| {
-                function.body.contains(identifier.span)
-                    && file.source_text(identifier.span) == Some("arguments")
-                    && !file.ast.functions.iter().any(|inner| {
-                        inner.span != function.span
-                            && function.span.contains(inner.span)
-                            && inner.kind != solid_facts::ast::FunctionKind::Arrow
-                            && inner.span.contains(identifier.span)
-                    })
-            });
-            for (index, parameter) in function.parameters.iter().enumerate() {
-                let mut found: Vec<(Vec<String>, bool, Span)> = Vec::new();
-                if arguments_object {
-                    found.push((Vec::new(), true, function.body));
-                }
-                if parameter.shape == solid_facts::ast::BindingShape::Identifier {
-                    let [name] = parameter.names.as_slice() else {
-                        continue;
-                    };
-                    for (reference, _) in
-                        file.ast
-                            .reference_declarations
-                            .iter()
-                            .filter(|(reference, declaration)| {
-                                *declaration == name.span && *reference != name.span
-                            })
-                    {
-                        if let Some(entry) = classify_parameter_use(
-                            file,
-                            nodes,
-                            nodes_by_path,
-                            owner,
-                            *reference,
-                            lookup,
-                        ) {
-                            found.push(entry);
-                        }
+            if parameter.shape == solid_facts::ast::BindingShape::Identifier {
+                let [name] = parameter.names.as_slice() else {
+                    continue;
+                };
+                for (reference, _) in
+                    file.ast
+                        .reference_declarations
+                        .iter()
+                        .filter(|(reference, declaration)| {
+                            *declaration == name.span && *reference != name.span
+                        })
+                {
+                    if let Some(entry) = classify_parameter_use(
+                        file,
+                        nodes,
+                        nodes_by_path,
+                        owner,
+                        *reference,
+                        lookup,
+                    ) {
+                        found.push(entry);
                     }
-                } else {
-                    // A destructured parameter: a local that is called, has
-                    // a member called or is handed on came out of the
-                    // caller's object. A plain `key: local` slot names the
-                    // member path; a default, nested pattern or rest does
-                    // not, and is unmodeled.
-                    found.extend(destructured_parameter_uses(file, parameter));
                 }
-                for (path, unmodeled, site) in found {
-                    if invoked_parameter_members[owner].iter().any(|existing| {
-                        existing.parameter == index
-                            && existing.path == path
-                            && existing.unmodeled == unmodeled
-                    }) {
-                        continue;
-                    }
-                    // The use's own context decides, as for a member call
-                    // the graph records: a use inside a function proven to run
-                    // as an event, a deferred callback or a tracked
-                    // computation is not reported through the callers.
-                    let nested = containing_ast_function(&file.ast, site)
-                        .is_some_and(|inner| inner.span != function.span);
-                    let entry = ParameterMemberInvocation {
-                        parameter: index,
-                        path,
-                        in_owner_body: function.body.contains(site) && !nested,
-                        site,
-                        primitive_builtin: false,
-                        dispatch_read_excluded: excluded(file, site),
-                        unmodeled,
-                    };
-                    invoked_parameter_members[owner].push(entry);
+            } else {
+                // A destructured parameter: a local that is called, has
+                // a member called or is handed on came out of the
+                // caller's object. A plain `key: local` slot names the
+                // member path; a default, nested pattern or rest does
+                // not, and is unmodeled.
+                found.extend(destructured_parameter_uses(file, parameter));
+            }
+            for (path, unmodeled, site) in found {
+                if direct[position].iter().any(|existing| {
+                    existing.invocation.parameter == index
+                        && existing.invocation.path == path
+                        && existing.invocation.unmodeled == unmodeled
+                }) {
+                    continue;
                 }
+                // The use's own context decides, as for a member call
+                // the graph records: a use inside a function proven to run
+                // as an event, a deferred callback or a tracked
+                // computation is not reported through the callers.
+                let nested = containing_ast_function(&file.ast, site)
+                    .is_some_and(|inner| inner.span != function.span);
+                let entry = ParameterMemberInvocation {
+                    parameter: index,
+                    path,
+                    in_owner_body: function.body.contains(site) && !nested,
+                    site,
+                    primitive_builtin: false,
+                    // Decided once every file's rows are in
+                    // ([`DirectInvocation::exclusion`]).
+                    dispatch_read_excluded: false,
+                    unmodeled,
+                };
+                direct[position].push(DirectInvocation {
+                    exclusion: excluded(file, site),
+                    invocation: entry,
+                });
             }
         }
     }
@@ -356,14 +358,15 @@ pub(super) fn classify_parameter_use(
                 .iter()
                 .take(index + 1)
                 .any(|argument| argument.spread)
-            && crate::execution_role::project_callee_at_parameter(file, call, index, lookup)
-                .is_some_and(|(callee_file, callee, exact)| {
+            && callee_at_parameter(file, call, index, lookup).is_some_and(
+                |(callee_file, callee, exact)| {
                     exact
                         && callee.parameters.get(index).is_some_and(|parameter| {
                             parameter.shape == solid_facts::ast::BindingShape::Identifier
                         })
                         && !callee_file.path.as_str().is_empty()
-                });
+                },
+            );
         // An audited standard-library call that only reads or copies the
         // value invokes nothing on it. (For any other callee `ValueOnly`
         // says only that the argument itself is not called; its members
@@ -509,112 +512,314 @@ pub(super) fn classify_parameter_use(
     (handed_on && in_argument).then(|| (Vec::new(), true, reference))
 }
 
-/// ADR 0320: see the call in the interprocedural build. A forwarded
-/// invocation's site is the forwarding call's callee, so the refreshed
-/// context of that call decides whether its dispatch can be reported.
-pub(super) fn forward_parameter_member_invocations(
-    facts: &ProjectFacts,
+/// How a member invocation's `dispatch_read_excluded` is decided at its
+/// site: never (a default parameter initializer runs at the call), always
+/// (its execution role, or an `await` continuation, already decides it), or
+/// by whether a callback consumer proves the site tracked or fresh, which
+/// another file's consumer can change at any edit
+/// (`ReadConsumerSummaries::proves_tracked_or_fresh`), so it is asked again
+/// in every build.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum Exclusion {
+    Never,
+    Always,
+    Consumer,
+}
+
+/// A member invocation of a function's own rows (its graph contribution and
+/// its unmodeled uses), with how its exclusion is decided.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct DirectInvocation {
+    pub(super) invocation: ParameterMemberInvocation,
+    pub(super) exclusion: Exclusion,
+}
+
+/// [`Exclusion`] at `site` of `file`, asking its execution role once per
+/// site: the contexts `semantic_execution_role` reads (`allowed`) are the
+/// file's callback spans, computed once, when a site first asks.
+pub(super) struct SiteExclusions<'a, 'l> {
+    file: &'a solid_facts::FileFacts,
+    allowed: Option<Vec<Span>>,
+    entities: &'a EntitySymbols,
+    symbol_names: &'a HashMap<SymbolId, SymbolId>,
+    lookup: &'a SemanticLookup<'l>,
+    decided: HashMap<Span, Exclusion>,
+}
+
+impl<'a, 'l> SiteExclusions<'a, 'l> {
+    pub(super) fn new(
+        file: &'a solid_facts::FileFacts,
+        entities: &'a EntitySymbols,
+        symbol_names: &'a HashMap<SymbolId, SymbolId>,
+        lookup: &'a SemanticLookup<'l>,
+    ) -> Self {
+        Self {
+            file,
+            allowed: None,
+            entities,
+            symbol_names,
+            lookup,
+            decided: HashMap::default(),
+        }
+    }
+
+    pub(super) fn at(&mut self, site: Span) -> Exclusion {
+        if let Some(decided) = self.decided.get(&site) {
+            return *decided;
+        }
+        let file = self.file;
+        let lookup = self.lookup;
+        let default = file
+            .ast
+            .functions
+            .iter()
+            .any(|function| function.span.contains(site) && !function.body.contains(site));
+        let decided = if default {
+            Exclusion::Never
+        } else {
+            let allowed = self
+                .allowed
+                .get_or_insert_with(|| allowed_callback_spans(file, lookup));
+            let role = semantic_execution_role(
+                file,
+                site,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                lookup,
+            );
+            if crate::execution_role::excluded_role_holds(file, site, role, lookup)
+                || crate::execution_role::await_continuation_decides_nothing(file, site, lookup)
+            {
+                Exclusion::Always
+            } else {
+                Exclusion::Consumer
+            }
+        };
+        self.decided.insert(site, decided);
+        decided
+    }
+}
+
+/// ADR 0320: a call of a helper (not a rendering function) that hands its
+/// owner's own parameter, as the whole argument at `index`, to an exact
+/// project callee: the owner invokes whatever member the callee invokes on
+/// its parameter `index`. `target` is the callee (its file and span), found
+/// among the summary nodes when the edge is solved. A forwarded invocation's
+/// site is the forwarding call's callee, so that call's context decides
+/// whether its dispatch can be reported.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct ForwardEdge {
+    /// The owner's position among its file's summary nodes.
+    pub(super) owner: usize,
+    pub(super) parameter: usize,
+    pub(super) target: (String, Span),
+    pub(super) index: usize,
+    pub(super) in_owner_body: bool,
+    pub(super) site: Span,
+    pub(super) exclusion: Exclusion,
+}
+
+/// The [`ForwardEdge`]s of `file`'s calls, in call and argument order;
+/// `owners` are the summary nodes of `file`'s path.
+pub(super) fn forward_edges(
+    file: &solid_facts::FileFacts,
+    owners: &[usize],
     nodes: &[SummaryNode],
     nodes_by_path: &HashMap<String, Vec<usize>>,
     lookup: &SemanticLookup<'_>,
-    invoked_parameter_members: &mut [Vec<ParameterMemberInvocation>],
-    mut excluded: impl FnMut(&solid_facts::FileFacts, Span) -> bool,
-) {
-    // Bounded: each round can only lengthen forwarding chains by one.
-    for _ in 0..8 {
-        let mut added = Vec::new();
-        for file in &facts.files {
-            for call in &file.ast.calls {
-                let Some(owner) = containing_summary_function_indexed(
-                    nodes,
-                    nodes_by_path,
-                    file.path.as_str(),
-                    call.span,
-                ) else {
-                    continue;
-                };
-                // A call inside a rendering function raises its own
-                // obligation at the inner site (ADR 0202); only a helper's
-                // call, which raises none, forwards it to its callers.
-                if crate::owners::enclosing_render_function(file, call.span, lookup) {
-                    continue;
-                }
-                let Some(owner_function) = file.ast.function_at(nodes[owner].span) else {
-                    continue;
-                };
-                for (index, argument) in call.arguments.iter().enumerate() {
-                    if call
-                        .arguments
-                        .iter()
-                        .take(index + 1)
-                        .any(|argument| argument.spread)
-                    {
-                        break;
-                    }
-                    let value = file.ast.peel_ts_sugar_span(argument.span);
-                    let Some(declaration) = file.ast.reference_declaration(value) else {
-                        continue;
-                    };
-                    let Some(parameter) = owner_function.parameters.iter().position(|parameter| {
-                        parameter.shape == solid_facts::ast::BindingShape::Identifier
-                            && parameter.names.iter().any(|name| name.span == declaration)
-                    }) else {
-                        continue;
-                    };
-                    let Some((callee_file, callee, exact)) =
-                        crate::execution_role::project_callee_at_parameter(
-                            file, call, index, lookup,
-                        )
-                    else {
-                        continue;
-                    };
-                    if !exact {
-                        continue;
-                    }
-                    let Some(target) = nodes_by_path
-                        .get(callee_file.path.as_str())
-                        .into_iter()
-                        .flatten()
-                        .copied()
-                        .find(|candidate| nodes[*candidate].span == callee.span)
-                    else {
-                        continue;
-                    };
-                    let in_owner_body = containing_ast_function(&file.ast, call.span)
-                        .is_some_and(|function| function.body == nodes[owner].body);
-                    let forwarding_excluded = excluded(file, call.callee);
-                    for invocation in &invoked_parameter_members[target] {
-                        // An invocation whose dispatch is not reported where
-                        // it runs is not reported through its callers either.
-                        if invocation.parameter != index
-                            || (invocation.path.is_empty() && !invocation.unmodeled)
-                            || invocation.dispatch_read_excluded
-                        {
-                            continue;
-                        }
-                        let entry = ParameterMemberInvocation {
-                            parameter,
-                            path: invocation.path.clone(),
-                            in_owner_body: in_owner_body && invocation.in_owner_body,
-                            site: call.callee,
-                            primitive_builtin: invocation.primitive_builtin,
-                            dispatch_read_excluded: forwarding_excluded,
-                            unmodeled: invocation.unmodeled,
-                        };
-                        if !invoked_parameter_members[owner].contains(&entry)
-                            && !added.contains(&(owner, entry.clone()))
-                        {
-                            added.push((owner, entry));
-                        }
-                    }
-                }
+    excluded: &mut impl FnMut(&solid_facts::FileFacts, Span) -> Exclusion,
+) -> Vec<ForwardEdge> {
+    let mut edges = Vec::new();
+    for call in &file.ast.calls {
+        let Some(owner) = containing_summary_function_indexed(
+            nodes,
+            nodes_by_path,
+            file.path.as_str(),
+            call.span,
+        ) else {
+            continue;
+        };
+        // A call inside a rendering function raises its own obligation at
+        // the inner site (ADR 0202); only a helper's call, which raises
+        // none, forwards it to its callers.
+        if crate::owners::enclosing_render_function(file, call.span, lookup) {
+            continue;
+        }
+        let Some(owner_function) = file.ast.function_at(nodes[owner].span) else {
+            continue;
+        };
+        for (index, argument) in call.arguments.iter().enumerate() {
+            if call
+                .arguments
+                .iter()
+                .take(index + 1)
+                .any(|argument| argument.spread)
+            {
+                break;
             }
+            let value = file.ast.peel_ts_sugar_span(argument.span);
+            let Some(declaration) = file.ast.reference_declaration(value) else {
+                continue;
+            };
+            let Some(parameter) = owner_function.parameters.iter().position(|parameter| {
+                parameter.shape == solid_facts::ast::BindingShape::Identifier
+                    && parameter.names.iter().any(|name| name.span == declaration)
+            }) else {
+                continue;
+            };
+            let Some((callee_file, callee, exact)) = callee_at_parameter(file, call, index, lookup)
+            else {
+                continue;
+            };
+            if !exact {
+                continue;
+            }
+            let in_owner_body = containing_ast_function(&file.ast, call.span)
+                .is_some_and(|function| function.body == nodes[owner].body);
+            let Some(owner) = owners.iter().position(|candidate| *candidate == owner) else {
+                continue;
+            };
+            edges.push(ForwardEdge {
+                owner,
+                parameter,
+                target: (callee_file.path.to_string(), callee.span),
+                index,
+                in_owner_body,
+                site: call.callee,
+                exclusion: excluded(file, call.callee),
+            });
         }
-        if added.is_empty() {
-            return;
+    }
+    edges
+}
+
+/// What the refresh reads of a callee in another file: its path and span,
+/// whether the argument maps exactly, and its parameter's shape at the
+/// argument's index. The lookup's function table and the callee's syntax
+/// are not recorded reads (`crate::base::reads`), so a file's kept rows hold
+/// every answer they read, asked again before they are reused
+/// (`interproc::refresh`).
+pub(super) type CalleeAnswer = Option<(String, Span, bool, Option<solid_facts::ast::BindingShape>)>;
+
+/// A [`CalleeAnswer`] at a call of the file whose rows are computing:
+/// the call and the argument's index.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct CalleeRead {
+    pub(super) call: Span,
+    pub(super) index: usize,
+    pub(super) answer: CalleeAnswer,
+}
+
+thread_local! {
+    static CALLEE_READS: std::cell::RefCell<Option<Vec<CalleeRead>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f`, recording the [`CalleeRead`]s it makes.
+pub(super) fn record_callee_reads<R>(f: impl FnOnce() -> R) -> (R, Vec<CalleeRead>) {
+    let outer = CALLEE_READS.with(|log| log.replace(Some(Vec::new())));
+    let value = f();
+    let reads = CALLEE_READS
+        .with(|log| log.replace(outer))
+        .unwrap_or_default();
+    (value, reads)
+}
+
+/// The answer of `project_callee_at_parameter` as [`CalleeAnswer`] holds it.
+pub(super) fn callee_answer(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> CalleeAnswer {
+    crate::execution_role::project_callee_at_parameter(file, call, index, lookup).map(
+        |(callee_file, callee, exact)| {
+            (
+                callee_file.path.to_string(),
+                callee.span,
+                exact,
+                callee
+                    .parameters
+                    .get(index)
+                    .map(|parameter| parameter.shape),
+            )
+        },
+    )
+}
+
+/// `project_callee_at_parameter`, recorded ([`record_callee_reads`]).
+fn callee_at_parameter<'a>(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'a>,
+) -> Option<(
+    &'a solid_facts::FileFacts,
+    &'a solid_facts::ast::FunctionFact,
+    bool,
+)> {
+    let found = crate::execution_role::project_callee_at_parameter(file, call, index, lookup);
+    CALLEE_READS.with(|log| {
+        if let Some(log) = log.borrow_mut().as_mut() {
+            log.push(CalleeRead {
+                call: call.span,
+                index,
+                answer: found.map(|(callee_file, callee, exact)| {
+                    (
+                        callee_file.path.to_string(),
+                        callee.span,
+                        exact,
+                        callee
+                            .parameters
+                            .get(index)
+                            .map(|parameter| parameter.shape),
+                    )
+                }),
+            });
         }
-        for (owner, entry) in added {
-            invoked_parameter_members[owner].push(entry);
+    });
+    found
+}
+
+/// A [`ForwardEdge`] as the forwarding loop reads it: its exclusion decided.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct Forwarding {
+    pub(super) parameter: usize,
+    pub(super) index: usize,
+    pub(super) in_owner_body: bool,
+    pub(super) site: Span,
+    pub(super) excluded: bool,
+}
+
+/// One forwarding step: the invocations an owner gains through `edge` from
+/// its callee's current ones (`target`), appended to `added` unless `own`
+/// or `added` holds them already. An invocation whose dispatch is not
+/// reported where it runs is not reported through its callers either.
+pub(super) fn forward_through(
+    edge: &Forwarding,
+    target: &[ParameterMemberInvocation],
+    own: &[ParameterMemberInvocation],
+    added: &mut Vec<ParameterMemberInvocation>,
+) {
+    for invocation in target {
+        if invocation.parameter != edge.index
+            || (invocation.path.is_empty() && !invocation.unmodeled)
+            || invocation.dispatch_read_excluded
+        {
+            continue;
+        }
+        let entry = ParameterMemberInvocation {
+            parameter: edge.parameter,
+            path: invocation.path.clone(),
+            in_owner_body: edge.in_owner_body && invocation.in_owner_body,
+            site: edge.site,
+            primitive_builtin: invocation.primitive_builtin,
+            dispatch_read_excluded: edge.excluded,
+            unmodeled: invocation.unmodeled,
+        };
+        if !own.contains(&entry) && !added.contains(&entry) {
+            added.push(entry);
         }
     }
 }

@@ -177,44 +177,14 @@ pub(super) fn component_owner_binding(
 /// Canonical TypeScript symbols prove identity, AST binding facts prove the
 /// initializer/alias chain, and the dialect's resolved primitive index proves
 /// that the initializer is the actual Solid export rather than a same-spelled
-/// local function.
+/// local function. The walk is a memo per file
+/// ([`crate::indexes::SemanticLookup::returned_primitive_at`], ADR 0392).
 pub(crate) fn returned_primitive_invocation(
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
     lookup: &SemanticLookup<'_>,
 ) -> Option<(Primitive, Option<usize>)> {
-    let mut reference_path = file.path.as_str();
-    let mut reference_span = call.callee;
-    let mut seen = HashSet::default();
-    loop {
-        // Callee result values do not always receive an entity fact of their
-        // own (tuple slots are the motivating case). Resolve them from the
-        // canonical reference set of each demanded binding declaration, then
-        // follow local or cross-file aliases one binding at a time.
-        let (binding_file, binding, symbol) =
-            lookup.binding_at_reference(reference_path, reference_span)?;
-        if !seen.insert(symbol.clone()) {
-            return None;
-        }
-        if let Some(initializer) = binding.call_initializer {
-            let call_index = lookup.call_index(binding_file, initializer)?;
-            let result_slot = match binding.shape {
-                solid_facts::ast::BindingShape::Array => {
-                    Some(binding.array_slots.iter().position(|slot| {
-                        slot.as_ref().and_then(|name| {
-                            lookup.entities().at(binding_file.path.as_str(), name.span)
-                        }) == Some(&symbol)
-                    })?)
-                }
-                _ => None,
-            };
-            return known_primitive(&lookup.primitives(binding_file).calls[call_index])
-                .map(|primitive| (primitive, result_slot));
-        }
-        let initializer = binding.initializer_identifier.as_ref()?;
-        reference_path = binding_file.path.as_str();
-        reference_span = initializer.span;
-    }
+    lookup.returned_primitive_at(file, call)
 }
 
 /// The execution semantics of one callback argument accepted by a proven
@@ -263,233 +233,67 @@ pub(crate) fn returned_callback_invocation_sites(
         .clone()
 }
 
-/// [`returned_callback_invocation_sites`], computed once per factory call: the
-/// compute scans every file's calls, and execution, owner and standing passes
-/// each ask about the same call.
+/// [`returned_callback_invocation_sites`], assembled once per factory call and
+/// build: the owner of an inherited callback is not cheap, and execution,
+/// owner and standing passes each ask about the same call.
 fn returned_callback_invocation_sites_memo(
     file: &solid_facts::FileFacts,
     factory_call: &solid_facts::ast::CallFact,
     lookup: &SemanticLookup<'_>,
 ) -> std::sync::Arc<Vec<ReturnedCallbackInvocationSite>> {
     lookup.returned_invocation_sites_memo(file.path.as_str(), factory_call.span, || {
-        compute_returned_callback_invocation_sites(file, factory_call, lookup)
+        assemble_returned_callback_invocation_sites(file, factory_call, lookup)
     })
 }
 
-fn compute_returned_callback_invocation_sites(
+/// The uses ([`SemanticLookup::returned_uses`]) with what each inherits.
+fn assemble_returned_callback_invocation_sites(
     file: &solid_facts::FileFacts,
     factory_call: &solid_facts::ast::CallFact,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<ReturnedCallbackInvocationSite> {
-    let direct_factory_value = |argument: Span| {
-        file.ast
-            .calls_within(argument)
-            .max_by_key(|nested| nested.span.end - nested.span.start)
-            .is_some_and(|nested| nested.span == factory_call.span)
-    };
-    let mut sites = Vec::new();
-    for outer in file
-        .ast
-        .calls_with_callee_containing(factory_call.span)
-        .filter(|outer| {
-            outer.span != factory_call.span
-            && file
-                .ast
-                .calls_within(outer.callee)
-                .filter(|nested| nested.span != outer.span)
-                .max_by_key(|nested| nested.span.end - nested.span.start)
-                .is_some_and(|nested| nested.span == factory_call.span)
-            // `factory(...).member()` invokes the member, not the returned
-            // function, so it proves nothing about the factory's callbacks.
-            // `preload` is the one member the runtime routes to the loader,
-            // matching the binding-based preload proof below.
-            && lookup
-                .member_property_at(file, outer.callee)
-                .is_none_or(|property| file.source_text(property) == Some("preload"))
-        })
-    {
+    use crate::indexes::UseKind;
+    let uses = lookup.returned_uses(file.path.as_str(), factory_call.span);
+    let mut sites = Vec::with_capacity(uses.len());
+    for used in uses.iter() {
+        let Some(use_file) = lookup.returned_use_file(used) else {
+            continue;
+        };
+        let UseKind::Argument(index) = used.kind else {
+            sites.push(ReturnedCallbackInvocationSite {
+                path: use_file.path.to_string(),
+                span: used.span,
+                inherited_execution: None,
+                inherited_owner: OwnerEdgeKind::Preserve,
+            });
+            continue;
+        };
+        // Handed to another callback-taking primitive: the use inherits that
+        // callback's execution and owner.
+        let index = index as usize;
+        let Some(outer) = use_file.ast.call_at(used.span) else {
+            continue;
+        };
+        let Some(primitive) = lookup.primitive_at_call(use_file, outer.span) else {
+            continue;
+        };
+        let execution = lookup
+            .dialect
+            .callback_semantics_at(primitive, index, outer.arguments.len())
+            .execution;
+        if execution.is_none() {
+            continue;
+        }
+        let inherited_owner = callback_owner_at_call(use_file, outer, primitive, index, lookup)
+            .map(|owner| callback_owner_edge_kind_at(lookup, primitive, owner))
+            .unwrap_or(OwnerEdgeKind::Preserve);
         sites.push(ReturnedCallbackInvocationSite {
-            path: file.path.to_string(),
+            path: use_file.path.to_string(),
             span: outer.span,
-            inherited_execution: None,
-            inherited_owner: OwnerEdgeKind::Preserve,
+            inherited_execution: execution,
+            inherited_owner,
         });
     }
-
-    for (outer, index) in file.ast.arguments_containing(factory_call.span) {
-        let primitive = lookup.primitive_at_call(file, outer.span);
-        if direct_factory_value(outer.arguments[index].span)
-            && primitive.is_some_and(|primitive| {
-                lookup
-                    .dialect
-                    .callback_semantics_at(primitive, index, outer.arguments.len())
-                    .execution
-                    .is_some()
-            })
-        {
-            let inherited_owner = primitive
-                .and_then(|primitive| {
-                    callback_owner_at_call(file, outer, primitive, index, lookup)
-                        .map(|owner| callback_owner_edge_kind_at(lookup, primitive, owner))
-                })
-                .unwrap_or(OwnerEdgeKind::Preserve);
-            sites.push(ReturnedCallbackInvocationSite {
-                path: file.path.to_string(),
-                span: outer.span,
-                inherited_execution: primitive.and_then(|primitive| {
-                    lookup
-                        .dialect
-                        .callback_semantics_at(primitive, index, outer.arguments.len())
-                        .execution
-                }),
-                inherited_owner,
-            });
-        }
-    }
-
-    let mut factory_bindings = file
-        .ast
-        .bindings
-        .iter()
-        .filter(|binding| binding.call_initializer == Some(factory_call.span))
-        .flat_map(|binding| &binding.names)
-        .filter_map(|name| lookup.entities().at(file.path.as_str(), name.span).cloned())
-        .collect::<HashSet<_>>();
-    if factory_bindings.is_empty() {
-        sites.sort_by(|left, right| left.order_key().cmp(&right.order_key()));
-        sites.dedup();
-        return sites;
-    }
-
-    // Follow identifier aliases in every project file. The compiler's symbol
-    // reference table bridges imports/re-exports; local AST bindings bridge a
-    // fresh `const Alias = Imported` symbol introduced after that boundary.
-    loop {
-        let references = returned_binding_references(lookup, &factory_bindings);
-        let aliases = lookup
-            .files()
-            .iter()
-            .flat_map(|candidate| {
-                candidate
-                    .ast
-                    .bindings
-                    .iter()
-                    .filter_map(|binding| {
-                        let initializer = binding.initializer_identifier.as_ref()?;
-                        returned_binding_reference(
-                            candidate,
-                            initializer.span,
-                            lookup,
-                            &factory_bindings,
-                            &references,
-                        )
-                        .then_some(binding)
-                    })
-                    .flat_map(move |binding| {
-                        binding.names.iter().filter_map(|name| {
-                            lookup
-                                .entities()
-                                .at(candidate.path.as_str(), name.span)
-                                .cloned()
-                        })
-                    })
-            })
-            .collect::<Vec<_>>();
-        let before = factory_bindings.len();
-        factory_bindings.extend(aliases);
-        if factory_bindings.len() == before {
-            break;
-        }
-    }
-
-    // Group the reference locations by file once, so each file's test of a
-    // span is two lookups with no allocation (`returned_binding_reference`
-    // builds an owned path key for every span it is asked about).
-    let mut references_by_path: HashMap<&str, HashSet<(u64, u64)>> = HashMap::default();
-    let references = returned_binding_references(lookup, &factory_bindings);
-    for (path, start, end) in &references {
-        references_by_path
-            .entry(path.as_str())
-            .or_default()
-            .insert((*start, *end));
-    }
-    for use_file in lookup.files() {
-        let file_entities = lookup.entities().by_path.get(use_file.path.as_str());
-        let file_references = references_by_path.get(use_file.path.as_str());
-        let returned = |span: Span| {
-            let key = (u64::from(span.start), u64::from(span.end));
-            file_entities
-                .and_then(|entities| entities.get(&key))
-                .is_some_and(|symbol| factory_bindings.contains(symbol))
-                || file_references.is_some_and(|references| references.contains(&key))
-        };
-        for outer in &use_file.ast.calls {
-            if returned(outer.callee) {
-                sites.push(ReturnedCallbackInvocationSite {
-                    path: use_file.path.to_string(),
-                    span: outer.span,
-                    inherited_execution: None,
-                    inherited_owner: OwnerEdgeKind::Preserve,
-                });
-            }
-            for (index, argument) in outer.arguments.iter().enumerate() {
-                if !returned(argument.span) {
-                    continue;
-                }
-                let primitive = lookup.primitive_at_call(use_file, outer.span);
-                if primitive.is_some_and(|primitive| {
-                    lookup
-                        .dialect
-                        .callback_semantics_at(primitive, index, outer.arguments.len())
-                        .execution
-                        .is_some()
-                }) {
-                    let inherited_owner = primitive
-                        .and_then(|primitive| {
-                            callback_owner_at_call(use_file, outer, primitive, index, lookup)
-                                .map(|owner| callback_owner_edge_kind_at(lookup, primitive, owner))
-                        })
-                        .unwrap_or(OwnerEdgeKind::Preserve);
-                    sites.push(ReturnedCallbackInvocationSite {
-                        path: use_file.path.to_string(),
-                        span: outer.span,
-                        inherited_execution: primitive.and_then(|primitive| {
-                            lookup
-                                .dialect
-                                .callback_semantics_at(primitive, index, outer.arguments.len())
-                                .execution
-                        }),
-                        inherited_owner,
-                    });
-                }
-            }
-
-            // `lazyResult.preload()` resolves the property as a distinct
-            // method; prove the receiver from the member-expression AST.
-            if use_file.ast.members_within(outer.callee).any(|member| {
-                use_file.source_text(member.property) == Some("preload") && returned(member.object)
-            }) {
-                sites.push(ReturnedCallbackInvocationSite {
-                    path: use_file.path.to_string(),
-                    span: outer.span,
-                    inherited_execution: None,
-                    inherited_owner: OwnerEdgeKind::Preserve,
-                });
-            }
-        }
-
-        for element in &use_file.ast.jsx_elements {
-            if returned(element.name.span) {
-                sites.push(ReturnedCallbackInvocationSite {
-                    path: use_file.path.to_string(),
-                    span: element.span,
-                    inherited_execution: None,
-                    inherited_owner: OwnerEdgeKind::Preserve,
-                });
-            }
-        }
-    }
-
     sites.sort_by(|left, right| left.order_key().cmp(&right.order_key()));
     sites.dedup();
     sites

@@ -1,5 +1,6 @@
 //! Completion proofs: never-returning calls, parameters called on every completion, and result-access forwarding.
 
+use super::project_memos::{NeverReturning, ParameterCompletionCalls};
 use super::*;
 
 impl<'a> SemanticLookup<'a> {
@@ -109,33 +110,53 @@ impl<'a> SemanticLookup<'a> {
             .contains(&(file.path.as_str(), function.span))
     }
 
+    /// ADR 0278: the `never` and `asserts` calls of each path, a view of the
+    /// per-file [`NeverReturning`] memos built once per build.
     pub(super) fn never_returning_calls(&self) -> &HashMap<&'a str, Vec<Span>> {
-        self.never_returning_calls.get_or_init(|| {
-            let facts: &'a ProjectFacts = self.facts;
+        crate::base::reads::note(crate::base::reads::Section::NeverReturning);
+        self.never_returning_calls
+            .get_or_init(|| crate::base::reads::suppress(|| self.never_returning_calls_uncached()))
+    }
+
+    fn never_returning_calls_uncached(&self) -> HashMap<&'a str, Vec<Span>> {
+        {
+            let world = self.memo_world();
             let mut calls = HashMap::<&'a str, Vec<Span>>::default();
-            for file in &facts.files {
-                for call in &file.ast.calls {
-                    if self
-                        .resolved_callee_call(file, call.callee)
-                        .is_some_and(|resolved| {
-                            // The compiler's own type flag, not the display
-                            // text (docs/typefacts/compiler-semantic-facts.md).
-                            resolved.never_returns || resolved.assertion_signature
-                        })
-                    {
-                        calls.entry(file.path.as_str()).or_default().push(call.span);
-                    }
+            for file in self.files() {
+                let path = file.path.as_str();
+                if calls.contains_key(path) {
+                    continue;
+                }
+                let Some(id) = world.views().table.id_of(path) else {
+                    continue;
+                };
+                let spans = world.answer::<NeverReturning>(&id);
+                if !spans.is_empty() {
+                    calls.insert(path, spans);
                 }
             }
-            for spans in calls.values_mut() {
-                spans.sort_unstable();
-            }
             calls
+        }
+    }
+
+    /// ADR 0277: a view of the [`ParameterCompletionCalls`] memo, built once
+    /// per build.
+    pub(super) fn parameter_completion_calls(&self) -> &HashSet<(&'a str, Span, usize)> {
+        self.parameter_completion_calls.get_or_init(|| {
+            self.whole_program_answer::<ParameterCompletionCalls>()
+                .into_iter()
+                .filter_map(|(path, span, index)| {
+                    Some((self.file_by_path(&path)?.path.as_str(), span, index))
+                })
+                .collect()
         })
     }
 
-    pub(super) fn parameter_completion_calls(&self) -> &HashSet<(&'a str, Span, usize)> {
-        self.parameter_completion_calls.get_or_init(|| {
+    /// The memo's computation: every `(path, function, parameter)` called on
+    /// the function's every completion, sorted. The forwards fixed point
+    /// reads the whole program (study S7 moves it onto its cone).
+    pub(super) fn compute_parameter_completion_calls(&self) -> Vec<(String, Span, usize)> {
+        {
             let facts: &'a ProjectFacts = self.facts;
             let mut calls = HashSet::default();
             // ADR 0285: calls passing a parameter on to another function.
@@ -254,8 +275,13 @@ impl<'a> SemanticLookup<'a> {
                     }
                 }
             }
-            calls
-        })
+            let mut answer = calls
+                .into_iter()
+                .map(|(path, span, index)| (path.to_owned(), span, index))
+                .collect::<Vec<_>>();
+            answer.sort_unstable();
+            answer
+        }
     }
 
     /// The arguments in `path` that a project function forwards, unchanged,
@@ -280,79 +306,38 @@ impl<'a> SemanticLookup<'a> {
         &self,
     ) -> &HashMap<&'a str, Vec<ResultAccessForwarded>> {
         self.result_access_forwarded.get_or_init(|| {
-            let mut forwarded = HashMap::<&'a str, Vec<ResultAccessForwarded>>::default();
-            // Most dialect variants answer no slot at all; skip the walk.
-            let answered = self.project_primitives().iter().any(|primitive| {
-                (0..PROBED_ARGUMENTS).any(|count| {
-                    (0..count).any(|argument| {
-                        self.dialect
-                            .callback_runs_on_result_access(*primitive, argument, count)
-                    })
+            let table = self.memos.table();
+            let files = self.files();
+            self.memo_world()
+                .answer::<super::ResultAccessForwardedAll>(&())
+                .iter()
+                .filter_map(|(id, entries)| {
+                    let slot = *table.slots_of(*id).first()?;
+                    Some((
+                        files[slot].path.as_str(),
+                        entries
+                            .iter()
+                            .map(|(argument, primitive)| ResultAccessForwarded {
+                                argument: *argument,
+                                primitive: *primitive,
+                            })
+                            .collect(),
+                    ))
                 })
-            });
-            if !answered {
-                return forwarded;
-            }
-            let facts: &'a ProjectFacts = self.facts;
-            for file in &facts.files {
-                for call in &file.ast.calls {
-                    let Some(primitive) = self.primitive_at_call(file, call.span) else {
-                        continue;
-                    };
-                    let count = call.arguments.len();
-                    for (index, argument) in call.arguments.iter().enumerate() {
-                        if argument.spread
-                            || argument.value != solid_facts::ast::ArgumentValueKind::Identifier
-                            || !self
-                                .dialect
-                                .callback_runs_on_result_access(primitive, index, count)
-                        {
-                            continue;
-                        }
-                        let Some(declaration) = argument.binding_declaration else {
-                            continue;
-                        };
-                        for function in file.ast.functions_body_containing(call.span) {
-                            let Some(parameter) = function.parameters.iter().position(|binding| {
-                                binding.names.len() == 1 && binding.names[0].span == declaration
-                            }) else {
-                                continue;
-                            };
-                            for (caller, callee) in
-                                self.function_call_sites(file.path.as_str(), function.span)
-                            {
-                                let Some(site) =
-                                    caller.ast.calls.iter().find(|site| site.callee == callee)
-                                else {
-                                    continue;
-                                };
-                                // A spread up to the slot moves arguments into it.
-                                if site
-                                    .arguments
-                                    .iter()
-                                    .take(parameter.saturating_add(1))
-                                    .any(|candidate| candidate.spread)
-                                {
-                                    continue;
-                                }
-                                if let Some(forwarded_argument) = site.arguments.get(parameter) {
-                                    forwarded.entry(caller.path.as_str()).or_default().push(
-                                        ResultAccessForwarded {
-                                            argument: forwarded_argument.span,
-                                            primitive,
-                                        },
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            for entries in forwarded.values_mut() {
-                entries.sort_unstable_by_key(|entry| (entry.argument.start, entry.argument.end));
-                entries.dedup_by_key(|entry| entry.argument);
-            }
-            forwarded
+                .collect()
+        })
+    }
+
+    /// Whether the dialect answers a result-access slot for some primitive the
+    /// project names: most variants answer none, and the walk is skipped.
+    pub(super) fn result_access_slots_answered(&self) -> bool {
+        self.project_primitives().iter().any(|primitive| {
+            (0..PROBED_ARGUMENTS).any(|count| {
+                (0..count).any(|argument| {
+                    self.dialect
+                        .callback_runs_on_result_access(*primitive, argument, count)
+                })
+            })
         })
     }
 }

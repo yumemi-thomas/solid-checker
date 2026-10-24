@@ -1,7 +1,6 @@
-//! Digests of the program inputs a retained answer can depend on (ADR 0369).
+//! Digests of the program inputs a kept pass output can depend on (`passes`).
 //!
-//! A retained answer records the digests it was computed under and is reused
-//! only while every one is unchanged:
+//! A kept pass is reused only while every digest it depends on is unchanged:
 //!
 //! * `Text(path)`: the file's exact bytes;
 //! * `Exports(path)`: which declaration references of `path` the program's
@@ -38,22 +37,11 @@ struct FileInput {
 
 #[derive(Default)]
 pub struct ProgramInputs {
-    /// Advances on every program change; a retained record validated at the
-    /// current epoch needs no second check.
-    epoch: u64,
     files: HashMap<String, FileInput>,
     by_path: Option<HashMap<String, P<SourceFile>>>,
     ambient: Option<Digest>,
     options: Option<Digest>,
     exports: Option<HashMap<String, Digest>>,
-    /// Declaring paths interned for the dependency checks of retained
-    /// answers, and each one's `(Text, Exports)` at an epoch.
-    path_ids: HashMap<String, u32>,
-    path_names: Vec<String>,
-    declared: Vec<Option<(u64, Option<Digest>, Digest)>>,
-    /// The names of the global scope's aliases (UMD exports, global
-    /// `import =`), which scope lookup resolves to test their meaning.
-    global_aliases: Option<std::sync::Arc<std::collections::HashSet<String>>>,
 }
 
 fn file_input(file: P<SourceFile>) -> FileInput {
@@ -78,15 +66,9 @@ fn contributes_to_global_scope(file: P<SourceFile>) -> bool {
 }
 
 impl ProgramInputs {
-    #[must_use]
-    pub fn epoch(&self) -> u64 {
-        self.epoch
-    }
-
     /// The accepted program changed. `reused_except` names the one file a
     /// parse-reusing update replaced; `None` drops every text digest.
     pub fn program_changed(&mut self, reused_except: Option<&str>) {
-        self.epoch += 1;
         match reused_except {
             Some(path) => {
                 self.files.remove(&clean(path));
@@ -97,24 +79,6 @@ impl ProgramInputs {
         self.ambient = None;
         self.options = None;
         self.exports = None;
-        self.global_aliases = None;
-    }
-
-    /// The names of the global scope's aliases in the accepted program (the
-    /// checker's merged global table, read only).
-    pub fn global_aliases(
-        &mut self,
-        checker: &tsrs_compiler::Checker,
-    ) -> std::sync::Arc<std::collections::HashSet<String>> {
-        std::sync::Arc::clone(self.global_aliases.get_or_insert_with(|| {
-            let mut names = std::collections::HashSet::new();
-            checker.globals.for_each(|name, symbol| {
-                if symbol.flags().intersects(tsrs_ast::SymbolFlags::Alias) {
-                    names.insert(name.to_owned());
-                }
-            });
-            std::sync::Arc::new(names)
-        }))
     }
 
     fn input(&mut self, file: P<SourceFile>) -> FileInput {
@@ -124,42 +88,15 @@ impl ProgramInputs {
             .or_insert_with(|| file_input(file))
     }
 
-    /// A small stable number for `path`, for [`ProgramInputs::declared`].
-    pub fn path_id(&mut self, path: &str) -> u32 {
-        if let Some(id) = self.path_ids.get(path) {
-            return *id;
-        }
-        let id = u32::try_from(self.path_names.len()).expect("fewer than 2^32 paths");
-        self.path_ids.insert(path.to_owned(), id);
-        self.path_names.push(path.to_owned());
-        self.declared.push(None);
-        id
-    }
-
-    /// `(Text(path), Exports(path))` of an interned path, memoized for the
-    /// epoch; the text is `None` when the program has no such file.
-    pub fn declared(
-        &mut self,
-        program: &Program,
-        exported: &HashMap<DurableRef, Preserved>,
-        path: u32,
-    ) -> (Option<Digest>, Digest) {
-        let index = path as usize;
-        if let Some((epoch, text, exports)) = self.declared[index]
-            && epoch == self.epoch
-        {
-            return (text, exports);
-        }
-        let name = self.path_names[index].clone();
-        let text = self.text_at(program, &name);
-        let exports = self.exports(exported, &name);
-        self.declared[index] = Some((self.epoch, text, exports));
-        (text, exports)
-    }
-
     /// `Text(file)`.
     pub fn text(&mut self, file: P<SourceFile>) -> Digest {
         self.input(file).text
+    }
+
+    /// Whether `file` adds to the global scope or augments a module (a
+    /// member of `Ambient`).
+    pub fn is_ambient(&mut self, file: P<SourceFile>) -> bool {
+        self.input(file).ambient
     }
 
     /// `Text(path)`, or `None` when the program has no such file.

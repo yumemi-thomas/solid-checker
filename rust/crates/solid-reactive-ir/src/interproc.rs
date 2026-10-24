@@ -77,8 +77,12 @@ use structured_returns::*;
 mod result_view;
 pub(crate) use result_view::*;
 mod result_reads;
+mod transport_reads;
 pub(crate) use result_reads::*;
+pub(crate) use transport_reads::TransportReads;
+mod node_index;
 mod reads;
+mod refresh;
 pub(crate) use reads::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -128,50 +132,193 @@ struct DirectReferenceContribution {
     unique: bool,
 }
 
-#[derive(Clone, Default, Eq, PartialEq)]
+/// One function's summary rows as a canonical set (ADR 0395).
+///
+/// Rows that share a key `(display, origin, declaration, transported)` are
+/// the same read reached on different paths. The set keeps, per key, the rows
+/// no other row of the key dominates, where a row dominates another when it
+/// is no worse on each of `local`, `conditional` and [`canonical_rank`]
+/// (lower is better on all three). The value is therefore a function of the
+/// rows offered, not of the order they arrived in, and union is its join.
+///
+/// Dominance is a product order on purpose. Every transfer a propagation
+/// applies (`conditional |= local; local = !guaranteed; transported |= t`,
+/// one more hop) is monotone in each component, so it preserves dominance:
+/// a row the set drops would only ever have produced rows the survivor's
+/// transfer dominates. Ranking ties of equal flags alone (a total order
+/// consulted only when the flags are equal) would not be preserved: two rows
+/// with incomparable flags can transfer to equal flags, and the one the
+/// source dropped could then win at the caller.
+///
+/// `ordered` holds the set in canonical order ([`canonical_order`]), so the
+/// first row a consumer finds is the canonical first row. `log` is every row
+/// the set ever accepted, in arrival order, with its hop count: delta
+/// propagation reads it by position, and a row it carries that the set has
+/// since dropped is dominated at the receiver too.
+#[derive(Clone, Default)]
 pub(super) struct SummaryReads {
-    pub(super) ordered: Vec<SummaryRead>,
-    seen: HashSet<(SymbolId, Location, Location)>,
+    ordered: Vec<SummaryRead>,
+    /// `hops[i]` is the edge count from `ordered[i]`'s seed.
+    hops: Vec<u32>,
+    log: Vec<(u32, SummaryRead)>,
+    keys: HashMap<SummaryKey, u32>,
+}
+
+type SummaryKey = (SymbolId, Location, Location, bool);
+
+impl PartialEq for SummaryReads {
+    fn eq(&self, other: &Self) -> bool {
+        self.ordered == other.ordered && self.hops == other.hops
+    }
+}
+
+impl Eq for SummaryReads {}
+
+/// The rank dominance compares, after the flags: hop count, then the read's
+/// location fields, then the rest of the row. `transported` is part of the
+/// key, `local` and `conditional` are the flags.
+///
+/// The hop count leads because it is order-free (the fewest edges from the
+/// row's seed) and because it keeps the explanation nearest the call: a
+/// callee's own read outranks one it reaches through a further helper. Step 0
+/// measured the alternative, location order alone, against the rc17 corpus:
+/// it moved three related locations onto a deeper helper's read, where the
+/// hop order moved none (ADR 0395).
+fn canonical_rank(
+    (left_hops, left): (u32, &SummaryRead),
+    (right_hops, right): (u32, &SummaryRead),
+) -> std::cmp::Ordering {
+    left_hops
+        .cmp(&right_hops)
+        .then_with(|| location_order(&left.origin, &right.origin))
+        .then_with(|| location_order(&left.declaration, &right.declaration))
+        .then_with(|| left.display.cmp(&right.display))
+        .then_with(|| left.symbol.cmp(&right.symbol))
+        .then_with(|| left.kind.cmp(&right.kind))
+        .then_with(|| left.origin_context.cmp(&right.origin_context))
+        .then_with(|| left.owner.cmp(&right.owner))
+        .then_with(|| left.undecided.cmp(&right.undecided))
+}
+
+/// The total order of `ordered`: the rank, then the key's flag, then the
+/// flags.
+fn canonical_order(left: (u32, &SummaryRead), right: (u32, &SummaryRead)) -> std::cmp::Ordering {
+    canonical_rank(left, right)
+        .then_with(|| left.1.transported.cmp(&right.1.transported))
+        .then_with(|| left.1.local.cmp(&right.1.local))
+        .then_with(|| left.1.conditional.cmp(&right.1.conditional))
+}
+
+/// `left` dominates `right`: the same key, and no worse on either flag or on
+/// the rank. A row dominates an identical one.
+fn summary_dominates(left: (u32, &SummaryRead), right: (u32, &SummaryRead)) -> bool {
+    (!left.1.local || right.1.local)
+        && (!left.1.conditional || right.1.conditional)
+        && canonical_rank(left, right).is_le()
 }
 
 impl SummaryReads {
-    fn key(read: &SummaryRead) -> (SymbolId, Location, Location) {
+    fn key(read: &SummaryRead) -> SummaryKey {
         (
             read.display.clone(),
             read.origin.clone(),
             read.declaration.clone(),
+            read.transported,
         )
     }
 
+    /// Offer a seed row (no hop below it).
     pub(super) fn push(&mut self, read: SummaryRead) {
-        self.seen.insert(Self::key(&read));
-        self.ordered.push(read);
+        self.insert(read, 0);
     }
 
+    /// Offer a seed row; whether the set changed.
     pub(super) fn push_unique(&mut self, read: SummaryRead) -> bool {
-        // A row proven on more paths already covers this one (ADR 0276).
-        if !self.seen.insert(Self::key(&read))
-            && self.ordered.iter().any(|previous| {
-                Self::key(previous) == Self::key(&read)
-                    && previous.transported == read.transported
-                    && (!previous.local || read.local)
-                    && (!previous.conditional || read.conditional)
-            })
-        {
-            return false;
+        self.insert(read, 0)
+    }
+
+    /// Offer a row `hops` edges from its seed; whether the set changed.
+    pub(super) fn insert(&mut self, read: SummaryRead, hops: u32) -> bool {
+        let key = Self::key(&read);
+        if let Some(count) = self.keys.get(&key).copied() {
+            let same_key = |row: &SummaryRead| {
+                row.transported == read.transported
+                    && row.display == read.display
+                    && row.origin == read.origin
+                    && row.declaration == read.declaration
+            };
+            if self.ordered.iter().zip(&self.hops).any(|(row, &row_hops)| {
+                same_key(row) && summary_dominates((row_hops, row), (hops, &read))
+            }) {
+                return false;
+            }
+            let mut removed = 0;
+            let mut index = 0;
+            while index < self.ordered.len() {
+                if same_key(&self.ordered[index])
+                    && summary_dominates((hops, &read), (self.hops[index], &self.ordered[index]))
+                {
+                    self.ordered.remove(index);
+                    self.hops.remove(index);
+                    removed += 1;
+                } else {
+                    index += 1;
+                }
+            }
+            self.keys.insert(key, count - removed + 1);
+        } else {
+            self.keys.insert(key, 1);
         }
-        self.ordered.push(read);
+        let position = self
+            .ordered
+            .iter()
+            .zip(&self.hops)
+            .position(|(row, &row_hops)| canonical_order((hops, &read), (row_hops, row)).is_lt())
+            .unwrap_or(self.ordered.len());
+        self.ordered.insert(position, read.clone());
+        self.hops.insert(position, hops);
+        self.log.push((hops, read));
         true
     }
 
-    fn take(&mut self) -> Vec<SummaryRead> {
-        self.seen.clear();
-        std::mem::take(&mut self.ordered)
+    /// The rows with their hop counts, in canonical order.
+    pub(super) fn rows(&self) -> impl Iterator<Item = (u32, &SummaryRead)> {
+        self.hops.iter().copied().zip(&self.ordered)
     }
 
+    /// How many rows the set has accepted so far, dropped ones included.
+    pub(super) fn log_len(&self) -> usize {
+        self.log.len()
+    }
+
+    /// The rows accepted since `start`, for delta propagation.
+    pub(super) fn log_since(&self, start: usize) -> &[(u32, SummaryRead)] {
+        &self.log[start..]
+    }
+
+    /// Empty the set and return its seed rows. Only valid before any
+    /// propagation: it forgets hop counts.
+    fn take(&mut self) -> Vec<SummaryRead> {
+        debug_assert!(self.hops.iter().all(|hops| *hops == 0));
+        let reads = std::mem::take(&mut self.ordered);
+        *self = Self::default();
+        reads
+    }
+
+    /// Replace the set by the canonical set of these seed rows.
     pub(super) fn replace(&mut self, reads: Vec<SummaryRead>) {
-        self.seen = reads.iter().map(Self::key).collect();
-        self.ordered = reads;
+        *self = Self::default();
+        for read in reads {
+            self.insert(read, 0);
+        }
+    }
+
+    /// Rewrite every row, then rebuild the canonical set: a rewrite may
+    /// change a key or a rank. Only valid before any propagation.
+    pub(super) fn rewrite(&mut self, mut rewrite: impl FnMut(&mut SummaryRead)) {
+        let mut reads = self.take();
+        reads.iter_mut().for_each(&mut rewrite);
+        self.replace(reads);
     }
 
     pub(super) fn to_vec(&self) -> Vec<SummaryRead> {
@@ -252,7 +399,7 @@ impl std::ops::Deref for SummaryReads {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct SummaryNode {
     pub(super) path: String,
     pub(super) span: Span,
@@ -308,6 +455,10 @@ impl FunctionBoundary for SummaryNode {
 
 #[derive(Clone)]
 pub(super) struct InterproceduralResult {
+    /// What the reused graph and result chunks read when they ran
+    /// ([`crate::base::reads`]): with the build's own reads, what the
+    /// retained result read.
+    pub(super) reused_reads: crate::base::reads::Reads,
     pub(super) reads: Arc<[ReactiveRead]>,
     pub(super) source_call_targets: Arc<HashMap<Location, accessor_provenance::Callable>>,
     pub(super) dispatch_obligations: Arc<[StaticDefect]>,
@@ -318,6 +469,17 @@ pub(super) struct InterproceduralResult {
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct InterproceduralTimings {
     pub(super) graph: Duration,
+    /// Inside [`Self::graph`]: summary-node discovery (per-file, cached),
+    /// `accessor_provenance::Resolver::new`, `transported_call_targets`, the
+    /// graph-contribution merge (per-file, cached) and
+    /// `refresh_member_invocation_contexts`.
+    pub(super) graph_nodes: Duration,
+    /// The kept node index's patch ([`node_index`]).
+    pub(super) node_index: Duration,
+    pub(super) resolver: Duration,
+    pub(super) transport: Duration,
+    pub(super) merge: Duration,
+    pub(super) refresh: Duration,
     pub(super) direct_summaries: Duration,
     pub(super) direct_index: Duration,
     pub(super) direct_references: Duration,

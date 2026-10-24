@@ -49,12 +49,11 @@ stay inside the producer's tsrs backend.
 - Apply updates transactionally: cancellation or a rebuild failure leaves the
   prior project generation queryable and unchanged.
 
-Generation-scoped opaque identities include their project generation and must
-be reacquired after every successful `Update`. Canonical identities
-(`symbol:h:`) are minted again after an update, or answered again by a retained
-binder-level answer that holds them (ADR 0369); any other ID held over an
-update fails closed with not-found until a location scan mints it. A
-binder-level symbol's hash ID is
+Every identity is a hash (`symbol:h:`) that names the same symbol in every
+checker of the program; it is answered again after an update by the passes
+that reach it, and an ID no pass of the current table reached fails closed
+with not-found unless its key re-resolves it. A binder-level symbol's hash ID
+is
 a pure function of the program (ADR 0366): a checker singleton, a global by
 name, a module export by declaring path and name, else its minimum declaration
 by path and offset, with the checker's private and unique-symbol counters
@@ -63,23 +62,23 @@ intersection or spread property hashes its combination, name and origins'
 binder keys when those fix its type: written annotations reading no `this` or
 type parameter, through constituents that do not transform them (ADR 0371). Any other derived symbol (an
 instantiation, a `this`-type or widened copy, a mapped property) and any symbol
-not proven binder-level get counters (`symbol:<gen>:<n>`). A
-table build discards every type-derived answer, so none is reused inside a
-generation or across an update (ADR 0364). Answers the checker gives by scope
-lookup alone are kept with the digests they read (file text, the exports scan,
-the global scope, the options) and reused while those are unchanged: each
-file's binder-resolved reference spans, entity symbols at binder-resolved
-positions and binder-level symbols' declarations (ADR 0369). The compiler's
-incremental program is still reused.
+not proven binder-level takes its exact derived key (what it is derived from
+and its type context), or no ID at all (an absent fact); none takes a counter.
+Each file's facts are computed by a pass, a fresh checker of its own that
+checks the file first; a pass's output is reused while every file it can read
+(its read set) is unchanged in text, exports and module resolution, and the
+options, the global scope and its census answers are too (ADR 0398). The
+compiler's incremental program is still reused.
 
 ## Native integration pins
 
 - tsrs: the fork `https://github.com/yumemi-thomas/tsrs` at
-  `e1e9183c5da78de3261b9832598e3ebebc04cb73`, every tsrs crate pinned to that
+  `db57178a979f484d6c9c226438f785da834d5e19`, every tsrs crate pinned to that
   one `rev` in `apps/solid-typefacts/Cargo.toml` (and so in its `Cargo.lock`).
-  Upstream `oxc-project/tsrs@3bbcc754` (v0.19.0) plus one marked commit that exports
-  `is_untyped_function_call` and `get_reduced_apparent_type`; it changes no
-  behavior. The fork is unpublished: a producer builds only with network access
+  Upstream `oxc-project/tsrs@3bbcc754` (v0.19.0) plus one marked commit (branch `solid-checker-v2`) that exports
+  `is_untyped_function_call`, `get_reduced_apparent_type`,
+  `could_contain_type_variables`, the tuple element index and
+  `get_write_type_of_symbol`; it changes no behavior. The fork is unpublished: a producer builds only with network access
   to it.
 - TypeScript: commit `3e9236361fa97a9e6c685f4833ac457ae2d8c50a`
   (`7.1.0-beta`), the commit tsrs ports. The `tsc` oracle runs the same

@@ -3,54 +3,6 @@
 use super::*;
 
 impl<'a> SemanticLookup<'a> {
-    /// Review round 1 of ADR 0293: the project-wide inputs of an exempt store
-    /// Get's proof (`local_access::store_get_decision`), for the cross-file
-    /// digest: per key the dialect exempts that some Get spells, whether a
-    /// member of that name is written; then the prototype-write flag and
-    /// [`Self::property_may_be_defined_reflectively`]. `None` when no Get
-    /// spells an exempt key, so such a project keeps the digest it had.
-    pub(super) fn exempt_store_key_census(&self) -> Option<Vec<(String, bool)>> {
-        let mut keys = self
-            .files()
-            .iter()
-            .flat_map(|file| {
-                file.ast
-                    .members
-                    .iter()
-                    .filter_map(|member| file.source_text(member.property))
-                    .chain(
-                        file.ast
-                            .literal_computed_members
-                            .iter()
-                            .map(|literal| literal.key.as_str()),
-                    )
-            })
-            .filter(|key| self.dialect.store_key_may_skip_strict_read(key))
-            .map(str::to_owned)
-            .collect::<Vec<_>>();
-        if keys.is_empty() {
-            return None;
-        }
-        keys.sort_unstable();
-        keys.dedup();
-        let mut census = keys
-            .into_iter()
-            .map(|key| {
-                let written = self.member_name_may_be_reassigned(&key);
-                (key, written)
-            })
-            .collect::<Vec<_>>();
-        census.push((
-            "\0reflective-property-definition".into(),
-            self.property_may_be_defined_reflectively(),
-        ));
-        census.push((
-            "\0reflective-prototype-write".into(),
-            crate::interproc::accessor_provenance::reflective_prototype_write(self),
-        ));
-        Some(census)
-    }
-
     /// The expression inside any parentheses around `value`; `None` when a
     /// type assertion (`as`, `<T>`, `!`, `satisfies`) wraps it on the way,
     /// which changes the declared type and never the value.
@@ -197,6 +149,9 @@ impl<'a> SemanticLookup<'a> {
         depth: usize,
     ) -> bool {
         use solid_facts::ast::{BindingShape, ExportKind, ImportKind};
+        // Another file's constant: the answer is one of the set
+        // [`Self::exported_primitive_consts`] holds, which the section binds.
+        crate::base::reads::note(crate::base::reads::Section::ExportedPrimitiveConsts);
         let value = file.ast.peel_ts_sugar_span(value);
         let Some(declaration) = file.ast.reference_declaration(value) else {
             return false;
@@ -269,6 +224,11 @@ impl<'a> SemanticLookup<'a> {
     /// [`Self::imported_const_is_primitive`] can accept. Empty when no file
     /// imports a binding by name.
     pub(super) fn exported_primitive_consts(&self) -> Vec<(String, Span)> {
+        self.whole_program_answer::<super::project_memos::ExportedPrimitiveConsts>()
+    }
+
+    /// [`Self::exported_primitive_consts`]'s computation (the memo's).
+    pub(super) fn compute_exported_primitive_consts(&self) -> Vec<(String, Span)> {
         use solid_facts::ast::{BindingShape, ImportKind};
         if !self.files().iter().any(|file| {
             file.ast.imports.iter().any(|import| {

@@ -19,6 +19,7 @@ dialect-v2 = ["dep:solid-v2-compiler", "dep:solid-v2-rules"]
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+memchr = "2"
 oxc_diagnostics.workspace = true
 oxc_miette.workspace = true
 oxc_allocator.workspace = true

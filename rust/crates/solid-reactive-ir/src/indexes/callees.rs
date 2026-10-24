@@ -9,14 +9,7 @@ impl<'a> SemanticLookup<'a> {
         call: &solid_facts::ast::CallFact,
         kind: typefacts::CallKind,
     ) -> Option<&'a typefacts::ResolvedDeclaration> {
-        self.resolved_callee_call(file, call.callee)
-            .filter(|resolved| {
-                resolved.validity == ResolvedCallValidity::Valid
-                    && resolved.kind == kind
-                    && resolved.targets.is_none()
-            })
-            .and_then(|resolved| resolved.declaration.as_ref())
-            .filter(|declaration| declaration.standard_library)
+        standard_library_declaration_of(self.resolved_callee_call(file, call.callee), kind)
     }
 
     /// ADR 0211: the instance method `property` of exactly `class`, declared
@@ -60,33 +53,7 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         function: &solid_facts::ast::FunctionFact,
     ) -> bool {
-        // A class element's or an object literal method's own function. A
-        // function nested inside a method inherits its `method_name`, so that
-        // field alone says nothing.
-        let element_function = file.ast.classes.iter().any(|class| {
-            class
-                .elements
-                .iter()
-                .any(|element| element.value == Some(function.span))
-        }) || file.ast.object_properties.iter().any(|property| {
-            !property.data && file.ast.peel_ts_sugar_span(property.value) == function.span
-        });
-        if element_function {
-            return true;
-        }
-        if function.kind == solid_facts::ast::FunctionKind::Declaration {
-            return function
-                .name
-                .as_ref()
-                .is_some_and(|name| !binding_written(file, name.span));
-        }
-        file.ast.bindings.iter().any(|binding| {
-            binding.immutable
-                && binding.shape == solid_facts::ast::BindingShape::Identifier
-                && binding.initializer.is_some_and(|initializer| {
-                    file.ast.peel_ts_sugar_span(initializer) == function.span
-                })
-        })
+        function_value_is_current_in(file, function)
     }
 
     /// Whether `new C(…)` of this class evaluates to an instance whose
@@ -102,77 +69,7 @@ impl<'a> SemanticLookup<'a> {
         property: &str,
         depth: usize,
     ) -> bool {
-        use solid_facts::ast::ClassElementKind;
-        if depth == 0 {
-            return false;
-        }
-        for element in &class.elements {
-            if element.r#static {
-                continue;
-            }
-            match element.kind {
-                ClassElementKind::Constructor => {
-                    let Some(constructor) = file
-                        .ast
-                        .functions
-                        .iter()
-                        .find(|function| Some(function.span) == element.value)
-                    else {
-                        return false;
-                    };
-                    let returns_value = file
-                        .ast
-                        .own_returns(constructor)
-                        .any(|returned| returned.argument.is_some());
-                    let parameter_property = file.ast.parameter_properties.iter().any(|name| {
-                        constructor.span.contains(*name)
-                            && file.source_text(*name) == Some(property)
-                    });
-                    if returns_value || parameter_property {
-                        return false;
-                    }
-                }
-                ClassElementKind::Field
-                    if element.computed
-                        || element.key.and_then(|key| file.source_text(key)) == Some(property) =>
-                {
-                    return false;
-                }
-                ClassElementKind::Method | ClassElementKind::Getter | ClassElementKind::Setter
-                    if element.computed =>
-                {
-                    return false;
-                }
-                _ => {}
-            }
-        }
-        let Some(heritage) = class.heritage else {
-            return true;
-        };
-        let heritage = file.ast.peel_ts_sugar_span(heritage);
-        let base = file
-            .ast
-            .reference_declaration(heritage)
-            .and_then(|declaration| {
-                file.ast
-                    .classes
-                    .iter()
-                    .find(|candidate| {
-                        candidate
-                            .name
-                            .as_ref()
-                            .is_some_and(|name| name.span == declaration)
-                    })
-                    .map(|base| (file, base))
-            })
-            .or_else(|| {
-                self.entities
-                    .at(file.path.as_str(), heritage)
-                    .and_then(|symbol| self.class_for_symbol(symbol))
-            });
-        base.is_some_and(|(base_file, base)| {
-            self.class_instance_is_exact(base_file, base, property, depth - 1)
-        })
+        super::callee_world::class_instance_is_exact_in(self, file, class, property, depth)
     }
 
     pub(crate) fn binding_at_reference(
@@ -180,13 +77,55 @@ impl<'a> SemanticLookup<'a> {
         path: &str,
         span: Span,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::BindingFact, SymbolId)> {
+        let resolution = self.binding_resolution_at(path, span)?;
+        let file = &self.facts.files[resolution.file];
+        Some((
+            file,
+            &file.ast.bindings[resolution.binding],
+            resolution.symbol.clone(),
+        ))
+    }
+
+    /// The slot of the file and the ordinal of the binding that the reference
+    /// at `span` of `path` resolves to: [`Self::binding_at_reference`]'s
+    /// answer as positions.
+    pub(super) fn binding_resolution_at(
+        &self,
+        path: &str,
+        span: Span,
+    ) -> Option<&BindingResolution> {
         let references = self.bindings_by_reference().get(path)?;
+        self.resolution_in(references, self.file_by_path(path), span)
+    }
+
+    /// The symbol [`Self::binding_at_reference`] names at each of `spans` of
+    /// `path`, finding the path's resolutions once.
+    pub(crate) fn binding_symbols_at(&self, path: &str, spans: &[Span]) -> Vec<Option<SymbolId>> {
+        let Some(references) = self.bindings_by_reference().get(path) else {
+            return vec![None; spans.len()];
+        };
+        let file = self.file_by_path(path);
+        spans
+            .iter()
+            .map(|span| {
+                self.resolution_in(references, file, *span)
+                    .map(|resolution| resolution.symbol.clone())
+            })
+            .collect()
+    }
+
+    fn resolution_in<'t>(
+        &self,
+        references: &'t HashMap<(u64, u64), BindingResolution>,
+        file: Option<&FileFacts>,
+        span: Span,
+    ) -> Option<&'t BindingResolution> {
         let key = |span: Span| (u64::from(span.start), u64::from(span.end));
         // Transparent TypeScript wrappers, however nested, preserve the value
         // of the identifier they wrap. A missed wrapped span resolves as that
         // identifier, and only when it peels to exactly one identifier.
         let resolution = references.get(&key(span)).or_else(|| {
-            let file = self.file_by_path(path)?;
+            let file = file?;
             let peeled = file.ast.peel_ts_sugar_span(span);
             let identifier = file
                 .ast
@@ -198,12 +137,7 @@ impl<'a> SemanticLookup<'a> {
                 .then(|| references.get(&key(peeled)))
                 .flatten()
         })?;
-        let file = &self.facts.files[resolution.file];
-        Some((
-            file,
-            &file.ast.bindings[resolution.binding],
-            resolution.symbol.clone(),
-        ))
+        Some(resolution)
     }
 
     pub(super) fn bindings_by_reference(&self) -> &BindingsByReference {
@@ -367,34 +301,12 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         callee: Span,
     ) -> Option<&'a ResolvedCall> {
-        let original_callee = callee;
-        let callee = file.ast.peel_ts_sugar_span(callee);
-        let outer = self
-            .call_by_callee(file, original_callee)
-            .or_else(|| self.call_by_callee(file, callee));
-        let call_span = outer.map_or(original_callee, |call| call.span);
-        // Review of ADR 0368: a callee that is itself a call (`get()(x)`)
-        // has, at its own span, the inner call's fact. Only the outer call's
-        // exact fact (demanded at its whole span) answers for the outer call;
-        // without it there is no fact.
-        if outer.is_some() && file.ast.call_at(callee).is_some() {
-            return self
-                .entity_at(file.path.as_str(), call_span)
-                .and_then(|entity| entity.resolved_call.as_deref());
-        }
-        // A wrapped callee has its own exact call demand. Prefer that fact:
-        // the peeled expression may also be another invocation's location
-        // (a factory result, for example), or may have only a symbol demand.
-        self.entity_at(file.path.as_str(), original_callee)
-            .and_then(|entity| entity.resolved_call.as_deref())
-            .or_else(|| {
-                self.entity_at(file.path.as_str(), callee)
-                    .and_then(|entity| entity.resolved_call.as_deref())
-            })
-            .or_else(|| {
-                self.entity_at(file.path.as_str(), call_span)
-                    .and_then(|entity| entity.resolved_call.as_deref())
-            })
+        resolved_callee_call_in(
+            file,
+            self.ast_indexes.get(file.path.as_str()),
+            callee,
+            |span| self.entity_at(file.path.as_str(), span),
+        )
     }
 
     pub(crate) fn ast_file_index(&self, path: &str) -> Option<&'a CachedAstFileIndex> {
@@ -430,6 +342,18 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         callee: Span,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+        super::callee_world::namespace_member_function_in(self, file, callee)
+    }
+
+    /// The exported value a static member of a namespace import names: what
+    /// [`Self::namespace_member_function`] reads of `file` alone. Must agree
+    /// with `callee_world::namespace_member_function_in`, which that method
+    /// delegates to (S7a's kept discovery rows read the two halves apart).
+    pub(crate) fn namespace_member_symbol(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<&'a SymbolId> {
         let callee = file.ast.peel_ts_sugar_span(callee);
         if file.ast.computed_members.binary_search(&callee).is_ok() {
             return None;
@@ -448,12 +372,18 @@ impl<'a> SemanticLookup<'a> {
         if !namespace {
             return None;
         }
-        let symbol = self.entities.at(file.path.as_str(), member.property)?;
-        self.function_for_symbol(symbol)
-            .filter(|(target_file, function)| {
-                function.method_name.is_none()
-                    && self.function_value_is_current(target_file, function)
-            })
+        self.entities.at(file.path.as_str(), member.property)
+    }
+
+    /// [`Self::namespace_member_function`]'s answer from the member
+    /// symbol's function: what it reads of the function's file.
+    pub(crate) fn namespace_member_target(
+        &self,
+        found: Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)>,
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+        found.filter(|(target_file, function)| {
+            function.method_name.is_none() && self.function_value_is_current(target_file, function)
+        })
     }
 
     pub(crate) fn function_for_symbol(
@@ -485,53 +415,49 @@ impl<'a> SemanticLookup<'a> {
     /// inherit the identity of `i` or `wrapper` when the complete callee has no
     /// semantic fact.
     pub(crate) fn callee_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
+        self.redirected_callee_symbol(file, callee).or_else(|| {
+            let path = file.path.as_str();
+            plain_callee_symbol(
+                file,
+                self.ast_indexes.get(path),
+                callee,
+                |span| self.resolved_declaration_symbol(file, span),
+                |span| self.entities.at(path, span),
+                |span| self.entities.value_symbol(file, span),
+            )
+        })
+    }
+
+    /// ADR 0322: the redirected export a member of a namespace import names,
+    /// when a runtime redirect binds it to selected source: the entity at the
+    /// property carries it, the resolved declaration names the declaration
+    /// file the compiler bound instead. `None` without redirects, and for every
+    /// other callee ([`Self::callee_symbol`] then answers
+    /// [`plain_callee_symbol`]).
+    pub(crate) fn redirected_callee_symbol(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<&'a str> {
+        if self.facts.runtime_symbol_redirects.is_empty() {
+            return None;
+        }
         let callee = file.ast.peel_ts_sugar_span(callee);
-        let member_property = self
+        let property = self
             .ast_indexes
             .get(file.path.as_str())
-            .and_then(|index| index.member_property(callee));
-        let computed_member = file.ast.computed_members.contains(&callee);
-        // ADR 0322: a member of a namespace import that a runtime redirect
-        // binds to selected source is the redirected export: the entity at
-        // the property carries it, the resolved declaration names the
-        // declaration file the compiler bound instead.
-        if let Some(property) = member_property
-            && !computed_member
-            && !self.facts.runtime_symbol_redirects.is_empty()
-            && self.namespace_member_function(file, callee).is_some()
-            && let Some(symbol) = self.entities.at(file.path.as_str(), property)
-            && self
-                .facts
-                .runtime_symbol_redirects
-                .values()
-                .any(|target| target.as_str() == symbol.as_str())
+            .and_then(|index| index.member_property(callee))?;
+        if file.ast.computed_members.contains(&callee)
+            || self.namespace_member_function(file, callee).is_none()
         {
-            return Some(symbol.as_str());
+            return None;
         }
-        member_property
-            .and_then(|property| {
-                self.resolved_declaration_symbol(file, callee).or_else(|| {
-                    if computed_member {
-                        None
-                    } else {
-                        self.entities
-                            .at(file.path.as_str(), property)
-                            .map(SymbolId::as_str)
-                    }
-                })
-            })
-            .or_else(|| {
-                if member_property.is_none() {
-                    // The identifier's own symbol. A call or another expression
-                    // names no value through its leading token (ADR 0346): the
-                    // token at `make(…)(…)`'s callee is `make`, not what it returns.
-                    self.entities
-                        .value_symbol(file, callee)
-                        .map(SymbolId::as_str)
-                } else {
-                    None
-                }
-            })
+        let symbol = self.entities.at(file.path.as_str(), property)?;
+        self.facts
+            .runtime_symbol_redirects
+            .values()
+            .any(|target| target.as_str() == symbol.as_str())
+            .then_some(symbol.as_str())
     }
 
     /// Exact callable identities for one call site.
@@ -777,12 +703,7 @@ impl<'a> SemanticLookup<'a> {
                 || path.len() > 8
                 || call.construct
                 || call.arguments.iter().any(|argument| argument.spread)
-                || self.files().iter().any(|file| {
-                    file.ast
-                        .module_hazards
-                        .iter()
-                        .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
-                })
+                || self.program_has_eval()
             {
                 return None;
             }
@@ -859,4 +780,120 @@ impl<'a> SemanticLookup<'a> {
         };
         resolve().unwrap_or_default()
     }
+}
+
+/// A call's resolved declaration when it is a valid, single-target call of
+/// `kind` to a standard-library declaration.
+pub(crate) fn standard_library_declaration_of(
+    resolved: Option<&ResolvedCall>,
+    kind: typefacts::CallKind,
+) -> Option<&typefacts::ResolvedDeclaration> {
+    resolved
+        .filter(|resolved| {
+            resolved.validity == ResolvedCallValidity::Valid
+                && resolved.kind == kind
+                && resolved.targets.is_none()
+        })
+        .and_then(|resolved| resolved.declaration.as_ref())
+        .filter(|declaration| declaration.standard_library)
+}
+
+/// [`SemanticLookup::resolved_callee_call`] over one file's own facts: its
+/// AST index and its entities (`entity_at` answers for this file only).
+pub(crate) fn resolved_callee_call_in<'e>(
+    file: &FileFacts,
+    ast_index: Option<&CachedAstFileIndex>,
+    callee: Span,
+    entity_at: impl Fn(Span) -> Option<&'e EntityFact>,
+) -> Option<&'e ResolvedCall> {
+    let call_by_callee = |span| ast_index.and_then(|index| index.call_by_callee(span));
+    let original_callee = callee;
+    let callee = file.ast.peel_ts_sugar_span(callee);
+    let outer = call_by_callee(original_callee).or_else(|| call_by_callee(callee));
+    let call_span = outer.map_or(original_callee, |call| call.span);
+    // Review of ADR 0368: a callee that is itself a call (`get()(x)`)
+    // has, at its own span, the inner call's fact. Only the outer call's
+    // exact fact (demanded at its whole span) answers for the outer call;
+    // without it there is no fact.
+    if outer.is_some() && file.ast.call_at(callee).is_some() {
+        return entity_at(call_span).and_then(|entity| entity.resolved_call.as_deref());
+    }
+    // A wrapped callee has its own exact call demand. Prefer that fact:
+    // the peeled expression may also be another invocation's location
+    // (a factory result, for example), or may have only a symbol demand.
+    entity_at(original_callee)
+        .and_then(|entity| entity.resolved_call.as_deref())
+        .or_else(|| entity_at(callee).and_then(|entity| entity.resolved_call.as_deref()))
+        .or_else(|| entity_at(call_span).and_then(|entity| entity.resolved_call.as_deref()))
+}
+
+/// The symbol a callee span resolves to, runtime redirects aside
+/// ([`SemanticLookup::redirected_callee_symbol`]). Transparent wrappers are
+/// peeled because they preserve the called value; arbitrary contained symbols
+/// are never substituted, since `handlers[i]()` and `wrapper.value()` must not
+/// inherit the identity of `i` or `wrapper` when the complete callee has no
+/// semantic fact. A member names its resolved declaration, or else (not
+/// computed) its property's symbol; an identifier its own symbol. A call or
+/// another expression names no value through its leading token (ADR 0346):
+/// the token at `make(…)(…)`'s callee is `make`, not what it returns.
+///
+/// Every input is the callee's own file (its AST, its entity symbols and its
+/// entities' resolved calls), so a per-file contribution can answer it
+/// ([`crate::base::contributions::callees`]).
+pub(crate) fn plain_callee_symbol<'s>(
+    file: &FileFacts,
+    ast_index: Option<&CachedAstFileIndex>,
+    callee: Span,
+    resolved_declaration: impl Fn(Span) -> Option<&'s str>,
+    symbol_at: impl Fn(Span) -> Option<&'s SymbolId>,
+    value_symbol: impl Fn(Span) -> Option<&'s SymbolId>,
+) -> Option<&'s str> {
+    let callee = file.ast.peel_ts_sugar_span(callee);
+    let member_property = ast_index.and_then(|index| index.member_property(callee));
+    let computed_member = file.ast.computed_members.contains(&callee);
+    match member_property {
+        Some(property) => resolved_declaration(callee).or_else(|| {
+            if computed_member {
+                None
+            } else {
+                symbol_at(property).map(SymbolId::as_str)
+            }
+        }),
+        None => value_symbol(callee).map(SymbolId::as_str),
+    }
+}
+
+/// [`SemanticLookup::function_value_is_current`]: it reads the function's
+/// own file only.
+pub(crate) fn function_value_is_current_in(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    // A class element's or an object literal method's own function. A
+    // function nested inside a method inherits its `method_name`, so that
+    // field alone says nothing.
+    let element_function = file.ast.classes.iter().any(|class| {
+        class
+            .elements
+            .iter()
+            .any(|element| element.value == Some(function.span))
+    }) || file.ast.object_properties.iter().any(|property| {
+        !property.data && file.ast.peel_ts_sugar_span(property.value) == function.span
+    });
+    if element_function {
+        return true;
+    }
+    if function.kind == solid_facts::ast::FunctionKind::Declaration {
+        return function
+            .name
+            .as_ref()
+            .is_some_and(|name| !binding_written(file, name.span));
+    }
+    file.ast.bindings.iter().any(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.initializer.is_some_and(|initializer| {
+                file.ast.peel_ts_sugar_span(initializer) == function.span
+            })
+    })
 }

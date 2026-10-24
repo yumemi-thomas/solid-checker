@@ -16,10 +16,18 @@ mod cli_process;
 mod cross_file_callbacks_process;
 #[path = "cross_file_digest_process.rs"]
 mod cross_file_digest_process;
+#[path = "daemon_residue_process.rs"]
+mod daemon_residue_process;
+#[path = "forwarding_refresh_process.rs"]
+mod forwarding_refresh_process;
 #[path = "harness_process.rs"]
 mod harness_process;
+#[path = "idle_shadow_process.rs"]
+mod idle_shadow_process;
 #[path = "imported_const_process.rs"]
 mod imported_const_process;
+#[path = "incremental_staleness_process.rs"]
+mod incremental_staleness_process;
 #[path = "invocation_flow_process.rs"]
 mod invocation_flow_process;
 #[path = "owner_flow_process.rs"]

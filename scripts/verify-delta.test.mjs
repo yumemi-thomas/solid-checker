@@ -44,7 +44,7 @@ test("every check a row or the universal set names actually exists", () => {
 test("each table row claims its own owner's paths", () => {
   const expected = [
     ["rust/crates/solid-facts/src/lib.rs", ["facts-lib", "wasm-compile"]],
-    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "coverage", "wasm-compile"]],
+    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "coverage", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"]],
     ["rust/dialects/solid-v2/rules/src/lib.rs", ["dialects-process", "wasm-compile"]],
     ["rust/dialects/solid-v2/compiler/src/lib.rs", ["dialects-process"]],
     ["rust/crates/solid-facts-backend/src/diagnostics.rs", ["backend-process", "coverage"]],
@@ -89,6 +89,8 @@ test("a mapped change set runs preflight checks before building and testing", ()
     "ir-lib",
     "coverage",
     "ownership-gate",
+    "ir-read-lint",
+    "ir-edit-fuzz",
     "wasm-compile",
   ]);
   // No duplicate, even though both rows select coverage.

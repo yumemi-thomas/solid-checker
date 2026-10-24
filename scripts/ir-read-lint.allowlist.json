@@ -1,0 +1,289 @@
+{
+  "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs": {
+    "files()": 5,
+    "file_by_path": 1
+  },
+  "rust/crates/solid-reactive-ir/src/accessor_provenance/projection_helpers.rs": {
+    "hashmap-iteration": 7
+  },
+  "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_dependencies.rs": {
+    "file_by_path": 11
+  },
+  "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_index.rs": {
+    "facts.files": 2,
+    "file_by_path": 1
+  },
+  "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_memos.rs": {
+    "files()": 2,
+    "hashmap-iteration": 4
+  },
+  "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_queries.rs": {
+    "facts.files": 1,
+    "hashmap-iteration": 1
+  },
+  "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_world.rs": {
+    "file_by_path": 2
+  },
+  "rust/crates/solid-reactive-ir/src/accessor_provenance/transport_memos.rs": {
+    "facts.files": 2
+  },
+  "rust/crates/solid-reactive-ir/src/accessor_provenance.rs": {
+    "hashmap-iteration": 2
+  },
+  "rust/crates/solid-reactive-ir/src/attribution.rs": {
+    "files()": 1,
+    "file_by_path": 1,
+    "hashmap-iteration": 7
+  },
+  "rust/crates/solid-reactive-ir/src/base/index.rs": {
+    "hashmap-iteration": 3
+  },
+  "rust/crates/solid-reactive-ir/src/boundary_defects.rs": {
+    "facts.files": 1
+  },
+  "rust/crates/solid-reactive-ir/src/cache.rs": {
+    "facts.files": 4,
+    "hashmap-iteration": 5
+  },
+  "rust/crates/solid-reactive-ir/src/callback_host.rs": {
+    "facts.files": 2
+  },
+  "rust/crates/solid-reactive-ir/src/cleanup.rs": {
+    "facts.files": 1,
+    "file_by_path": 4
+  },
+  "rust/crates/solid-reactive-ir/src/directives.rs": {
+    "facts.files": 1
+  },
+  "rust/crates/solid-reactive-ir/src/effect_execution.rs": {
+    "files()": 3,
+    "file_by_path": 1,
+    "hashmap-iteration": 1
+  },
+  "rust/crates/solid-reactive-ir/src/effect_phase.rs": {
+    "files()": 3
+  },
+  "rust/crates/solid-reactive-ir/src/execution_role/callback_standing.rs": {
+    "files()": 1
+  },
+  "rust/crates/solid-reactive-ir/src/execution_role/flow_memos.rs": {
+    "files()": 2,
+    "hashmap-iteration": 1
+  },
+  "rust/crates/solid-reactive-ir/src/execution_role/invocation_flow.rs": {
+    "file_by_path": 2
+  },
+  "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs": {
+    "facts.files": 3,
+    "file_by_path": 3
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/callees.rs": {
+    "facts.files": 3,
+    "file_by_path": 3
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/census.rs": {
+    "files()": 3,
+    "hashmap-iteration": 2
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/closed_members.rs": {
+    "files()": 1,
+    "file_by_path": 1,
+    "hashmap-iteration": 1
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/completion.rs": {
+    "facts.files": 2,
+    "files()": 2,
+    "file_by_path": 1,
+    "hashmap-iteration": 3
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/components.rs": {
+    "facts.files": 2,
+    "files()": 2,
+    "file_by_path": 1,
+    "hashmap-iteration": 1
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/compound.rs": {
+    "facts.files": 1,
+    "files()": 1,
+    "hashmap-iteration": 2
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/initialization.rs": {
+    "facts.files": 6,
+    "file_by_path": 1,
+    "hashmap-iteration": 2
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/intrinsics.rs": {
+    "files()": 1
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/member_values.rs": {
+    "facts.files": 3,
+    "files()": 2,
+    "file_by_path": 2,
+    "hashmap-iteration": 2
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/memo_probes.rs": {
+    "facts.files": 2
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/primitive_proof.rs": {
+    "files()": 2
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/returned_invocations.rs": {
+    "facts.files": 2,
+    "files()": 1
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/returned_uses.rs": {
+    "facts.files": 1
+  },
+  "rust/crates/solid-reactive-ir/src/indexes.rs": {
+    "facts.files": 8,
+    "files()": 5,
+    "file_by_path": 3,
+    "hashmap-iteration": 1
+  },
+  "rust/crates/solid-reactive-ir/src/interproc/obligations.rs": {
+    "hashmap-iteration": 2
+  },
+  "rust/crates/solid-reactive-ir/src/interproc/parameter_use.rs": {
+    "file_by_path": 1
+  },
+  "rust/crates/solid-reactive-ir/src/interproc/reads.rs": {
+    "facts.files": 16,
+    "file_by_path": 2,
+    "hashmap-iteration": 3
+  },
+  "rust/crates/solid-reactive-ir/src/interproc/refresh.rs": {
+    "facts.files": 6
+  },
+  "rust/crates/solid-reactive-ir/src/interproc/result_reads.rs": {
+    "facts.files": 1,
+    "file_by_path": 9
+  },
+  "rust/crates/solid-reactive-ir/src/interproc/structured_returns.rs": {
+    "facts.files": 1,
+    "files()": 1,
+    "file_by_path": 4,
+    "hashmap-iteration": 3
+  },
+  "rust/crates/solid-reactive-ir/src/lib.rs": {
+    "file_by_path": 2
+  },
+  "rust/crates/solid-reactive-ir/src/literal_member_slots.rs": {
+    "file_by_path": 1,
+    "hashmap-iteration": 2
+  },
+  "rust/crates/solid-reactive-ir/src/local_access.rs": {
+    "facts.files": 4,
+    "hashmap-iteration": 2
+  },
+  "rust/crates/solid-reactive-ir/src/object_members/handlers.rs": {
+    "facts.files": 1
+  },
+  "rust/crates/solid-reactive-ir/src/object_members.rs": {
+    "files()": 3,
+    "hashmap-iteration": 20
+  },
+  "rust/crates/solid-reactive-ir/src/owners/context_census.rs": {
+    "facts.files": 5,
+    "hashmap-iteration": 1
+  },
+  "rust/crates/solid-reactive-ir/src/owners/missing_owners.rs": {
+    "facts.files": 4,
+    "file_by_path": 4,
+    "hashmap-iteration": 1
+  },
+  "rust/crates/solid-reactive-ir/src/owners/owner_context.rs": {
+    "files()": 1,
+    "file_by_path": 1
+  },
+  "rust/crates/solid-reactive-ir/src/owners/owner_discovery.rs": {
+    "facts.files": 4,
+    "files()": 1,
+    "file_by_path": 1
+  },
+  "rust/crates/solid-reactive-ir/src/owners/owner_graph.rs": {
+    "file_by_path": 1
+  },
+  "rust/crates/solid-reactive-ir/src/owners.rs": {
+    "facts.files": 2
+  },
+  "rust/crates/solid-reactive-ir/src/pipeline.rs": {
+    "facts.files": 3,
+    "files()": 1
+  },
+  "rust/crates/solid-reactive-ir/src/project_consumer.rs": {
+    "file_by_path": 1,
+    "hashmap-iteration": 2
+  },
+  "rust/crates/solid-reactive-ir/src/reachability.rs": {
+    "facts.files": 8,
+    "hashmap-iteration": 3
+  },
+  "rust/crates/solid-reactive-ir/src/reactive_analysis.rs": {
+    "facts.files": 1,
+    "file_by_path": 1
+  },
+  "rust/crates/solid-reactive-ir/src/route_components.rs": {
+    "facts.files": 3
+  },
+  "rust/crates/solid-reactive-ir/src/router_params.rs": {
+    "facts.files": 7
+  },
+  "rust/crates/solid-reactive-ir/src/server_rules.rs": {
+    "facts.files": 5
+  },
+  "rust/crates/solid-reactive-ir/src/source_discovery/async_server.rs": {
+    "facts.files": 1
+  },
+  "rust/crates/solid-reactive-ir/src/source_discovery/discover_file.rs": {
+    "hashmap-iteration": 13
+  },
+  "rust/crates/solid-reactive-ir/src/source_discovery/discover_sources.rs": {
+    "facts.files": 3
+  },
+  "rust/crates/solid-reactive-ir/src/source_discovery/post_passes.rs": {
+    "facts.files": 3,
+    "file_by_path": 1,
+    "hashmap-iteration": 4
+  },
+  "rust/crates/solid-reactive-ir/src/source_discovery/post_rows.rs": {
+    "file_by_path": 3
+  },
+  "rust/crates/solid-reactive-ir/src/source_discovery/props_reactivity.rs": {
+    "hashmap-iteration": 1
+  },
+  "rust/crates/solid-reactive-ir/src/source_discovery/trace.rs": {
+    "file_by_path": 4
+  },
+  "rust/crates/solid-reactive-ir/src/source_discovery/typed_sources.rs": {
+    "file_by_path": 1
+  },
+  "rust/crates/solid-reactive-ir/src/source_discovery.rs": {
+    "hashmap-iteration": 2
+  },
+  "rust/crates/solid-reactive-ir/src/static_api.rs": {
+    "facts.files": 1
+  },
+  "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs": {
+    "files()": 3
+  },
+  "rust/crates/solid-reactive-ir/src/static_rules/pre_await.rs": {
+    "facts.files": 1,
+    "hashmap-iteration": 4
+  },
+  "rust/crates/solid-reactive-ir/src/static_rules.rs": {
+    "facts.files": 9,
+    "files()": 1
+  },
+  "rust/crates/solid-reactive-ir/src/symbols.rs": {
+    "facts.files": 1,
+    "files()": 1,
+    "hashmap-iteration": 2
+  },
+  "rust/crates/solid-reactive-ir/src/upstream_compat/mod.rs": {
+    "facts.files": 2,
+    "hashmap-iteration": 1
+  },
+  "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs": {
+    "hashmap-iteration": 3
+  }
+}

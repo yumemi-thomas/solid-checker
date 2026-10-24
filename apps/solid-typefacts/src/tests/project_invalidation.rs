@@ -273,6 +273,7 @@ fn updates_that_cannot_reuse_the_program_rebuild_it() {
             imports: true,
             import_paths: vec![a.clone()],
             packages: false,
+            distinct_bare_imports: false,
         },
     )
     .unwrap();
@@ -500,6 +501,7 @@ fn a_rebuilt_chain_over_project_references_keeps_the_reference_mapping() {
                 imports: true,
                 import_paths: Vec::new(),
                 packages: false,
+                distinct_bare_imports: false,
             },
         )
         .unwrap();

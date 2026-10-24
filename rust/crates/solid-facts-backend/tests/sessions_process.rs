@@ -1186,9 +1186,13 @@ fn incremental_reactive_ir_matches_fresh_after_an_edit() {
         timings.source_discovery_reused_files + timings.source_discovery_recomputed_files,
         u64::try_from(edited.files.len()).unwrap()
     );
-    assert_eq!(
-        timings.interprocedural_graph_reused_files,
-        timings.source_discovery_reused_files
+    // A graph chunk is reused only where source discovery's is, and only
+    // while what it read still answers as it did (ADR 0397): the prefix
+    // edit moves the edited file's component keys, which the project passes
+    // whose tables the graph reads have read.
+    assert!(
+        timings.interprocedural_graph_reused_files <= timings.source_discovery_reused_files,
+        "{timings:?}"
     );
     assert_eq!(
         timings.interprocedural_graph_reused_files + timings.interprocedural_graph_recomputed_files,

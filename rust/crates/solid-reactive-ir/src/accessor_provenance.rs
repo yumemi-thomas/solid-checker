@@ -2,6 +2,8 @@
 //! are deliberately not evidence here. This join retains an implementation
 //! or source identity; the interprocedural consumer decides execution.
 
+use std::sync::Arc;
+
 use crate::{HashMap, HashSet};
 
 use solid_dialect::ContextRole;
@@ -20,11 +22,24 @@ mod projection_helpers;
 mod resolver_dependencies;
 #[path = "accessor_provenance/resolver_index.rs"]
 mod resolver_index;
+#[path = "accessor_provenance/resolver_memos.rs"]
+mod resolver_memos;
 #[path = "accessor_provenance/resolver_queries.rs"]
 mod resolver_queries;
 #[path = "accessor_provenance/resolver_values.rs"]
 mod resolver_values;
+#[path = "accessor_provenance/resolver_world.rs"]
+mod resolver_world;
+#[path = "accessor_provenance/transport_memos.rs"]
+mod transport_memos;
 pub(crate) use projection_helpers::*;
+use resolver_dependencies::{Dependencies, dependency_member_stable};
+use resolver_index::*;
+pub(crate) use resolver_memos::{RESOLVER_TABLES_FROM, ResolverTables};
+use resolver_queries::Queries;
+use resolver_values::Values;
+use resolver_world::{ProviderValues, World, parameter_typefacts_admit_in};
+pub(crate) use transport_memos::{TRANSPORT_TABLES_END, TRANSPORT_TABLES_FROM, TransportTables};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum Callable {
@@ -68,22 +83,24 @@ pub(super) struct Resolver<'a, 'facts> {
     pub accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub source_kinds: &'a HashMap<SymbolId, crate::ReactiveSourceKind>,
     pub names: &'a HashMap<SymbolId, SymbolId>,
-    functions: HashSet<(String, Span)>,
-    binding_locations: HashMap<SymbolId, Location>,
+    functions: Arc<HashSet<(String, Span)>>,
+    /// The tables shared with the memo build's kept state, which patches
+    /// them per moved key (S7b).
+    binding_locations: Arc<HashMap<SymbolId, Location>>,
     parameter_inputs: HashMap<Location, (String, Span)>,
-    declarations: HashMap<SymbolId, (SymbolId, Location)>,
-    uses: HashMap<Location, ClosedUses>,
+    declarations: Arc<HashMap<SymbolId, (SymbolId, Location)>>,
+    uses: Arc<HashMap<Location, ClosedUses>>,
     providers: HashMap<Location, Vec<Option<(String, Span)>>>,
     source_origins: HashSet<SymbolId>,
     runtime_source_origins: HashSet<SymbolId>,
     blocked_contexts: HashSet<Location>,
     unkeyed_provider: bool,
-    member_stability: MemberStability,
+    member_stability: &'a MemberStability,
     receiver_channels_opaque: bool,
 }
 
 /// ADR 0273: absence of a visible veto is an assumption, not a closed census.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct MemberStability {
     written: HashMap<String, Location>,
     all: Option<Location>,
@@ -137,15 +154,26 @@ impl MemberStability {
         }
     }
 
+    /// The census over the lookup's files, replayed in file order from the
+    /// base indexes: each file's write and `delete` targets
+    /// ([`crate::base::MemberRole::StabilityWrite`]) and its reflective
+    /// mutation candidates ([`crate::base::Hazard::MutationBuiltinCall`],
+    /// the only calls [`mutation_builtin`] accepts).
     pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
         let mut project = Self::default();
-        for file in &facts.files {
+        let members = lookup.slot_entries(lookup.base_members());
+        let hazards = lookup.slot_entries(lookup.base_hazards());
+        for ((file, members), (_, hazards)) in members.zip(hazards) {
             let index = match facts.dependency_source_root(file.path.as_str()) {
                 Some(root) => project.dependencies.entry(root.to_owned()).or_default(),
                 None => &mut project,
             };
-            index.syntax(file);
-            for call in &file.ast.calls {
+            index.syntax(file, members);
+            let calls = hazards
+                .iter()
+                .filter(|(hazard, _)| *hazard == crate::base::Hazard::MutationBuiltinCall)
+                .map(|(_, call)| &file.ast.calls[*call as usize]);
+            for call in calls {
                 let Some(method) = mutation_builtin(file, call, lookup) else {
                     continue;
                 };
@@ -264,45 +292,36 @@ impl MemberStability {
         project
     }
 
-    fn syntax(&mut self, file: &FileFacts) {
-        // Normalized leaves exclude receiver Gets, destructuring keys/defaults
-        // and reads inside computed keys. Updates and loop targets are included.
-        let targets = file
-            .ast
-            .write_targets
-            .iter()
-            .copied()
-            .chain(file.ast.deleted_targets.iter().copied())
-            .map(|span| file.ast.peel_ts_sugar_span(span))
-            .collect::<HashSet<_>>();
-        let literal_keys = file
-            .ast
-            .literal_computed_members
-            .iter()
-            .map(|key| (key.span, key.key.as_str()))
-            .collect::<HashMap<_, _>>();
-        for member in &file.ast.members {
-            if !targets.contains(&member.span) {
+    /// Normalized leaves exclude receiver Gets, destructuring keys/defaults
+    /// and reads inside computed keys. Updates and loop targets are included
+    /// ([`crate::base::contributions::members`]).
+    fn syntax(
+        &mut self,
+        file: &FileFacts,
+        members: &[(crate::base::MemberName, crate::base::MemberUse)],
+    ) {
+        use crate::base::{MemberName, MemberRole};
+        for (name, used) in members {
+            if used.role != MemberRole::StabilityWrite {
                 continue;
             }
-            let name = if file.ast.computed_members.contains(&member.span) {
-                literal_keys.get(&member.span).copied()
-            } else {
-                file.source_text(member.property)
-            };
-            if let Some(name) = name {
-                self.written
-                    .entry(name.to_owned())
-                    .or_insert_with(|| location(file.path.shared(), member.span));
-            } else {
-                self.unknown_receivers
-                    .push(location(file.path.shared(), member.object));
+            let member = &file.ast.members[used.ordinal as usize];
+            match name {
+                MemberName::Named(name) => {
+                    self.written
+                        .entry(name.to_string())
+                        .or_insert_with(|| location(file.path.shared(), member.span));
+                }
+                MemberName::Unnamed => {
+                    self.unknown_receivers
+                        .push(location(file.path.shared(), member.object));
+                }
             }
         }
     }
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct ClosedUses {
     object_escaped: bool,
     array_escaped: bool,
@@ -320,6 +339,144 @@ impl ClosedUses {
         self.context_value_escaped = true;
         self.destructured_escaped = true;
     }
+
+    /// What a handoff hands back from its receiver to its argument binding:
+    /// the receiver's escapes, or, for a destructuring receiver, its
+    /// destructured escape as the object's and the context value's.
+    fn handed_back(destructured: &bool, receiver: &Self) -> Self {
+        if *destructured {
+            Self {
+                object_escaped: receiver.destructured_escaped,
+                context_value_escaped: receiver.destructured_escaped,
+                ..Self::default()
+            }
+        } else {
+            Self {
+                object_escaped: receiver.object_escaped,
+                array_escaped: receiver.array_escaped,
+                callable_escaped: receiver.callable_escaped,
+                context_value_escaped: receiver.context_value_escaped,
+                ..Self::default()
+            }
+        }
+    }
+}
+
+/// The census is a join of escape flags.
+impl crate::base::fixpoint::Lattice for ClosedUses {
+    fn bottom() -> Self {
+        Self::default()
+    }
+
+    fn join(&mut self, other: &Self) {
+        self.object_escaped |= other.object_escaped;
+        self.array_escaped |= other.array_escaped;
+        self.callable_escaped |= other.callable_escaped;
+        self.context_escaped |= other.context_escaped;
+        self.context_value_escaped |= other.context_value_escaped;
+        self.destructured_escaped |= other.destructured_escaped;
+    }
+}
+
+impl crate::base::memo::Canonical for ClosedUses {}
+
+/// Builds this build's resolver ahead of the interprocedural stage, which
+/// then reuses it ([`Resolver::new_kept`]): the late stages' reuse check
+/// needs the derived tables its construction publishes.
+pub(crate) fn build_kept_resolver(
+    facts: &ProjectFacts,
+    lookup: &SemanticLookup<'_>,
+    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+    source_kinds: &HashMap<SymbolId, crate::ReactiveSourceKind>,
+    names: &HashMap<SymbolId, SymbolId>,
+) {
+    Resolver::new_kept(facts, lookup, accessors, source_kinds, names);
+}
+
+/// Each handoff binding's joined use census ([`Resolver::new`]), published
+/// for memo readers: the resolver's origins and object contexts.
+struct HandoffUses;
+
+impl crate::base::memo::derived::Derived for HandoffUses {
+    type Key = Location;
+    type Value = ClosedUses;
+    const NAME: &'static str = "handoff_uses";
+    const ID: crate::base::memo::derived::DerivedId = crate::base::memo::derived::DerivedId(224);
+}
+
+/// The kept solver of the handoff join.
+const HANDOFF_SOLVER: crate::base::memo::derived::SolverId =
+    crate::base::memo::derived::SolverId(224);
+
+/// The resolver's tables over `lookup`, rendered in a canonical order, for
+/// tests that compare constructions.
+#[cfg(test)]
+pub(crate) fn resolver_tables(
+    facts: &ProjectFacts,
+    lookup: &SemanticLookup<'_>,
+    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+) -> Vec<String> {
+    let source_kinds = HashMap::default();
+    let resolver = Resolver::new(
+        facts,
+        lookup,
+        accessors,
+        &source_kinds,
+        lookup.symbol_names(),
+        Arc::default(),
+    );
+    let mut lines = Vec::new();
+    lines.extend(
+        resolver
+            .binding_locations
+            .iter()
+            .map(|(symbol, location)| format!("binding {symbol:?} {location:?}")),
+    );
+    lines.extend(
+        resolver
+            .declarations
+            .iter()
+            .map(|(symbol, declaration)| format!("declaration {symbol:?} {declaration:?}")),
+    );
+    lines.extend(
+        resolver
+            .parameter_inputs
+            .iter()
+            .map(|(parameter, argument)| format!("parameter {parameter:?} {argument:?}")),
+    );
+    lines.extend(
+        resolver
+            .uses
+            .iter()
+            .map(|(key, uses)| format!("uses {key:?} {uses:?}")),
+    );
+    lines.extend(
+        resolver
+            .providers
+            .iter()
+            .map(|(context, providers)| format!("providers {context:?} {providers:?}")),
+    );
+    lines.extend(
+        resolver
+            .source_origins
+            .iter()
+            .map(|symbol| format!("source origin {symbol:?}")),
+    );
+    lines.extend(
+        resolver
+            .runtime_source_origins
+            .iter()
+            .map(|symbol| format!("runtime origin {symbol:?}")),
+    );
+    lines.extend(
+        resolver
+            .blocked_contexts
+            .iter()
+            .map(|context| format!("blocked {context:?}")),
+    );
+    lines.push(format!("unkeyed {}", resolver.unkeyed_provider));
+    lines.sort();
+    lines
 }
 
 #[cfg(test)]

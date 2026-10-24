@@ -128,7 +128,8 @@ resynchronizes source and runtime inputs before every answer, and makes
 repeated CLI and editor checks incremental. Set `SOLID_CHECKER_DAEMON=0` for a
 strict one-shot process, or `SOLID_CHECKER_DAEMON_IDLE_SECS=<seconds>` to tune
 the idle lifetime. The actor and its Type Facts child are evicted when their
-combined resident memory exceeds 2048 MiB; tune that with
+combined resident memory exceeds 15% of physical memory (at least 2 GiB, at
+most 8 GiB); tune that with
 `SOLID_CHECKER_DAEMON_MAX_RSS_MB=<MiB>`, or set it to `0` to disable the memory
 ceiling. `SOLID_CHECKER_TIMINGS=1` emits retained cache-hit, generation,
 analysis, round-trip, and payload measurements as JSON on stderr. Debug builds

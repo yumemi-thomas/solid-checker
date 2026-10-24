@@ -56,13 +56,30 @@ pub fn module_graph(
     let patterns = PathsPatterns::of(program);
     for file in answered {
         check(ctx)?;
-        append_import_facts(
-            &mut inventory.imports,
-            program,
-            file,
-            &patterns,
-            packages.as_mut(),
-        )?;
+        if !demand.distinct_bare_imports {
+            append_import_facts(
+                &mut inventory.imports,
+                program,
+                file,
+                &patterns,
+                packages.as_mut(),
+            )?;
+            continue;
+        }
+        let mut facts = Vec::new();
+        append_import_facts(&mut facts, program, file, &patterns, packages.as_mut())?;
+        facts.sort_by_key(|fact| fact.specifier.start_byte);
+        let mut seen = HashSet::new();
+        inventory.imports.extend(facts.into_iter().filter(|fact| {
+            !fact.text.starts_with('.')
+                && !fact.text.starts_with('/')
+                && seen.insert((
+                    Arc::clone(&fact.text),
+                    Arc::clone(&fact.resolved_path),
+                    Arc::clone(&fact.included_path),
+                    Arc::clone(&fact.symlink_path),
+                ))
+        }));
     }
     inventory.imports.sort_by(|left, right| {
         left.specifier

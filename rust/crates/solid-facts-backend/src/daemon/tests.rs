@@ -8,9 +8,10 @@ use std::{
 };
 
 use super::{
-    CheckHeader, CheckRequest, FileRefresh, ProcessMemory, Request, cache_retention_from, eligible,
-    enabled_from, fingerprint_file, hash_file, inference_inputs_current, macho_build_identity,
-    normalize_enablement, parse_process_memory, process_tree_resident_bytes_from,
+    CheckHeader, CheckRequest, FileRefresh, ProcessMemory, Request, cache_retention_from,
+    default_memory_limit_bytes, eligible, enabled_from, fingerprint_file, hash_file,
+    inference_inputs_current, macho_build_identity, normalize_enablement, parse_meminfo_available,
+    parse_process_memory, parse_vm_stat_available, process_tree_resident_bytes_from,
     refresh_file_with, retained_format, serve, socket_path, socket_path_in_domain, timing_value,
     verify_implementation,
 };
@@ -152,6 +153,24 @@ fn retained_inference_closure_observes_content_absence_membership_and_symlinks()
         !inference_inputs_current(&links),
         "equal target bytes do not imply equal link identity"
     );
+    // A dangling link is a stable input: the answer is reused while it
+    // dangles, and not once it is retargeted or its target appears.
+    let dangling = scratch.join("optional-package");
+    std::os::unix::fs::symlink(scratch.join("never-installed"), &dangling).unwrap();
+    let dangles = observed(std::slice::from_ref(&dangling));
+    assert!(inference_inputs_current(&dangles));
+    fs::remove_file(&dangling).unwrap();
+    std::os::unix::fs::symlink(scratch.join("also-missing"), &dangling).unwrap();
+    assert!(
+        !inference_inputs_current(&dangles),
+        "a retargeted link moves"
+    );
+    let dangles = observed(std::slice::from_ref(&dangling));
+    fs::create_dir_all(scratch.join("also-missing")).unwrap();
+    assert!(
+        !inference_inputs_current(&dangles),
+        "an installed target moves"
+    );
     fs::remove_dir_all(scratch).unwrap();
 }
 
@@ -168,6 +187,7 @@ fn daemon_enablement_order_and_duplicates_normalize_to_one_key() {
         ],
         runtime: RuntimeEnvironment::default(),
         dependency_sources: vec!["dep-b".into(), "*".into(), "dep-b".into()],
+        only_file: None,
     };
     normalize_enablement(&mut repeated);
     assert_eq!(repeated.presets, ["preferences", "z"]);
@@ -339,6 +359,7 @@ fn retained_timing_reports_cache_generation_and_payload() {
             analysis_ns: 11,
             response_bytes: 13,
             notice: None,
+            recovered: false,
         },
         Duration::from_nanos(17),
         13,
@@ -432,4 +453,33 @@ fn changed_content_reads_once_and_reports_the_new_bytes() {
     }
     assert_eq!(reads.get(), 1);
     fs::remove_file(path).expect("remove fixture");
+}
+
+#[test]
+fn available_memory_parses_meminfo_and_vm_stat() {
+    assert_eq!(
+        parse_meminfo_available("MemTotal: 100 kB\nMemAvailable:   2048 kB\n"),
+        Some(2048 * 1024)
+    );
+    assert_eq!(parse_meminfo_available("MemTotal: 100 kB\n"), None);
+    let vm_stat = "Mach Virtual Memory Statistics: (page size of 16384 bytes)\n\
+Pages free:                                   10.\n\
+Pages active:                                 99.\n\
+Pages inactive:                               20.\n\
+Pages speculative:                             3.\n\
+Pages purgeable:                               1.\n";
+    assert_eq!(parse_vm_stat_available(vm_stat), Some(34 * 16384));
+    assert_eq!(parse_vm_stat_available("garbage"), None);
+}
+
+#[test]
+fn the_default_memory_limit_scales_with_the_machine() {
+    let gib = 1024 * 1024 * 1024_u64;
+    assert_eq!(default_memory_limit_bytes(None), 2 * gib);
+    assert_eq!(default_memory_limit_bytes(Some(8 * gib)), 2 * gib);
+    assert_eq!(
+        default_memory_limit_bytes(Some(48 * gib)),
+        48 * gib / 100 * 15
+    );
+    assert_eq!(default_memory_limit_bytes(Some(128 * gib)), 8 * gib);
 }

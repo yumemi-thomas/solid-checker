@@ -220,13 +220,20 @@ impl<'a> SemanticLookup<'a> {
     /// name `set`, `defineProperty` or `setPrototypeOf` directly on a fresh
     /// literal; or a destructuring that takes one of those names.
     pub(super) fn objects_may_be_assigned_into(&self) -> bool {
+        *self.objects_assigned_into.get_or_init(|| {
+            self.whole_program_answer::<super::project_memos::ObjectsAssignedInto>()
+        })
+    }
+
+    /// [`Self::objects_may_be_assigned_into`]'s computation (the memo's).
+    pub(super) fn compute_objects_assigned_into(&self) -> bool {
         const COPIERS: [&str; 4] = [
             "assign",
             "setPrototypeOf",
             "defineProperty",
             "defineProperties",
         ];
-        *self.objects_assigned_into.get_or_init(|| {
+        {
             // An assignment through a key nothing names (`t[key] = v`) may
             // write any member of whatever `t` is, unless `t` is proven a
             // built-in value (`xs[i] = v` on an array), which no project
@@ -304,7 +311,7 @@ impl<'a> SemanticLookup<'a> {
                         })
                     })
                 })
-        })
+        }
     }
 
     /// The exact implementations `object.property` resolves to, or `None`
