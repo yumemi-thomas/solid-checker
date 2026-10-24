@@ -170,6 +170,15 @@ struct CheckerSlot {
     /// with one is leaked instead of freed (the file checker reads the
     /// program until it is dropped).
     file_checkers: AtomicUsize,
+    /// Where the program's lazily filled caches are allocated (the include
+    /// processor's diagnostics, filled by the first `get_semantic_diagnostics`
+    /// in whatever region is current, and kept for the program's life). Primed
+    /// before the first checker of either kind, so they land in neither the
+    /// slot checker's region (freed by `release_checker`) nor a file
+    /// checker's (freed after its pass). Freed with the slot, after the
+    /// program.
+    caches: Region,
+    caches_primed: AtomicBool,
 }
 
 /// The file checker installed on this thread (module invariant 8): the
@@ -224,8 +233,9 @@ fn file_checker_lease(program: &'static Program) -> Option<CheckerHandle> {
     })
 }
 
-/// File checkers leaked instead of freed (a lease left out, or an escaped
-/// region), process-wide: a measurement and a canary, expected to stay 0.
+/// Checkers leaked instead of freed (a file checker's lease left out, or an
+/// escaped region of a file or slot checker), process-wide: a measurement and
+/// a canary, expected to stay 0.
 static ESCAPED_FILE_CHECKERS: AtomicUsize = AtomicUsize::new(0);
 
 /// How many file checkers were leaked instead of freed (see
@@ -292,7 +302,18 @@ impl CheckerSlot {
             held: Mutex::new(None),
             leases: AtomicUsize::new(0),
             file_checkers: AtomicUsize::new(0),
+            caches: Region::new(64 << 10),
+            caches_primed: AtomicBool::new(false),
         })
+    }
+
+    /// Fills the program's lazily filled caches in [`CheckerSlot::caches`],
+    /// once, before any checker is made. Acquires no checker.
+    fn prime_caches(&self) {
+        if !self.caches_primed.swap(true, Ordering::SeqCst) {
+            let _scope = self.caches.enter();
+            let _ = self.program.get_program_diagnostics();
+        }
     }
 
     fn outstanding(&self) -> usize {
@@ -310,7 +331,15 @@ impl CheckerSlot {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take();
-        drop(held);
+        if held.as_ref().is_some_and(|held| held._region.escaped()) {
+            // tsrs stored an object of the checker's region in a structure
+            // that outlives it (`Region::escaped`): leak it, as a file
+            // checker's (`ESCAPED_FILE_CHECKERS` counts both).
+            ESCAPED_FILE_CHECKERS.fetch_add(1, Ordering::SeqCst);
+            std::mem::forget(held);
+        } else {
+            drop(held);
+        }
         true
     }
 }
@@ -336,6 +365,7 @@ impl CheckerPool for SlotPool {
             "a tsrs entry point acquired the checker while a lease was held \
              (unsafe_boundary invariant 7)"
         );
+        slot.prime_caches();
         let mut guard = slot
             .held
             .lock()
@@ -470,12 +500,6 @@ pub struct Generation {
     updates: u32,
     thread: ThreadId,
     kind: UpdateKind,
-    /// Per-file checkers (module invariant 8): where the program's lazily
-    /// filled caches are allocated (the include processor's diagnostics),
-    /// primed before the first file checker so they never land in a file
-    /// checker's region. Freed after the program (fields drop after `drop`).
-    caches: Region,
-    caches_primed: AtomicBool,
 }
 
 fn options_for(
@@ -563,8 +587,6 @@ impl Generation {
             updates: 0,
             thread: std::thread::current().id(),
             kind: UpdateKind::Rebuilt,
-            caches: Region::new(64 << 10),
-            caches_primed: AtomicBool::new(false),
         }
     }
 
@@ -626,16 +648,7 @@ impl Generation {
             !nested,
             "file checkers do not nest (unsafe_boundary invariant 8)"
         );
-        if !self.caches_primed.swap(true, Ordering::SeqCst) {
-            // The program fills some caches of its own lazily, in whatever
-            // region is current, and keeps them for its life: the include
-            // processor's diagnostics (every `get_semantic_diagnostics` reads
-            // them). Made inside a file checker they would point into a region
-            // the pass frees. Fill them here, in a region that outlives the
-            // program.
-            let _scope = self.caches.enter();
-            let _ = self.program.get_program_diagnostics();
-        }
+        self.slot.prime_caches();
         let region = Region::new(1 << 20);
         let checker = {
             let _scope = region.enter();
@@ -730,8 +743,6 @@ impl Generation {
                 updates: self.updates + 1,
                 thread: self.thread,
                 kind: UpdateKind::Reused,
-                caches: Region::new(64 << 10),
-                caches_primed: AtomicBool::new(false),
             };
         }
         // A fresh chain from the same parsed configuration, in regions of its
@@ -763,8 +774,6 @@ impl Generation {
             updates: 0,
             thread: self.thread,
             kind: UpdateKind::Rebuilt,
-            caches: Region::new(64 << 10),
-            caches_primed: AtomicBool::new(false),
         }
     }
 
@@ -824,7 +833,6 @@ impl Drop for Generation {
             std::mem::forget(Arc::clone(&self.slot));
             std::mem::forget(Arc::clone(&self.regions));
             std::mem::forget(Arc::clone(&self.files));
-            std::mem::forget(self.caches.clone());
             return;
         }
         let disposed = self.slot.dispose();

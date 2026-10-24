@@ -334,3 +334,37 @@ fn program_caches_never_land_in_a_file_checkers_region() {
         "a file checker's region escaped into a program cache"
     );
 }
+
+/// The same cache in canonical mode: filled by the program's single checker's
+/// first `get_semantic_diagnostics`, it must not land in that checker's region,
+/// which `release_checker` frees while the program (and the cache) stays.
+#[test]
+fn program_caches_survive_a_canonical_release() {
+    let a = "/// <reference path=\"./missing.ts\" />\nexport const one = 1;\n";
+    let scratch = Scratch::new(&[
+        ("tsconfig.json", super::project_support::SMALL_CONFIG),
+        ("a.ts", a),
+    ]);
+    let mut project = open(&scratch, false);
+    let leaked = crate::unsafe_boundary::leaked_file_checkers();
+    let a_path = scratch.path("a.ts");
+    let has_6053 = |project: &Project| {
+        let generation = project.current().unwrap();
+        let file = generation.program().get_source_file(&a_path).unwrap();
+        generation
+            .semantic_diagnostics(file)
+            .iter()
+            .any(|diagnostic| diagnostic.code == 6053)
+    };
+    assert!(has_6053(&project), "the case needs a processing diagnostic");
+    project.release_analysis_state_for_test();
+    assert!(
+        has_6053(&project),
+        "the cache is read again after the release"
+    );
+    assert_eq!(
+        crate::unsafe_boundary::leaked_file_checkers(),
+        leaked,
+        "the slot checker's region escaped into a program cache"
+    );
+}
