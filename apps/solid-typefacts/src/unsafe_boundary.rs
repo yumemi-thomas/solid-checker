@@ -509,6 +509,9 @@ pub struct Generation {
     updates: u32,
     thread: ThreadId,
     kind: UpdateKind,
+    /// Whether `prepare_update` may keep the edited file's synthetic imports
+    /// (the JSX runtime, import helpers): see [`options_for`].
+    reuse_synthetic_imports: bool,
 }
 
 fn options_for(
@@ -516,6 +519,7 @@ fn options_for(
     host: Arc<dyn CompilerHost>,
     regions: &Arc<ProgramRegions>,
     factory: &CreateCheckerPool,
+    reuse_synthetic_imports: bool,
 ) -> ProgramOptions {
     // tsrs's canonical checker history (ADR 0367): the caches typescript-go
     // keys by what the checker saw first (`undefinedProperties`, keyed by name
@@ -542,6 +546,16 @@ fn options_for(
     options.regions = Some(Arc::clone(regions));
     // One checker reports diagnostics (S4 reads them for call validity).
     options.canonical_diagnostics = false;
+    // Per-file checkers (instant-edits P3): an edit of a file with a JSX
+    // runtime import (every `.tsx` under `jsx: preserve` + `jsxImportSource`)
+    // or under `importHelpers` reuses the program when the file needs the same
+    // synthetic imports, instead of Go's full rebuild, as tsrs's watch mode
+    // does. The kept synthetic import nodes' parent is the full build's
+    // version of the file; the chain keeps every file of its full build alive
+    // until the chain is freed (`FileRegions` base, `sweep_dead_files`), which
+    // is the condition the option states. Off in the default mode, which stays
+    // byte-identical.
+    options.reuse_synthetic_imports = reuse_synthetic_imports;
     options
 }
 
@@ -578,12 +592,19 @@ impl Generation {
         config_region: Region,
         config: P<ParsedCommandLine>,
         host: Arc<dyn CompilerHost>,
+        reuse_synthetic_imports: bool,
     ) -> Generation {
         let regions = Arc::new(ProgramRegions::default());
         let files = Arc::new(FileRegions::default());
         let host = RegionHost::wrap(host, &files);
         let (factory, cell) = slot_factory();
-        let program = new_program(options_for(config, host, &regions, &factory));
+        let program = new_program(options_for(
+            config,
+            host,
+            &regions,
+            &factory,
+            reuse_synthetic_imports,
+        ));
         program.bind_source_files();
         files.set_base(program.source_files().iter().map(|file| file.addr()));
         Generation {
@@ -596,6 +617,7 @@ impl Generation {
             updates: 0,
             thread: std::thread::current().id(),
             kind: UpdateKind::Rebuilt,
+            reuse_synthetic_imports,
         }
     }
 
@@ -759,6 +781,7 @@ impl Generation {
                 updates: self.updates + 1,
                 thread: self.thread,
                 kind: UpdateKind::Reused,
+                reuse_synthetic_imports: self.reuse_synthetic_imports,
             };
         }
         // A fresh chain from the same parsed configuration, in regions of its
@@ -777,6 +800,7 @@ impl Generation {
             RegionHost::wrap(host, &files),
             &regions,
             &factory,
+            self.reuse_synthetic_imports,
         ));
         program.bind_source_files();
         files.set_base(program.source_files().iter().map(|file| file.addr()));
@@ -790,6 +814,7 @@ impl Generation {
             updates: 0,
             thread: self.thread,
             kind: UpdateKind::Rebuilt,
+            reuse_synthetic_imports: self.reuse_synthetic_imports,
         }
     }
 

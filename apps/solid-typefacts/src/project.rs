@@ -223,7 +223,8 @@ impl Project {
             },
             directory: type_script_path_dir(&config_path),
         });
-        let generation = build_program(ctx, &config_path, &fs, &config_host)?;
+        let per_file = crate::per_file::enabled_by_env();
+        let generation = build_program(ctx, &config_path, &fs, &config_host, per_file)?;
         let mut project = Self {
             trace,
             config_path,
@@ -240,7 +241,7 @@ impl Project {
             inputs: ProgramInputs::default(),
             unavailable: Unavailable::default(),
             source_memo: HashMap::new(),
-            per_file: crate::per_file::enabled_by_env().then(crate::per_file::PerFile::new),
+            per_file: per_file.then(crate::per_file::PerFile::new),
         };
         project.references.set_per_file(project.per_file.is_some());
         // Go: `collectExportedIdentities` seeds the symbol store at open.
@@ -446,6 +447,7 @@ fn build_program(
     config_path: &str,
     fs: &Arc<OverlayFs>,
     config_host: &HostLease<ConfigHost>,
+    reuse_synthetic_imports: bool,
 ) -> Result<Generation, String> {
     if let Some(reason) = ctx.err() {
         return Err(reason.to_owned());
@@ -496,7 +498,12 @@ fn build_program(
         let _scope = config_region.enter();
         P::new(config)
     };
-    Ok(Generation::build(config_region, config, host))
+    Ok(Generation::build(
+        config_region,
+        config,
+        host,
+        reuse_synthetic_imports,
+    ))
 }
 
 pub(crate) fn compiler_host(
@@ -1024,8 +1031,14 @@ impl Project {
             let host = compiler_host(&type_script_path_dir(&self.config_path), &candidate_fs);
             generation.prepare_update(&incremental_path, host)
         } else {
-            build_program(ctx, &self.config_path, &candidate_fs, &self.config_host)
-                .map_err(BackendError)?
+            build_program(
+                ctx,
+                &self.config_path,
+                &candidate_fs,
+                &self.config_host,
+                self.per_file.is_some(),
+            )
+            .map_err(BackendError)?
         };
         let program_duration = stage.elapsed();
 
