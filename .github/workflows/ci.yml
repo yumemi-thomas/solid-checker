@@ -172,8 +172,6 @@ jobs:
           # explicit key the action includes the different CI/release job names.
           shared-key: release-wasm
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      # The native producer, for the parity gate below.
-      - uses: ./.github/actions/typefacts
       - run: bun install --ignore-scripts --no-progress --frozen-lockfile
         working-directory: packages/wasm
       - run: bun run build
@@ -182,13 +180,35 @@ jobs:
         working-directory: packages/wasm
       - run: bun pm pack --dry-run
         working-directory: packages/wasm
-      # The owned check against the native one over the same projects. Local
-      # `make verify` skips it for changes confined to the analysis crates
-      # (ADR 0379), so every pull request runs it here. It also needs the
-      # native checker (built by the gate target), the producer restored above,
-      # and the oracle installs the harness resolves `typescript` from.
+
+  # The owned check against the native one over the same projects. Local
+  # `make verify` skips it for changes confined to the analysis crates (ADR
+  # 0379), so every pull request runs it here. On macOS: the gate's path rows
+  # pin macOS errno values (a symlink loop is os error 62 there, 40 on Linux).
+  wasm-parity:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          targets: wasm32-wasip1-threads, wasm32-wasip1
+      - run: rustup target add wasm32-wasip1-threads wasm32-wasip1 --toolchain 1.99.1
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            rust
+            apps/solid-typefacts
+          shared-key: wasm-parity-macos
+          # As in rust-package: restored macOS build-script executables have
+          # failed with exit 126, so keep downloads cached and rebuild targets.
+          cache-targets: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: ./.github/actions/typefacts
       - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
-      - run: make wasm-parity-gate
+      - run: make wasm-parity
 
   scripts-and-cli:
     runs-on: ubuntu-latest
