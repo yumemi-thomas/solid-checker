@@ -346,7 +346,9 @@ fn invalidation_is_complete_on_random_graphs() {
     assert!(reused > computed / 4, "{reused} reused of {computed}");
 }
 
+// A native-only test of concurrent readers; it never runs on wasm32-wasip1.
 #[test]
+#[allow(clippy::disallowed_methods)]
 fn concurrent_readers_agree_with_a_fresh_store() {
     for seed in 1..=40 {
         let mut random = Random(seed);
