@@ -235,7 +235,7 @@ impl Project {
             graph: ImportGraph::default(),
             declaration_shapes: HashMap::new(),
             last_update: UpdateMetrics::default(),
-            ids: Identities::new(1),
+            ids: Identities::new(1).with_derived_keys(crate::derived_key::enabled_by_env()),
             references: ReferenceIndex::default(),
             inputs: ProgramInputs::default(),
             unavailable: Unavailable::default(),
@@ -328,7 +328,15 @@ impl Project {
                         node.end().source_offset().map_or(-1, i64::from),
                     ))
                 })?;
-            Ok(env.id_for(symbol))
+            let id = env.id_for(symbol);
+            if id.is_empty() {
+                // No exact key (`Identities::derived_keys`): no id to answer.
+                return Err(BackendError(format!(
+                    "not found: symbol at byte {} has no exact id",
+                    location.start_byte
+                )));
+            }
+            Ok(id)
         })?
     }
 
@@ -626,7 +634,7 @@ impl ClosureBackend for Project {
                 return None;
             }
             let original = env.checker.get_aliased_symbol(symbol);
-            Some(env.id_for(original))
+            Some(env.id_for(original)).filter(|id| !id.is_empty())
         })
     }
 

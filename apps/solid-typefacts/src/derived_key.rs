@@ -1,26 +1,37 @@
-//! Checker-independent keys for derived symbols (instant-edits P2, prototype).
+//! Checker-independent keys for derived symbols (instant-edits P2), behind
+//! [`ENV_FLAG`]; off by default, and then nothing here runs.
 //!
 //! A derived symbol (an instantiation, a transient clone, a mapped or a
 //! synthetic property) is keyed by what it is derived from and by the exact
 //! type context the checker derived it in, never by erasure: two symbols one
-//! checker keeps apart never share a key (`Foo<number>.x` and
+//! checker keeps apart by type never share a key (`Foo<number>.x` and
 //! `Foo<string>.x` differ), and two checkers deriving the same symbol give it
 //! the same key, whatever each checked first.
 //!
 //! * Instantiated (`target` and `mapper`): when instantiation cannot affect
-//!   the root (its type could contain no type variable), the checker itself
-//!   returns the root once that type is resolved, so the key is the root's;
-//!   otherwise `inst(root, mapper)`.
+//!   the root (its type, and a set accessor's write type, could contain no
+//!   type variable), the checker itself returns the root once those types are
+//!   resolved, so the key is the root's; otherwise `inst(root, mapper)`.
 //! * Clone (`target`, no `mapper`): `clone(root, type of the clone)`.
 //! * Mapped property: `mapped(name, containing mapped type)`.
 //! * Synthetic union/intersection property outside the `Set` key:
 //!   `synth(name, containing type)`.
+//! * Tuple members by their tuple target; tsrs's shared tuple element type
+//!   parameters by index.
+//! * Identities no derivation link names ([`Keyer::special`]): checker
+//!   singletons by field, an unresolved entity name by its path, a class's
+//!   binder `prototype` by its class, a module re-typed for a namespace import
+//!   by module and import.
+//! * A binder symbol `binder_key` refuses: [`binder_fallback`].
 //!
-//! Types are keyed structurally (`type_key`): intrinsics and literals by value,
-//! named and anonymous types by their declaration's key, references by target
-//! and type arguments, instantiated anonymous types by target and mapper,
-//! unions and intersections as sorted key sets. Anything else, a cycle, or a
-//! depth past [`MAX_DEPTH`] has no key (fail closed: the caller falls back).
+//! Types are keyed structurally ([`Keyer::type_key`]): intrinsics by which
+//! checker singleton they are, literals by value, named and anonymous types by
+//! their declaration's key, references by target and type arguments,
+//! instantiated anonymous types by target and mapper, unions and
+//! intersections as key sets, recursion by back-reference. Anything else (an
+//! index-signature symbol, a binding-pattern property, a type kind not keyed
+//! here, a depth past [`MAX_DEPTH`], recursion past [`CYCLIC_BUDGET`]) has no
+//! key, and the symbol then has no id (`Identities::id_for`): an absent fact.
 
 use crate::binder_key::{Key, binder_key, set_key};
 use crate::durable::{DurableRef, normalized_name};
@@ -34,6 +45,18 @@ use tsrs_compiler::Checker;
 use tsrs_core::P;
 
 pub(crate) type Digest32 = [u8; 32];
+
+/// The environment flag that selects exact derived-symbol keys.
+pub const ENV_FLAG: &str = "SOLID_TYPEFACTS_DERIVED_KEYS";
+
+/// Opt-in (measurement): a file the keyer appends one line per decision to.
+pub const ENV_STATS: &str = "SOLID_TYPEFACTS_DERIVED_KEY_STATS";
+
+/// Whether the environment selects exact derived-symbol keys.
+#[must_use]
+pub fn enabled_by_env() -> bool {
+    std::env::var_os(ENV_FLAG).is_some()
+}
 
 /// Tuple targets' type parameters and member symbols, by address, to the
 /// target and their role. A tuple target's element properties and `length`
@@ -89,7 +112,12 @@ impl TupleIndex {
 
 const MAX_DEPTH: u32 = 40;
 
-/// Why a derived symbol has no key (prototype statistics).
+/// Cyclic subtrees one derived symbol's key may visit. A recursive type is
+/// keyed by its unfolding, which repeats each cycle once per path through
+/// it; past this the symbol has no key (no id: fail closed).
+const CYCLIC_BUDGET: u32 = 20_000;
+
+/// How a derived symbol was keyed, or why it was not (measurement).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum Outcome {
     Root,
@@ -101,19 +129,31 @@ pub(crate) enum Outcome {
     NoRoot,
     NoType,
     Tuple,
+    Singleton,
+    Unresolved,
+    Prototype,
+    ModuleType,
+    BinderFallback,
 }
 
 pub(crate) struct Keyer<'a, F: Fn(&DurableRef) -> bool> {
     pub checker: &'a mut Checker,
     pub exported: F,
-    pub memo: &'a mut HashMap<usize, Option<Digest32>>,
+    pub memo: &'a mut HashMap<usize, (Option<Digest32>, u32)>,
     pub tuples: &'a mut TupleIndex,
     /// Types being keyed, outermost first: a revisit is a back-reference.
     stack: Vec<usize>,
-    /// The outermost stack index a back-reference in the current subtree
-    /// points to (`usize::MAX`: none).
-    open_min: usize,
-    /// Prototype: the type variant (and depth) of the first unkeyable part.
+    /// Whether the subtree being keyed holds a back-reference.
+    cyclic: bool,
+    /// Whether the subtree being keyed failed by depth or by the cyclic
+    /// budget (path-dependent: never memoized).
+    path_failed: bool,
+    /// The deepest `depth` the subtree being keyed reached.
+    reach: u32,
+    /// Back-references and cyclic subtrees keyed for this symbol, against
+    /// [`CYCLIC_BUDGET`].
+    pub cyclic_work: u32,
+    /// The first unkeyable part, for measurement.
     pub failure: Option<String>,
     pub dump: Option<String>,
 }
@@ -191,7 +231,7 @@ impl<'a, F: Fn(&DurableRef) -> bool> Keyer<'a, F> {
     pub(crate) fn new(
         checker: &'a mut Checker,
         exported: F,
-        memo: &'a mut HashMap<usize, Option<Digest32>>,
+        memo: &'a mut HashMap<usize, (Option<Digest32>, u32)>,
         tuples: &'a mut TupleIndex,
     ) -> Self {
         Self {
@@ -200,7 +240,10 @@ impl<'a, F: Fn(&DurableRef) -> bool> Keyer<'a, F> {
             memo,
             tuples,
             stack: Vec::new(),
-            open_min: usize::MAX,
+            cyclic: false,
+            path_failed: false,
+            reach: 0,
+            cyclic_work: 0,
             failure: None,
             dump: None,
         }
@@ -226,10 +269,16 @@ impl<'a, F: Fn(&DurableRef) -> bool> Keyer<'a, F> {
     }
 
     fn derived_inner(&mut self, symbol: P<Symbol>, depth: u32) -> (Option<Key>, Outcome) {
+        self.reach = self.reach.max(depth);
         if depth > MAX_DEPTH {
+            self.path_failed = true;
+            self.failure.get_or_insert_with(|| "depth".into());
             return (None, Outcome::NoType);
         }
         let name = normalized_name(symbol.name()).into_owned();
+        if let Some(found) = self.special(symbol, depth) {
+            return found;
+        }
         let links = self
             .checker
             .value_symbol_links
@@ -249,14 +298,22 @@ impl<'a, F: Fn(&DurableRef) -> bool> Keyer<'a, F> {
                 // structural, so no checker derives a symbol through it.) A set
                 // accessor's write type decides too and is not reachable here:
                 // fail closed.
-                if root.flags().intersects(SymbolFlags::SetAccessor) {
-                    return (None, Outcome::NoType);
-                }
                 let root_type = self.checker.get_type_of_symbol_exported(root);
-                if !self
+                let mut unaffected = !self
                     .checker
-                    .could_contain_type_variables_exported(root_type)
-                {
+                    .could_contain_type_variables_exported(root_type);
+                // A set accessor answers for its instantiation only when its
+                // write type, cached on its links once resolved, could not
+                // contain type variables either.
+                if unaffected && root.flags().intersects(SymbolFlags::SetAccessor) {
+                    unaffected = self
+                        .checker
+                        .get_write_type_of_symbol_exported(root)
+                        .is_some_and(|write| {
+                            !self.checker.could_contain_type_variables_exported(write)
+                        });
+                }
+                if unaffected {
                     return (
                         Some(Key::Derived {
                             tag: "root",
@@ -342,6 +399,109 @@ impl<'a, F: Fn(&DurableRef) -> bool> Keyer<'a, F> {
             )
         });
         (None, Outcome::NoKind)
+    }
+
+    /// Derived symbols with an identity of their own that no derivation link
+    /// names: checker singletons, unresolved entity names, a class's
+    /// `prototype`, a module re-typed for a namespace import. `None`: not
+    /// one of them. An index-signature symbol has no exact key and none here.
+    fn special(&mut self, symbol: P<Symbol>, depth: u32) -> Option<(Option<Key>, Outcome)> {
+        let keyed =
+            |tag: &'static str, name: String, root: String, context: Digest32| Key::Derived {
+                tag,
+                name,
+                root,
+                context,
+            };
+        if let Some(which) = singleton_symbol(self.checker, symbol) {
+            return Some((
+                Some(keyed("singleton", which.to_owned(), String::new(), [0; 32])),
+                Outcome::Singleton,
+            ));
+        }
+        let check = symbol.check_flags();
+        if check.intersects(CheckFlags::Unresolved)
+            && symbol.flags().intersects(SymbolFlags::TypeAlias)
+        {
+            // `get_unresolved_symbol_for_entity_name`: one symbol per checker
+            // per entity-name path (`get_symbol_path`), so the path is exact.
+            let mut parts = vec![symbol.name()];
+            let mut parent = symbol.parent();
+            while let Some(current) = parent {
+                if parts.len() > 64 {
+                    self.failure
+                        .get_or_insert_with(|| "unresolved:depth".into());
+                    return Some((None, Outcome::NoKind));
+                }
+                parts.push(current.name());
+                parent = current.parent();
+            }
+            parts.reverse();
+            return Some((
+                Some(keyed("unresolved", parts.join("."), String::new(), [0; 32])),
+                Outcome::Unresolved,
+            ));
+        }
+        if check.intersects(CheckFlags::IndexSymbol) {
+            // `get_applicable_index_symbol` caches one symbol per index info,
+            // and an index info has no link to the type it belongs to: two
+            // instantiations of one signature (`A<string>`, `A<boolean>`) can
+            // share declarations and value type and still be two symbols.
+            self.failure.get_or_insert_with(|| "index-symbol".into());
+            return Some((None, Outcome::NoKind));
+        }
+        if symbol.flags().intersects(SymbolFlags::Prototype)
+            && !symbol.flags().intersects(SymbolFlags::Transient)
+            && symbol.declarations().is_empty()
+        {
+            // The binder makes one `prototype` per class symbol.
+            let Some(parent) = symbol.parent() else {
+                self.failure
+                    .get_or_insert_with(|| "prototype:no-parent".into());
+                return Some((None, Outcome::NoKind));
+            };
+            let Some(root) = self.symbol_id(parent, depth + 1) else {
+                return Some((None, Outcome::NoRoot));
+            };
+            return Some((
+                Some(keyed(
+                    "prototype",
+                    normalized_name(symbol.name()).into_owned(),
+                    root,
+                    [0; 32],
+                )),
+                Outcome::Prototype,
+            ));
+        }
+        if let Some(links) = self.checker.export_type_links.try_get(symbol)
+            && let Some(target) = links.target.get()
+        {
+            // `clone_type_as_module_type`: the module symbol re-typed for one
+            // namespace import or import call, a function of both.
+            let Some(import) = links.originating_import.get().and_then(node_location) else {
+                self.failure
+                    .get_or_insert_with(|| "module-type:no-import".into());
+                return Some((None, Outcome::NoKind));
+            };
+            let Some(root) = self.symbol_id(target, depth + 1) else {
+                return Some((None, Outcome::NoRoot));
+            };
+            let context = Enc::new("module-type")
+                .str(&import.0)
+                .u64(u64::from(import.1))
+                .u64(u64::from(import.2))
+                .finish();
+            return Some((
+                Some(keyed(
+                    "module-type",
+                    normalized_name(symbol.name()).into_owned(),
+                    root,
+                    context,
+                )),
+                Outcome::ModuleType,
+            ));
+        }
+        None
     }
 
     fn mapper_key(&mut self, mapper: P<TypeMapper>, depth: u32) -> Option<Digest32> {
@@ -436,34 +596,59 @@ impl<'a, F: Fn(&DurableRef) -> bool> Keyer<'a, F> {
         Some(enc.finish())
     }
 
+    /// The key of `t`, a function of the type graph reachable from it (and
+    /// of `depth`), never of what was keyed before:
+    ///
+    /// * a type reached again on the current path is a back-reference by
+    ///   distance, so a recursive type is keyed by its unfolding;
+    /// * a key is memoized only when its subtree holds no back-reference
+    ///   (then it is the same from every path), with the depth it reaches, so
+    ///   a memoized key fails by depth exactly where keying it again would;
+    /// * a subtree holding a back-reference is keyed again on every visit
+    ///   (a memoized key of a node on a cycle would encode the cycle from
+    ///   the node's own entry, and spliced into another entry's unfolding it
+    ///   would key one regular tree two ways), within [`CYCLIC_BUDGET`].
     pub(crate) fn type_key(&mut self, t: P<Type>, depth: u32) -> Option<Digest32> {
         let address = t.addr();
+        self.reach = self.reach.max(depth);
         if let Some(index) = self.stack.iter().position(|entry| *entry == address) {
-            // A recursive type: a back-reference by distance, which keys the
-            // same regular tree the same way from any entry point.
-            self.open_min = self.open_min.min(index);
+            self.cyclic = true;
             let distance = (self.stack.len() - index) as u64;
             return Some(Enc::new("rec").u64(distance).finish());
         }
-        if let Some(known) = self.memo.get(&address) {
-            return *known;
+        if let Some(&(known, reach)) = self.memo.get(&address) {
+            if depth + reach > MAX_DEPTH {
+                self.path_failed = true;
+                self.failure.get_or_insert_with(|| "depth".into());
+                return None;
+            }
+            self.reach = self.reach.max(depth + reach);
+            return known;
         }
         if depth > MAX_DEPTH {
+            self.path_failed = true;
             self.failure.get_or_insert_with(|| "depth".into());
             return None;
         }
-        let index = self.stack.len();
         self.stack.push(address);
-        let outer = std::mem::replace(&mut self.open_min, usize::MAX);
-        let key = self.type_key_uncached(t, depth);
+        let outer_cyclic = std::mem::replace(&mut self.cyclic, false);
+        let outer_failed = std::mem::replace(&mut self.path_failed, false);
+        let outer_reach = std::mem::replace(&mut self.reach, depth);
+        let mut key = self.type_key_uncached(t, depth);
         self.stack.pop();
-        let inner = self.open_min;
-        // Closed at or inside this type: the key is a function of the type
-        // alone. Open to an ancestor: it depends on the path, so not memoized.
-        if inner >= index {
-            self.memo.insert(address, key);
+        if self.cyclic {
+            self.cyclic_work += 1;
+            if self.cyclic_work > CYCLIC_BUDGET {
+                self.path_failed = true;
+                self.failure.get_or_insert_with(|| "cyclic-budget".into());
+                key = None;
+            }
+        } else if !self.path_failed && (key.is_some() || !stats_enabled()) {
+            self.memo.insert(address, (key, self.reach - depth));
         }
-        self.open_min = outer.min(if inner < index { inner } else { usize::MAX });
+        self.cyclic |= outer_cyclic;
+        self.path_failed |= outer_failed;
+        self.reach = self.reach.max(outer_reach);
         if key.is_none() {
             let variant = match t.data() {
                 TypeData::Intrinsic(_) => "intrinsic",
@@ -523,12 +708,26 @@ impl<'a, F: Fn(&DurableRef) -> bool> Keyer<'a, F> {
 
     fn type_key_uncached(&mut self, t: P<Type>, depth: u32) -> Option<Digest32> {
         match t.data() {
-            TypeData::Intrinsic(intrinsic) => Some(
-                Enc::new("intrinsic")
-                    .str(intrinsic.intrinsic_name.get())
-                    .u64(u64::from(t.flags.get().bits()))
-                    .finish(),
-            ),
+            TypeData::Intrinsic(intrinsic) => {
+                // The checker's intrinsics are singletons (several share a
+                // name: `any`, `never`, `undefined`), keyed by which one; the
+                // only intrinsic made later is an unresolved alias's `error`,
+                // one per alias and type arguments.
+                if let Some(which) = singleton_type(self.checker, t) {
+                    return Some(Enc::new("intrinsic").str(which).finish());
+                }
+                let alias = self.need(t.alias(), "intrinsic:dynamic")?;
+                let symbol = self.need(alias.symbol.get(), "intrinsic:alias-no-symbol")?;
+                let symbol = self.symbol_id(symbol, depth + 1);
+                let symbol = self.need(symbol, "intrinsic:alias-unkeyed")?;
+                let mut enc = Enc::new("error-alias");
+                enc.str(intrinsic.intrinsic_name.get()).str(&symbol);
+                for argument in alias.type_arguments.get() {
+                    let argument = self.type_key(*argument, depth + 1)?;
+                    enc.digest(&argument);
+                }
+                Some(enc.finish())
+            }
             TypeData::Literal(literal) => {
                 let mut enc = Enc::new("literal");
                 match literal.value.get() {
@@ -644,6 +843,9 @@ impl<'a, F: Fn(&DurableRef) -> bool> Keyer<'a, F> {
                             .finish(),
                     );
                 }
+                if let Some(which) = singleton_type(self.checker, t) {
+                    return Some(Enc::new("singleton-type").str(which).finish());
+                }
                 self.named("anonymous", t, depth)
             }
             TypeData::Union(_) | TypeData::Intersection(_) => {
@@ -739,6 +941,92 @@ impl<'a, F: Fn(&DurableRef) -> bool> Keyer<'a, F> {
     }
 }
 
+/// Which of the checker's own singleton types `t` is, by pointer: made once
+/// per checker at its creation (or, for `import.meta`, on first use), so the
+/// field names one type in every checker. When two fields hold one object
+/// (a widening type without `strictNullChecks`), the first listed wins in
+/// every checker alike.
+fn singleton_type(checker: &Checker, t: P<Type>) -> Option<&'static str> {
+    let address = t.addr();
+    let table: [(P<Type>, &'static str); 36] = [
+        (checker.any_type, "any"),
+        (checker.auto_type, "auto"),
+        (checker.wildcard_type, "wildcard"),
+        (checker.blocked_string_type, "blocked-string"),
+        (checker.error_type, "error"),
+        (checker.unresolved_type, "unresolved"),
+        (checker.non_inferrable_any_type, "non-inferrable-any"),
+        (checker.intrinsic_marker_type, "intrinsic-marker"),
+        (checker.unknown_type, "unknown"),
+        (checker.undefined_type, "undefined"),
+        (checker.undefined_widening_type, "undefined-widening"),
+        (checker.missing_type, "missing"),
+        (checker.optional_type, "optional"),
+        (checker.null_type, "null"),
+        (checker.null_widening_type, "null-widening"),
+        (checker.string_type, "string"),
+        (checker.number_type, "number"),
+        (checker.bigint_type, "bigint"),
+        (checker.es_symbol_type, "symbol"),
+        (checker.void_type, "void"),
+        (checker.never_type, "never"),
+        (checker.silent_never_type, "silent-never"),
+        (checker.implicit_never_type, "implicit-never"),
+        (checker.unreachable_never_type, "unreachable-never"),
+        (checker.non_primitive_type, "object"),
+        (checker.unique_literal_type, "unique-literal"),
+        (checker.empty_object_type, "empty-object"),
+        (checker.empty_jsx_object_type, "empty-jsx-object"),
+        (
+            checker.empty_fresh_jsx_object_type,
+            "empty-fresh-jsx-object",
+        ),
+        (checker.empty_type_literal_type, "empty-type-literal"),
+        (checker.unknown_empty_object_type, "unknown-empty-object"),
+        (checker.empty_generic_type, "empty-generic"),
+        (checker.any_function_type, "any-function"),
+        (checker.no_constraint_type, "no-constraint"),
+        (checker.circular_constraint_type, "circular-constraint"),
+        (checker.resolving_default_type, "resolving-default"),
+    ];
+    if let Some((_, which)) = table
+        .iter()
+        .find(|(singleton, _)| singleton.addr() == address)
+    {
+        return Some(which);
+    }
+    checker
+        .deferred_global_import_meta_expression_type
+        .filter(|singleton| singleton.addr() == address)
+        .map(|_| "import-meta-expression")
+}
+
+/// Which checker-made singleton symbol `symbol` is: the symbol of a singleton
+/// type above, or a member of the `import.meta` expression type (`meta`).
+fn singleton_symbol(checker: &Checker, symbol: P<Symbol>) -> Option<&'static str> {
+    if !symbol.flags().intersects(SymbolFlags::Transient) || !symbol.declarations().is_empty() {
+        return None;
+    }
+    if checker
+        .empty_type_literal_type
+        .symbol()
+        .is_some_and(|singleton| singleton.addr() == symbol.addr())
+    {
+        return Some("empty-type-literal");
+    }
+    let meta = checker
+        .deferred_global_import_meta_expression_type?
+        .symbol()?;
+    if meta.addr() == symbol.addr() {
+        return Some("import-meta-expression");
+    }
+    (symbol
+        .parent()
+        .is_some_and(|parent| parent.addr() == meta.addr())
+        && symbol.name() == "meta")
+        .then_some("import-meta-expression.meta")
+}
+
 /// The domain of a mapper: its sources, the checker singleton functions it
 /// applies (in tree order: a function maps every type parameter), and the
 /// type parameters an inference context has already inferred (read from the
@@ -832,7 +1120,7 @@ pub(crate) fn pointer_signature(checker: &mut Checker, symbol: P<Symbol>) -> Vec
     signature
 }
 
-/// Why `type_key` failed for `t`, by the first unkeyable part (prototype).
+/// The mapper kinds of an unkeyed symbol (measurement).
 pub(crate) fn failure_reason(checker: &mut Checker, symbol: P<Symbol>) -> String {
     let Some(links) = checker.value_symbol_links.try_get_if_id_assigned(symbol) else {
         return "no-links".into();
@@ -863,6 +1151,10 @@ fn mapper_kinds(mapper: P<TypeMapper>, out: &mut Vec<&'static str>, depth: u32) 
     }
 }
 
+fn stats_enabled() -> bool {
+    std::env::var_os(ENV_STATS).is_some()
+}
+
 pub(crate) fn record(path: &std::ffi::OsStr, line: &str) {
     use std::io::Write;
     if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -870,6 +1162,6 @@ pub(crate) fn record(path: &std::ffi::OsStr, line: &str) {
         .append(true)
         .open(path)
     {
-        let _ = writeln!(file, "{line}");
+        let _ = file.write_all(format!("{line}\n").as_bytes());
     }
 }

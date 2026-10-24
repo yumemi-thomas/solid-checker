@@ -103,14 +103,21 @@ pub struct Identities {
     /// `runtime_facts`. Holds node and symbol addresses: generation-scoped like
     /// `ids_by_symbol`, cleared at every point that clears it.
     pub(crate) write_indexes: HashMap<usize, Rc<WriteIndex>>,
-    /// Prototype (derived keys): type keys by type address; generation-scoped
-    /// like `ids_by_symbol`, cleared with it.
-    pub(crate) type_keys: HashMap<usize, Option<crate::derived_key::Digest32>>,
-    /// Prototype: the pointer signature each derived id was first minted with.
+    /// Derived keys: memoized acyclic type keys (with the depth each reaches)
+    /// by type address, and the tuple index; address-keyed, so
+    /// generation-scoped like `ids_by_symbol` and cleared with it.
+    pub(crate) type_keys: HashMap<usize, (Option<crate::derived_key::Digest32>, u32)>,
+    pub(crate) tuple_index: crate::derived_key::TupleIndex,
+    /// Measurement only (`derived_key::ENV_STATS`): the derivation pointers
+    /// and the symbol each derived id was first minted with in this pass, and
+    /// why the last symbol had no key.
     pub(crate) derived_signatures: HashMap<SymbolId, Vec<usize>>,
     pub(crate) derived_first: HashMap<SymbolId, P<Symbol>>,
     pub(crate) last_failure: Option<String>,
-    pub(crate) tuple_index: crate::derived_key::TupleIndex,
+    /// Derived symbols take exact keys (`derived_key.rs`), and a symbol with
+    /// no key carries no id at all instead of a counter (instant-edits P2).
+    /// Chosen at open; never changes for a project.
+    derived_keys: bool,
 }
 
 /// What an identity question needs: the checker and program of the generation
@@ -134,6 +141,24 @@ impl Identities {
             generation,
             ..Self::default()
         }
+    }
+
+    /// Selects exact derived-symbol keys (`derived_key::ENV_FLAG`).
+    #[must_use]
+    pub fn with_derived_keys(mut self, derived_keys: bool) -> Self {
+        self.derived_keys = derived_keys;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn select_derived_keys_for_test(&mut self) {
+        self.derived_keys = true;
+    }
+
+    /// Whether derived symbols take exact keys and an unkeyed symbol no id.
+    #[must_use]
+    pub fn derived_keys(&self) -> bool {
+        self.derived_keys
     }
 
     /// The declaration references of the binder ids held (tests).
@@ -382,179 +407,127 @@ impl Env<'_> {
                 return id;
             }
         }
-        if std::env::var_os("SOLID_TYPEFACTS_DERIVED_KEYS").is_some()
-            && let Some(id) = self.derived_id(symbol)
-        {
+        if self.ids.derived_keys {
+            // No exact key: no id. An absent symbol fails closed downstream;
+            // a counter would split one symbol across checkers (and, in
+            // per-file mode, across passes).
+            let id = self.derived_id(symbol).unwrap_or_else(|| {
+                if let Some(path) = std::env::var_os(crate::derived_key::ENV_STATS) {
+                    let reason = self.ids.last_failure.take().unwrap_or_default();
+                    crate::derived_key::record(
+                        &path,
+                        &format!(
+                            "nosymbol name={} flags={:?} check={:?} decls={} :: {reason}",
+                            symbol.name(),
+                            symbol.flags(),
+                            symbol.check_flags(),
+                            symbol.declarations().len()
+                        ),
+                    );
+                }
+                SymbolId::from("")
+            });
+            self.ids.ids_by_symbol.insert(address, Arc::clone(&id));
             return id;
         }
         self.ids.next_symbol += 1;
         let id: SymbolId =
             Arc::from(format!("symbol:{}:{}", self.ids.generation, self.ids.next_symbol).as_str());
-        if let Some(path) = std::env::var_os("SOLID_TYPEFACTS_DERIVED_KEY_STATS") {
+        if let Some(path) = std::env::var_os(crate::derived_key::ENV_STATS) {
             let reason = self.ids.last_failure.take().unwrap_or_default();
-            crate::derived_key::record(&path, &format!("counter {id} {} {reason}", symbol.name()));
+            crate::derived_key::record(
+                &path,
+                &format!(
+                    "counter {id} name={} flags={:?} check={:?} decls={} :: {reason}",
+                    symbol.name(),
+                    symbol.flags(),
+                    symbol.check_flags(),
+                    symbol.declarations().len()
+                ),
+            );
         }
         self.ids.ids_by_symbol.insert(address, Arc::clone(&id));
         self.ids.symbols_by_id.insert(Arc::clone(&id), symbol);
         id
     }
 
-    /// Prototype (instant-edits P2): a derived symbol's exact key.
+    /// A derived symbol's exact key (`derived_key.rs`, instant-edits P2), or
+    /// `None`: no key (the caller gives the symbol no id). With
+    /// [`crate::derived_key::ENV_STATS`] set, every decision is appended to
+    /// that file, and an id minted again in this pass for a symbol whose
+    /// derivation pointers differ is checked for type identity (injectivity).
     fn derived_id(&mut self, symbol: P<Symbol>) -> Option<SymbolId> {
-        let exported = &self.ids.exported_by_ref;
-        let checker: &mut tsrs_compiler::Checker = &mut *self.checker;
-        let mut memo = std::mem::take(&mut self.ids.type_keys);
-        let mut tuples = std::mem::take(&mut self.ids.tuple_index);
-        if let Some(key) = crate::derived_key::binder_fallback(symbol) {
-            let id: SymbolId = Arc::from(key.id().as_str());
-            if self.ids.keys.get(&id).is_some_and(|held| **held != key) {
-                self.ids.last_failure = Some("fallback-collision".into());
-                return None;
-            }
-            self.ids
-                .keys
-                .entry(Arc::clone(&id))
-                .or_insert_with(|| Arc::new(key));
-            self.ids
-                .symbols_by_id
-                .entry(Arc::clone(&id))
-                .or_insert(symbol);
-            self.ids
-                .ids_by_symbol
-                .insert(symbol.addr(), Arc::clone(&id));
-            if let Some(path) = std::env::var_os("SOLID_TYPEFACTS_DERIVED_KEY_STATS") {
-                crate::derived_key::record(&path, "keyed BinderFallback");
-            }
-            return Some(id);
-        }
-        let (key, outcome, failure) = {
-            let mut keyer = crate::derived_key::Keyer::new(
-                checker,
-                |reference: &crate::durable::DurableRef| exported.contains_key(reference),
-                &mut memo,
-                &mut tuples,
-            );
-            let (key, outcome) = keyer.derived(symbol, 0);
-            if let (Some(dump), Some(path)) = (
-                keyer.dump.take(),
-                std::env::var_os("SOLID_TYPEFACTS_DERIVED_KEY_STATS"),
-            ) {
-                if let Some(key) = &key {
-                    crate::derived_key::record(&path, &format!("mapperdump {} {dump}", key.id()));
-                }
-            }
-            (key, outcome, keyer.failure.take())
-        };
-        self.ids.type_keys = memo;
-        self.ids.tuple_index = tuples;
-        let signature = crate::derived_key::pointer_signature(&mut *self.checker, symbol);
-        let stats = std::env::var_os("SOLID_TYPEFACTS_DERIVED_KEY_STATS");
-        let key = match key {
-            Some(key) => key,
+        let stats = std::env::var_os(crate::derived_key::ENV_STATS);
+        let (key, outcome) = match crate::derived_key::binder_fallback(symbol) {
+            Some(key) => (key, crate::derived_key::Outcome::BinderFallback),
             None => {
+                let exported = &self.ids.exported_by_ref;
+                let checker: &mut tsrs_compiler::Checker = &mut *self.checker;
+                let mut memo = std::mem::take(&mut self.ids.type_keys);
+                let mut tuples = std::mem::take(&mut self.ids.tuple_index);
+                let mut keyer = crate::derived_key::Keyer::new(
+                    checker,
+                    |reference: &crate::durable::DurableRef| exported.contains_key(reference),
+                    &mut memo,
+                    &mut tuples,
+                );
+                let (key, outcome) = keyer.derived(symbol, 0);
+                let failure = keyer.failure.take();
                 if let Some(path) = &stats {
-                    let reason = crate::derived_key::failure_reason(&mut *self.checker, symbol);
-                    crate::derived_key::record(
-                        path,
-                        &format!(
-                            "none {outcome:?} {reason} {}",
-                            failure.as_deref().unwrap_or("-")
-                        ),
-                    );
-                    self.ids.last_failure = Some(format!(
-                        "{outcome:?} {reason} {}",
-                        failure.as_deref().unwrap_or("-")
-                    ));
+                    if let (Some(dump), Some(key)) = (keyer.dump.take(), &key) {
+                        crate::derived_key::record(
+                            path,
+                            &format!("mapperdump {} {dump}", key.id()),
+                        );
+                    }
+                    if keyer.cyclic_work > 50 {
+                        crate::derived_key::record(
+                            path,
+                            &format!("cyclicwork {}", keyer.cyclic_work),
+                        );
+                    }
                 }
-                return None;
+                drop(keyer);
+                self.ids.type_keys = memo;
+                self.ids.tuple_index = tuples;
+                let Some(key) = key else {
+                    if let Some(path) = &stats {
+                        let reason = format!(
+                            "{outcome:?} {} {}",
+                            crate::derived_key::failure_reason(&mut *self.checker, symbol),
+                            failure.as_deref().unwrap_or("-")
+                        );
+                        crate::derived_key::record(path, &format!("none {reason}"));
+                        self.ids.last_failure = Some(reason);
+                    }
+                    return None;
+                };
+                (key, outcome)
             }
         };
         let id: SymbolId = Arc::from(key.id().as_str());
-        if let (
-            Some(path),
-            crate::binder_key::Key::Derived {
-                tag,
-                name,
-                root,
-                context,
-            },
-        ) = (&stats, &key)
-        {
-            let decl = symbol
-                .declarations()
-                .first()
-                .and_then(|d| crate::durable::durable_ref_for_declaration(symbol, *d))
-                .map(|r| {
-                    format!(
-                        "{}:{}",
-                        r.path.rsplit('/').next().unwrap_or(""),
-                        r.start_byte
-                    )
-                })
-                .unwrap_or_default();
-            crate::derived_key::record(
-                path,
-                &format!(
-                    "keydef {id} {tag} {name} root={root} ctx={} decl={decl}",
-                    context
-                        .iter()
-                        .take(4)
-                        .map(|b| format!("{b:02x}"))
-                        .collect::<String>()
-                ),
-            );
-        }
         if let Some(path) = &stats {
-            let verdict = match self.ids.derived_signatures.get(&id) {
-                None => "first".to_owned(),
-                Some(previous) if *previous == signature => "same".to_owned(),
-                Some(_) => {
-                    let earlier = self.ids.derived_first.get(&id).copied();
-                    let describe = |checker: &mut tsrs_compiler::Checker, symbol: P<Symbol>| {
-                        let t = checker.get_type_of_symbol_exported(symbol);
-                        checker.type_to_string_exported(t)
-                    };
-                    let identical = earlier.is_some_and(|earlier| {
-                        let a = self.checker.get_type_of_symbol_exported(earlier);
-                        let b = self.checker.get_type_of_symbol_exported(symbol);
-                        self.checker.is_type_identical_to(a, b)
-                            && self.checker.is_type_identical_to(b, a)
-                    });
-                    if identical {
-                        "DIFFERENT-IDENTICAL".to_owned()
-                    } else {
-                        let now = describe(&mut *self.checker, symbol);
-                        let before = earlier.map_or_else(String::new, |earlier| {
-                            describe(&mut *self.checker, earlier)
-                        });
-                        format!(
-                            "DIFFERENT-NOT-IDENTICAL {} :: {before} || {now}",
-                            symbol.name()
-                        )
-                    }
-                }
-            };
-            crate::derived_key::record(
-                path,
-                &format!("keyed {outcome:?} {verdict} {}", std::process::id()),
-            );
+            self.record_derived(path, symbol, &id, &key, outcome);
         }
-        self.ids
-            .derived_signatures
-            .entry(Arc::clone(&id))
-            .or_insert(signature);
-        self.ids
-            .derived_first
-            .entry(Arc::clone(&id))
-            .or_insert(symbol);
         // An instantiation the root answers for is the root: its id is the
-        // root's own, already registered under the root's key.
-        if matches!(&key, crate::binder_key::Key::Derived { tag: "root", .. }) {
+        // root's own. The root is minted here too, so the id resolves (to the
+        // root) in this pass whether or not anything named the root itself.
+        if matches!(&key, Key::Derived { tag: "root", .. }) {
+            let root = self
+                .checker
+                .value_symbol_links
+                .try_get_if_id_assigned(symbol)
+                .and_then(|links| links.target())?;
+            if self.id_for(root) != id {
+                self.ids.last_failure = Some("root-mismatch".into());
+                return None;
+            }
             self.ids
                 .ids_by_symbol
                 .insert(symbol.addr(), Arc::clone(&id));
             return Some(id);
         }
+        // Two keys spelling one id (a 96-bit collision): no id.
         if self.ids.keys.get(&id).is_some_and(|held| **held != key) {
             self.ids.last_failure = Some(format!(
                 "derived-collision held={:?} new={key:?}",
@@ -574,6 +547,60 @@ impl Env<'_> {
             .ids_by_symbol
             .insert(symbol.addr(), Arc::clone(&id));
         Some(id)
+    }
+
+    /// Measurement only ([`crate::derived_key::ENV_STATS`]): the key, and
+    /// whether this pass already minted `id` for a symbol whose derivation
+    /// pointers differ (then: are the two types identical both ways).
+    fn record_derived(
+        &mut self,
+        path: &std::ffi::OsStr,
+        symbol: P<Symbol>,
+        id: &SymbolId,
+        key: &Key,
+        outcome: crate::derived_key::Outcome,
+    ) {
+        if let Key::Derived {
+            tag,
+            name,
+            root,
+            context,
+        } = key
+        {
+            let context: String = context.iter().take(4).map(|b| format!("{b:02x}")).collect();
+            crate::derived_key::record(
+                path,
+                &format!("keydef {id} {tag} {name} root={root} ctx={context}"),
+            );
+        }
+        let signature = crate::derived_key::pointer_signature(&mut *self.checker, symbol);
+        let verdict = match self.ids.derived_signatures.get(id) {
+            None => "first".to_owned(),
+            Some(previous) if *previous == signature => "same".to_owned(),
+            Some(_) => {
+                let earlier = self.ids.derived_first.get(id).copied();
+                let identical = earlier.is_some_and(|earlier| {
+                    let a = self.checker.get_type_of_symbol_exported(earlier);
+                    let b = self.checker.get_type_of_symbol_exported(symbol);
+                    self.checker.is_type_identical_to(a, b)
+                        && self.checker.is_type_identical_to(b, a)
+                });
+                if identical {
+                    "DIFFERENT-IDENTICAL".to_owned()
+                } else {
+                    format!("DIFFERENT-NOT-IDENTICAL {}", symbol.name())
+                }
+            }
+        };
+        crate::derived_key::record(path, &format!("keyed {outcome:?} {verdict}"));
+        self.ids
+            .derived_signatures
+            .entry(Arc::clone(id))
+            .or_insert(signature);
+        self.ids
+            .derived_first
+            .entry(Arc::clone(id))
+            .or_insert(symbol);
     }
 
     /// Go: `runtimePath`: `path` with symlinks resolved, or `path` itself when

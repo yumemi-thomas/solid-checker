@@ -236,6 +236,11 @@ pub fn run(
             };
             if let Some(symbol) = env.checker.get_symbol_at_location_exported(node) {
                 let id = env.id_for(symbol);
+                // No exact key: no symbol (a structural accessor without one
+                // is not suppressed batch-wide either).
+                if id.is_empty() {
+                    continue;
+                }
                 let entity = &mut result.entities[index];
                 entity.symbol = id.clone();
                 entity.symbol_claim =
@@ -329,7 +334,14 @@ pub fn run(
                             } else {
                                 SymbolClaim::Partial
                             };
-                            (env.id_for(symbol), claim)
+                            let id = env.id_for(symbol);
+                            // A symbol with no exact key carries no id: the
+                            // entity says it could not name one.
+                            if id.is_empty() {
+                                (id, SymbolClaim::Unresolved)
+                            } else {
+                                (id, claim)
+                            }
                         }
                         None => ("".into(), SymbolClaim::Unresolved),
                     };
@@ -337,7 +349,9 @@ pub fn run(
                         entity.symbol = answer.0.clone();
                         entity.symbol_claim = answer.1;
                     }
-                    if binder {
+                    // A symbol without an id is not retained: a later
+                    // generation may key it.
+                    if binder && !(result_symbol.is_some() && answer.0.is_empty()) {
                         references.retain_symbol(env, file, span, answer);
                     }
                 }
@@ -348,7 +362,9 @@ pub fn run(
                 let id = if let Some(id) = &retained_id {
                     (!id.is_empty()).then(|| id.clone())
                 } else {
-                    result_symbol.map(|symbol| env.id_for(symbol))
+                    result_symbol
+                        .map(|symbol| env.id_for(symbol))
+                        .filter(|id| !id.is_empty())
                 };
                 if let Some(id) = id {
                     match deferrals.as_deref_mut() {

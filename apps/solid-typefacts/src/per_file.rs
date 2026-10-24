@@ -262,6 +262,13 @@ impl Project {
         self.references.set_per_file(true);
     }
 
+    /// Selects exact derived-symbol keys on an opened project (tests; the
+    /// binary reads the environment at open).
+    #[cfg(test)]
+    pub(crate) fn select_derived_keys_for_test(&mut self) {
+        self.ids.select_derived_keys_for_test();
+    }
+
     /// The per-file counters (tests, measurement).
     #[must_use]
     pub fn per_file_stats(&self) -> Option<Stats> {
@@ -527,6 +534,9 @@ impl Project {
         for (id, row) in computed {
             if !row.found {
                 state.stats.unresolved_queries += 1;
+                if env_is_one(ENV_STATS) {
+                    eprintln!("per-file unresolved query {id}");
+                }
             }
             rows.insert(id, row);
         }

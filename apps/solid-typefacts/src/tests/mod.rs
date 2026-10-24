@@ -6,6 +6,7 @@ mod binder_ids;
 mod binder_retention;
 mod canonical_assembly;
 mod contributions;
+mod derived_keys;
 mod entity_projection;
 mod generation;
 mod history_order;

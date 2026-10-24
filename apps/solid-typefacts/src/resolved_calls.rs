@@ -579,12 +579,21 @@ impl CallRun<'_, '_> {
         if writes.contains(&*library.name) {
             return None;
         }
+        // The write census reads the binding's references, which a symbol
+        // with no id does not have: no binding (fail closed).
         if self.caches.defer_library {
-            self.caches.pending_library = Some(self.env.id_for(target));
+            let id = self.env.id_for(target);
+            if id.is_empty() {
+                return None;
+            }
+            self.caches.pending_library = Some(id);
             return Some(library);
         }
         self.references.ensure(self.env);
         let id = self.env.id_for(target);
+        if id.is_empty() {
+            return None;
+        }
         for reference in self.references.query(self.env, &id) {
             let source = program.get_source_file(&reference.path)?;
             let position = u32::try_from(reference.start_byte).ok()?;

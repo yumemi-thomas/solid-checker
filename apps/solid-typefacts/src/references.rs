@@ -593,9 +593,12 @@ impl Acc {
     }
 
     fn finish(self) -> (Vec<Group>, Vec<(SymbolId, u8)>, bool) {
+        // A symbol with no id (no exact key, `Identities::derived_keys`) has
+        // no reference list: its identifiers join no bucket and no space.
         let mut groups: Vec<Group> = self
             .groups
             .into_iter()
+            .filter(|group| !group.id.is_empty())
             .map(|mut group| {
                 if group.unordered {
                     group.spans.sort_by_key(|span| span.start);
@@ -608,6 +611,7 @@ impl Acc {
             .collect();
         groups.sort_by(|left, right| left.id.cmp(&right.id));
         let mut spaces = self.spaces;
+        spaces.retain(|(id, _)| !id.is_empty());
         spaces.sort_by(|left, right| left.0.cmp(&right.0));
         (groups, spaces, self.durable)
     }
@@ -744,7 +748,11 @@ impl<'r> Walk<'r> {
             return;
         };
         let slot = slot_of(&mut self.slots, env, symbol);
-        if !durable_symbol_id(&slot.reference) || !durable_symbol_id(&slot.canonical) {
+        if !durable_symbol_id(&slot.reference)
+            || !durable_symbol_id(&slot.canonical)
+            || slot.reference.is_empty()
+            || slot.canonical.is_empty()
+        {
             // A generation-scoped id (an unresolved type name's placeholder,
             // a symbol with no provable key) means nothing next generation:
             // the identifier joins the half resolved again on every reuse.
@@ -1377,6 +1385,9 @@ impl ReferenceIndex {
     /// Go: `locations`.
     #[must_use]
     pub fn locations(&self, id: &SymbolId) -> Vec<Location> {
+        if id.is_empty() {
+            return Vec::new();
+        }
         let Some(references) = self.merged.as_ref().and_then(|merged| merged.get(id)) else {
             return Vec::new();
         };
@@ -1488,17 +1499,22 @@ impl ReferenceIndex {
                     let id = env.id_for(canonical);
                     let start = skip_trivia(text, node.pos().source_offset().unwrap_or(0));
                     let end = node.end().source_offset().unwrap_or(start);
-                    let spans = scan.references.entry(id.clone()).or_default();
-                    // Parsed children normally arrive in source order.
-                    // Preserve the ordering contract without sorting every
-                    // bucket, but detect and repair any non-lexical compiler
-                    // traversal defensively.
-                    if spans.last().is_some_and(|last| last.start > start) {
-                        scan.unordered.insert(id);
+                    // A symbol with no id has no bucket and no space.
+                    if !id.is_empty() {
+                        let spans = scan.references.entry(id.clone()).or_default();
+                        // Parsed children normally arrive in source order.
+                        // Preserve the ordering contract without sorting every
+                        // bucket, but detect and repair any non-lexical compiler
+                        // traversal defensively.
+                        if spans.last().is_some_and(|last| last.start > start) {
+                            scan.unordered.insert(id);
+                        }
+                        spans.push(Span { start, end });
                     }
-                    spans.push(Span { start, end });
-                    *scan.spaces.entry(reference_id).or_default() |=
-                        if is_type_space_reference(node) { 2 } else { 1 };
+                    if !reference_id.is_empty() {
+                        *scan.spaces.entry(reference_id).or_default() |=
+                            if is_type_space_reference(node) { 2 } else { 1 };
+                    }
                 }
             }
             node.for_each_child(&mut |child| {
