@@ -722,6 +722,57 @@ where
     })
 }
 
+/// [`parallel_slice_results`] for items whose costs vary widely: each worker
+/// claims the next unclaimed item, and the results come back in input order.
+/// Workers keep the caller's worker limit, so analysis nested in an item
+/// spreads as it would on the caller's thread. Without threads (WASM), or
+/// for a short slice, the items run in order on the caller's thread.
+pub(crate) fn parallel_balanced_results<T, R, F>(items: &[T], analyze: F) -> Vec<R>
+where
+    T: Sync,
+    R: Send,
+    F: Fn(&T) -> R + Sync,
+{
+    let limit = available_analysis_workers();
+    let workers = limit.min(items.len());
+    if workers <= 1 || items.len() < 64 {
+        return items.iter().map(analyze).collect();
+    }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    std::thread::scope(|scope| {
+        let handles = (0..workers)
+            .map(|_| {
+                let (analyze, next) = (&analyze, &next);
+                scope.spawn(move || {
+                    let _limit = AnalysisWorkerLimit::enter(limit);
+                    let mut done = Vec::new();
+                    loop {
+                        let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some(item) = items.get(index) else {
+                            break;
+                        };
+                        done.push((index, analyze(item)));
+                    }
+                    done
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut results = (0..items.len()).map(|_| None).collect::<Vec<_>>();
+        for handle in handles {
+            for (index, result) in handle
+                .join()
+                .expect("parallel Reactive IR analysis worker panicked")
+            {
+                results[index] = Some(result);
+            }
+        }
+        results
+            .into_iter()
+            .map(|result| result.expect("every item is claimed by one worker"))
+            .collect()
+    })
+}
+
 pub(crate) fn parallel_file_chunk_results<R, F>(files: &[FileFacts], analyze: F) -> Vec<R>
 where
     R: Send,

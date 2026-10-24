@@ -14,29 +14,59 @@ pub(crate) fn event_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(St
     if !lookup.program_closed || lookup.program_has_eval() {
         return literals;
     }
-    for file in lookup.files() {
-        for literal in &file.ast.functions {
-            if literal.generator
-                || lookup.function_component_status(file, literal) != ComponentStatus::No
-            {
-                continue;
-            }
-            let mut classifying = HashSet::default();
-            let mut flow = InvocationFlow {
-                lookup,
-                classifying: &mut classifying,
-                budget: FLOW_BUDGET,
-                seen: HashSet::default(),
-                frames: Vec::new(),
-                props_stack: Vec::new(),
-                owner_mode: true,
-            };
-            if flow.function_role(file, literal) == Some(Some(ExecutionRole::EventCallback)) {
-                literals.insert((file.path.to_string(), literal.span));
-            }
+    let candidates = lookup
+        .files()
+        .iter()
+        .flat_map(|file| {
+            file.ast
+                .functions
+                .iter()
+                .map(move |literal| (file, literal))
+        })
+        .collect::<Vec<_>>();
+    // Each literal's census is independent. In parallel only once the flow
+    // answers exist and this thread is not computing them: a nested role
+    // query then reads the finished answers on every thread, as it does here,
+    // and a table a census forces first is forced the same way in any order.
+    let invoked = if lookup.invocation_flow_answers_ready() && !computing_flow_answers() {
+        crate::pipeline::parallel_balanced_results(&candidates, |&(file, literal)| {
+            literal_event_invoked(lookup, file, literal)
+        })
+    } else {
+        candidates
+            .iter()
+            .map(|&(file, literal)| literal_event_invoked(lookup, file, literal))
+            .collect()
+    };
+    for ((file, literal), invoked) in candidates.into_iter().zip(invoked) {
+        if invoked {
+            literals.insert((file.path.to_string(), literal.span));
         }
     }
     literals
+}
+
+/// Whether every invocation of the function literal runs through event
+/// delivery ([`event_invoked_literals`]), from an empty context.
+fn literal_event_invoked<'a>(
+    lookup: &SemanticLookup<'a>,
+    file: &'a solid_facts::FileFacts,
+    literal: &'a solid_facts::ast::FunctionFact,
+) -> bool {
+    if literal.generator || lookup.function_component_status(file, literal) != ComponentStatus::No {
+        return false;
+    }
+    let mut classifying = HashSet::default();
+    let mut flow = InvocationFlow {
+        lookup,
+        classifying: &mut classifying,
+        budget: FLOW_BUDGET,
+        seen: HashSet::default(),
+        frames: Vec::new(),
+        props_stack: Vec::new(),
+        owner_mode: true,
+    };
+    flow.function_role(file, literal) == Some(Some(ExecutionRole::EventCallback))
 }
 
 impl<'a> InvocationFlow<'a, '_, '_> {

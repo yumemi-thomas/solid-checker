@@ -123,9 +123,21 @@ thread_local! {
     static COMPUTING_FLOW_ANSWERS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+/// Whether this thread is computing [`invocation_flow_answers`].
+pub(super) fn computing_flow_answers() -> bool {
+    COMPUTING_FLOW_ANSWERS.with(std::cell::Cell::get)
+}
+
 /// ADR 0319: the invocation-flow answer of every function literal of a
 /// closed program, keyed by path and literal span; only proven roles are
 /// kept. Computed once per build, each answer from an empty context.
+///
+/// The answers are independent, so they are computed in parallel, each on a
+/// thread that is computing the answers (a nested role query there computes
+/// directly, as on the caller's thread), and inserted in file and literal
+/// order. A table one of them first forces is forced inside this
+/// computation in any order, and its initializer receives no context from
+/// the literal that forced it.
 pub(crate) fn invocation_flow_answers(
     lookup: &SemanticLookup<'_>,
 ) -> HashMap<(String, Span), ExecutionRole> {
@@ -134,12 +146,26 @@ pub(crate) fn invocation_flow_answers(
         return answers;
     }
     let outer = COMPUTING_FLOW_ANSWERS.with(|computing| computing.replace(true));
-    for file in lookup.files() {
-        for literal in &file.ast.functions {
-            let mut classifying = HashSet::default();
-            if let Some(role) = literal_flow_role(file, literal, lookup, &mut classifying) {
-                answers.insert((file.path.to_string(), literal.span), role);
-            }
+    let literals = lookup
+        .files()
+        .iter()
+        .flat_map(|file| {
+            file.ast
+                .functions
+                .iter()
+                .map(move |literal| (file, literal))
+        })
+        .collect::<Vec<_>>();
+    let roles = crate::pipeline::parallel_balanced_results(&literals, |(file, literal)| {
+        let outer = COMPUTING_FLOW_ANSWERS.with(|computing| computing.replace(true));
+        let mut classifying = HashSet::default();
+        let role = literal_flow_role(file, literal, lookup, &mut classifying);
+        COMPUTING_FLOW_ANSWERS.with(|computing| computing.set(outer));
+        role
+    });
+    for ((file, literal), role) in literals.into_iter().zip(roles) {
+        if let Some(role) = role {
+            answers.insert((file.path.to_string(), literal.span), role);
         }
     }
     COMPUTING_FLOW_ANSWERS.with(|computing| computing.set(outer));

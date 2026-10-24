@@ -1806,6 +1806,11 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| crate::execution_role::invocation_flow_answers(self))
     }
 
+    /// Whether [`Self::invocation_flow_answers`] is already computed.
+    pub(crate) fn invocation_flow_answers_ready(&self) -> bool {
+        self.invocation_flow_answers.get().is_some()
+    }
+
     /// The literals whose every invocation comes through event delivery, for the
     /// owner seeds; see [`crate::execution_role::event_invoked_literals`].
     pub(crate) fn event_invoked_literals(&self) -> &HashSet<(String, Span)> {
