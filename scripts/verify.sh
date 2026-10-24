@@ -237,6 +237,22 @@ TYPEFACTS_BUILD_ID="$SOLID_CHECKER_BUILD_ID"
 SOLID_CHECKER_CARGO_PROFILE="$cargo_profile"
 export SOLID_CHECKER_BUILD_ID TYPEFACTS_BUILD_ID SOLID_CHECKER_CARGO_PROFILE
 
+# The WASM package and its parity gate run unless the branch changes only the
+# analysis crates (or prose), whose threads a lint confines to sites with a
+# sequential arm (ADR 0379). CI runs parity on every pull request either way.
+# SOLID_CHECKER_VERIFY_WASM=1 runs it regardless.
+step wasm-scope
+wasm_scope=$(bun scripts/verify-delta.mjs --wasm-scope)
+case "$wasm_scope" in
+  skip:*) run_wasm=0 ;;
+  *) run_wasm=1 ;;
+esac
+if [ "${SOLID_CHECKER_VERIFY_WASM:-0}" = 1 ]; then
+  run_wasm=1
+  wasm_scope="run: SOLID_CHECKER_VERIFY_WASM=1"
+fi
+echo "make verify: WASM package and parity: $wasm_scope"
+
 # ---------------------------------------------------------------------------
 # Builds and suites: five lanes, one per target directory (plus provisioning,
 # which runs no Cargo).
@@ -305,7 +321,9 @@ step builds-and-suites
 lane rust rust_lane
 lane typefacts typefacts_lane
 lane clippy clippy_lane
-lane wasm-build wasm_build_lane
+if [ "$run_wasm" = 1 ]; then
+  lane wasm-build wasm_build_lane
+fi
 lane oracle-provision oracle_provision_lane
 lanes_wait
 
@@ -374,7 +392,9 @@ js_lane() {
 
 step gates
 lane gates gates_lane
-lane wasm-parity wasm_parity_lane
+if [ "$run_wasm" = 1 ]; then
+  lane wasm-parity wasm_parity_lane
+fi
 lane js js_lane
 lanes_wait
 
@@ -394,6 +414,7 @@ bun scripts/doc-budget.mjs
 
 step ""
 summarize
+printf '\n  WASM package and parity: %s\n' "$wasm_scope"
 
 # A clean tree that passed every step is the default base for the next
 # `make verify-delta` (scripts/verify-delta.mjs): the fast loop then plans only

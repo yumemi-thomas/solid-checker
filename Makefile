@@ -16,7 +16,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity clean clean-verify
+.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify
 
 build: build-rust
 
@@ -109,8 +109,11 @@ build-wasm-parity-guests:
 # ordinary check (scripts/wasm-parity.mjs). The
 # gate builds nothing: the package, the native checker and the bridge test's
 # recorded update frames are made here first, and the gate fails on any it
-# cannot find. Uncached, by design.
-wasm-parity: build-wasm-package build-checker-debug tsc-oracle-provision build-wasm-parity-guests
+# cannot find. Uncached, by design. `wasm-parity-gate` is the gate over a
+# package already built (CI's wasm-package job builds it first).
+wasm-parity: build-wasm-package wasm-parity-gate
+
+wasm-parity-gate: build-checker-debug tsc-oracle-provision build-wasm-parity-guests
 	scratch=$$(mktemp -d "$${TMPDIR:-/tmp}/sc-wasm-parity.XXXXXX") && mkdir -p "$$scratch/n2-tmp" && \
 	  TMPDIR="$$scratch/n2-tmp" TYPEFACTS_BRIDGE_FRAMES="$$scratch/update-frames" \
 	  SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" \

@@ -596,3 +596,7 @@ The producer pins `yumemi-thomas/tsrs@e1e9183` (upstream `3bbcc754`, v0.19.0, pl
 <a id="adr-0378"></a>
 ## ADR 0378 — A write's legal role needs all of its function's entries
 An event-only proof (ADR 0327) decides first. Else an unplaced write takes its function's call sites' and naming positions' role (a nested closure: its own, unless each layer between runs inline or on a fresh stack). An owned-scope entry is a violation if the binding holds only it. An unplaced entry, a recursive JSX render, or other reference to the binding or a named expression's outer one (prop, store, alias, method, open or escaping export): uncertifiable. Owner: `execution_role/write_roles.rs`.
+
+<a id="adr-0379"></a>
+## ADR 0379 — `make verify` skips WASM parity for analysis-only changes
+When every path the branch changes against origin/main is in `solid-facts`, `solid-reactive-ir`, the v2 rules crate or prose (`verify-delta.mjs --wasm-scope`), `make verify` builds no WASM package and runs no parity gate; CI's `wasm-package` job runs `make wasm-parity-gate` on every pull request instead. Parity compares two builds of one analysis, and the WASM-only behaviour there is threads: `Scope::spawn` panics on wasm32-wasip1. Each of those crates' `clippy.toml` disallows the thread APIs, so a new site needs an allow that names its sequential arm. Accepted trade: a 32-bit or WASI-only analysis difference surfaces in CI, not locally. `SOLID_CHECKER_VERIFY_WASM=1` forces the gate. Owners: `scripts/verify.sh`, `scripts/verify-delta.mjs`.

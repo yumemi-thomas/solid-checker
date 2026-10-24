@@ -44,6 +44,8 @@ pub(crate) struct ProjectInputs<'a, 'facts> {
     pub(crate) typescript_delta: Option<&'a SourceDiscoveryTypeScriptDelta>,
 }
 
+// Spawns only when `overlap` (a second worker); otherwise both lanes run inline (wasm32-wasip1).
+#[allow(clippy::disallowed_methods)]
 pub(crate) fn collect_project<'facts>(
     inputs: ProjectInputs<'_, 'facts>,
     mut caches: IncrementalCaches<'_>,

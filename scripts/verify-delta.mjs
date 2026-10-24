@@ -365,6 +365,33 @@ export function planFor(paths) {
   return { full: false, unmapped, decisions, checks: ordered };
 }
 
+/**
+ * Whether `make verify` must build the WASM package and run its parity gate
+ * for a change set (ADR 0379).
+ *
+ * Parity compares two builds of one analysis. An edit confined to the analysis
+ * crates -- the rows that select `wasm-compile` -- moves both builds alike,
+ * apart from what only the WASM target does differently; for the analysis that
+ * is threads, which `clippy.toml` in each of those crates confines to sites
+ * with a sequential arm. Prose no check reads moves neither. Anything else, an
+ * unreadable change set, or an empty one (nothing to attribute the result to)
+ * runs it. CI runs parity on every pull request either way.
+ *
+ * @returns {{run: boolean, reason: string}}
+ */
+export function wasmParityScope(changed) {
+  if (changed.error) return { run: true, reason: changed.error };
+  if (changed.paths.length === 0) return { run: true, reason: "no change set to scope by" };
+  const outside = [...new Set(changed.paths)].filter((path) => {
+    const row = classify(path);
+    return !row || !(row.checks.includes("wasm-compile") || row.checks.length === 0);
+  });
+  if (outside.length > 0) {
+    return { run: true, reason: `${outside.length} changed path(s) outside the analysis crates, e.g. ${outside[0]}` };
+  }
+  return { run: false, reason: `all ${new Set(changed.paths).size} changed path(s) are analysis-only or prose` };
+}
+
 const git = (args) => {
   const result = spawnSync("git", args, { cwd: ROOT, encoding: "utf8" });
   if (result.status !== 0) {
@@ -695,6 +722,16 @@ export function greenCommit(root = ROOT) {
 const DECISION_PRINT_LIMIT = 40;
 
 async function main() {
+  // `--wasm-scope [--base REV]`: scripts/verify.sh asks whether to run the
+  // WASM package and parity gate. The scope is the whole branch against
+  // origin/main (or `--base`/SOLID_VERIFY_BASE), not the last green commit:
+  // it is what CI's parity run will cover.
+  if (process.argv.includes("--wasm-scope")) {
+    const selected = baseOf(process.argv, process.env);
+    const scope = wasmParityScope(selected.error ? { error: selected.error } : changedPaths(selected.base));
+    console.log(`${scope.run ? "run" : "skip"}: ${scope.reason}`);
+    return 0;
+  }
   const dryRun = process.argv.includes("--dry-run");
   const drift = producerStampDrift(readProducerIdentity());
   const selected = baseOf(process.argv, process.env, greenCommit());

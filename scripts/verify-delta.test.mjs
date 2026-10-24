@@ -5,7 +5,7 @@
 // this script could plausibly have.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
@@ -23,6 +23,7 @@ import {
   producerStampDrift,
   runSchedule,
   scheduleFor,
+  wasmParityScope,
 } from "./verify-delta.mjs";
 
 const withoutUniversal = (checks) => checks.filter((check) => !UNIVERSAL.includes(check));
@@ -476,5 +477,42 @@ test("a failure stops the run: nothing waiting on it starts, and running checks 
     assert.ok(Date.now() - begun < 10000, "the slow check must have been stopped");
   } finally {
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("make verify skips WASM parity only for analysis-only or prose change sets", () => {
+  const scope = (...paths) => wasmParityScope({ paths });
+  for (const paths of [
+    ["rust/crates/solid-reactive-ir/src/pipeline.rs"],
+    ["rust/crates/solid-facts/src/lib.rs", "rust/dialects/solid-v2/rules/src/lib.rs", "docs/decisions.md"],
+  ]) {
+    assert.equal(scope(...paths).run, false, paths.join(", "));
+  }
+  for (const paths of [
+    // The WASM crate links the backend, so its changes keep parity.
+    ["rust/crates/solid-reactive-ir/src/pipeline.rs", "rust/crates/solid-facts-backend/src/lib.rs"],
+    ["rust/crates/solid-dialect/src/lib.rs"],
+    ["rust/dialects/solid-v2/compiler/src/lib.rs"],
+    ["fixtures/reactive-ir/a/App.tsx"],
+    ["packages/wasm/src/index.mjs"],
+    ["apps/solid-typefacts/src/main.rs"],
+    ["scripts/verify.sh"],
+    ["rust/Cargo.toml"],
+  ]) {
+    const result = scope(...paths);
+    assert.equal(result.run, true, paths.join(", "));
+    assert.ok(result.reason.length > 20);
+  }
+  // Fail closed: an unreadable or empty change set runs it.
+  assert.equal(wasmParityScope({ error: "cannot diff against origin/main" }).run, true);
+  assert.equal(wasmParityScope({ paths: [] }).run, true);
+});
+
+test("each analysis crate whose changes skip WASM parity confines threads with the lint", () => {
+  for (const row of ROWS.filter((candidate) => candidate.checks.includes("wasm-compile"))) {
+    const config = readFileSync(join(row.prefix, "clippy.toml"), "utf8");
+    for (const method of ["std::thread::scope", "std::thread::spawn", "std::thread::Scope::spawn"]) {
+      assert.ok(config.includes(`"${method}"`), `${row.prefix}clippy.toml must disallow ${method}`);
+    }
   }
 });

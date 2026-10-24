@@ -1266,6 +1266,8 @@ impl<'a> SemanticLookup<'a> {
         Some(hasher.finalize().into())
     }
 
+    // Threads only with a second analysis worker; otherwise the lanes run inline (wasm32-wasip1).
+    #[allow(clippy::disallowed_methods)]
     pub(super) fn cross_file_proof_digest(&self) -> Option<CrossFileProofDigest> {
         *self.cross_file_proof_digest.get_or_init(|| {
             // The project-wide proofs below are independent and each a whole

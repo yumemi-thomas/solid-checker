@@ -67,7 +67,10 @@ in `rust/target`, the producer's in `apps/solid-typefacts/target`, clippy in
 `rust/target/lint` (shared with `verify-delta`), and the WASM package in
 `rust/target/wasm-package`; then the gates, WASM parity and the JS suites. Each
 lane's log is printed whole when it ends, and the timing summary lists every
-lane's own steps. `verify-performance` still runs alone. Rust suites run under
+lane's own steps. `verify-performance` still runs alone. When the branch
+changes only the analysis crates (`solid-facts`, `solid-reactive-ir`, the v2
+rules) or prose, it skips the WASM package and parity gate, which CI runs on
+every pull request (ADR 0379; `SOLID_CHECKER_VERIFY_WASM=1` forces it). Rust suites run under
 nextest when `cargo-nextest` is installed (`SOLID_CHECKER_RUST_TEST_RUNNER=test`
 forces `cargo test`; per-test durations land in
 `rust/target/nextest/verify/junit.xml`); logs land in
