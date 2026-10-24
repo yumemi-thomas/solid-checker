@@ -44,7 +44,9 @@ pub(crate) use event_literals::*;
 mod flow_helpers;
 mod flow_memos;
 pub(crate) use flow_helpers::*;
-pub(crate) use flow_memos::{FLOW_TABLES_END, FLOW_TABLES_FROM, FlowTables};
+pub(crate) use flow_memos::{
+    FLOW_NARROW_TABLES_END, FLOW_NARROW_TABLES_FROM, FLOW_TABLES_END, FLOW_TABLES_FROM, FlowTables,
+};
 pub(crate) use project_consumer::ReadConsumerSummaries;
 
 use crate::indexes::ComponentStatus;

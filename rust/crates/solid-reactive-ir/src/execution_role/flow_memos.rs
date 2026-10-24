@@ -19,17 +19,26 @@
 //!   the hazard probe, the component a tag renders the tag's entity row and
 //!   the `FunctionForSymbol` probe, a primitive slot the call's signature
 //!   section and the dialect;
-//! - the questions whose tables are not ported (a call site's role, a project
-//!   callee at a parameter, a callback that runs in its call's window, a
-//!   member tag's declared method, an absent member's vetoes) are
-//!   [`Ctx::project`] reads: a file whose walks ask one is recomputed in every
-//!   build in which the program moved, and narrows as those tables port.
+//! - a project callee at a parameter and a member tag's declared method
+//!   resolve over [`ExactCallees`] ([`crate::indexes::CalleeWorld`]): the
+//!   call's file's member targets, literal receivers and entity rows, the
+//!   `FunctionForSymbol`, `BindingAt`, `ClassFor` and `PathFile` probes, the
+//!   files those name, and the assigned-member census memo. Under runtime
+//!   redirects (ADR 0322) the lookup answers ([`Ctx::project`]);
+//! - an absent member's vetoes are the assigned-member census and the
+//!   `DefinedReflectively` probe; a callback that runs in its call's window
+//!   the dialect and the effect-apply memo (a returned adapter's invocation
+//!   census is the lookup's);
+//! - a call site's role is [`FlowSiteRole`], keyed by the walk's context. Its
+//!   role machine reads the lookup ([`Ctx::project`]): it runs again in every
+//!   build in which the program moved, and a walk is reused while every site
+//!   it asked answers the same.
 //!
 //! The budget ([`FLOW_BUDGET`]) bounds what one walk visits; a walk that
 //! exhausts it has recorded exactly the reads it made, so its answer is as
 //! exact as any other. A role query nested in a walk (the site role's
 //! classification asks other literals' flow) stays inside it: it runs in the
-//! walk's `classifying` context, inside the project read.
+//! walk's `classifying` context, inside the site role's project read.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -49,6 +58,9 @@ impl Canonical for ExecutionRole {}
 /// ids 96 to 127).
 pub(crate) const FLOW_TABLES_FROM: u16 = 96;
 pub(crate) const FLOW_TABLES_END: u16 = 128;
+/// The flow narrowing's ids (256 to 319), also in [`FlowTables`].
+pub(crate) const FLOW_NARROW_TABLES_FROM: u16 = 256;
+pub(crate) const FLOW_NARROW_TABLES_END: u16 = 320;
 
 macro_rules! flow_tables {
     ($($field:ident: $memo:ty = $id:literal;)*) => {
@@ -85,6 +97,7 @@ macro_rules! flow_tables {
 flow_tables! {
     answers: InvocationFlowAnswers = 96;
     event_invoked: EventInvokedLiterals = 97;
+    site_roles: FlowSiteRole = 256;
 }
 
 /// Every analyzed file as the flow memos key it, with its path. A path
@@ -115,6 +128,22 @@ type CallPrimitives = Arc<BTreeMap<Span, Primitive>>;
 /// The function a value names: its file and ordinal there.
 type CalledFunction = Option<(FileId, u32)>;
 
+/// A project function: its file and ordinal there.
+type ProjectFunction = Option<(FileId, u32)>;
+
+/// A file's object-member targets ([`crate::object_members::ObjectMemberTargets`]):
+/// `(read, path, function)`.
+type MemberTargets = Option<Arc<Vec<(Span, Arc<str>, Span)>>>;
+
+/// A file's literal-receiver members ([`crate::object_members::LiteralReceivers`]).
+type ReceiverMembers = Option<Arc<Vec<(Span, bool)>>>;
+
+/// The binding a reference resolves to: its file and ordinal there.
+type ResolvedBinding = Option<(FileId, u32)>;
+
+/// What [`FlowWorld::project_callee`] answered for `(file, call, argument)`.
+type ProjectCallee<'w> = Option<(&'w FileFacts, &'w solid_facts::ast::FunctionFact, bool)>;
+
 /// The walk's world in a memo computation: every answer a recorded read.
 /// Each input is read once per walk: a repeated question is answered from
 /// the walk's own copy, so the record stays short.
@@ -127,6 +156,18 @@ struct CtxFlow<'r, 'c, 'w: 'c> {
     primitives: RefCell<BTreeMap<FileId, Option<CallPrimitives>>>,
     /// A tag's or callee's component: `(file, ordinal)`.
     called: RefCell<BTreeMap<(FileId, Span), CalledFunction>>,
+    /// Callee resolution's reads (ADR 0278, 0279, 0299, 0314): each file's
+    /// object-member targets and literal receivers, the functions and
+    /// classes symbols name, the bindings references resolve to, the
+    /// analyzed files paths name and the assigned-member census.
+    targets: RefCell<BTreeMap<FileId, MemberTargets>>,
+    receivers: RefCell<BTreeMap<FileId, ReceiverMembers>>,
+    functions: RefCell<BTreeMap<String, ProjectFunction>>,
+    classes: RefCell<BTreeMap<String, Option<(FileId, Span)>>>,
+    bindings: RefCell<BTreeMap<(FileId, Span), ResolvedBinding>>,
+    paths: RefCell<BTreeMap<String, Option<FileId>>>,
+    assigned: RefCell<Option<Option<Arc<crate::object_members::AssignedAnswer>>>>,
+    callees: RefCell<BTreeMap<(FileId, u32, usize), ProjectCallee<'w>>>,
     /// The first cycle a memo read met: the computation fails closed.
     cycle: RefCell<Option<Cycle>>,
 }
@@ -140,6 +181,14 @@ impl<'r, 'c, 'w: 'c> CtxFlow<'r, 'c, 'w> {
             statuses: RefCell::new(BTreeMap::new()),
             primitives: RefCell::new(BTreeMap::new()),
             called: RefCell::new(BTreeMap::new()),
+            targets: RefCell::new(BTreeMap::new()),
+            receivers: RefCell::new(BTreeMap::new()),
+            functions: RefCell::new(BTreeMap::new()),
+            classes: RefCell::new(BTreeMap::new()),
+            bindings: RefCell::new(BTreeMap::new()),
+            paths: RefCell::new(BTreeMap::new()),
+            assigned: RefCell::new(None),
+            callees: RefCell::new(BTreeMap::new()),
             cycle: RefCell::new(None),
         }
     }
@@ -182,12 +231,244 @@ impl<'r, 'c, 'w: 'c> CtxFlow<'r, 'c, 'w> {
         self.ctx.project_files(f)
     }
 
+    /// The object-member targets of `id`'s first slot
+    /// ([`crate::object_members::ObjectMemberTargets`]).
+    fn targets(&self, id: FileId) -> MemberTargets {
+        if let Some(targets) = self.targets.borrow().get(&id) {
+            return targets.clone();
+        }
+        let targets = self
+            .memo::<crate::object_members::ObjectMemberTargets>(&(id, 0))
+            .map(Arc::new);
+        self.targets.borrow_mut().insert(id, targets.clone());
+        targets
+    }
+
+    /// The literal-receiver members of `id`'s first slot
+    /// ([`crate::object_members::LiteralReceivers`]).
+    fn receivers(&self, id: FileId) -> ReceiverMembers {
+        if let Some(receivers) = self.receivers.borrow().get(&id) {
+            return receivers.clone();
+        }
+        let receivers = self
+            .memo::<crate::object_members::LiteralReceivers>(&(id, 0))
+            .map(Arc::new);
+        self.receivers.borrow_mut().insert(id, receivers.clone());
+        receivers
+    }
+
+    /// The function `symbol` names (the `FunctionForSymbol` probe).
+    fn function_named(&self, symbol: &str) -> ProjectFunction {
+        if let Some(found) = self.functions.borrow().get(symbol) {
+            return *found;
+        }
+        let found = self
+            .ctx
+            .function_for_symbol(symbol)
+            .map(|(id, _, ordinal)| (id, ordinal));
+        self.functions.borrow_mut().insert(symbol.to_owned(), found);
+        found
+    }
+
+    /// The function `(file, ordinal)` names, read.
+    fn function(
+        &self,
+        found: ProjectFunction,
+    ) -> Option<(&'w FileFacts, &'w solid_facts::ast::FunctionFact)> {
+        let (id, ordinal) = found?;
+        let file = self.read(id)?;
+        Some((file, file.ast.functions.get(ordinal as usize)?))
+    }
+
+    /// The function the value at `callee` of `id` names, as the lookup
+    /// resolves it: the value symbol (the file's entity rows) and the
+    /// function that symbol names.
+    fn called_function(
+        &self,
+        id: FileId,
+        callee: Span,
+    ) -> Option<(&'w FileFacts, &'w solid_facts::ast::FunctionFact)> {
+        let cached = self.called.borrow().get(&(id, callee)).copied();
+        let called = cached.unwrap_or_else(|| {
+            let called = self
+                .ctx
+                .file(id, 0)
+                .and_then(|read| read.value_symbol(callee))
+                .and_then(|symbol| self.function_named(symbol.as_str()));
+            self.called.borrow_mut().insert((id, callee), called);
+            called
+        });
+        self.function(called)
+    }
+
+    /// The analyzed file at `path` (the `PathFile` probe).
+    fn analyzed(&self, path: &str) -> Option<FileId> {
+        if let Some(id) = self.paths.borrow().get(path) {
+            return *id;
+        }
+        let id = self.ctx.path_file(path).map(|(id, _)| id);
+        self.paths.borrow_mut().insert(path.to_owned(), id);
+        id
+    }
+
+    /// The assigned-member census ([`crate::object_members::AssignedMembersAnswer`]).
+    fn assigned(&self) -> Option<Arc<crate::object_members::AssignedAnswer>> {
+        if let Some(assigned) = self.assigned.borrow().as_ref() {
+            return assigned.clone();
+        }
+        let assigned = self
+            .memo::<crate::object_members::AssignedMembersAnswer>(&())
+            .map(Arc::new);
+        *self.assigned.borrow_mut() = Some(assigned.clone());
+        assigned
+    }
+
     /// `value`, unless a read met a cycle.
     fn finish<T>(self, value: T) -> Result<T, Cycle> {
         match self.cycle.into_inner() {
             Some(cycle) => Err(cycle),
             None => Ok(value),
         }
+    }
+}
+
+/// Callee resolution in a flow memo ([`crate::indexes::CalleeWorld`]): every
+/// answer a recorded read. Built only for a build without runtime redirects,
+/// under which a file's own rows name a callee's symbol
+/// ([`crate::base::memo::build::FileRead::callee_symbol`]); with them the
+/// question reads the lookup.
+struct ExactCallees<'f, 'r, 'c, 'w: 'c>(&'f CtxFlow<'r, 'c, 'w>);
+
+impl<'w> crate::indexes::CalleeWorld<'w> for ExactCallees<'_, '_, '_, 'w> {
+    fn call_withheld(&self, file: &FileFacts, callee: Span) -> bool {
+        let Some(id) = self.0.id(file) else {
+            return true;
+        };
+        // As `object_members::call_withheld`: a literal receiver's member
+        // call (at the peeled callee) that no member target resolves (at the
+        // callee itself). A cycle answers withheld.
+        let peeled = file.ast.peel_ts_sugar_span(callee);
+        let Some(receivers) = self.0.receivers(id) else {
+            return true;
+        };
+        if !receivers.iter().any(|(span, _)| *span == peeled) {
+            return false;
+        }
+        self.0
+            .targets(id)
+            .is_none_or(|targets| !targets.iter().any(|(read, _, _)| *read == callee))
+    }
+
+    fn object_member_function(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<(&'w FileFacts, &'w solid_facts::ast::FunctionFact)> {
+        let id = self.0.id(file)?;
+        let targets = self.0.targets(id)?;
+        // The lookup's map keeps the last row of a callee.
+        let (_, path, function) = targets.iter().rev().find(|(read, _, _)| *read == callee)?;
+        let target = self.0.read(self.0.analyzed(path)?)?;
+        Some((target, target.ast.function_at(*function)?))
+    }
+
+    fn callee_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'w str> {
+        let id = self.0.id(file)?;
+        self.0.ctx.file(id, 0)?.callee_symbol(callee)
+    }
+
+    fn function_for_symbol(
+        &self,
+        symbol: &str,
+    ) -> Option<(&'w FileFacts, &'w solid_facts::ast::FunctionFact)> {
+        self.0.function(self.0.function_named(symbol))
+    }
+
+    fn function_called_at(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<(&'w FileFacts, &'w solid_facts::ast::FunctionFact)> {
+        self.0.called_function(self.0.id(file)?, callee)
+    }
+
+    fn entity_symbol_at(&self, file: &FileFacts, span: Span) -> Option<&'w crate::SymbolId> {
+        let id = self.0.id(file)?;
+        self.0.ctx.file(id, 0)?.symbol_at(span)
+    }
+
+    fn binding_at_reference(
+        &self,
+        file: &FileFacts,
+        span: Span,
+    ) -> Option<(&'w FileFacts, &'w solid_facts::ast::BindingFact)> {
+        let id = self.0.id(file)?;
+        let cached = self.0.bindings.borrow().get(&(id, span)).copied();
+        let found = cached.unwrap_or_else(|| {
+            let found = self
+                .0
+                .ctx
+                .binding_at(id, span)
+                .map(|(bound, _, ordinal)| (bound, ordinal));
+            self.0.bindings.borrow_mut().insert((id, span), found);
+            found
+        });
+        let (bound, ordinal) = found?;
+        let bound = self.0.read(bound)?;
+        Some((bound, bound.ast.bindings.get(ordinal as usize)?))
+    }
+
+    fn class_for_symbol(
+        &self,
+        symbol: &str,
+    ) -> Option<(&'w FileFacts, &'w solid_facts::ast::ClassFact)> {
+        let cached = self.0.classes.borrow().get(symbol).copied();
+        let found = cached.unwrap_or_else(|| {
+            let found = self
+                .0
+                .ctx
+                .class_for_symbol(symbol)
+                .map(|(id, _, span)| (id, span));
+            self.0.classes.borrow_mut().insert(symbol.to_owned(), found);
+            found
+        });
+        let (id, span) = found?;
+        let file = self.0.read(id)?;
+        Some((
+            file,
+            file.ast.classes.iter().find(|class| class.span == span)?,
+        ))
+    }
+
+    // A cycle in the census fails closed: every member may be written.
+    fn member_name_assigned(&self, name: &str) -> bool {
+        self.0.assigned().is_none_or(|assigned| {
+            assigned
+                .names
+                .binary_search_by(|candidate| candidate.as_ref().cmp(name))
+                .is_ok()
+        })
+    }
+
+    fn builtin_prototype_written(&self) -> bool {
+        self.0
+            .assigned()
+            .is_none_or(|assigned| assigned.global || assigned.hosts.iter().any(|(_, dom)| !dom))
+    }
+
+    fn constructor_prototypes_written(&self) -> bool {
+        self.0
+            .assigned()
+            .is_none_or(|assigned| !assigned.constructors.is_empty())
+    }
+
+    fn constructor_prototype_written(&self, path: &str, declaration: Span) -> bool {
+        self.0.assigned().is_none_or(|assigned| {
+            assigned
+                .constructors
+                .iter()
+                .any(|(written, at)| written.as_ref() == path && *at == declaration)
+        })
     }
 }
 
@@ -251,21 +532,49 @@ impl<'w> FlowWorld<'w> for CtxFlow<'_, '_, 'w> {
         let Some(id) = self.id(file) else {
             return (false, None);
         };
-        // Whether a callback runs in its call's own window is the effect
-        // apply census's and the returned-invocation census's question.
+        // Whether a callback runs in its call's own window
+        // ([`callback_execution_at_call`]): the dialect's answer, once the
+        // effect apply census proves the apply runs, and once the
+        // returned-invocation census proves a returned adapter is invoked.
         if self
             .dialect()
             .callback_inherits_calling_window(primitive, index)
         {
-            let ordinal = ordinal_of(&file.ast.calls, call);
-            let inherits = self.project(|lookup, table| {
-                path_file(lookup, table, id)
-                    .zip(ordinal)
-                    .and_then(|(file, ordinal)| Some((file, file.ast.calls.get(ordinal as usize)?)))
-                    .is_some_and(|(file, call)| {
-                        callback_execution_at_call(file, call, primitive, index, lookup).is_some()
-                    })
-            });
+            let semantics =
+                self.dialect()
+                    .callback_semantics_at(primitive, index, call.arguments.len());
+            let inherits = if semantics.requires_return_invocation {
+                // The returned-invocation census is assembled per build, not
+                // a memo: the lookup answers.
+                let ordinal = ordinal_of(&file.ast.calls, call);
+                self.project(|lookup, table| {
+                    path_file(lookup, table, id)
+                        .zip(ordinal)
+                        .and_then(|(file, ordinal)| {
+                            Some((file, file.ast.calls.get(ordinal as usize)?))
+                        })
+                        .is_some_and(|(file, call)| {
+                            callback_execution_at_call(file, call, primitive, index, lookup)
+                                .is_some()
+                        })
+                })
+            } else {
+                let applied = self
+                    .dialect()
+                    .effect_apply_defer_options(primitive, index)
+                    .is_none()
+                    || self
+                        .memo::<crate::indexes::EffectApplyCalls>(&())
+                        .is_some_and(|rows| {
+                            rows.iter().any(|(path, span, argument, execution)| {
+                                path.as_str() == file.path.as_str()
+                                    && *span == call.span
+                                    && *argument == index
+                                    && *execution == crate::effect_execution::ApplyExecution::Proven
+                            })
+                        });
+                applied && semantics.execution.is_some()
+            };
             if inherits {
                 return (true, None);
             }
@@ -289,20 +598,34 @@ impl<'w> FlowWorld<'w> for CtxFlow<'_, '_, 'w> {
     ) -> Option<(&'w FileFacts, &'w solid_facts::ast::FunctionFact, bool)> {
         let id = self.id(file)?;
         let ordinal = ordinal_of(&file.ast.calls, call)?;
-        let (callee, function, exact) = self.project(|lookup, table| {
-            let file = path_file(lookup, table, id)?;
-            let call = file.ast.calls.get(ordinal as usize)?;
-            let (callee_file, callee, exact) =
-                project_callee_at_parameter(file, call, index, lookup)?;
-            Some((
-                table.id_of(callee_file.path.as_str())?,
-                ordinal_of(&callee_file.ast.functions, callee)?,
-                exact,
-            ))
-        })?;
-        let callee_file = self.read(callee)?;
-        let function = callee_file.ast.functions.get(function as usize)?;
-        Some((callee_file, function, exact))
+        if let Some(found) = self.callees.borrow().get(&(id, ordinal, index)) {
+            return *found;
+        }
+        let found = if self.ctx.constant(Constant::RuntimeRedirects) {
+            // A redirected callee symbol (ADR 0322) is the lookup's.
+            self.project(|lookup, table| {
+                let file = path_file(lookup, table, id)?;
+                let call = file.ast.calls.get(ordinal as usize)?;
+                let (callee_file, callee, exact) =
+                    project_callee_at_parameter(file, call, index, lookup)?;
+                Some((
+                    table.id_of(callee_file.path.as_str())?,
+                    ordinal_of(&callee_file.ast.functions, callee)?,
+                    exact,
+                ))
+            })
+            .and_then(|(callee, function, exact)| {
+                let callee_file = self.read(callee)?;
+                let function = callee_file.ast.functions.get(function as usize)?;
+                Some((callee_file, function, exact))
+            })
+        } else {
+            project_callee_in(&ExactCallees(self), file, call, index)
+        };
+        self.callees
+            .borrow_mut()
+            .insert((id, ordinal, index), found);
+        found
     }
 
     fn function_called_at(
@@ -310,24 +633,7 @@ impl<'w> FlowWorld<'w> for CtxFlow<'_, '_, 'w> {
         file: &'w FileFacts,
         callee: Span,
     ) -> Option<(&'w FileFacts, &'w solid_facts::ast::FunctionFact)> {
-        // As the lookup resolves it: the tag's value symbol (the file's
-        // entity rows) and the function that symbol names.
-        let id = self.id(file)?;
-        let cached = self.called.borrow().get(&(id, callee)).copied();
-        let called = cached.unwrap_or_else(|| {
-            let called = self
-                .ctx
-                .file(id, 0)
-                .and_then(|read| read.value_symbol(callee))
-                .and_then(|symbol| self.ctx.function_for_symbol(symbol.as_str()))
-                .map(|(target, _, ordinal)| (target, ordinal));
-            self.called.borrow_mut().insert((id, callee), called);
-            called
-        });
-        let (target, ordinal) = called?;
-        let target_file = self.read(target)?;
-        let function = target_file.ast.functions.get(ordinal as usize)?;
-        Some((target_file, function))
+        self.called_function(self.id(file)?, callee)
     }
 
     fn member_runs_declared_method(
@@ -344,6 +650,15 @@ impl<'w> FlowWorld<'w> for CtxFlow<'_, '_, 'w> {
         ) else {
             return false;
         };
+        if !self.ctx.constant(Constant::RuntimeRedirects) {
+            return member_runs_declared_method_in(
+                &ExactCallees(self),
+                file,
+                tag,
+                component_file,
+                component,
+            );
+        }
         self.project(|lookup, table| {
             let (Some(file), Some(component_file)) = (
                 path_file(lookup, table, id),
@@ -362,7 +677,13 @@ impl<'w> FlowWorld<'w> for CtxFlow<'_, '_, 'w> {
     }
 
     fn absent_member_inert(&self, key: &str) -> bool {
-        self.project(|lookup, _| absent_member_inert_in(lookup, key))
+        // As [`absent_member_inert_in`]: the assigned-member census and the
+        // reflective definers.
+        let callees = ExactCallees(self);
+        let builtin = |name: &str| {
+            crate::indexes::callee_world::member_may_be_reassigned_on_builtin_in(&callees, name)
+        };
+        !builtin(key) && !builtin("__proto__") && !self.ctx.defined_reflectively(key)
     }
 
     fn site_role(
@@ -372,12 +693,11 @@ impl<'w> FlowWorld<'w> for CtxFlow<'_, '_, 'w> {
         classifying: &mut HashSet<(String, Span)>,
     ) -> Option<ExecutionRole> {
         let id = self.id(file)?;
-        // Asked in the walk's own context, which the query leaves as it
-        // leaves it on the lookup.
-        self.project(|lookup, table| {
-            let file = path_file(lookup, table, id)?;
-            site_role_in(lookup, file, call, classifying)
-        })
+        // Asked in the walk's own context ([`FlowSiteRole`]), which the
+        // query leaves as it found it.
+        let mut context = classifying.iter().cloned().collect::<Vec<_>>();
+        context.sort_unstable();
+        self.memo::<FlowSiteRole>(&(id, call, context)).flatten()
     }
 }
 
@@ -485,5 +805,46 @@ impl Memo<BuildSchema> for EventInvokedLiterals {
             Input::File(*id, Section::Source),
             Input::File(*id, Section::Compiler),
         ]
+    }
+}
+
+/// A call site's role as a flow walk asks it ([`FlowWorld::site_role`]): the
+/// file, the call, and the walk's context (the literals it is classifying,
+/// sorted), which the role query consults to cut a cycle and leaves as it
+/// found it. A function of its key, so a memo: a walk that asks reads this
+/// answer, not the whole program, and is reused while every site it asked
+/// answers the same. The role machine reads the lookup's tables
+/// (`semantic_execution_role_within` and the named-callback census), so the
+/// answer itself reads the whole program ([`Ctx::project`]) and runs in
+/// every build in which the program moved.
+pub(crate) struct FlowSiteRole;
+
+impl Memo<BuildSchema> for FlowSiteRole {
+    type Key = (FileId, Span, Vec<(String, Span)>);
+    type Value = Option<ExecutionRole>;
+    const NAME: &'static str = "flow_site_role";
+    const ID: TableId = Self::TABLE;
+
+    fn table(tables: &BuildTables) -> &Table<BuildSchema, Self> {
+        Self::of(tables)
+    }
+
+    fn compute(
+        ctx: &Ctx<'_, '_, BuildSchema>,
+        (id, call, context): &(FileId, Span, Vec<(String, Span)>),
+    ) -> Result<Option<ExecutionRole>, Cycle> {
+        // As every flow memo, a nested role query computes in this context
+        // whoever asks ([`computing_flow`]).
+        Ok(computing_flow(|| {
+            ctx.project_files(|lookup, table| {
+                let file = path_file(lookup, table, *id)?;
+                let mut classifying = context.iter().cloned().collect::<HashSet<_>>();
+                site_role_in(lookup, file, *call, &mut classifying)
+            })
+        }))
+    }
+
+    fn on_cycle(_: &(FileId, Span, Vec<(String, Span)>)) -> Option<ExecutionRole> {
+        None
     }
 }

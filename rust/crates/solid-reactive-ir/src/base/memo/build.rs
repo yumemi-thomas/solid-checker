@@ -164,7 +164,8 @@ pub(crate) struct BuildTables {
     census: crate::indexes::CensusTables,
     /// Tables 128 to 159: returned-callback use sites (study S5e).
     returned: crate::indexes::ReturnedTables,
-    /// Tables 96 to 127: the invocation-flow answers (study S5a).
+    /// Tables 96 to 127 and 256 to 319: the invocation-flow answers (study
+    /// S5a) and their site roles.
     flow: crate::execution_role::FlowTables,
     /// Tables 160 to 191: returned-function invocations and returned sources
     /// (study S6a).
@@ -203,7 +204,10 @@ impl BuildTables {
             PROTOTYPE_OWNER_AT => &self.prototype_owner_at,
             id if (crate::execution_role::FLOW_TABLES_FROM
                 ..crate::execution_role::FLOW_TABLES_END)
-                .contains(&id.0) =>
+                .contains(&id.0)
+                || (crate::execution_role::FLOW_NARROW_TABLES_FROM
+                    ..crate::execution_role::FLOW_NARROW_TABLES_END)
+                    .contains(&id.0) =>
             {
                 self.flow
                     .table(id)

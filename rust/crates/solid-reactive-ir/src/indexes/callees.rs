@@ -69,77 +69,7 @@ impl<'a> SemanticLookup<'a> {
         property: &str,
         depth: usize,
     ) -> bool {
-        use solid_facts::ast::ClassElementKind;
-        if depth == 0 {
-            return false;
-        }
-        for element in &class.elements {
-            if element.r#static {
-                continue;
-            }
-            match element.kind {
-                ClassElementKind::Constructor => {
-                    let Some(constructor) = file
-                        .ast
-                        .functions
-                        .iter()
-                        .find(|function| Some(function.span) == element.value)
-                    else {
-                        return false;
-                    };
-                    let returns_value = file
-                        .ast
-                        .own_returns(constructor)
-                        .any(|returned| returned.argument.is_some());
-                    let parameter_property = file.ast.parameter_properties.iter().any(|name| {
-                        constructor.span.contains(*name)
-                            && file.source_text(*name) == Some(property)
-                    });
-                    if returns_value || parameter_property {
-                        return false;
-                    }
-                }
-                ClassElementKind::Field
-                    if element.computed
-                        || element.key.and_then(|key| file.source_text(key)) == Some(property) =>
-                {
-                    return false;
-                }
-                ClassElementKind::Method | ClassElementKind::Getter | ClassElementKind::Setter
-                    if element.computed =>
-                {
-                    return false;
-                }
-                _ => {}
-            }
-        }
-        let Some(heritage) = class.heritage else {
-            return true;
-        };
-        let heritage = file.ast.peel_ts_sugar_span(heritage);
-        let base = file
-            .ast
-            .reference_declaration(heritage)
-            .and_then(|declaration| {
-                file.ast
-                    .classes
-                    .iter()
-                    .find(|candidate| {
-                        candidate
-                            .name
-                            .as_ref()
-                            .is_some_and(|name| name.span == declaration)
-                    })
-                    .map(|base| (file, base))
-            })
-            .or_else(|| {
-                self.entities
-                    .at(file.path.as_str(), heritage)
-                    .and_then(|symbol| self.class_for_symbol(symbol))
-            });
-        base.is_some_and(|(base_file, base)| {
-            self.class_instance_is_exact(base_file, base, property, depth - 1)
-        })
+        super::callee_world::class_instance_is_exact_in(self, file, class, property, depth)
     }
 
     pub(crate) fn binding_at_reference(
@@ -387,30 +317,7 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         callee: Span,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
-        let callee = file.ast.peel_ts_sugar_span(callee);
-        if file.ast.computed_members.binary_search(&callee).is_ok() {
-            return None;
-        }
-        let member = file.ast.member_at(callee)?;
-        let receiver = file.ast.peel_ts_sugar_span(member.object);
-        let declaration = file.ast.reference_declaration(receiver)?;
-        let namespace = file.ast.imports.iter().any(|import| {
-            !import.type_only
-                && import.bindings.iter().any(|binding| {
-                    !binding.type_only
-                        && binding.kind == solid_facts::ast::ImportKind::Namespace
-                        && binding.local.span == declaration
-                })
-        });
-        if !namespace {
-            return None;
-        }
-        let symbol = self.entities.at(file.path.as_str(), member.property)?;
-        self.function_for_symbol(symbol)
-            .filter(|(target_file, function)| {
-                function.method_name.is_none()
-                    && self.function_value_is_current(target_file, function)
-            })
+        super::callee_world::namespace_member_function_in(self, file, callee)
     }
 
     pub(crate) fn function_for_symbol(

@@ -17,7 +17,7 @@ mod handlers;
 pub(crate) use handlers::{SpreadTargets, intrinsic_element, unresolved_handler_defects};
 #[path = "object_members/assigned.rs"]
 mod assigned;
-pub(crate) use assigned::{AssignedMembersAnswer, PrototypeOwnerAt};
+pub(crate) use assigned::{AssignedAnswer, AssignedMembersAnswer, PrototypeOwnerAt};
 #[path = "object_members/memo.rs"]
 mod memo;
 pub(crate) use memo::{LiteralReceivers, ObjectMemberTargets, ReceiverClosed, SpreadTargetsAt};

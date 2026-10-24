@@ -40,10 +40,7 @@ impl<'a> SemanticLookup<'a> {
     /// declaration of which is in `lib.dom.d.ts`: no ECMAScript value inherits
     /// from a DOM interface.
     pub(crate) fn member_may_be_reassigned_on_builtin(&self, name: &str) -> bool {
-        let assigned = self.assigned_members();
-        assigned.global
-            || assigned.hosts.iter().any(|(_, dom)| !dom)
-            || assigned.names.contains(name)
+        super::callee_world::member_may_be_reassigned_on_builtin_in(self, name)
     }
 
     /// ADR 0314: [`Self::member_name_may_be_reassigned`] for an instance of
@@ -56,72 +53,7 @@ impl<'a> SemanticLookup<'a> {
         file: &'a FileFacts,
         class: &'a solid_facts::ast::ClassFact,
     ) -> bool {
-        let assigned = self.assigned_members();
-        assigned.global
-            || assigned.hosts.iter().any(|(_, dom)| !dom)
-            || assigned.names.contains(name)
-            || self.class_chain_prototype_written(file, class, 8)
-    }
-
-    fn class_chain_prototype_written(
-        &self,
-        file: &'a FileFacts,
-        class: &'a solid_facts::ast::ClassFact,
-        depth: usize,
-    ) -> bool {
-        let assigned = self.assigned_members();
-        if depth == 0 {
-            return true;
-        }
-        if !assigned.constructors.is_empty() {
-            // The class's own name, or the `const` a class expression is bound to.
-            let declared = class.name.as_ref().map(|name| name.span).into_iter().chain(
-                file.ast
-                    .bindings
-                    .iter()
-                    .filter(|binding| {
-                        binding.initializer.is_some_and(|initializer| {
-                            file.ast.peel_ts_sugar_span(initializer) == class.span
-                        })
-                    })
-                    .flat_map(|binding| binding.names.iter().map(|name| name.span)),
-            );
-            for declaration in declared {
-                if assigned
-                    .constructors
-                    .contains(&(file.path.to_string(), declaration))
-                {
-                    return true;
-                }
-            }
-        }
-        let Some(heritage) = class.heritage else {
-            return false;
-        };
-        let heritage = file.ast.peel_ts_sugar_span(heritage);
-        let base = file
-            .ast
-            .reference_declaration(heritage)
-            .and_then(|declaration| {
-                file.ast
-                    .classes
-                    .iter()
-                    .find(|candidate| {
-                        candidate
-                            .name
-                            .as_ref()
-                            .is_some_and(|name| name.span == declaration)
-                    })
-                    .map(|base| (file, base))
-            })
-            .or_else(|| {
-                self.entities
-                    .at(file.path.as_str(), heritage)
-                    .and_then(|symbol| self.class_for_symbol(symbol))
-            });
-        base.is_none_or(|(base_file, base)| {
-            self.class_chain_prototype_written(base_file, base, depth - 1)
-        })
+        super::callee_world::member_may_be_reassigned_on_class_in(self, name, file, class)
     }
 
     /// ADR 0209, 0314: the member names assignments write, and the prototypes
