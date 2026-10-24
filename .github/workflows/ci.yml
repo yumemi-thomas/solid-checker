@@ -183,10 +183,12 @@ jobs:
 
   # The owned check against the native one over the same projects. Local
   # `make verify` skips it for changes confined to the analysis crates (ADR
-  # 0379), so every pull request runs it here. On macOS: the gate's path rows
-  # pin macOS errno values (a symlink loop is os error 62 there, 40 on Linux).
+  # 0379), so every pull request runs it here. On macOS 27 (the `xcode-27`
+  # image): the gate's path rows compare the owned WASI layer with the host's
+  # own POSIX answers, which differ on Linux (a symlink loop is os error 40,
+  # not 62) and on macOS 15 (a trailing slash through a file symlink).
   wasm-parity:
-    runs-on: macos-15
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.99.1
