@@ -47,9 +47,9 @@ pub(crate) enum Section {
     /// resolved calls (a callee's symbol), and the references located in it.
     Entities,
     /// What the file's TypeFacts entities say about calls: for each entity of
-    /// its path, in table order, its location and whether it carries a
-    /// resolved call that never returns or asserts. A resolved call is read
-    /// through `FileRead::resolved_callee_call`.
+    /// its path, in table order, its location and its whole resolved call
+    /// (validity, kind, targets, declaration, arguments, flags), since
+    /// `FileRead::resolved_callee_call` hands the whole call to its reader.
     Signatures,
 }
 
@@ -348,6 +348,20 @@ fn low_bits(digest: &[u8; 32]) -> u64 {
     u64::from_le_bytes(digest[..8].try_into().expect("eight bytes"))
 }
 
+/// Feeds serialized bytes straight into a digest.
+struct DigestWriter<'a>(&'a mut Sha256);
+
+impl std::io::Write for DigestWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.update(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 fn fingerprints(views: &Views<'_>, id: FileId) -> FileFingerprints {
     let slots = views.table.slots_of(id).to_vec();
     let mut source = Sha256::new();
@@ -413,10 +427,20 @@ fn fingerprints(views: &Views<'_>, id: FileId) -> FileFingerprints {
     }
     let mut signatures = Sha256::new();
     if let Some(slot) = slots.first() {
-        for (start, end, call) in views.view(*slot).call_signature_rows() {
-            signatures.update(start.to_le_bytes());
-            signatures.update(end.to_le_bytes());
-            signatures.update([call]);
+        for entity in views.view(*slot).typescript_entities() {
+            signatures.update(entity.location.start_byte.to_le_bytes());
+            signatures.update(entity.location.end_byte.to_le_bytes());
+            match entity.resolved_call.as_deref() {
+                None => signatures.update([0]),
+                Some(call) => {
+                    signatures.update([1]);
+                    // The call's canonical serialization (field order is the
+                    // struct's; no map iterates), terminated so two calls
+                    // cannot run together.
+                    let _ = serde_json::to_writer(DigestWriter(&mut signatures), call);
+                    signatures.update([0xff]);
+                }
+            }
         }
     }
     FileFingerprints {

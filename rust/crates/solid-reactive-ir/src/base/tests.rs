@@ -201,11 +201,24 @@ fn typescript(
                     // re-spells (ids keyed by declaration position, study
                     // N5) while this file's source and entity rows stay.
                     let declared = schemes.get(&format!("decl:{path}")).copied().unwrap_or(0);
+                    // A TypeFacts-only flip of the call's validity (another
+                    // file's edit can make an overload unresolvable).
+                    let validity = if schemes
+                        .get(&format!("validity:{path}"))
+                        .copied()
+                        .unwrap_or(0)
+                        % 2
+                        == 1
+                    {
+                        "recovery"
+                    } else {
+                        "valid"
+                    };
                     entities.push(
                         serde_json::from_value(serde_json::json!({
                             "location": location(path, call.callee),
                             "resolvedCall": {
-                                "validity": "valid",
+                                "validity": validity,
                                 "kind": "call",
                                 "declaration": {
                                     "symbol": format!("d{declared}:{property}"),
@@ -221,11 +234,22 @@ fn typescript(
                 }
                 None => continue,
             };
+            let validity = if schemes
+                .get(&format!("validity:{path}"))
+                .copied()
+                .unwrap_or(0)
+                % 2
+                == 1
+            {
+                "recovery"
+            } else {
+                "valid"
+            };
             entities.push(
                 serde_json::from_value(serde_json::json!({
                     "location": location(path, call.callee),
                     "resolvedCall": {
-                        "validity": "valid",
+                        "validity": validity,
                         "kind": "call",
                         "declaration": {
                             "kind": "method",
@@ -380,6 +404,7 @@ const KINDS: &[&str] = &[
     "add-file",
     "remove-file",
     "typefacts-only",
+    "typefacts-validity",
     "typefacts-references",
     "typefacts-declarations",
 ];
@@ -426,6 +451,13 @@ fn edit(project: &mut Project, kind: &str, random: &mut Random, serial: usize) -
             }
             None => project.unreferenced.push(path.clone()),
         }
+        return Some(());
+    }
+    if kind == "typefacts-validity" {
+        *project
+            .schemes
+            .entry(format!("validity:{path}"))
+            .or_default() += 1;
         return Some(());
     }
     if kind == "typefacts-declarations" {
@@ -775,6 +807,29 @@ fn identity_wrappers_are_found_across_files() {
     assert_eq!(answer("s0:later"), None);
     assert_eq!(answer("s0:absent"), Some(None));
     assert_eq!(build.stats.reused + build.stats.verified, 0);
+}
+
+/// `FileRead::resolved_callee_call` hands a memo the whole resolved call
+/// (the flow memos read its validity), so the Signatures section must move
+/// when only a call's validity does: an edit elsewhere can make an overload
+/// unresolvable while this file's source and entity rows stay.
+#[test]
+fn a_resolved_call_validity_flip_changes_the_calling_file() {
+    let store = super::memo::build::MemoStore::new(false, true);
+    let mut project = wrapper_project(FIXTURES[0]);
+    project.files.push((
+        "/fixture/calls.ts".to_owned(),
+        "export const box = { run() { return 1; } };\nexport const ran = box.run();\n".to_owned(),
+    ));
+    memo_build(&project, &store).unwrap();
+    let unchanged = memo_build(&project, &store).unwrap();
+    assert_eq!(unchanged.begin.changed_files, 0);
+    *project
+        .schemes
+        .entry("validity:/fixture/calls.ts".to_owned())
+        .or_default() += 1;
+    let flipped = memo_build(&project, &store).unwrap();
+    assert_eq!(flipped.begin.changed_files, 1);
 }
 
 /// With stable symbol ids (the synthetic table spells a symbol by its text),

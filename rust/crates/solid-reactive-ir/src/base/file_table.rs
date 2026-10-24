@@ -359,25 +359,6 @@ impl<'a> FileView<'a> {
         rows
     }
 
-    /// What this file's entities say about calls, in table order:
-    /// `(start, end, code)`, the code 0 for an entity with no resolved call,
-    /// else 1 plus 2 if the call never returns plus 4 if its signature
-    /// asserts. What [`Self::resolved_callee_call`] answers a never-returning
-    /// question from.
-    pub(crate) fn call_signature_rows(&self) -> Vec<(u64, u64, u8)> {
-        self.sources
-            .typescript
-            .entities_for_path(self.path())
-            .iter()
-            .map(|entity| {
-                let code = entity.resolved_call.as_deref().map_or(0, |call| {
-                    1 + 2 * u8::from(call.never_returns) + 4 * u8::from(call.assertion_signature)
-                });
-                (entity.location.start_byte, entity.location.end_byte, code)
-            })
-            .collect()
-    }
-
     /// A digest of everything this view exposes: the path, the source (the
     /// AST and its index are functions of it), the entity-symbol rows, the
     /// resolved-call facts of the file's entities (validity, kind, targets,
