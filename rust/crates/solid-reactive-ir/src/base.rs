@@ -230,6 +230,8 @@ base_indexes! {
     unread: {
         /// References by symbol.
         references: Arc<str> => Span = contributions::references;
+        /// The spans where a symbol's value is used like a returned callback.
+        use_spans: Arc<str> => Span = contributions::use_spans;
         /// Calls and JSX elements by the symbol of their callee or tag.
         callees: Arc<str> => CalleeSite = contributions::callees;
         /// Item key spaces.

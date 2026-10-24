@@ -71,6 +71,9 @@ pub(crate) enum IndexId {
     /// Calls and JSX elements by the symbol their callee or tag names
     /// ([`super::super::contributions::callees`]).
     Callees,
+    /// The spans where a symbol's value is used like a returned callback
+    /// ([`super::super::contributions::use_spans`]).
+    UseSpans,
 }
 
 /// A build constant a computation may read. Constants are part of the
@@ -156,6 +159,8 @@ pub(crate) struct BuildTables {
     project: crate::indexes::ProjectTables,
     /// Tables 64 and up: the component census (study S5c).
     census: crate::indexes::CensusTables,
+    /// Tables 128 to 159: returned-callback use sites (study S5e).
+    returned: crate::indexes::ReturnedTables,
 }
 
 impl TableSet<BuildSchema> for BuildTables {
@@ -186,6 +191,10 @@ impl BuildTables {
             RECEIVER_CLOSED => &self.receiver_closed,
             ASSIGNED_MEMBERS => &self.assigned_members,
             PROTOTYPE_OWNER_AT => &self.prototype_owner_at,
+            id if id.0 >= crate::indexes::RETURNED_TABLES_FROM => self
+                .returned
+                .table(id)
+                .unwrap_or_else(|| unreachable!("memo table {id:?}")),
             id if id.0 >= crate::indexes::CENSUS_TABLES_FROM => self
                 .census
                 .table(id)
@@ -208,6 +217,7 @@ impl BuildTables {
         ];
         tables.extend(self.project.tables());
         tables.extend(self.census.tables());
+        tables.extend(self.returned.tables());
         tables
     }
 }
@@ -265,6 +275,10 @@ impl BuildTables {
 
     pub(crate) fn census(&self) -> &crate::indexes::CensusTables {
         &self.census
+    }
+
+    pub(crate) fn returned(&self) -> &crate::indexes::ReturnedTables {
+        &self.returned
     }
 }
 
@@ -516,6 +530,7 @@ struct MemoBase {
     /// The component census's indexes ([`crate::indexes::CallSitesOf`]).
     references: KeptIndex<Arc<str>, Span>,
     callees: KeptIndex<Arc<str>, crate::base::CalleeSite>,
+    use_spans: KeptIndex<Arc<str>, Span>,
     runtime_redirects: Option<bool>,
     /// The analyzed ids in the order of their first slot ([`Input::Files`]).
     ids: Vec<FileId>,
@@ -743,6 +758,7 @@ impl MemoStore {
         let MemoBase {
             references,
             callees,
+            use_spans,
             ..
         } = &mut *base;
         report.census_delta_keys += references.update(
@@ -759,6 +775,16 @@ impl MemoStore {
             IndexId::Callees,
             views,
             crate::base::contributions::callees,
+            &changed_files,
+            &removed,
+            check,
+            &self.store,
+            &mut changed_inputs,
+        );
+        report.census_delta_keys += use_spans.update(
+            IndexId::UseSpans,
+            views,
+            crate::base::contributions::use_spans,
             &changed_files,
             &removed,
             check,
@@ -874,6 +900,7 @@ impl MemoStore {
                 Input::Index(IndexId::WrapperCandidates, id) => base.wrapper_keys.release(id),
                 Input::Index(IndexId::References, id) => base.references.keys.release(id),
                 Input::Index(IndexId::Callees, id) => base.callees.keys.release(id),
+                Input::Index(IndexId::UseSpans, id) => base.use_spans.keys.release(id),
                 Input::Polled(..) => {
                     base.polled.remove(&input);
                     polled_released = true;
@@ -999,6 +1026,7 @@ impl World<BuildSchema> for BuildWorld<'_> {
             }
             Input::Index(IndexId::References, key) => base.references.fingerprint(key),
             Input::Index(IndexId::Callees, key) => base.callees.fingerprint(key),
+            Input::Index(IndexId::UseSpans, key) => base.use_spans.fingerprint(key),
             Input::Constant(Constant::ProgramClosed) => u64::from(self.program_closed),
             Input::Constant(Constant::RuntimeRedirects) => u64::from(self.runtime_redirects),
             Input::Files => {
@@ -1194,6 +1222,17 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
             symbol,
             |base| &base.references,
             |base| &mut base.references,
+        )
+    }
+
+    /// The spans where `symbol`'s value is used like a returned callback
+    /// ([`super::super::contributions::use_spans`]): `(file, slot rank, span)`.
+    pub(crate) fn use_spans(&self, symbol: &Arc<str>) -> Vec<(FileId, usize, Span)> {
+        self.index_values(
+            IndexId::UseSpans,
+            symbol,
+            |base| &base.use_spans,
+            |base| &mut base.use_spans,
         )
     }
 

@@ -123,6 +123,9 @@
   "rust/crates/solid-reactive-ir/src/indexes/primitive_proof.rs": {
     "files()": 3
   },
+  "rust/crates/solid-reactive-ir/src/indexes/returned_uses.rs": {
+    "facts.files": 1
+  },
   "rust/crates/solid-reactive-ir/src/indexes.rs": {
     "facts.files": 10,
     "files()": 5,
@@ -169,12 +172,6 @@
   "rust/crates/solid-reactive-ir/src/object_members.rs": {
     "files()": 3,
     "hashmap-iteration": 20
-  },
-  "rust/crates/solid-reactive-ir/src/owners/bindings.rs": {
-    "hashmap-iteration": 2
-  },
-  "rust/crates/solid-reactive-ir/src/owners/callback_owners.rs": {
-    "files()": 2
   },
   "rust/crates/solid-reactive-ir/src/owners/context_census.rs": {
     "facts.files": 5,

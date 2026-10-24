@@ -34,6 +34,50 @@ pub(crate) fn references(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Ar
         .collect()
 }
 
+/// The spans of a file where the value of an entity symbol is used the way a
+/// returned callback is (study S5e): a call's callee, a call's argument, a
+/// JSX tag's name, the object of a `preload` member, or the identifier a
+/// binding is initialized from. Keyed by the symbol of the entity at exactly
+/// that span ([`FileView::symbol_at`]); the returned-callback use sites read
+/// the index with TypeFacts' references of the same symbol
+/// ([`crate::indexes::ReturnedUses`]).
+pub(crate) fn use_spans(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Arc<str>, Span)> {
+    let file = view.file;
+    let mut spans = Vec::new();
+    for call in &file.ast.calls {
+        spans.push(call.callee);
+        spans.extend(call.arguments.iter().map(|argument| argument.span));
+    }
+    spans.extend(
+        file.ast
+            .jsx_elements
+            .iter()
+            .map(|element| element.name.span),
+    );
+    spans.extend(
+        file.ast
+            .members
+            .iter()
+            .filter(|member| file.source_text(member.property) == Some("preload"))
+            .map(|member| member.object),
+    );
+    spans.extend(
+        file.ast
+            .bindings
+            .iter()
+            .filter_map(|binding| binding.initializer_identifier.as_ref())
+            .map(|initializer| initializer.span),
+    );
+    spans.sort_unstable();
+    spans.dedup();
+    let mut entries = spans
+        .into_iter()
+        .filter_map(|span| view.symbol_at(span).map(|symbol| (symbol.shared(), span)))
+        .collect::<Vec<_>>();
+    entries.sort_unstable();
+    entries
+}
+
 /// One use of an entity symbol in a file, as receiver censuses read it.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) enum SymbolUse {

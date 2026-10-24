@@ -1096,6 +1096,272 @@ fn census_memos_through_random_edits_equal_a_fresh_store() {
     assert!(reused > 0, "{reused} reused, {computed} computed");
 }
 
+// ---------------------------------------------------------------------------
+// L2: returned-callback use sites over a retained store (study S5e,
+// [`crate::indexes::ReturnedUses`]).
+
+/// One factory call's uses, as `(factory file, factory span, [(file, span,
+/// kind)])`.
+type FactoryUses = (String, Span, Vec<(String, Span, crate::indexes::UseKind)>);
+
+type MemoTables = Vec<(&'static str, super::memo::TableStats)>;
+
+/// One build of `project` over `store`: the uses of every call's result, and
+/// the build's memo stats by table.
+fn returned_build(
+    project: &Project,
+    store: &super::memo::build::MemoStore,
+) -> Option<(Vec<FactoryUses>, MemoTables)> {
+    let facts = facts(project)?;
+    let ast_indexes = facts
+        .files
+        .iter()
+        .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
+        .collect::<HashMap<_, _>>();
+    let symbols = entity_symbols(&facts);
+    let names = HashMap::default();
+    let lookup = crate::indexes::SemanticLookup::new(
+        &facts,
+        &ast_indexes,
+        &symbols,
+        &names,
+        &solid_dialect::Solid2,
+        false,
+    )
+    .with_memo_store(store);
+    let mut answers = Vec::new();
+    for file in lookup.files() {
+        let path = file.path.as_str();
+        for call in &file.ast.calls {
+            let uses = lookup
+                .returned_uses(path, call.span)
+                .iter()
+                .map(|used| {
+                    (
+                        lookup.returned_use_file(used).unwrap().path.to_string(),
+                        used.span,
+                        used.kind,
+                    )
+                })
+                .collect();
+            answers.push((path.to_owned(), call.span, uses));
+        }
+    }
+    let report = lookup.end_memos()?;
+    Some((answers, report.tables))
+}
+
+/// A factory whose result is bound, destructured, called and handed to a
+/// callback in its own file, aliased and rendered in a second file, and
+/// `preload`ed in a third; and a module unrelated to all of them.
+const RETURNED_FILES: &[(&str, &str)] = &[
+    (
+        "/fixture/returned/factory.ts",
+        "export const load = make(() => 1);\nexport const [track, again] = pair(() => 2);\nmake(() => 3)();\nmake(() => 4).preload();\ntake(make(() => 5));\nmake(() => 6).other();\nexport const unused = make(() => 7);\n",
+    ),
+    (
+        "/fixture/returned/alias.tsx",
+        "import { load, track } from \"./factory\";\nconst Alias = load;\nexport const Again = Alias;\nAlias();\ntrack(() => 1);\nexport const view = <Again />;\n",
+    ),
+    (
+        "/fixture/returned/preloader.ts",
+        "import { Again } from \"./alias\";\nimport { load } from \"./factory\";\nAgain.preload();\nload.other();\nschedule(load);\nexport const label = \"x\";\n",
+    ),
+    (
+        "/fixture/returned/other.ts",
+        "export const note = \"x\";\nexport function helper(value: number) {\n  return value + 1;\n}\n",
+    ),
+];
+
+fn returned_project() -> Project {
+    Project {
+        files: RETURNED_FILES
+            .iter()
+            .map(|(path, source)| ((*path).to_owned(), (*source).to_owned()))
+            .collect(),
+        schemes: HashMap::default(),
+        unreferenced: Vec::new(),
+    }
+}
+
+fn returned_table(tables: &[(&'static str, super::memo::TableStats)]) -> super::memo::TableStats {
+    table_stats(tables, "returned_callback_uses")
+}
+
+#[test]
+fn returned_uses_follow_the_result_through_aliases_and_files() {
+    use crate::indexes::UseKind;
+    let store = super::memo::build::MemoStore::new(false, true);
+    let project = returned_project();
+    let (answers, _) = returned_build(&project, &store).unwrap();
+    let text = |path: &str| {
+        project
+            .files
+            .iter()
+            .find(|(candidate, _)| candidate == path)
+            .map(|(_, source)| source.as_str())
+            .unwrap()
+    };
+    // The uses of the call that starts with `needle` in `path`, as
+    // `(file, text at the use, kind)`.
+    let uses_of = |path: &str, needle: &str| {
+        let source = text(path);
+        let start = source.find(needle).expect("the factory call");
+        let (_, _, uses) = answers
+            .iter()
+            .find(|(file, span, _)| file == path && usize::try_from(span.start).unwrap() == start)
+            .expect("a call at the span");
+        uses.iter()
+            .map(|(file, span, kind)| {
+                let source = text(file);
+                (
+                    file.rsplit('/').next().unwrap().to_owned(),
+                    source
+                        [usize::try_from(span.start).unwrap()..usize::try_from(span.end).unwrap()]
+                        .to_owned(),
+                    *kind,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let factory = "/fixture/returned/factory.ts";
+    // `load`: aliased (`Alias`, `Again`) and used in two other files.
+    let load = uses_of(factory, "make(() => 1)");
+    assert!(
+        load.contains(&("alias.tsx".into(), "Alias()".into(), UseKind::Call)),
+        "{load:?}"
+    );
+    assert!(
+        load.contains(&("alias.tsx".into(), "<Again />".into(), UseKind::Jsx)),
+        "{load:?}"
+    );
+    assert!(
+        load.contains(&(
+            "preloader.ts".into(),
+            "Again.preload()".into(),
+            UseKind::Preload
+        )),
+        "{load:?}"
+    );
+    assert!(
+        load.contains(&(
+            "preloader.ts".into(),
+            "schedule(load)".into(),
+            UseKind::Argument(0)
+        )),
+        "{load:?}"
+    );
+    // `load.other()` invokes a member of the result, not the result.
+    assert!(
+        !load.iter().any(|(_, text, _)| text == "load.other()"),
+        "{load:?}"
+    );
+    // Both names of a destructured result hold it.
+    let pair = uses_of(factory, "pair(() => 2)");
+    assert!(
+        pair.contains(&("alias.tsx".into(), "track(() => 1)".into(), UseKind::Call)),
+        "{pair:?}"
+    );
+    // The written-around forms.
+    let direct = uses_of(factory, "make(() => 3)");
+    assert_eq!(direct.len(), 1, "{direct:?}");
+    assert_eq!(direct[0].2, UseKind::Call);
+    let preload = uses_of(factory, "make(() => 4)");
+    assert_eq!(preload.len(), 1, "{preload:?}");
+    let handed = uses_of(factory, "make(() => 5)");
+    assert_eq!(handed.len(), 1, "{handed:?}");
+    assert_eq!(handed[0].2, UseKind::Argument(0));
+    // A member of the result is not a use of it, and an unused result has
+    // none.
+    assert!(uses_of(factory, "make(() => 6)").is_empty());
+    assert!(uses_of(factory, "make(() => 7)").is_empty());
+}
+
+/// With stable symbol ids, an edit of a module that neither holds the
+/// factory nor mentions its result leaves every answer unrun; an edit of a
+/// user recomputes only what read it.
+#[test]
+fn returned_uses_are_reused_across_an_unrelated_edit() {
+    let store = super::memo::build::MemoStore::new(false, true);
+    let mut project = returned_project();
+    let (first, tables) = returned_build(&project, &store).unwrap();
+    assert!(returned_table(&tables).fresh > 0);
+    // A body edit of the unrelated module: the same length, no span moves.
+    project.files[3].1 = project.files[3].1.replace("\"x\"", "\"y\"");
+    let (second, tables) = returned_build(&project, &store).unwrap();
+    assert_eq!(first, second);
+    let uses = returned_table(&tables);
+    assert_eq!(uses.fresh + uses.changed + uses.unchanged, 0, "{uses:?}");
+    assert!(uses.reused + uses.verified > 0, "{uses:?}");
+    // A body edit of a user: its readers re-run, to the same answers.
+    project.files[2].1 = project.files[2].1.replace("\"x\"", "\"z\"");
+    let (third, tables) = returned_build(&project, &store).unwrap();
+    assert_eq!(first, third);
+    let uses = returned_table(&tables);
+    assert_eq!(uses.changed, 0, "{uses:?}");
+    assert!(uses.unchanged > 0, "{uses:?}");
+    // Dropping the aliasing import moves the answers of the factory's calls.
+    project.files[1].1 = project.files[1].1.replace("Alias();", "");
+    let (fourth, tables) = returned_build(&project, &store).unwrap();
+    assert_ne!(first, fourth);
+    assert!(returned_table(&tables).changed > 0);
+    let fresh = super::memo::build::MemoStore::new(false, false);
+    let (expected, _) = returned_build(&project, &fresh).unwrap();
+    assert_eq!(fourth, expected);
+}
+
+/// Through random edits, the retained store's use sites equal a fresh
+/// store's, with verify-reused mode on.
+#[test]
+fn returned_uses_through_random_edits_equal_a_fresh_store() {
+    let (mut steps, mut reused, mut computed) = (0, 0, 0);
+    let fixtures = FIXTURES.iter().map(|fixture| {
+        let mut project = Project {
+            files: fixture_sources(fixture),
+            schemes: HashMap::default(),
+            unreferenced: Vec::new(),
+        };
+        project.files.extend(returned_project().files);
+        project.files.sort();
+        (*fixture, project)
+    });
+    for (fixture, original) in fixtures {
+        for seed in 1..=2 {
+            let mut random = Random(seed);
+            let mut project = original.clone();
+            let store = super::memo::build::MemoStore::new(true, true);
+            returned_build(&project, &store).expect("the fixture parses");
+            for serial in 0..15 {
+                let kind = KINDS[random.below(KINDS.len())];
+                let mut next = project.clone();
+                if edit(&mut next, kind, &mut random, serial).is_none() || facts(&next).is_none() {
+                    continue;
+                }
+                project = next;
+                let (answers, tables) = returned_build(&project, &store).unwrap();
+                let fresh = super::memo::build::MemoStore::new(false, false);
+                let (expected, _) = returned_build(&project, &fresh).unwrap();
+                assert_eq!(
+                    answers, expected,
+                    "{fixture} seed {seed} step {serial} ({kind})"
+                );
+                for (table, stats) in &tables {
+                    assert_eq!(
+                        stats.mismatches, 0,
+                        "{fixture} seed {seed} step {serial}: {table}"
+                    );
+                    reused += stats.reused + stats.verified;
+                    computed += stats.fresh + stats.changed + stats.unchanged;
+                }
+                steps += 1;
+            }
+        }
+    }
+    eprintln!("returned uses: {steps} edits, {reused} answers reused, {computed} computed");
+    assert!(steps > 120, "only {steps} edits applied");
+    assert!(reused > 0, "{reused} reused, {computed} computed");
+}
+
 /// Every memo table of a build has its own id and name, and the schema's
 /// dispatch by id finds that table: two slices that pick the same id (or a
 /// range dispatch that shadows another's) fail here, not as a stats or
