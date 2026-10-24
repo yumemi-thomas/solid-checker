@@ -10,9 +10,9 @@ use std::{
 use super::{
     CheckHeader, CheckRequest, FileRefresh, ProcessMemory, Request, cache_retention_from, eligible,
     enabled_from, fingerprint_file, hash_file, inference_inputs_current, macho_build_identity,
-    normalize_enablement, parse_process_memory, process_tree_resident_bytes_from,
-    refresh_file_with, retained_format, serve, socket_path, socket_path_in_domain, timing_value,
-    verify_implementation,
+    normalize_enablement, parse_meminfo_available, parse_process_memory, parse_vm_stat_available,
+    process_tree_resident_bytes_from, refresh_file_with, retained_format, serve, socket_path,
+    socket_path_in_domain, timing_value, verify_implementation,
 };
 use solid_reactive_ir::{CacheRetention, RuntimeEnvironment};
 
@@ -451,4 +451,21 @@ fn changed_content_reads_once_and_reports_the_new_bytes() {
     }
     assert_eq!(reads.get(), 1);
     fs::remove_file(path).expect("remove fixture");
+}
+
+#[test]
+fn available_memory_parses_meminfo_and_vm_stat() {
+    assert_eq!(
+        parse_meminfo_available("MemTotal: 100 kB\nMemAvailable:   2048 kB\n"),
+        Some(2048 * 1024)
+    );
+    assert_eq!(parse_meminfo_available("MemTotal: 100 kB\n"), None);
+    let vm_stat = "Mach Virtual Memory Statistics: (page size of 16384 bytes)\n\
+Pages free:                                   10.\n\
+Pages active:                                 99.\n\
+Pages inactive:                               20.\n\
+Pages speculative:                             3.\n\
+Pages purgeable:                               1.\n";
+    assert_eq!(parse_vm_stat_available(vm_stat), Some(34 * 16384));
+    assert_eq!(parse_vm_stat_available("garbage"), None);
 }

@@ -240,6 +240,11 @@ impl IdleShadow {
         self.lock().served = None;
     }
 
+    /// Whether a check is running now.
+    pub(super) fn running(&self) -> bool {
+        self.lock().running.is_some()
+    }
+
     /// The daemon is over its memory limit: abandon a running check, whose
     /// second build is the transient part. Returns whether one was running.
     pub(super) fn relieve_memory(&self) -> bool {
@@ -275,8 +280,7 @@ impl IdleShadow {
     pub(super) fn spawn(
         self: &Arc<Self>,
         request: Request,
-        memory_limit: Option<u64>,
-        resident: impl Fn() -> Option<u64> + Send + 'static,
+        room: impl Fn() -> Option<String> + Send + 'static,
     ) {
         if !self.enabled() {
             return;
@@ -286,7 +290,7 @@ impl IdleShadow {
             .name("idle-shadow".into())
             .spawn(move || {
                 unsafe_boundary::lower_thread_priority();
-                this.run(&request, memory_limit, &resident);
+                this.run(&request, &room);
             });
         if let Err(error) = spawned {
             self.append_log(&format!(
@@ -295,12 +299,7 @@ impl IdleShadow {
         }
     }
 
-    fn run(
-        &self,
-        request: &Request,
-        memory_limit: Option<u64>,
-        resident: &dyn Fn() -> Option<u64>,
-    ) {
+    fn run(&self, request: &Request, room: &dyn Fn() -> Option<String>) {
         loop {
             let (served, epoch, cancel) = {
                 let mut inner = self.lock();
@@ -336,12 +335,11 @@ impl IdleShadow {
                 )
             };
             // A second build roughly doubles the daemon's resident memory:
-            // skip it where that would pass the daemon's own limit.
-            let over = memory_limit
-                .zip(resident())
-                .is_some_and(|(limit, resident)| resident.saturating_mul(2) > limit);
-            let outcome = if over {
-                Outcome::Inconclusive("skipped: a second build would pass the memory limit".into())
+            // it runs only while the machine has room for it (`room` names
+            // the reason it does not), whatever the daemon's own limit.
+            let skipped = room();
+            let outcome = if let Some(reason) = skipped {
+                Outcome::Inconclusive(format!("skipped: {reason}"))
             } else {
                 verify(request, &served, &cancel)
             };

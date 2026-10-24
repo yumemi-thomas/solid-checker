@@ -411,6 +411,91 @@ fn process_tree_resident_bytes_from(samples: &[ProcessMemory], root: u32) -> u64
     resident_kib.saturating_mul(1024)
 }
 
+/// The free memory the idle check keeps beyond its own second build
+/// (`SOLID_CHECKER_IDLE_SHADOW_MIN_FREE_MB`, default 1 GiB).
+fn idle_check_headroom_bytes() -> u64 {
+    std::env::var("SOLID_CHECKER_IDLE_SHADOW_MIN_FREE_MB")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(1024)
+        .saturating_mul(1024 * 1024)
+}
+
+/// Whether the machine has room for the idle check's second build (about
+/// the daemon's own resident size) plus the headroom: `None` if it has, else
+/// why not. Unknown memory counts as no room: a skipped check is only a
+/// missed verification, never a served answer.
+fn idle_check_room(root: u32) -> Option<String> {
+    let Some(available) = available_memory_bytes() else {
+        return Some("available memory unknown".to_owned());
+    };
+    let Some(resident) = process_tree_resident_bytes(root) else {
+        return Some("resident memory unknown".to_owned());
+    };
+    let needed = resident.saturating_add(idle_check_headroom_bytes());
+    (available < needed).then(|| {
+        format!(
+            "{} MiB available, {} MiB needed",
+            available / (1024 * 1024),
+            needed / (1024 * 1024)
+        )
+    })
+}
+
+/// The memory the system can hand out without swapping: Linux
+/// `MemAvailable`; macOS free, inactive, speculative and purgeable pages.
+fn available_memory_bytes() -> Option<u64> {
+    if cfg!(target_os = "linux") {
+        let meminfo = fs::read_to_string("/proc/meminfo").ok()?;
+        return parse_meminfo_available(&meminfo);
+    }
+    if cfg!(target_os = "macos") {
+        let output = Command::new("vm_stat").output().ok()?;
+        return output
+            .status
+            .success()
+            .then(|| parse_vm_stat_available(&String::from_utf8_lossy(&output.stdout)))
+            .flatten();
+    }
+    None
+}
+
+fn parse_meminfo_available(meminfo: &str) -> Option<u64> {
+    meminfo.lines().find_map(|line| {
+        let rest = line.strip_prefix("MemAvailable:")?;
+        let kib = rest.trim().strip_suffix("kB")?.trim().parse::<u64>().ok()?;
+        Some(kib.saturating_mul(1024))
+    })
+}
+
+fn parse_vm_stat_available(output: &str) -> Option<u64> {
+    let mut lines = output.lines();
+    let page = lines
+        .next()?
+        .split("page size of ")
+        .nth(1)?
+        .split_whitespace()
+        .next()?
+        .parse::<u64>()
+        .ok()?;
+    let mut pages = 0_u64;
+    let mut seen = false;
+    for line in lines {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        if matches!(
+            name.trim(),
+            "Pages free" | "Pages inactive" | "Pages speculative" | "Pages purgeable"
+        ) {
+            let count = value.trim().trim_end_matches('.').parse::<u64>().ok()?;
+            pages = pages.saturating_add(count);
+            seen = true;
+        }
+    }
+    seen.then(|| pages.saturating_mul(page))
+}
+
 fn process_tree_resident_bytes(root: u32) -> Option<u64> {
     let output = Command::new("ps")
         .args(["-axo", "pid=,ppid=,rss="])
@@ -1071,9 +1156,7 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
         serving: false,
     }));
     let idle_check = idle_shadow::IdleShadow::from_env(&socket);
-    idle_check.spawn(request.clone(), memory_limit, move || {
-        process_tree_resident_bytes(process_id)
-    });
+    idle_check.spawn(request.clone(), move || idle_check_room(process_id));
     let watchdog_check = Arc::clone(&idle_check);
     let watchdog_activity = std::sync::Arc::clone(&activity);
     let watchdog_socket = socket.clone();
@@ -1104,9 +1187,14 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
             if memory_limit.is_some_and(|limit| {
                 process_tree_resident_bytes(process_id).is_some_and(|resident| resident > limit)
             }) {
-                // The idle check's second build is transient and the first
-                // thing to give up: abandon it, and end the daemon only if
-                // the next sample is still over the limit.
+                // The idle check's second build is transient: while the
+                // machine still has room for it, it is not held to the
+                // daemon's limit. Short of room it is the first thing to
+                // give up: abandon it, and end the daemon only if the next
+                // sample is still over the limit.
+                if watchdog_check.running() && idle_check_room(process_id).is_none() {
+                    continue;
+                }
                 if watchdog_check.relieve_memory() {
                     continue;
                 }
