@@ -230,11 +230,33 @@ impl ResolutionWitness {
         }
     }
 
-    /// Whether every recorded entry is still as it was.
+    /// Whether every recorded entry is still as it was. The entries are
+    /// independent filesystem reads (tens of thousands for a monorepo's
+    /// `node_modules` walks), checked on six workers; any change answers no.
     pub(crate) fn current(&self) -> bool {
-        self.observed
-            .iter()
-            .all(|(path, recorded)| still(path, recorded))
+        const WORKERS: usize = 6;
+        let entries = self.observed.iter().collect::<Vec<_>>();
+        if entries.len() < 512 {
+            return entries.iter().all(|(path, recorded)| still(path, recorded));
+        }
+        let moved = std::sync::atomic::AtomicBool::new(false);
+        std::thread::scope(|scope| {
+            for worker in 0..WORKERS {
+                let (entries, moved) = (&entries, &moved);
+                scope.spawn(move || {
+                    for (path, recorded) in entries.iter().skip(worker).step_by(WORKERS) {
+                        if moved.load(std::sync::atomic::Ordering::Relaxed) {
+                            return;
+                        }
+                        if !still(path, recorded) {
+                            moved.store(true, std::sync::atomic::Ordering::Relaxed);
+                            return;
+                        }
+                    }
+                });
+            }
+        });
+        !moved.into_inner()
     }
 }
 

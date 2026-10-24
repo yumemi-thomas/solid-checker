@@ -294,10 +294,12 @@ pub(super) fn graph_identity(manifest: &mut BrowserRootManifest, path: &Path) ->
 
 // Every pass still reads current bytes and path identities. Bound parallel I/O
 // only; never reuse an earlier pass's hash or a metadata-only observation.
+// Six workers: the reads are filesystem-bound, and on APFS more threads
+// contend (a 12,558-input daemon check: 4-6 workers 103 ms, 8 118, 16 158).
 pub(crate) fn identities(paths: &[&Path]) -> Vec<Option<String>> {
     let workers = std::thread::available_parallelism()
         .map_or(1, usize::from)
-        .min(8);
+        .min(6);
     if paths.len() < 128 || workers == 1 {
         return paths.iter().map(|path| identity(path)).collect();
     }
@@ -342,7 +344,23 @@ pub fn inferred_host_directory_digest(path: &Path) -> Option<[u8; 32]> {
 /// reused until the link is retargeted or its target appears.
 #[must_use]
 pub fn inferred_host_input_digest(path: &Path) -> Option<[u8; 32]> {
-    let identity = identity(path).or_else(|| dangling_link(path))?;
+    digest_of(path, identity(path))
+}
+
+/// [`inferred_host_input_digest`] of every path, in order, observed in
+/// parallel ([`identities`]): a retained daemon re-reads thousands of inputs
+/// on every answer, and each observation is independent of the others.
+#[must_use]
+pub fn inferred_host_input_digests(paths: &[&Path]) -> Vec<Option<[u8; 32]>> {
+    paths
+        .iter()
+        .zip(identities(paths))
+        .map(|(path, identity)| digest_of(path, identity))
+        .collect()
+}
+
+fn digest_of(path: &Path, identity: Option<String>) -> Option<[u8; 32]> {
+    let identity = identity.or_else(|| dangling_link(path))?;
     Some(Sha256::digest(identity.as_bytes()).into())
 }
 

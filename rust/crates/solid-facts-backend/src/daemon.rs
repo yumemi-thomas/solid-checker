@@ -1588,21 +1588,27 @@ fn inference_inputs_for_check(state: &State, check: &CheckRequest) -> Option<Vec
     }));
     paths.sort();
     paths.dedup();
+    let digests = solid_facts_backend::inferred_host_input_digests(
+        &paths.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
+    );
     paths
         .into_iter()
-        .map(|path| {
-            Some((
-                path.clone(),
-                solid_facts_backend::inferred_host_input_digest(&path)?,
-            ))
-        })
+        .zip(digests)
+        .map(|(path, digest)| Some((path, digest?)))
         .collect()
 }
 
+/// Every input still digests as recorded. Each is read again (never trusted
+/// on metadata), in parallel: a project tree is thousands of inputs.
 fn inference_inputs_current(inputs: &[InputFile]) -> bool {
-    inputs.iter().all(|(path, expected)| {
-        solid_facts_backend::inferred_host_input_digest(path).as_ref() == Some(expected)
-    })
+    let paths = inputs
+        .iter()
+        .map(|(path, _)| path.as_path())
+        .collect::<Vec<_>>();
+    solid_facts_backend::inferred_host_input_digests(&paths)
+        .iter()
+        .zip(inputs)
+        .all(|(digest, (_, expected))| digest.as_ref() == Some(expected))
 }
 
 /// The current on-disk inputs besides the program and the inference closure:
