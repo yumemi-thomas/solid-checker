@@ -9,10 +9,7 @@
 use crate::{HashMap, HashSet};
 use std::{
     collections::BTreeMap,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::Arc,
     time::{Duration, Instant},
 };
 

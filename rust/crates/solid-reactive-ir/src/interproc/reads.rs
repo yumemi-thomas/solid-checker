@@ -669,13 +669,7 @@ pub(super) fn interprocedural_reads(
     let result_reads = phase_started.elapsed();
     let (export_summaries, export_work) = export_structured_return_obligations(
         context,
-        &StructuredReturnInputs {
-            nodes,
-            indexes,
-            by_symbol,
-            summaries: &summaries,
-            returned: &returned,
-        },
+        nodes,
         &mut dispatch_obligations,
         &mut fixed_points,
     );
@@ -1911,16 +1905,28 @@ fn export_parameter_member_dispatch_obligations(
         else {
             continue;
         };
-        let allowed = allowed_by_path
-            .entry(file.path.as_str())
-            .or_insert_with(|| allowed_callback_spans(file, context.lookup));
-        let direct_member = file.ast.calls.iter().find_map(|call| {
-            if !function.body.contains(call.span)
-                || !containing_ast_function(&file.ast, call.span)
-                    .is_some_and(|owner| owner.span == function.span)
+        // The first call written in the function's own body whose callee is
+        // a member of one of its parameters, not a tracked JSX role and not
+        // a standard-library method. The conjuncts are pure, so the cheap
+        // syntactic ones run first: the role (and the file's allowed
+        // callback spans it reads) is asked only of a parameter's member.
+        let direct_member = file.ast.calls_within(function.body).find_map(|call| {
+            if !containing_ast_function(&file.ast, call.span)
+                .is_some_and(|owner| owner.span == function.span)
             {
                 return None;
             }
+            let (receiver, path) = context.lookup.member_callee_receiver(file, call.callee)?;
+            if !node
+                .parameters
+                .iter()
+                .any(|parameter| parameter == &receiver)
+            {
+                return None;
+            }
+            let allowed = allowed_by_path
+                .entry(file.path.as_str())
+                .or_insert_with(|| allowed_callback_spans(file, context.lookup));
             if semantic_execution_role(
                 file,
                 call.callee,
@@ -1940,11 +1946,7 @@ fn export_parameter_member_dispatch_obligations(
             {
                 return None;
             }
-            let (receiver, path) = context.lookup.member_callee_receiver(file, call.callee)?;
-            node.parameters
-                .iter()
-                .any(|parameter| parameter == &receiver)
-                .then_some(path)
+            Some(path)
         });
         if let Some(path) = direct_member {
             dispatch_obligations.push(StaticDefect {
@@ -1968,114 +1970,24 @@ fn export_parameter_member_dispatch_obligations(
     }
 }
 
-/// The settled summaries structured-return discovery reads.
-struct StructuredReturnInputs<'a> {
-    nodes: &'a [SummaryNode],
-    indexes: &'a HashMap<(String, Span), usize>,
-    by_symbol: &'a HashMap<SymbolId, usize>,
-    summaries: &'a [SummaryReads],
-    returned: &'a [SummaryReads],
-}
-
 /// Files with at most this many returns filter them per exported function;
 /// larger ones group them by owner once.
 const SMALL_RETURN_COUNT: usize = 16;
 
+/// The `StructuredReturnUnresolved` obligation of each shorthand property an
+/// exported function returns that no exact project declaration answers.
 fn export_structured_return_obligations(
     context: &InterproceduralContext<'_, '_>,
-    inputs: &StructuredReturnInputs<'_>,
+    nodes: &[SummaryNode],
     dispatch_obligations: &mut Vec<StaticDefect>,
     fixed_points: &mut crate::InterproceduralFixedPointTimings,
 ) -> (Duration, u64) {
-    let work = AtomicU64::new(0);
-    let InterproceduralContext {
-        facts,
-        accessors,
-        source_kinds,
-        entities,
-        symbol_names,
-        lookup,
-        ..
-    } = context;
-    let StructuredReturnInputs {
-        nodes,
-        indexes,
-        by_symbol,
-        summaries,
-        returned,
-    } = inputs;
+    let InterproceduralContext { facts, lookup, .. } = context;
     let export_started = Instant::now();
-    let mut structured_returns = vec![None; nodes.len()];
-    let has_structured_return_seed = facts.files.iter().any(|file| {
-        !file.ast.object_properties.is_empty()
-            || file
-                .ast
-                .functions
-                .iter()
-                .filter_map(|function| function.expression_return.as_ref())
-                .chain(file.ast.returns.iter())
-                .any(|returned| {
-                    !returned.elements().is_empty() || !returned.properties().is_empty()
-                })
-    });
-    let accessor_declarations = structured_returns::accessor_declarations(accessors);
-    let accessors_by_identity = std::sync::OnceLock::new();
-    let module_exports = std::sync::OnceLock::new();
-    if has_structured_return_seed {
-        for _ in 0..=nodes.len() {
-            let discovered = discover_structured_returns(&StructuredReturnDiscovery {
-                facts,
-                nodes,
-                indexes,
-                by_symbol,
-                summaries,
-                returned,
-                structured_returns: &structured_returns,
-                work: &work,
-                accessors,
-                accessor_declarations: &accessor_declarations,
-                accessors_by_identity: &accessors_by_identity,
-                module_exports: &module_exports,
-                source_kinds,
-                entities,
-                symbol_names,
-                lookup,
-            });
-            let mut changed = false;
-            for (target, returned) in structured_returns.iter_mut().zip(discovered) {
-                if *target != returned {
-                    *target = returned;
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
-    }
-    fixed_points.structured_returns = export_started.elapsed();
-    let shorthand_started = Instant::now();
-    let structured_discovery = StructuredReturnDiscovery {
-        facts,
-        nodes,
-        indexes,
-        by_symbol,
-        summaries,
-        returned,
-        structured_returns: &structured_returns,
-        work: &work,
-        accessors,
-        accessor_declarations: &accessor_declarations,
-        accessors_by_identity: &accessors_by_identity,
-        module_exports: &module_exports,
-        source_kinds,
-        entities,
-        symbol_names,
-        lookup,
-    };
+    let mut work = 0;
     let mut returns_by_owner: HashMap<&str, HashMap<Span, Vec<usize>>> = HashMap::default();
     for node in nodes.iter().filter(|node| node.exported) {
-        work.fetch_add(1, Ordering::Relaxed);
+        work += 1;
         let Some(file) = lookup.file_by_path(node.path.as_str()) else {
             continue;
         };
@@ -2122,9 +2034,8 @@ fn export_structured_return_obligations(
             )
             .flat_map(|returned| returned.properties())
         {
-            work.fetch_add(1, Ordering::Relaxed);
-            let Some(reason) =
-                structured_discovery.unresolved_shorthand_reason(file, property.value)
+            work += 1;
+            let Some(reason) = unresolved_shorthand_reason(file, property.value, facts, lookup)
             else {
                 continue;
             };
@@ -2144,6 +2055,6 @@ fn export_structured_return_obligations(
             });
         }
     }
-    fixed_points.shorthand_obligations = shorthand_started.elapsed();
-    (export_started.elapsed(), work.into_inner())
+    fixed_points.shorthand_obligations = export_started.elapsed();
+    (export_started.elapsed(), work)
 }

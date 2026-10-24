@@ -1320,7 +1320,6 @@ pub struct InterproceduralFixedPointTimings {
     /// Factory copies and the third run.
     pub factory: Duration,
     pub parameter_member_obligations: Duration,
-    pub structured_returns: Duration,
     pub shorthand_obligations: Duration,
 }
 
@@ -1360,10 +1359,9 @@ pub struct BuildTimings {
     pub interprocedural_graph_recomputed_files: u64,
     pub interprocedural_result_reused_files: u64,
     pub interprocedural_result_recomputed_files: u64,
-    /// Deterministic work units of export aggregation (node visits per
-    /// discovery round, leaf evaluations, exported properties examined): a
-    /// count, so unlike the phase's wall time it does not depend on the
-    /// machine. See `StructuredReturnDiscovery::work`.
+    /// Deterministic work units of export aggregation (exported functions
+    /// and returned properties examined): a count, so unlike the phase's
+    /// wall time it does not depend on the machine.
     pub interprocedural_export_work: u64,
     pub typescript_indexes_reused: bool,
     /// The retained TypeScript indexes were patched from the Type Facts
