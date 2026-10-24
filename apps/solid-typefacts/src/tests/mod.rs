@@ -12,6 +12,7 @@ mod generation;
 mod history_order;
 mod materialize;
 mod module_graph;
+mod pass_reuse;
 mod per_file;
 mod project_invalidation;
 mod project_open;

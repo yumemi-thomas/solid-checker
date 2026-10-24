@@ -147,7 +147,7 @@ fn check(ctx: &Context) -> Result<(), BackendError> {
 /// its own contribution exists, so they are recorded here, by entity index,
 /// and completed once every file was scanned (`per_file`), from pointer-free
 /// state only. The canonical run (`None`) answers them in place.
-#[derive(Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Deferrals {
     /// Entities whose reference space is the union of every file's spaces of
     /// the id.
@@ -164,6 +164,9 @@ pub struct Deferrals {
     /// (`CallCaches::library_property_writes`), shared by every pass instead
     /// of recomputed per file.
     pub library_writes: Option<Arc<HashSet<String>>>,
+    /// The census questions the run asked, with their answers
+    /// (`CallCaches::take_census_reads`): what a reused pass must re-check.
+    pub census: Vec<(String, bool)>,
 }
 
 /// Go: `SemanticDemandRuns`, after the project lock and checker are held.
@@ -521,6 +524,7 @@ pub fn run(
         let (writes, library) = caches.take_deferred_library();
         deferrals.library_writes = writes;
         deferrals.library = library;
+        deferrals.census = caches.take_census_reads();
     }
     Ok(results)
 }

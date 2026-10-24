@@ -84,11 +84,11 @@ pub fn enabled_by_env() -> bool {
 pub(crate) struct Row {
     /// Whether the id resolved in that pass. An unresolved id answers an
     /// id-only row, as the canonical producer answers a stale id.
-    found: bool,
-    alias_target: SymbolId,
-    declarations: Arc<[Declaration]>,
+    pub(crate) found: bool,
+    pub(crate) alias_target: SymbolId,
+    pub(crate) declarations: Arc<[Declaration]>,
     /// The id of the alias-canonical symbol: its bucket is the reference list.
-    canonical: SymbolId,
+    pub(crate) canonical: SymbolId,
 }
 
 impl Row {
@@ -101,6 +101,19 @@ impl Row {
         }
     }
 }
+
+/// A reused pass differed from its recomputation
+/// (`passes::ENV_VERIFY_REUSE`): reported, and the fresh output is served; a
+/// test build panics.
+fn reuse_mismatch(path: &str) {
+    eprintln!("per-file reuse mismatch: {path} (served fresh)");
+    if cfg!(test) {
+        panic!("per-file reuse mismatch: {path}");
+    }
+}
+
+/// What the runs and async locations of one table answer.
+type RunsAnswer = (Vec<SemanticDemandRunResult>, Vec<AsyncFunctionFact>);
 
 /// Counters of the per-file mode, for measurement.
 #[derive(Clone, Copy, Debug, Default)]
@@ -130,6 +143,11 @@ pub struct Stats {
     pub deferred_library: usize,
     pub withdrawn_library: usize,
     pub suppressed_descriptors: usize,
+    /// Pass reuse and the pool (`passes`), for the last table.
+    pub reuse: crate::passes::ReuseStats,
+    /// Tables whose passes minted one id for two keys (the sequential
+    /// shared-keys run answered them instead).
+    pub key_collisions: usize,
 }
 
 /// The per-file state a project keeps beside its identity state.
@@ -138,12 +156,35 @@ pub(crate) struct PerFile {
     rows: HashMap<SymbolId, Row>,
     pub(crate) stats: Stats,
     verify_rows: bool,
+    /// Kept pass outputs (instant-edits P3).
+    pub(crate) reuse: crate::passes::Reuse,
+    /// Worker threads for the passes.
+    workers: usize,
+    /// What the last table served per path, and a version per path that
+    /// changes exactly when what the path's rows hold changed
+    /// ([`Project::per_file_content_version`]).
+    served_runs: HashMap<String, (Arc<crate::passes::PassOutput>, Vec<Completion>)>,
+    served_async: HashMap<String, Vec<AsyncFunctionFact>>,
+    versions: HashMap<String, u64>,
+    next_version: u64,
+    /// Whether `versions` describes the last table.
+    versions_valid: bool,
+}
+
+/// How the cross-file answers of one entity were completed after the passes
+/// (`Deferrals`): what the entity row holds beyond its pass's own output.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Completion {
+    Space(typefacts::ReferenceSpace),
+    Withdrawn(bool),
+    Suppressed(usize),
 }
 
 impl PerFile {
     pub(crate) fn new() -> Self {
         Self {
             verify_rows: env_is_one(ENV_VERIFY_ROWS),
+            workers: crate::passes::workers_from_env(),
             ..Self::default()
         }
     }
@@ -161,7 +202,10 @@ impl PerFile {
 /// this pass's row, as the canonical producer answers it from the symbol it
 /// holds for the generation. (A derived id cannot be re-resolved in a later
 /// pass: no position names it.)
-fn seeds(result: &SemanticDemandRunResult, facts: &[AsyncFunctionFact]) -> Vec<SymbolId> {
+pub(crate) fn seeds(
+    result: &SemanticDemandRunResult,
+    facts: &[AsyncFunctionFact],
+) -> Vec<SymbolId> {
     fn declaration(ids: &mut Vec<SymbolId>, declaration: &typefacts::ResolvedDeclaration) {
         ids.push(declaration.symbol.clone());
         ids.extend(declaration.owners.iter().map(|owner| owner.symbol.clone()));
@@ -200,7 +244,7 @@ fn seeds(result: &SemanticDemandRunResult, facts: &[AsyncFunctionFact]) -> Vec<S
 /// `id`'s row in the current pass: the canonical `symbol_evidence` answer
 /// without references (alias target, declarations), and the canonical id the
 /// references are listed under.
-fn row_for(env: &mut Env<'_>, id: &SymbolId) -> Row {
+pub(crate) fn row_for(env: &mut Env<'_>, id: &SymbolId) -> Row {
     let Some(symbol) = env.symbol_for(id) else {
         return Row::missing();
     };
@@ -293,6 +337,24 @@ impl Project {
         self.ids.select_derived_keys_for_test();
     }
 
+    /// Sets the pass pool's workers and pass reuse (tests; the binary reads
+    /// the environment at open).
+    #[cfg(test)]
+    pub(crate) fn select_passes_for_test(&mut self, workers: usize, reuse: bool, verify: bool) {
+        let state = self.per_file_state();
+        state.workers = workers;
+        state.reuse.set_enabled_for_test(reuse, verify);
+    }
+
+    /// The read set of `path` at the last table (tests).
+    #[cfg(test)]
+    pub(crate) fn per_file_read_set_for_test(&self, path: &str) -> Vec<String> {
+        self.per_file
+            .as_ref()
+            .map(|state| state.reuse.read_set_for_test(path))
+            .unwrap_or_default()
+    }
+
     /// The per-file counters (tests, measurement).
     #[must_use]
     pub fn per_file_stats(&self) -> Option<Stats> {
@@ -332,8 +394,35 @@ impl Project {
     /// answers that read every file. Results are index-aligned with `runs`;
     /// the async facts are what one `async_functions_at_locations` call over
     /// `async_locations` returns.
-    #[allow(clippy::too_many_lines)]
+    ///
+    /// With exact derived keys each pass is a function of what its checker
+    /// read: passes are reused across tables and run on a pool
+    /// ([`Project::pooled_demand_runs`]). Without them (counter ids hand out
+    /// across passes), or when two passes minted one id for two keys, the
+    /// passes run in path order over one identity state
+    /// ([`Project::sequential_demand_runs`]).
     pub(crate) fn per_file_demand_runs(
+        &mut self,
+        ctx: &Context,
+        runs: &[SemanticDemandRun<'_>],
+        async_locations: &[Location],
+    ) -> Result<(Vec<SemanticDemandRunResult>, Vec<AsyncFunctionFact>), BackendError> {
+        if self.ids.derived_keys()
+            && let Some(answer) = self.pooled_demand_runs(ctx, runs, async_locations)?
+        {
+            return Ok(answer);
+        }
+        let state = self.per_file_state();
+        state.versions_valid = false;
+        state.served_runs.clear();
+        state.served_async.clear();
+        self.sequential_demand_runs(ctx, runs, async_locations)
+    }
+
+    /// The sequential per-file run over the project's one identity state
+    /// (P1/P2): the first pass in path order to mint an id decides its key.
+    #[allow(clippy::too_many_lines)]
+    pub(crate) fn sequential_demand_runs(
         &mut self,
         ctx: &Context,
         runs: &[SemanticDemandRun<'_>],
@@ -454,42 +543,8 @@ impl Project {
         }
 
         // The answers that read every file, from pointer-free state only.
-        let structural: HashSet<SymbolId> = deferred
-            .iter()
-            .flat_map(|deferrals| deferrals.structural.iter().cloned())
-            .collect();
-        for (result, deferrals) in results.iter_mut().zip(&deferred) {
-            for (index, id) in &deferrals.spaces {
-                result.entities[*index].reference_space = Some(self.references.merged_space(id));
-                state.stats.deferred_spaces += 1;
-            }
-            for (index, id) in &deferrals.library {
-                state.stats.deferred_library += 1;
-                let written = self.references.query_merged(id).iter().any(|reference| {
-                    let Some(source) = program.get_source_file(&reference.path) else {
-                        return true;
-                    };
-                    u32::try_from(reference.start_byte)
-                        .map_or(true, |start| reference_is_write(source, start))
-                });
-                if written && let Some(call) = &mut result.entities[*index].resolved_call {
-                    Arc::make_mut(call).default_library_binding = None;
-                    state.stats.withdrawn_library += 1;
-                }
-            }
-            // The canonical run suppresses the descriptor of an entity whose
-            // symbol is a structural accessor anywhere in the batch.
-            for entity in &mut result.entities {
-                if entity.type_descriptor.is_some()
-                    && !entity.symbol.is_empty()
-                    && structural.contains(&entity.symbol)
-                    && !deferrals.structural.contains(&entity.symbol)
-                {
-                    entity.type_descriptor = None;
-                    state.stats.suppressed_descriptors += 1;
-                }
-            }
-        }
+        let deferred: Vec<&Deferrals> = deferred.iter().collect();
+        self.complete_deferred(program, &mut results, &deferred, &mut state.stats);
         let facts = crate::source_facts::merge_async_facts(async_batches);
         if env_is_one(ENV_STATS) {
             eprintln!(
@@ -514,6 +569,427 @@ impl Project {
         }
         *self.per_file_state() = state;
         Ok((results, facts))
+    }
+
+    /// Per-file passes with reuse and a pool (instant-edits P3, `passes`).
+    /// `None` when two passes minted one id for two keys: the caller answers
+    /// with the sequential run, whose first pass in path order decides.
+    #[allow(clippy::too_many_lines)]
+    fn pooled_demand_runs(
+        &mut self,
+        ctx: &Context,
+        runs: &[SemanticDemandRun<'_>],
+        async_locations: &[Location],
+    ) -> Result<Option<RunsAnswer>, BackendError> {
+        use crate::passes::{PassOutput, PassWork, run_works};
+        check(ctx)?;
+        let program = self.live()?.program();
+        let mut state = std::mem::take(self.per_file_state());
+        state.clear_rows();
+        let mut async_by_path: BTreeMap<Arc<str>, Vec<Location>> = BTreeMap::new();
+        for location in async_locations {
+            async_by_path
+                .entry(location.path.clone())
+                .or_default()
+                .push(location.clone());
+        }
+        // The works, in the order their outputs merge: the runs (path
+        // order), async locations outside every run, then every other
+        // non-declaration file's reference contribution.
+        let mut works: Vec<PassWork<'_>> = Vec::with_capacity(runs.len());
+        let mut scanned: HashSet<String> = HashSet::new();
+        for run in runs {
+            if let Some(file) = absolute(run.path)
+                .ok()
+                .and_then(|path| program.get_source_file(&path))
+                && !file.is_declaration_file()
+            {
+                scanned.insert(clean(file.file_name()));
+            }
+            works.push(PassWork {
+                path: run.path.to_owned(),
+                run: Some(run),
+                locations: async_by_path.remove(run.path).unwrap_or_default(),
+                scan: true,
+                reusable: true,
+            });
+        }
+        let async_count = works.len() + async_by_path.len();
+        for (path, locations) in std::mem::take(&mut async_by_path) {
+            works.push(PassWork {
+                path: path.to_string(),
+                run: None,
+                locations,
+                scan: false,
+                reusable: false,
+            });
+        }
+        let mut paths: Vec<String> = Vec::new();
+        for file in program.source_files() {
+            if file.is_declaration_file() {
+                continue;
+            }
+            let path = clean(file.file_name());
+            if !scanned.contains(&path) {
+                works.push(PassWork {
+                    path: path.clone(),
+                    run: None,
+                    locations: Vec::new(),
+                    scan: true,
+                    reusable: true,
+                });
+            }
+            paths.push(path);
+        }
+
+        // Kept outputs whose read set is unchanged.
+        let started = std::time::Instant::now();
+        state
+            .reuse
+            .refresh(program, &mut self.inputs, self.ids.exported_by_ref());
+        let mut outputs: Vec<Option<Arc<PassOutput>>> = works
+            .iter()
+            .map(|work| state.reuse.lookup(work, program, &mut self.inputs))
+            .collect();
+        let verify = state.reuse.verify;
+        let to_run: Vec<usize> = (0..works.len())
+            .filter(|index| verify || outputs[*index].is_none())
+            .collect();
+        let census = (!to_run.is_empty()).then(|| state.reuse.census(program, &mut self.inputs));
+        let refresh = started.elapsed();
+
+        let started = std::time::Instant::now();
+        let seed = self.ids.pass_seed();
+        let selected: Vec<&PassWork<'_>> = to_run.iter().map(|index| &works[*index]).collect();
+        let workers = state.workers;
+        let outcome = run_works(
+            ctx,
+            self.live()?,
+            &seed,
+            census.as_ref(),
+            &selected,
+            workers,
+        );
+        let pool = started.elapsed();
+        for paths in outcome.runtime_paths {
+            self.ids.absorb_runtime_paths(paths);
+        }
+        let mut failure: Option<BackendError> = None;
+        let (mut ran, mut verified, mut mismatches) = (0, 0, 0);
+        let mut recomputed = vec![false; works.len()];
+        for (index, fresh) in to_run.iter().zip(outcome.outputs) {
+            let fresh = match fresh {
+                Ok(fresh) => fresh,
+                Err(error) => {
+                    failure.get_or_insert(error);
+                    continue;
+                }
+            };
+            if let Some(reused) = &outputs[*index] {
+                verified += 1;
+                if **reused == fresh {
+                    continue;
+                }
+                mismatches += 1;
+                reuse_mismatch(&works[*index].path);
+            } else {
+                ran += 1;
+            }
+            let fresh = Arc::new(fresh);
+            state.reuse.keep(&works[*index], &fresh);
+            outputs[*index] = Some(fresh);
+            recomputed[*index] = true;
+        }
+        state.stats.reuse = crate::passes::ReuseStats {
+            reused: works.len() - ran,
+            ran,
+            verified,
+            mismatches,
+            workers: workers.min(selected.len()).max(1),
+            ..state.reuse.stats
+        };
+        if let Some(error) = failure {
+            *self.per_file_state() = state;
+            return Err(error);
+        }
+        let outputs: Vec<Arc<PassOutput>> = outputs
+            .into_iter()
+            .map(|output| output.expect("every work has an output"))
+            .collect();
+        state.stats.passes += ran + verified;
+        state.stats.demanded_passes += runs.len();
+        state.stats.reference_passes += works.len() - async_count;
+
+        // Keys: one id names one key across every pass and what the
+        // project already holds (scratch questions), or the table is the
+        // sequential run's.
+        let started = std::time::Instant::now();
+        let mut keys: HashMap<SymbolId, Arc<crate::binder_key::Key>> = HashMap::new();
+        let mut collision: Option<SymbolId> = None;
+        'outputs: for output in &outputs {
+            for (id, key) in &output.keys {
+                match keys.get(id) {
+                    Some(held) if held != key => {
+                        collision = Some(id.clone());
+                        break 'outputs;
+                    }
+                    Some(_) => {}
+                    None => {
+                        keys.insert(id.clone(), Arc::clone(key));
+                    }
+                }
+            }
+        }
+        if collision.is_none() {
+            collision = keys
+                .iter()
+                .find(|(id, key)| self.ids.key(id).is_some_and(|held| held != *key))
+                .map(|(id, _)| id.clone());
+        }
+        if let Some(id) = collision {
+            state.stats.key_collisions += 1;
+            if env_is_one(ENV_STATS) {
+                eprintln!("per-file key collision {id}: the sequential run answers");
+            }
+            state.reuse.clear();
+            *self.per_file_state() = state;
+            return Ok(None);
+        }
+        for (id, key) in &keys {
+            self.ids.insert_key(id, key);
+        }
+        // Rows: the first pass in path order wins.
+        for output in &outputs {
+            for (id, row) in &output.rows {
+                match state.rows.get(id) {
+                    Some(existing) => {
+                        if state.verify_rows && crate::model::durable_symbol_id(id) {
+                            state.stats.rows_verified += 1;
+                            if !rows_agree(existing, row) {
+                                state.stats.row_mismatches += 1;
+                                if env_is_one(ENV_STATS) {
+                                    eprintln!(
+                                        "per-file row mismatch {id}: {existing:?} vs {row:?}"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        state.rows.insert(id.clone(), row.clone());
+                        state.stats.rows += 1;
+                    }
+                }
+            }
+        }
+        let mut reuse = crate::references::BinderRetention::default();
+        for (output, recomputed) in outputs.iter().zip(&recomputed) {
+            let reused = !recomputed;
+            let symbols = output.result.as_ref().map_or(0, |result| {
+                result
+                    .entities
+                    .iter()
+                    .filter(|entity| !entity.symbol.is_empty())
+                    .count()
+            });
+            let references = usize::from(output.references.is_some());
+            if reused {
+                reuse.reused_reference_files += references;
+                reuse.reused_symbols += symbols;
+            } else {
+                reuse.scanned_reference_files += references;
+                reuse.resolved_symbols += symbols;
+            }
+        }
+        self.references.note_pass_reuse(reuse);
+        for output in &outputs {
+            if let Some((path, references)) = &output.references {
+                self.references
+                    .insert_file(path.clone(), references.clone());
+            }
+            for (family, count) in &output.unavailable.0 {
+                *self.unavailable.0.entry(family).or_default() += count;
+            }
+        }
+        self.references.finish_per_file(paths);
+        let mut results: Vec<SemanticDemandRunResult> = outputs[..runs.len()]
+            .iter()
+            .map(|output| output.result.clone().unwrap_or_default())
+            .collect();
+        let deferred: Vec<&Deferrals> = outputs[..runs.len()]
+            .iter()
+            .map(|output| &output.deferrals)
+            .collect();
+        let completions =
+            self.complete_deferred(program, &mut results, &deferred, &mut state.stats);
+        let facts = crate::source_facts::merge_async_facts(
+            outputs[..async_count]
+                .iter()
+                .map(|output| output.facts.clone())
+                .collect(),
+        );
+        self.record_versions(
+            &mut state,
+            &works[..runs.len()],
+            &outputs[..runs.len()],
+            completions,
+            &facts,
+        );
+        let merge = started.elapsed();
+        if env_is_one(ENV_STATS) {
+            eprintln!(
+                "per-file stats (table): {:?}; refresh {refresh:?} pool {pool:?} merge {merge:?}; leaked file checkers {}",
+                state.stats,
+                crate::unsafe_boundary::leaked_file_checkers()
+            );
+        }
+        if let Some(trace) = &self.trace {
+            let count = |value: usize| i64::try_from(value).unwrap_or(i64::MAX);
+            let nanos =
+                |value: std::time::Duration| i64::try_from(value.as_nanos()).unwrap_or(i64::MAX);
+            let stats = state.stats;
+            trace.metrics(
+                "per-file",
+                &[
+                    ("passes", count(stats.passes)),
+                    ("demandedPasses", count(stats.demanded_passes)),
+                    ("referencePasses", count(stats.reference_passes)),
+                    ("rows", count(stats.rows)),
+                    ("rowMismatches", count(stats.row_mismatches)),
+                    ("reused", count(stats.reuse.reused)),
+                    ("ran", count(stats.reuse.ran)),
+                    ("invalidated", count(stats.reuse.invalidated)),
+                    ("workers", count(stats.reuse.workers)),
+                    ("reuseMismatches", count(stats.reuse.mismatches)),
+                    ("refreshNs", nanos(refresh)),
+                    ("poolNs", nanos(pool)),
+                    ("mergeNs", nanos(merge)),
+                ],
+            );
+        }
+        *self.per_file_state() = state;
+        Ok(Some((results, facts)))
+    }
+
+    /// Advances the version of every path whose rows (its run's entities,
+    /// its async facts) differ from what the previous table served.
+    fn record_versions(
+        &mut self,
+        state: &mut PerFile,
+        works: &[crate::passes::PassWork<'_>],
+        outputs: &[Arc<crate::passes::PassOutput>],
+        completions: Vec<Vec<Completion>>,
+        facts: &[AsyncFunctionFact],
+    ) {
+        let mut runs: HashMap<String, (Arc<crate::passes::PassOutput>, Vec<Completion>)> =
+            HashMap::with_capacity(works.len());
+        for ((work, output), completion) in works.iter().zip(outputs).zip(completions) {
+            runs.insert(work.path.clone(), (Arc::clone(output), completion));
+        }
+        let mut by_path: HashMap<String, Vec<AsyncFunctionFact>> = HashMap::new();
+        for fact in facts {
+            by_path
+                .entry(clean(&fact.expression.path))
+                .or_default()
+                .push(fact.clone());
+        }
+        let mut every: HashSet<String> = HashSet::new();
+        every.extend(state.served_runs.keys().cloned());
+        every.extend(state.served_async.keys().cloned());
+        every.extend(runs.keys().cloned());
+        every.extend(by_path.keys().cloned());
+        if !state.versions_valid {
+            state.versions.clear();
+        }
+        for path in every {
+            let same_run = match (state.served_runs.get(&path), runs.get(&path)) {
+                (None, None) => true,
+                (Some(before), Some(now)) => {
+                    (Arc::ptr_eq(&before.0, &now.0) || *before.0 == *now.0) && before.1 == now.1
+                }
+                _ => false,
+            };
+            let same_async = state.served_async.get(&path) == by_path.get(&path);
+            let present = runs.contains_key(&path) || by_path.contains_key(&path);
+            if !present {
+                state.versions.remove(&path);
+            } else if !same_run || !same_async || !state.versions.contains_key(&path) {
+                state.next_version += 1;
+                state.versions.insert(path, state.next_version);
+            }
+        }
+        state.served_runs = runs;
+        state.served_async = by_path;
+        state.versions_valid = true;
+    }
+
+    /// Per-file passes with reuse: a number that changes exactly when the
+    /// rows of `path` (its entities and async facts) differ from the
+    /// previous table's, `None` for a path without rows. `None` for every
+    /// path when the last table did not track them (the sequential run).
+    #[must_use]
+    pub fn per_file_content_version(&self, path: &str) -> Option<Option<u64>> {
+        let state = self.per_file.as_ref()?;
+        if !state.versions_valid {
+            return None;
+        }
+        Some(state.versions.get(path).copied())
+    }
+
+    /// Completes the answers of `results` that read every file (`Deferrals`,
+    /// index-aligned), from the merged reference index and the program's
+    /// syntax only; returns, per result, how each was completed.
+    fn complete_deferred(
+        &mut self,
+        program: &'static tsrs_compiler::Program,
+        results: &mut [SemanticDemandRunResult],
+        deferred: &[&Deferrals],
+        stats: &mut Stats,
+    ) -> Vec<Vec<Completion>> {
+        let structural: HashSet<SymbolId> = deferred
+            .iter()
+            .flat_map(|deferrals| deferrals.structural.iter().cloned())
+            .collect();
+        let mut completions = Vec::with_capacity(results.len());
+        for (result, deferrals) in results.iter_mut().zip(deferred) {
+            let mut completion = Vec::new();
+            for (index, id) in &deferrals.spaces {
+                let space = self.references.merged_space(id);
+                result.entities[*index].reference_space = Some(space);
+                completion.push(Completion::Space(space));
+                stats.deferred_spaces += 1;
+            }
+            for (index, id) in &deferrals.library {
+                stats.deferred_library += 1;
+                let written = self.references.query_merged(id).iter().any(|reference| {
+                    let Some(source) = program.get_source_file(&reference.path) else {
+                        return true;
+                    };
+                    u32::try_from(reference.start_byte)
+                        .map_or(true, |start| reference_is_write(source, start))
+                });
+                completion.push(Completion::Withdrawn(written));
+                if written && let Some(call) = &mut result.entities[*index].resolved_call {
+                    Arc::make_mut(call).default_library_binding = None;
+                    stats.withdrawn_library += 1;
+                }
+            }
+            // The canonical run suppresses the descriptor of an entity whose
+            // symbol is a structural accessor anywhere in the batch.
+            for (index, entity) in result.entities.iter_mut().enumerate() {
+                if entity.type_descriptor.is_some()
+                    && !entity.symbol.is_empty()
+                    && structural.contains(&entity.symbol)
+                    && !deferrals.structural.contains(&entity.symbol)
+                {
+                    entity.type_descriptor = None;
+                    completion.push(Completion::Suppressed(index));
+                    stats.suppressed_descriptors += 1;
+                }
+            }
+            completions.push(completion);
+        }
+        completions
     }
 
     /// The rows of `ids`: the table passes' rows, and for an id without one,

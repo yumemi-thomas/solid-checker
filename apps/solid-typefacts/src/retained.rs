@@ -292,18 +292,59 @@ impl DemandClosure {
             self.next_table_state_id += 1;
         }
         table.state_id = self.next_table_state_id;
-        // Every demanded file was recomputed and generation-scoped ids are
-        // minted afresh, so any path may differ from the previous table (a
-        // different counter, a shifted reference space) and the manifest names
-        // all of them, along
-        // with the paths the update named. The previous table keeps no rows
-        // (they are released once published), so there is nothing to compare
-        // values against; naming a path that did not change only costs bytes.
-        let manifest_changed_paths: Option<HashSet<String>> = {
+        // Per-file passes with reuse (instant-edits P3) know, per path,
+        // whether its rows changed: the manifest names exactly the paths whose
+        // rows or source digest differ from the previous table's, or that
+        // entered or left it.
+        let versions: Option<crate::closure::PathVersions> =
+            self.backend.tracks_content_versions().then(|| {
+                let mut now: crate::closure::PathVersions = HashMap::new();
+                for source in &source_digests {
+                    now.entry(source.path.to_string()).or_default().1 = Some(source.sha256.clone());
+                }
+                for group in groups.iter() {
+                    now.entry(group.path.clone()).or_default();
+                }
+                for (path, state) in &mut now {
+                    state.0 = self.backend.content_version(path);
+                }
+                now
+            });
+        let exact: Option<HashSet<String>> = match (&versions, &self.path_versions) {
+            (Some(now), Some((state_id, before)))
+                if self
+                    .previous_table
+                    .as_ref()
+                    .is_some_and(|previous| previous.state_id == *state_id) =>
+            {
+                let mut changed: HashSet<String> = now
+                    .iter()
+                    .filter(|(path, state)| before.get(*path) != Some(*state))
+                    .map(|(path, _)| path.clone())
+                    .collect();
+                changed.extend(
+                    before
+                        .keys()
+                        .filter(|path| !now.contains_key(*path))
+                        .cloned(),
+                );
+                Some(changed)
+            }
+            _ => None,
+        };
+        self.path_versions = versions.map(|now| (table.state_id, now));
+        // Otherwise every demanded file was recomputed and generation-scoped
+        // ids are minted afresh, so any path may differ from the previous
+        // table (a different counter, a shifted reference space) and the
+        // manifest names all of them, along with the paths the update named.
+        // The previous table keeps no rows (they are released once
+        // published), so there is nothing to compare values against; naming
+        // a path that did not change only costs bytes.
+        let manifest_changed_paths: Option<HashSet<String>> = exact.or_else(|| {
             let mut paths = self.transport_changed_paths.clone().unwrap_or_default();
             paths.extend(groups.iter().map(|group| group.path.clone()));
             Some(paths)
-        };
+        });
         table.transport = rust_owned_transport_manifest(
             self.previous_table.as_ref(),
             manifest_changed_paths.as_ref(),

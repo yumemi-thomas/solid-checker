@@ -54,7 +54,7 @@ struct Indexed {
     end: u32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Group {
     pub id: SymbolId,
     /// Emptied once merged into the index, so the index does not duplicate
@@ -65,7 +65,7 @@ pub struct Group {
 /// One file's contribution to the reference index: every resolvable
 /// non-declaration identifier in the file, grouped by the id of its
 /// alias-canonicalized symbol, each group in ascending byte order.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FileReferences {
     pub refs: Vec<Group>,
     spaces: Vec<(SymbolId, u8)>,
@@ -1069,6 +1069,38 @@ impl ReferenceIndex {
         let entry = self.contribution(env, file);
         self.files.insert(clean(file.file_name()), entry);
         self.retention.build += started.elapsed();
+    }
+
+    /// Per-file passes on their own index (instant-edits P3): the
+    /// contribution [`ReferenceIndex::scan_file`] just held for `path`.
+    pub(crate) fn take_file(&mut self, path: &str) -> Option<FileReferences> {
+        self.files.remove(path)
+    }
+
+    /// Per-file passes: holds a pass's contribution for `path` until
+    /// [`ReferenceIndex::finish_per_file`] merges it.
+    pub(crate) fn insert_file(&mut self, path: String, references: FileReferences) {
+        self.files.insert(path, references);
+    }
+
+    /// Per-file passes with reuse (instant-edits P3): reference
+    /// contributions and entity symbols served from a kept pass output, and
+    /// computed anew, in the counters ADR 0369's retention reports.
+    pub(crate) fn note_pass_reuse(&mut self, reuse: BinderRetention) {
+        self.retention.reused_reference_files += reuse.reused_reference_files;
+        self.retention.scanned_reference_files += reuse.scanned_reference_files;
+        self.retention.reused_symbols += reuse.reused_symbols;
+        self.retention.resolved_symbols += reuse.resolved_symbols;
+    }
+
+    /// An index of a pass's own (per-file checkers, instant-edits P3): filled
+    /// per file and never merged or retained.
+    #[must_use]
+    pub(crate) fn for_pass() -> Self {
+        Self {
+            per_file: true,
+            ..Self::default()
+        }
     }
 
     /// Per-file checkers: merges the scanned contributions of `paths` (every

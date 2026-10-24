@@ -168,7 +168,7 @@ pub struct Project {
     pub(crate) trace: SharedTrace,
     config_path: String,
     fs: Arc<OverlayFs>,
-    generation: Option<Generation>,
+    pub(crate) generation: Option<Generation>,
     /// After `generation`: dropped after every configuration parsed through it.
     config_host: HostLease<ConfigHost>,
     versions: HashMap<String, u64>,
@@ -827,6 +827,14 @@ impl ClosureBackend for Project {
     fn binder_retention(&mut self) -> crate::references::BinderRetention {
         self.references.take_retention()
     }
+
+    fn tracks_content_versions(&self) -> bool {
+        self.per_file_content_version("").is_some()
+    }
+
+    fn content_version(&self, path: &str) -> Option<u64> {
+        self.per_file_content_version(path).flatten()
+    }
 }
 
 impl SymbolEvidence for Project {
@@ -1103,6 +1111,11 @@ impl Project {
         self.references.start_retaining();
         if !reused {
             self.ids.forget_runtime_paths();
+            // Per-file passes (instant-edits P3): a rebuilt chain re-read
+            // every file and resolution; no kept pass output survives it.
+            if let Some(state) = &mut self.per_file {
+                state.reuse.program_rebuilt();
+            }
         }
         self.fs = candidate_fs;
         self.versions = candidate_versions;
@@ -1260,6 +1273,9 @@ impl Project {
         // chain about to be freed.
         self.ids.release_pointers();
         self.ids.forget_runtime_paths();
+        if let Some(state) = &mut self.per_file {
+            state.reuse.program_rebuilt();
+        }
         generation.commit(fresh);
         self.inputs.program_changed(None);
         true

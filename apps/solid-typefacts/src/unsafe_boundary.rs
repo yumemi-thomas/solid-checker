@@ -89,7 +89,16 @@
 //!    file checker leaks instead of freeing its program. What the checker made
 //!    lives in its region, so invariant 1 applies to it at the drop: callers
 //!    purge every handle the pass made (`Identities::purge_scope_pointers`)
-//!    before or at the drop.
+//!    before or at the drop. The pass pool (`passes::run_works`) shares
+//!    `&Generation` with scoped worker threads that do nothing but this: each
+//!    installs file checkers of its own and calls no program entry point
+//!    without one installed (the slot's checker is never acquired off the
+//!    building thread). The program's lazily filled caches are primed first
+//!    ([`Generation::prime_caches`]); everything else a checker reads in the
+//!    program (files, binder symbols and tables, nodes) is frozen after
+//!    binding, and a file's own lazies are `OnceLock`s or locked and
+//!    allocated in the file's region (tsrs runs concurrent checkers over one
+//!    program the same way).
 //!
 //! Violations of 2, 3 and 8 degrade to a leak. Violations of 1 and 6 cannot be
 //! detected here; the S3 suite runs under `TSRS_ARENA_POISON=1` so a read of
@@ -673,6 +682,13 @@ impl Generation {
             held: Some(held),
             _thread: std::marker::PhantomData,
         }
+    }
+
+    /// Fills the program's lazily filled caches now, on this thread, if no
+    /// checker did yet (per-file pass workers: before any worker starts, so
+    /// no worker's checker region receives them; see [`CheckerSlot::caches`]).
+    pub fn prime_caches(&self) {
+        self.slot.prime_caches();
     }
 
     /// Whether a file checker for this program is installed on this thread.

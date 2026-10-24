@@ -87,7 +87,7 @@ pub struct Identities {
     /// The module-visible symbols' declaration references (Go:
     /// `exportedIdentitiesByRef`): pointer-free, so it also answers after a
     /// release.
-    exported_by_ref: HashMap<DurableRef, Preserved>,
+    exported_by_ref: Arc<HashMap<DurableRef, Preserved>>,
     /// Go: `filesByName`. `Program.GetSourceFile` does not round-trip virtual
     /// bundled-lib names, so durable re-resolution of lib-declared symbols
     /// falls back to this index.
@@ -117,6 +117,15 @@ pub struct Identities {
     /// Derived symbols take exact keys (`derived_key.rs`), and a symbol with
     /// no key carries no id at all instead of a counter (instant-edits P2).
     /// Chosen at open; never changes for a project.
+    derived_keys: bool,
+}
+
+/// The pointer-free start of a pass's identity state ([`Identities::pass_seed`]).
+#[derive(Clone)]
+pub(crate) struct PassSeed {
+    generation: u64,
+    exported_by_ref: Arc<HashMap<DurableRef, Preserved>>,
+    runtime_paths: HashMap<String, String>,
     derived_keys: bool,
 }
 
@@ -247,6 +256,71 @@ impl Identities {
         self.tuple_index = crate::derived_key::TupleIndex::default();
     }
 
+    /// What a pass's own identity state starts from (per-file passes,
+    /// instant-edits P3): the project's pointer-free inputs (the derived-key
+    /// mode, the exported identities, the resolved runtime paths) and no key.
+    /// `Send`, so a worker thread builds its state from it
+    /// ([`Identities::from_seed`]).
+    #[must_use]
+    pub(crate) fn pass_seed(&self) -> PassSeed {
+        PassSeed {
+            generation: self.generation,
+            exported_by_ref: Arc::clone(&self.exported_by_ref),
+            runtime_paths: self.runtime_paths.clone(),
+            derived_keys: self.derived_keys,
+        }
+    }
+
+    /// A pass's identity state. A pass mints into its own `keys`, so what it
+    /// emits is a function of what its checker read, never of which pass,
+    /// table or scratch question minted an id first; the caller merges the
+    /// keys afterwards ([`Identities::take_keys`]).
+    #[must_use]
+    pub(crate) fn from_seed(seed: PassSeed) -> Identities {
+        Identities {
+            generation: seed.generation,
+            exported_by_ref: seed.exported_by_ref,
+            runtime_paths: seed.runtime_paths,
+            derived_keys: seed.derived_keys,
+            ..Identities::default()
+        }
+    }
+
+    /// The keys minted since the last call, in id order (a pass's output).
+    pub(crate) fn take_keys(&mut self) -> Vec<(SymbolId, Arc<Key>)> {
+        let mut keys: Vec<(SymbolId, Arc<Key>)> =
+            std::mem::take(&mut self.keys).into_iter().collect();
+        keys.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+        keys
+    }
+
+    /// The key `id` names in this generation, if any.
+    #[must_use]
+    pub(crate) fn key(&self, id: &SymbolId) -> Option<&Arc<Key>> {
+        self.keys.get(id)
+    }
+
+    /// Records `key` for `id` (the merge of a pass's keys; the caller checked
+    /// that `id` names no other key).
+    pub(crate) fn insert_key(&mut self, id: &SymbolId, key: &Arc<Key>) {
+        self.keys
+            .entry(Arc::clone(id))
+            .or_insert_with(|| Arc::clone(key));
+    }
+
+    /// The runtime paths a pass state resolved (to merge back).
+    pub(crate) fn take_runtime_paths(&mut self) -> HashMap<String, String> {
+        std::mem::take(&mut self.runtime_paths)
+    }
+
+    /// Merges runtime paths a pass state resolved (a memo of a file-system
+    /// answer: every pass resolves a path the same way).
+    pub(crate) fn absorb_runtime_paths(&mut self, paths: HashMap<String, String>) {
+        for (path, resolved) in paths {
+            self.runtime_paths.entry(path).or_insert(resolved);
+        }
+    }
+
     /// The program chain was rebuilt: every file and module resolution was
     /// read again, so resolved runtime paths are too.
     pub fn forget_runtime_paths(&mut self) {
@@ -258,12 +332,12 @@ impl Identities {
         self.release_pointers();
         self.runtime_paths.clear();
         self.keys.clear();
-        self.exported_by_ref.clear();
+        self.exported_by_ref = Arc::default();
     }
 
     /// Seeds the exported identities at open (Go: `OpenProject`).
     pub fn seed_exported(&mut self, program: &Program, checker: &mut Checker) {
-        self.exported_by_ref = collect_exported_identities(program, checker);
+        self.exported_by_ref = Arc::new(collect_exported_identities(program, checker));
     }
 
     /// Go: the identity half of `Update` after a candidate is accepted. Nothing

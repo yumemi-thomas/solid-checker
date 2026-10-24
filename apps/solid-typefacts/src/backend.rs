@@ -254,6 +254,23 @@ pub trait ClosureBackend {
     fn binder_retention(&mut self) -> crate::references::BinderRetention {
         crate::references::BinderRetention::default()
     }
+
+    /// Per-file passes with reuse (instant-edits P3): whether the last
+    /// [`ClosureBackend::per_file_demand_runs`] tracked, per path, whether its
+    /// rows changed ([`ClosureBackend::content_version`]).
+    fn tracks_content_versions(&self) -> bool {
+        false
+    }
+
+    /// A number that changes exactly when the rows the last
+    /// [`ClosureBackend::per_file_demand_runs`] answered for `path` (its run's
+    /// entities and its async facts) differ from any earlier answer; `None`
+    /// for a path without rows. Meaningful only while
+    /// [`ClosureBackend::tracks_content_versions`].
+    fn content_version(&self, path: &str) -> Option<u64> {
+        let _ = path;
+        None
+    }
 }
 
 /// Symbol-level evidence for the `symbols` operation and for `analyze`'s

@@ -959,42 +959,81 @@ impl Project {
                     selected
                 }
             };
-            for mut fact in selected {
-                let fact_key: FactKey = (
-                    clean(&fact.expression.path),
-                    fact.expression.start_byte,
-                    fact.expression.end_byte,
-                    fact.symbol.clone(),
-                    fact.target.clone(),
-                );
-                if !seen.insert(fact_key.clone()) {
-                    continue;
-                }
-                fact.expression.path = fact_key.0.into();
-                for call in &mut fact.calls_after_await {
-                    call.path = clean(&call.path).into();
-                }
-                facts.push(fact);
-            }
+            push_selected(&mut facts, &mut seen, selected);
         }
-        facts.sort_by(|left, right| {
-            (
-                &*left.expression.path,
-                left.expression.start_byte,
-                left.expression.end_byte,
-                &*left.symbol,
-                &*left.target,
-            )
-                .cmp(&(
-                    &*right.expression.path,
-                    right.expression.start_byte,
-                    right.expression.end_byte,
-                    &*right.symbol,
-                    &*right.target,
-                ))
-        });
+        sort_async_facts(&mut facts);
         Ok(facts)
     }
+}
+
+/// Appends the facts of one location, dropping repeats, paths cleaned.
+fn push_selected(
+    facts: &mut Vec<AsyncFunctionFact>,
+    seen: &mut HashSet<FactKey>,
+    selected: Vec<AsyncFunctionFact>,
+) {
+    for mut fact in selected {
+        let fact_key: FactKey = (
+            clean(&fact.expression.path),
+            fact.expression.start_byte,
+            fact.expression.end_byte,
+            fact.symbol.clone(),
+            fact.target.clone(),
+        );
+        if !seen.insert(fact_key.clone()) {
+            continue;
+        }
+        fact.expression.path = fact_key.0.into();
+        for call in &mut fact.calls_after_await {
+            call.path = clean(&call.path).into();
+        }
+        facts.push(fact);
+    }
+}
+
+fn sort_async_facts(facts: &mut [AsyncFunctionFact]) {
+    facts.sort_by(|left, right| {
+        (
+            &*left.expression.path,
+            left.expression.start_byte,
+            left.expression.end_byte,
+            &*left.symbol,
+            &*left.target,
+        )
+            .cmp(&(
+                &*right.expression.path,
+                right.expression.start_byte,
+                right.expression.end_byte,
+                &*right.symbol,
+                &*right.target,
+            ))
+    });
+}
+
+/// [`Project::async_functions_at_locations`] inside a per-file pass, on the
+/// pass's own checker and identity state, without the cross-generation memo
+/// (a pass's output must be a function of what its checker read; a memoized
+/// answer is the same answer).
+pub(crate) fn async_facts_in_pass(
+    ctx: &Context,
+    env: &mut Env<'_>,
+    locations: &[Location],
+) -> Result<Vec<AsyncFunctionFact>, BackendError> {
+    check(ctx)?;
+    let mut facts: Vec<AsyncFunctionFact> = Vec::with_capacity(locations.len());
+    let mut seen: HashSet<FactKey> = HashSet::with_capacity(locations.len());
+    for location in locations {
+        check(ctx)?;
+        let location = Location {
+            path: clean(&location.path).into(),
+            ..location.clone()
+        };
+        let file = source_file_for(env, &location)?;
+        let selected = async_functions_at_location(env, &location, file);
+        push_selected(&mut facts, &mut seen, selected);
+    }
+    sort_async_facts(&mut facts);
+    Ok(facts)
 }
 
 /// Per-file checkers: the answers of several
