@@ -739,6 +739,9 @@ pub(crate) struct CachedLateStages {
     pub(crate) proof: Option<ReadProof>,
     /// This build's reads of the aggregates, gathered while they compute.
     pub(crate) reads: crate::base::reads::Reads,
+    /// The proof's reads a pass not yet run in this build must decide
+    /// ([`ReusePlan::settle`]).
+    pub(crate) undecided: Vec<crate::base::reads::MemoRead>,
     pub(crate) local_accesses: CachedLocalAccesses,
     pub(crate) interprocedural: Option<InterproceduralResult>,
     pub(crate) missing_owners: Option<Vec<OwnerRequirement>>,
@@ -973,6 +976,11 @@ pub(crate) fn typescript_unchanged(facts: &ProjectFacts) -> bool {
 pub(crate) struct ReusePlan {
     pub(crate) typescript_unchanged: bool,
     pub(crate) late_stages_reusable: bool,
+    /// The late aggregates' proof holds so far, but for memo reads that need
+    /// a derived table a pass publishes later in this build (the resolver's):
+    /// [`Self::settle`] decides once it has run. Until then nothing is
+    /// reusable and the cache is untouched.
+    pub(crate) late_stages_pending: bool,
 }
 
 impl ReusePlan {
@@ -982,55 +990,110 @@ impl ReusePlan {
         answers: &dyn ReadAnswers,
     ) -> Self {
         let typescript_unchanged = typescript_unchanged(facts);
-        let late_stages_reusable = typescript_unchanged
-            && late_stages
+        let mut undecided = Vec::new();
+        let verdict = if typescript_unchanged {
+            late_stages
                 .as_deref()
                 .and_then(Option::as_ref)
-                .is_some_and(|cache| {
-                    late_stage_inputs_match(cache, facts)
-                        && cache
-                            .proof
-                            .as_ref()
-                            .is_some_and(|proof| proof.holds(answers))
-                });
-
-        if let Some(slot) = late_stages {
-            if late_stages_reusable {
-                if let Some(retained) = slot.as_mut() {
-                    for file in &facts.files {
-                        if let Some(input) = retained.inputs.get_mut(file.path.as_str()) {
-                            input.source_hash.clone_from(&file.source_hash);
-                            input.source = Arc::clone(&file.source);
-                        }
-                    }
+                .filter(|cache| late_stage_inputs_match(cache, facts))
+                .and_then(|cache| cache.proof.as_ref())
+                .map(|proof| proof.verdict(answers))
+        } else {
+            None
+        };
+        let late_stages_reusable = match verdict {
+            Some(crate::base::reads::Verdict::Holds) => true,
+            Some(crate::base::reads::Verdict::Undecided(reads)) => {
+                undecided = reads;
+                false
+            }
+            Some(crate::base::reads::Verdict::Moved(miss)) => {
+                if std::env::var_os("SOLID_CHECKER_IR_READ_MISSES")
+                    .is_some_and(|value| value != "0")
+                {
+                    eprintln!("{}", serde_json::json!({ "irReadMiss": miss }));
                 }
-            } else if let Some(retained) = slot.as_mut() {
-                refresh_late_stage_inputs(&mut retained.inputs, facts);
-                retained.proof = None;
-                retained.reads = crate::base::reads::Reads::default();
-                retained.local_accesses.aggregate = None;
-                retained.interprocedural = None;
-                retained.missing_owners = None;
-                retained.settled_gates = None;
-                retained.compat_reference_locations = None;
+                false
+            }
+            None => false,
+        };
+        let late_stages_pending = !undecided.is_empty();
+        if let Some(slot) = late_stages {
+            if late_stages_pending {
+                if let Some(retained) = slot.as_mut() {
+                    retained.undecided = undecided;
+                }
             } else {
-                *slot = Some(CachedLateStages {
-                    inputs: current_late_stage_inputs(facts),
-                    proof: None,
-                    reads: crate::base::reads::Reads::default(),
-                    local_accesses: CachedLocalAccesses::default(),
-                    interprocedural: None,
-                    missing_owners: None,
-                    settled_gates: None,
-                    owner_files: HashMap::default(),
-                    compat_reference_locations: None,
-                });
+                settle_late_stages(slot, facts, late_stages_reusable);
             }
         }
-
         Self {
             typescript_unchanged,
             late_stages_reusable,
+            late_stages_pending,
         }
+    }
+
+    /// Decides a pending reuse ([`Self::late_stages_pending`]) once the pass
+    /// that publishes what its undecided reads need has run in this build.
+    pub(crate) fn settle(
+        &mut self,
+        facts: &ProjectFacts,
+        late_stages: Option<&mut Option<CachedLateStages>>,
+        answers: &dyn ReadAnswers,
+    ) {
+        if !self.late_stages_pending {
+            return;
+        }
+        self.late_stages_pending = false;
+        let Some(slot) = late_stages else {
+            return;
+        };
+        let reusable = slot.as_mut().is_some_and(|cache| {
+            let undecided = std::mem::take(&mut cache.undecided);
+            cache
+                .proof
+                .as_ref()
+                .is_some_and(|proof| proof.recheck(&undecided, answers))
+        });
+        self.late_stages_reusable = reusable;
+        settle_late_stages(slot, facts, reusable);
+    }
+}
+
+/// The late-stage cache transition of a decided reuse.
+fn settle_late_stages(slot: &mut Option<CachedLateStages>, facts: &ProjectFacts, reusable: bool) {
+    if reusable {
+        if let Some(retained) = slot.as_mut() {
+            for file in &facts.files {
+                if let Some(input) = retained.inputs.get_mut(file.path.as_str()) {
+                    input.source_hash.clone_from(&file.source_hash);
+                    input.source = Arc::clone(&file.source);
+                }
+            }
+        }
+    } else if let Some(retained) = slot.as_mut() {
+        refresh_late_stage_inputs(&mut retained.inputs, facts);
+        retained.proof = None;
+        retained.reads = crate::base::reads::Reads::default();
+        retained.undecided = Vec::new();
+        retained.local_accesses.aggregate = None;
+        retained.interprocedural = None;
+        retained.missing_owners = None;
+        retained.settled_gates = None;
+        retained.compat_reference_locations = None;
+    } else {
+        *slot = Some(CachedLateStages {
+            inputs: current_late_stage_inputs(facts),
+            proof: None,
+            reads: crate::base::reads::Reads::default(),
+            undecided: Vec::new(),
+            local_accesses: CachedLocalAccesses::default(),
+            interprocedural: None,
+            missing_owners: None,
+            settled_gates: None,
+            owner_files: HashMap::default(),
+            compat_reference_locations: None,
+        });
     }
 }

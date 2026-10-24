@@ -385,10 +385,39 @@ pub(crate) trait ReadAnswers {
     fn memo_changed_at(&self, store: u64, read: MemoRead) -> Option<Revision>;
     /// The identity of the memo store this build reads.
     fn memo_store_id(&self) -> u64;
+    /// [`Self::memo_changed_at`], telling apart a read this build cannot
+    /// answer yet: bringing the memo up to date needs a derived table its
+    /// pass has not published (`base::memo::derived::deferring`).
+    fn memo_check(&self, store: u64, read: MemoRead) -> MemoCheck {
+        if self.memo_changed_at(store, read) == Some(read.changed_at) {
+            MemoCheck::Same
+        } else {
+            MemoCheck::Moved
+        }
+    }
     /// A memo read, named for a diagnostic.
     fn describe_memo(&self, read: MemoRead) -> String {
         format!("{read:?}")
     }
+}
+
+/// One recorded memo read checked in the current build.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MemoCheck {
+    Same,
+    Moved,
+    /// Its memo needs a derived table not yet published in this build.
+    Undecided,
+}
+
+/// What a proof's check found.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum Verdict {
+    Holds,
+    Moved(String),
+    /// Every read decided so far holds; these need a pass that has not run
+    /// yet in this build. Checked again once it has ([`ReadProof::recheck`]).
+    Undecided(Vec<MemoRead>),
 }
 
 /// `SOLID_CHECKER_IR_READ_MISSES`: report the first read that no longer
@@ -422,43 +451,81 @@ impl ReadProof {
         }
     }
 
-    /// Whether every read answers in this build as it did when recorded.
+    /// Whether every read answers in this build as it did when recorded. A
+    /// read this build cannot answer yet counts as moved: the chunk reruns.
     pub(crate) fn holds(&self, answers: &dyn ReadAnswers) -> bool {
-        match self.first_miss(answers) {
-            None => true,
-            Some(miss) => {
-                if report_misses() {
-                    eprintln!("{}", serde_json::json!({ "irReadMiss": miss }));
-                }
+        match self.verdict(answers) {
+            Verdict::Holds => true,
+            Verdict::Moved(miss) => {
+                report_miss(&miss);
+                false
+            }
+            Verdict::Undecided(reads) => {
+                report_miss(&format!(
+                    "memo {} (undecided before its pass publishes)",
+                    answers.describe_memo(reads[0])
+                ));
                 false
             }
         }
     }
 
-    /// The first read that no longer answers as recorded, named.
-    pub(crate) fn first_miss(&self, answers: &dyn ReadAnswers) -> Option<String> {
+    /// Whether every read answers as recorded, moved (the first, named), or
+    /// holds so far but for reads a pass not yet run must decide.
+    pub(crate) fn verdict(&self, answers: &dyn ReadAnswers) -> Verdict {
         if self.sections.len() != self.reads.sections().count() {
-            return Some("an unfinished chunk".to_owned());
+            return Verdict::Moved("an unfinished chunk".to_owned());
         }
         if self.reads.is_empty() {
-            return None;
+            return Verdict::Holds;
         }
         for (section, recorded) in self.reads.sections().zip(&self.sections) {
             if answers.section_fingerprint(section) != *recorded {
-                return Some(format!("section {section:?}"));
+                return Verdict::Moved(format!("section {section:?}"));
             }
         }
         if self.reads.memos.is_empty() {
-            return None;
+            return Verdict::Holds;
         }
         if answers.memo_store_id() != self.store {
-            return Some("another memo store".to_owned());
+            return Verdict::Moved("another memo store".to_owned());
         }
-        self.reads
-            .memos
+        let mut undecided = Vec::new();
+        for read in &self.reads.memos {
+            match answers.memo_check(self.store, *read) {
+                MemoCheck::Same => {}
+                MemoCheck::Moved => {
+                    return Verdict::Moved(format!("memo {}", answers.describe_memo(*read)));
+                }
+                MemoCheck::Undecided => undecided.push(*read),
+            }
+        }
+        if undecided.is_empty() {
+            Verdict::Holds
+        } else {
+            Verdict::Undecided(undecided)
+        }
+    }
+
+    /// Checks again the reads a [`Verdict::Undecided`] named, once their
+    /// pass has run: whether each answers as recorded.
+    pub(crate) fn recheck(&self, undecided: &[MemoRead], answers: &dyn ReadAnswers) -> bool {
+        match undecided
             .iter()
-            .find(|read| answers.memo_changed_at(self.store, **read) != Some(read.changed_at))
-            .map(|read| format!("memo {}", answers.describe_memo(*read)))
+            .find(|read| answers.memo_check(self.store, **read) != MemoCheck::Same)
+        {
+            None => true,
+            Some(read) => {
+                report_miss(&format!("memo {}", answers.describe_memo(*read)));
+                false
+            }
+        }
+    }
+}
+
+fn report_miss(miss: &str) {
+    if report_misses() {
+        eprintln!("{}", serde_json::json!({ "irReadMiss": miss }));
     }
 }
 
@@ -510,5 +577,66 @@ mod tests {
         // Outside every recording, a note goes nowhere.
         note(Section::Components);
         assert!(!recording());
+    }
+
+    /// Answers over fixed memo revisions; `undecided` holds the queries
+    /// whose derived table is not published yet.
+    struct Fixed {
+        revisions: std::collections::BTreeMap<u32, Revision>,
+        undecided: std::cell::RefCell<BTreeSet<u32>>,
+    }
+
+    impl ReadAnswers for Fixed {
+        fn section_fingerprint(&self, _: Section) -> [u8; 32] {
+            [0; 32]
+        }
+        fn memo_changed_at(&self, _: u64, read: MemoRead) -> Option<Revision> {
+            self.revisions.get(&read.query.0).copied()
+        }
+        fn memo_store_id(&self) -> u64 {
+            1
+        }
+        fn memo_check(&self, store: u64, read: MemoRead) -> MemoCheck {
+            if self.undecided.borrow().contains(&read.query.0) {
+                return MemoCheck::Undecided;
+            }
+            if self.memo_changed_at(store, read) == Some(read.changed_at) {
+                MemoCheck::Same
+            } else {
+                MemoCheck::Moved
+            }
+        }
+    }
+
+    /// A proof checked before a pass publishes what some of its memos read
+    /// is undecided, not moved, while every decided read holds; checked again
+    /// once the pass has run, it holds exactly when those reads answer as
+    /// recorded. A decided read that moved wins over an undecided one.
+    #[test]
+    fn a_proof_is_undecided_until_its_pass_runs_then_exact() {
+        let ((), reads) = record(|| {
+            note_memo(read(1));
+            note_memo(read(2));
+        });
+        let mut answers = Fixed {
+            revisions: [(1, 1), (2, 1)].into_iter().collect(),
+            undecided: std::cell::RefCell::new([2].into_iter().collect()),
+        };
+        let proof = ReadProof::new(reads, &answers);
+        let Verdict::Undecided(pending) = proof.verdict(&answers) else {
+            panic!("undecided before the pass")
+        };
+        assert_eq!(pending, [read(2)]);
+        assert!(!proof.holds(&answers), "an undecided read reruns the chunk");
+        answers.undecided.borrow_mut().clear();
+        assert!(proof.recheck(&pending, &answers));
+        answers.revisions.insert(2, 5);
+        assert!(
+            !proof.recheck(&pending, &answers),
+            "it moved once published"
+        );
+        answers.revisions.insert(1, 7);
+        answers.undecided.borrow_mut().insert(2);
+        assert!(matches!(proof.verdict(&answers), Verdict::Moved(_)));
     }
 }

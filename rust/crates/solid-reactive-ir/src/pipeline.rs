@@ -430,7 +430,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     let substage_started = Instant::now();
     // The memos begin before any stage reads one (ADR 0392's ordering).
     semantic_lookup.begin_memos();
-    let reuse = ReusePlan::prepare(facts, late_stage_cache.as_deref_mut(), semantic_lookup);
+    let mut reuse = ReusePlan::prepare(facts, late_stage_cache.as_deref_mut(), semantic_lookup);
     build_timings.reuse_plan = substage_started.elapsed();
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
@@ -527,6 +527,19 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     // also ran after the stage above closed; restart this function's clock so
     // the static-prepass stage measures only the prepass loops.
     clock.restart();
+    // The late aggregates' proof read memos over the resolver's derived
+    // tables, which only its pass publishes: build it now (the
+    // interprocedural stage reuses this construction) and decide.
+    if reuse.late_stages_pending {
+        crate::interproc::accessor_provenance::build_kept_resolver(
+            facts,
+            semantic_lookup,
+            &source_discovery.accessors,
+            &source_discovery.source_kinds,
+            &symbol_names,
+        );
+        reuse.settle(facts, late_stage_cache.as_deref_mut(), semantic_lookup);
+    }
 
     let analysis = AnalysisContext {
         facts,
@@ -820,7 +833,7 @@ where
     let chunk_size = items.len().div_ceil(workers);
     // A computation recording its reads on this thread records what the
     // workers read too ([`crate::base::reads`]).
-    let recording = crate::base::reads::recording();
+    let recording = WorkerContext::of_caller();
     std::thread::scope(|scope| {
         let handles = items
             .chunks(chunk_size)
@@ -844,18 +857,38 @@ where
     })
 }
 
-/// A worker's part of a parallel helper: its reads, when the spawning
-/// thread records ([`crate::base::reads`]), come back with its results.
-fn on_worker<R>(
+/// What a parallel helper's workers inherit from the spawning thread:
+/// whether it records its reads ([`crate::base::reads`]), and whether it is
+/// checking a proof ([`crate::base::memo::derived::deferring`]).
+#[derive(Clone, Copy)]
+struct WorkerContext {
     recording: bool,
+    deferring: bool,
+}
+
+impl WorkerContext {
+    fn of_caller() -> Self {
+        Self {
+            recording: crate::base::reads::recording(),
+            deferring: crate::base::memo::derived::is_deferring(),
+        }
+    }
+}
+
+/// A worker's part of a parallel helper: its reads, when the spawning
+/// thread records, come back with its results.
+fn on_worker<R>(
+    context: WorkerContext,
     work: impl FnOnce() -> R,
 ) -> (R, Option<crate::base::reads::Reads>) {
-    if recording {
-        let (value, reads) = crate::base::reads::record(work);
-        (value, Some(reads))
-    } else {
-        (work(), None)
-    }
+    crate::base::memo::derived::deferring_as(context.deferring, || {
+        if context.recording {
+            let (value, reads) = crate::base::reads::record(work);
+            (value, Some(reads))
+        } else {
+            (work(), None)
+        }
+    })
 }
 
 /// Hands a worker's reads to the joining thread's computation.
@@ -885,7 +918,7 @@ where
         return items.iter().map(analyze).collect();
     }
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let recording = crate::base::reads::recording();
+    let recording = WorkerContext::of_caller();
     std::thread::scope(|scope| {
         let handles = (0..workers)
             .map(|_| {
@@ -935,7 +968,7 @@ where
         return vec![analyze(files)];
     }
     let chunk_size = files.len().div_ceil(workers);
-    let recording = crate::base::reads::recording();
+    let recording = WorkerContext::of_caller();
     std::thread::scope(|scope| {
         files
             .chunks(chunk_size)

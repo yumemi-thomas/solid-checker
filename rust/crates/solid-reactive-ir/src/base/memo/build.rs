@@ -1057,6 +1057,11 @@ impl MemoStore {
         self.store.publish::<D>(&self.derived, changes)
     }
 
+    /// The store's current build ([`super::Store::revision`]).
+    pub(crate) fn revision(&self) -> super::Revision {
+        self.store.revision()
+    }
+
     /// Shadow or verify-reused mode: a kept solver is checked against a
     /// fresh solve every build ([`crate::base::fixpoint`]).
     pub(crate) fn check_solvers(&self) -> bool {
@@ -1144,7 +1149,23 @@ impl<'w> BuildWorld<'w> {
         table: TableId,
         query: super::QueryId,
     ) -> Option<super::Revision> {
-        crate::base::reads::suppress(|| self.store.store.changed_at(self, table, query))
+        self.changed_at_checked(table, query).0
+    }
+
+    /// [`Self::changed_at`], and whether bringing the memo up to date needed
+    /// a derived table not published yet in this build: then the answer is
+    /// `None` and nothing was installed, nor the store poisoned
+    /// ([`super::derived::deferring`]).
+    pub(crate) fn changed_at_checked(
+        &self,
+        table: TableId,
+        query: super::QueryId,
+    ) -> (Option<super::Revision>, bool) {
+        super::derived::computing(|| {
+            crate::base::reads::suppress(|| {
+                super::derived::deferring(|| self.store.store.changed_at(self, table, query))
+            })
+        })
     }
 }
 

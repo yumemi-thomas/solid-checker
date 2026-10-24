@@ -1711,6 +1711,22 @@ impl crate::base::reads::ReadAnswers for SemanticLookup<'_> {
         self.memos.store().id()
     }
 
+    fn memo_check(
+        &self,
+        store: u64,
+        read: crate::base::reads::MemoRead,
+    ) -> crate::base::reads::MemoCheck {
+        use crate::base::reads::MemoCheck;
+        if store != self.memos.store().id() {
+            return MemoCheck::Moved;
+        }
+        match self.memo_world().changed_at_checked(read.table, read.query) {
+            (_, true) => MemoCheck::Undecided,
+            (Some(changed_at), false) if changed_at == read.changed_at => MemoCheck::Same,
+            _ => MemoCheck::Moved,
+        }
+    }
+
     fn describe_memo(&self, read: crate::base::reads::MemoRead) -> String {
         self.memos.store().describe(read.table, read.query)
     }

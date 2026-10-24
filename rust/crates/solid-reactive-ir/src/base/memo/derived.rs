@@ -12,8 +12,18 @@
 //! is a pass-order bug, which fails closed (the store is poisoned, so the
 //! next build starts empty) and panics in debug builds. A table is published
 //! once per build for the same reason.
+//!
+//! One reader asks earlier on purpose: a stage chunk's proof
+//! ([`crate::base::reads::ReadProof`]) checks its recorded memo reads before
+//! the passes run, and bringing a dirty memo up to date may need a table not
+//! published yet. That check runs [`deferring`]: such a read marks the
+//! computation undecided instead of failing closed, the memo computing it
+//! (and every memo above it) installs nothing and answers an error, and the
+//! proof counts the read as moved. The chunk reruns, which is exact; its
+//! pass publishes before anything reads the table for real.
 
 use std::any::Any;
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -21,6 +31,45 @@ use std::sync::{Mutex, RwLock};
 
 use super::{Canonical, Ctx, Invalidation, Revision, Schema, Store};
 use crate::base::fixpoint::Published;
+
+thread_local! {
+    /// A proof is checking recorded reads ([`deferring`]).
+    static DEFERRING: Cell<bool> = const { Cell::new(false) };
+    /// The current computation read a table not published in this build,
+    /// under [`deferring`].
+    static UNPUBLISHED: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Runs `f` as a proof's check of recorded reads: a memo it brings up to
+/// date that reads a derived table not yet published in this build answers
+/// an error (undecided) instead of failing closed.
+pub(crate) fn deferring<R>(f: impl FnOnce() -> R) -> R {
+    let outer = DEFERRING.with(|deferring| deferring.replace(true));
+    let value = f();
+    DEFERRING.with(|deferring| deferring.set(outer));
+    value
+}
+
+/// Whether this thread is checking a proof ([`deferring`]): the parallel
+/// helpers carry it to their workers.
+pub(crate) fn is_deferring() -> bool {
+    DEFERRING.with(Cell::get)
+}
+
+/// Runs `f` with [`deferring`] set to `on` (a worker of a parallel helper).
+pub(crate) fn deferring_as<R>(on: bool, f: impl FnOnce() -> R) -> R {
+    if on { deferring(f) } else { f() }
+}
+
+/// Runs one memo computation and answers whether it (or one nested in it)
+/// read a table not published yet under [`deferring`]; the enclosing
+/// computation sees the mark too.
+pub(super) fn computing<R>(f: impl FnOnce() -> R) -> (R, bool) {
+    let outer = UNPUBLISHED.with(|unpublished| unpublished.replace(false));
+    let value = f();
+    let unpublished = UNPUBLISHED.with(|mark| mark.replace(outer || mark.get()));
+    (value, unpublished)
+}
 
 /// Which derived table.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -180,7 +229,10 @@ impl<S: DerivedSchema> Ctx<'_, '_, S> {
     /// build.
     pub(crate) fn derived<D: Derived>(&self, key: &D::Key) -> Option<D::Value> {
         let read = S::derived(self.world()).read::<D>(key, self.store.revision());
-        if !read.published_now {
+        if !read.published_now && is_deferring() {
+            // A proof's check: undecided, not a pass-order bug.
+            UNPUBLISHED.with(|unpublished| unpublished.set(true));
+        } else if !read.published_now {
             self.store.poison(&format!(
                 "IR derived table `{}` read at {key:?} before its pass published it in this build (failed closed)",
                 D::NAME

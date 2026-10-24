@@ -23,13 +23,46 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
         names: &'a HashMap<SymbolId, SymbolId>,
         functions: HashSet<(String, Span)>,
     ) -> Resolver<'a, 'facts> {
+        let empty = Self::empty(facts, lookup, accessors, source_kinds, names, functions);
+        // Built once per build: the late stages' reuse check may have built it
+        // already ([`Self::new_kept`]); this one reads the same tables and
+        // records what that construction read.
+        if let Some(built) = super::resolver_memos::built_this_build(empty.sibling_with(&empty)) {
+            return built;
+        }
         let mut timer = ResolverTimer::start();
-        let resolver = super::resolver_memos::build(
-            Self::empty(facts, lookup, accessors, source_kinds, names, functions),
-            &mut timer,
-        );
+        let resolver = super::resolver_memos::build(empty, &mut timer);
         timer.emit();
         resolver
+    }
+
+    /// [`Self::new`], kept for a later construction in the same build to
+    /// reuse: the late stages' reuse check builds it before the
+    /// interprocedural stage, so that the derived tables it publishes (once
+    /// per build) exist when the check asks the memos that read them.
+    pub fn new_kept(
+        facts: &'a ProjectFacts,
+        lookup: &'a SemanticLookup<'facts>,
+        accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+        source_kinds: &'a HashMap<SymbolId, crate::ReactiveSourceKind>,
+        names: &'a HashMap<SymbolId, SymbolId>,
+    ) {
+        let empty = Self::empty(
+            facts,
+            lookup,
+            accessors,
+            source_kinds,
+            names,
+            HashSet::default(),
+        );
+        if super::resolver_memos::built_this_build(empty.sibling_with(&empty)).is_some() {
+            return;
+        }
+        let mut timer = ResolverTimer::start();
+        let (resolver, reads) =
+            crate::base::reads::record(|| super::resolver_memos::build(empty, &mut timer));
+        timer.emit();
+        super::resolver_memos::keep_built(&resolver, reads);
     }
 
     /// A resolver whose tables are empty, for the stages to fill.
@@ -61,6 +94,18 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
             receiver_channels_opaque: lookup.program_has_eval()
                 || lookup.hazard_present(crate::base::Hazard::CodeEvaluatingCall),
         }
+    }
+
+    /// An empty resolver over the same inputs and functions.
+    fn sibling_with(&self, functions: &Self) -> Resolver<'a, 'facts> {
+        Self::empty(
+            self.facts,
+            self.lookup,
+            self.accessors,
+            self.source_kinds,
+            self.names,
+            functions.functions.clone(),
+        )
     }
 
     /// A resolver with the same tables (the functions it was built for aside),

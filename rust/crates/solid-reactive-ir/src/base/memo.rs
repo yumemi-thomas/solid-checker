@@ -1000,8 +1000,19 @@ impl<S: Schema> Store<S> {
         let ctx = parent.child((query, M::ID), implied.clone());
         // The memo records its own reads; none reaches a stage chunk the
         // computation happens to run inside ([`crate::base::reads`]).
-        let value = crate::base::reads::suppress(|| M::compute(&ctx, key))?;
-        Ok((value, ctx.take_reads(), implied))
+        let (value, unpublished) =
+            derived::computing(|| crate::base::reads::suppress(|| M::compute(&ctx, key)));
+        if unpublished {
+            // Undecided before its pass publishes ([`derived::deferring`]):
+            // nothing is installed, and the proof asking counts it as moved.
+            return Err(Cycle {
+                path: vec![format!(
+                    "{} {key:?}: reads a derived table not published in this build",
+                    M::NAME
+                )],
+            });
+        }
+        Ok((value?, ctx.take_reads(), implied))
     }
 
     fn recompute<M: Memo<S>>(

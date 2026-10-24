@@ -259,3 +259,54 @@ fn a_read_before_the_pass_publishes_fails_closed() {
     };
     store.answer::<Reader>(&world, &0);
 }
+
+/// A stage chunk's proof checks its recorded memo reads before the passes
+/// run. A reader made dirty since must not be brought up to date over a
+/// table its pass has not published yet: under `deferring` the check
+/// answers undecided (the proof counts the read as moved), installs nothing
+/// and leaves the store unpoisoned, and once the pass publishes the reader
+/// computes over this build's values.
+#[test]
+fn a_proof_check_before_the_pass_publishes_is_undecided_not_a_failure() {
+    let store = Store::<Toy>::new(false, ignore);
+    let derived = DerivedTables::default();
+    let world = ToyWorld {
+        derived: &derived,
+        computed: Mutex::default(),
+    };
+    store.begin(&[]);
+    store.publish::<Solution>(&derived, [(0, Some(Bits(1))), (1, Some(Bits(2)))]);
+    let (first, read) = store.answer_read::<Reader>(&world, &0);
+    let (query, changed_at) = read.expect("no cycle");
+    store.end();
+    assert_eq!(first[..2], [Some(Bits(1)), Some(Bits(2))]);
+
+    // The next build: key 0's input moved, so the reader is dirty, and the
+    // pass has not published yet.
+    store.begin(&[0]);
+    world.computed.lock().unwrap().clear();
+    let checked = super::deferring(|| store.changed_at(&world, TableId(0), query));
+    assert_eq!(checked, None, "undecided before the pass publishes");
+    assert!(!store.poisoned(), "a proof's check is not a pass-order bug");
+    assert_eq!(
+        *world.computed.lock().unwrap(),
+        [0],
+        "the reader ran once and installed nothing"
+    );
+
+    // The pass publishes a moved key 0; the reader recomputes over it.
+    store.publish::<Solution>(&derived, [(0, Some(Bits(4)))]);
+    let (next, read) = store.answer_read::<Reader>(&world, &0);
+    assert!(!store.poisoned());
+    assert_eq!(next[..2], [Some(Bits(4)), Some(Bits(2))]);
+    assert_ne!(read.expect("no cycle").1, changed_at);
+    store.end();
+
+    // A clean reader checks without running: the pass has not published.
+    store.begin(&[]);
+    world.computed.lock().unwrap().clear();
+    let read = store.changed_at(&world, TableId(0), query);
+    assert!(read.is_some());
+    assert!(world.computed.lock().unwrap().is_empty());
+    assert!(!store.poisoned());
+}
