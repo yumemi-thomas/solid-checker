@@ -99,7 +99,7 @@
 use std::cell::{Cell, RefCell};
 use std::ptr::NonNull;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::ThreadId;
 use tsrs_ast::SourceFile;
@@ -224,6 +224,17 @@ fn file_checker_lease(program: &'static Program) -> Option<CheckerHandle> {
     })
 }
 
+/// File checkers leaked instead of freed (a lease left out, or an escaped
+/// region), process-wide: a measurement and a canary, expected to stay 0.
+static ESCAPED_FILE_CHECKERS: AtomicUsize = AtomicUsize::new(0);
+
+/// How many file checkers were leaked instead of freed (see
+/// [`ESCAPED_FILE_CHECKERS`]).
+#[must_use]
+pub fn leaked_file_checkers() -> usize {
+    ESCAPED_FILE_CHECKERS.load(Ordering::SeqCst)
+}
+
 /// A fresh checker of one's own over a generation's program, in a [`Region`]
 /// of its own, installed as the calling thread's current checker until it is
 /// dropped (module invariant 8). Every checker acquisition for that program on
@@ -252,9 +263,13 @@ impl Drop for FileChecker {
             .is_some_and(|installed| installed.leases.get() != 0);
         drop(installed);
         let held = self.held.take();
-        if leased {
-            // A lease outlived the scope (module invariant 2): freeing would
-            // free a checker a live handle points at. Leak it instead.
+        let escaped = held.as_ref().is_some_and(|held| held._region.escaped());
+        if leased || escaped {
+            // A lease outlived the scope (module invariant 2), or tsrs stored
+            // an object of the region in a structure that outlives it (a
+            // program-level cache filled lazily: `Region::escaped`): freeing
+            // would free memory a live reference points at. Leak it instead.
+            ESCAPED_FILE_CHECKERS.fetch_add(1, Ordering::SeqCst);
             std::mem::forget(held);
         } else {
             // Field order: the checker, then its region.
@@ -455,6 +470,12 @@ pub struct Generation {
     updates: u32,
     thread: ThreadId,
     kind: UpdateKind,
+    /// Per-file checkers (module invariant 8): where the program's lazily
+    /// filled caches are allocated (the include processor's diagnostics),
+    /// primed before the first file checker so they never land in a file
+    /// checker's region. Freed after the program (fields drop after `drop`).
+    caches: Region,
+    caches_primed: AtomicBool,
 }
 
 fn options_for(
@@ -542,6 +563,8 @@ impl Generation {
             updates: 0,
             thread: std::thread::current().id(),
             kind: UpdateKind::Rebuilt,
+            caches: Region::new(64 << 10),
+            caches_primed: AtomicBool::new(false),
         }
     }
 
@@ -603,6 +626,16 @@ impl Generation {
             !nested,
             "file checkers do not nest (unsafe_boundary invariant 8)"
         );
+        if !self.caches_primed.swap(true, Ordering::SeqCst) {
+            // The program fills some caches of its own lazily, in whatever
+            // region is current, and keeps them for its life: the include
+            // processor's diagnostics (every `get_semantic_diagnostics` reads
+            // them). Made inside a file checker they would point into a region
+            // the pass frees. Fill them here, in a region that outlives the
+            // program.
+            let _scope = self.caches.enter();
+            let _ = self.program.get_program_diagnostics();
+        }
         let region = Region::new(1 << 20);
         let checker = {
             let _scope = region.enter();
@@ -697,6 +730,8 @@ impl Generation {
                 updates: self.updates + 1,
                 thread: self.thread,
                 kind: UpdateKind::Reused,
+                caches: Region::new(64 << 10),
+                caches_primed: AtomicBool::new(false),
             };
         }
         // A fresh chain from the same parsed configuration, in regions of its
@@ -728,6 +763,8 @@ impl Generation {
             updates: 0,
             thread: self.thread,
             kind: UpdateKind::Rebuilt,
+            caches: Region::new(64 << 10),
+            caches_primed: AtomicBool::new(false),
         }
     }
 
@@ -787,6 +824,7 @@ impl Drop for Generation {
             std::mem::forget(Arc::clone(&self.slot));
             std::mem::forget(Arc::clone(&self.regions));
             std::mem::forget(Arc::clone(&self.files));
+            std::mem::forget(self.caches.clone());
             return;
         }
         let disposed = self.slot.dispose();

@@ -461,7 +461,11 @@ impl Project {
         }
         let facts = crate::source_facts::merge_async_facts(async_batches);
         if env_is_one(ENV_STATS) {
-            eprintln!("per-file stats (table): {:?}", state.stats);
+            eprintln!(
+                "per-file stats (table): {:?}; leaked file checkers {}",
+                state.stats,
+                crate::unsafe_boundary::leaked_file_checkers()
+            );
         }
         if let Some(trace) = &self.trace {
             let count = |value: usize| i64::try_from(value).unwrap_or(i64::MAX);

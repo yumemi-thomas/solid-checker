@@ -278,3 +278,59 @@ fn per_file_runs_never_make_the_program_checker_and_purge_every_handle() {
     assert_eq!(stats.reference_passes, 2);
     assert!(stats.passes >= 3);
 }
+
+/// The program fills its include processor's diagnostics lazily, wherever the
+/// first `get_semantic_diagnostics` allocates (rc17 corpus, kui: a read of
+/// freed memory in the second pass). They are primed outside every file
+/// checker, so no pass's region escapes and every pass's checker is freed.
+#[test]
+fn program_caches_never_land_in_a_file_checkers_region() {
+    let a = "/// <reference path=\"./missing.ts\" />\nexport const one = 1;\n";
+    let b = "import { one } from \"./a\";\nexport const two = one + 1;\n";
+    let scratch = Scratch::new(&[
+        ("tsconfig.json", super::project_support::SMALL_CONFIG),
+        ("a.ts", a),
+        ("b.ts", b),
+    ]);
+    let mut project = open(&scratch, true);
+    let leaked = crate::unsafe_boundary::leaked_file_checkers();
+    let (a_path, b_path) = (scratch.path("a.ts"), scratch.path("b.ts"));
+    let demand = |path: &str, source: &str, needle: &str| typefacts::v3::EntityDemand {
+        location: super::project_support::find(path, source, needle),
+        symbol: true,
+        type_descriptor: true,
+        ..typefacts::v3::EntityDemand::default()
+    };
+    let a_demands = vec![demand(&a_path, a, "one")];
+    let b_demands = vec![demand(&b_path, b, "two")];
+    let runs = [
+        crate::model::SemanticDemandRun {
+            path: &a_path,
+            demands: &a_demands,
+        },
+        crate::model::SemanticDemandRun {
+            path: &b_path,
+            demands: &b_demands,
+        },
+    ];
+    let (results, _) = project
+        .per_file_demand_runs(&Context::new(), &runs, &[])
+        .unwrap();
+    assert_eq!(results.len(), 2);
+    // The case proves something only with a processing diagnostic (TS6053,
+    // the missing referenced file): asked after the passes.
+    let generation = project.current().unwrap();
+    let file = generation.program().get_source_file(&a_path).unwrap();
+    assert!(
+        generation
+            .semantic_diagnostics(file)
+            .iter()
+            .any(|diagnostic| diagnostic.code == 6053),
+        "the case needs a processing diagnostic"
+    );
+    assert_eq!(
+        crate::unsafe_boundary::leaked_file_checkers(),
+        leaked,
+        "a file checker's region escaped into a program cache"
+    );
+}
