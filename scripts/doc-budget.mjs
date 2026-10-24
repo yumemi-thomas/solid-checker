@@ -25,7 +25,7 @@ export const FILE_BUDGETS = {
   "docs/open-work.md": 26_700,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for
-  // ADRs 0382-0392; and for ADR 03XX-s70.
+  // ADRs 0382-0392; and for ADR 0393.
   "docs/decisions.md": 129_300,
 };
 
