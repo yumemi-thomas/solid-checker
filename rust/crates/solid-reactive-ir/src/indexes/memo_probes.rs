@@ -18,6 +18,9 @@ pub(crate) fn probing() -> bool {
     PROBING.with(std::cell::Cell::get)
 }
 
+/// One file's binding resolutions ([`SemanticLookup::binding_resolution_rows`]).
+pub(crate) type BindingResolutionRows = Vec<((u64, u64), (FileId, u32, u32, SymbolId))>;
+
 impl SemanticLookup<'_> {
     /// The slot of `(id, rank)` in the build's files, by the memo table.
     fn memo_slot(&self, id: FileId, rank: u32) -> Option<usize> {
@@ -35,6 +38,37 @@ impl SemanticLookup<'_> {
             table.slot_id(slot),
             u32::try_from(table.slot_rank(slot)).expect("fewer than 2^32 slots of one path"),
         )
+    }
+
+    /// Every binding resolution the lookup holds for spans of `path`
+    /// ([`Self::binding_at_reference`]'s table): `((start, end), (file, slot
+    /// rank, binding ordinal, symbol))`, sorted by span. One file's rows, for
+    /// the resolver's per-file adapter (S7b).
+    pub(crate) fn binding_resolution_rows(&self, path: &str) -> BindingResolutionRows {
+        let mut rows = self
+            .bindings_by_reference()
+            .get(path)
+            .map(|references| {
+                references
+                    .iter()
+                    .map(|(span, resolution)| {
+                        let (file, rank) = self.memo_slot_of(resolution.file);
+                        (
+                            *span,
+                            (
+                                file,
+                                rank,
+                                u32::try_from(resolution.binding)
+                                    .expect("fewer than 2^32 bindings"),
+                                resolution.symbol.clone(),
+                            ),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        rows.sort_unstable_by_key(|(span, _)| *span);
+        rows
     }
 
     fn ask(&self, probe: Probe, key: &PolledKey) -> ProbeAnswer {

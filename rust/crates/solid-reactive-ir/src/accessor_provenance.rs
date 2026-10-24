@@ -2,6 +2,8 @@
 //! are deliberately not evidence here. This join retains an implementation
 //! or source identity; the interprocedural consumer decides execution.
 
+use std::sync::Arc;
+
 use crate::{HashMap, HashSet};
 
 use solid_dialect::ContextRole;
@@ -20,11 +22,21 @@ mod projection_helpers;
 mod resolver_dependencies;
 #[path = "accessor_provenance/resolver_index.rs"]
 mod resolver_index;
+#[path = "accessor_provenance/resolver_memos.rs"]
+mod resolver_memos;
 #[path = "accessor_provenance/resolver_queries.rs"]
 mod resolver_queries;
 #[path = "accessor_provenance/resolver_values.rs"]
 mod resolver_values;
+#[path = "accessor_provenance/resolver_world.rs"]
+mod resolver_world;
 pub(crate) use projection_helpers::*;
+use resolver_dependencies::{Dependencies, dependency_member_stable};
+use resolver_index::*;
+pub(crate) use resolver_memos::{RESOLVER_TABLES_FROM, ResolverTables};
+use resolver_queries::Queries;
+use resolver_values::Values;
+use resolver_world::{ProviderValues, World, parameter_typefacts_admit_in};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum Callable {
@@ -69,10 +81,12 @@ pub(super) struct Resolver<'a, 'facts> {
     pub source_kinds: &'a HashMap<SymbolId, crate::ReactiveSourceKind>,
     pub names: &'a HashMap<SymbolId, SymbolId>,
     functions: HashSet<(String, Span)>,
-    binding_locations: HashMap<SymbolId, Location>,
+    /// The tables shared with the memo build's kept state, which patches
+    /// them per moved key (S7b).
+    binding_locations: Arc<HashMap<SymbolId, Location>>,
     parameter_inputs: HashMap<Location, (String, Span)>,
-    declarations: HashMap<SymbolId, (SymbolId, Location)>,
-    uses: HashMap<Location, ClosedUses>,
+    declarations: Arc<HashMap<SymbolId, (SymbolId, Location)>>,
+    uses: Arc<HashMap<Location, ClosedUses>>,
     providers: HashMap<Location, Vec<Option<(String, Span)>>>,
     source_origins: HashSet<SymbolId>,
     runtime_source_origins: HashSet<SymbolId>,
@@ -364,7 +378,7 @@ impl crate::base::fixpoint::Lattice for ClosedUses {
 impl crate::base::memo::Canonical for ClosedUses {}
 
 /// Each handoff binding's joined use census ([`Resolver::new`]), published
-/// for memo readers.
+/// for memo readers: the resolver's origins and object contexts.
 struct HandoffUses;
 
 impl crate::base::memo::derived::Derived for HandoffUses {
@@ -377,6 +391,77 @@ impl crate::base::memo::derived::Derived for HandoffUses {
 /// The kept solver of the handoff join.
 const HANDOFF_SOLVER: crate::base::memo::derived::SolverId =
     crate::base::memo::derived::SolverId(224);
+
+/// The resolver's tables over `lookup`, rendered in a canonical order, for
+/// tests that compare constructions.
+#[cfg(test)]
+pub(crate) fn resolver_tables(
+    facts: &ProjectFacts,
+    lookup: &SemanticLookup<'_>,
+    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+) -> Vec<String> {
+    let source_kinds = HashMap::default();
+    let resolver = Resolver::new(
+        facts,
+        lookup,
+        accessors,
+        &source_kinds,
+        lookup.symbol_names(),
+        HashSet::default(),
+    );
+    let mut lines = Vec::new();
+    lines.extend(
+        resolver
+            .binding_locations
+            .iter()
+            .map(|(symbol, location)| format!("binding {symbol:?} {location:?}")),
+    );
+    lines.extend(
+        resolver
+            .declarations
+            .iter()
+            .map(|(symbol, declaration)| format!("declaration {symbol:?} {declaration:?}")),
+    );
+    lines.extend(
+        resolver
+            .parameter_inputs
+            .iter()
+            .map(|(parameter, argument)| format!("parameter {parameter:?} {argument:?}")),
+    );
+    lines.extend(
+        resolver
+            .uses
+            .iter()
+            .map(|(key, uses)| format!("uses {key:?} {uses:?}")),
+    );
+    lines.extend(
+        resolver
+            .providers
+            .iter()
+            .map(|(context, providers)| format!("providers {context:?} {providers:?}")),
+    );
+    lines.extend(
+        resolver
+            .source_origins
+            .iter()
+            .map(|symbol| format!("source origin {symbol:?}")),
+    );
+    lines.extend(
+        resolver
+            .runtime_source_origins
+            .iter()
+            .map(|symbol| format!("runtime origin {symbol:?}")),
+    );
+    lines.extend(
+        resolver
+            .blocked_contexts
+            .iter()
+            .map(|context| format!("blocked {context:?}")),
+    );
+    lines.push(format!("unkeyed {}", resolver.unkeyed_provider));
+    lines.sort();
+    lines
+}
 
 #[cfg(test)]
 #[path = "accessor_provenance/tests.rs"]
