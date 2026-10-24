@@ -302,7 +302,7 @@ const OPAQUE_G: &str =
     "declare const other: { run(callback: () => void): void };\nexport const ns = other;\n";
 const CALLER_F: &str = "import { count } from \"./S\";\nimport { ns } from \"./G\";\nexport function App() {\n  ns.run(() => count());\n  return <div />;\n}\n";
 
-/// 2.5, fourth path (closed by ADR 03XX-S5b): `literal_receiver_members` says
+/// 2.5, fourth path (closed by ADR 0386): `literal_receiver_members` says
 /// which member calls have a receiver bound to an exact object literal, possibly
 /// declared in another file, and `call_withheld` (interprocedural graph, result
 /// reads, execution roles) reads it; the cross-file part is now in the digest. `F` is unchanged

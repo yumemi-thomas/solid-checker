@@ -22,9 +22,15 @@ impl<'a> SemanticLookup<'a> {
     /// what the project visibly writes, not a proof about the builtin.
     pub(crate) fn function_bind_may_be_patched(&self) -> bool {
         *self.function_bind_patched.get_or_init(|| {
-            self.member_may_be_reassigned_on_builtin("bind")
-                || crate::interproc::accessor_provenance::reflective_prototype_write(self)
+            self.memo_world()
+                .answer::<super::project_memos::FunctionBindPatched>(&())
         })
+    }
+
+    /// [`Self::function_bind_may_be_patched`]'s computation (the memo's).
+    pub(super) fn compute_function_bind_patched(&self) -> bool {
+        self.member_may_be_reassigned_on_builtin("bind")
+            || crate::interproc::accessor_provenance::reflective_prototype_write(self)
     }
 
     /// ADR 0314: [`Self::member_name_may_be_reassigned`] for a value whose

@@ -923,3 +923,230 @@ fn a_renderer_declaration_must_sit_in_a_dialect_package() {
         assert!(!declared_in_package(outside, &packages), "{outside}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// The project-wide memos ([`project_memos`], study S5d).
+
+fn project_over(source: &str, entities: Vec<typefacts::EntityFact>) -> ProjectFacts {
+    let mut facts = project(source);
+    facts.typescript = TypeScriptTable::from_parts(
+        3,
+        1,
+        "fixture",
+        Vec::new(),
+        entities,
+        Vec::new(),
+        Vec::new(),
+    );
+    facts
+}
+
+fn never_returning_entity(span: Span) -> typefacts::EntityFact {
+    serde_json::from_value(serde_json::json!({
+        "location": { "path": PATH, "startByte": span.start, "endByte": span.end },
+        "resolvedCall": { "validity": "valid", "kind": "call", "neverReturns": true },
+    }))
+    .expect("an entity row with a never-returning call")
+}
+
+/// A lookup over `facts` reading a retained `store`; runs `body`, ends the
+/// build and returns its table stats beside the body's value.
+fn memo_build<T>(
+    facts: &ProjectFacts,
+    store: &crate::base::memo::build::MemoStore,
+    spans: &[(Span, &str)],
+    body: impl FnOnce(&SemanticLookup<'_>) -> T,
+) -> (T, Vec<(&'static str, crate::base::memo::TableStats)>) {
+    let entities = entity_symbols(spans);
+    let ast_indexes = HashMap::default();
+    let symbol_names = HashMap::default();
+    let dialect = solid_dialect::Solid2;
+    let lookup = SemanticLookup::new(
+        facts,
+        &ast_indexes,
+        &entities,
+        &symbol_names,
+        &dialect,
+        false,
+    )
+    .with_memo_store(store);
+    let value = body(&lookup);
+    let report = lookup.end_memos().expect("the build read a memo");
+    (value, report.tables)
+}
+
+fn stats_of(
+    tables: &[(&'static str, crate::base::memo::TableStats)],
+    name: &str,
+) -> crate::base::memo::TableStats {
+    tables
+        .iter()
+        .find(|(table, _)| *table == name)
+        .map(|(_, stats)| *stats)
+        .unwrap_or_else(|| panic!("no table {name}"))
+}
+
+#[test]
+fn never_returning_calls_come_from_each_files_own_resolved_calls() {
+    let source =
+        "declare function guard(message: string): never;\nfunction f() { guard(\"x\"); work(); }\n";
+    let facts = project_over(
+        source,
+        vec![never_returning_entity(span_of(source, "guard", 1))],
+    );
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    let (calls, _) = memo_build(&facts, &store, &[], |lookup| {
+        lookup
+            .never_returning_calls()
+            .iter()
+            .map(|(path, spans)| ((*path).to_owned(), spans.clone()))
+            .collect::<HashMap<_, _>>()
+    });
+    assert_eq!(
+        calls.get(PATH).map(Vec::as_slice),
+        Some(&[span_of(source, "guard(\"x\")", 0)][..])
+    );
+    // A project with no such resolved call answers nothing.
+    let quiet = project_over(source, Vec::new());
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    let (calls, _) = memo_build(&quiet, &store, &[], |lookup| {
+        lookup
+            .never_returning_calls()
+            .iter()
+            .map(|(path, spans)| ((*path).to_owned(), spans.clone()))
+            .collect::<HashMap<_, _>>()
+    });
+    assert!(calls.is_empty());
+}
+
+#[test]
+fn the_any_file_vetoes_follow_what_the_project_writes() {
+    let veto = |source: &str| {
+        let facts = project(source);
+        let store = crate::base::memo::build::MemoStore::new(true, true);
+        memo_build(&facts, &store, &[], |lookup| {
+            (
+                lookup.visible_string_code(),
+                lookup.tuple_iteration_may_be_mutated(),
+                lookup.objects_may_be_assigned_into(),
+                lookup.function_bind_may_be_patched(),
+                lookup.promise_intrinsics_intact(),
+                lookup.array_iteration_intact(),
+            )
+        })
+        .0
+    };
+    assert_eq!(
+        veto("export const answer = 1;"),
+        (false, false, false, false, true, true)
+    );
+    let (string_code, tuple, ..) = veto("eval(\"1\");");
+    assert!(string_code && tuple, "eval is string code, and mutates all");
+    assert!(veto("Object.assign(target, extra);").2);
+    assert!(veto("Function.prototype.bind = null;").3);
+    let promise = veto("Promise.prototype.then = null;");
+    assert!(!promise.4 && !promise.5, "a prototype write spells both");
+    let iterator = veto("Array.prototype[Symbol.iterator] = null;");
+    assert!(iterator.4 && !iterator.5);
+}
+
+#[test]
+fn parameter_completion_and_primitive_consts_are_memo_views() {
+    let source = "function run(cb) { cb(); }\nfunction maybe(cb) { if (flag) cb(); }\n";
+    let spans = [
+        (span_of(source, "cb", 0), "s:run-cb"),
+        (span_of(source, "cb", 1), "s:run-cb"),
+        (span_of(source, "cb", 2), "s:maybe-cb"),
+        (span_of(source, "cb", 3), "s:maybe-cb"),
+    ];
+    let facts = project(source);
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    let (calls, _) = memo_build(&facts, &store, &spans, |lookup| {
+        lookup
+            .parameter_completion_calls()
+            .iter()
+            .map(|(path, span, index)| ((*path).to_owned(), *span, *index))
+            .collect::<HashSet<_>>()
+    });
+    let run = span_of(source, "function run(cb) { cb(); }", 0);
+    assert_eq!(calls, HashSet::from_iter([(PATH.to_owned(), run, 0)]));
+
+    let source = "import { a } from \"./a\";\nexport const k = 1;\nexport const m = a;\n";
+    let facts = project(source);
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    let (consts, _) = memo_build(&facts, &store, &[], |lookup| {
+        lookup.exported_primitive_consts()
+    });
+    assert_eq!(consts, vec![(PATH.to_owned(), span_of(source, "k", 0))]);
+}
+
+#[test]
+fn project_memos_are_reused_until_the_program_moves() {
+    let source = "declare function guard(message: string): never;\nfunction f() { guard(\"x\"); work(); }\nexport const label = \"x\";\n";
+    let entities = || vec![never_returning_entity(span_of(source, "guard", 1))];
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    let ask = |lookup: &SemanticLookup<'_>| {
+        (
+            lookup.never_returning_calls().len(),
+            lookup.tuple_iteration_may_be_mutated(),
+            lookup.objects_may_be_assigned_into(),
+        )
+    };
+    let first = project_over(source, entities());
+    let (answer, tables) = memo_build(&first, &store, &[], ask);
+    assert_eq!(answer, (1, false, false));
+    assert_eq!(stats_of(&tables, "tuple_iteration_veto").fresh, 1);
+    assert_eq!(stats_of(&tables, "never_returning_calls").fresh, 1);
+
+    // The producer says the TypeScript table is the last build's: nothing
+    // moved, so nothing runs.
+    let mut same = project_over(source, entities());
+    same.typescript_changes = Some(solid_facts::TypeScriptChanges {
+        unchanged: true,
+        ..Default::default()
+    });
+    let (answer, tables) = memo_build(&same, &store, &[], ask);
+    assert_eq!(answer, (1, false, false));
+    for name in [
+        "tuple_iteration_veto",
+        "objects_assigned_into",
+        "never_returning_calls",
+    ] {
+        let stats = stats_of(&tables, name);
+        assert_eq!(
+            (stats.reused, stats.fresh + stats.changed + stats.unchanged),
+            (1, 0),
+            "{name}: {stats:?}"
+        );
+        assert_eq!(stats.mismatches, 0, "{name}");
+    }
+
+    // A same-length body edit moves the program: the whole-program answers
+    // rerun and come out equal (cutoff); the edited file's own answer too.
+    let edited_source = source.replace("label = \"x\"", "label = \"y\"");
+    let mut edited = project_over(&edited_source, entities());
+    edited.typescript_changes = Some(solid_facts::TypeScriptChanges {
+        unchanged: true,
+        ..Default::default()
+    });
+    let (answer, tables) = memo_build(&edited, &store, &[], ask);
+    assert_eq!(answer, (1, false, false));
+    let stats = stats_of(&tables, "tuple_iteration_veto");
+    assert_eq!(
+        (stats.unchanged, stats.changed, stats.mismatches),
+        (1, 0, 0),
+        "{stats:?}"
+    );
+    let stats = stats_of(&tables, "never_returning_calls");
+    assert_eq!(
+        (stats.unchanged, stats.changed, stats.mismatches),
+        (1, 0, 0)
+    );
+
+    // A new `eval` flips the veto.
+    let flipped_source = format!("{edited_source}eval(\"1\");\n");
+    let flipped = project_over(&flipped_source, entities());
+    let (answer, tables) = memo_build(&flipped, &store, &[], ask);
+    assert_eq!(answer, (1, true, false));
+    assert_eq!(stats_of(&tables, "tuple_iteration_veto").changed, 1);
+}

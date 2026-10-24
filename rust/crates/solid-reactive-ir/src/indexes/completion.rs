@@ -1,5 +1,6 @@
 //! Completion proofs: never-returning calls, parameters called on every completion, and result-access forwarding.
 
+use super::project_memos::{NeverReturning, ParameterCompletionCalls};
 use super::*;
 
 impl<'a> SemanticLookup<'a> {
@@ -109,33 +110,48 @@ impl<'a> SemanticLookup<'a> {
             .contains(&(file.path.as_str(), function.span))
     }
 
+    /// ADR 0278: the `never` and `asserts` calls of each path, a view of the
+    /// per-file [`NeverReturning`] memos built once per build.
     pub(super) fn never_returning_calls(&self) -> &HashMap<&'a str, Vec<Span>> {
         self.never_returning_calls.get_or_init(|| {
-            let facts: &'a ProjectFacts = self.facts;
+            let world = self.memo_world();
             let mut calls = HashMap::<&'a str, Vec<Span>>::default();
-            for file in &facts.files {
-                for call in &file.ast.calls {
-                    if self
-                        .resolved_callee_call(file, call.callee)
-                        .is_some_and(|resolved| {
-                            // The compiler's own type flag, not the display
-                            // text (docs/typefacts/compiler-semantic-facts.md).
-                            resolved.never_returns || resolved.assertion_signature
-                        })
-                    {
-                        calls.entry(file.path.as_str()).or_default().push(call.span);
-                    }
+            for file in self.files() {
+                let path = file.path.as_str();
+                if calls.contains_key(path) {
+                    continue;
                 }
-            }
-            for spans in calls.values_mut() {
-                spans.sort_unstable();
+                let Some(id) = world.views().table.id_of(path) else {
+                    continue;
+                };
+                let spans = world.answer::<NeverReturning>(&id);
+                if !spans.is_empty() {
+                    calls.insert(path, spans);
+                }
             }
             calls
         })
     }
 
+    /// ADR 0277: a view of the [`ParameterCompletionCalls`] memo, built once
+    /// per build.
     pub(super) fn parameter_completion_calls(&self) -> &HashSet<(&'a str, Span, usize)> {
         self.parameter_completion_calls.get_or_init(|| {
+            self.memo_world()
+                .answer::<ParameterCompletionCalls>(&())
+                .into_iter()
+                .filter_map(|(path, span, index)| {
+                    Some((self.file_by_path(&path)?.path.as_str(), span, index))
+                })
+                .collect()
+        })
+    }
+
+    /// The memo's computation: every `(path, function, parameter)` called on
+    /// the function's every completion, sorted. The forwards fixed point
+    /// reads the whole program (study S7 moves it onto its cone).
+    pub(super) fn compute_parameter_completion_calls(&self) -> Vec<(String, Span, usize)> {
+        {
             let facts: &'a ProjectFacts = self.facts;
             let mut calls = HashSet::default();
             // ADR 0285: calls passing a parameter on to another function.
@@ -254,8 +270,13 @@ impl<'a> SemanticLookup<'a> {
                     }
                 }
             }
-            calls
-        })
+            let mut answer = calls
+                .into_iter()
+                .map(|(path, span, index)| (path.to_owned(), span, index))
+                .collect::<Vec<_>>();
+            answer.sort_unstable();
+            answer
+        }
     }
 
     /// The arguments in `path` that a project function forwards, unchanged,
