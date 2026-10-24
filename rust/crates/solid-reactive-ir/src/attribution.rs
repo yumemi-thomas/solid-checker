@@ -15,7 +15,7 @@
 //! still reach the obligation.
 
 use crate::{HashMap, HashSet};
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 
 use solid_facts::{FileFacts, ProjectFacts, core::Span};
 use typefacts::Location;
@@ -77,7 +77,8 @@ pub(crate) fn discharge_closed_program_export_dispatch(
         entities,
         aliases,
         symbols_by_root,
-        namespace_escapes: RefCell::new(HashMap::default()),
+        namespace_escapes: OnceCell::new(),
+        load_members: OnceCell::new(),
         attested_project_texts: RefCell::new(None),
         may_name_unresolved: true,
     };
@@ -177,18 +178,17 @@ pub(crate) fn namespace_hand_outs(
         entities: lookup.entities(),
         aliases,
         symbols_by_root,
-        namespace_escapes: RefCell::new(HashMap::default()),
+        namespace_escapes: OnceCell::new(),
+        load_members: OnceCell::new(),
         attested_project_texts: RefCell::new(None),
         may_name_unresolved: false,
     };
-    for file in files {
+    for (index, file) in files.iter().enumerate() {
         if !file.ast.exports.is_empty() && graph.module_namespace_escapes(file.path.as_str()) {
             hand_outs.unnamed.insert(file.path.to_string());
         }
-        for load in &file.ast.module_loads {
-            if let Some(named) = graph.named_load_members(file, load) {
-                hand_outs.members.extend(named);
-            }
+        for named in graph.load_members()[index].iter().flatten() {
+            hand_outs.members.extend(named.iter().cloned());
         }
         // The member a call invokes is a call, not a hand-out; every other read
         // of a static member in a runtime position hands its value out.
@@ -232,8 +232,12 @@ struct CallGraph<'a, 'b> {
     entities: &'a EntitySymbols,
     aliases: &'a HashMap<SymbolId, SymbolId>,
     symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
-    /// One namespace-escape verdict per module; the scan reads every file.
-    namespace_escapes: RefCell<HashMap<String, bool>>,
+    /// The modules a namespace object may escape from, walked once over every
+    /// file.
+    namespace_escapes: OnceCell<NamespaceEscapes>,
+    /// [`Self::named_load_members`] of every module load, by file index in
+    /// [`SemanticLookup::files`] and load index.
+    load_members: OnceCell<Vec<Vec<LoadMembers>>>,
     /// Specifier texts the compiler resolves to a project file somewhere,
     /// built on first use.
     attested_project_texts: RefCell<Option<HashMap<String, Vec<String>>>>,
@@ -348,39 +352,54 @@ impl<'a> CallGraph<'a, '_> {
     /// specifier may be an alias, so it matches when its last segment names
     /// this module.
     fn module_namespace_escapes(&self, path: &str) -> bool {
-        if let Some(escapes) = self.namespace_escapes.borrow().get(path) {
-            return *escapes;
-        }
-        let escapes = self.scan_namespace_escapes(path);
-        self.namespace_escapes
-            .borrow_mut()
-            .insert(path.to_string(), escapes);
-        escapes
+        let escapes = self.namespace_escapes();
+        escapes.every_module || escapes.modules.contains(path)
     }
 
-    fn scan_namespace_escapes(&self, path: &str) -> bool {
+    /// The census behind [`Self::module_namespace_escapes`], walked once.
+    ///
+    /// Which namespace objects escape does not depend on the module asked
+    /// about; only whether each one may expose it does. So one walk follows
+    /// every escaping namespace through [`Self::specifier_reaches`] to the end
+    /// and records each module it asks about. A walk that stops at the first
+    /// module equal to `path` returns true exactly when this full walk records
+    /// `path`, or meets a module that may be anything first (which exposes
+    /// every module).
+    fn namespace_escapes(&self) -> &NamespaceEscapes {
+        self.namespace_escapes.get_or_init(|| {
+            let mut walk = ModuleWalk::default();
+            let every_module = self.walk_namespace_escapes(&mut walk);
+            NamespaceEscapes {
+                every_module,
+                modules: walk.reached,
+            }
+        })
+    }
+
+    /// Walks every escaping namespace into `walk`; true when one may name any
+    /// module.
+    fn walk_namespace_escapes(&self, walk: &mut ModuleWalk) -> bool {
         // The module the binding's specifier loads, as the compiler resolved
         // it; without a specifier, the module Type Facts resolves the binding
         // to. A barrel may expose this module's functions under its own
         // namespace. A target outside the project's files may be anything.
-        let names_this = |file: &solid_facts::FileFacts,
-                          span: Span,
-                          specifier: Option<(Span, &str)>| match specifier
-        {
+        let names = |file: &solid_facts::FileFacts,
+                     span: Span,
+                     specifier: Option<(Span, &str)>,
+                     walk: &mut ModuleWalk| match specifier {
             Some((declaration, specifier)) => {
-                self.specifier_reaches(file, Some(declaration), specifier, path, &mut Vec::new())
+                self.specifier_reaches(file, Some(declaration), specifier, walk)
             }
             None => self
                 .lookup
                 .namespace_module_paths(file.path.as_str(), span)
                 .map_or(self.may_name_unresolved, |paths| {
-                    paths
-                        .iter()
-                        .any(|target| self.module_exposes(target, path, &mut Vec::new()))
+                    paths.iter().any(|target| self.module_exposes(target, walk))
                 }),
         };
-        self.lookup.files().iter().any(|file| {
-            let namespace_escapes = file
+        let load_members = self.load_members();
+        for (index, file) in self.lookup.files().iter().enumerate() {
+            let namespaces = file
                 .ast
                 .imports
                 .iter()
@@ -389,57 +408,85 @@ impl<'a> CallGraph<'a, '_> {
                 .filter(|(_, binding)| {
                     !binding.type_only && binding.kind == solid_facts::ast::ImportKind::Namespace
                 })
-                .any(|(import, binding)| {
-                    names_this(
+                .filter(|(_, binding)| !namespace_used_by_static_members(file, binding.local.span));
+            for (import, binding) in namespaces {
+                if names(
+                    file,
+                    binding.local.span,
+                    Some((import.span, import.module.as_str())),
+                    walk,
+                ) {
+                    return true;
+                }
+            }
+            for export in &file.ast.exports {
+                if export.type_only {
+                    continue;
+                }
+                if let Some(binding) = &export.namespace_binding
+                    && names(
                         file,
-                        binding.local.span,
-                        Some((import.span, import.module.as_str())),
-                    ) && !namespace_used_by_static_members(file, binding.local.span)
-                });
-            let reexported = file.ast.exports.iter().any(|export| {
-                !export.type_only
-                    && export.namespace_binding.as_ref().is_some_and(|binding| {
-                        names_this(
-                            file,
-                            binding.span,
-                            export.module.as_deref().map(|module| (export.span, module)),
-                        )
-                    })
-            });
-            let required = file.ast.import_equals.iter().any(|import| {
-                !import.type_only
-                    && names_this(
+                        binding.span,
+                        export.module.as_deref().map(|module| (export.span, module)),
+                        walk,
+                    )
+                {
+                    return true;
+                }
+            }
+            for import in &file.ast.import_equals {
+                if !import.type_only
+                    && (import.exported
+                        || !namespace_used_by_static_members(file, import.local.span))
+                    && names(
                         file,
                         import.local.span,
                         Some((import.span, import.module.as_str())),
+                        walk,
                     )
-                    && (import.exported
-                        || !namespace_used_by_static_members(file, import.local.span))
-            });
+                {
+                    return true;
+                }
+            }
             // A load whose read is named hands out only the names it reads, so it
             // escapes nothing (ADR 0347, amendment); every other load may hand out the lot.
-            let loaded = file.ast.module_loads.iter().any(|load| {
-                self.named_load_members(file, load).is_none()
+            for (load, named) in file.ast.module_loads.iter().zip(&load_members[index]) {
+                if named.is_none()
                     && load
                         .specifier
                         .as_deref()
                         .map_or(self.may_name_unresolved, |specifier| {
-                            self.specifier_reaches(
-                                file,
-                                load.specifier_span,
-                                specifier,
-                                path,
-                                &mut Vec::new(),
-                            )
+                            self.specifier_reaches(file, load.specifier_span, specifier, walk)
                         })
-            });
-            namespace_escapes || reexported || required || loaded
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// [`Self::named_load_members`] of every module load, read once.
+    fn load_members(&self) -> &[Vec<LoadMembers>] {
+        self.load_members.get_or_init(|| {
+            self.lookup
+                .files()
+                .iter()
+                .map(|file| {
+                    file.ast
+                        .module_loads
+                        .iter()
+                        .map(|load| self.named_load_members(file, load))
+                        .collect()
+                })
+                .collect()
         })
     }
 
-    /// Whether the specifier at `at` in `from` loads the module at `path`, or
-    /// a module that exposes it. `at` is the declaration holding the
-    /// specifier, or a load's own argument literal.
+    /// Walks the modules the specifier at `at` in `from` loads, and those they
+    /// expose, recording each in `walk` ([`Self::module_exposes`]). True when
+    /// it may load any module. `at` is the declaration holding the specifier,
+    /// or a load's own argument literal.
     ///
     /// The compiler's attested resolution decides when it has a row for this
     /// occurrence:
@@ -463,8 +510,7 @@ impl<'a> CallGraph<'a, '_> {
         from: &solid_facts::FileFacts,
         at: Option<Span>,
         specifier: &str,
-        path: &str,
-        visiting: &mut Vec<String>,
+        walk: &mut ModuleWalk,
     ) -> bool {
         // The runtime's own answer, when the host obtained it (ADR 0220),
         // replaces every inference below. A file outside the program, an
@@ -480,7 +526,7 @@ impl<'a> CallGraph<'a, '_> {
                 } => [runtime_path.as_ref(), physical_path.as_ref()]
                     .into_iter()
                     .find(|target| self.file(target).is_some())
-                    .is_some_and(|target| self.module_exposes(target, path, visiting)),
+                    .is_some_and(|target| self.module_exposes(target, walk)),
                 solid_facts::runtime_resolution::RuntimeOutcome::External
                 | solid_facts::runtime_resolution::RuntimeOutcome::Builtin => false,
                 solid_facts::runtime_resolution::RuntimeOutcome::Unknown => {
@@ -508,13 +554,13 @@ impl<'a> CallGraph<'a, '_> {
                 row.included_path.as_ref()
             };
             if self.file(resolved).is_some() {
-                return self.module_exposes(resolved, path, visiting);
+                return self.module_exposes(resolved, walk);
             }
             if let Some(candidates) = explicit_runtime_files(from.path.as_str(), specifier) {
                 return candidates
                     .iter()
                     .filter(|candidate| self.file(candidate).is_some())
-                    .any(|candidate| self.module_exposes(candidate, path, visiting));
+                    .any(|candidate| self.module_exposes(candidate, walk));
             }
             if row.resolution != solid_facts::ImportResolution::NodeModules
                 || !resolved.contains("/node_modules/")
@@ -548,7 +594,7 @@ impl<'a> CallGraph<'a, '_> {
             return self
                 .attested_project_targets(specifier)
                 .iter()
-                .any(|target| self.module_exposes(target, path, visiting));
+                .any(|target| self.module_exposes(target, walk));
         }
         let files = self.lookup.files();
         solid_facts::resolve_relative_module_path(
@@ -557,7 +603,7 @@ impl<'a> CallGraph<'a, '_> {
             files.iter().map(|file| file.path.as_str()),
         )
         .map_or(self.may_name_unresolved, |resolved| {
-            self.module_exposes(resolved, path, visiting)
+            self.module_exposes(resolved, walk)
         })
     }
 
@@ -750,13 +796,14 @@ impl<'a> CallGraph<'a, '_> {
         targets.get(specifier).cloned().unwrap_or_default()
     }
 
-    /// Whether the module at `target` exposes the module at `path`: it is
-    /// that module, or it re-exports from one that does, by `export … from`
-    /// or by exporting a binding it imported. A module the project does not
-    /// analyze may.
-    fn module_exposes(&self, target: &str, path: &str, visiting: &mut Vec<String>) -> bool {
-        if target == path {
-            return true;
+    /// Walks the modules `target` exposes: itself, and every module it
+    /// re-exports from, by `export … from` or by exporting a binding it
+    /// imported. Each module asked about is recorded in `walk`, so `target`
+    /// exposes the module at `path` when the walk records `path`. True when a
+    /// module the project does not analyze may expose anything.
+    fn module_exposes(&self, target: &str, walk: &mut ModuleWalk) -> bool {
+        if !walk.reached.contains(target) {
+            walk.reached.insert(target.to_string());
         }
         // A declaration's exports are not its runtime module's.
         if [".d.ts", ".d.mts", ".d.cts"]
@@ -765,10 +812,9 @@ impl<'a> CallGraph<'a, '_> {
         {
             return self.may_name_unresolved;
         }
-        if visiting.iter().any(|seen| seen == target) {
+        if !walk.visited.insert(target.to_string()) {
             return false;
         }
-        visiting.push(target.to_string());
         let Some(file) = self.file(target) else {
             return self.may_name_unresolved;
         };
@@ -793,7 +839,7 @@ impl<'a> CallGraph<'a, '_> {
         };
         for export in &file.ast.exports {
             if let Some(module) = export.module.as_deref() {
-                if self.specifier_reaches(file, Some(export.span), module, path, visiting) {
+                if self.specifier_reaches(file, Some(export.span), module, walk) {
                     return true;
                 }
                 continue;
@@ -805,7 +851,7 @@ impl<'a> CallGraph<'a, '_> {
                     .ast
                     .reference_declaration(specifier.local.span)
                     .and_then(imported_from)
-                    && self.specifier_reaches(file, Some(declaration), module, path, visiting)
+                    && self.specifier_reaches(file, Some(declaration), module, walk)
                 {
                     return true;
                 }
@@ -1952,6 +1998,26 @@ impl<'a> CallGraph<'a, '_> {
     fn file(&self, path: &str) -> Option<&'a FileFacts> {
         self.files_by_path.get(path).copied()
     }
+}
+
+/// A module load's named hand-outs ([`CallGraph::named_load_members`]).
+type LoadMembers = Option<Vec<(String, Span)>>;
+
+/// The modules a namespace object may escape from (ADR 0347).
+struct NamespaceEscapes {
+    /// Some escaping namespace may name any module.
+    every_module: bool,
+    /// Every module an escaping namespace may expose.
+    modules: HashSet<String>,
+}
+
+/// One walk through the modules specifiers load and re-export.
+#[derive(Default)]
+struct ModuleWalk {
+    /// Every module asked about, whether or not it was entered.
+    reached: HashSet<String>,
+    /// The modules whose exports were followed, each once.
+    visited: HashSet<String>,
 }
 
 /// Every runtime reference to the namespace binding declared at
