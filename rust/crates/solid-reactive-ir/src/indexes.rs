@@ -1853,8 +1853,32 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn object_member_targets(&self) -> &crate::object_members::Targets {
         crate::base::reads::note(crate::base::reads::Section::MemberTargets);
+        self.object_member_target_map()
+    }
+
+    fn object_member_target_map(&self) -> &crate::object_members::Targets {
         self.object_members
             .get_or_init(|| crate::base::reads::suppress(|| crate::object_members::index(self)))
+    }
+
+    /// The exact object-member target of the call at `site`: a read of the
+    /// targets of `site`'s file, not of the whole map.
+    pub(crate) fn object_member_target_at(&self, site: &Location) -> Option<&(String, Span)> {
+        if !self.note_member_targets_of(site.path.as_ref()) {
+            crate::base::reads::note(crate::base::reads::Section::MemberTargets);
+        }
+        self.object_member_target_map().get(site)
+    }
+
+    /// Whether the member at `span` of the file at `path` has an exact
+    /// object-literal receiver: a read of that file's census, not the whole.
+    pub(crate) fn literal_receiver_member_at(&self, path: &str, span: Span) -> bool {
+        if !self.note_literal_receivers_of(path) {
+            crate::base::reads::note(crate::base::reads::Section::LiteralReceivers);
+        }
+        self.literal_receiver_census_map()
+            .all
+            .contains(&(path.to_owned(), span))
     }
 
     /// ADR 0358: what each spread argument of an intrinsic element supplies.
@@ -1878,6 +1902,10 @@ impl<'a> SemanticLookup<'a> {
 
     fn literal_receiver_census(&self) -> &crate::object_members::LiteralReceiverCensus {
         crate::base::reads::note(crate::base::reads::Section::LiteralReceivers);
+        self.literal_receiver_census_map()
+    }
+
+    fn literal_receiver_census_map(&self) -> &crate::object_members::LiteralReceiverCensus {
         self.literal_receiver_members.get_or_init(|| {
             crate::base::reads::suppress(|| crate::object_members::literal_receiver_members(self))
         })
@@ -1888,9 +1916,8 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         callee: Span,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
-        let (path, span) = self
-            .object_member_targets()
-            .get(&crate::location(file.path.shared(), callee))?;
+        let (path, span) =
+            self.object_member_target_at(&crate::location(file.path.shared(), callee))?;
         let file = self.file_by_path(path)?;
         Some((file, file.ast.function_at(*span)?))
     }

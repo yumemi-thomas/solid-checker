@@ -72,6 +72,7 @@ project_tables! {
     34 effect_apply_regions: EffectApplyRegions,
     36 uninitialized_references: UninitializedReferences,
     37 parameter_completion_calls: ParameterCompletionCalls,
+    58 parameter_completion_slots: ParameterCompletionSlot,
     39 intrinsics: IntrinsicsTripwires,
     40 string_code: StringCodeVeto,
     41 tuple_iteration: TupleIterationVeto,
@@ -248,12 +249,58 @@ whole_program! {
 
 whole_program! {
     /// ADR 0277: `(path, function, parameter)` for each synchronous project
-    /// function parameter called on its every completion path, sorted.
+    /// function parameter called on its every completion path, sorted: the
+    /// fixed point over every slot's part ([`ParameterCompletionSlot`]).
     ParameterCompletionCalls, 37, parameter_completion_calls, "parameter_completion_calls",
     Vec<(String, Span, usize)>,
     cycle: Vec::new(),
     direct: |lookup| lookup.compute_parameter_completion_calls(),
-    |ctx| Ok(ctx.project(|lookup| lookup.compute_parameter_completion_calls()))
+    |ctx| {
+        let mut slots = Vec::new();
+        for id in ctx.ids() {
+            for rank in 0..ctx.slots(id).len() {
+                let rank = u32::try_from(rank).expect("fewer than 2^32 slots of one path");
+                slots.push((ctx.path_of(id), ctx.memo::<ParameterCompletionSlot>(&(id, rank))?));
+            }
+        }
+        Ok(super::completion::parameter_completion_fixpoint(
+            slots.iter().map(|(path, slot)| (*path, &**slot)),
+        ))
+    }
+}
+
+/// One slot's part of [`ParameterCompletionCalls`]: its own file, and the
+/// callees its forwards reach through the lookup's recorded questions
+/// ([`Ctx::project_file_recorded`]).
+pub(crate) struct ParameterCompletionSlot;
+
+impl Memo<BuildSchema> for ParameterCompletionSlot {
+    type Key = (FileId, u32);
+    type Value = Arc<super::completion::CompletionSlot>;
+    const NAME: &'static str = "parameter_completion_slot";
+    const ID: TableId = TableId(58);
+
+    fn table(tables: &BuildTables) -> &Table<BuildSchema, Self> {
+        tables.project().parameter_completion_slots()
+    }
+
+    fn compute(
+        ctx: &Ctx<'_, '_, BuildSchema>,
+        (id, rank): &(FileId, u32),
+    ) -> Result<Self::Value, Cycle> {
+        Ok(ctx.project_file_recorded(*id, |lookup, table| {
+            table
+                .slots_of(*id)
+                .get(*rank as usize)
+                .and_then(|slot| lookup.files().get(*slot))
+                .map(|file| Arc::new(lookup.parameter_completion_slot(file)))
+                .unwrap_or_default()
+        }))
+    }
+
+    fn on_cycle(_: &(FileId, u32)) -> Self::Value {
+        Arc::default()
+    }
 }
 
 whole_program! {

@@ -58,6 +58,7 @@ mod findings;
 mod identity;
 mod indexes;
 mod interproc;
+mod late_chunks;
 mod literal_member_slots;
 mod local_access;
 mod owners;

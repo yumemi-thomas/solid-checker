@@ -917,7 +917,7 @@ fn transported_call_targets(
             return false;
         };
         !crate::object_members::literal_receiver_call(file, Span::new(start, end), lookup)
-            || lookup.object_member_targets().contains_key(site)
+            || lookup.object_member_target_at(site).is_some()
     });
     for (site, (path, span)) in lookup.object_member_targets() {
         transported_calls.insert(

@@ -1890,9 +1890,15 @@ fn flow_answers_through_project_callees_are_reused_across_an_unrelated_edit() {
             "{table}: {stats:?}"
         );
     }
+    // A site's role reads only its own file's recorded questions (ADR
+    // 03XX-late-stages), so the unrelated edit leaves it verified against
+    // them, not recomputed: the answer is the same, checked above.
     let sites = table_stats(&tables, "flow_site_role");
     assert!(
-        sites.unchanged >= 1 && sites.changed == 0 && sites.fresh == 0,
+        sites.reused + sites.verified + sites.unchanged >= 1
+            && sites.changed == 0
+            && sites.fresh == 0
+            && sites.mismatches == 0,
         "{sites:?}"
     );
     // The callee's module, edited so that the function no longer hands its

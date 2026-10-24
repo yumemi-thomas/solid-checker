@@ -756,6 +756,9 @@ pub(crate) struct CachedLateStages {
     /// under the same condition as `interprocedural`, because both are
     /// functions of the TypeScript table and the proven source set.
     pub(crate) compat_reference_locations: Option<SourceReferenceLocations>,
+    /// The chunked passes' per-file outputs, each with its own proof
+    /// ([`crate::late_chunks`]).
+    pub(crate) chunks: crate::late_chunks::LateChunks,
 }
 
 /// Whether two analyses of one path's source hold the same AST facts, every
@@ -1095,6 +1098,7 @@ fn settle_late_stages(slot: &mut Option<CachedLateStages>, facts: &ProjectFacts,
             settled_gates: None,
             owners: crate::owners::OwnerState::default(),
             compat_reference_locations: None,
+            chunks: crate::late_chunks::LateChunks::default(),
         });
     }
 }

@@ -205,6 +205,9 @@ pub(crate) struct HandOutReads {
     rows: OnceLock<Vec<OnceLock<MemoRead>>>,
     buckets: OnceLock<Vec<OnceLock<MemoRead>>>,
     component_spans: OnceLock<Vec<OnceLock<MemoRead>>>,
+    member_targets: OnceLock<Vec<OnceLock<MemoRead>>>,
+    literal_receivers: OnceLock<Vec<OnceLock<MemoRead>>>,
+    never_returning: OnceLock<Vec<OnceLock<MemoRead>>>,
 }
 
 /// The cached read of slot `index` of `cells` (sized `len` on first use),
@@ -248,6 +251,9 @@ enum Noted {
     FunctionBucket(u16),
     BindingRows(FileId),
     ComponentSpans(FileId),
+    MemberTargets(FileId),
+    LiteralReceivers(FileId),
+    NeverReturning(FileId),
 }
 
 thread_local! {
@@ -382,6 +388,90 @@ impl<'a> SemanticLookup<'a> {
                         .memo_read::<super::census::ComponentSpansOf>(&id)
                 },
             );
+        }
+        true
+    }
+
+    /// Records, for the computation recording, the exact object-member
+    /// targets of every slot of the file at `path`
+    /// ([`crate::object_members::ObjectMemberTargets`]): what a question
+    /// about one call site of that file reads of the whole map. `false` when
+    /// no such read stands for it, as [`Self::note_component_spans`].
+    pub(crate) fn note_member_targets_of(&self, path: &str) -> bool {
+        self.note_slot_memos::<crate::object_members::ObjectMemberTargets>(
+            path,
+            Noted::MemberTargets,
+            &self.hand_out_reads.member_targets,
+        )
+    }
+
+    /// [`Self::note_member_targets_of`] for the literal-receiver census
+    /// ([`crate::object_members::LiteralReceivers`]).
+    pub(crate) fn note_literal_receivers_of(&self, path: &str) -> bool {
+        self.note_slot_memos::<crate::object_members::LiteralReceivers>(
+            path,
+            Noted::LiteralReceivers,
+            &self.hand_out_reads.literal_receivers,
+        )
+    }
+
+    /// Records, for the computation recording, the `never`-returning calls
+    /// of the file at `path` ([`super::project_memos::NeverReturning`]):
+    /// what a question about that file reads of the whole table. `false`
+    /// when no such read stands for it, as [`Self::note_component_spans`].
+    pub(crate) fn note_never_returning_of(&self, path: &str) -> bool {
+        if probing() {
+            return false;
+        }
+        let Some(frame) = crate::base::reads::recording_frame() else {
+            return true;
+        };
+        let Some(slot) = self.file_table.last_slot(path) else {
+            return false;
+        };
+        let (id, _) = self.memo_slot_of(slot);
+        if first_in_frame(frame, Noted::NeverReturning(id)) {
+            cached_read(
+                &self.hand_out_reads.never_returning,
+                self.file_table.slot_count(),
+                slot,
+                || {
+                    self.memo_world()
+                        .memo_read::<super::project_memos::NeverReturning>(&id)
+                },
+            );
+        }
+        true
+    }
+
+    /// Notes `M`'s answer of every slot of the file at `path`: the entries
+    /// a whole-program map assembled from those answers holds for the path
+    /// (a later slot's entry replaces an earlier one's, so each may decide).
+    fn note_slot_memos<M>(
+        &self,
+        path: &str,
+        noted: fn(FileId) -> Noted,
+        cells: &OnceLock<Vec<OnceLock<MemoRead>>>,
+    ) -> bool
+    where
+        M: Memo<BuildSchema, Key = (FileId, u32)>,
+    {
+        if probing() {
+            return false;
+        }
+        let Some(frame) = crate::base::reads::recording_frame() else {
+            return true;
+        };
+        let Some(slot) = self.file_table.last_slot(path) else {
+            return false;
+        };
+        let (id, _) = self.memo_slot_of(slot);
+        if first_in_frame(frame, noted(id)) {
+            for &slot in self.memos.table().slots_of(id) {
+                cached_read(cells, self.file_table.slot_count(), slot, || {
+                    self.memo_world().memo_read::<M>(&self.memo_slot_of(slot))
+                });
+            }
         }
         true
     }

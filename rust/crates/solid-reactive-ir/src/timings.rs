@@ -255,6 +255,12 @@ pub(crate) fn reuse_line(
                 "resultReads": ms(timings.interprocedural_result_reads),
                 "exportSummaries": ms(timings.interprocedural_export_summaries),
             },
+            "ownerMs": {
+                "fragmentBuild": ms(timings.owner_fragment_build),
+                "graphAssembly": ms(timings.owner_graph_assembly),
+                "propagation": ms(timings.owner_propagation),
+                "requirementEmission": ms(timings.owner_requirement_emission),
+            },
             "fixedPointsMs": {
                 "transported": ms(timings.interprocedural_fixed_points.transported),
                 "callbackForwarding": ms(timings.interprocedural_fixed_points.callback_forwarding),

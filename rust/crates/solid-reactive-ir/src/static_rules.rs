@@ -23,11 +23,44 @@ mod native_promise;
 mod pre_await;
 
 /// The static-prepass stage: every prepass rule, in their pipeline order.
-pub(crate) fn static_prepass(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    component_props_destructure(ctx, draft);
+pub(crate) fn static_prepass(
+    ctx: &AnalysisContext<'_>,
+    mut chunks: Option<&mut crate::late_chunks::LateChunks>,
+    draft: &mut ProgramDraft,
+) {
+    let inputs = crate::late_chunks::ChunkInputs::of(ctx);
+    let per_file = crate::late_chunks::FileChunks::run(
+        chunks
+            .as_deref_mut()
+            .map(|chunks| &mut chunks.props_destructure),
+        &inputs,
+        |file| component_props_destructure(ctx, &inputs.discovery, file),
+    );
+    push_defects(draft, &per_file);
     reactive_read_after_await(ctx, draft);
-    primitive_value_references(ctx, draft);
-    primitive_result_methods(ctx, draft);
+    let per_file = crate::late_chunks::FileChunks::run(
+        chunks
+            .as_deref_mut()
+            .map(|chunks| &mut chunks.value_references),
+        &inputs,
+        |file| primitive_value_references(ctx, file),
+    );
+    push_defects(draft, &per_file);
+    let per_file = crate::late_chunks::FileChunks::run(
+        chunks.map(|chunks| &mut chunks.result_methods),
+        &inputs,
+        |file| primitive_result_methods(ctx, file),
+    );
+    push_defects(draft, &per_file);
+}
+
+/// A chunked pass's defects, in file order.
+fn push_defects(draft: &mut ProgramDraft, per_file: &[std::sync::Arc<Vec<StaticDefect>>]) {
+    for defects in per_file {
+        for defect in defects.iter() {
+            draft.push_defect(defect.clone());
+        }
+    }
 }
 
 /// ADR 0338: a member call on the result of a primitive whose result holds an
@@ -38,7 +71,10 @@ pub(crate) fn static_prepass(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
 /// the setter, `.toString()` is a string. Silence would certify a read through
 /// a helper (`access(value)`) the engine never saw as a getter, so the call is
 /// an obligation, never a violation and never a silent clean.
-fn primitive_result_methods(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
+fn primitive_result_methods(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+) -> Vec<StaticDefect> {
     use solid_dialect::ResultSlot;
     let audited = |file: &solid_facts::FileFacts, call: &solid_facts::ast::CallFact| {
         crate::call_primitive_name_cached(
@@ -61,7 +97,8 @@ fn primitive_result_methods(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         })
         .and_then(|primitive| Some((primitive, ctx.dialect.name_of(primitive)?)))
     };
-    for file in &ctx.facts.files {
+    let mut defects = Vec::new();
+    {
         let ast = &file.ast;
         for call in &ast.calls {
             let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) else {
@@ -97,7 +134,7 @@ fn primitive_result_methods(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
             let Some((_, spelling)) = root else {
                 continue;
             };
-            draft.push_defect(StaticDefect {
+            defects.push(StaticDefect {
                 kind: StaticDefectKind::ReactiveDispatchUnresolved {
                     callee: spelling.to_owned(),
                     member: file.source_text(member.property).map(str::to_owned),
@@ -109,6 +146,7 @@ fn primitive_result_methods(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
             });
         }
     }
+    defects
 }
 
 /// A dialect primitive referenced as a value rather than called by name
@@ -123,8 +161,12 @@ fn primitive_result_methods(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
 /// or type name (annotations, `implements`, interface heritage), an import or
 /// export specifier and the declaration. Listing value positions instead
 /// missed class fields, `yield` and JSX attribute values.
-fn primitive_value_references(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    for file in &ctx.facts.files {
+fn primitive_value_references(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+) -> Vec<StaticDefect> {
+    let mut defects = Vec::new();
+    {
         let ast = &file.ast;
         // The callee of a call that resolves to a primitive, and the plain
         // member chain it is (`createEffect`, `Solid.createEffect`): the rules
@@ -185,7 +227,7 @@ fn primitive_value_references(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
             ) else {
                 continue;
             };
-            draft.push_defect(StaticDefect {
+            defects.push(StaticDefect {
                 kind: StaticDefectKind::ReactiveDispatchUnresolved {
                     callee: primitive.to_string(),
                     member: None,
@@ -197,6 +239,7 @@ fn primitive_value_references(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
             });
         }
     }
+    defects
 }
 
 /// SC1003: a reactive object destructured outside tracking. Component
@@ -212,8 +255,13 @@ fn primitive_value_references(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
 /// - **Caller-proven props.** Under a dialect requiring caller proof, a
 ///   destructure that binds only proven-static props is not a reactive read
 ///   at all; an unprovable one is reported as a proof obligation.
-fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    for file in &ctx.facts.files {
+fn component_props_destructure(
+    ctx: &AnalysisContext<'_>,
+    tables: &crate::late_chunks::DiscoveryTables<'_>,
+    file: &solid_facts::FileFacts,
+) -> Vec<StaticDefect> {
+    let mut defects = Vec::new();
+    {
         for function in &file.ast.functions {
             // Solid invokes components with one props object. Reject the
             // overwhelmingly common non-destructured functions before the
@@ -240,12 +288,12 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                     .semantic_lookup
                     .function_component_status(file, function)
                     == crate::indexes::ComponentStatus::Uncertain;
-                uncertain |= match destructured_props_use(ctx, parameter, &location) {
+                uncertain |= match destructured_props_use(tables, parameter, &location) {
                     crate::source_discovery::PropUse::Static => continue,
                     crate::source_discovery::PropUse::Reactive => false,
                     crate::source_discovery::PropUse::Unknown => true,
                 };
-                draft.push_defect(StaticDefect {
+                defects.push(StaticDefect {
                     kind: StaticDefectKind::ReactiveObjectDestructure {
                         source: "props".into(),
                         component_props: true,
@@ -274,7 +322,7 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
             .iter()
             .any(|binding| binding.shape == solid_facts::ast::BindingShape::Object)
         {
-            continue;
+            return defects;
         }
         let allowed = allowed_callback_spans(file, ctx.semantic_lookup);
         for binding in &file.ast.bindings {
@@ -289,10 +337,11 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                         .get(&location(file.path.shared(), identifier.span))
                 });
             let prop_declaration = prop_symbol
-                .and_then(|symbol| ctx.prop_sources.get(symbol))
+                .and_then(|symbol| tables.prop_source(symbol))
                 .map(|(_, declaration)| declaration.clone());
             let props = prop_declaration.is_some();
-            let reactive_object = props || binding_initializes_reactive_store(ctx, file, binding);
+            let reactive_object =
+                props || binding_initializes_reactive_store(ctx, tables, file, binding);
             if !reactive_object {
                 continue;
             }
@@ -361,9 +410,9 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                 role,
                 crate::ExecutionRole::Unknown | crate::ExecutionRole::Unreported
             ) || prop_symbol
-                .is_some_and(|symbol| ctx.uncertain_prop_sources.contains(symbol));
+                .is_some_and(|symbol| tables.uncertain_prop_source(symbol));
             if let Some(declaration) = &prop_declaration {
-                match destructured_props_use(ctx, binding, declaration) {
+                match destructured_props_use(tables, binding, declaration) {
                     crate::source_discovery::PropUse::Static => continue,
                     crate::source_discovery::PropUse::Reactive => {}
                     crate::source_discovery::PropUse::Unknown => uncertain = true,
@@ -375,7 +424,7 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                 .and_then(|span| file.source_text(span))
                 .unwrap_or("reactive object")
                 .to_owned();
-            draft.push_defect(StaticDefect {
+            defects.push(StaticDefect {
                 kind: StaticDefectKind::ReactiveObjectDestructure {
                     source,
                     component_props: props,
@@ -387,20 +436,21 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
             });
         }
     }
+    defects
 }
 
 /// The caller classification of the props a destructuring pattern binds: the
 /// named slots when they are all it binds, the whole object when a rest
 /// element (or an unresolved slot) captures the remainder.
 fn destructured_props_use(
-    ctx: &AnalysisContext<'_>,
+    tables: &crate::late_chunks::DiscoveryTables<'_>,
     binding: &solid_facts::ast::BindingFact,
     declaration: &Location,
 ) -> crate::source_discovery::PropUse {
     if binding.names.len() > binding.object_slots.len() {
-        return ctx.props_reactivity.object_use(declaration);
+        return tables.props_object_use(declaration);
     }
-    ctx.props_reactivity.names_use(
+    tables.props_names_use(
         declaration,
         binding
             .object_slots
@@ -411,6 +461,7 @@ fn destructured_props_use(
 
 fn binding_initializes_reactive_store(
     ctx: &AnalysisContext<'_>,
+    tables: &crate::late_chunks::DiscoveryTables<'_>,
     file: &solid_facts::FileFacts,
     binding: &solid_facts::ast::BindingFact,
 ) -> bool {
@@ -421,7 +472,7 @@ fn binding_initializes_reactive_store(
             ctx.entities
                 .get(&location(file.path.shared(), identifier.span))
         })
-        .is_some_and(|symbol| ctx.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store))
+        .is_some_and(|symbol| tables.source_kind(symbol) == Some(&ReactiveSourceKind::Store))
     {
         return true;
     }

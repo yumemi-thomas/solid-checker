@@ -1830,6 +1830,72 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
         self.project(|lookup| f(lookup, table))
     }
 
+    /// [`Self::project_files`] for a computation about the file `id` that
+    /// reads the rest of the program only through the lookup's recorded
+    /// questions ([`crate::base::reads`]: memo answers and what the lookup
+    /// hands out, ADR 0408): it records the file's sections and slots, the
+    /// build constants, and what `f` recorded, not the whole program. A
+    /// whole-table section read (`reads::Section`), a cycle's answer, or a
+    /// build under runtime redirects (where the lookup answers callees
+    /// unrecorded) reads the whole program ([`Input::Project`]).
+    pub(crate) fn project_file_recorded<R>(
+        &self,
+        id: FileId,
+        f: impl for<'x> FnOnce(&crate::indexes::SemanticLookup<'x>, &FileTable) -> R,
+    ) -> R {
+        if self.constant(Constant::RuntimeRedirects) {
+            return self.project_files(f);
+        }
+        let _ = self.constant(Constant::ProgramClosed);
+        for section in SECTIONS {
+            self.record_input(Input::File(id, section));
+        }
+        self.record_input(Input::Slots(id));
+        let table = self.world().views.table;
+        let access = self
+            .world()
+            .project
+            .expect("a build world with a lookup (`with_project`)");
+        let mut f = Some(f);
+        let mut out = None;
+        access.run(&mut |lookup| {
+            if let Some(f) = f.take() {
+                out = Some(crate::base::reads::record_detached(|| f(lookup, table)));
+            }
+        });
+        let (value, reads) = out.expect("the lookup ran the closure");
+        let (memos, sections) = reads.into_memo_reads();
+        // A hazard section is the hazard's answer
+        // (`SemanticLookup::section_fingerprint`): its probe stands for it.
+        let mut whole = memos
+            .iter()
+            .any(|read| read.query == super::QueryId(u32::MAX));
+        for section in sections {
+            match section {
+                crate::base::reads::Section::SynchronousDispatch => {
+                    let _ = self.hazard(crate::base::Hazard::SynchronousDispatch);
+                }
+                crate::base::reads::Section::ReflectiveDefinition => {
+                    let _ = self.hazard(crate::base::Hazard::ReflectiveDefinitionSpelling);
+                }
+                _ => whole = true,
+            }
+        }
+        if whole {
+            self.record_input(Input::Project);
+        }
+        if self.frame.current.is_some() {
+            let mut recorded = self.reads.borrow_mut();
+            recorded.extend(
+                memos
+                    .into_iter()
+                    .filter(|read| read.query != super::QueryId(u32::MAX))
+                    .map(|read| super::Read::Memo(read.query, read.changed_at)),
+            );
+        }
+        value
+    }
+
     /// The path a file id names: the key's identity, not a read of the file.
     pub(crate) fn path_of(&self, id: FileId) -> &'w str {
         self.world().views.table.path_of(id)

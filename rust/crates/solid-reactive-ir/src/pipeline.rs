@@ -175,6 +175,10 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) reachable_calls: &'a HashMap<Location, usize>,
     pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
     pub(crate) rule_options: &'a RuleOptions,
+    /// The files whose source and TypeFacts rows are the last build's
+    /// (source discovery's): a per-file chunk of such a file may be kept
+    /// ([`crate::late_chunks`]).
+    pub(crate) unchanged_paths: &'a HashSet<String>,
 }
 
 /// What one analysis is given about the code it cannot read: the package
@@ -575,8 +579,16 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         reachable_calls,
         symbols_by_root: &typescript_indexes.symbols_by_root,
         rule_options,
+        unchanged_paths: &source_discovery.unchanged_paths,
     };
-    static_rules::static_prepass(&analysis, &mut draft);
+    static_rules::static_prepass(
+        &analysis,
+        late_stage_cache
+            .as_deref_mut()
+            .and_then(Option::as_mut)
+            .map(|cache| &mut cache.chunks),
+        &mut draft,
+    );
     clock.finish(&mut build_timings, ReactiveIrStage::StaticPrepass);
     let factory_instances = reactive_analysis::collect_project(
         reactive_analysis::ProjectInputs {

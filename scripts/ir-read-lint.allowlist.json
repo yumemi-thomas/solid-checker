@@ -91,10 +91,10 @@
     "hashmap-iteration": 1
   },
   "rust/crates/solid-reactive-ir/src/indexes/completion.rs": {
-    "facts.files": 2,
+    "facts.files": 1,
     "files()": 2,
     "file_by_path": 1,
-    "hashmap-iteration": 3
+    "hashmap-iteration": 4
   },
   "rust/crates/solid-reactive-ir/src/indexes/components.rs": {
     "facts.files": 2,
@@ -123,6 +123,9 @@
   },
   "rust/crates/solid-reactive-ir/src/indexes/memo_probes.rs": {
     "facts.files": 2
+  },
+  "rust/crates/solid-reactive-ir/src/indexes/project_memos.rs": {
+    "files()": 1
   },
   "rust/crates/solid-reactive-ir/src/indexes/returned_invocations.rs": {
     "facts.files": 2,
@@ -157,6 +160,9 @@
   },
   "rust/crates/solid-reactive-ir/src/interproc/structured_returns.rs": {
     "file_by_path": 1
+  },
+  "rust/crates/solid-reactive-ir/src/late_chunks.rs": {
+    "facts.files": 1
   },
   "rust/crates/solid-reactive-ir/src/lib.rs": {
     "file_by_path": 2
@@ -264,7 +270,7 @@
     "hashmap-iteration": 4
   },
   "rust/crates/solid-reactive-ir/src/static_rules.rs": {
-    "facts.files": 9,
+    "facts.files": 6,
     "files()": 1
   },
   "rust/crates/solid-reactive-ir/src/symbols.rs": {

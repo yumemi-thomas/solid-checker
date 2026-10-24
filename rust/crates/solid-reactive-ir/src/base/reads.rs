@@ -161,6 +161,14 @@ impl Reads {
         self.distinct_memos()
     }
 
+    /// The memo reads, sorted without duplicates, and the whole-table
+    /// sections read: what a memo computation that recorded its lookup
+    /// reads records in its own context
+    /// ([`crate::base::memo::Ctx::project_file_recorded`]).
+    pub(crate) fn into_memo_reads(self) -> (Vec<MemoRead>, Vec<Section>) {
+        (self.distinct_memos(), self.sections().collect())
+    }
+
     /// Every memo read, a read held twice listed twice.
     fn memo_reads(&self) -> impl Iterator<Item = &MemoRead> + '_ {
         self.runs
