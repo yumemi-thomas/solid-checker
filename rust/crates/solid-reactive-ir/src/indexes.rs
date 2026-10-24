@@ -66,12 +66,6 @@ pub(super) struct ReflectiveDefinitionNames {
     sole_keys: HashSet<String>,
 }
 
-#[derive(Default)]
-pub(super) struct BindingDeclarations<'a> {
-    initialized_by_symbol: HashMap<(&'a str, &'a SymbolId), &'a solid_facts::ast::BindingFact>,
-    by_name_span: HashMap<(&'a str, Span), &'a solid_facts::ast::BindingFact>,
-}
-
 /// Per-build cache of `returned_callback_invocation_sites` per factory call:
 /// the uses are a memo ([`ReturnedUses`](returned_uses::ReturnedUses)), what
 /// each inherits is assembled from lookup tables that are not memos yet.
@@ -823,9 +817,6 @@ pub(super) struct SemanticLookup<'a> {
     /// [`Self::property_may_be_defined_reflectively_as`], summarised once
     /// over the project so each per-name query is a set lookup.
     reflective_definition_names: crate::base::reads::Recorded<ReflectiveDefinitionNames>,
-    /// Per file path: the first binding with an initializer that declares each
-    /// symbol, and the first binding declaring a name at each span.
-    binding_declarations: crate::base::reads::Recorded<BindingDeclarations<'a>>,
     /// The invocation sites of each factory call's returned function, by
     /// file path and call span. Several passes ask the same factory call.
     returned_invocation_sites: ReturnedInvocationSites,
@@ -1166,7 +1157,6 @@ impl<'a> SemanticLookup<'a> {
             reflective_definition_names: crate::base::reads::Recorded::new(),
             returned_invocation_sites: ReturnedInvocationSites::default(),
             invocation_answers: returned_invocations::State::default(),
-            binding_declarations: crate::base::reads::Recorded::new(),
             intrinsics: crate::base::reads::Recorded::new(),
             closed_members: crate::base::reads::Recorded::new(),
             entities_by_location: crate::base::reads::Recorded::new(),
@@ -2190,59 +2180,6 @@ impl<'a> SemanticLookup<'a> {
             .map(|declaration| declaration.location.path.as_ref())
             .collect::<Vec<&'a str>>();
         (!paths.is_empty()).then_some(paths)
-    }
-
-    fn binding_declarations(&self) -> &BindingDeclarations<'a> {
-        self.binding_declarations.get_or_init(|| {
-            let entities = self.entities();
-            let mut declarations = BindingDeclarations::default();
-            for file in self.files() {
-                let path = file.path.as_str();
-                for binding in &file.ast.bindings {
-                    for name in &binding.names {
-                        declarations
-                            .by_name_span
-                            .entry((path, name.span))
-                            .or_insert(binding);
-                        if binding.initializer.is_some()
-                            && let Some(symbol) = entities.at(path, name.span)
-                        {
-                            declarations
-                                .initialized_by_symbol
-                                .entry((path, symbol))
-                                .or_insert(binding);
-                        }
-                    }
-                }
-            }
-            declarations
-        })
-    }
-
-    /// The first binding of `path`, in file order, that has an initializer and
-    /// a name whose entity is `symbol`.
-    pub(crate) fn initialized_binding_of_symbol(
-        &self,
-        path: &str,
-        symbol: &SymbolId,
-    ) -> Option<&'a solid_facts::ast::BindingFact> {
-        self.binding_declarations()
-            .initialized_by_symbol
-            .get(&(path, symbol))
-            .copied()
-    }
-
-    /// The first binding of `path`, in file order, with a name written at
-    /// exactly `span`.
-    pub(crate) fn binding_named_at(
-        &self,
-        path: &str,
-        span: Span,
-    ) -> Option<&'a solid_facts::ast::BindingFact> {
-        self.binding_declarations()
-            .by_name_span
-            .get(&(path, span))
-            .copied()
     }
 
     /// The memoised result for the factory call at `span` in `path`.

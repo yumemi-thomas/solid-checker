@@ -85,6 +85,7 @@ Leaf body (`leaf-owner-forbidden-call`, SC3001):
 - Recall fixes for the section 1 oracle sites: zero corpus yield (no `useParams()` destructuring; every `children()` accessor is read in JSX). Reopen on a real hit.
 - An inferred browser host keeps rc.17 `setLinkClaim`'s gap: ADR 0270 admits non-Vite scripts (`node server.js` calling `renderToString`).
 - Inferring a `never` exit from a body: a call completes normally unless its signature is `asserts` or returns `never`, and a helper that throws undeclared is outside the model. Treating every helper call in a `try` as unproven would cost recall the owner declined (ADR 0279, option b). Reopen if a producer fact records inferred throws.
+- Cone propagation of the interprocedural summary, returned and factory fixed points on kept state (S7 design §5): they cost about 2 ms per app-game import edit (ADR 0407), about what diffing their definitions would. Reopen if their seeds become incremental.
 ## 3. Recorded precision trades
 
 A violation withheld, or turned uncertifiable, to keep zero false positives. Each loses recall on purpose.

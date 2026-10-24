@@ -497,6 +497,8 @@ pub(super) fn interprocedural_reads(
         &mut invoked_parameter_members,
     );
     let refresh = step_started.elapsed();
+    let mut fixed_points = crate::InterproceduralFixedPointTimings::default();
+    let step_started = Instant::now();
     let transported_edges = add_transported_call_summaries(
         &TransportedCallInputs {
             context,
@@ -514,6 +516,8 @@ pub(super) fn interprocedural_reads(
     // Extra memo-wrapper source origins also enter through ordinary discovery.
     // Tag those rows before any normal summary hop can copy them.
     tag_extra_source_origins(&provenance, &mut summaries);
+    fixed_points.transported = step_started.elapsed();
+    let step_started = Instant::now();
     propagate_callback_forwardings(
         &callback_forwardings,
         nodes,
@@ -521,6 +525,7 @@ pub(super) fn interprocedural_reads(
         &mut callback_summaries,
         &mut unresolved_callback_obligations,
     );
+    fixed_points.callback_forwarding = step_started.elapsed();
     let graph = phase_started.elapsed();
     phase_started = Instant::now();
     let (direct_index, direct_references, direct_summaries) = add_direct_reference_summaries(
@@ -548,6 +553,7 @@ pub(super) fn interprocedural_reads(
     let returned_delta_started = Instant::now();
     propagate_returned_summary_deltas(&mut returned, &returned_edges);
     let returned_delta = returned_delta_started.elapsed();
+    fixed_points.returned = returned_delta;
     let call_summary_delta_started = Instant::now();
     let mut summary_propagation = SummaryPropagation {
         reverse_edges: reverse_summary_edges(&mut edges),
@@ -556,7 +562,8 @@ pub(super) fn interprocedural_reads(
         guaranteed_edges,
     };
     summary_propagation.run(&mut summaries);
-
+    fixed_points.calls = call_summary_delta_started.elapsed();
+    let step_started = Instant::now();
     attach_dispatch_edges(
         &DispatchGraph {
             dispatches: &dispatches,
@@ -574,7 +581,8 @@ pub(super) fn interprocedural_reads(
         &mut edges,
         &mut summary_propagation,
     );
-
+    fixed_points.dispatch = step_started.elapsed();
+    let step_started = Instant::now();
     add_returned_function_reads(
         context,
         nodes,
@@ -583,6 +591,7 @@ pub(super) fn interprocedural_reads(
         &returns_by_ast_owner,
         &mut returned,
     );
+    fixed_points.returned_functions = step_started.elapsed();
     let call_summary_delta = call_summary_delta_started.elapsed();
     let factory_propagation_started = Instant::now();
     let returned_bindings = propagate_factory_reads(
@@ -599,6 +608,7 @@ pub(super) fn interprocedural_reads(
     );
 
     let factory_propagation = factory_propagation_started.elapsed();
+    fixed_points.factory = factory_propagation;
     let propagation = phase_started.elapsed();
     phase_started = Instant::now();
     let result_view = InterproceduralResultView {
@@ -649,7 +659,9 @@ pub(super) fn interprocedural_reads(
         result.extend(getter_reads);
         dispatch_obligations.extend(getter_obligations);
     }
+    let step_started = Instant::now();
     export_parameter_member_dispatch_obligations(context, nodes, &mut dispatch_obligations);
+    fixed_points.parameter_member_obligations = step_started.elapsed();
     let factory_instances = returned_bindings
         .values()
         .filter(|summary| !summary.is_empty())
@@ -657,14 +669,9 @@ pub(super) fn interprocedural_reads(
     let result_reads = phase_started.elapsed();
     let (export_summaries, export_work) = export_structured_return_obligations(
         context,
-        &StructuredReturnInputs {
-            nodes,
-            indexes,
-            by_symbol,
-            summaries: &summaries,
-            returned: &returned,
-        },
+        nodes,
         &mut dispatch_obligations,
+        &mut fixed_points,
     );
     let results_and_exports = phase_started.elapsed();
     super::node_index::keep(lookup, node_index);
@@ -695,6 +702,7 @@ pub(super) fn interprocedural_reads(
             result_reads,
             export_summaries,
             export_work,
+            fixed_points,
             graph_reused_files,
             graph_recomputed_files,
             result_reused_files,
@@ -797,6 +805,7 @@ fn discover_summary_graph_nodes<'a, 'c>(
                 && cache.get(file.path.as_str()).is_some_and(|cached| {
                     cached.proof.holds(*lookup)
                         && super::transport_reads::hold_accessors(&cached.accessor_reads, accessors)
+                        && super::graph::graph_callee_reads_hold(file, &cached.callee_reads, lookup)
                         && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                             || same_compiler_semantics(&cached.compiler, &file.compiler))
                 }))
@@ -820,6 +829,7 @@ fn discover_summary_graph_nodes<'a, 'c>(
                     compiler: file.compiler.clone(),
                     proof: crate::base::reads::ReadProof::pending(reads),
                     accessor_reads: Vec::new(),
+                    callee_reads: Vec::new(),
                 },
             );
             computed.push(Some(file_nodes));
@@ -933,17 +943,19 @@ fn merge_graph_contributions(
                 (!graph_node_reused_paths.contains(file.path.as_str())).then(|| {
                     crate::base::reads::record(|| {
                         super::transport_reads::record(|| {
-                            discover_interprocedural_graph(
-                                file,
-                                nodes,
-                                nodes_by_path,
-                                InterproceduralGraphSymbols {
-                                    entities,
-                                    names: symbol_names,
-                                },
-                                lookup,
-                                accessors,
-                            )
+                            super::graph::record_graph_callee_reads(|| {
+                                discover_interprocedural_graph(
+                                    file,
+                                    nodes,
+                                    nodes_by_path,
+                                    InterproceduralGraphSymbols {
+                                        entities,
+                                        names: symbol_names,
+                                    },
+                                    lookup,
+                                    accessors,
+                                )
+                            })
                         })
                     })
                 })
@@ -957,7 +969,7 @@ fn merge_graph_contributions(
                     continue;
                 }
                 graph_recomputed_files += 1;
-                let ((contribution, accessor_reads), mut reads) =
+                let (((contribution, callee_reads), accessor_reads), mut reads) =
                     contribution.expect("recomputed graph path has a fresh contribution");
                 graph.merge(file.path.as_str(), &contribution);
                 // The nodes' reads (this build's) and the contribution's.
@@ -977,6 +989,7 @@ fn merge_graph_contributions(
                         compiler: file.compiler.clone(),
                         proof: crate::base::reads::ReadProof::new(reads, *lookup),
                         accessor_reads,
+                        callee_reads,
                     },
                 );
             }
@@ -1897,16 +1910,28 @@ fn export_parameter_member_dispatch_obligations(
         else {
             continue;
         };
-        let allowed = allowed_by_path
-            .entry(file.path.as_str())
-            .or_insert_with(|| allowed_callback_spans(file, context.lookup));
-        let direct_member = file.ast.calls.iter().find_map(|call| {
-            if !function.body.contains(call.span)
-                || !containing_ast_function(&file.ast, call.span)
-                    .is_some_and(|owner| owner.span == function.span)
+        // The first call written in the function's own body whose callee is
+        // a member of one of its parameters, not a tracked JSX role and not
+        // a standard-library method. The conjuncts are pure, so the cheap
+        // syntactic ones run first: the role (and the file's allowed
+        // callback spans it reads) is asked only of a parameter's member.
+        let direct_member = file.ast.calls_within(function.body).find_map(|call| {
+            if !containing_ast_function(&file.ast, call.span)
+                .is_some_and(|owner| owner.span == function.span)
             {
                 return None;
             }
+            let (receiver, path) = context.lookup.member_callee_receiver(file, call.callee)?;
+            if !node
+                .parameters
+                .iter()
+                .any(|parameter| parameter == &receiver)
+            {
+                return None;
+            }
+            let allowed = allowed_by_path
+                .entry(file.path.as_str())
+                .or_insert_with(|| allowed_callback_spans(file, context.lookup));
             if semantic_execution_role(
                 file,
                 call.callee,
@@ -1926,11 +1951,7 @@ fn export_parameter_member_dispatch_obligations(
             {
                 return None;
             }
-            let (receiver, path) = context.lookup.member_callee_receiver(file, call.callee)?;
-            node.parameters
-                .iter()
-                .any(|parameter| parameter == &receiver)
-                .then_some(path)
+            Some(path)
         });
         if let Some(path) = direct_member {
             dispatch_obligations.push(StaticDefect {
@@ -1954,111 +1975,24 @@ fn export_parameter_member_dispatch_obligations(
     }
 }
 
-/// The settled summaries structured-return discovery reads.
-struct StructuredReturnInputs<'a> {
-    nodes: &'a [SummaryNode],
-    indexes: &'a HashMap<(String, Span), usize>,
-    by_symbol: &'a HashMap<SymbolId, usize>,
-    summaries: &'a [SummaryReads],
-    returned: &'a [SummaryReads],
-}
-
 /// Files with at most this many returns filter them per exported function;
 /// larger ones group them by owner once.
 const SMALL_RETURN_COUNT: usize = 16;
 
+/// The `StructuredReturnUnresolved` obligation of each shorthand property an
+/// exported function returns that no exact project declaration answers.
 fn export_structured_return_obligations(
     context: &InterproceduralContext<'_, '_>,
-    inputs: &StructuredReturnInputs<'_>,
+    nodes: &[SummaryNode],
     dispatch_obligations: &mut Vec<StaticDefect>,
+    fixed_points: &mut crate::InterproceduralFixedPointTimings,
 ) -> (Duration, u64) {
-    let work = AtomicU64::new(0);
-    let InterproceduralContext {
-        facts,
-        accessors,
-        source_kinds,
-        entities,
-        symbol_names,
-        lookup,
-        ..
-    } = context;
-    let StructuredReturnInputs {
-        nodes,
-        indexes,
-        by_symbol,
-        summaries,
-        returned,
-    } = inputs;
+    let InterproceduralContext { facts, lookup, .. } = context;
     let export_started = Instant::now();
-    let mut structured_returns = vec![None; nodes.len()];
-    let has_structured_return_seed = facts.files.iter().any(|file| {
-        !file.ast.object_properties.is_empty()
-            || file
-                .ast
-                .functions
-                .iter()
-                .filter_map(|function| function.expression_return.as_ref())
-                .chain(file.ast.returns.iter())
-                .any(|returned| {
-                    !returned.elements().is_empty() || !returned.properties().is_empty()
-                })
-    });
-    let accessor_declarations = structured_returns::accessor_declarations(accessors);
-    let accessors_by_identity = std::sync::OnceLock::new();
-    let module_exports = std::sync::OnceLock::new();
-    if has_structured_return_seed {
-        for _ in 0..=nodes.len() {
-            let discovered = discover_structured_returns(&StructuredReturnDiscovery {
-                facts,
-                nodes,
-                indexes,
-                by_symbol,
-                summaries,
-                returned,
-                structured_returns: &structured_returns,
-                work: &work,
-                accessors,
-                accessor_declarations: &accessor_declarations,
-                accessors_by_identity: &accessors_by_identity,
-                module_exports: &module_exports,
-                source_kinds,
-                entities,
-                symbol_names,
-                lookup,
-            });
-            let mut changed = false;
-            for (target, returned) in structured_returns.iter_mut().zip(discovered) {
-                if *target != returned {
-                    *target = returned;
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
-    }
-    let structured_discovery = StructuredReturnDiscovery {
-        facts,
-        nodes,
-        indexes,
-        by_symbol,
-        summaries,
-        returned,
-        structured_returns: &structured_returns,
-        work: &work,
-        accessors,
-        accessor_declarations: &accessor_declarations,
-        accessors_by_identity: &accessors_by_identity,
-        module_exports: &module_exports,
-        source_kinds,
-        entities,
-        symbol_names,
-        lookup,
-    };
+    let mut work = 0;
     let mut returns_by_owner: HashMap<&str, HashMap<Span, Vec<usize>>> = HashMap::default();
     for node in nodes.iter().filter(|node| node.exported) {
-        work.fetch_add(1, Ordering::Relaxed);
+        work += 1;
         let Some(file) = lookup.file_by_path(node.path.as_str()) else {
             continue;
         };
@@ -2105,9 +2039,8 @@ fn export_structured_return_obligations(
             )
             .flat_map(|returned| returned.properties())
         {
-            work.fetch_add(1, Ordering::Relaxed);
-            let Some(reason) =
-                structured_discovery.unresolved_shorthand_reason(file, property.value)
+            work += 1;
+            let Some(reason) = unresolved_shorthand_reason(file, property.value, facts, lookup)
             else {
                 continue;
             };
@@ -2127,5 +2060,6 @@ fn export_structured_return_obligations(
             });
         }
     }
-    (export_started.elapsed(), work.into_inner())
+    fixed_points.shorthand_obligations = export_started.elapsed();
+    (export_started.elapsed(), work)
 }

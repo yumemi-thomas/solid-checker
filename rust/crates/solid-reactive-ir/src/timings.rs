@@ -170,6 +170,7 @@ impl BuildTimings {
         self.interprocedural_results_and_exports = timings.results_and_exports;
         self.interprocedural_result_reads = timings.result_reads;
         self.interprocedural_export_summaries = timings.export_summaries;
+        self.interprocedural_fixed_points = timings.fixed_points;
         self.interprocedural_graph_reused_files = timings.graph_reused_files;
         self.interprocedural_graph_recomputed_files = timings.graph_recomputed_files;
         self.interprocedural_result_reused_files = timings.result_reused_files;
@@ -252,6 +253,18 @@ pub(crate) fn reuse_line(
                 "propagation": ms(timings.interprocedural_propagation),
                 "resultReads": ms(timings.interprocedural_result_reads),
                 "exportSummaries": ms(timings.interprocedural_export_summaries),
+            },
+            "fixedPointsMs": {
+                "transported": ms(timings.interprocedural_fixed_points.transported),
+                "callbackForwarding": ms(timings.interprocedural_fixed_points.callback_forwarding),
+                "returnedSeeds": ms(timings.interprocedural_returned_direct),
+                "returned": ms(timings.interprocedural_fixed_points.returned),
+                "calls": ms(timings.interprocedural_fixed_points.calls),
+                "dispatch": ms(timings.interprocedural_fixed_points.dispatch),
+                "returnedFunctions": ms(timings.interprocedural_fixed_points.returned_functions),
+                "factory": ms(timings.interprocedural_fixed_points.factory),
+                "parameterMemberObligations": ms(timings.interprocedural_fixed_points.parameter_member_obligations),
+                "shorthandObligations": ms(timings.interprocedural_fixed_points.shorthand_obligations),
             },
             "totalNs": u64::try_from(timings.total.as_nanos()).unwrap_or(u64::MAX),
             "shadowNs": u64::try_from(timings.shadow.as_nanos()).unwrap_or(u64::MAX),
