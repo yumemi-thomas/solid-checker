@@ -7,7 +7,7 @@
 //
 //   node scripts/runtime-oracle.mjs --cases fixtures/runtime-oracle --out <fresh.json>
 //     [--only id,...] [--install <app with solid-js 2.x node_modules>]
-//     [--browser <chromium>] [--concurrency <n>]
+//     [--browser <chromium>] [--concurrency <n>] [--cache <directory>|off]
 //   env: SOLID_CHECKER_NATIVE_BIN, SOLID_TYPEFACTS_BIN
 //
 // A case is a directory holding an `App.tsx` and its other source files. Every
@@ -65,6 +65,10 @@ const options = {
   // 373 s at 8 with every verdict unchanged (2026-10-24).
   concurrency: String(recommendedConcurrency()),
   only: "",
+  // The browser half of each case, content-addressed (`feedback run
+  // --execution-cache`): a checker change that leaves a case's development
+  // models alone reruns only its analysis. `off` runs every browser half.
+  cache: join(repo, "rust/target/runtime-oracle-cache"),
   out: null,
 };
 const argv = process.argv.slice(2);
@@ -87,11 +91,16 @@ const solidVersion = JSON.parse(readFileSync(join(install, "node_modules/solid-j
 assert(solidVersion.startsWith("2."), `--install resolves solid-js ${solidVersion}, not 2.x`);
 // Cases run inside the install so its node_modules is their ancestor.
 
+// Playwright's headless shell: the same Chromium build (Blink, V8) without the
+// browser shell, which starts in about half the time (~240 ms against ~550 ms
+// for launch, page and close). At concurrency 8 the 735 cases took 312 s
+// against 373 s for Chrome for Testing, every verdict the same (2026-10-24).
+// --browser still takes the full Chrome for Testing.
 function defaultChromium() {
   const cache = join(process.env.HOME, "Library/Caches/ms-playwright");
-  const builds = readdirSync(cache).filter((name) => /^chromium-\d+$/.test(name)).sort((a, b) => Number(b.split("-")[1]) - Number(a.split("-")[1]));
-  assert(builds.length, "no playwright chromium; pass --browser");
-  return join(cache, builds[0], "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing");
+  const builds = readdirSync(cache).filter((name) => /^chromium_headless_shell-\d+$/.test(name)).sort((a, b) => Number(b.split("-")[1]) - Number(a.split("-")[1]));
+  assert(builds.length, "no playwright chromium headless shell; pass --browser");
+  return join(cache, builds[0], "chrome-headless-shell-mac-arm64/chrome-headless-shell");
 }
 
 const compilerOptions = {
@@ -498,7 +507,8 @@ async function runCase(id) {
   const started = Date.now();
   const result = await run(process.execPath, [join(repo, "packages/cli/bin/solid-checker.mjs"), "feedback", "run",
     "--project", join(dir, "tsconfig.json"), "--scenario", join(dir, "scenario.json"),
-    "--browser", browser, "--tooling", tooling, "--native-bin", process.env.SOLID_CHECKER_NATIVE_BIN], dir);
+    "--browser", browser, "--tooling", tooling, "--native-bin", process.env.SOLID_CHECKER_NATIVE_BIN,
+    ...(options.cache === "off" ? [] : ["--execution-cache", resolve(options.cache)])], dir);
   const wallMs = Date.now() - started;
   let report = null;
   try { report = JSON.parse(result.stdout.slice(result.stdout.indexOf("{"))); } catch { /* recorded below */ }
@@ -638,7 +648,7 @@ async function runCase(id) {
     : behaviour.some((row) => row.verdict === "behaviour-confirmed") ? "behaviour-confirmed"
     : behaviour.length ? "behaviour-clean" : "quiet";
   return {
-    id, verdict, note: spec.note ?? null, wallMs, typingErrors, failure, stale: [...stale, ...staleBehaviour], diagnostics, behaviour, staticOnly, findings,
+    id, verdict, note: spec.note ?? null, wallMs, executionCache: report.execution?.executionCache?.outcome ?? null, typingErrors, failure, stale: [...stale, ...staleBehaviour], diagnostics, behaviour, staticOnly, findings,
     unattributed: (report.execution?.diagnostics ?? []).filter((row) => !caseFile(row.site?.location?.path)).map((row) => row.code),
     pageErrors: (report.execution?.pageErrors ?? []).map((error) => error.message.slice(0, 200)),
   };
@@ -664,8 +674,10 @@ async function worker() {
 await Promise.all(Array.from({ length: Number(options.concurrency) }, worker));
 results.sort((left, right) => left.id.localeCompare(right.id));
 const tally = results.reduce((counts, row) => ({ ...counts, [row.verdict]: (counts[row.verdict] ?? 0) + 1 }), {});
-writeFileSync(output, `${JSON.stringify({ solid: solidVersion, install, browser, cases: results.length, tally, results }, null, 2)}\n`);
+const executionCache = results.reduce((counts, row) => (row.executionCache ? { ...counts, [row.executionCache]: (counts[row.executionCache] ?? 0) + 1 } : counts), {});
+writeFileSync(output, `${JSON.stringify({ solid: solidVersion, install, browser, cases: results.length, tally, executionCache, results }, null, 2)}\n`);
 console.log(JSON.stringify(tally));
+console.error(`browser halves: ${JSON.stringify(executionCache)}`);
 const failing = results.filter((row) => ["unproven-clean", "stale-open", "type-error", "harness-error"].includes(row.verdict));
 for (const row of failing) {
   console.error(`${row.id}: ${row.verdict}`);

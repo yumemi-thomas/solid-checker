@@ -14,6 +14,7 @@ import { classifyUnmappedFrames, createFrameAttributor, operationFrame, siteExpr
 import { completeFeedbackEntryOutput, feedbackEntryBootstrapPlugin, feedbackHtmlEntries, resolveFeedbackEntries, selectedFeedbackEntry, validateFeedbackDocument } from "./feedback-entry-bootstrap.mjs";
 import { observeFeedbackDocuments } from "./feedback-documents.mjs";
 import { configureFeedbackOptimizer, createFeedbackOptimizerObserver, feedbackRuntimePackages, resolveFeedbackRuntime } from "./feedback-optimizer.mjs";
+import { createExecutionCache, executionCacheKey, harnessDigest, toolingIdentity } from "./feedback-execution-cache.mjs";
 
 const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const runtimePath = fileURLToPath(new URL("./feedback-read-runtime.mjs", import.meta.url));
@@ -476,7 +477,9 @@ export function mergeDocumentStates(messages, final) {
     documents: { loaded: states.length, reported: present.length, lost: states.length - present.length } };
 }
 
-async function collectProject(project, scenario, tools, browser, responses = new Map(), runtimeOptions = {}) {
+// `tooling` and `browser` return the (lazily loaded) Vite/Playwright tooling and
+// Chromium: a run whose every project reuses a cached browser half needs neither.
+async function collectProject(project, scenario, tooling, browser, responses = new Map(), runtimeOptions = {}, executionCache = null) {
   const { snapshot, leaves } = feedbackBrowserSnapshots(project), projectRoot = dirname(snapshot.manifest.project);
   // This run executes the application as a client-rendered development build
   // in Chromium, which is the runtime the native analysis answers for.
@@ -493,6 +496,37 @@ async function collectProject(project, scenario, tools, browser, responses = new
     : inspectDevelopmentFeedback(project, { ...nativeOptions, snapshot });
   assert(Array.isArray(nativeFeedback.analysis.feedbackFacts), "Native checker does not expose development models");
   const { models, conflictingLeafModels } = selectFeedbackModels(nativeFeedback.analysis.feedbackFacts);
+  // The browser half reads the checker only through the models and the
+  // TypeScript error count, so its result is keyed on those and reused across
+  // checker builds (feedback-execution-cache.mjs). The findings, observations
+  // and automatic warnings below always come from this run's analysis.
+  const key = executionCache && executionCacheKey({ ...executionCache.parts, project: realpathSync(project),
+    manifest: snapshot.manifest, sources: snapshot.sources.filter(source => !source.isDeclarationFile)
+      .map(source => [resolve(source.fileName), hash(source.text)]),
+    feedbackFacts: nativeFeedback.analysis.feedbackFacts, typingErrors: snapshot.typingErrors, scenario,
+    responses: [...responses.values()].map(({ served: _served, ...row }) => row), runtimeOptions });
+  let body = key ? executionCache.cache.read(key) : null;
+  const cacheOutcome = !key ? "off" : body ? "hit" : "miss";
+  if (!body) {
+    body = await browserHalf({ projectRoot, snapshot, models, conflictingLeafModels, scenario, tooling, browser, responses, runtimeOptions });
+    if (key && !body.failure) executionCache.cache.write(key, body);
+  }
+  const { capture, authoredEvents, documentsLost, assertions, typingErrors: _typingErrors, ...execution } = body;
+  validateFeedbackInputs(snapshot.manifest);
+  const feedback = inspectDevelopmentFeedback(project, { capture, snapshot, analyze: () => ({ status: nativeFeedback.nativeExitCode,
+    stdout: JSON.stringify(nativeFeedback.analysis) }) });
+  if (projects) { feedback.solution = { referencedProjects: projects.map(row => row.project) }; feedback.projects = projects; }
+  const automatic = selectReadFeedback(authoredEvents, [...models.values()], { typingErrors: snapshot.typingErrors, dropped: execution.stats?.dropped ?? 0 });
+  if (documentsLost) automatic.open?.push({ reason: "A loaded document unloaded without reporting its records", lost: documentsLost });
+  return { feedback, capture, assertions: snapshot.typingErrors ? [] : assertions, automatic, ...execution,
+    typingErrors: snapshot.typingErrors, executionCache: { outcome: cacheOutcome, ...(key ? { key } : {}) } };
+}
+
+// Vite, Chromium, the scenario and frame attribution: everything of a run that
+// needs the live server and page. It returns raw records only; what reads the
+// checker's findings is finished by `collectProject`.
+async function browserHalf({ projectRoot, snapshot, models, conflictingLeafModels, scenario, tooling, browser, responses, runtimeOptions }) {
+  const tools = await tooling();
   const runtimeInputs = new Map(), coverage = { nativeReader: null, sourceInstrumentation: [], complete: false,
     ...(conflictingLeafModels.size ? { conflictingLeafModels: [...conflictingLeafModels] } : {}) }, unmapped = [];
   const instrumented = new Map();
@@ -558,7 +592,8 @@ async function collectProject(project, scenario, tools, browser, responses = new
     record(entry.path);
     await server.listen();
     const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
-    context = await browser.newContext(feedbackContextOptions(scenario)); context.setDefaultTimeout(12000);
+    const chromium = await browser();
+    context = await chromium.newContext(feedbackContextOptions(scenario)); context.setDefaultTimeout(12000);
     await context.route("**/*", route => routeFeedbackRequest(route, origin, responses, blockedRequests, refusedResponses));
     const page = await context.newPage();
     // A raw CDP binding: Playwright's exposed bindings drop calls from a
@@ -713,21 +748,14 @@ async function collectProject(project, scenario, tools, browser, responses = new
     const optimizedDependencies = optimizer.finish();
     capture.runtimeInputs = [...runtimeInputs.values()];
     for (const pin of capture.runtimeInputs) assert.equal(hash(readFileSync(pin.path)), pin.sha256, `Runtime input changed: ${pin.path}`);
-    validateFeedbackInputs(snapshot.manifest);
-    const feedback = inspectDevelopmentFeedback(project, { capture, snapshot, analyze: () => ({ status: nativeFeedback.nativeExitCode,
-      stdout: JSON.stringify(nativeFeedback.analysis) }) });
-    if (projects) { feedback.solution = { referencedProjects: projects.map(row => row.project) }; feedback.projects = projects; }
-    const automatic = selectReadFeedback(authoredEvents, [...models.values()], { typingErrors: snapshot.typingErrors, dropped: raw.stats?.dropped ?? 0 });
-    if (raw.documents.lost) automatic.open?.push({ reason: "A loaded document unloaded without reporting its records", lost: raw.documents.lost });
-    return { feedback, capture, assertions: snapshot.typingErrors ? [] : assertions,
-      automatic,
+    return { capture, authoredEvents, documentsLost: raw.documents.lost ?? 0, assertions,
       coverage, stats: raw.stats, diagnostics, checkpoints, unmapped, blockedRequests, refusedResponses,
       suppliedResponses: [...responses.values()].map(row => ({ url: row.url, method: row.method,
         ...(row.requestBody !== undefined ? { requestBody: row.requestBody, requestBodySha256: row.requestBodySha256, matchedRequestBodySha256: row.matchedRequestBodySha256 ?? null } : {}), status: row.status, contentType: row.contentType,
         body: row.pin, served: row.served, channel: "scenario-input" })),
       pageErrors, consoleDiagnostics, consoleDiagnosticsDropped, serverDiagnostics: await serverDiagnostics.finish(), failure,
       entry, optimizedDependencies, runtimeInputs: capture.runtimeInputs, ...(scenario.viewport ? { viewport: scenario.viewport } : {}),
-      configuration: configuration.configuration, typingErrors: snapshot.typingErrors };
+      configuration: configuration.configuration, typingErrors: snapshot.typingErrors, browserVersion: chromium.version() };
   } catch (error) {
     if (!server) error.message += "; no Vite server was exposed for cleanup; partial startup resources may remain until CLI exit";
     primary = error;
@@ -750,21 +778,32 @@ export function selectFeedbackModels(rows) {
   return { models, conflictingLeafModels };
 }
 
-export async function runBrowserFeedback({ project, scenarioPath, browserPath, toolingRoot, comparisonProject, root, config }) {
+export async function runBrowserFeedback({ project, scenarioPath, browserPath, toolingRoot, comparisonProject, root, config, executionCacheDirectory }) {
   const scenarioPin = { path: realpathSync(resolve(scenarioPath)), sha256: hash(readFileSync(scenarioPath)) };
   const scenario = validateFeedbackScenario(JSON.parse(readFileSync(scenarioPin.path, "utf8")));
   const responses = loadSuppliedResponses(scenario, scenarioPin.path);
   const runtimeOptions = validateFeedbackRuntimeOptions(project, { root, config });
   assert(!comparisonProject || (!root && !config), "Explicit --root/--config with --compare-project needs separate app inputs; run each app separately");
+  // The tooling loads up front even when every browser half is reused: loading
+  // it only on a miss saved ~0.2 s a case but left about one hit in 80 unable
+  // to exit until killed (2026-10-24, not explained), so it is not lazy.
+  const toolsRoot = realpathSync(resolve(toolingRoot ?? dirname(resolve(project))));
   const tools = await toolingAt(resolve(toolingRoot ?? dirname(resolve(project))));
-  tools.root = realpathSync(resolve(toolingRoot ?? dirname(resolve(project))));
+  tools.root = toolsRoot;
+  const tooling = async () => tools;
   const browserPin = { path: realpathSync(resolve(browserPath)), sha256: hash(readFileSync(browserPath)) };
-  const browser = await tools.chromium.launch({ executablePath: browserPin.path, headless: true, timeout: 15000 });
+  assert(!executionCacheDirectory || !comparisonProject, "--execution-cache does not combine with --compare-project");
+  const executionCache = executionCacheDirectory ? { cache: createExecutionCache(resolve(executionCacheDirectory)),
+    parts: { harness: harnessDigest(), tools: toolingIdentity(toolsRoot), browser: browserPin.sha256 } } : null;
+  // Likewise Chromium.
+  let launched = null;
+  const browser = () => (launched ??= tools.chromium.launch({ executablePath: browserPin.path, headless: true, timeout: 15000 }));
+  if (!executionCache) await browser();
   let primary;
   try {
     const fresh = () => new Map([...responses].map(([url, row]) => [url, { ...row, served: 0 }]));
-    const original = await collectProject(project, scenario, tools, browser, fresh(), runtimeOptions);
-    const comparison = comparisonProject ? await collectProject(comparisonProject, scenario, tools, browser, fresh(), validateFeedbackRuntimeOptions(comparisonProject)) : null;
+    const original = await collectProject(project, scenario, tooling, browser, fresh(), runtimeOptions, executionCache);
+    const comparison = comparisonProject ? await collectProject(comparisonProject, scenario, tooling, browser, fresh(), validateFeedbackRuntimeOptions(comparisonProject)) : null;
     for (const run of [original, comparison].filter(Boolean)) {
       validateFeedbackInputs(run.capture.manifest);
       for (const pin of run.capture.runtimeInputs) assert.equal(hash(readFileSync(pin.path)), pin.sha256, `Runtime input changed: ${pin.path}`);
@@ -780,6 +819,8 @@ export async function runBrowserFeedback({ project, scenarioPath, browserPath, t
       comparison: comparison ? { project: comparison.feedback.project, inputId: comparison.feedback.inputId,
         assertions: comparison.assertions, stats: comparison.stats, nativeExitCode: comparison.feedback.nativeExitCode,
         typingErrors: comparison.typingErrors, pageErrors: comparison.pageErrors } : null,
-      scenario: scenarioPin, browser: { ...browserPin, version: browser.version() } };
-  } catch (error) { primary = error; throw error; } finally { await closeFeedbackResourcesAfter(primary, { browser }); }
+      scenario: scenarioPin, browser: { ...browserPin, version: original.browserVersion } };
+  } catch (error) { primary = error; throw error; } finally {
+    await closeFeedbackResourcesAfter(primary, { browser: launched && await launched.catch(() => null) });
+  }
 }
