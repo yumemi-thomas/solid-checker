@@ -68,7 +68,7 @@
 //! # The pool
 //!
 //! [`run_works`] runs passes on `N` scoped worker threads (default
-//! `min(cores - 2, 12)`, [`ENV_WORKERS`]). Each worker builds its own identity
+//! [`pool_size`]: every core up to 4, else `cores - 2`, at most 12; [`ENV_WORKERS`]). Each worker builds its own identity
 //! state from a [`crate::identity::PassSeed`] and installs its own file
 //! checker per pass. Outputs land by index, so the caller merges them in path
 //! order whatever the schedule. The program is shared read-only: its lazily
@@ -132,10 +132,17 @@ pub fn workers_from_env() -> usize {
     {
         return count.max(1);
     }
-    std::thread::available_parallelism()
-        .map_or(1, std::num::NonZeroUsize::get)
-        .saturating_sub(2)
-        .clamp(1, 12)
+    pool_size(std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get))
+}
+
+/// The pool for `cores` cores: every core up to 4, then two left for the
+/// client and the IR beside the producer, at most 12. The calling thread
+/// only waits on the pool, so on a small machine leaving cores idle costs
+/// more than sharing them (a 4-core runner: 2 workers made an edit 1.47x
+/// slower than 4).
+#[must_use]
+pub fn pool_size(cores: usize) -> usize {
+    cores.saturating_sub(2).max(cores.min(4)).clamp(1, 12)
 }
 
 /// One pass to run: a demanded file (`run`), the async facts of locations
@@ -1499,5 +1506,17 @@ impl Merged {
             row_mismatches,
             changed_rows,
         })
+    }
+}
+
+#[cfg(test)]
+mod pool_size_tests {
+    #[test]
+    fn small_machines_use_every_core_and_big_ones_keep_two() {
+        let sizes: Vec<usize> = [1, 2, 3, 4, 5, 6, 8, 14, 32]
+            .into_iter()
+            .map(super::pool_size)
+            .collect();
+        assert_eq!(sizes, [1, 2, 3, 4, 4, 4, 6, 12, 12]);
     }
 }
