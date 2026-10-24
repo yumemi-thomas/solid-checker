@@ -1592,8 +1592,9 @@ impl IncrementalBuilder {
 
     /// Applies the idle-memory policy without invalidating the current result.
     ///
-    /// `Balanced` targets the three cache families that profiling found to
-    /// account for most retained bytes per millisecond of recomputation.
+    /// `Balanced` targets the cache families that profiling found to
+    /// account for most retained bytes per millisecond of recomputation; it
+    /// keeps the TypeScript indexes, which an exact Type Facts delta patches.
     /// `Compact` releases every derived index while preserving the current
     /// generation and its source-discovery domain identity.
     pub fn retain_for_idle(&mut self, retention: CacheRetention) {

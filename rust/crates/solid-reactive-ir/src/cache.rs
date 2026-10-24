@@ -165,13 +165,16 @@ impl IncrementalCacheState {
         }
         self.interprocedural_graph.clear();
         self.interprocedural_results = CachedInterproceduralResults::default();
-        self.typescript_indexes = None;
         self.reachability = None;
         self.base_indexes = None;
         if retention == CacheRetention::Compact {
             // Memo answers are small next to what they save; only the
             // compact policy, which keeps no index at all, drops them.
             self.memos = None;
+            // The TypeScript indexes are patched from an exact Type Facts
+            // delta (instant-edits P4) for a few milliseconds where a rebuild
+            // costs tens: they stay under the balanced policy.
+            self.typescript_indexes = None;
             self.ast_indexes.clear();
             self.source_discovery.clear();
             self.late_stages = None;

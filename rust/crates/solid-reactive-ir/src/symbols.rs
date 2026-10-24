@@ -282,18 +282,6 @@ pub(super) fn patch_typescript_indexes(
             )
         })
         .collect::<Vec<_>>();
-    let removed_aliases = current_targets
-        .iter()
-        .filter(|(id, current)| {
-            cache.symbol_alias_targets.contains_key(id.as_str()) && current.is_none()
-        })
-        .count();
-    let added_aliases = current_targets
-        .iter()
-        .filter(|(id, current)| {
-            !cache.symbol_alias_targets.contains_key(id.as_str()) && current.is_some()
-        })
-        .count();
     let structurally_changed_symbols = current_targets
         .iter()
         .filter_map(|(id, current_target)| {
@@ -306,18 +294,19 @@ pub(super) fn patch_typescript_indexes(
             (existed != exists || old_target != *current_target).then_some(id.as_str())
         })
         .collect::<HashSet<_>>();
-    let alias_graph_is_local = added_aliases == removed_aliases
-        && current_targets.iter().all(|(id, current)| {
-            cache
-                .symbol_alias_targets
-                .get(id.as_str())
-                .zip(*current)
-                .is_none_or(|(old, current)| old == current)
-        })
-        && cache.symbol_alias_targets.iter().all(|(symbol, target)| {
-            changed_symbols.contains(symbol.as_str())
-                || !structurally_changed_symbols.contains(target.as_str())
-        });
+    // An alias row that appears or disappears (an edited import) moves only
+    // its own root; one a retained alias points at is a structural change
+    // the last clause rejects.
+    let alias_graph_is_local = current_targets.iter().all(|(id, current)| {
+        cache
+            .symbol_alias_targets
+            .get(id.as_str())
+            .zip(*current)
+            .is_none_or(|(old, current)| old == current)
+    }) && cache.symbol_alias_targets.iter().all(|(symbol, target)| {
+        changed_symbols.contains(symbol.as_str())
+            || !structurally_changed_symbols.contains(target.as_str())
+    });
     if !alias_graph_is_local {
         return None;
     }
