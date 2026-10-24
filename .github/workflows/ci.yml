@@ -207,6 +207,8 @@ jobs:
           cache-targets: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: ./.github/actions/typefacts
+      # The package's build tooling (napi) and the oracle harness's `typescript`.
+      - run: bun install --cwd packages/wasm --ignore-scripts --no-progress --frozen-lockfile
       - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
       - run: make wasm-parity
 
