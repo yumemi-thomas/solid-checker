@@ -136,7 +136,7 @@
   },
   "rust/crates/solid-reactive-ir/src/indexes.rs": {
     "facts.files": 8,
-    "files()": 5,
+    "files()": 4,
     "file_by_path": 3,
     "hashmap-iteration": 1
   },
@@ -147,7 +147,7 @@
     "file_by_path": 1
   },
   "rust/crates/solid-reactive-ir/src/interproc/reads.rs": {
-    "facts.files": 16,
+    "facts.files": 15,
     "file_by_path": 2,
     "hashmap-iteration": 3
   },
@@ -159,10 +159,7 @@
     "file_by_path": 9
   },
   "rust/crates/solid-reactive-ir/src/interproc/structured_returns.rs": {
-    "facts.files": 1,
-    "files()": 1,
-    "file_by_path": 4,
-    "hashmap-iteration": 3
+    "file_by_path": 1
   },
   "rust/crates/solid-reactive-ir/src/lib.rs": {
     "file_by_path": 2
