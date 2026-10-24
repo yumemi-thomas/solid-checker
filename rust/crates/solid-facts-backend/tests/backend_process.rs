@@ -18,6 +18,8 @@ mod cross_file_callbacks_process;
 mod cross_file_digest_process;
 #[path = "harness_process.rs"]
 mod harness_process;
+#[path = "idle_shadow_process.rs"]
+mod idle_shadow_process;
 #[path = "imported_const_process.rs"]
 mod imported_const_process;
 #[path = "incremental_staleness_process.rs"]

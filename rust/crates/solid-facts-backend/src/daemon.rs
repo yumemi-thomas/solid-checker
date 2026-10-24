@@ -50,7 +50,7 @@ use crate::daemon_resolution::ResolutionWitness;
 use crate::idle_memory;
 use solid_facts_backend::dependency_program::{self, PreparedDependencies};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CheckRequest {
     #[serde(default)]
@@ -90,6 +90,12 @@ struct CheckHeader {
     /// daemon's stderr is not the user's terminal, so it answers them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     notice: Option<String>,
+    /// The idle check found the previous answer differed from a fresh build
+    /// (ADR 0394). The retained state was dropped; this answer
+    /// is the fresh one, and a client that kept the earlier answer should
+    /// replace it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    recovered: bool,
 }
 
 struct Answer {
@@ -99,6 +105,8 @@ struct Answer {
     generation: u64,
     analysis_ns: u64,
     notice: Arc<str>,
+    /// The reactive IR program the answer came from, for the idle check.
+    program: Option<Arc<solid_reactive_ir::Program>>,
 }
 
 pub fn enabled() -> bool {
@@ -1062,6 +1070,11 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
         last: Instant::now(),
         serving: false,
     }));
+    let idle_check = idle_shadow::IdleShadow::from_env(&socket);
+    idle_check.spawn(request.clone(), memory_limit, move || {
+        process_tree_resident_bytes(process_id)
+    });
+    let watchdog_check = Arc::clone(&idle_check);
     let watchdog_activity = std::sync::Arc::clone(&activity);
     let watchdog_socket = socket.clone();
     std::thread::spawn(move || {
@@ -1091,6 +1104,12 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
             if memory_limit.is_some_and(|limit| {
                 process_tree_resident_bytes(process_id).is_some_and(|resident| resident > limit)
             }) {
+                // The idle check's second build is transient and the first
+                // thing to give up: abandon it, and end the daemon only if
+                // the next sample is still over the limit.
+                if watchdog_check.relieve_memory() {
+                    continue;
+                }
                 let _ = fs::remove_file(&watchdog_socket);
                 remove_owned_program();
                 std::process::exit(0);
@@ -1103,9 +1122,20 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
                 if let Ok(mut activity) = activity.lock() {
                     activity.serving = true;
                 }
-                if let Err(error) = handle(&mut state, request, stream) {
+                let recovered = idle_check.begin_request();
+                if recovered {
+                    // The idle check proved the retained state wrong: every
+                    // retained cache goes with it, and this request opens a
+                    // state from scratch.
+                    if let Some(generated) = state.take().as_ref().and_then(State::generated) {
+                        let _ = fs::remove_file(generated);
+                    }
+                    own_program(None);
+                }
+                if let Err(error) = handle(&mut state, request, stream, &idle_check, recovered) {
                     eprintln!("solid-checker daemon: {error}");
                 }
+                idle_check.end_request();
                 if let Ok(mut activity) = activity.lock() {
                     activity.serving = false;
                     activity.last = Instant::now();
@@ -1131,6 +1161,8 @@ fn handle(
     state: &mut Option<State>,
     request: &Request,
     stream: UnixStream,
+    idle_check: &idle_shadow::IdleShadow,
+    recovered: bool,
 ) -> Result<(), Box<dyn Error>> {
     stream.set_read_timeout(Some(Duration::from_secs(10)))?;
     let mut reader = BufReader::new(stream);
@@ -1157,7 +1189,7 @@ fn handle(
     if !request.dependency_sources.is_empty() && check.runtime != request.runtime {
         return respond_error(&mut stream, "daemon serves a different runtime host");
     }
-    let outcome = answer_retained(state, request, &check);
+    let outcome = answer_retained(state, request, &check, idle_check);
     match outcome {
         Ok(answer) => {
             let materialized = !answer.cache_hit;
@@ -1171,6 +1203,7 @@ fn handle(
                 analysis_ns: answer.analysis_ns,
                 response_bytes: u64::try_from(answer.body.len()).unwrap_or(u64::MAX),
                 notice: Some(answer.notice.to_string()),
+                recovered,
             })?;
             stream.write_all(&header)?;
             stream.write_all(b"\n")?;
@@ -1208,6 +1241,7 @@ fn respond_error(stream: &mut UnixStream, message: &str) -> Result<(), Box<dyn E
         analysis_ns: 0,
         response_bytes: 0,
         notice: None,
+        recovered: false,
     })?;
     stream.write_all(&header)?;
     stream.write_all(b"\n")?;
@@ -1229,6 +1263,7 @@ fn answer_retained(
     slot: &mut Option<State>,
     request: &Request,
     check: &CheckRequest,
+    idle_check: &idle_shadow::IdleShadow,
 ) -> Result<Answer, Box<dyn Error>> {
     if slot.is_none() {
         let opened = State::open(request)?;
@@ -1238,23 +1273,65 @@ fn answer_retained(
     let Some(state) = slot.as_mut() else {
         return Err("daemon state was not opened".into());
     };
-    let outcome = answer(state, request, check);
-    if outcome.is_err() {
+    let outcome = answer_with(state, request, check, true, None);
+    let Ok(mut answered) = outcome else {
         if let Some(generated) = slot.take().as_ref().and_then(State::generated) {
             let _ = fs::remove_file(generated);
         }
         own_program(None);
+        idle_check.forget();
+        return outcome;
+    };
+    if !answered.cache_hit && idle_check.enabled() {
+        // The test fault hook perturbs the retained answer itself, so a
+        // cache hit keeps serving it until the idle check drops the state.
+        if let Some(perturbed) = idle_shadow::fault(&answered.body) {
+            answered.body = Arc::clone(&perturbed);
+            if let Some(last) = state_last(slot) {
+                last.body = perturbed;
+            }
+        }
+        if let Some(witness) = slot.as_ref().and_then(idle_shadow::Witness::of) {
+            idle_check.record(idle_shadow::Served {
+                check: check.clone(),
+                status: Arc::clone(&answered.status),
+                body: Arc::clone(&answered.body),
+                notice: Arc::clone(&answered.notice),
+                program: answered.program.clone(),
+                witness,
+            });
+        } else {
+            idle_check.forget();
+        }
     }
-    outcome
+    Ok(answered)
 }
 
-fn answer(
+fn state_last(slot: &mut Option<State>) -> Option<&mut CachedAnswer> {
+    slot.as_mut().and_then(|state| state.last.as_mut())
+}
+
+/// The reason an answer was abandoned because its idle check was cancelled.
+const CANCELLED: &str = "cancelled";
+
+/// Answer a check from `state`. `timings` reports the phases under
+/// `SOLID_CHECKER_TIMINGS`; `cancel` abandons the answer between phases (the
+/// idle check's fresh build only).
+fn answer_with(
     state: &mut State,
     request: &Request,
     check: &CheckRequest,
+    timings: bool,
+    cancel: Option<&std::sync::atomic::AtomicBool>,
 ) -> Result<Answer, Box<dyn Error>> {
     let started = Instant::now();
-    let mut phases = PhaseClock::new();
+    let mut phases = PhaseClock::new(timings);
+    let checkpoint = || -> Result<(), Box<dyn Error>> {
+        if cancel.is_some_and(|cancel| cancel.load(std::sync::atomic::Ordering::Relaxed)) {
+            return Err(CANCELLED.into());
+        }
+        Ok(())
+    };
     let changes = match state.resync(request)? {
         Sync::Rebuild => {
             let previous = state.generated().map(Path::to_path_buf);
@@ -1303,6 +1380,7 @@ fn answer(
             cache_hit: true,
             generation: state.session.generation(),
             analysis_ns: u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
+            program: None,
         });
     }
     let demand = |state: &mut State| -> Result<(), Box<dyn Error>> {
@@ -1320,6 +1398,7 @@ fn answer(
         Ok(())
     };
     phases.mark("resync");
+    checkpoint()?;
     // The files an overlay update edited while the program kept its files.
     let mut edited = None;
     let facts = if changes.is_empty() {
@@ -1357,6 +1436,7 @@ fn answer(
         }
     };
     phases.mark("facts");
+    checkpoint()?;
     // Review of ADR 0368: a project call's validity is the project's own
     // program's (the retained original, current: `resync` ran), and a package
     // whose own source has a call error is unproven.
@@ -1471,6 +1551,7 @@ fn answer(
         .join("\n")
         .into();
     phases.mark("package-inputs");
+    checkpoint()?;
     let (analysis, diagnostic_timings) =
         state.diagnostics.analyze_inputs_measured_with_enablement(
             &state.project,
@@ -1488,6 +1569,7 @@ fn answer(
             },
         )?;
     phases.mark("analyze");
+    checkpoint()?;
     let body: Arc<[u8]> = snapshot_emission::emit(
         resolve_dialect(request)?,
         "json",
@@ -1539,6 +1621,7 @@ fn answer(
         generation: state.session.generation(),
         analysis_ns: u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
         notice,
+        program: Some(Arc::clone(&analysis.program)),
     })
 }
 
@@ -1802,6 +1885,12 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     if let Some(notice) = header.notice.as_deref().filter(|notice| !notice.is_empty()) {
         eprintln!("{notice}");
     }
+    if header.recovered {
+        eprintln!(
+            "solid-checker: the daemon's earlier answer differed from a fresh build and was \
+             dropped; this answer is the fresh one"
+        );
+    }
     // Past here the answer is this check's: a failed write is reported, never
     // followed by a one-shot answer on the same stdout.
     if let Err(error) = io::stdout().write_all(&output) {
@@ -1858,9 +1947,9 @@ struct PhaseClock {
 }
 
 impl PhaseClock {
-    fn new() -> Self {
+    fn new(enabled: bool) -> Self {
         Self {
-            emit: std::env::var_os("SOLID_CHECKER_TIMINGS").is_some(),
+            emit: enabled && std::env::var_os("SOLID_CHECKER_TIMINGS").is_some(),
             last: Instant::now(),
             phases: Vec::new(),
         }
@@ -1995,5 +2084,6 @@ fn spawn_and_connect(
     }
 }
 
+mod idle_shadow;
 #[cfg(test)]
 mod tests;
