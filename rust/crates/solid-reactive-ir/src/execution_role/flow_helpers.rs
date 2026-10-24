@@ -15,16 +15,32 @@ pub(super) fn primitive_callback_slot_role(
     index: usize,
     lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
+    let valid = lookup
+        .resolved_callee_call(file, call.callee)
+        .is_some_and(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Valid);
+    primitive_slot_role(
+        lookup.dialect,
+        valid,
+        lookup.primitive_at_call(file, call.span),
+        call,
+        index,
+    )
+}
+
+/// [`primitive_callback_slot_role`] from its inputs: whether the call's
+/// resolved signature is valid, and the primitive resolved at the call.
+pub(super) fn primitive_slot_role(
+    dialect: &dyn solid_dialect::Dialect,
+    valid_call: bool,
+    primitive: Option<Primitive>,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+) -> Option<ExecutionRole> {
     let argument = &call.arguments[index];
-    if argument.spread
-        || !lookup
-            .resolved_callee_call(file, call.callee)
-            .is_some_and(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Valid)
-    {
+    if argument.spread || !valid_call {
         return None;
     }
-    let primitive = lookup.primitive_at_call(file, call.span)?;
-    let dialect = lookup.dialect;
+    let primitive = primitive?;
     let semantics = dialect.callback_semantics_at(primitive, index, call.arguments.len());
     let execution = semantics.execution?;
     if semantics.requires_return_invocation
@@ -283,10 +299,10 @@ pub(super) fn jsx_value_expression(file: &solid_facts::FileFacts, value: Span) -
 /// non-function literal, or, for a component's props, an attribute
 /// forwarding such a value from the enclosing component's props. An absent
 /// member proves nothing: `Object.prototype` may carry one.
-pub(super) fn origin_member_ignores_receiver(
-    origin: &FlowOrigin<'_>,
+pub(super) fn origin_member_ignores_receiver<'a, W: FlowWorld<'a>>(
+    origin: &FlowOrigin<'a>,
     key: &str,
-    lookup: &SemanticLookup<'_>,
+    world: &W,
     depth: usize,
 ) -> bool {
     if depth == 0 {
@@ -351,7 +367,7 @@ pub(super) fn origin_member_ignores_receiver(
                     })
                     .is_some_and(|function| !function_uses_receiver(file, function));
             }
-            value_ignores_receiver(file, property.value, &FlowOrigin::Unknown, lookup, depth)
+            value_ignores_receiver(file, property.value, &FlowOrigin::Unknown, world, depth)
         }
         FlowOrigin::Element(file, element, enclosing) => {
             let Some(element) = file.ast.jsx_element_at(*element) else {
@@ -365,7 +381,7 @@ pub(super) fn origin_member_ignores_receiver(
                 let [child] = children.as_slice() else {
                     return false;
                 };
-                return value_ignores_receiver(file, *child, enclosing, lookup, depth);
+                return value_ignores_receiver(file, *child, enclosing, world, depth);
             }
             match element
                 .attributes
@@ -378,17 +394,13 @@ pub(super) fn origin_member_ignores_receiver(
                 // one or reach the built-in prototype it would otherwise be
                 // read from: the read is `undefined`, or an
                 // `Object.prototype` built-in that invokes nothing it holds.
-                None => {
-                    !lookup.member_may_be_reassigned_on_builtin(key)
-                        && !lookup.member_may_be_reassigned_on_builtin("__proto__")
-                        && !lookup.property_may_be_defined_reflectively_as(key)
-                }
+                None => world.absent_member_inert(key),
                 Some(attribute) => match attribute.value_kind {
                     solid_facts::ast::JsxAttributeValueKind::String
                     | solid_facts::ast::JsxAttributeValueKind::Boolean => true,
                     solid_facts::ast::JsxAttributeValueKind::Expression => {
                         attribute.expression.is_some_and(|value| {
-                            value_ignores_receiver(file, value, enclosing, lookup, depth)
+                            value_ignores_receiver(file, value, enclosing, world, depth)
                         })
                     }
                     _ => false,
@@ -401,11 +413,11 @@ pub(super) fn origin_member_ignores_receiver(
 /// Whether the value at `value` (in an element written in a component whose
 /// props `enclosing` describes) is one that cannot use a `this` it is called
 /// with; see [`origin_member_ignores_receiver`].
-pub(super) fn value_ignores_receiver(
-    file: &solid_facts::FileFacts,
+pub(super) fn value_ignores_receiver<'a, W: FlowWorld<'a>>(
+    file: &'a solid_facts::FileFacts,
     value: Span,
-    enclosing: &FlowOrigin<'_>,
-    lookup: &SemanticLookup<'_>,
+    enclosing: &FlowOrigin<'a>,
+    world: &W,
     depth: usize,
 ) -> bool {
     let value = jsx_value_expression(file, value);
@@ -448,7 +460,7 @@ pub(super) fn value_ignores_receiver(
         && let FlowOrigin::Element(element_file, element, _) = enclosing
         && let Some(element) = element_file.ast.jsx_element_at(*element)
         && let Some((component_file, component)) =
-            lookup.function_called_at(element_file.path.as_str(), element.name.span)
+            world.function_called_at(element_file, element.name.span)
         && component_file.path == file.path
         && component.span.contains(member.span)
         && let Some(key) = member_static_key(file, member)
@@ -462,7 +474,7 @@ pub(super) fn value_ignores_receiver(
             .reference_declaration(file.ast.peel_ts_sugar_span(member.object))
             == Some(name.span)
     {
-        return origin_member_ignores_receiver(enclosing, key, lookup, depth - 1);
+        return origin_member_ignores_receiver(enclosing, key, world, depth - 1);
     }
     file.ast.array_literals.binary_search(&value).is_ok()
         || file

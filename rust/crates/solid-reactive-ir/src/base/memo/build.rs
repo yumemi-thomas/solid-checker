@@ -161,6 +161,8 @@ pub(crate) struct BuildTables {
     census: crate::indexes::CensusTables,
     /// Tables 128 to 159: returned-callback use sites (study S5e).
     returned: crate::indexes::ReturnedTables,
+    /// Tables 96 to 127: the invocation-flow answers (study S5a).
+    flow: crate::execution_role::FlowTables,
 }
 
 impl TableSet<BuildSchema> for BuildTables {
@@ -191,6 +193,14 @@ impl BuildTables {
             RECEIVER_CLOSED => &self.receiver_closed,
             ASSIGNED_MEMBERS => &self.assigned_members,
             PROTOTYPE_OWNER_AT => &self.prototype_owner_at,
+            id if (crate::execution_role::FLOW_TABLES_FROM
+                ..crate::execution_role::FLOW_TABLES_END)
+                .contains(&id.0) =>
+            {
+                self.flow
+                    .table(id)
+                    .unwrap_or_else(|| unreachable!("memo table {id:?}"))
+            }
             id if id.0 >= crate::indexes::RETURNED_TABLES_FROM => self
                 .returned
                 .table(id)
@@ -218,6 +228,7 @@ impl BuildTables {
         tables.extend(self.project.tables());
         tables.extend(self.census.tables());
         tables.extend(self.returned.tables());
+        tables.extend(self.flow.tables());
         tables
     }
 }
@@ -279,6 +290,10 @@ impl BuildTables {
 
     pub(crate) fn returned(&self) -> &crate::indexes::ReturnedTables {
         &self.returned
+    }
+
+    pub(crate) fn flow(&self) -> &crate::execution_role::FlowTables {
+        &self.flow
     }
 }
 

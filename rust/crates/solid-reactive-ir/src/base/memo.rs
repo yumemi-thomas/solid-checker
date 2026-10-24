@@ -729,19 +729,21 @@ impl<S: Schema> Store<S> {
             keep
         });
         released.sort_unstable();
-        let mut stats = tables
-            .iter()
-            .map(|table| (table.name(), table.take_stats()))
-            .collect::<Vec<_>>();
-        for (name, table_stats) in &mut stats {
-            table_stats.reads = nodes
-                .values()
-                .filter(|node| {
-                    matches!(node.kind, NodeKind::Memo(id) if self.tables.table(id).name() == *name)
-                })
-                .map(|node| node.reads.len() as u64)
-                .sum();
+        // Recorded reads by table, in one pass over the graph.
+        let mut reads = BTreeMap::<TableId, u64>::new();
+        for node in nodes.values() {
+            if let NodeKind::Memo(id) = node.kind {
+                *reads.entry(id).or_default() += node.reads.len() as u64;
+            }
         }
+        let stats = tables
+            .iter()
+            .map(|table| {
+                let mut table_stats = table.take_stats();
+                table_stats.reads = reads.get(&table.id()).copied().unwrap_or_default();
+                (table.name(), table_stats)
+            })
+            .collect::<Vec<_>>();
         (stats, released)
     }
 

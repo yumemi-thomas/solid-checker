@@ -23,7 +23,7 @@ pub(crate) use callees::{
     standard_library_declaration_of,
 };
 pub(crate) use census::{
-    CENSUS_TABLES_FROM, CallSite, CallSitesOf, CensusTables, ComponentIdentity,
+    CENSUS_TABLES_FROM, CallPrimitives, CallSite, CallSitesOf, CensusTables, ComponentIdentity,
     FileComponentStatuses, LazyWitnessesIn, PropRenderSitesIn, ResultAccessForwardedAll,
     TagRendered,
 };
@@ -31,6 +31,7 @@ mod class_prototype;
 mod closed_members;
 mod completion;
 mod components;
+pub(crate) use components::unproven_component_status;
 mod compound;
 mod event_delivery;
 mod identity_wrappers;
