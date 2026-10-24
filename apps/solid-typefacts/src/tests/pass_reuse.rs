@@ -195,7 +195,9 @@ fn kept_passes_rerun_exactly_what_an_edit_can_change() {
         },
         Step {
             edits: vec![("f.ts", Some("export const ff = 1;\n".to_owned()))],
-            ran: 7,
+            // Only f.ts: nothing reads it (a rebuilt chain keeps every pass
+            // whose read set kept its text, exports and resolutions).
+            ran: 1,
             what: "a file entering the program (membership, a rebuilt chain)",
         },
         Step {
@@ -206,12 +208,14 @@ fn kept_passes_rerun_exactly_what_an_edit_can_change() {
                     C.replace("= 1", "= f(1)")
                 )),
             )],
-            ran: 7,
+            // c.ts and its importer e.ts; a.ts gains a reader, not an input.
+            ran: 2,
             what: "a changed import (resolution, a rebuilt chain)",
         },
         Step {
             edits: vec![("f.ts", None)],
-            ran: 6,
+            // Nothing read f.ts.
+            ran: 0,
             what: "a file leaving the program",
         },
         Step {
@@ -531,5 +535,136 @@ fn the_merged_passes_name_every_changed_symbol_answer() {
             }
         }
         previous = current;
+    }
+}
+
+/// An edit that changes imports rebuilds the program chain (tsrs cannot
+/// replace a file whose imports changed), and the kept passes are checked
+/// path by path: a pass runs again only if its read set holds a file whose
+/// text, exports or resolutions moved, or one that left the program. Each
+/// table equals a fresh project's and the sequential run's (and every reused
+/// pass is recomputed and compared, `verify`).
+#[test]
+fn import_edits_rerun_only_the_passes_that_reach_the_edit() {
+    const X: &str = "export const v = 1;\n";
+    const Y: &str = "export const v = \"s\";\n";
+    const W: &str = "import { m } from \"./mod\";\nexport const w = m;\n";
+    const U: &str = "import { v } from \"./x\";\nexport const u = v;\n";
+    let mut all = files();
+    all.extend([
+        ("x.ts", X),
+        ("y.ts", Y),
+        ("u.ts", U),
+        ("w.ts", W),
+        ("mod.ts", "export const m = 1;\n"),
+        // Outside `include`: in the program only while something imports
+        // them.
+        ("mod/index.ts", "export const m = \"index\";\n"),
+        ("lib/extra.ts", "export const extra = 5;\n"),
+    ]);
+    let ctx = Context::new();
+    let scratch = Scratch::new(&all);
+    let mut sources: BTreeMap<String, String> = all
+        .iter()
+        .filter(|(name, _)| name.ends_with(".ts") && !name.contains('/'))
+        .map(|(name, text)| ((*name).to_owned(), (*text).to_owned()))
+        .collect();
+    let mut incremental = open(&scratch, 2, true);
+    let _ = table(&mut incremental, &demands(&scratch, &sources));
+    let steps = [
+        Step {
+            edits: vec![(
+                "d.ts",
+                Some(format!(
+                    "import {{ extra }} from \"./lib/extra\";\n{}",
+                    D.replace("helper(G)", "helper(G) + extra")
+                )),
+            )],
+            // d.ts, and lib/extra.ts entering the program.
+            ran: 2,
+            what: "an import of a module new to the program",
+        },
+        Step {
+            edits: vec![("u.ts", Some(U.replace("./x", "./y")))],
+            // u.ts only: x.ts loses its reader, y.ts gains one.
+            ran: 1,
+            what: "a specifier changed to resolve elsewhere",
+        },
+        Step {
+            edits: vec![("mod.ts", None)],
+            // w.ts's text is the same, its `./mod` now resolves to
+            // mod/index.ts (entering the program): its resolutions moved.
+            ran: 2,
+            what: "a resolution moved by a deleted file, its importer's text unchanged",
+        },
+        Step {
+            edits: vec![("d.ts", Some(D.to_owned()))],
+            // d.ts only; lib/extra.ts leaves the program.
+            ran: 1,
+            what: "an import removed",
+        },
+    ];
+    let mut versions: BTreeMap<&str, u64> = BTreeMap::new();
+    let mut history: Vec<Vec<FileChange>> = Vec::new();
+    for step in &steps {
+        let mut changes = Vec::new();
+        for (name, text) in &step.edits {
+            let version = versions.entry(name).or_default();
+            *version += 1;
+            match text {
+                Some(text) => {
+                    sources.insert((*name).to_owned(), text.clone());
+                }
+                None => {
+                    sources.remove(*name);
+                }
+            }
+            changes.push(FileChange {
+                path: scratch.path(name),
+                source: text.clone().unwrap_or_default().into_bytes(),
+                deleted: text.is_none(),
+                version: *version,
+            });
+        }
+        ClosureBackend::update(&mut incremental, &ctx, &changes).unwrap();
+        assert_eq!(
+            incremental.last_update.kind,
+            Some(crate::unsafe_boundary::UpdateKind::Rebuilt),
+            "{}: the case needs a rebuilt chain",
+            step.what
+        );
+        history.push(changes);
+        let demands = demands(&scratch, &sources);
+        let kept = table(&mut incremental, &demands);
+        let stats = incremental.per_file_stats().reuse;
+        assert_eq!(stats.mismatches, 0, "{}: {stats:?}", step.what);
+        assert_eq!(stats.ran, step.ran, "{}: {stats:?}", step.what);
+        assert!(
+            stats.reused >= sources.len() - step.ran,
+            "{}: {stats:?}",
+            step.what
+        );
+        let mut fresh = open(&scratch, 1, false);
+        for changes in &history {
+            ClosureBackend::update(&mut fresh, &ctx, changes).unwrap();
+        }
+        let whole = table(&mut fresh, &demands);
+        assert!(
+            kept == whole,
+            "{}: kept passes differ from a fresh project: {:?}",
+            step.what,
+            first_line_difference(&kept, &whole)
+        );
+        let mut shared = open(&scratch, 1, false);
+        for changes in &history {
+            ClosureBackend::update(&mut shared, &ctx, changes).unwrap();
+        }
+        let legacy = table_with(&mut shared, &demands, true);
+        assert!(
+            kept == legacy,
+            "{}: kept passes differ from the shared-identity run: {:?}",
+            step.what,
+            first_line_difference(&kept, &legacy)
+        );
     }
 }

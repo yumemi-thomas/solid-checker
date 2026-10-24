@@ -291,7 +291,11 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
           SOLID_CHECKER_IR_SHADOW: "1",
           SOLID_CHECKER_IR_SHADOW_LOG: shadowLog,
           TYPEFACTS_VERIFY_SYMBOL_PATCH: "1",
-          TYPEFACTS_VERIFY_SYMBOL_PATCH_LOG: shadowLog
+          TYPEFACTS_VERIFY_SYMBOL_PATCH_LOG: shadowLog,
+          // And every reused Type Facts pass against its recomputation
+          // (apps/solid-typefacts/src/passes.rs).
+          SOLID_TYPEFACTS_PER_FILE_VERIFY_REUSE: "1",
+          SOLID_TYPEFACTS_PER_FILE_VERIFY_REUSE_LOG: shadowLog
         }
       : { SOLID_CHECKER_IR_SHADOW: "0" })
   };

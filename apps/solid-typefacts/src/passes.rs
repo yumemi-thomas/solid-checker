@@ -45,12 +45,25 @@
 //!
 //! [`Reuse`] keeps the last output of every path with its read set (a bit
 //! set over the program's paths). At every table it compares each path's
-//! `(Text, Exports)` with the previous table's, and drops every entry whose
-//! read set holds a changed path. Options or `Ambient` changing drops every
-//! entry; so does a program chain that was rebuilt (the project bumps
-//! [`Reuse::program_rebuilt`]) and any change of membership or resolution
-//! (the graph's digest). [`ENV_VERIFY_REUSE`] recomputes every reused pass and
-//! compares it with what reuse would serve.
+//! `(Text, Exports, Resolutions)` with the previous table's, by path, and
+//! drops every entry whose read set holds a changed path, or a path that
+//! left the program. `Resolutions(path)` is every module and type-reference
+//! resolution the program recorded for the file (specifier, mode, resolved
+//! name and package, resolved or not) and the program files they land on.
+//! Options or `Ambient` changing drops every entry.
+//!
+//! This holds across a rebuilt program chain (an edit that changes imports,
+//! a deleted or new file, the rebase policy): a kept entry's read set is the
+//! closure of its file over the edges of its members, and every member kept
+//! its resolutions, so the new program's closure is the same set of paths;
+//! a member's text, exports and resolutions are the inputs the pass read
+//! from it; and the global contributors (every checker's merged globals and
+//! augmentations) are `Ambient`, compared in program order. A file the edit
+//! newly imports enters only the read sets of the files that now reach it,
+//! each of which reaches the edited file (whose text moved). The entry's
+//! read set is computed again over the new graph and must be the same paths
+//! (fail closed otherwise). [`ENV_VERIFY_REUSE`] recomputes every reused pass
+//! and compares it with what reuse would serve.
 //!
 //! # The pool
 //!
@@ -91,6 +104,9 @@ pub const ENV_WORKERS: &str = "SOLID_TYPEFACTS_PER_FILE_WORKERS";
 /// A difference is counted and reported on stderr, the fresh output is
 /// served (fail closed), and a test build panics.
 pub const ENV_VERIFY_REUSE: &str = "SOLID_TYPEFACTS_PER_FILE_VERIFY_REUSE";
+
+/// With [`ENV_VERIFY_REUSE`]: a file every reuse mismatch is appended to.
+pub const ENV_VERIFY_REUSE_LOG: &str = "SOLID_TYPEFACTS_PER_FILE_VERIFY_REUSE_LOG";
 
 /// `1`: no pass output is reused (every pass runs every table).
 pub const ENV_NO_REUSE: &str = "SOLID_TYPEFACTS_PER_FILE_NO_REUSE";
@@ -403,6 +419,9 @@ pub(crate) struct Graph {
     edges: Vec<Vec<u32>>,
     /// Membership and every edge, so a change of either is seen.
     digest: Digest,
+    /// Per path, `Resolutions(path)`: every resolution recorded for the file
+    /// and the paths its edges land on.
+    resolutions: Vec<Digest>,
 }
 
 impl Graph {
@@ -474,7 +493,86 @@ impl Graph {
             ids,
             edges,
             digest: hasher.finalize().into(),
+            resolutions: Vec::new(),
         }
+    }
+
+    /// Fills `Resolutions(path)` for every path: every resolution record of
+    /// the file, spelled out and sorted (the program iterates them in hash
+    /// order), and the paths its edges land on.
+    fn compute_resolutions(&mut self, program: &Program) {
+        let by_key: HashMap<&str, u32> = program
+            .source_files()
+            .iter()
+            .filter_map(|file| {
+                self.ids
+                    .get(&clean(file.file_name()))
+                    .map(|id| (file.path().as_str(), *id))
+            })
+            .collect();
+        let mut records: Vec<Vec<String>> = vec![Vec::new(); self.paths.len()];
+        program.for_each_resolved_module(
+            &mut |resolution, name, mode, from| {
+                if let Some(from) = by_key.get(from.as_str()) {
+                    records[*from as usize].push(format!(
+                        "m\0{name}\0{mode:?}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{:?}\0{}",
+                        resolution.resolved_file_name,
+                        resolution.original_path,
+                        resolution.extension,
+                        resolution.resolved_using_ts_extension,
+                        resolution.resolved_using_extra_extensions,
+                        resolution.is_external_library_import,
+                        resolution.is_custom_resolution,
+                        resolution.package_id,
+                        resolution.alternate_result,
+                    ));
+                }
+            },
+            None,
+        );
+        program.for_each_resolved_type_reference_directive(
+            &mut |resolution, name, mode, from| {
+                if let Some(from) = by_key.get(from.as_str()) {
+                    records[*from as usize].push(format!(
+                        "t\0{name}\0{mode:?}\0{}\0{}\0{}\0{}\0{:?}",
+                        resolution.primary,
+                        resolution.resolved_file_name,
+                        resolution.original_path,
+                        resolution.is_external_library_import,
+                        resolution.package_id,
+                    ));
+                }
+            },
+            None,
+        );
+        self.resolutions = records
+            .into_iter()
+            .zip(&self.edges)
+            .map(|(mut file, edges)| {
+                file.sort_unstable();
+                let mut resolved = Sha256::new();
+                for record in &file {
+                    resolved.update(record.as_bytes());
+                    resolved.update([0xff]);
+                }
+                // By path, not by index: indexes move with membership.
+                for to in edges {
+                    resolved.update(self.paths[*to as usize].as_bytes());
+                    resolved.update([0]);
+                }
+                resolved.finalize().into()
+            })
+            .collect();
+    }
+
+    /// The paths of `bits`, over this graph.
+    fn paths_of(&self, bits: &Bits) -> Vec<&str> {
+        self.paths
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| bit_get(bits, u32::try_from(*index).unwrap_or(u32::MAX)))
+            .map(|(_, path)| path.as_str())
+            .collect()
     }
 
     /// `seeds` and every file they reach, added to `bits`.
@@ -546,16 +644,17 @@ pub struct ReuseStats {
 pub(crate) struct Reuse {
     enabled: bool,
     pub(crate) verify: bool,
-    /// Bumped at every program change that did not reuse the chain's parse
-    /// (a rebuild, a rebase): every kept output is dropped.
-    chain: u64,
-    graph_chain: u64,
     graph: Option<Graph>,
+    /// Whether a program change since the last table did not reuse the
+    /// chain's parse (a rebuild, a rebase), so resolutions may have moved;
+    /// a parse-reusing update keeps every file's resolutions (tsrs replaces
+    /// a file in place only with the same imports).
+    rebuilt: bool,
     options: Option<Digest>,
     ambient: Option<Digest>,
     ambient_reads: Bits,
-    /// `(Text, Exports)` per path id at the previous table.
-    snapshot: Vec<(Option<Digest>, Digest)>,
+    /// `(Text, Exports, Resolutions)` per path at the previous table.
+    snapshot: HashMap<String, PathInputs>,
     entries: HashMap<String, Entry>,
     /// Each file's half of the census, by its text.
     census_files: HashMap<String, (Digest, Arc<HashSet<String>>)>,
@@ -568,13 +667,12 @@ impl Default for Reuse {
         Self {
             enabled: !env_is_one(ENV_NO_REUSE),
             verify: env_is_one(ENV_VERIFY_REUSE),
-            chain: 0,
-            graph_chain: 0,
             graph: None,
+            rebuilt: true,
             options: None,
             ambient: None,
             ambient_reads: Vec::new(),
-            snapshot: Vec::new(),
+            snapshot: HashMap::new(),
             entries: HashMap::new(),
             census_files: HashMap::new(),
             census: None,
@@ -583,10 +681,15 @@ impl Default for Reuse {
     }
 }
 
+/// What a pass can have read from one path: `Text`, `Exports`,
+/// `Resolutions`.
+type PathInputs = (Option<Digest>, Digest, Digest);
+
 impl Reuse {
-    /// The program chain was rebuilt (not a parse-reusing update).
+    /// The program chain was rebuilt (not a parse-reusing update): the next
+    /// table computes every file's resolutions again.
     pub(crate) fn program_rebuilt(&mut self) {
-        self.chain += 1;
+        self.rebuilt = true;
     }
 
     /// Drops every kept output.
@@ -601,7 +704,8 @@ impl Reuse {
         self.verify = verify;
     }
 
-    /// Starts a table: drops every kept output whose read set changed.
+    /// Starts a table: drops every kept output whose read set changed (see
+    /// the module docs), and moves the rest onto the current program's graph.
     pub(crate) fn refresh(
         &mut self,
         program: &Program,
@@ -610,17 +714,16 @@ impl Reuse {
     ) {
         self.stats = ReuseStats::default();
         self.census = None;
-        let graph = Graph::build(program);
-        let same_graph = self.graph_chain == self.chain
-            && self
-                .graph
-                .as_ref()
-                .is_some_and(|held| held.digest == graph.digest);
-        if !same_graph {
-            self.clear();
-            self.snapshot.clear();
+        let mut graph = Graph::build(program);
+        match &self.graph {
+            // A parse-reusing update kept every resolution: the same graph
+            // carries the same records.
+            Some(old) if !self.rebuilt && old.digest == graph.digest => {
+                graph.resolutions.clone_from(&old.resolutions);
+            }
+            _ => graph.compute_resolutions(program),
         }
-        self.graph_chain = self.chain;
+        self.rebuilt = false;
         let options = inputs.options(program);
         let ambient = inputs.ambient(program);
         if self.options != Some(options) || self.ambient != Some(ambient) {
@@ -628,27 +731,33 @@ impl Reuse {
         }
         self.options = Some(options);
         self.ambient = Some(ambient);
-        let mut snapshot = Vec::with_capacity(graph.paths.len());
-        for path in &graph.paths {
-            snapshot.push((
-                inputs.text_at(program, path),
-                inputs.exports(exported, path),
-            ));
-        }
-        let mut changed = bits_new(graph.paths.len());
+        let snapshot: HashMap<String, PathInputs> = graph
+            .paths
+            .iter()
+            .zip(&graph.resolutions)
+            .map(|(path, resolutions)| {
+                (
+                    path.clone(),
+                    (
+                        inputs.text_at(program, path),
+                        inputs.exports(exported, path),
+                        *resolutions,
+                    ),
+                )
+            })
+            .collect();
         let mut changed_count = 0;
-        for (index, now) in snapshot.iter().enumerate() {
-            if self.snapshot.get(index) != Some(now) {
-                bit_set(&mut changed, u32::try_from(index).unwrap_or(u32::MAX));
+        for (path, now) in &snapshot {
+            if self.snapshot.get(path) != Some(now) {
                 changed_count += 1;
             }
         }
+        changed_count += self
+            .snapshot
+            .keys()
+            .filter(|path| !snapshot.contains_key(*path))
+            .count();
         self.stats.changed_paths = changed_count;
-        let before = self.entries.len();
-        self.entries
-            .retain(|_, entry| !bits_intersect(&entry.reads, &changed));
-        self.stats.invalidated = before - self.entries.len();
-        self.snapshot = snapshot;
         let mut ambient_reads = bits_new(graph.paths.len());
         let ambient_files: Vec<u32> = program
             .source_files()
@@ -657,6 +766,41 @@ impl Reuse {
             .filter_map(|file| graph.ids.get(&clean(file.file_name())).copied())
             .collect();
         graph.close(ambient_files, &mut ambient_reads);
+        let before = self.entries.len();
+        match self.graph.take() {
+            Some(old) if !self.entries.is_empty() => {
+                // A path changed when its inputs moved or it left the
+                // program, in the old graph's index space.
+                let mut changed = bits_new(old.paths.len());
+                for (index, path) in old.paths.iter().enumerate() {
+                    if snapshot.get(path) != self.snapshot.get(path) {
+                        bit_set(&mut changed, u32::try_from(index).unwrap_or(u32::MAX));
+                    }
+                }
+                self.entries
+                    .retain(|_, entry| !bits_intersect(&entry.reads, &changed));
+                if old.digest != graph.digest {
+                    // Same members, same edges: the closure over the new
+                    // graph is the same set of paths. Checked, not assumed.
+                    self.entries.retain(|path, entry| {
+                        let Some(id) = graph.ids.get(path).copied() else {
+                            return false;
+                        };
+                        let mut reads = ambient_reads.clone();
+                        graph.close([id], &mut reads);
+                        if graph.paths_of(&reads) != old.paths_of(&entry.reads) {
+                            return false;
+                        }
+                        entry.reads = reads;
+                        true
+                    });
+                }
+            }
+            _ => self.entries.clear(),
+        }
+        self.stats.invalidated = before - self.entries.len();
+        self.stats.cleared = self.stats.cleared || (before > 0 && self.entries.is_empty());
+        self.snapshot = snapshot;
         self.ambient_reads = ambient_reads;
         self.graph = Some(graph);
         if !self.enabled {

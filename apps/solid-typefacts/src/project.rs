@@ -948,9 +948,10 @@ impl Project {
         self.inputs
             .program_changed(reused.then_some(incremental_path.as_str()));
         if !reused {
+            // A rebuilt chain read the file system again. Kept passes are
+            // checked path by path against the new program's text, exports
+            // and resolutions at the next table (`passes::Reuse::refresh`).
             self.ids.forget_runtime_paths();
-            // Per-file passes (instant-edits P3): a rebuilt chain re-read
-            // every file and resolution; no kept pass output survives it.
             self.per_file.reuse.program_rebuilt();
         }
         self.fs = candidate_fs;

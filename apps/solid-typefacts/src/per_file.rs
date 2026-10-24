@@ -90,10 +90,22 @@ impl Row {
 }
 
 /// A reused pass differed from its recomputation
-/// (`passes::ENV_VERIFY_REUSE`): reported, and the fresh output is served; a
-/// test build panics.
+/// (`passes::ENV_VERIFY_REUSE`): reported on stderr and appended to
+/// [`crate::passes::ENV_VERIFY_REUSE_LOG`] when set (the IR edit fuzz fails
+/// on that log), and the fresh output is served; a test build panics.
 fn reuse_mismatch(path: &str) {
-    eprintln!("per-file reuse mismatch: {path} (served fresh)");
+    let message = format!("per-file reuse mismatch: {path} (served fresh)");
+    eprintln!("{message}");
+    if let Some(log) = std::env::var_os(crate::passes::ENV_VERIFY_REUSE_LOG) {
+        use std::io::Write as _;
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log)
+        {
+            let _ = writeln!(file, "{message}");
+        }
+    }
     if cfg!(test) {
         panic!("per-file reuse mismatch: {path}");
     }
