@@ -372,6 +372,7 @@ fn incremental_builder_reuses_only_the_same_coherent_generation() {
     let (reused, reused_timings) = incremental.build(&first, &solid_dialect::Solid2).unwrap();
     let mut next_facts = empty_project(2);
     next_facts.typescript_changes = Some(solid_facts::TypeScriptChanges {
+        full: false,
         unchanged: true,
         ..solid_facts::TypeScriptChanges::default()
     });
@@ -402,6 +403,7 @@ fn idle_retention_preserves_results_and_rebuilds_released_indexes() {
 
     let mut next_facts = empty_project(2);
     next_facts.typescript_changes = Some(solid_facts::TypeScriptChanges {
+        full: false,
         unchanged: true,
         ..solid_facts::TypeScriptChanges::default()
     });
@@ -567,6 +569,7 @@ fn exact_index_patch_replaces_local_alias_ids_without_retargeting_the_graph() {
         .collect::<HashMap<_, _>>();
     let mut patched = typescript_index_cache(&old);
     let changes = solid_facts::TypeScriptChanges {
+        full: false,
         unchanged: false,
         entity_paths: vec!["fixture.ts".into()],
         symbol_ids: vec!["new-alias".into(), "old-alias".into(), "root".into()],
@@ -582,6 +585,23 @@ fn exact_index_patch_replaces_local_alias_ids_without_retargeting_the_graph() {
             &changes
         )
         .is_some()
+    );
+    // The same change lists from a full transition (no base) are no delta:
+    // they name only the new table's paths, so the patcher rebuilds.
+    let full = solid_facts::TypeScriptChanges {
+        full: true,
+        ..changes.clone()
+    };
+    assert!(
+        patch_typescript_indexes(
+            &mut typescript_index_cache(&old),
+            &current,
+            &symbols_by_id,
+            &solid_dialect::Solid2,
+            &full
+        )
+        .is_none(),
+        "a full replacement must not be patched as a delta"
     );
     let fresh = typescript_index_cache(&current);
     assert_eq!(patched.symbol_alias_targets, fresh.symbol_alias_targets);
@@ -678,6 +698,7 @@ fn exact_index_patch_adds_and_removes_an_alias_like_a_rebuild() {
             .collect::<HashMap<_, _>>();
         let mut patched = typescript_index_cache(old);
         let changes = solid_facts::TypeScriptChanges {
+            full: false,
             unchanged: false,
             entity_paths: vec!["fixture.ts".into()],
             symbol_ids: vec!["import".into()],
@@ -745,6 +766,7 @@ fn exact_index_patch_rejects_an_alias_chain_through_a_new_alias() {
         .collect::<HashMap<_, _>>();
     let mut patched = typescript_index_cache(&old);
     let changes = solid_facts::TypeScriptChanges {
+        full: false,
         unchanged: false,
         entity_paths: Vec::new(),
         symbol_ids: vec!["middle".into()],
@@ -791,6 +813,7 @@ fn exact_index_patch_does_not_treat_references_as_source_discovery_semantics() {
         .collect::<HashMap<_, _>>();
     let mut patched = typescript_index_cache(&old);
     let changes = solid_facts::TypeScriptChanges {
+        full: false,
         unchanged: false,
         entity_paths: Vec::new(),
         symbol_ids: vec!["root".into()],
@@ -841,6 +864,7 @@ fn exact_index_patch_does_not_treat_declaration_offsets_as_source_semantics() {
         .collect::<HashMap<_, _>>();
     let mut patched = typescript_index_cache(&old);
     let changes = solid_facts::TypeScriptChanges {
+        full: false,
         unchanged: false,
         entity_paths: Vec::new(),
         symbol_ids: vec!["root".into()],
@@ -896,6 +920,7 @@ fn exact_index_patch_does_not_invalidate_when_a_runtime_representative_moves_fil
         .collect::<HashMap<_, _>>();
     let mut patched = typescript_index_cache(&old);
     let changes = solid_facts::TypeScriptChanges {
+        full: false,
         unchanged: false,
         entity_paths: Vec::new(),
         symbol_ids: vec!["root".into()],
@@ -970,6 +995,7 @@ fn exact_index_patch_invalidates_a_root_when_an_alias_changes_its_source_declara
         .collect::<HashMap<_, _>>();
     let mut patched = typescript_index_cache(&old);
     let changes = solid_facts::TypeScriptChanges {
+        full: false,
         unchanged: false,
         entity_paths: Vec::new(),
         symbol_ids: vec!["new-alias".into(), "old-alias".into()],
@@ -1038,6 +1064,7 @@ fn exact_index_patch_rejects_alias_retargeting() {
         .collect::<HashMap<_, _>>();
     let mut patched = typescript_index_cache(&old);
     let changes = solid_facts::TypeScriptChanges {
+        full: false,
         unchanged: false,
         entity_paths: Vec::new(),
         symbol_ids: vec!["alias".into()],

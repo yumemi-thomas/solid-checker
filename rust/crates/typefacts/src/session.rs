@@ -211,6 +211,11 @@ pub struct UpdateTimings {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct TableChanges {
     pub unchanged: bool,
+    /// The table was replaced whole (a full transition: no base, e.g. the
+    /// session's first table or one after a producer restart). The path
+    /// lists then name the new table's paths only, not the ones it dropped,
+    /// so no consumer may treat them as a delta.
+    pub full: bool,
     pub entity_paths: Vec<String>,
     pub symbol_ids: Vec<String>,
     pub file_paths: Vec<String>,
@@ -2276,6 +2281,7 @@ fn table_changes(transition: &WireTableTransition) -> TableChanges {
         && file_paths.is_empty();
     TableChanges {
         unchanged,
+        full: false,
         entity_paths,
         symbol_ids,
         file_paths,
@@ -2316,6 +2322,7 @@ fn table_changes_against(table: &FactTable, transition: &WireTableTransition) ->
     let unchanged = entity_paths.is_empty() && symbol_ids.is_empty() && file_paths.is_empty();
     TableChanges {
         unchanged,
+        full: false,
         entity_paths,
         symbol_ids,
         file_paths,
@@ -2378,7 +2385,9 @@ fn apply_table_transition(
 }
 
 fn materialize_full_transition(transition: WireTableTransition) -> (FactTable, TableChanges) {
-    let changes = table_changes(&transition);
+    let mut changes = table_changes(&transition);
+    changes.full = true;
+    changes.unchanged = false;
     (FactTable::materialize_full(transition), changes)
 }
 

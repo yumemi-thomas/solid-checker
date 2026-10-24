@@ -454,6 +454,9 @@ impl<'de> Deserialize<'de> for TypeScriptTable {
 #[serde(rename_all = "camelCase")]
 pub struct TypeScriptChanges {
     pub unchanged: bool,
+    /// A whole-table replacement: the path lists name only the new table's
+    /// paths, so they are no delta (see `typefacts::session::TableChanges`).
+    pub full: bool,
     pub entity_paths: Vec<String>,
     pub symbol_ids: Vec<String>,
     pub file_paths: Vec<String>,

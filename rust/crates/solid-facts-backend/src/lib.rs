@@ -411,15 +411,20 @@ impl TypeFactsSession {
                     client_close_symbols: timings.client_close_symbols,
                     client_closure_patched: timings.client_closure_patched,
                 });
-        self.last_table_changes =
-            self.session
-                .take_last_table_changes()
-                .map(|changes| TypeScriptChanges {
-                    unchanged: changes.unchanged,
-                    entity_paths: changes.entity_paths,
-                    symbol_ids: changes.symbol_ids,
-                    file_paths: changes.file_paths,
-                });
+        // A full transition's lists name only the new table's paths, not the
+        // ones it dropped: it reaches the IR as no change set at all, which
+        // every consumer reads as "anything may have changed".
+        self.last_table_changes = self
+            .session
+            .take_last_table_changes()
+            .filter(|changes| !changes.full)
+            .map(|changes| TypeScriptChanges {
+                unchanged: changes.unchanged,
+                full: changes.full,
+                entity_paths: changes.entity_paths,
+                symbol_ids: changes.symbol_ids,
+                file_paths: changes.file_paths,
+            });
     }
 }
 

@@ -1105,6 +1105,7 @@ fn project_memos_are_reused_until_the_program_moves() {
     // moved, so nothing runs.
     let mut same = project_over(source, entities());
     same.typescript_changes = Some(solid_facts::TypeScriptChanges {
+        full: false,
         unchanged: true,
         ..Default::default()
     });
@@ -1129,6 +1130,7 @@ fn project_memos_are_reused_until_the_program_moves() {
     let edited_source = source.replace("label = \"x\"", "label = \"y\"");
     let mut edited = project_over(&edited_source, entities());
     edited.typescript_changes = Some(solid_facts::TypeScriptChanges {
+        full: false,
         unchanged: true,
         ..Default::default()
     });

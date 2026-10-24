@@ -231,6 +231,7 @@ fn reference_transition_replaces_only_the_named_paths_run() {
     assert_eq!(
         changes,
         TableChanges {
+            full: false,
             unchanged: false,
             entity_paths: Vec::new(),
             symbol_ids: vec!["shared".into()],

@@ -255,6 +255,11 @@ pub(super) fn patch_typescript_indexes(
 ) -> Option<(Duration, Duration)> {
     // An empty non-reuse change set is the sidecar's fail-closed description
     // of a full table replacement, so only named deltas are patchable.
+    // A full replacement names only the new table's paths, not the ones it
+    // dropped: rebuild rather than patch.
+    if changes.full {
+        return None;
+    }
     if changes.unchanged
         || changes.entity_paths.is_empty()
             && changes.symbol_ids.is_empty()
