@@ -805,6 +805,7 @@ fn discover_summary_graph_nodes<'a, 'c>(
                 && cache.get(file.path.as_str()).is_some_and(|cached| {
                     cached.proof.holds(*lookup)
                         && super::transport_reads::hold_accessors(&cached.accessor_reads, accessors)
+                        && super::graph::graph_callee_reads_hold(file, &cached.callee_reads, lookup)
                         && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                             || same_compiler_semantics(&cached.compiler, &file.compiler))
                 }))
@@ -828,6 +829,7 @@ fn discover_summary_graph_nodes<'a, 'c>(
                     compiler: file.compiler.clone(),
                     proof: crate::base::reads::ReadProof::pending(reads),
                     accessor_reads: Vec::new(),
+                    callee_reads: Vec::new(),
                 },
             );
             computed.push(Some(file_nodes));
@@ -941,17 +943,19 @@ fn merge_graph_contributions(
                 (!graph_node_reused_paths.contains(file.path.as_str())).then(|| {
                     crate::base::reads::record(|| {
                         super::transport_reads::record(|| {
-                            discover_interprocedural_graph(
-                                file,
-                                nodes,
-                                nodes_by_path,
-                                InterproceduralGraphSymbols {
-                                    entities,
-                                    names: symbol_names,
-                                },
-                                lookup,
-                                accessors,
-                            )
+                            super::graph::record_graph_callee_reads(|| {
+                                discover_interprocedural_graph(
+                                    file,
+                                    nodes,
+                                    nodes_by_path,
+                                    InterproceduralGraphSymbols {
+                                        entities,
+                                        names: symbol_names,
+                                    },
+                                    lookup,
+                                    accessors,
+                                )
+                            })
                         })
                     })
                 })
@@ -965,7 +969,7 @@ fn merge_graph_contributions(
                     continue;
                 }
                 graph_recomputed_files += 1;
-                let ((contribution, accessor_reads), mut reads) =
+                let (((contribution, callee_reads), accessor_reads), mut reads) =
                     contribution.expect("recomputed graph path has a fresh contribution");
                 graph.merge(file.path.as_str(), &contribution);
                 // The nodes' reads (this build's) and the contribution's.
@@ -985,6 +989,7 @@ fn merge_graph_contributions(
                         compiler: file.compiler.clone(),
                         proof: crate::base::reads::ReadProof::new(reads, *lookup),
                         accessor_reads,
+                        callee_reads,
                     },
                 );
             }
