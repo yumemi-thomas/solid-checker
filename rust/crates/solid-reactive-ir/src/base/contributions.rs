@@ -75,6 +75,15 @@ pub(crate) enum ModuleKey {
     Opaque,
 }
 
+impl ModuleKey {
+    pub(crate) fn specifier(&self) -> Option<&str> {
+        match self {
+            Self::Specifier(specifier) => Some(specifier),
+            Self::Opaque => None,
+        }
+    }
+}
+
 /// One runtime module edge of a file: what loads or re-exports a module.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum ModuleEdge {

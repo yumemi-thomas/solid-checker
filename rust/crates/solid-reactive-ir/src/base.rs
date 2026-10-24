@@ -213,6 +213,8 @@ macro_rules! base_indexes {
 
 base_indexes! {
     read: {
+        /// Module edges by specifier.
+        modules: ModuleKey => ModuleEdge = contributions::modules;
         /// Member reads, writes and assignments by name.
         members: MemberName => MemberUse = contributions::members;
         /// Module hazards and module-level flags.
@@ -221,8 +223,6 @@ base_indexes! {
         definers: DefinerKey => () = contributions::definers;
     }
     unread: {
-        /// Module edges by specifier.
-        modules: ModuleKey => ModuleEdge = contributions::modules;
         /// References by symbol.
         references: Arc<str> => Span = contributions::references;
         /// Calls and JSX elements by the symbol of their callee or tag.

@@ -17,7 +17,7 @@
 use crate::{HashMap, HashSet};
 use std::cell::{OnceCell, RefCell};
 
-use solid_facts::{FileFacts, ProjectFacts, core::Span};
+use solid_facts::{FileFacts, core::Span};
 use typefacts::Location;
 
 use crate::StaticDefect;
@@ -42,7 +42,6 @@ struct ShowChild {
 /// A helper rendered through JSX, handed out as a value, or with no binding to
 /// enumerate keeps the obligation.
 pub(crate) fn discharge_closed_program_export_dispatch(
-    facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
     aliases: &HashMap<SymbolId, SymbolId>,
@@ -68,11 +67,6 @@ pub(crate) fn discharge_closed_program_export_dispatch(
         return;
     }
     let graph = CallGraph {
-        files_by_path: facts
-            .files
-            .iter()
-            .map(|file| (file.path.as_str(), file))
-            .collect(),
         lookup,
         entities,
         aliases,
@@ -168,12 +162,7 @@ pub(crate) fn namespace_hand_outs(
     if !lookup.program_closed {
         return hand_outs;
     }
-    let files = lookup.files();
     let graph = CallGraph {
-        files_by_path: files
-            .iter()
-            .map(|file| (file.path.as_str(), file))
-            .collect(),
         lookup,
         entities: lookup.entities(),
         aliases,
@@ -183,36 +172,27 @@ pub(crate) fn namespace_hand_outs(
         attested_project_texts: RefCell::new(None),
         may_name_unresolved: false,
     };
-    for (index, file) in files.iter().enumerate() {
-        if !file.ast.exports.is_empty() && graph.module_namespace_escapes(file.path.as_str()) {
+    let uses = lookup.slot_entries(lookup.base_members());
+    let flags = lookup.slot_entries(lookup.base_hazards());
+    for (index, ((file, uses), (_, flags))) in uses.zip(flags).enumerate() {
+        if flags
+            .iter()
+            .any(|(hazard, _)| *hazard == crate::base::Hazard::Export)
+            && graph.module_namespace_escapes(file.path.as_str())
+        {
             hand_outs.unnamed.insert(file.path.to_string());
         }
         for named in graph.load_members()[index].iter().flatten() {
             hand_outs.members.extend(named.iter().cloned());
         }
         // The member a call invokes is a call, not a hand-out; every other read
-        // of a static member in a runtime position hands its value out.
-        let callees = file
-            .ast
-            .calls
-            .iter()
-            .map(|call| file.ast.peel_ts_sugar_span(call.callee))
-            .collect::<HashSet<_>>();
-        for member in &file.ast.members {
-            if file
-                .ast
-                .computed_members
-                .binary_search(&member.span)
-                .is_ok()
-                || callees.contains(&member.span)
-                || file
-                    .ast
-                    .type_queries
-                    .iter()
-                    .any(|query| query.contains(member.span))
-            {
+        // of a static member in a runtime position hands its value out
+        // ([`crate::base::MemberRole::ValueRead`]).
+        for (_, used) in uses {
+            if used.role != crate::base::MemberRole::ValueRead {
                 continue;
             }
+            let member = &file.ast.members[used.ordinal as usize];
             let Some(symbol) = lookup.entity_symbol(file, member.property) else {
                 continue;
             };
@@ -227,7 +207,6 @@ pub(crate) fn namespace_hand_outs(
 }
 
 struct CallGraph<'a, 'b> {
-    files_by_path: HashMap<&'a str, &'a FileFacts>,
     lookup: &'a SemanticLookup<'b>,
     entities: &'a EntitySymbols,
     aliases: &'a HashMap<SymbolId, SymbolId>,
@@ -398,50 +377,50 @@ impl<'a> CallGraph<'a, '_> {
                 }),
         };
         let load_members = self.load_members();
-        for (index, file) in self.lookup.files().iter().enumerate() {
-            let namespaces = file
-                .ast
-                .imports
-                .iter()
-                .filter(|import| !import.type_only)
-                .flat_map(|import| import.bindings.iter().map(move |binding| (import, binding)))
-                .filter(|(_, binding)| {
-                    !binding.type_only && binding.kind == solid_facts::ast::ImportKind::Namespace
-                })
-                .filter(|(_, binding)| !namespace_used_by_static_members(file, binding.local.span));
-            for (import, binding) in namespaces {
-                if names(
-                    file,
-                    binding.local.span,
-                    Some((import.span, import.module.as_str())),
-                    walk,
-                ) {
-                    return true;
+        let modules = self.lookup.base_modules();
+        for (index, (file, edges)) in self.lookup.slot_entries(modules).enumerate() {
+            use crate::base::ModuleEdge;
+            for (module, edge) in edges {
+                let ModuleEdge::Import { span, escaping, .. } = edge else {
+                    continue;
+                };
+                let module = module.specifier().expect("an import names its module");
+                for local in escaping {
+                    if names(file, *local, Some((*span, module)), walk) {
+                        return true;
+                    }
                 }
             }
-            for export in &file.ast.exports {
-                if export.type_only {
-                    continue;
-                }
-                if let Some(binding) = &export.namespace_binding
+            for (module, edge) in edges {
+                if let ModuleEdge::Export {
+                    span,
+                    namespace_binding: Some(binding),
+                    ..
+                } = edge
                     && names(
                         file,
-                        binding.span,
-                        export.module.as_deref().map(|module| (export.span, module)),
+                        *binding,
+                        module.specifier().map(|module| (*span, module)),
                         walk,
                     )
                 {
                     return true;
                 }
             }
-            for import in &file.ast.import_equals {
-                if !import.type_only
-                    && (import.exported
-                        || !namespace_used_by_static_members(file, import.local.span))
+            for (module, edge) in edges {
+                if let ModuleEdge::ImportEquals {
+                    span,
+                    local,
+                    escapes: true,
+                    ..
+                } = edge
                     && names(
                         file,
-                        import.local.span,
-                        Some((import.span, import.module.as_str())),
+                        *local,
+                        Some((
+                            *span,
+                            module.specifier().expect("an `import =` names its module"),
+                        )),
                         walk,
                     )
                 {
@@ -450,13 +429,20 @@ impl<'a> CallGraph<'a, '_> {
             }
             // A load whose read is named hands out only the names it reads, so it
             // escapes nothing (ADR 0347, amendment); every other load may hand out the lot.
-            for (load, named) in file.ast.module_loads.iter().zip(&load_members[index]) {
-                if named.is_none()
-                    && load
-                        .specifier
-                        .as_deref()
+            for (module, edge) in edges {
+                let ModuleEdge::Load {
+                    ordinal,
+                    specifier_span,
+                    ..
+                } = edge
+                else {
+                    continue;
+                };
+                if load_members[index][*ordinal as usize].is_none()
+                    && module
+                        .specifier()
                         .map_or(self.may_name_unresolved, |specifier| {
-                            self.specifier_reaches(file, load.specifier_span, specifier, walk)
+                            self.specifier_reaches(file, *specifier_span, specifier, walk)
                         })
                 {
                     return true;
@@ -470,13 +456,19 @@ impl<'a> CallGraph<'a, '_> {
     fn load_members(&self) -> &[Vec<LoadMembers>] {
         self.load_members.get_or_init(|| {
             self.lookup
-                .files()
-                .iter()
-                .map(|file| {
-                    file.ast
-                        .module_loads
+                .slot_entries(self.lookup.base_modules())
+                .map(|(file, edges)| {
+                    edges
                         .iter()
-                        .map(|load| self.named_load_members(file, load))
+                        .filter_map(|(_, edge)| match edge {
+                            crate::base::ModuleEdge::Load { ordinal, .. } => {
+                                Some(self.named_load_members(
+                                    file,
+                                    &file.ast.module_loads[*ordinal as usize],
+                                ))
+                            }
+                            _ => None,
+                        })
                         .collect()
                 })
                 .collect()
@@ -596,15 +588,11 @@ impl<'a> CallGraph<'a, '_> {
                 .iter()
                 .any(|target| self.module_exposes(target, walk));
         }
-        let files = self.lookup.files();
-        solid_facts::resolve_relative_module_path(
-            from.path.as_str(),
-            specifier,
-            files.iter().map(|file| file.path.as_str()),
-        )
-        .map_or(self.may_name_unresolved, |resolved| {
-            self.module_exposes(resolved, walk)
-        })
+        self.lookup
+            .relative_module_path(from.path.as_str(), specifier)
+            .map_or(self.may_name_unresolved, |resolved| {
+                self.module_exposes(resolved, walk)
+            })
     }
 
     /// Whether `callee` is Solid's `lazy` (ADR 0347, amendment): a named import of `lazy`
@@ -714,12 +702,9 @@ impl<'a> CallGraph<'a, '_> {
                 row.included_path.to_string()
             }
         } else if specifier.starts_with('.') {
-            solid_facts::resolve_relative_module_path(
-                from.path.as_str(),
-                specifier,
-                self.lookup.files().iter().map(|file| file.path.as_str()),
-            )?
-            .to_string()
+            self.lookup
+                .relative_module_path(from.path.as_str(), specifier)?
+                .to_string()
         } else {
             return None;
         };
@@ -1996,7 +1981,7 @@ impl<'a> CallGraph<'a, '_> {
     }
 
     fn file(&self, path: &str) -> Option<&'a FileFacts> {
-        self.files_by_path.get(path).copied()
+        self.lookup.file_by_path(path)
     }
 }
 

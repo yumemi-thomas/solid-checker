@@ -23,8 +23,8 @@ export const FILE_BUDGETS = {
   "CLAUDE.md": 1_000,
   // Raised for ADR 0380's latent-key item.
   "docs/open-work.md": 26_700,
-  // Raised for ADR 0378: the file stood 2 bytes under 113_200. Again for ADR 0380.
-  "docs/decisions.md": 115_600,
+  // Raised for ADR 0378: the file stood 2 bytes under 113_200. Again for ADRs 0380 and 0381.
+  "docs/decisions.md": 116_400,
 };
 
 export const GROUP_BUDGETS = [

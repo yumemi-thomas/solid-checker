@@ -26,7 +26,8 @@
     "hashmap-iteration": 2
   },
   "rust/crates/solid-reactive-ir/src/attribution.rs": {
-    "files()": 6,
+    "files()": 1,
+    "file_by_path": 1,
     "hashmap-iteration": 7
   },
   "rust/crates/solid-reactive-ir/src/base/index.rs": {
@@ -164,9 +165,9 @@
   },
   "rust/crates/solid-reactive-ir/src/object_members.rs": {
     "facts.files": 1,
-    "files()": 5,
+    "files()": 2,
     "file_by_path": 2,
-    "hashmap-iteration": 23
+    "hashmap-iteration": 22
   },
   "rust/crates/solid-reactive-ir/src/owners/bindings.rs": {
     "files()": 1,

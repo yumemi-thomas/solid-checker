@@ -1847,6 +1847,11 @@ impl<'a> SemanticLookup<'a> {
         self.file_table.first_slot(path)
     }
 
+    /// L0: this build's analyzed files by interned id.
+    pub(crate) fn file_table(&self) -> &crate::base::FileTable {
+        &self.file_table
+    }
+
     /// The per-file views of this build's files over `table`: what the base
     /// indexes fold.
     pub(crate) fn base_views_over<'s>(
@@ -1881,6 +1886,13 @@ impl<'a> SemanticLookup<'a> {
     /// Whether some analyzed file has `hazard`.
     pub(crate) fn hazard_present(&self, hazard: crate::base::Hazard) -> bool {
         self.base_hazards().contains_key(&hazard)
+    }
+
+    /// L1: module edges by specifier.
+    pub(crate) fn base_modules(
+        &self,
+    ) -> &crate::base::BaseIndex<crate::base::ModuleKey, crate::base::ModuleEdge> {
+        self.base.modules(|| self.base_views())
     }
 
     /// L1: member uses by name.

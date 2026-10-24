@@ -591,7 +591,6 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     draft.discard_deleted_static_diagnostics(facts);
     crate::effect_execution::gate_diagnostics(semantic_lookup, &mut draft);
     crate::attribution::discharge_closed_program_export_dispatch(
-        facts,
         semantic_lookup,
         entities,
         aliases,

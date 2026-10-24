@@ -386,11 +386,7 @@ impl ModuleCensus {
                 Landing::Installed
             }
         };
-        let analyzed = lookup
-            .files()
-            .iter()
-            .map(|file| file.path.as_str())
-            .collect::<HashSet<_>>();
+        let analyzed = lookup.file_table();
         // Where a specifier loads: analyzed project modules (graph edges), an
         // installed dependency, or code the census cannot see.
         let landing = |file: &FileFacts, span, module: &str| -> Landing {
@@ -419,11 +415,7 @@ impl ModuleCensus {
                         .any(|suffix| path.ends_with(suffix));
                     (path, declaration_only, installed)
                 } else {
-                    match solid_facts::resolve_relative_module_path(
-                        file.path.as_str(),
-                        module,
-                        lookup.files().iter().map(|file| file.path.as_str()),
-                    ) {
+                    match lookup.relative_module_path(file.path.as_str(), module) {
                         Some(path) => (path.to_string(), false, false),
                         None => return unresolved(relative, module),
                     }
@@ -446,7 +438,7 @@ impl ModuleCensus {
             }
             // A project file no analyzed file carries (JavaScript outside
             // `allowJs`) has imports the census cannot see.
-            if runs.iter().any(|run| !analyzed.contains(run.as_str())) {
+            if runs.iter().any(|run| !analyzed.contains_path(run.as_str())) {
                 return Landing::Unknown;
             }
             Landing::Modules(paths)
@@ -457,16 +449,24 @@ impl ModuleCensus {
         let mut in_place_loads = HashMap::<String, Vec<(HashSet<String>, u32)>>::default();
         let mut alias_loads = HashMap::<String, Vec<AliasLoad>>::default();
         let mut barrels = HashMap::<String, HashSet<String>>::default();
-        for file in lookup.files() {
+        let modules = lookup.slot_entries(lookup.base_modules());
+        let hazards = lookup.slot_entries(lookup.base_hazards());
+        for ((file, edges), (_, flags)) in modules.zip(hazards) {
+            use crate::base::{Hazard, ModuleEdge};
+            let flagged = |hazard: Hazard| flags.iter().any(|(found, _)| *found == hazard);
             let path = file.path.to_string();
-            for import in file.ast.imports.iter().filter(|import| !import.type_only) {
-                let namespace = import.bindings.iter().any(|binding| {
-                    !binding.type_only && binding.kind == ast::ImportKind::Namespace
-                });
-                let landed = landing(file, import.span, &import.module);
+            for (module, edge) in edges {
+                let ModuleEdge::Import {
+                    span, namespace, ..
+                } = edge
+                else {
+                    continue;
+                };
+                let module = module.specifier().expect("an import names its module");
+                let landed = landing(file, *span, module);
                 if matches!(landed, Landing::Unknown) {
                     result.cyclic.insert(path.clone());
-                    result.unknown_load |= namespace;
+                    result.unknown_load |= *namespace;
                 }
                 if let Landing::Modules(targets) = landed {
                     graph
@@ -479,26 +479,31 @@ impl ModuleCensus {
                         .extend(targets.iter().cloned());
                     // Also covers `import { receiver }; export { receiver }`.
                     // Over-including other imports of a barrel only withholds.
-                    if file.ast.module_level_exports().next().is_some() {
+                    if flagged(Hazard::ModuleLevelExport) {
                         barrels
                             .entry(path.clone())
                             .or_default()
                             .extend(targets.iter().cloned());
                     }
-                    if namespace {
+                    if *namespace {
                         result.exposed.extend(targets);
                     }
                 }
             }
-            for export in file
-                .ast
-                .module_level_exports()
-                .filter(|export| !export.type_only)
-            {
-                let Some(module) = export.module.as_deref() else {
+            for (module, edge) in edges {
+                let ModuleEdge::Export {
+                    span,
+                    module_level: true,
+                    namespace,
+                    ..
+                } = edge
+                else {
                     continue;
                 };
-                match landing(file, export.span, module) {
+                let Some(module) = module.specifier() else {
+                    continue;
+                };
+                match landing(file, *span, module) {
                     Landing::Modules(targets) => {
                         graph
                             .entry(path.clone())
@@ -512,7 +517,7 @@ impl ModuleCensus {
                             .entry(path.clone())
                             .or_default()
                             .extend(targets.iter().cloned());
-                        if export.namespace.is_some() {
+                        if *namespace {
                             result.exposed.extend(targets);
                         }
                     }
@@ -530,15 +535,23 @@ impl ModuleCensus {
             // its module in a later job, after the importer's own synchronous
             // evaluation, and a module still being evaluated is awaited, so it
             // orders nothing: it only exposes the module as a namespace.
-            for load in &file.ast.module_loads {
-                let in_place = load.kind == ast::ModuleLoadKind::Require;
-                let landed = match load.specifier.as_deref() {
-                    Some(module) => landing(file, load.span, module),
+            for (module, edge) in edges {
+                let ModuleEdge::Load {
+                    span,
+                    require: in_place,
+                    in_function,
+                    ..
+                } = edge
+                else {
+                    continue;
+                };
+                let landed = match module.specifier() {
+                    Some(module) => landing(file, *span, module),
                     None => Landing::Unknown,
                 };
                 match landed {
                     Landing::Modules(targets) => {
-                        if in_place {
+                        if *in_place {
                             graph
                                 .entry(path.clone())
                                 .or_default()
@@ -549,12 +562,7 @@ impl ModuleCensus {
                         // runs: it orders nothing and withholds mentions of
                         // its targets. A dynamic `import()` written at module
                         // level binds a name the same way.
-                        let in_function = file
-                            .ast
-                            .functions
-                            .iter()
-                            .any(|function| function.span.contains(load.span));
-                        if in_place || !in_function {
+                        if *in_place || !*in_function {
                             alias_loads
                                 .entry(path.clone())
                                 .or_default()
@@ -564,7 +572,7 @@ impl ModuleCensus {
                     }
                     Landing::Installed => {}
                     Landing::Unknown => {
-                        if in_place {
+                        if *in_place {
                             result.cyclic.insert(path.clone());
                         }
                         result.opaque_loads.insert(path.clone());
@@ -572,34 +580,31 @@ impl ModuleCensus {
                     }
                 }
             }
-            for import in file
-                .ast
-                .import_equals
-                .iter()
-                .filter(|import| !import.type_only)
-            {
-                match landing(file, import.span, &import.module) {
+            for (module, edge) in edges {
+                let ModuleEdge::ImportEquals {
+                    span, module_level, ..
+                } = edge
+                else {
+                    continue;
+                };
+                let module = module.specifier().expect("an `import =` names its module");
+                match landing(file, *span, module) {
                     Landing::Modules(targets) => {
                         graph
                             .entry(path.clone())
                             .or_default()
                             .extend(targets.iter().cloned());
                         // `import x = require(…)` runs where it is written.
-                        let module_level = !file
-                            .ast
-                            .module_blocks
-                            .iter()
-                            .any(|block| block.contains(import.span));
-                        if module_level {
+                        if *module_level {
                             in_place_loads
                                 .entry(path.clone())
                                 .or_default()
-                                .push((targets.clone(), import.span.end));
+                                .push((targets.clone(), span.end));
                         }
                         alias_loads
                             .entry(path.clone())
                             .or_default()
-                            .push((targets.clone(), module_level.then_some(import.span.end)));
+                            .push((targets.clone(), module_level.then_some(span.end)));
                         result.exposed.extend(targets);
                     }
                     Landing::Installed => {}
@@ -612,56 +617,22 @@ impl ModuleCensus {
             // A bundler turns an `import.meta.glob(…, { eager: true })` into
             // static imports of modules no specifier names: unknown loads in
             // place. A lazy glob is a dynamic import and orders nothing.
-            if !file.ast.in_place_import_globs.is_empty() {
+            if flagged(Hazard::InPlaceImportGlob) {
                 result.opaque_loads.insert(path.clone());
                 result.unknown_load = true;
                 result.cyclic.insert(path.clone());
             }
-            // A call of a bare `require` the facts did not record as a load
-            // (a `declare function require` shim shadows the global in the
-            // binder, though the host `require` is what runs): an unmodeled
+            // A `require` the facts did not model as a load: an unmodeled
             // load, so the importer may be on a cycle.
-            if file.ast.calls.iter().any(|call| {
-                !call.construct
-                    && file.source_text(file.ast.peel_ts_sugar_span(call.callee)) == Some("require")
-                    && !file
-                        .ast
-                        .module_loads
-                        .iter()
-                        .any(|load| load.span == call.span)
-            }) {
+            if flagged(Hazard::UnmodeledRequire) {
                 result.unknown_load = true;
                 result.cyclic.insert(path.clone());
             }
-            // Any other mention of `require` (`(0, require)(x)`, an alias, an
-            // argument) may load in place with no recorded load.
-            if !file.ast.unmodeled_require_references.is_empty() {
-                result.unknown_load = true;
-                result.cyclic.insert(path.clone());
-            }
-            if file
-                .ast
-                .module_hazards
-                .iter()
-                .any(|hazard| hazard.kind == ast::ModuleHazardKind::NonliteralDynamicLoading)
-            {
+            if flagged(Hazard::NonliteralDynamicLoad) {
                 result.opaque_loads.insert(path.clone());
                 result.unknown_load = true;
             }
-            let top_level = |span: Span| {
-                !file
-                    .ast
-                    .functions
-                    .iter()
-                    .any(|function| function.span.contains(span))
-            };
-            if file
-                .ast
-                .awaits
-                .iter()
-                .chain(&file.ast.implicit_suspensions)
-                .any(|span| top_level(*span))
-            {
+            if flagged(Hazard::TopLevelAwait) {
                 result.async_modules.insert(path.clone());
             }
         }

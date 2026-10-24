@@ -122,6 +122,10 @@ impl FileTable {
         self.id_of(path)
             .and_then(|id| self.slots_of(id).last().copied())
     }
+
+    pub(crate) fn contains_path(&self, path: &str) -> bool {
+        self.id_of(path).is_some()
+    }
 }
 
 /// The kinds of item a file's item table numbers.
