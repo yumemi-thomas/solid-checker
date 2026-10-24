@@ -300,79 +300,38 @@ impl<'a> SemanticLookup<'a> {
         &self,
     ) -> &HashMap<&'a str, Vec<ResultAccessForwarded>> {
         self.result_access_forwarded.get_or_init(|| {
-            let mut forwarded = HashMap::<&'a str, Vec<ResultAccessForwarded>>::default();
-            // Most dialect variants answer no slot at all; skip the walk.
-            let answered = self.project_primitives().iter().any(|primitive| {
-                (0..PROBED_ARGUMENTS).any(|count| {
-                    (0..count).any(|argument| {
-                        self.dialect
-                            .callback_runs_on_result_access(*primitive, argument, count)
-                    })
+            let table = self.memos.table();
+            let files = self.files();
+            self.memo_world()
+                .answer::<super::ResultAccessForwardedAll>(&())
+                .iter()
+                .filter_map(|(id, entries)| {
+                    let slot = *table.slots_of(*id).first()?;
+                    Some((
+                        files[slot].path.as_str(),
+                        entries
+                            .iter()
+                            .map(|(argument, primitive)| ResultAccessForwarded {
+                                argument: *argument,
+                                primitive: *primitive,
+                            })
+                            .collect(),
+                    ))
                 })
-            });
-            if !answered {
-                return forwarded;
-            }
-            let facts: &'a ProjectFacts = self.facts;
-            for file in &facts.files {
-                for call in &file.ast.calls {
-                    let Some(primitive) = self.primitive_at_call(file, call.span) else {
-                        continue;
-                    };
-                    let count = call.arguments.len();
-                    for (index, argument) in call.arguments.iter().enumerate() {
-                        if argument.spread
-                            || argument.value != solid_facts::ast::ArgumentValueKind::Identifier
-                            || !self
-                                .dialect
-                                .callback_runs_on_result_access(primitive, index, count)
-                        {
-                            continue;
-                        }
-                        let Some(declaration) = argument.binding_declaration else {
-                            continue;
-                        };
-                        for function in file.ast.functions_body_containing(call.span) {
-                            let Some(parameter) = function.parameters.iter().position(|binding| {
-                                binding.names.len() == 1 && binding.names[0].span == declaration
-                            }) else {
-                                continue;
-                            };
-                            for (caller, callee) in
-                                self.function_call_sites(file.path.as_str(), function.span)
-                            {
-                                let Some(site) =
-                                    caller.ast.calls.iter().find(|site| site.callee == callee)
-                                else {
-                                    continue;
-                                };
-                                // A spread up to the slot moves arguments into it.
-                                if site
-                                    .arguments
-                                    .iter()
-                                    .take(parameter.saturating_add(1))
-                                    .any(|candidate| candidate.spread)
-                                {
-                                    continue;
-                                }
-                                if let Some(forwarded_argument) = site.arguments.get(parameter) {
-                                    forwarded.entry(caller.path.as_str()).or_default().push(
-                                        ResultAccessForwarded {
-                                            argument: forwarded_argument.span,
-                                            primitive,
-                                        },
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            for entries in forwarded.values_mut() {
-                entries.sort_unstable_by_key(|entry| (entry.argument.start, entry.argument.end));
-                entries.dedup_by_key(|entry| entry.argument);
-            }
-            forwarded
+                .collect()
+        })
+    }
+
+    /// Whether the dialect answers a result-access slot for some primitive the
+    /// project names: most variants answer none, and the walk is skipped.
+    pub(super) fn result_access_slots_answered(&self) -> bool {
+        self.project_primitives().iter().any(|primitive| {
+            (0..PROBED_ARGUMENTS).any(|count| {
+                (0..count).any(|argument| {
+                    self.dialect
+                        .callback_runs_on_result_access(*primitive, argument, count)
+                })
+            })
         })
     }
 }

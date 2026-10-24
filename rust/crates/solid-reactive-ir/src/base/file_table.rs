@@ -289,6 +289,29 @@ impl<'a> FileView<'a> {
         self.sources.symbols.at(self.path(), span)
     }
 
+    /// The symbol a callee of this file resolves to, without runtime
+    /// redirects ([`crate::indexes::plain_callee_symbol`]).
+    pub(crate) fn callee_symbol(&self, callee: Span) -> Option<&'a str> {
+        crate::indexes::plain_callee_symbol(
+            self.file,
+            self.ast_index(),
+            callee,
+            |span| {
+                self.resolved_callee_call(span)
+                    .and_then(|call| call.declaration.as_ref())
+                    .map(|declaration| declaration.symbol.as_ref())
+                    .filter(|symbol| !symbol.is_empty())
+            },
+            |span| self.symbol_at(span),
+            |span| self.value_symbol(span),
+        )
+    }
+
+    /// This file's TypeFacts entities, in table order.
+    pub(crate) fn typescript_entities(&self) -> &'a [EntityFact] {
+        self.sources.typescript.entities_for_path(self.path())
+    }
+
     pub(crate) fn entity_at(&self, span: Span) -> Option<&'a EntityFact> {
         self.sources
             .entities

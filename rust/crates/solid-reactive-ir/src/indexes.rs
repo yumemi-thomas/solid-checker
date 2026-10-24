@@ -17,8 +17,15 @@ use super::{SymbolId, SymbolName};
 use crate::owners::function_binding_name;
 
 mod callees;
+mod census;
 pub(crate) use callees::{
-    function_value_is_current_in, resolved_callee_call_in, standard_library_declaration_of,
+    function_value_is_current_in, plain_callee_symbol, resolved_callee_call_in,
+    standard_library_declaration_of,
+};
+pub(crate) use census::{
+    CENSUS_TABLES_FROM, CallSite, CallSitesOf, CensusTables, ComponentIdentity,
+    FileComponentStatuses, LazyWitnessesIn, PropRenderSitesIn, ResultAccessForwardedAll,
+    TagRendered,
 };
 mod class_prototype;
 mod closed_members;
@@ -733,23 +740,7 @@ struct BindingResolution {
     symbol: SymbolId,
 }
 
-#[derive(Clone, Copy)]
-struct FunctionCallSite {
-    file: usize,
-    callee: Span,
-    /// A second reference to the same function that this one call site
-    /// accounts for, when the syntax of the site writes the callee's name
-    /// twice: a JSX element with a closing tag. It is not a call site of its
-    /// own — a render is one invocation — so only the escape test, which
-    /// enumerates *references*, ever reads it.
-    also_referenced: Option<Span>,
-}
-
 type BindingsByReference = HashMap<String, HashMap<(u64, u64), BindingResolution>>;
-
-/// Rendering-prop flows by value reference: the render sites each reaches
-/// ([`SemanticLookup::prop_render_sites_at`]).
-type PropRenderSites<'a> = HashMap<(&'a str, Span), Vec<Span>>;
 
 /// One argument a project wrapper forwards into a result-access slot
 /// ([`SemanticLookup::result_access_forwarded_arguments`]).
@@ -843,17 +834,14 @@ pub(super) struct SemanticLookup<'a> {
     callability_by_symbol: OnceLock<HashMap<&'a str, Callability>>,
     symbols_by_id: OnceLock<HashMap<&'a str, solid_facts::TypeScriptSymbol<'a>>>,
     context_symbols: OnceLock<HashSet<&'a str>>,
-    jsx_call_sites: OnceLock<HashMap<(&'a str, Span), CallSiteLoading>>,
     declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
-    function_call_sites: OnceLock<HashMap<(&'a str, Span), Vec<FunctionCallSite>>>,
     /// ADR 0339: references to function-valued bindings not proven to follow
     /// their declarators.
     initialization: initialization::State,
     /// [`crate::interproc::accessor_provenance::MemberStability::index`] of the lookup's facts.
     member_stability: OnceLock<crate::interproc::accessor_provenance::MemberStability>,
-    /// ADR 0342: the member values of compound components that tags render.
-    compound: compound::State<'a>,
-    prop_render_sites: OnceLock<PropRenderSites<'a>>,
+    /// Study S5c: the component census's side of the lookup.
+    census: census::State<'a>,
     direct_value_aliases: OnceLock<HashSet<SymbolId>>,
     /// The closed program's namespace census (ADR 0347), set once per build.
     namespace_hand_outs: OnceLock<crate::attribution::NamespaceHandOuts>,
@@ -892,10 +880,6 @@ pub(super) struct SemanticLookup<'a> {
     parameter_testing_functions: OnceLock<HashSet<(&'a str, Span)>>,
     /// ADR 0338: whether some analysed file may patch `Function.prototype.bind`.
     function_bind_patched: OnceLock<bool>,
-    /// ADR 0292: `(path, function span, property span)` for each object
-    /// property that is a proven component's one route, the `default` of the
-    /// module a dialect component loader renders.
-    lazy_default_render_witnesses: OnceLock<HashSet<(&'a str, Span, Span)>>,
     effect_apply_regions: OnceLock<crate::effect_execution::ApplyRegions>,
     effect_apply_calls: OnceLock<crate::effect_execution::ApplyCalls<'a>>,
 }
@@ -1025,19 +1009,22 @@ impl<'a> SemanticLookup<'a> {
             !probing(),
             "a memo probe read a memo: the build would begin from inside its own invalidation"
         );
+        let redirects = !self.facts.runtime_symbol_redirects.is_empty();
         let world = crate::base::memo::build::BuildWorld::new(
             self.base_views_over(self.memos.table()),
             self.memos.store(),
             self.program_closed,
             self,
         )
-        .with_project(self);
+        .with_project(self)
+        .with_runtime_redirects(redirects);
         self.memos.begin_once(|| {
             self.memos.store().begin_with(
                 world.views(),
                 self.program_closed,
                 self,
                 crate::cache::typescript_unchanged(self.facts),
+                redirects,
             )
         });
         world
@@ -1135,13 +1122,10 @@ impl<'a> SemanticLookup<'a> {
             callability_by_symbol: OnceLock::new(),
             symbols_by_id: OnceLock::new(),
             context_symbols: OnceLock::new(),
-            jsx_call_sites: OnceLock::new(),
             declaration_symbols: OnceLock::new(),
-            function_call_sites: OnceLock::new(),
             initialization: initialization::State::default(),
             member_stability: OnceLock::new(),
-            compound: compound::State::default(),
-            prop_render_sites: OnceLock::new(),
+            census: census::State::default(),
             direct_value_aliases: OnceLock::new(),
             namespace_hand_outs: OnceLock::new(),
             bindings_by_symbol: OnceLock::new(),
@@ -1165,7 +1149,6 @@ impl<'a> SemanticLookup<'a> {
             never_returning_calls: OnceLock::new(),
             parameter_testing_functions: OnceLock::new(),
             function_bind_patched: OnceLock::new(),
-            lazy_default_render_witnesses: OnceLock::new(),
             effect_apply_regions: OnceLock::new(),
             effect_apply_calls: OnceLock::new(),
         }
@@ -1920,16 +1903,22 @@ impl<'a> SemanticLookup<'a> {
 
     /// ADR 0292: whether `property` holding `function` is the `default` of a
     /// module object a dialect component loader renders, and that function's
-    /// one reference ([`crate::owners::lazy_default_render_witnesses`]).
+    /// one reference ([`LazyWitnessesIn`]).
     pub(super) fn is_lazy_default_render_witness(
         &self,
         file: &FileFacts,
         function: Span,
         property: Span,
     ) -> bool {
-        self.lazy_default_render_witnesses
-            .get_or_init(|| crate::owners::lazy_default_render_witnesses(self))
-            .contains(&(file.path.as_str(), function, property))
+        self.memos
+            .table()
+            .id_of(file.path.as_str())
+            .is_some_and(|id| {
+                self.memo_world()
+                    .answer::<LazyWitnessesIn>(&id)
+                    .binary_search(&(function, property))
+                    .is_ok()
+            })
     }
 
     /// The analyzed file path a plain relative import specifier resolves to,
@@ -2066,33 +2055,37 @@ impl<'a> SemanticLookup<'a> {
     /// ADR 0334: whether `span` in `path` is a component value of a route's
     /// options that the audited `@tanstack/solid-router` only renders.
     pub(super) fn route_component_value(&self, path: &str, span: Span) -> bool {
-        self.route_component_values
-            .get_or_init(|| {
-                crate::route_components::route_component_values(
-                    self.facts,
-                    self.dialect,
-                    &self.router_install,
-                    &|file, name| {
-                        let symbol = self.entities.at(file.path.as_str(), name)?;
-                        let references = self.symbol_references_if_present(symbol.as_str())?;
-                        references
-                            .iter()
-                            .map(|reference| {
-                                Some((
-                                    reference.path.to_string(),
-                                    Span::new(
-                                        u32::try_from(reference.start_byte).ok()?,
-                                        u32::try_from(reference.end_byte).ok()?,
-                                    ),
-                                ))
-                            })
-                            .collect()
-                    },
-                    crate::object_members::namespace_exposed_modules(self).as_ref(),
-                    crate::interproc::accessor_provenance::reflective_prototype_write(self),
-                )
-            })
-            .contains(&(path.to_owned(), span))
+        self.route_component_values()
+            .contains(&(path.to_string(), span))
+    }
+
+    /// Every route component value (ADR 0334), by path and span.
+    pub(super) fn route_component_values(&self) -> &HashSet<(String, Span)> {
+        self.route_component_values.get_or_init(|| {
+            crate::route_components::route_component_values(
+                self.facts,
+                self.dialect,
+                &self.router_install,
+                &|file, name| {
+                    let symbol = self.entities.at(file.path.as_str(), name)?;
+                    let references = self.symbol_references_if_present(symbol.as_str())?;
+                    references
+                        .iter()
+                        .map(|reference| {
+                            Some((
+                                reference.path.to_string(),
+                                Span::new(
+                                    u32::try_from(reference.start_byte).ok()?,
+                                    u32::try_from(reference.end_byte).ok()?,
+                                ),
+                            ))
+                        })
+                        .collect()
+                },
+                crate::object_members::namespace_exposed_modules(self).as_ref(),
+                crate::interproc::accessor_provenance::reflective_prototype_write(self),
+            )
+        })
     }
 
     /// The compiler's attested resolution of the project's import specifiers,

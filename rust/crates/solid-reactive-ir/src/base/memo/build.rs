@@ -7,7 +7,8 @@
 //!   entity-symbol rows;
 //! - the slots a file occupies in `ProjectFacts::files` (file order);
 //! - one key of an L1 index the store keeps ([`IndexId`]);
-//! - a build constant ([`Constant`]).
+//! - a build constant ([`Constant`]);
+//! - the analyzed ids in order ([`Input::Files`]).
 //!
 //! [`MemoStore::begin`] finds the changed inputs exactly: each file's section
 //! fingerprints are compared with the last build's, the store's L1 indexes
@@ -41,7 +42,9 @@ pub(crate) enum Section {
     /// The Solid compiler's execution map: a function of the source under
     /// the pinned compiler, fingerprinted by the source hash it records.
     Compiler,
-    /// The file's entity-symbol rows (`EntitySymbols` for its path).
+    /// The file's TypeFacts rows: its entity-symbol rows (`EntitySymbols`
+    /// for its path), the declaration symbol of each of its entities'
+    /// resolved calls (a callee's symbol), and the references located in it.
     Entities,
     /// What the file's TypeFacts entities say about calls: for each entity of
     /// its path, in table order, its location and whether it carries a
@@ -63,6 +66,11 @@ pub(crate) enum IndexId {
     /// Identity-wrapper candidates by declaration symbol
     /// ([`crate::indexes::identity_wrappers`]).
     WrapperCandidates,
+    /// TypeFacts references by symbol ([`super::super::contributions::references`]).
+    References,
+    /// Calls and JSX elements by the symbol their callee or tag names
+    /// ([`super::super::contributions::callees`]).
+    Callees,
 }
 
 /// A build constant a computation may read. Constants are part of the
@@ -71,6 +79,9 @@ pub(crate) enum IndexId {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) enum Constant {
     ProgramClosed,
+    /// Whether the build carries runtime symbol redirects (dependency-source
+    /// analysis), under which a callee's symbol can be the redirected export.
+    RuntimeRedirects,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -84,6 +95,9 @@ pub(crate) enum Input {
     /// One key of an index, by its interned id.
     Index(IndexId, u32),
     Constant(Constant),
+    /// The analyzed ids in the order of their first slot: changed when a
+    /// file is added, removed or reordered.
+    Files,
     /// The whole analyzed program: every file's every section and slots, the
     /// TypeScript table's change flag and the build constants. A coarse read
     /// for a computation that goes through lookup tables not yet ported onto
@@ -138,8 +152,10 @@ pub(crate) struct BuildTables {
     receiver_closed: super::Table<BuildSchema, crate::object_members::ReceiverClosed>,
     assigned_members: super::Table<BuildSchema, crate::object_members::AssignedMembersAnswer>,
     prototype_owner_at: super::Table<BuildSchema, crate::object_members::PrototypeOwnerAt>,
-    /// Tables 32 and up: the project-wide answers (study S5d).
+    /// Tables 32 to 63: the project-wide answers (study S5d).
     project: crate::indexes::ProjectTables,
+    /// Tables 64 and up: the component census (study S5c).
+    census: crate::indexes::CensusTables,
 }
 
 impl TableSet<BuildSchema> for BuildTables {
@@ -153,6 +169,10 @@ impl TableSet<BuildSchema> for BuildTables {
             RECEIVER_CLOSED => &self.receiver_closed,
             ASSIGNED_MEMBERS => &self.assigned_members,
             PROTOTYPE_OWNER_AT => &self.prototype_owner_at,
+            id if id.0 >= crate::indexes::CENSUS_TABLES_FROM => self
+                .census
+                .table(id)
+                .unwrap_or_else(|| unreachable!("memo table {id:?}")),
             id if id.0 >= crate::indexes::PROJECT_TABLES_FROM => self.project.table(id),
             _ => unreachable!("memo table {id:?}"),
         }
@@ -170,6 +190,7 @@ impl TableSet<BuildSchema> for BuildTables {
             &self.prototype_owner_at,
         ];
         tables.extend(self.project.tables());
+        tables.extend(self.census.tables());
         tables
     }
 }
@@ -224,6 +245,10 @@ impl BuildTables {
     pub(crate) fn project(&self) -> &crate::indexes::ProjectTables {
         &self.project
     }
+
+    pub(crate) fn census(&self) -> &crate::indexes::CensusTables {
+        &self.census
+    }
 }
 
 /// A file's section fingerprints and slots in one build.
@@ -277,6 +302,42 @@ fn fingerprints(views: &Views<'_>, id: FileId) -> FileFingerprints {
             entities.update(symbol.as_bytes());
             entities.update([u8::from(exact)]);
         }
+        let view = views.view(*slot);
+        // The declaration each resolved call names (a callee's symbol), and
+        // the references located here (the reference index's entries).
+        for entity in view.typescript_entities() {
+            let declaration = entity.resolved_call.as_deref().map(|call| {
+                call.declaration
+                    .as_ref()
+                    .map(|declaration| &*declaration.symbol)
+            });
+            entities.update(entity.location.start_byte.to_le_bytes());
+            entities.update(entity.location.end_byte.to_le_bytes());
+            match declaration {
+                None => entities.update([0]),
+                Some(None) => entities.update([1]),
+                Some(Some(symbol)) => {
+                    entities.update([2]);
+                    entities.update(
+                        u64::try_from(symbol.len())
+                            .unwrap_or(u64::MAX)
+                            .to_le_bytes(),
+                    );
+                    entities.update(symbol.as_bytes());
+                }
+            }
+        }
+        entities.update([0xff]);
+        for (symbol, span) in view.references() {
+            entities.update(
+                u64::try_from(symbol.len())
+                    .unwrap_or(u64::MAX)
+                    .to_le_bytes(),
+            );
+            entities.update(symbol.as_bytes());
+            entities.update(span.start.to_le_bytes());
+            entities.update(span.end.to_le_bytes());
+        }
     }
     let mut signatures = Sha256::new();
     if let Some(slot) = slots.first() {
@@ -325,6 +386,104 @@ impl<K: Clone + Eq + std::hash::Hash> IndexKeys<K> {
     }
 }
 
+/// An L1 index the store keeps between builds, with its interned keys.
+struct KeptIndex<K, C> {
+    index: Option<BaseIndex<K, C>>,
+    keys: IndexKeys<K>,
+}
+
+impl<K, C> Default for KeptIndex<K, C> {
+    fn default() -> Self {
+        Self {
+            index: None,
+            keys: IndexKeys {
+                ids: HashMap::default(),
+                keys: HashMap::default(),
+                next: 0,
+            },
+        }
+    }
+}
+
+impl<K, C> KeptIndex<K, C>
+where
+    K: Clone + Eq + std::hash::Hash + Send + std::fmt::Debug,
+    C: Clone + PartialEq + Send + std::hash::Hash,
+{
+    /// Brings the index to `views` from the last build's: the changed and
+    /// removed files' contributions are replaced, and each changed key some
+    /// entry reads is pushed onto `changed`. A store with no index folds one.
+    /// With `check`, the update is compared with a refold; a difference is
+    /// reported (the store is poisoned) and the refold kept.
+    #[allow(clippy::too_many_arguments)]
+    fn update(
+        &mut self,
+        id: IndexId,
+        views: &Views<'_>,
+        contribute: Contribute<K, C>,
+        changed_files: &[FileId],
+        removed: &[FileId],
+        check: bool,
+        store: &Store<BuildSchema>,
+        changed: &mut Vec<Input>,
+    ) -> usize {
+        let mut count = 0;
+        match self.index.as_mut() {
+            Some(index) => {
+                let delta = index.update(
+                    crate::pipeline::parallel_slice_results(changed_files, |file| {
+                        (*file, Some(views.contribution(*file, contribute)))
+                    })
+                    .into_iter()
+                    .chain(removed.iter().map(|file| (*file, None))),
+                );
+                count = delta.len();
+                for key in delta {
+                    if let Some(key) = self.keys.ids.get(&key) {
+                        changed.push(Input::Index(id, *key));
+                    }
+                }
+            }
+            None => self.index = Some(views.fold(contribute)),
+        }
+        if check && let Some(index) = &self.index {
+            let fold = views.fold(contribute);
+            if *index != fold {
+                store.poison(&format!(
+                    "IR memo mismatch: index `{id:?}`: the update of {} changed and {} removed files differs from a refold",
+                    changed_files.len(),
+                    removed.len()
+                ));
+                self.index = Some(fold);
+            }
+        }
+        count
+    }
+
+    fn fingerprint(&self, key: u32) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = rustc_hash::FxHasher::default();
+        if let (Some(index), Some(key)) = (&self.index, self.keys.keys.get(&key)) {
+            for (file, rank, value) in index.ranked_values(key) {
+                (file, rank, value).hash(&mut hasher);
+            }
+        }
+        hasher.finish()
+    }
+
+    fn values(&self, key: &K) -> Vec<(FileId, usize, C)> {
+        self.index
+            .as_ref()
+            .map(|index| {
+                index
+                    .ranked_values(key)
+                    .map(|(file, rank, value)| (file, rank, value.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
+
 /// An identity-wrapper candidate: the `ordinal`-th function of its file's
 /// slot, bound to the indexed symbol.
 pub(crate) type WrapperCandidate = u32;
@@ -337,6 +496,12 @@ struct MemoBase {
     wrapper_candidates: Option<BaseIndex<Arc<str>, WrapperCandidate>>,
     wrapper_keys: IndexKeys<Arc<str>>,
     program_closed: Option<bool>,
+    /// The component census's indexes ([`crate::indexes::CallSitesOf`]).
+    references: KeptIndex<Arc<str>, Span>,
+    callees: KeptIndex<Arc<str>, crate::base::CalleeSite>,
+    runtime_redirects: Option<bool>,
+    /// The analyzed ids in the order of their first slot ([`Input::Files`]).
+    ids: Vec<FileId>,
     /// The keys of polled inputs, and each recorded polled input's answer
     /// fingerprint as of the last build ([`super::probes`]).
     polled_keys: IndexKeys<super::probes::PolledKey>,
@@ -356,6 +521,8 @@ pub(crate) struct BeginReport {
     pub(crate) changed_files: usize,
     pub(crate) removed_files: usize,
     pub(crate) delta_keys: usize,
+    /// The census indexes' changed keys (references, callees).
+    pub(crate) census_delta_keys: usize,
     pub(crate) changed_inputs: usize,
     pub(crate) dirty: usize,
     pub(crate) maybe_dirty: usize,
@@ -439,18 +606,20 @@ impl MemoStore {
         program_closed: bool,
         probes: &dyn super::probes::Probes,
     ) -> BeginReport {
-        self.begin_with(views, program_closed, probes, false)
+        self.begin_with(views, program_closed, probes, false, false)
     }
 
     /// [`Self::begin`], told whether the producer says the TypeScript table
-    /// is the last build's (`cache::typescript_unchanged`). Without that
-    /// word, the table is taken to have changed.
+    /// is the last build's (`cache::typescript_unchanged`; without that word,
+    /// the table is taken to have changed) and whether the build carries
+    /// runtime redirects ([`Constant::RuntimeRedirects`]).
     pub(crate) fn begin_with(
         &self,
         views: &Views<'_>,
         program_closed: bool,
         probes: &dyn super::probes::Probes,
         typescript_unchanged: bool,
+        runtime_redirects: bool,
     ) -> BeginReport {
         let mut report = BeginReport::default();
         let fresh = self.store.poisoned() || self.builds.fetch_add(1, Ordering::AcqRel) == 0;
@@ -502,6 +671,10 @@ impl MemoStore {
         }
         report.changed_files = changed_files.len();
         report.removed_files = removed.len();
+        if base.ids != views.table.ids() {
+            changed_inputs.push(Input::Files);
+            base.ids = views.table.ids().to_vec();
+        }
         let project_moved = fresh
             || !changed_files.is_empty()
             || !removed.is_empty()
@@ -549,7 +722,40 @@ impl MemoStore {
             ));
             base.wrapper_candidates = Some(views.fold(contribute));
         }
+        let check = self.check_indexes;
+        let MemoBase {
+            references,
+            callees,
+            ..
+        } = &mut *base;
+        report.census_delta_keys += references.update(
+            IndexId::References,
+            views,
+            crate::base::contributions::references,
+            &changed_files,
+            &removed,
+            check,
+            &self.store,
+            &mut changed_inputs,
+        );
+        report.census_delta_keys += callees.update(
+            IndexId::Callees,
+            views,
+            crate::base::contributions::callees,
+            &changed_files,
+            &removed,
+            check,
+            &self.store,
+            &mut changed_inputs,
+        );
         report.index_ns = nanos(started.elapsed());
+        if base
+            .runtime_redirects
+            .is_some_and(|redirects| redirects != runtime_redirects)
+        {
+            changed_inputs.push(Input::Constant(Constant::RuntimeRedirects));
+        }
+        base.runtime_redirects = Some(runtime_redirects);
         if base
             .program_closed
             .is_some_and(|closed| closed != program_closed)
@@ -649,6 +855,8 @@ impl MemoStore {
         for input in released {
             match input {
                 Input::Index(IndexId::WrapperCandidates, id) => base.wrapper_keys.release(id),
+                Input::Index(IndexId::References, id) => base.references.keys.release(id),
+                Input::Index(IndexId::Callees, id) => base.callees.keys.release(id),
                 Input::Polled(..) => {
                     base.polled.remove(&input);
                     polled_released = true;
@@ -702,6 +910,7 @@ pub(crate) struct BuildWorld<'w> {
     program_closed: bool,
     pub(super) probes: &'w dyn super::probes::Probes,
     project: Option<&'w dyn ProjectAccess>,
+    runtime_redirects: bool,
 }
 
 impl<'w> BuildWorld<'w> {
@@ -717,7 +926,15 @@ impl<'w> BuildWorld<'w> {
             program_closed,
             probes,
             project: None,
+            runtime_redirects: false,
         }
+    }
+
+    /// Whether the build carries runtime redirects ([`Constant::RuntimeRedirects`]).
+    #[must_use]
+    pub(crate) fn with_runtime_redirects(mut self, runtime_redirects: bool) -> Self {
+        self.runtime_redirects = runtime_redirects;
+        self
     }
 
     /// The lookup coarse reads go through ([`Ctx::project`]).
@@ -763,7 +980,16 @@ impl World<BuildSchema> for BuildWorld<'_> {
                 }
                 hasher.finish()
             }
+            Input::Index(IndexId::References, key) => base.references.fingerprint(key),
+            Input::Index(IndexId::Callees, key) => base.callees.fingerprint(key),
             Input::Constant(Constant::ProgramClosed) => u64::from(self.program_closed),
+            Input::Constant(Constant::RuntimeRedirects) => u64::from(self.runtime_redirects),
+            Input::Files => {
+                use std::hash::{Hash, Hasher};
+                let mut hasher = rustc_hash::FxHasher::default();
+                self.views.table.ids().hash(&mut hasher);
+                hasher.finish()
+            }
             Input::Polled(probe, id) => {
                 let key = base.polled_keys.keys.get(&id).cloned();
                 drop(base);
@@ -822,6 +1048,15 @@ impl<'w> FileRead<'_, '_, 'w> {
         self.ctx
             .record_input(Input::File(self.id, Section::Entities));
         self.view.symbol_at(span)
+    }
+
+    /// The symbol a callee resolves to, runtime redirects aside
+    /// ([`FileView::callee_symbol`]): reads the AST and the TypeFacts rows.
+    pub(crate) fn callee_symbol(&self, callee: Span) -> Option<&'w str> {
+        self.ctx
+            .record_input(Input::File(self.id, Section::Entities));
+        self.ctx.record_input(Input::File(self.id, Section::Source));
+        self.view.callee_symbol(callee)
     }
 
     /// The symbol that is the value at `span` ([`FileView::value_symbol`]):
@@ -912,12 +1147,83 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
         out.expect("the lookup ran the closure")
     }
 
+    /// [`Self::project`] with the build's file table (the store's ids), for
+    /// a computation that names files by id.
+    pub(crate) fn project_files<R>(
+        &self,
+        f: impl for<'x> FnOnce(&crate::indexes::SemanticLookup<'x>, &FileTable) -> R,
+    ) -> R {
+        let table = self.world().views.table;
+        self.project(|lookup| f(lookup, table))
+    }
+
+    /// The path a file id names: the key's identity, not a read of the file.
+    pub(crate) fn path_of(&self, id: FileId) -> &'w str {
+        self.world().views.table.path_of(id)
+    }
+
+    /// Every analyzed id, in the order of its first slot.
+    pub(crate) fn ids(&self) -> Vec<FileId> {
+        self.record_input(Input::Files);
+        self.world().views.table.ids().to_vec()
+    }
+
+    /// The TypeFacts references of `symbol` located in analyzed files: `(file,
+    /// slot rank, span)`, by file id then production order (each slot of a
+    /// file lists them).
+    pub(crate) fn references(&self, symbol: &Arc<str>) -> Vec<(FileId, usize, Span)> {
+        self.index_values(
+            IndexId::References,
+            symbol,
+            |base| &base.references,
+            |base| &mut base.references,
+        )
+    }
+
+    /// The calls and JSX elements whose callee or tag resolves to `symbol`
+    /// ([`super::super::contributions::callees`]): `(file, slot rank, site)`.
+    pub(crate) fn callees(
+        &self,
+        symbol: &Arc<str>,
+    ) -> Vec<(FileId, usize, crate::base::CalleeSite)> {
+        self.index_values(
+            IndexId::Callees,
+            symbol,
+            |base| &base.callees,
+            |base| &mut base.callees,
+        )
+    }
+
+    fn index_values<C>(
+        &self,
+        id: IndexId,
+        key: &Arc<str>,
+        kept: fn(&MemoBase) -> &KeptIndex<Arc<str>, C>,
+        kept_mut: fn(&mut MemoBase) -> &mut KeptIndex<Arc<str>, C>,
+    ) -> Vec<(FileId, usize, C)>
+    where
+        C: Clone + PartialEq + Send + std::hash::Hash,
+    {
+        let store = self.world().store;
+        let interned = {
+            let base = store.base.read().expect("memo base lock");
+            kept(&base).keys.ids.get(key).copied()
+        };
+        let interned = interned.unwrap_or_else(|| {
+            let mut base = store.base.write().expect("memo base lock");
+            kept_mut(&mut base).keys.intern(key)
+        });
+        self.record_input(Input::Index(id, interned));
+        let base = store.base.read().expect("memo base lock");
+        kept(&base).values(key)
+    }
+
     /// A build constant.
-    #[allow(dead_code, reason = "the first table reading one ports in study S5")]
     pub(crate) fn constant(&self, constant: Constant) -> bool {
         self.record_input(Input::Constant(constant));
         match constant {
             Constant::ProgramClosed => self.world().program_closed,
+            Constant::RuntimeRedirects => self.world().runtime_redirects,
         }
     }
 }

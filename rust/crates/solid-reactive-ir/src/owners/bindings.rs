@@ -2,86 +2,21 @@
 
 use super::*;
 
-/// ADR 0292: `(path, function span, property span)` for each object property
-/// proven to be the one route by which a project component reaches anything:
-/// the `default` member of the module object a dialect component loader
-/// renders ([`Dialect::renders_loaded_default_argument`]).
-///
-/// ```tsx
-/// const Page = lazy(async () => {
-///   function Cube() { start(); return <div />; }
-///   return { default: Cube };
-/// });
-/// <Page />
-/// ```
-///
-/// The witness holds only when all of these do:
-///
-/// - the loader is the call's whole argument at the dialect's slot, an
-///   `async` non-generator function literal, so nothing but the call holds it;
-/// - its one unconditional return (its own, not a nested function's) is a
-///   closed object literal: data properties only, no spread, computed key,
-///   duplicate key or `__proto__`, and no `then` (a thenable is assimilated
-///   when the async return resolves, so it is not what `lazy` receives).
-///   Its `default` property's value, under transparent TypeScript wrappers,
-///   is a plain identifier;
-/// - that identifier names a proven, synchronous, non-generator component
-///   declared directly in the loader: a function declaration or a `const`
-///   initialized with the function literal itself, unwritten, and referenced
-///   nowhere else;
-/// - the call initializes an unexported, unwritten `const`, and every
-///   reference to it is a JSX tag name (an opening or closing name, never a
-///   dotted one), with at least one opening tag. A `.preload()` would hand
-///   the module promise to its caller, and any other use could reach it;
-/// - no analyzed file holds a reflective write through a `prototype`, the
-///   visible veto ADR 0288 keeps for a fresh literal.
-///
-/// The module object is then fresh, reachable only by the runtime that
-/// selects its `default` and renders it, so the component's only invocations
-/// are those renders.
-pub(crate) fn lazy_default_render_witnesses<'a>(
-    lookup: &SemanticLookup<'a>,
-) -> HashSet<(&'a str, Span, Span)> {
-    let mut witnesses = HashSet::default();
-    for file in lookup.files() {
-        for call in &file.ast.calls {
-            if let Some((function, property)) = lazy_default_render_witness(file, call, lookup) {
-                witnesses.insert((file.path.as_str(), function, property));
-            }
-        }
-    }
-    if !witnesses.is_empty()
-        && crate::interproc::accessor_provenance::reflective_prototype_write(lookup)
-    {
-        witnesses.clear();
-    }
-    witnesses
-}
-
-pub(super) fn lazy_default_render_witness(
-    file: &solid_facts::FileFacts,
-    call: &solid_facts::ast::CallFact,
-    lookup: &SemanticLookup<'_>,
-) -> Option<(Span, Span)> {
-    let (function, property, _) = lazy_default_render_candidate(file, call, lookup)?;
-    (lookup.function_component_status(file, function) == crate::indexes::ComponentStatus::Proven)
-        .then_some((function.span, property))
-}
-
-/// Every condition of [`lazy_default_render_witnesses`] but the component
-/// proof and the reflective-write veto: `(component, default property, its
-/// value)`. Component identity itself asks this, so the `default` value is a
-/// reference the loader's render accounts for rather than an escape.
+/// Every condition of a lazy default render witness
+/// ([`crate::indexes::LazyWitnessesIn`]) but the component proof and the
+/// reflective-write veto: `(component, default property, its value)`.
+/// Component identity itself asks this, so the `default` value is a reference
+/// the loader's render accounts for rather than an escape. It reads the call's
+/// own file, and `primitive_at` (the primitive resolved at a call span of it).
 pub(crate) fn lazy_default_render_candidate<'f>(
     file: &'f solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
-    lookup: &SemanticLookup<'_>,
+    primitive_at: &dyn Fn(Span) -> Option<solid_dialect::Primitive>,
+    dialect: &dyn solid_dialect::Dialect,
 ) -> Option<(&'f solid_facts::ast::FunctionFact, Span, Span)> {
     use crate::interproc::accessor_provenance::{closed_properties, single_return};
-    let primitive = lookup.primitive_at_call(file, call.span)?;
-    let slot = lookup
-        .dialect
-        .renders_loaded_default_argument(primitive, call.arguments.len())?;
+    let primitive = primitive_at(call.span)?;
+    let slot = dialect.renders_loaded_default_argument(primitive, call.arguments.len())?;
     if call.arguments.iter().any(|argument| argument.spread) {
         return None;
     }
@@ -146,8 +81,10 @@ pub(crate) fn lazy_default_render_candidate<'f>(
                     && outer.span.contains(function.span)
             })
     })?;
-    (!function.r#async && !function.generator && lookup.function_value_is_current(file, function))
-        .then_some((function, property.span, value))
+    (!function.r#async
+        && !function.generator
+        && crate::indexes::function_value_is_current_in(file, function))
+    .then_some((function, property.span, value))
 }
 
 /// Whether the loader call initializes an unexported, unwritten `const` whose

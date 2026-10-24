@@ -442,53 +442,49 @@ impl<'a> SemanticLookup<'a> {
     /// inherit the identity of `i` or `wrapper` when the complete callee has no
     /// semantic fact.
     pub(crate) fn callee_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
+        self.redirected_callee_symbol(file, callee).or_else(|| {
+            let path = file.path.as_str();
+            plain_callee_symbol(
+                file,
+                self.ast_indexes.get(path),
+                callee,
+                |span| self.resolved_declaration_symbol(file, span),
+                |span| self.entities.at(path, span),
+                |span| self.entities.value_symbol(file, span),
+            )
+        })
+    }
+
+    /// ADR 0322: the redirected export a member of a namespace import names,
+    /// when a runtime redirect binds it to selected source: the entity at the
+    /// property carries it, the resolved declaration names the declaration
+    /// file the compiler bound instead. `None` without redirects, and for every
+    /// other callee ([`Self::callee_symbol`] then answers
+    /// [`plain_callee_symbol`]).
+    pub(crate) fn redirected_callee_symbol(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<&'a str> {
+        if self.facts.runtime_symbol_redirects.is_empty() {
+            return None;
+        }
         let callee = file.ast.peel_ts_sugar_span(callee);
-        let member_property = self
+        let property = self
             .ast_indexes
             .get(file.path.as_str())
-            .and_then(|index| index.member_property(callee));
-        let computed_member = file.ast.computed_members.contains(&callee);
-        // ADR 0322: a member of a namespace import that a runtime redirect
-        // binds to selected source is the redirected export: the entity at
-        // the property carries it, the resolved declaration names the
-        // declaration file the compiler bound instead.
-        if let Some(property) = member_property
-            && !computed_member
-            && !self.facts.runtime_symbol_redirects.is_empty()
-            && self.namespace_member_function(file, callee).is_some()
-            && let Some(symbol) = self.entities.at(file.path.as_str(), property)
-            && self
-                .facts
-                .runtime_symbol_redirects
-                .values()
-                .any(|target| target.as_str() == symbol.as_str())
+            .and_then(|index| index.member_property(callee))?;
+        if file.ast.computed_members.contains(&callee)
+            || self.namespace_member_function(file, callee).is_none()
         {
-            return Some(symbol.as_str());
+            return None;
         }
-        member_property
-            .and_then(|property| {
-                self.resolved_declaration_symbol(file, callee).or_else(|| {
-                    if computed_member {
-                        None
-                    } else {
-                        self.entities
-                            .at(file.path.as_str(), property)
-                            .map(SymbolId::as_str)
-                    }
-                })
-            })
-            .or_else(|| {
-                if member_property.is_none() {
-                    // The identifier's own symbol. A call or another expression
-                    // names no value through its leading token (ADR 0346): the
-                    // token at `make(…)(…)`'s callee is `make`, not what it returns.
-                    self.entities
-                        .value_symbol(file, callee)
-                        .map(SymbolId::as_str)
-                } else {
-                    None
-                }
-            })
+        let symbol = self.entities.at(file.path.as_str(), property)?;
+        self.facts
+            .runtime_symbol_redirects
+            .values()
+            .any(|target| target.as_str() == symbol.as_str())
+            .then_some(symbol.as_str())
     }
 
     /// Exact callable identities for one call site.
@@ -856,6 +852,42 @@ pub(crate) fn resolved_callee_call_in<'e>(
         .and_then(|entity| entity.resolved_call.as_deref())
         .or_else(|| entity_at(callee).and_then(|entity| entity.resolved_call.as_deref()))
         .or_else(|| entity_at(call_span).and_then(|entity| entity.resolved_call.as_deref()))
+}
+
+/// The symbol a callee span resolves to, runtime redirects aside
+/// ([`SemanticLookup::redirected_callee_symbol`]). Transparent wrappers are
+/// peeled because they preserve the called value; arbitrary contained symbols
+/// are never substituted, since `handlers[i]()` and `wrapper.value()` must not
+/// inherit the identity of `i` or `wrapper` when the complete callee has no
+/// semantic fact. A member names its resolved declaration, or else (not
+/// computed) its property's symbol; an identifier its own symbol. A call or
+/// another expression names no value through its leading token (ADR 0346):
+/// the token at `make(…)(…)`'s callee is `make`, not what it returns.
+///
+/// Every input is the callee's own file (its AST, its entity symbols and its
+/// entities' resolved calls), so a per-file contribution can answer it
+/// ([`crate::base::contributions::callees`]).
+pub(crate) fn plain_callee_symbol<'s>(
+    file: &FileFacts,
+    ast_index: Option<&CachedAstFileIndex>,
+    callee: Span,
+    resolved_declaration: impl Fn(Span) -> Option<&'s str>,
+    symbol_at: impl Fn(Span) -> Option<&'s SymbolId>,
+    value_symbol: impl Fn(Span) -> Option<&'s SymbolId>,
+) -> Option<&'s str> {
+    let callee = file.ast.peel_ts_sugar_span(callee);
+    let member_property = ast_index.and_then(|index| index.member_property(callee));
+    let computed_member = file.ast.computed_members.contains(&callee);
+    match member_property {
+        Some(property) => resolved_declaration(callee).or_else(|| {
+            if computed_member {
+                None
+            } else {
+                symbol_at(property).map(SymbolId::as_str)
+            }
+        }),
+        None => value_symbol(callee).map(SymbolId::as_str),
+    }
 }
 
 /// [`SemanticLookup::function_value_is_current`]: it reads the function's

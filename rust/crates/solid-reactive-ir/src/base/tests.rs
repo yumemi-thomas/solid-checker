@@ -846,3 +846,252 @@ fn identity_wrapper_memos_through_random_edits_equal_a_fresh_store() {
     assert!(steps > 150, "only {steps} edits applied");
     assert!(reused > computed, "{reused} reused, {computed} computed");
 }
+
+// ---------------------------------------------------------------------------
+// L2: the component census over a retained store (study S5c,
+// [`crate::indexes::ComponentStatusAt`]).
+
+/// A function's `(path, span)` and its call sites' `(caller, span)`.
+type FunctionSites = (String, Span, Vec<(String, Span)>);
+
+/// Every census answer of one build, by path and span, read through the
+/// lookup as its consumers read them.
+#[derive(Debug, PartialEq)]
+struct CensusAnswers {
+    /// Each function's status, and whether it is an escaped component.
+    statuses: Vec<(String, Span, crate::indexes::ComponentStatus, bool)>,
+    /// Each function's call-site references, as `(caller, span)`.
+    sites: Vec<FunctionSites>,
+    /// The functions some tag renders.
+    rendered: Vec<(String, Span)>,
+    /// Each file's lazy `default` witnesses that hold.
+    witnesses: Vec<(String, Span, Span)>,
+    /// The result-access forwarded arguments, by caller.
+    forwarded: Vec<(String, Vec<Span>)>,
+}
+
+/// One build of `project` over `store` through a lookup: every census
+/// answer, and the build's memo stats by table.
+fn census_build(
+    project: &Project,
+    store: &super::memo::build::MemoStore,
+    closed: bool,
+) -> Option<(CensusAnswers, Vec<(&'static str, super::memo::TableStats)>)> {
+    let facts = facts(project)?;
+    let ast_indexes = facts
+        .files
+        .iter()
+        .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
+        .collect::<HashMap<_, _>>();
+    let symbols = entity_symbols(&facts);
+    let names = HashMap::default();
+    let lookup = crate::indexes::SemanticLookup::new(
+        &facts,
+        &ast_indexes,
+        &symbols,
+        &names,
+        &solid_dialect::Solid2,
+        closed,
+    )
+    .with_memo_store(store);
+    let mut answers = CensusAnswers {
+        statuses: Vec::new(),
+        sites: Vec::new(),
+        rendered: Vec::new(),
+        witnesses: Vec::new(),
+        forwarded: Vec::new(),
+    };
+    for file in lookup.files() {
+        let path = file.path.as_str();
+        for function in &file.ast.functions {
+            answers.statuses.push((
+                path.to_owned(),
+                function.span,
+                lookup.function_component_status(file, function),
+                lookup
+                    .escaped_component_functions()
+                    .contains(&(path, function.span)),
+            ));
+            answers.sites.push((
+                path.to_owned(),
+                function.span,
+                lookup
+                    .function_call_site_references(path, function.span)
+                    .into_iter()
+                    .map(|(caller, span)| (caller.path.to_string(), span))
+                    .collect(),
+            ));
+            if lookup.jsx_call_site_loading(path, function.span).any {
+                answers.rendered.push((path.to_owned(), function.span));
+            }
+            for property in &file.ast.object_properties {
+                if lookup.is_lazy_default_render_witness(file, function.span, property.span) {
+                    answers
+                        .witnesses
+                        .push((path.to_owned(), function.span, property.span));
+                }
+            }
+        }
+        answers.forwarded.push((
+            path.to_owned(),
+            lookup
+                .result_access_forwarded_arguments(path)
+                .iter()
+                .map(|entry| entry.argument)
+                .collect(),
+        ));
+    }
+    let report = lookup.end_memos()?;
+    Some((answers, report.tables))
+}
+
+fn table_stats(
+    tables: &[(&'static str, super::memo::TableStats)],
+    name: &str,
+) -> super::memo::TableStats {
+    tables
+        .iter()
+        .find(|(table, _)| *table == name)
+        .map(|(_, stats)| *stats)
+        .unwrap_or_default()
+}
+
+/// A component, the module that renders it, and a module unrelated to both.
+const CENSUS_FILES: &[(&str, &str)] = &[
+    (
+        "/fixture/census/panel.tsx",
+        "export function Panel() {\n  return <div>panel</div>;\n}\nexport function Row() {\n  return <p>row</p>;\n}\n",
+    ),
+    (
+        "/fixture/census/app.tsx",
+        "import { Panel, Row } from \"./panel\";\nexport function App() {\n  const rows = [1].map(Row);\n  return <Panel>{rows}</Panel>;\n}\n",
+    ),
+    (
+        "/fixture/census/other.ts",
+        "export const label = \"x\";\nexport function helper(value: number) {\n  return value + 1;\n}\n",
+    ),
+];
+
+fn census_project() -> Project {
+    Project {
+        files: CENSUS_FILES
+            .iter()
+            .map(|(path, source)| ((*path).to_owned(), (*source).to_owned()))
+            .collect(),
+        schemes: HashMap::default(),
+        unreferenced: Vec::new(),
+    }
+}
+
+/// With stable symbol ids, an edit of a module that neither references,
+/// calls nor renders a function leaves its identity unrun: its reads are
+/// verified (the adapters answer as before) and nothing in the other files
+/// is recomputed. An edit of the rendering module recomputes the answers that
+/// read it.
+#[test]
+fn component_identities_are_reused_across_an_unrelated_edit() {
+    let store = super::memo::build::MemoStore::new(false, true);
+    let mut project = census_project();
+    let (first, tables) = census_build(&project, &store, false).unwrap();
+    // `Panel` is rendered by a tag in another file; `Row` is handed to
+    // `map`, an escape; `helper` returns no JSX.
+    let status = |answers: &CensusAnswers, index: usize| {
+        let (_, _, status, escaped) = &answers.statuses[index];
+        (*status, *escaped)
+    };
+    use crate::indexes::ComponentStatus;
+    assert_eq!(status(&first, 0), (ComponentStatus::Proven, false));
+    assert_eq!(status(&first, 1), (ComponentStatus::Proven, true));
+    assert_eq!(status(&first, 3), (ComponentStatus::No, false));
+    assert_eq!(first.rendered.len(), 1);
+    assert_eq!(first.sites[0].2.len(), 2, "the tag and its closing name");
+    // One per-file answer each; a census of its references for `Row` and
+    // `App`, whose own file does not decide them.
+    assert_eq!(table_stats(&tables, "component_functions").fresh, 3);
+    assert_eq!(table_stats(&tables, "component_census").fresh, 2);
+    // A body edit of the unrelated module: the same length, no span moves.
+    project.files[2].1 = project.files[2].1.replace("\"x\"", "\"y\"");
+    let (second, tables) = census_build(&project, &store, false).unwrap();
+    assert_eq!(first, second);
+    let files = table_stats(&tables, "component_functions");
+    // Only the edited file's answer is recomputed.
+    assert_eq!(
+        (files.fresh, files.changed, files.unchanged),
+        (0, 0, 1),
+        "{files:?}"
+    );
+    assert_eq!(files.reused + files.verified, 2, "{files:?}");
+    let census = table_stats(&tables, "component_census");
+    assert_eq!(
+        census.fresh + census.changed + census.unchanged,
+        0,
+        "{census:?}"
+    );
+    assert_eq!(census.reused + census.verified, 2, "{census:?}");
+    let sites = table_stats(&tables, "function_call_sites");
+    assert_eq!(sites.changed + sites.fresh, 0, "{sites:?}");
+    // A prefix edit of the rendering module moves every span in it: the
+    // answers that read it are recomputed, and agree with a fresh store.
+    project.files[1].1 = format!("// moved\n{}", project.files[1].1);
+    let (third, tables) = census_build(&project, &store, false).unwrap();
+    let fresh = super::memo::build::MemoStore::new(false, false);
+    let (expected, _) = census_build(&project, &fresh, false).unwrap();
+    assert_eq!(third, expected);
+    let census = table_stats(&tables, "component_census");
+    assert!(census.unchanged + census.changed >= 1, "{census:?}");
+}
+
+/// Through random edits (the base property test's kinds, TypeFacts-only
+/// changes included), the retained store's census answers exactly as a
+/// fresh store's, with verify-reused mode on: no reused answer missed a read.
+#[test]
+fn census_memos_through_random_edits_equal_a_fresh_store() {
+    let mut steps = 0;
+    let (mut reused, mut computed) = (0, 0);
+    let fixtures = FIXTURES.iter().map(|fixture| {
+        let mut project = Project {
+            files: fixture_sources(fixture),
+            schemes: HashMap::default(),
+            unreferenced: Vec::new(),
+        };
+        project.files.extend(census_project().files);
+        project.files.sort();
+        (*fixture, project)
+    });
+    for (fixture, original) in fixtures {
+        for seed in 1..=2 {
+            let closed = seed == 2;
+            let mut random = Random(seed);
+            let mut project = original.clone();
+            let store = super::memo::build::MemoStore::new(true, true);
+            census_build(&project, &store, closed).expect("the fixture parses");
+            for serial in 0..15 {
+                let kind = KINDS[random.below(KINDS.len())];
+                let mut next = project.clone();
+                if edit(&mut next, kind, &mut random, serial).is_none() || facts(&next).is_none() {
+                    continue;
+                }
+                project = next;
+                let (answers, tables) = census_build(&project, &store, closed).unwrap();
+                let fresh = super::memo::build::MemoStore::new(false, false);
+                let (expected, _) = census_build(&project, &fresh, closed).unwrap();
+                assert_eq!(
+                    answers, expected,
+                    "{fixture} seed {seed} step {serial} ({kind})"
+                );
+                for (table, stats) in &tables {
+                    assert_eq!(
+                        stats.mismatches, 0,
+                        "{fixture} seed {seed} step {serial}: {table}"
+                    );
+                    reused += stats.reused + stats.verified;
+                    computed += stats.fresh + stats.changed + stats.unchanged;
+                }
+                steps += 1;
+            }
+        }
+    }
+    eprintln!("census memos: {steps} edits, {reused} answers reused, {computed} computed");
+    assert!(steps > 120, "only {steps} edits applied");
+    assert!(reused > 0, "{reused} reused, {computed} computed");
+}
