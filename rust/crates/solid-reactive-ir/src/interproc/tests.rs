@@ -234,28 +234,154 @@ fn summary_reads_dedupe_on_display_origin_and_declaration_only() {
 }
 
 #[test]
-fn unconditional_push_appends_duplicates_but_still_records_the_key() {
+fn identical_rows_collapse_whichever_way_they_are_offered() {
     let mut reads = SummaryReads::default();
     reads.push(read("sym", "count", 10));
     reads.push(read("sym", "count", 10));
-    // `push` never dedupes its own input...
-    assert_eq!(reads.len(), 2);
-    // ...but it seeds the key, so a later `push_unique` is refused.
+    assert_eq!(reads.len(), 1);
     assert!(!reads.push_unique(read("sym", "count", 10)));
 }
 
 #[test]
-fn replacing_the_reads_resets_the_dedupe_state() {
+fn replacing_the_reads_resets_the_set() {
     let mut reads = SummaryReads::default();
     reads.push(read("sym", "count", 10));
     reads.replace(vec![read("sym", "name", 20)]);
     // The old key is forgotten, the replacement's key is live.
     assert!(reads.push_unique(read("sym", "count", 10)));
     assert!(!reads.push_unique(read("sym", "name", 20)));
+    // Canonical order, not arrival order: the earlier origin first.
     assert_eq!(
         reads.to_vec(),
-        vec![read("sym", "name", 20), read("sym", "count", 10)]
+        vec![read("sym", "count", 10), read("sym", "name", 20)]
     );
+}
+
+fn flagged(read: SummaryRead, local: bool, conditional: bool) -> SummaryRead {
+    SummaryRead {
+        local,
+        conditional,
+        ..read
+    }
+}
+
+/// ADR 0395: a dominating row that arrives late evicts the weaker one
+/// (arrival order used to keep both), and rows with incomparable flags both
+/// stay.
+#[test]
+fn a_late_dominating_row_evicts_the_weaker_one() {
+    let mut reads = SummaryReads::default();
+    assert!(reads.push_unique(flagged(read("sym", "count", 10), true, true)));
+    assert!(reads.push_unique(flagged(read("sym", "count", 10), false, true)));
+    assert_eq!(
+        reads.to_vec(),
+        vec![flagged(read("sym", "count", 10), false, true)]
+    );
+    assert!(reads.push_unique(flagged(read("sym", "count", 10), true, false)));
+    assert_eq!(reads.len(), 2);
+    assert!(!reads.push_unique(flagged(read("sym", "count", 10), true, true)));
+    // A nearer row with worse flags is not dominated by a farther one with
+    // better flags: dominance is a product order, so a transfer keeps it.
+    let mut reads = SummaryReads::default();
+    assert!(reads.insert(read("sym", "count", 10), 2));
+    assert!(reads.insert(flagged(read("sym", "count", 10), false, true), 1));
+    assert_eq!(reads.len(), 2);
+    assert_eq!(reads.rows().next().map(|(hops, _)| hops), Some(1));
+    // Equal flags: the fewer hops win, and the rank ties the rest.
+    assert!(reads.insert(read("sym", "count", 10), 1));
+    assert_eq!(reads.len(), 1);
+    assert!(!reads.insert(read("sym-b", "count", 10), 1));
+    assert!(reads.insert(read("alias", "count", 10), 1));
+    assert_eq!(reads.to_vec(), vec![read("alias", "count", 10)]);
+}
+
+fn permutations<T: Clone>(items: &[T]) -> Vec<Vec<T>> {
+    if items.len() <= 1 {
+        return vec![items.to_vec()];
+    }
+    let mut all = Vec::new();
+    for index in 0..items.len() {
+        let mut rest = items.to_vec();
+        let head = rest.remove(index);
+        for mut tail in permutations(&rest) {
+            tail.insert(0, head.clone());
+            all.push(tail);
+        }
+    }
+    all
+}
+
+/// ADR 0395: the set is a function of the rows offered, whatever their
+/// arrival order.
+#[test]
+fn summary_reads_are_independent_of_arrival_order() {
+    let rows = [
+        (0, flagged(read("sym", "count", 10), true, true)),
+        (1, flagged(read("sym", "count", 10), false, true)),
+        (2, flagged(read("sym", "count", 10), true, false)),
+        (0, flagged(read("sym-b", "count", 10), false, false)),
+        (1, flagged(read("sym", "count", 12), false, false)),
+        (
+            0,
+            SummaryRead {
+                transported: true,
+                ..read("sym", "count", 10)
+            },
+        ),
+    ];
+    let build = |order: &[(u32, SummaryRead)]| {
+        let mut reads = SummaryReads::default();
+        for (hops, read) in order {
+            reads.insert(read.clone(), *hops);
+        }
+        reads
+    };
+    let expected = build(&rows);
+    for order in permutations(&rows) {
+        assert!(build(&order) == expected);
+    }
+}
+
+/// ADR 0395: call propagation reaches one fixed point whatever order the
+/// worklist visits callers in, including rows whose flags become equal past
+/// an edge.
+#[test]
+fn propagated_summaries_are_independent_of_edge_order() {
+    // 0 calls 1 and 2; 1 and 2 call 3; 3 calls 4. 1 -> 3 is guaranteed.
+    let calls = [(0, 1), (0, 2), (1, 3), (2, 3), (3, 4)];
+    let guaranteed = HashSet::from_iter([(1, 3), (0, 1), (3, 4)]);
+    let seeds = [
+        (4, flagged(read("deep", "count", 40), false, false)),
+        (3, flagged(read("mid", "count", 30), true, false)),
+        (2, flagged(read("deep", "count", 40), false, true)),
+        (1, flagged(read("mid", "count", 30), false, false)),
+    ];
+    let solve = |calls: &[(usize, usize)], seeds: &[(usize, SummaryRead)]| {
+        let mut summaries = vec![SummaryReads::default(); 5];
+        for (node, read) in seeds {
+            summaries[*node].push(read.clone());
+        }
+        let mut reverse = vec![Vec::new(); 5];
+        for (caller, callee) in calls {
+            reverse[*callee].push(*caller);
+        }
+        let mut lengths = vec![0; 5];
+        crate::propagate_summary_deltas(
+            &mut summaries,
+            &reverse,
+            &mut lengths,
+            &HashSet::default(),
+            &guaranteed,
+        );
+        summaries
+    };
+    let expected = solve(&calls, &seeds);
+    assert!(!expected[0].is_empty());
+    for order in permutations(&calls) {
+        for seeds in permutations(&seeds) {
+            assert!(solve(&order, &seeds) == expected);
+        }
+    }
 }
 
 #[test]
