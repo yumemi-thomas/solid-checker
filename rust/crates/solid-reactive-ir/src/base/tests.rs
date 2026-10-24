@@ -629,3 +629,219 @@ fn a_contribution_reads_only_its_own_file() {
     };
     assert_eq!(first(&alone), first(&together));
 }
+
+// ---------------------------------------------------------------------------
+// L2: the identity-wrapper memo over a retained store ([`super::memo`]).
+
+/// Wrappers across files: `wrap` and `keep` return their parameter, the
+/// others do not; `use.ts` calls them from another file.
+const WRAPPER_FILES: &[(&str, &str)] = &[
+    (
+        "/fixture/wrap.ts",
+        "export function wrap(cb: () => void) {\n  return cb;\n}\nexport const keep = (value: number) => value;\nexport function notWrapper(cb: () => void) {\n  cb();\n  return cb;\n}\nexport async function later(cb: () => void) {\n  return cb;\n}\n",
+    ),
+    (
+        "/fixture/use.ts",
+        "import { wrap, keep } from \"./wrap\";\nexport const run = wrap(() => keep(1));\nexport const label = \"x\";\n",
+    ),
+];
+
+/// What one memo build answered and found.
+struct MemoBuild {
+    answers: Vec<(Arc<str>, Option<usize>)>,
+    /// The per-symbol table's stats.
+    stats: super::memo::TableStats,
+    /// The per-function table's stats.
+    functions: super::memo::TableStats,
+    begin: super::memo::build::BeginReport,
+}
+
+/// One build of `project` over the retained `store`: every candidate's
+/// answer (plus one absent symbol), and the build's table stats.
+fn memo_build(project: &Project, store: &super::memo::build::MemoStore) -> Option<MemoBuild> {
+    use crate::indexes::IdentityWrapper;
+    let facts = facts(project)?;
+    let ast_indexes = facts
+        .files
+        .iter()
+        .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
+        .collect::<HashMap<_, _>>();
+    let symbols = entity_symbols(&facts);
+    let entities = crate::indexes::first_entity_by_location(facts.typescript.entities());
+    let references = OnceLock::new();
+    let table = store.table(&super::FileTable::new(&facts.files));
+    let views = Views {
+        table: &table,
+        files: &facts.files,
+        sources: ViewSources {
+            ast_indexes: &ast_indexes,
+            symbols: &symbols,
+            entities: &entities,
+            typescript: &facts.typescript,
+            references: &references,
+        },
+        constants: BuildConstants {
+            dialect: &solid_dialect::Solid2,
+        },
+    };
+    let begin = store.begin(&views, false);
+    let world = super::memo::build::BuildWorld::new(views, store, false);
+    let mut keys = store.wrapper_candidate_keys();
+    keys.push(Arc::from("s0:absent"));
+    let answers = keys
+        .into_iter()
+        .map(|key| {
+            let answer = world.answer::<IdentityWrapper>(&key);
+            (key, answer)
+        })
+        .collect();
+    let tables = store.end();
+    let stats = |table: &str| {
+        tables
+            .iter()
+            .find(|(name, _)| *name == table)
+            .map(|(_, stats)| *stats)
+            .unwrap_or_default()
+    };
+    Some(MemoBuild {
+        answers,
+        stats: stats("identity_wrappers"),
+        functions: stats("identity_wrapper_functions"),
+        begin,
+    })
+}
+
+fn wrapper_project(fixture: &str) -> Project {
+    let mut files = fixture_sources(fixture);
+    files.extend(
+        WRAPPER_FILES
+            .iter()
+            .map(|(path, source)| ((*path).to_owned(), (*source).to_owned())),
+    );
+    files.sort();
+    Project {
+        files,
+        schemes: HashMap::default(),
+        unreferenced: Vec::new(),
+    }
+}
+
+#[test]
+fn identity_wrappers_are_found_across_files() {
+    let store = super::memo::build::MemoStore::new(false, true);
+    let build = memo_build(&wrapper_project(FIXTURES[0]), &store).unwrap();
+    let answer = |symbol: &str| {
+        build
+            .answers
+            .iter()
+            .find(|(key, _)| key.as_ref() == symbol)
+            .map(|(_, answer)| *answer)
+    };
+    assert_eq!(answer("s0:wrap"), Some(Some(0)));
+    assert_eq!(answer("s0:keep"), Some(Some(0)));
+    assert_eq!(answer("s0:notWrapper"), Some(None));
+    // Async: not a candidate at all.
+    assert_eq!(answer("s0:later"), None);
+    assert_eq!(answer("s0:absent"), Some(None));
+    assert_eq!(build.stats.reused + build.stats.verified, 0);
+}
+
+/// With stable symbol ids (the synthetic table spells a symbol by its text),
+/// an edit that leaves a wrapper's file and index entries alone reuses its
+/// answer; an edit that moves the wrapper's spans recomputes its function's
+/// answer to the same value, and the symbol's answer is verified unrun.
+#[test]
+fn identity_wrapper_answers_are_reused_when_ids_are_stable() {
+    let store = super::memo::build::MemoStore::new(false, true);
+    let mut project = wrapper_project(FIXTURES[0]);
+    let first = memo_build(&project, &store).unwrap();
+    assert!(first.stats.fresh > 2);
+    // A body edit of the caller: the same byte length, no span moves.
+    let caller = project
+        .files
+        .iter()
+        .position(|(path, _)| path == "/fixture/use.ts")
+        .unwrap();
+    project.files[caller].1 = project.files[caller].1.replace("\"x\"", "\"y\"");
+    let second = memo_build(&project, &store).unwrap();
+    assert_eq!(first.answers, second.answers);
+    assert_eq!(second.begin.changed_files, 1);
+    let stats = second.stats;
+    assert_eq!(
+        (
+            stats.reused,
+            stats.fresh + stats.changed + stats.unchanged + stats.verified
+        ),
+        (first.answers.len() as u64, 0),
+        "{stats:?}"
+    );
+    // A prefix edit of the wrappers' file moves every span in it: the L1
+    // entries (symbol, ordinal) stay, each function's answer is recomputed
+    // to the same value, and each symbol's answer is verified (cutoff).
+    let wrappers = project
+        .files
+        .iter()
+        .position(|(path, _)| path == "/fixture/wrap.ts")
+        .unwrap();
+    project.files[wrappers].1 = format!("// moved\n{}", project.files[wrappers].1);
+    let third = memo_build(&project, &store).unwrap();
+    assert_eq!(first.answers, third.answers);
+    assert_eq!(third.begin.delta_keys, 0);
+    let (stats, functions) = (third.stats, third.functions);
+    assert!(functions.unchanged >= 3, "{functions:?}");
+    assert_eq!(functions.changed + functions.fresh, 0, "{functions:?}");
+    assert!(stats.verified >= 3, "{stats:?}");
+    assert_eq!(
+        stats.changed + stats.unchanged + stats.fresh,
+        0,
+        "{stats:?}"
+    );
+}
+
+/// Through random edits (the base property test's kinds, TypeFacts-only
+/// changes included), the retained store answers exactly as a fresh store,
+/// with verify-reused mode on: no reused answer missed a read.
+#[test]
+fn identity_wrapper_memos_through_random_edits_equal_a_fresh_store() {
+    let mut steps = 0;
+    let (mut reused, mut computed) = (0, 0);
+    for fixture in FIXTURES {
+        let original = wrapper_project(fixture);
+        for seed in 1..=3 {
+            let mut random = Random(seed);
+            let mut project = original.clone();
+            let store = super::memo::build::MemoStore::new(true, true);
+            memo_build(&project, &store).expect("the fixture parses");
+            for serial in 0..20 {
+                let kind = KINDS[random.below(KINDS.len())];
+                let mut next = project.clone();
+                if edit(&mut next, kind, &mut random, serial).is_none() || facts(&next).is_none() {
+                    continue;
+                }
+                project = next;
+                let build = memo_build(&project, &store).unwrap();
+                let fresh = super::memo::build::MemoStore::new(false, false);
+                let expected = memo_build(&project, &fresh).unwrap();
+                assert_eq!(
+                    build.answers, expected.answers,
+                    "{fixture} seed {seed} step {serial} ({kind})"
+                );
+                assert_eq!(
+                    build.stats.mismatches + build.functions.mismatches,
+                    0,
+                    "{fixture} seed {seed} step {serial}"
+                );
+                steps += 1;
+                for stats in [build.stats, build.functions] {
+                    reused += stats.reused + stats.verified;
+                    computed += stats.fresh + stats.changed + stats.unchanged;
+                }
+            }
+        }
+    }
+    eprintln!(
+        "identity-wrapper memos: {steps} edits, {reused} answers reused, {computed} computed"
+    );
+    assert!(steps > 150, "only {steps} edits applied");
+    assert!(reused > computed, "{reused} reused, {computed} computed");
+}

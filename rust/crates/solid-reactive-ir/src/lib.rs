@@ -1316,6 +1316,14 @@ pub struct BuildTimings {
     pub base_index_update: Duration,
     /// Shadow mode: how many files' views changed since the retained base.
     pub base_index_changed_files: u64,
+    /// L2 memos ([`base::memo`]): finding the changed inputs and marking
+    /// their readers, before the build's first memo read.
+    pub memo_begin: Duration,
+    /// Memo answers reused from an earlier build (clean, or maybe-dirty and
+    /// verified), each key counted once per build.
+    pub memo_reused: u64,
+    /// Memo answers computed in this build (new keys and recomputations).
+    pub memo_computed: u64,
     pub reused: bool,
     pub source_discovery_reused_files: u64,
     pub source_discovery_recomputed_files: u64,

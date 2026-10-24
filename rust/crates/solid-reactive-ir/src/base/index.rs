@@ -27,6 +27,11 @@ impl<K, C> FileContribution<K, C> {
         Self { entries, slot_ends }
     }
 
+    /// Which slot of the file produced the entry at `position`.
+    fn rank_of(&self, position: u32) -> usize {
+        self.slot_ends.partition_point(|end| *end <= position)
+    }
+
     /// The entries the file's `rank`-th slot produced.
     pub(crate) fn slot(&self, rank: usize) -> &[(K, C)] {
         let start = if rank == 0 {
@@ -186,6 +191,28 @@ impl<K: Eq + Hash + Clone, C: PartialEq> BaseIndex<K, C> {
                 positions
                     .iter()
                     .map(move |position| (*file, &entries[*position as usize].1))
+            })
+    }
+
+    /// [`Self::values`], each with the rank of the file's slot that
+    /// produced it.
+    pub(crate) fn ranked_values<'s>(
+        &'s self,
+        key: &K,
+    ) -> impl Iterator<Item = (FileId, usize, &'s C)> + 's {
+        self.by_key
+            .get(key)
+            .into_iter()
+            .flatten()
+            .flat_map(move |(file, positions)| {
+                let contribution = &self.by_file[file];
+                positions.iter().map(move |position| {
+                    (
+                        *file,
+                        contribution.rank_of(*position),
+                        &contribution.entries[*position as usize].1,
+                    )
+                })
             })
     }
 
