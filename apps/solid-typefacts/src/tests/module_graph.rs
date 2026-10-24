@@ -223,7 +223,7 @@ fn module_graph_reports_relative_import_resolution() {
     assert_eq!(span, b"\"./nested/helper\"");
 }
 
-/// `distinctBareImports` (ADR 0379): what resolution read, once per importing
+/// `distinctBareImports` (ADR 0382): what resolution read, once per importing
 /// file and resolution. Relative imports and a repeated `import("pkg")` type
 /// add nothing a resolution witness observes, so only the first `pkg` row and
 /// the distinct `pkg/sub` row are answered, with the full demand's values.

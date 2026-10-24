@@ -81,7 +81,7 @@ and docs/decisions.md (live decisions by ADR number).
   get a seconds-long WASM compile check instead of the WASM package build and
   parity, which only `packages/wasm/` selects; `make verify` runs both.
 - IR reuse changes: `make ir-edit-fuzz` (random edits, daemon against one-shot, shadow
-  mode silent; `SOLID_CHECKER_IR_SHADOW`, ADR 0380) and `make ir-read-lint` (a ratchet on raw
+  mode silent; `SOLID_CHECKER_IR_SHADOW`, ADR 0383) and `make ir-read-lint` (a ratchet on raw
   cross-file reads). Long budget on the corpus: `make ir-edit-fuzz-corpus`.
 - Fixture or finding changes: `make coverage`, then `make ownership-gate`. Both
   build and use the fresh debug checker.
@@ -90,7 +90,10 @@ and docs/decisions.md (live decisions by ADR number).
   bare `cargo` does not. If a gate result looks impossible, rerun it with
   `SOLID_CHECKER_GATE_CACHE=0`.
 - Sweeps and timing use the release binary (`make build-checker-release`); the
-  debug binary inflates certification about 19x.
+  debug binary inflates certification about 19x. Pass the previous sweep's
+  report as `--order-from` so the slowest projects start first.
+- Iterating on the producer: `TYPEFACTS_PROFILE=bench-dev` (thin LTO); see
+  CONTRIBUTING.md for the shared producer cache.
 
 ## Report
 

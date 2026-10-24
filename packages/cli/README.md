@@ -56,4 +56,12 @@ informational debugging guidance; passing originals stay quiet. The collector
 uses a reviewed RC.9 native-reader profile. Automatic source proposals and
 package behavior inference remain unavailable.
 
+`--execution-cache <directory>` reuses a run's browser half (Vite, Chromium, the
+scenario and frame attribution) when the project's sources and manifest, the
+native development models, the TypeScript error count, the scenario, the
+browser, the tooling and this CLI are unchanged, and every runtime input it
+recorded still hashes the same. Findings, observations and automatic warnings
+always come from the current analysis. A run whose scenario failed is not
+stored. It does not combine with `--compare-project`.
+
 See [the capture format and current limits](../../docs/development-feedback.md).

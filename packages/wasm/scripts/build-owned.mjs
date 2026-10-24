@@ -45,12 +45,19 @@ function read(command, args, options) {
 }
 
 const rustEnvironment = { ...process.env, RUSTUP_TOOLCHAIN: "1.99.1", SOLID_CHECKER_BUILD_ID: buildId, TYPEFACTS_BUILD_ID: buildId };
+// CARGO_TARGET_DIR moves both builds out of the workspaces' own target
+// directories (scripts/verify.sh builds this package beside the checker's
+// tests); the producer, another workspace, gets a directory inside it.
+const targetOverride = process.env.CARGO_TARGET_DIR ? resolve(process.env.CARGO_TARGET_DIR) : null;
+const checkerTarget = targetOverride ?? join(repositoryRoot, "rust/target");
+const producerTarget = targetOverride ? join(targetOverride, "typefacts") : join(repositoryRoot, "apps/solid-typefacts/target");
 run("cargo", [
   "build", "--manifest-path", join(repositoryRoot, "rust/Cargo.toml"),
   "-p", "solid-checker-wasm", "--target", "wasm32-wasip1",
   "--no-default-features", "--features", "reactor,dialect-v2", "--release",
+  "--target-dir", checkerTarget,
 ], { cwd: repositoryRoot, env: rustEnvironment });
-const checkerBuilt = join(repositoryRoot, "rust/target/wasm32-wasip1/release/solid_checker_wasm.wasm");
+const checkerBuilt = join(checkerTarget, "wasm32-wasip1/release/solid_checker_wasm.wasm");
 
 const producerBuilt = join(staging, "solid-typefacts-rust.wasm");
 const producerManifest = join(repositoryRoot, "apps/solid-typefacts/Cargo.toml");
@@ -59,11 +66,11 @@ const producerManifest = join(repositoryRoot, "apps/solid-typefacts/Cargo.toml")
 // 80 MiB shadow stack is tsrs's own wasm setting (its notes/wasm-build.md).
 run("cargo", [
   "rustc", "--manifest-path", producerManifest, "--lib", "--crate-type", "cdylib",
-  "--target", "wasm32-wasip1", "--release", "--features", "reactor", "--locked",
+  "--target", "wasm32-wasip1", "--release", "--features", "reactor", "--locked", "--target-dir", producerTarget,
   // --wrap: see wasi_import_stubs in the producer's unsafe_boundary.rs.
   "--", "-C", "link-arg=-zstack-size=83886080", "-C", "link-arg=--wrap=__imported_wasi_snapshot_preview1_fd_filestat_set_times",
 ], { cwd: repositoryRoot, env: rustEnvironment });
-copyFileSync(join(repositoryRoot, "apps/solid-typefacts/target/wasm32-wasip1/release/solid_typefacts.wasm"), producerBuilt);
+copyFileSync(join(producerTarget, "wasm32-wasip1/release/solid_typefacts.wasm"), producerBuilt);
 
 const artifact = (source, file, details) => {
   const bytes = readFileSync(source);

@@ -236,6 +236,8 @@ fn measured(source: &str, exhaust: bool) -> (Vec<HostExecutionFact>, usize, usiz
 }
 
 #[test]
+// A test-only thread for its stack size; tests never run in the wasm32-wasip1 reactor.
+#[allow(clippy::disallowed_methods)]
 fn deep_wide_completion_visits_and_predicate_storage_are_linear() {
     // The parser/binder have their own stack needs. Count this pass's work,
     // never elapsed time, and test both pathological expression shapes.

@@ -46,7 +46,7 @@
 //      dialect) lives inside `coverage`. This one is *not* closed; it is printed
 //      as a caveat on every run, because closing it means hashing the fixture
 //      trees, which is `coverage`'s own job.
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -61,6 +61,10 @@ const MANIFEST = "rust/Cargo.toml";
 const TYPEFACTS_MANIFEST = "apps/solid-typefacts/Cargo.toml";
 const DEBUG_CHECKER = "rust/target/debug/solid-checker-rust";
 const TYPEFACTS = "bin/solid-typefacts";
+// Check-only builds (clippy, the WASM compile check) have a target directory of
+// their own, which scripts/verify.sh shares, so they compile beside the debug
+// build and the tests rather than queueing behind them on `rust/target`.
+const LINT_TARGET = "rust/target/lint";
 
 /**
  * The checks, by identifier.
@@ -161,8 +165,8 @@ export const CHECKS = {
       "package build and parity gate are skipped; this seconds-long check keeps a WASM-only compile break " +
       "(the crate without its default napi host) failing here rather than only in `make verify`",
     command: [
-      "cargo", TOOLCHAIN, "check", "--manifest-path", MANIFEST, "-p", "solid-checker-wasm",
-      "--all-targets", "--no-default-features", "--features", "dialect-v2",
+      "cargo", TOOLCHAIN, "check", "--target-dir", LINT_TARGET, "--manifest-path", MANIFEST,
+      "-p", "solid-checker-wasm", "--all-targets", "--no-default-features", "--features", "dialect-v2",
     ],
   },
   "typefacts": {
@@ -203,8 +207,8 @@ export const CHECKS = {
   "dialect-manifests": { command: ["bun", "scripts/dialect-manifests.mjs", "validate"] },
   clippy: {
     command: [
-      "cargo", TOOLCHAIN, "clippy", "--manifest-path", MANIFEST, "--workspace", "--all-targets",
-      "--", "-D", "warnings",
+      "cargo", TOOLCHAIN, "clippy", "--target-dir", LINT_TARGET, "--manifest-path", MANIFEST,
+      "--workspace", "--all-targets", "--", "-D", "warnings",
     ],
   },
   verify: { command: ["scripts/verify.sh"] },
@@ -399,6 +403,33 @@ export function planFor(paths) {
   return { full: false, unmapped, decisions, checks: ordered };
 }
 
+/**
+ * Whether `make verify` must build the WASM package and run its parity gate
+ * for a change set (ADR 0379).
+ *
+ * Parity compares two builds of one analysis. An edit confined to the analysis
+ * crates -- the rows that select `wasm-compile` -- moves both builds alike,
+ * apart from what only the WASM target does differently; for the analysis that
+ * is threads, which `clippy.toml` in each of those crates confines to sites
+ * with a sequential arm. Prose no check reads moves neither. Anything else, an
+ * unreadable change set, or an empty one (nothing to attribute the result to)
+ * runs it. CI runs parity on every pull request either way.
+ *
+ * @returns {{run: boolean, reason: string}}
+ */
+export function wasmParityScope(changed) {
+  if (changed.error) return { run: true, reason: changed.error };
+  if (changed.paths.length === 0) return { run: true, reason: "no change set to scope by" };
+  const outside = [...new Set(changed.paths)].filter((path) => {
+    const row = classify(path);
+    return !row || !(row.checks.includes("wasm-compile") || row.checks.length === 0);
+  });
+  if (outside.length > 0) {
+    return { run: true, reason: `${outside.length} changed path(s) outside the analysis crates, e.g. ${outside[0]}` };
+  }
+  return { run: false, reason: `all ${new Set(changed.paths).size} changed path(s) are analysis-only or prose` };
+}
+
 const git = (args) => {
   const result = spawnSync("git", args, { cwd: ROOT, encoding: "utf8" });
   if (result.status !== 0) {
@@ -451,6 +482,11 @@ const PRODUCER_STAMP = "bin/solid-typefacts.buildinfo";
  * change set can report -- and the producer computes every fact the repository
  * reasons about. A drifted or absent stamp therefore escalates: not because a
  * narrow check is missing, but because nothing here knows which answers moved.
+ *
+ * The build profile is the one field compared loosely: a `bench-dev` producer
+ * (thin LTO, `TYPEFACTS_PROFILE`) and a release one are the same sources
+ * through the same compiler, so either answers for the other here. `make verify`
+ * still certifies with release.
  */
 export function producerStampDrift({ expected, stamp }) {
   if (expected === null) {
@@ -465,7 +501,8 @@ export function producerStampDrift({ expected, stamp }) {
   } catch {
     return `${PRODUCER_STAMP} does not contain a valid local source identity`;
   }
-  if (JSON.stringify(recorded) !== JSON.stringify(expected)) {
+  const withoutProfile = ({ profile: _profile, ...rest } = {}) => JSON.stringify(rest);
+  if (recorded === null || typeof recorded !== "object" || withoutProfile(recorded) !== withoutProfile(expected)) {
     return (
       `the built producer identity does not match the local Type Facts source manifest; ` +
       `every fact in the repository comes from it`
@@ -533,6 +570,163 @@ const commandsOf = (check) => CHECKS[check].commands ?? [CHECKS[check].command];
 
 const render = (command) => command.join(" ");
 
+/**
+ * Which lane each check runs in. Checks in one lane run one after another, in
+ * plan order; lanes run side by side. A lane is a resource that may not be
+ * shared: AGENTS.md allows one Cargo process per target directory, so every
+ * check that runs Cargo in `rust/target` shares the `rust` lane, the check-only
+ * builds share `lint` (LINT_TARGET), and the producer workspace
+ * (`apps/solid-typefacts/target`) has its own. The gates and the JS suites run
+ * built binaries only.
+ */
+export const LANES = {
+  "build-typefacts": "producer",
+  "fmt-check": "preflight",
+  "whitespace-check": "preflight",
+  "schema-json": "preflight",
+  "dialect-manifests": "preflight",
+  // Check-only builds in their own target directory (LINT_TARGET).
+  clippy: "lint",
+  "wasm-compile": "lint",
+  "build-debug": "rust",
+  "facts-lib": "rust",
+  "ir-lib": "rust",
+  "backend-process": "rust",
+  "dialects-process": "rust",
+  "differential-harness": "rust",
+  typefacts: "typefacts",
+  coverage: "gates",
+  "ownership-gate": "gates",
+  // The CLI launcher falls back to `make build-rust` when it finds no
+  // checker, so the suite queues with the other `rust/target` users.
+  "bun-test-cli": "rust",
+  // `make wasm-parity` builds in both target directories, and the package
+  // tests load what it built.
+  "wasm-parity": "wasm",
+  "bun-test-wasm": "wasm",
+  verify: "verify",
+};
+
+/**
+ * The schedule for a plan: each check with its lane and the checks that must
+ * pass before it starts.
+ *
+ * - The producer comes first: every other check reads facts it computes.
+ * - The cheap preflight checks come next, so a formatting slip fails in
+ *   seconds rather than after a build.
+ * - The gates run the debug checker, so they wait for the `rust` lane.
+ * - The WASM lane builds in both workspaces' target directories, so it waits
+ *   for every other Cargo check.
+ */
+export function scheduleFor(checks) {
+  const lane = (check) => LANES[check] ?? "verify";
+  const inLanes = (...names) => checks.filter((check) => names.includes(lane(check)));
+  return checks.map((check) => {
+    const after = new Set();
+    const own = lane(check);
+    if (own !== "producer") for (const prior of inLanes("producer")) after.add(prior);
+    if (!["producer", "preflight"].includes(own)) {
+      for (const prior of inLanes("preflight")) after.add(prior);
+    }
+    // After every `rust/target` build, not only `build-debug`: a `cargo test`
+    // with other dev-dependency features can relink the binary a gate runs.
+    if (own === "gates") for (const prior of inLanes("rust")) after.add(prior);
+    if (own === "wasm") for (const prior of inLanes("rust", "lint", "typefacts")) after.add(prior);
+    if (own === "verify") for (const prior of checks) if (prior !== check) after.add(prior);
+    return { check, lane: own, after: [...after] };
+  });
+}
+
+/**
+ * Runs a schedule: lanes side by side, each lane in order, every check only
+ * after the checks it waits for passed. Output is buffered per command and
+ * printed whole, so lanes never interleave. The first failure stops the run:
+ * running commands are terminated and nothing new starts.
+ *
+ * @returns {Promise<{check: string, command: string[], status: number, error?: string} | null>}
+ */
+export async function runSchedule(schedule, { commandsOf, environmentOf, spawnCommand = spawn }) {
+  const settled = new Map();
+  const outcome = new Map();
+  for (const { check } of schedule) {
+    let resolveCheck;
+    outcome.set(check, new Promise((resolve) => (resolveCheck = resolve)));
+    settled.set(check, resolveCheck);
+  }
+  const running = new Set();
+  let failure = null;
+  const stopAll = () => {
+    for (const child of running) {
+      try {
+        process.kill(-child.pid, "SIGTERM");
+      } catch {
+        // Already gone.
+      }
+    }
+  };
+  // The children have process groups of their own (so a failure can stop a
+  // whole build), which also keeps a terminal's Ctrl-C from reaching them:
+  // pass it on, and stop everything on any exit.
+  const signals = ["SIGINT", "SIGTERM", "SIGHUP"];
+  const onSignal = (signal) => {
+    stopAll();
+    process.exit(128 + { SIGINT: 2, SIGTERM: 15, SIGHUP: 1 }[signal]);
+  };
+  for (const signal of signals) process.on(signal, onSignal);
+  process.on("exit", stopAll);
+  const runCommand = (check, command) =>
+    new Promise((resolve) => {
+      const [executable, ...args] = command;
+      const output = [];
+      const child = spawnCommand(executable, args, {
+        cwd: ROOT,
+        env: environmentOf(check, command),
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      running.add(child);
+      child.stdout?.on("data", (chunk) => output.push(chunk));
+      child.stderr?.on("data", (chunk) => output.push(chunk));
+      let spawnError = null;
+      child.on("error", (error) => (spawnError = error));
+      child.on("close", (code, signal) => {
+        running.delete(child);
+        resolve({ output: Buffer.concat(output), status: spawnError ? 127 : (code ?? (signal ? 1 : 0)), error: spawnError?.message });
+      });
+    });
+  const lanes = new Map();
+  for (const entry of schedule) {
+    const previous = lanes.get(entry.lane) ?? Promise.resolve(true);
+    const run = (async () => {
+      const ready = (await previous) && (await Promise.all(entry.after.map((check) => outcome.get(check)))).every(Boolean);
+      if (!ready || failure) return false;
+      for (const command of commandsOf(entry.check)) {
+        if (failure) return false;
+        const started = Date.now();
+        const result = await runCommand(entry.check, command);
+        const seconds = ((Date.now() - started) / 1000).toFixed(2);
+        process.stdout.write(`\n----- ${entry.check} [${entry.lane}]: ${render(command)}\n`);
+        process.stdout.write(result.output);
+        if (result.status !== 0) {
+          if (!failure) {
+            failure = { check: entry.check, command, status: result.status, error: result.error, seconds };
+            stopAll();
+          }
+          return false;
+        }
+        console.log(`=== check ${entry.check} ${seconds}s`);
+      }
+      return true;
+    })();
+    run.then((passed) => settled.get(entry.check)(passed));
+    lanes.set(entry.lane, run);
+  }
+  await Promise.all(outcome.values());
+  for (const signal of signals) process.off(signal, onSignal);
+  process.off("exit", stopAll);
+  return failure;
+}
+
 /** Where scripts/verify.sh records the last clean, fully green commit. */
 const GREEN_STAMP = "rust/target/verify-green-commit";
 
@@ -565,7 +759,17 @@ export function greenCommit(root = ROOT) {
 /** Printed decisions are capped; a large change set is summarized by row. */
 const DECISION_PRINT_LIMIT = 40;
 
-function main() {
+async function main() {
+  // `--wasm-scope [--base REV]`: scripts/verify.sh asks whether to run the
+  // WASM package and parity gate. The scope is the whole branch against
+  // origin/main (or `--base`/SOLID_VERIFY_BASE), not the last green commit:
+  // it is what CI's parity run will cover.
+  if (process.argv.includes("--wasm-scope")) {
+    const selected = baseOf(process.argv, process.env);
+    const scope = wasmParityScope(selected.error ? { error: selected.error } : changedPaths(selected.base));
+    console.log(`${scope.run ? "run" : "skip"}: ${scope.reason}`);
+    return 0;
+  }
   const dryRun = process.argv.includes("--dry-run");
   const drift = producerStampDrift(readProducerIdentity());
   const selected = baseOf(process.argv, process.env, greenCommit());
@@ -639,29 +843,20 @@ function main() {
   }
 
   console.log("");
-  let cargoEnvironment;
-  for (const check of plan.checks) {
-    for (const command of commandsOf(check)) {
-      const started = Date.now();
-      const [executable, ...args] = command;
-      if (executable === "cargo") cargoEnvironment ??= certificationEnvironment(ROOT);
-      const result = spawnSync(executable, args, {
-        cwd: ROOT,
-        stdio: "inherit",
-        // Later Bun/Make drivers can invoke Cargo too. Keep the same pins
-        // across the whole selected plan.
-        env: { ...(cargoEnvironment ?? process.env), ...(CHECKS[check].env ?? {}) },
-      });
-      const seconds = ((Date.now() - started) / 1000).toFixed(2);
-      if (result.error || result.status !== 0) {
-        console.error(
-          `\n=== verify-delta FAILED at ${check} after ${seconds}s: ${render(command)}` +
-            (result.error ? ` (${result.error.message})` : ` (exit ${result.status})`),
-        );
-        return result.status || 1;
-      }
-      console.log(`=== check ${check} ${seconds}s`);
-    }
+  // Later Bun/Make drivers can invoke Cargo too. Keep the same pins across the
+  // whole selected plan.
+  const plannedCargo = plan.checks.some((check) => commandsOf(check).some(([executable]) => executable === "cargo"));
+  const environment = plannedCargo ? certificationEnvironment(ROOT) : process.env;
+  const failure = await runSchedule(scheduleFor(plan.checks), {
+    commandsOf,
+    environmentOf: (check) => ({ ...environment, ...(CHECKS[check].env ?? {}) }),
+  });
+  if (failure) {
+    console.error(
+      `\n=== verify-delta FAILED at ${failure.check} after ${failure.seconds}s: ${render(failure.command)}` +
+        (failure.error ? ` (${failure.error})` : ` (exit ${failure.status})`),
+    );
+    return failure.status || 1;
   }
   console.log(
     "\nverify-delta: every selected check passed. `make verify` remains the handoff authority.",
@@ -670,5 +865,5 @@ function main() {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
-  process.exit(main());
+  process.exit(await main());
 }

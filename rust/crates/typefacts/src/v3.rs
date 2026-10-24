@@ -481,7 +481,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // Protocol 82 (ADR 0368) adds `ModuleFact.root`; a protocol-81 consumer
 // decodes with `deny_unknown_fields` and would reject it.
 // Protocol 83 (ADR 0368 review) adds the `Modules` answer's `unmappedRoots`.
-// Protocol 84 adds the `Modules` demand `distinctBareImports` (ADR 0379); a
+// Protocol 84 adds the `Modules` demand `distinctBareImports` (ADR 0382); a
 // protocol-83 producer decodes with `deny_unknown_fields` and would reject it.
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 84;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {

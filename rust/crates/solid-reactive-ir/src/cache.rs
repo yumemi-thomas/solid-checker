@@ -418,6 +418,8 @@ pub(crate) const PARALLEL_INDEX_FILE_THRESHOLD: usize = 256;
 /// thread support, and `Scope::spawn` panics there instead of degrading to an
 /// inline call, so the sequential arm is a correctness requirement and not
 /// only a small-project optimization.
+// Threads only when `parallel`; the sequential arm is the `else` branch (wasm32-wasip1).
+#[allow(clippy::disallowed_methods)]
 pub(crate) fn build_typescript_indexes(
     table: &solid_facts::TypeScriptTable,
     dialect: &dyn Dialect,

@@ -181,6 +181,39 @@ jobs:
       - run: bun pm pack --dry-run
         working-directory: packages/wasm
 
+  # The owned check against the native one over the same projects. Local
+  # `make verify` skips it for changes confined to the analysis crates (ADR
+  # 0379), so every pull request runs it here. On macOS 27 (the `xcode-27`
+  # image): the gate's path rows compare the owned WASI layer with the host's
+  # own POSIX answers, which differ on Linux (a symlink loop is os error 40,
+  # not 62) and on macOS 15 (a trailing slash through a file symlink).
+  wasm-parity:
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          targets: wasm32-wasip1-threads, wasm32-wasip1
+      - run: rustup target add wasm32-wasip1-threads wasm32-wasip1 --toolchain 1.99.1
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            rust
+            apps/solid-typefacts
+          shared-key: wasm-parity-macos
+          # As in rust-package: restored macOS build-script executables have
+          # failed with exit 126, so keep downloads cached and rebuild targets.
+          cache-targets: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: ./.github/actions/typefacts
+      # The package's build tooling (napi) and the oracle harness's `typescript`.
+      - run: bun install --cwd packages/wasm --ignore-scripts --no-progress --frozen-lockfile
+      - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
+      - run: make wasm-parity
+
   scripts-and-cli:
     runs-on: ubuntu-latest
     steps:
