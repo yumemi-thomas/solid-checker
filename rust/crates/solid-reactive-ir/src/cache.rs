@@ -164,12 +164,13 @@ impl IncrementalCacheState {
         if retention == CacheRetention::Performance {
             return;
         }
-        self.interprocedural_graph.clear();
-        self.interprocedural_results = CachedInterproceduralResults::default();
-        // Reachability stays (ADR 0397): its per-file chunks are small,
-        // and rebuilding them recomputed every file after each idle period.
+        // The interprocedural graph and result chunks stay (ADR
+        // 03XX-edit-residual): rebuilding them cost about 95 ms of every
+        // app-game edit for about 50 MB, as do reachability's (ADR 0397).
         self.base_indexes = None;
         if retention == CacheRetention::Compact {
+            self.interprocedural_graph.clear();
+            self.interprocedural_results = CachedInterproceduralResults::default();
             self.reachability = None;
             // Memo answers are small next to what they save; only the
             // compact policy, which keeps no index at all, drops them.

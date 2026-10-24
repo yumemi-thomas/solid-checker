@@ -1487,7 +1487,8 @@ pub enum CacheRetention {
     /// Keep every incremental index for the lowest edit latency.
     #[default]
     Performance,
-    /// Drop the largest low-cost-to-rebuild indexes.
+    /// Drop the indexes that only the shadow check reads; keep every cache
+    /// an edit reuses (ADR 03XX-edit-residual).
     Balanced,
     /// Keep only the current coherent program.
     Compact,
@@ -1648,9 +1649,10 @@ impl IncrementalBuilder {
 
     /// Applies the idle-memory policy without invalidating the current result.
     ///
-    /// `Balanced` targets the cache families that profiling found to
-    /// account for most retained bytes per millisecond of recomputation; it
-    /// keeps the TypeScript indexes, which an exact Type Facts delta patches.
+    /// `Balanced` releases the retained base indexes, which only shadow mode
+    /// reads, and keeps every cache an edit reuses: the interprocedural graph
+    /// and result chunks cost about 95 ms of an app-game edit to rebuild for
+    /// about 50 MB.
     /// `Compact` releases every derived index while preserving the current
     /// generation and its source-discovery domain identity.
     pub fn retain_for_idle(&mut self, retention: CacheRetention) {
