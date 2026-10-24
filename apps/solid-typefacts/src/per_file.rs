@@ -154,15 +154,39 @@ impl PerFile {
     }
 }
 
-/// The ids a table row of this file names, which the client's symbol closure
-/// starts from: entity symbols, resolved-call targets, async-function symbols
-/// and targets.
+/// Every id a table row of this file names: the client's symbol closure
+/// starts from entity symbols, resolved-call targets, async-function symbols
+/// and targets; a call's declarations (and their owners) and its parameters
+/// name ids too, and a later `symbols` query for any of them is answered from
+/// this pass's row, as the canonical producer answers it from the symbol it
+/// holds for the generation. (A derived id cannot be re-resolved in a later
+/// pass: no position names it.)
 fn seeds(result: &SemanticDemandRunResult, facts: &[AsyncFunctionFact]) -> Vec<SymbolId> {
+    fn declaration(ids: &mut Vec<SymbolId>, declaration: &typefacts::ResolvedDeclaration) {
+        ids.push(declaration.symbol.clone());
+        ids.extend(declaration.owners.iter().map(|owner| owner.symbol.clone()));
+    }
     let mut ids = Vec::new();
     for entity in &result.entities {
         ids.push(entity.symbol.clone());
         if let Some(call) = &entity.resolved_call {
             ids.push(call.target.clone());
+            if let Some(found) = &call.declaration {
+                declaration(&mut ids, found);
+            }
+            if let Some(found) = &call.default_library_binding {
+                declaration(&mut ids, found);
+            }
+            if let Some(targets) = &call.targets {
+                for found in targets.candidates.iter() {
+                    declaration(&mut ids, found);
+                }
+            }
+            for argument in call.arguments.iter() {
+                if let Some(parameter) = &argument.parameter {
+                    ids.push(parameter.symbol.clone());
+                }
+            }
         }
     }
     for fact in facts {
