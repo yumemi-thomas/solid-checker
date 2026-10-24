@@ -337,12 +337,60 @@ fn idle_limit() -> Duration {
     Duration::from_secs(seconds.max(1))
 }
 
+/// The daemon's memory limit: `SOLID_CHECKER_DAEMON_MAX_RSS_MB` (0 = none),
+/// else [`default_memory_limit_bytes`] of the machine's physical memory.
 fn memory_limit_bytes() -> Option<u64> {
-    let mebibytes = std::env::var("SOLID_CHECKER_DAEMON_MAX_RSS_MB")
+    match std::env::var("SOLID_CHECKER_DAEMON_MAX_RSS_MB")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
-        .unwrap_or(2048);
-    (mebibytes != 0).then(|| mebibytes.saturating_mul(1024 * 1024))
+    {
+        Some(0) => None,
+        Some(mebibytes) => Some(mebibytes.saturating_mul(1024 * 1024)),
+        None => Some(default_memory_limit_bytes(physical_memory_bytes())),
+    }
+}
+
+const MIB: u64 = 1024 * 1024;
+
+/// 15% of physical memory, at least 2 GiB and at most 8 GiB (2 GiB when the
+/// size is unknown). A fixed 2 GiB ended a large project's daemon after every
+/// check (app-game holds about 2.45 GiB), so its edits ran cold.
+fn default_memory_limit_bytes(physical: Option<u64>) -> u64 {
+    physical.map_or(2048 * MIB, |bytes| {
+        (bytes / 100 * 15).clamp(2048 * MIB, 8192 * MIB)
+    })
+}
+
+/// Physical memory: Linux `MemTotal`, macOS `hw.memsize`.
+fn physical_memory_bytes() -> Option<u64> {
+    if cfg!(target_os = "linux") {
+        let meminfo = fs::read_to_string("/proc/meminfo").ok()?;
+        return meminfo.lines().find_map(|line| {
+            let kib = line
+                .strip_prefix("MemTotal:")?
+                .trim()
+                .strip_suffix("kB")?
+                .trim();
+            Some(kib.parse::<u64>().ok()?.saturating_mul(1024))
+        });
+    }
+    if cfg!(target_os = "macos") {
+        let output = Command::new("sysctl")
+            .args(["-n", "hw.memsize"])
+            .output()
+            .ok()?;
+        return output
+            .status
+            .success()
+            .then(|| {
+                String::from_utf8_lossy(&output.stdout)
+                    .trim()
+                    .parse::<u64>()
+                    .ok()
+            })
+            .flatten();
+    }
+    None
 }
 
 const LARGE_PROJECT_SOURCE_THRESHOLD: usize = 1_000;
