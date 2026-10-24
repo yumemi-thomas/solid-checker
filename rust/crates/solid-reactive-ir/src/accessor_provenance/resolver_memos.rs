@@ -789,30 +789,12 @@ impl<'w> World<'w> for MemoWorld<'_, '_, 'w> {
         callee: Span,
     ) -> Option<(&'w FileFacts, &'w ast::FunctionFact)> {
         // As `SemanticLookup::namespace_member_function`.
-        let callee = file.ast.peel_ts_sugar_span(callee);
-        if file.ast.computed_members.binary_search(&callee).is_ok() {
-            return None;
-        }
-        let member = file.ast.member_at(callee)?;
-        let receiver = file.ast.peel_ts_sugar_span(member.object);
-        let declaration = file.ast.reference_declaration(receiver)?;
-        let namespace = file.ast.imports.iter().any(|import| {
-            !import.type_only
-                && import.bindings.iter().any(|binding| {
-                    !binding.type_only
-                        && binding.kind == ast::ImportKind::Namespace
-                        && binding.local.span == declaration
-                })
-        });
-        if !namespace {
-            return None;
-        }
-        let symbol = self.symbol_at(file, member.property)?;
-        self.function_for_symbol(symbol)
-            .filter(|(target_file, function)| {
-                function.method_name.is_none()
-                    && crate::indexes::function_value_is_current_in(target_file, function)
-            })
+        crate::indexes::callee_world::namespace_member_function_with(
+            file,
+            callee,
+            |property| self.symbol_at(file, property),
+            |symbol| self.function_for_symbol(symbol),
+        )
     }
 
     fn primitive(

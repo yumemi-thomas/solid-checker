@@ -357,25 +357,8 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         callee: Span,
     ) -> Option<&'a SymbolId> {
-        let callee = file.ast.peel_ts_sugar_span(callee);
-        if file.ast.computed_members.binary_search(&callee).is_ok() {
-            return None;
-        }
-        let member = file.ast.member_at(callee)?;
-        let receiver = file.ast.peel_ts_sugar_span(member.object);
-        let declaration = file.ast.reference_declaration(receiver)?;
-        let namespace = file.ast.imports.iter().any(|import| {
-            !import.type_only
-                && import.bindings.iter().any(|binding| {
-                    !binding.type_only
-                        && binding.kind == solid_facts::ast::ImportKind::Namespace
-                        && binding.local.span == declaration
-                })
-        });
-        if !namespace {
-            return None;
-        }
-        self.entities.at(file.path.as_str(), member.property)
+        let property = super::callee_world::namespace_member_property(file, callee)?;
+        self.entities.at(file.path.as_str(), property)
     }
 
     /// [`Self::namespace_member_function`]'s answer from the member
@@ -385,7 +368,7 @@ impl<'a> SemanticLookup<'a> {
         found: Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)>,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
         found.filter(|(target_file, function)| {
-            function.method_name.is_none() && self.function_value_is_current(target_file, function)
+            super::callee_world::namespace_member_value_is_current(target_file, function)
         })
     }
 
