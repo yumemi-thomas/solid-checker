@@ -1372,6 +1372,14 @@ impl<'a> SemanticLookup<'a> {
                             .is_some_and(|primitive| self.dialect.returns_reactive_tuple(primitive))
                 })
             });
+            // Begin the build's memos here, before the lanes: a lane that
+            // begins them would re-ask the recorded probes while holding its
+            // own table's `OnceLock`, and a probe that needs that table
+            // (member stability reads the tuple veto) would wait on it
+            // forever.
+            if !memo_probes::probing() {
+                let _ = self.memo_world();
+            }
             if crate::pipeline::available_analysis_workers() > 1 {
                 let limit = crate::pipeline::analysis_worker_limit_for_lanes(4);
                 std::thread::scope(|scope| {
