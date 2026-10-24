@@ -33,6 +33,7 @@
 //! | `package_boundary`, `boundary_defects`, `router_params` | Package-source boundary obligations and the router-parameters premise. |
 //! | `findings`, `projection` | The finding model and its projection onto dialect rule catalogs. |
 //! | `upstream_compat` | Retained eslint-plugin-solid 0.14.5 heuristics (see AGENTS.md before editing). |
+//! | `shadow` | Shadow mode: a retained build is compared with a fresh one (`SOLID_CHECKER_IR_SHADOW`). |
 //! | `development_feedback`, `timings` | Executed-feedback models and the stage-timing contract. |
 #![forbid(unsafe_code)]
 
@@ -75,6 +76,7 @@ pub mod route_components;
 pub mod router_params;
 mod runtime_configuration;
 mod runtime_semantics;
+pub mod shadow;
 pub use runtime_configuration::RuntimeConfigurationPremise;
 mod object_members;
 mod server_rules;
@@ -120,7 +122,7 @@ pub use projection::{
     suppress_findings_owned_by_enabled_rules,
 };
 
-use cache::{BuildIdentity, IncrementalCacheState, RetainedBuild};
+use cache::{BuildCaches, BuildIdentity, IncrementalCacheState, RetainedBuild};
 use pipeline::build_with_analysis_inputs_measured_incremental;
 
 use std::{
@@ -1304,6 +1306,9 @@ pub struct UnresolvedCallbackObligation {
 pub struct BuildTimings {
     pub total: Duration,
     pub cache_lookup: Duration,
+    /// Shadow mode ([`shadow`]): the fresh rebuild plus the comparison, which
+    /// `total` includes. Zero when shadow mode is off.
+    pub shadow: Duration,
     pub reused: bool,
     pub source_discovery_reused_files: u64,
     pub source_discovery_recomputed_files: u64,
@@ -1385,6 +1390,8 @@ pub struct IncrementalBuilder {
     /// Each file's part of that scan, reused across generations where the
     /// Type Facts delta proves it unchanged.
     runtime_configuration_scan: runtime_configuration::ScanCache,
+    /// `None` reads `SOLID_CHECKER_IR_SHADOW` at the first build.
+    shadow: Option<shadow::ShadowMode>,
 }
 
 /// How much derived cross-generation state an idle retained session keeps.
@@ -1466,11 +1473,13 @@ impl IncrementalBuilder {
             boundary_fingerprints: inputs.cache_fingerprints(),
             rule_options: rule_options.clone(),
         };
-        if self.caches.ensure_domain(
+        // A domain change drops every cache, so that build is fresh already.
+        let domain_reset = self.caches.ensure_domain(
             identity.dialect,
             &identity.project_id,
             &identity.boundary_fingerprints,
-        ) {
+        );
+        if domain_reset {
             self.retained = None;
         }
         let cache_lookup = lookup_started.elapsed();
@@ -1495,6 +1504,33 @@ impl IncrementalBuilder {
             self.caches.for_build(),
             identity.runtime_configuration.clone(),
         )?;
+        let shadow_mode = *self.shadow.get_or_insert_with(shadow::ShadowMode::from_env);
+        let mut shadow_elapsed = Duration::ZERO;
+        let program = if shadow_mode != shadow::ShadowMode::Off && !domain_reset {
+            let shadow_started = Instant::now();
+            let (fresh, _) = build_with_analysis_inputs_measured_incremental(
+                facts,
+                dialect,
+                inputs,
+                rule_options,
+                BuildCaches::default(),
+                runtime_configuration::scan(facts, dialect),
+            )?;
+            let program = if let Some(mismatch) = shadow::first_difference(&program, &fresh) {
+                shadow::report(shadow_mode, &mismatch);
+                // Fail closed: serve the fresh answer and distrust every
+                // retained cache until the next build rebuilds them.
+                self.caches.clear();
+                self.runtime_configuration = None;
+                fresh
+            } else {
+                program
+            };
+            shadow_elapsed = shadow_started.elapsed();
+            program
+        } else {
+            program
+        };
         let program = Arc::new(program);
         self.retained = Some(RetainedBuild {
             identity,
@@ -1502,7 +1538,13 @@ impl IncrementalBuilder {
         });
         timings.total = total_started.elapsed();
         timings.cache_lookup = cache_lookup;
+        timings.shadow = shadow_elapsed;
         Ok((program, timings))
+    }
+
+    /// Overrides `SOLID_CHECKER_IR_SHADOW` for this builder.
+    pub fn set_shadow_mode(&mut self, mode: shadow::ShadowMode) {
+        self.shadow = Some(mode);
     }
 
     pub fn clear(&mut self) {

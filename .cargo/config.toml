@@ -10,3 +10,8 @@ SOLID_CHECKER_BUILD_ID = "dev"
 # a bare `cargo test` runs them (and fails loudly if it is missing).
 SOLID_TYPEFACTS_BIN = { value = "bin/solid-typefacts", relative = true }
 TYPEFACTS_TEST_BIN = { value = "bin/solid-typefacts", relative = true }
+# Shadow mode (rust/crates/solid-reactive-ir/src/shadow.rs): every retained IR
+# build in a test is rebuilt fresh and compared; a mismatch panics naming the
+# first differing table and row. Release binaries run without it unless the
+# daemon's environment sets it.
+SOLID_CHECKER_IR_SHADOW = "panic"
