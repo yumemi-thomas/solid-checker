@@ -818,15 +818,29 @@ fn report_memos(
     }
 }
 
-pub(crate) fn available_analysis_workers() -> usize {
+/// The cores the analysis may use: the machine's, capped by
+/// `SOLID_CHECKER_IR_WORKERS` when it is set to a positive number. The cap
+/// reproduces a smaller machine's schedule (a 4-core CI runner) on a larger
+/// one; it changes timing only, never an answer.
+fn analysis_parallelism() -> usize {
+    static CAP: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
     let available = std::thread::available_parallelism().map_or(1, usize::from);
+    let cap = CAP.get_or_init(|| {
+        std::env::var("SOLID_CHECKER_IR_WORKERS")
+            .ok()
+            .and_then(|value| value.trim().parse::<usize>().ok())
+            .filter(|&cap| cap > 0)
+    });
+    cap.map_or(available, |cap| available.min(cap))
+}
+
+pub(crate) fn available_analysis_workers() -> usize {
+    let available = analysis_parallelism();
     ANALYSIS_WORKER_LIMIT.with(|limit| available.min(limit.get()))
 }
 
 pub(crate) fn analysis_worker_limit_for_lanes(lanes: usize) -> usize {
-    std::thread::available_parallelism()
-        .map_or(1, usize::from)
-        .div_ceil(lanes.max(1))
+    analysis_parallelism().div_ceil(lanes.max(1))
 }
 
 // Threads only with a second worker and 256 items; otherwise a plain map (wasm32-wasip1).

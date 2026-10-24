@@ -13,6 +13,10 @@
 //     --head-bench <path> --head-typefacts <path> \
 //     [--rounds 5]
 //
+// CI runners have four cores; SOLID_CHECKER_IR_WORKERS=4 (read by both
+// benchmark binaries' Reactive IR) reproduces their schedule on a larger
+// machine.
+//
 // The regression threshold is a ratio, SOLID_CHECKER_MAX_RELATIVE_REGRESSION
 // (default 1.25). Interleaved same-machine medians are stable to a few
 // percent: across ten consecutive shared-runner runs in September 2026 the
