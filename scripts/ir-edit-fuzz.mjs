@@ -140,6 +140,25 @@ export const EDIT_KINDS = {
     `${text}\n${/\.tsx?$/.test(path) ? "(Object.prototype as any)" : "Object.prototype"}.__fz${serial} = 1;\n`
 };
 
+const LOADERS = { ".ts": "ts", ".tsx": "tsx", ".js": "js", ".jsx": "jsx", ".mts": "ts", ".cts": "ts", ".mjs": "js", ".cjs": "js" };
+
+/**
+ * Whether `text` parses as the language of `path`. The checker refuses an
+ * unparseable project outright (exit 2, no answer), which says nothing about
+ * the IR, so edits that break syntax are not applied. Without Bun's
+ * transpiler every edit is assumed to parse and a refusal is caught below.
+ */
+export function parses(path, text) {
+  const loader = LOADERS[path.slice(path.lastIndexOf("."))];
+  if (!loader || typeof Bun === "undefined") return true;
+  try {
+    new Bun.Transpiler({ loader }).transformSync(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Source files a project edit may touch, in a stable order. */
 export function projectFiles(root) {
   const found = [];
@@ -304,7 +323,7 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
       const original = restorer.originals.get(path).toString("utf8");
       let kind;
       let next = null;
-      for (let attempt = 0; attempt < 8 && next === null; attempt += 1) {
+      for (let attempt = 0; attempt < 12 && next === null; attempt += 1) {
         kind = rand(5) === 0 && current !== original ? "revert" : kinds[rand(kinds.length)];
         next =
           kind === "revert"
@@ -316,6 +335,7 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
                 rand,
                 serial: step
               });
+        if (next !== null && !parses(path, next)) next = null;
       }
       if (next === null) continue;
       writeFileSync(path, next);
@@ -323,18 +343,32 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
       const logSize = existsSync(shadowLog) ? statSync(shadowLog).size : 0;
       const started = performance.now();
       const retained = await check(true);
-      retainedMs.push(performance.now() - started);
+      const retainedTook = performance.now() - started;
+      retainedMs.push(retainedTook);
       const freshStarted = performance.now();
       const fresh = await check(false);
-      freshMs.push(performance.now() - freshStarted);
+      const freshTook = performance.now() - freshStarted;
+      freshMs.push(freshTook);
       const shadowReport =
         existsSync(shadowLog) && statSync(shadowLog).size > logSize
           ? readFileSync(shadowLog, "utf8").slice(logSize)
           : "";
-      const same = retained.status === fresh.status && retained.stdout === fresh.stdout;
+      // Two empty answers are equal and prove nothing: a checker that cannot
+      // run the project must fail the run, not pass it. A refusal for syntax
+      // the pre-check let through is skipped, and the file put back.
+      const empty = fresh.stdout.trim() === "";
+      if (empty && /parse failed/.test(fresh.stderr) && retained.status === fresh.status) {
+        writeFileSync(path, current);
+        report(`skip ${label} step ${step} ${relative(root, path)} ${kind} (refused: unparseable)`);
+        continue;
+      }
+      const same = !empty && retained.status === fresh.status && retained.stdout === fresh.stdout;
       const name = `${label} step ${step} ${relative(root, path)} ${kind}`;
       if (same && !shadowReport) {
-        report(`ok ${name}`);
+        report(
+          `ok ${name} (daemon ${Math.round(retainedTook)} ms, one-shot ${Math.round(freshTook)} ms, ` +
+            `${fresh.stdout.length} bytes)`
+        );
         continue;
       }
       mismatches += 1;
@@ -342,6 +376,8 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
       writeFileSync(`${out}.retained.json`, retained.stdout);
       writeFileSync(`${out}.fresh.json`, fresh.stdout);
       writeFileSync(`${out}.file`, next);
+      writeFileSync(`${out}.retained.stderr`, retained.stderr);
+      writeFileSync(`${out}.fresh.stderr`, fresh.stderr);
       report(
         `MISMATCH ${name} (status ${retained.status}/${fresh.status}) -> ${out}.*` +
           (shadowReport ? `\n${shadowReport.trim()}` : "")
