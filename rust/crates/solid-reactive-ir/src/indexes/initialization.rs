@@ -176,10 +176,7 @@ impl<'a> SemanticLookup<'a> {
     }
 
     fn files_by_path_index(&self, path: &str) -> Option<usize> {
-        self.facts
-            .files
-            .iter()
-            .position(|file| file.path.as_str() == path)
+        self.first_file_index(path)
     }
 
     fn declarator(file: &FileFacts, binding: &BindingFact) -> Option<Declarator> {

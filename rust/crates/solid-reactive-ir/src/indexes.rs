@@ -856,6 +856,9 @@ pub(super) struct SemanticLookup<'a> {
     bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
     bindings_by_reference: OnceLock<BindingsByReference>,
     files_by_path: OnceLock<HashMap<&'a str, usize>>,
+    /// The index of the first file carrying each path, as a scan in file
+    /// order finds it ([`Self::first_file_index`]).
+    first_file_by_path: OnceLock<HashMap<&'a str, usize>>,
     /// How many analyzed files carry each path, for the indexed relative
     /// module resolver (a path listed twice is ambiguous, not unique).
     file_path_counts: OnceLock<HashMap<&'a str, usize>>,
@@ -1071,6 +1074,7 @@ impl<'a> SemanticLookup<'a> {
             bindings_by_symbol: OnceLock::new(),
             bindings_by_reference: OnceLock::new(),
             files_by_path: OnceLock::new(),
+            first_file_by_path: OnceLock::new(),
             file_path_counts: OnceLock::new(),
             file_primitives: OnceLock::new(),
             file_named_callback_roles: OnceLock::new(),
@@ -1852,6 +1856,22 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
+    /// The index of the first file in `facts.files` whose path is `path`:
+    /// what `facts.files.iter().position(..)` answers, read from an index
+    /// built once.
+    pub(super) fn first_file_index(&self, path: &str) -> Option<usize> {
+        self.first_file_by_path
+            .get_or_init(|| {
+                let mut first = HashMap::default();
+                for (index, file) in self.facts.files.iter().enumerate() {
+                    first.entry(file.path.as_str()).or_insert(index);
+                }
+                first
+            })
+            .get(path)
+            .copied()
+    }
+
     pub(super) fn file_by_path(&self, path: &str) -> Option<&'a FileFacts> {
         self.files_by_path
             .get_or_init(|| {
@@ -2061,11 +2081,7 @@ impl<'a> SemanticLookup<'a> {
         if &*declaration.kind != "class" {
             return None;
         }
-        let file = self
-            .facts
-            .files
-            .iter()
-            .find(|file| *declaration.location.path == *file.path.as_str())?;
+        let file = &self.facts.files[self.first_file_index(&declaration.location.path)?];
         let (Ok(start), Ok(end)) = (
             u32::try_from(declaration.location.start_byte),
             u32::try_from(declaration.location.end_byte),
