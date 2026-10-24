@@ -160,6 +160,23 @@ pub(crate) struct BuildTables {
 
 impl TableSet<BuildSchema> for BuildTables {
     fn table(&self, id: TableId) -> &dyn super::ErasedTable<BuildSchema> {
+        let table = self.table_by_id(id);
+        debug_assert_eq!(
+            table.id(),
+            id,
+            "memo table {} answers for another id",
+            table.name()
+        );
+        table
+    }
+
+    fn tables(&self) -> Vec<&dyn super::ErasedTable<BuildSchema>> {
+        self.all_tables()
+    }
+}
+
+impl BuildTables {
+    fn table_by_id(&self, id: TableId) -> &dyn super::ErasedTable<BuildSchema> {
         match id {
             IDENTITY_WRAPPERS => &self.identity_wrappers,
             WRAPPER_AT => &self.wrapper_at,
@@ -178,7 +195,7 @@ impl TableSet<BuildSchema> for BuildTables {
         }
     }
 
-    fn tables(&self) -> Vec<&dyn super::ErasedTable<BuildSchema>> {
+    fn all_tables(&self) -> Vec<&dyn super::ErasedTable<BuildSchema>> {
         let mut tables: Vec<&dyn super::ErasedTable<BuildSchema>> = vec![
             &self.identity_wrappers,
             &self.wrapper_at,

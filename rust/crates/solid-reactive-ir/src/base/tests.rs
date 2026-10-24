@@ -1095,3 +1095,38 @@ fn census_memos_through_random_edits_equal_a_fresh_store() {
     assert!(steps > 120, "only {steps} edits applied");
     assert!(reused > 0, "{reused} reused, {computed} computed");
 }
+
+/// Every memo table of a build has its own id and name, and the schema's
+/// dispatch by id finds that table: two slices that pick the same id (or a
+/// range dispatch that shadows another's) fail here, not as a stats or
+/// invalidation mix-up at run time.
+#[test]
+fn every_build_table_has_its_own_id() {
+    use super::memo::TableSet;
+    let tables = super::memo::build::BuildTables::default();
+    let all = tables.tables();
+    let mut ids = std::collections::BTreeMap::new();
+    let mut names = std::collections::BTreeSet::new();
+    for table in &all {
+        if let Some(other) = ids.insert(table.id(), table.name()) {
+            panic!(
+                "tables `{other}` and `{}` share the id {:?}",
+                table.name(),
+                table.id()
+            );
+        }
+        assert!(
+            names.insert(table.name()),
+            "two tables are named `{}`",
+            table.name()
+        );
+    }
+    for table in &all {
+        assert_eq!(
+            tables.table(table.id()).name(),
+            table.name(),
+            "the id {:?} dispatches to another table",
+            table.id()
+        );
+    }
+}

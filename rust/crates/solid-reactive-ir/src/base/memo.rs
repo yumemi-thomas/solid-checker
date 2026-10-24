@@ -261,6 +261,8 @@ impl<S: Schema, M: Memo<S>> Default for Table<S, M> {
 /// What the store needs of a table without knowing its key and value types.
 pub(crate) trait ErasedTable<S: Schema>: Send + Sync {
     fn name(&self) -> &'static str;
+    /// The table's id ([`Memo::ID`]).
+    fn id(&self) -> TableId;
     /// Brings the entry `query` up to date, as a read from `parent` would,
     /// and answers the revision its value last changed in; `None` when the
     /// entry is gone.
@@ -285,6 +287,10 @@ pub(crate) trait ErasedTable<S: Schema>: Send + Sync {
 impl<S: Schema, M: Memo<S>> ErasedTable<S> for Table<S, M> {
     fn name(&self) -> &'static str {
         M::NAME
+    }
+
+    fn id(&self) -> TableId {
+        M::ID
     }
 
     fn ensure(
