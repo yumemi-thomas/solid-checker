@@ -20,6 +20,8 @@ mod cross_file_digest_process;
 mod harness_process;
 #[path = "imported_const_process.rs"]
 mod imported_const_process;
+#[path = "incremental_staleness_process.rs"]
+mod incremental_staleness_process;
 #[path = "invocation_flow_process.rs"]
 mod invocation_flow_process;
 #[path = "owner_flow_process.rs"]

@@ -1,0 +1,146 @@
+//! Retained builds against fresh ones, under inputs that change *without* a
+//! source edit that moves the TypeScript table.
+//!
+//! The retained Reactive IR is exact only if every input of a reused cache is
+//! part of its key. `IncrementalBuilder` compares its answer with a fresh
+//! build here explicitly (shadow mode off), so these tests do not depend on
+//! `SOLID_CHECKER_IR_SHADOW`. Each case names the reuse path it exercises
+//! (`docs/` and the IR's `ReusePlan`): the study that found them is
+//! tsrs-plan/p5-ir-incremental-study.md section 2.5.
+
+use std::{env, fs, path::PathBuf, sync::Arc};
+
+use solid_facts::{ProjectFacts, compiler::CompilerOptions};
+use solid_facts_backend::{
+    NativeIncrementalSession, SourceChange, SourceFile, TypeFactsSession, dialect,
+};
+use solid_reactive_ir::{
+    AnalysisInputs, IncrementalBuilder, RuleOptions, RuntimeRendering,
+    build_with_analysis_inputs_measured,
+    shadow::{ShadowMode, first_difference},
+};
+
+fn solid_v2() -> &'static dialect::Dialect {
+    dialect::by_id("solid-v2").expect("the 2.0 dialect is registered")
+}
+
+fn fixture(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../fixtures/reactive-ir")
+        .join(name)
+}
+
+struct Project {
+    session: NativeIncrementalSession,
+    sources: Vec<SourceFile>,
+    version: u64,
+}
+
+impl Project {
+    /// `None` without a producer (the process tests skip silently, as the rest
+    /// of this crate's do).
+    fn open(fixture_name: &str, files: &[&str]) -> Option<Self> {
+        let typefacts = env::var("SOLID_TYPEFACTS_BIN").ok()?;
+        let root = fixture(fixture_name);
+        let project_id = root
+            .join("tsconfig.json")
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let sources = files
+            .iter()
+            .map(|name| {
+                let path = root.join(name);
+                SourceFile {
+                    path: path.canonicalize().unwrap().to_string_lossy().into_owned(),
+                    source: fs::read_to_string(path).unwrap().into(),
+                    compiler_options: CompilerOptions::default(),
+                }
+            })
+            .collect::<Vec<_>>();
+        let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+        let session =
+            NativeIncrementalSession::open(solid_v2(), project_id, sources.clone(), typescript)
+                .unwrap();
+        Some(Self {
+            session,
+            sources,
+            version: 0,
+        })
+    }
+
+    fn analyze(&mut self) -> Arc<ProjectFacts> {
+        self.session.analyze().unwrap()
+    }
+
+    /// A new generation whose only change is trailing trivia in `index`'s file,
+    /// so the TypeScript table is unchanged.
+    fn touch(&mut self, index: usize) -> Arc<ProjectFacts> {
+        self.version += 1;
+        let file = &self.sources[index];
+        self.session
+            .edit(
+                vec![SourceChange {
+                    path: file.path.clone(),
+                    version: self.version,
+                    source: Some(format!("{}\n// touch {}\n", file.source, self.version)),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap()
+    }
+}
+
+/// The retained builder's answer for `facts` under `options`, which must equal
+/// a fresh build's, table for table.
+fn assert_retained_is_fresh(
+    builder: &mut IncrementalBuilder,
+    facts: &ProjectFacts,
+    options: &RuleOptions,
+    label: &str,
+) {
+    builder.set_shadow_mode(ShadowMode::Off);
+    let vocabulary = solid_v2().vocabulary;
+    let (retained, _) = builder
+        .build_with_analysis_inputs_shared(facts, vocabulary, AnalysisInputs::empty(), options)
+        .unwrap();
+    let (fresh, _) =
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), options)
+            .unwrap();
+    if let Some(difference) = first_difference(&retained, &fresh) {
+        panic!("{label}: {difference}");
+    }
+}
+
+fn options_rendering(rendering: Option<RuntimeRendering>) -> RuleOptions {
+    let mut options = RuleOptions::default();
+    options.runtime.rendering = rendering;
+    options
+}
+
+/// 2.5, first path: `RuleOptions` are in the retained program's identity but
+/// not in the cache domain or `ReusePlan`'s late-stage gate. A generation that
+/// changes only trivia keeps the TypeScript table, so the late stages' cached
+/// aggregates are offered for reuse under different rendering options.
+#[test]
+fn changing_rule_options_between_generations_never_reuses_a_stale_late_stage() {
+    let Some(mut project) = Project::open("ssr-client-boundary", &["App.tsx"]) else {
+        return;
+    };
+    let mut builder = IncrementalBuilder::default();
+    let server = options_rendering(Some(RuntimeRendering::StringSsr));
+    let client = options_rendering(Some(RuntimeRendering::Csr));
+    let first = project.analyze();
+    assert_retained_is_fresh(&mut builder, &first, &server, "cold, server rendering");
+    let second = project.touch(0);
+    assert_retained_is_fresh(&mut builder, &second, &client, "edit, client rendering");
+    let third = project.touch(0);
+    assert_retained_is_fresh(
+        &mut builder,
+        &third,
+        &server,
+        "edit, server rendering again",
+    );
+}

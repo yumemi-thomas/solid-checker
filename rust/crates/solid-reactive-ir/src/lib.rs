@@ -1478,6 +1478,7 @@ impl IncrementalBuilder {
             identity.dialect,
             &identity.project_id,
             &identity.boundary_fingerprints,
+            &identity.rule_options,
         );
         if domain_reset {
             self.retained = None;

@@ -54,6 +54,11 @@ struct SourceDiscoveryDomain {
     dialect: solid_dialect::Version,
     project_id: String,
     boundary_fingerprints: Vec<[u8; 32]>,
+    /// Rule and runtime options feed stages whose cached files and aggregates
+    /// are keyed by sources alone (server rendering reaches the local-access
+    /// aggregate, rule enablement the compatibility pass), so a different
+    /// value is a different domain, as a different boundary is.
+    rule_options: RuleOptions,
 }
 
 /// Owns every derived cache retained across Reactive IR generations.
@@ -93,11 +98,13 @@ impl IncrementalCacheState {
         dialect: solid_dialect::Version,
         project_id: &str,
         boundary_fingerprints: &[[u8; 32]],
+        rule_options: &RuleOptions,
     ) -> bool {
         let next = SourceDiscoveryDomain {
             dialect,
             project_id: project_id.to_owned(),
             boundary_fingerprints: boundary_fingerprints.to_vec(),
+            rule_options: rule_options.clone(),
         };
         if self.domain.as_ref() == Some(&next) {
             return false;
