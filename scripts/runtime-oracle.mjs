@@ -7,7 +7,7 @@
 //
 //   node scripts/runtime-oracle.mjs --cases fixtures/runtime-oracle --out <fresh.json>
 //     [--only id,...] [--install <app with solid-js 2.x node_modules>]
-//     [--browser <chromium>] [--concurrency 2]
+//     [--browser <chromium>] [--concurrency <n>]
 //   env: SOLID_CHECKER_NATIVE_BIN, SOLID_TYPEFACTS_BIN
 //
 // A case is a directory holding an `App.tsx` and its other source files. Every
@@ -52,6 +52,7 @@ import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { recommendedConcurrency } from "./lib/pool.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const options = {
@@ -59,7 +60,10 @@ const options = {
   install: resolve(repo, "../solid-checker-rc17-corpus/apps/helge-dev"),
   browser: null,
   tooling: null,
-  concurrency: "2",
+  // The gates' default (cores, at most 8). Each worker is a CLI, a Vite server
+  // and a Chrome; on 14 cores under load 28, 735 cases took 1,147 s at 2 and
+  // 373 s at 8 with every verdict unchanged (2026-10-24).
+  concurrency: String(recommendedConcurrency()),
   only: "",
   out: null,
 };
@@ -70,6 +74,7 @@ for (let index = 0; index < argv.length; index += 2) {
   options[key] = argv[index + 1];
 }
 assert(options.out, "--out <fresh.json> is required");
+assert(Number.isInteger(Number(options.concurrency)) && Number(options.concurrency) > 0, "positive integer --concurrency required");
 const output = resolve(options.out);
 assert(!existsSync(output), "use a fresh output path");
 assert(process.env.SOLID_CHECKER_NATIVE_BIN && process.env.SOLID_TYPEFACTS_BIN, "set SOLID_CHECKER_NATIVE_BIN and SOLID_TYPEFACTS_BIN");
