@@ -28,6 +28,10 @@ build: build-rust
 build-typefacts:
 	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" scripts/build-typefacts.sh
 
+# Timing and packaging take the release producer, whatever TYPEFACTS_PROFILE
+# the inner loop exported (the variable reaches their build-typefacts too).
+build-checker-release package verify-performance: export TYPEFACTS_PROFILE := release
+
 # fmt, clippy (native and the wasm32-wasip1 reactor) and the tests of the
 # producer workspace. Its differential tests compare against a reference
 # producer when one is available (SOLID_TYPEFACTS_REFERENCE_BIN, default the
@@ -89,8 +93,10 @@ package: build-typefacts
 # planSync, then the owned check's two reactors (scripts/build-owned.mjs; the
 # producer's is apps/solid-typefacts built as a wasm32-wasip1 cdylib). The
 # Cargo builds run one after the other, with the native build's pins.
+# Its own target directory, the one scripts/verify.sh builds the package in, so
+# `make verify` and `make wasm-parity` share one build.
 build-wasm-package: build-typefacts
-	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" $(BUN) run --cwd packages/wasm build
+	CARGO_TARGET_DIR="$(CURDIR)/rust/target/wasm-package" SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" $(BUN) run --cwd packages/wasm build
 
 # The WASM parity gate's path-semantics control guests (S3a): a Rust program
 # making raw WASI path calls and std calls. It is not part of the rust/
@@ -210,7 +216,9 @@ verify-performance: build-typefacts
 clean:
 	rm -rf bin dist rust/target
 
-# Reclaim the large handoff test/link artifacts without discarding release
-# binaries, audited TypeScript installs, or content-addressed gate results.
+# Reclaim the target directories only `make verify` and `make verify-delta`
+# build in (check-only lint, the WASM package, and the retired `verify` profile)
+# without discarding the edit loop's build, release binaries, audited
+# TypeScript installs, or content-addressed gate results.
 clean-verify:
-	cargo +$(RUST_TOOLCHAIN) clean --manifest-path $(RUST_MANIFEST) --profile verify
+	rm -rf rust/target/lint rust/target/wasm-package rust/target/verify

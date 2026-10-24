@@ -81,13 +81,23 @@ function toolchainIdentity(root) {
   }).trim();
 }
 
-export function identity(buildId = process.env.TYPEFACTS_BUILD_ID || "dev", root = ROOT) {
+/**
+ * A non-release profile (`TYPEFACTS_PROFILE=bench-dev`, the thin-LTO inner
+ * loop) is recorded; the release identity has no `profile` key, so it is the
+ * same bytes it always was and the CI cache keys built from it do not move.
+ */
+export function identity(
+  buildId = process.env.TYPEFACTS_BUILD_ID || "dev",
+  root = ROOT,
+  profile = process.env.TYPEFACTS_PROFILE || "release",
+) {
   return {
     format: IDENTITY_FORMAT,
     sourceDigest: sourceDigest(root),
     tsrsRev: tsrsRevision(root),
     toolchain: toolchainIdentity(root),
     buildId,
+    ...(profile === "release" ? {} : { profile }),
   };
 }
 

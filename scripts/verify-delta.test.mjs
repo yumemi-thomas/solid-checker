@@ -5,7 +5,7 @@
 // this script could plausibly have.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
@@ -13,6 +13,7 @@ import { test } from "vitest";
 import {
   BASIS_CAVEATS,
   CHECKS,
+  LANES,
   ROWS,
   UNIVERSAL,
   classify,
@@ -20,6 +21,8 @@ import {
   baseOf,
   porcelainPaths,
   producerStampDrift,
+  runSchedule,
+  scheduleFor,
 } from "./verify-delta.mjs";
 
 const withoutUniversal = (checks) => checks.filter((check) => !UNIVERSAL.includes(check));
@@ -342,6 +345,16 @@ test("a producer that is not built from the local manifest escalates", () => {
     null,
     "a matching stamp is not a reason to escalate",
   );
+  // The thin-LTO inner-loop producer and the release one are the same sources
+  // through the same compiler, so neither drifts from the other.
+  assert.equal(
+    producerStampDrift({ expected: { ...expected, profile: "bench-dev" }, stamp: JSON.stringify(expected) }),
+    null,
+  );
+  assert.equal(
+    producerStampDrift({ expected, stamp: JSON.stringify({ ...expected, profile: "bench-dev" }) }),
+    null,
+  );
   for (const [what, input] of [
     ["a drifted producer", { expected, stamp: JSON.stringify({ ...expected, sourceDigest: "0".repeat(64) }) }],
     ["an absent stamp", { expected, stamp: null }],
@@ -376,5 +389,92 @@ test("the differential harness's own files select its tests; its neighbours stay
     "rust/crates/typefacts/Cargo.toml",
   ]) {
     assert.equal(planFor([path]).full, true, `${path} must fail closed`);
+  }
+});
+
+test("every check has a lane, and one lane owns each target directory", () => {
+  // AGENTS.md: one Cargo process per target directory. Lanes run side by side,
+  // so the lane is what keeps two builds out of one directory.
+  const owner = new Map();
+  for (const [check, definition] of Object.entries(CHECKS)) {
+    assert.ok(LANES[check], `${check} has no lane`);
+    if (check === "verify" || check === "wasm-parity") continue;
+    for (const command of definition.commands ?? [definition.command]) {
+      if (command[0] !== "cargo" || ["fmt"].includes(command[2])) continue;
+      const explicit = command.indexOf("--target-dir");
+      const directory = explicit !== -1 ? command[explicit + 1]
+        : command.includes("apps/solid-typefacts/Cargo.toml") ? "apps/solid-typefacts/target" : "rust/target";
+      const lane = owner.get(directory) ?? LANES[check];
+      assert.equal(LANES[check], lane, `${check} builds in ${directory}, which the ${lane} lane owns`);
+      owner.set(directory, lane);
+    }
+  }
+});
+
+test("the schedule runs the producer first, preflight next, and gates after the build they run", () => {
+  const plan = planFor(["rust/crates/solid-reactive-ir/src/lib.rs", "apps/solid-typefacts/src/main.rs"]);
+  const schedule = new Map(scheduleFor(plan.checks).map((entry) => [entry.check, entry]));
+  assert.deepEqual(schedule.get("build-typefacts").after, []);
+  for (const entry of schedule.values()) {
+    if (entry.check !== "build-typefacts") assert.ok(entry.after.includes("build-typefacts"), entry.check);
+    if (!["producer", "preflight"].includes(entry.lane)) {
+      assert.ok(entry.after.includes("fmt-check"), `${entry.check} must wait for the cheap preflight`);
+    }
+  }
+  for (const prior of ["build-debug", "ir-lib"]) {
+    assert.ok(schedule.get("coverage").after.includes(prior), `coverage must wait for ${prior}`);
+  }
+  for (const prior of ["clippy", "build-debug", "ir-lib", "typefacts"]) {
+    assert.ok(schedule.get("wasm-parity").after.includes(prior), `wasm-parity must wait for ${prior}`);
+  }
+});
+
+const nodeCheck = (code) => [[process.execPath, "-e", code]];
+
+test("lanes run side by side, and a lane runs its own checks in order", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "verify-delta-lanes-"));
+  try {
+    const marker = (name) => JSON.stringify(join(directory, name));
+    // `a` finishes only once `b` has started: it would time out if the lanes ran
+    // one after the other. `c` shares a's lane, so `a` must be done before it.
+    const commands = {
+      a: nodeCheck(`const fs=require('node:fs');const t=setInterval(()=>{if(fs.existsSync(${marker("b")})){fs.writeFileSync(${marker("a")},'');process.exit(0)}},10);setTimeout(()=>process.exit(9),5000)`),
+      b: nodeCheck(`require('node:fs').writeFileSync(${marker("b")},'')`),
+      c: nodeCheck(`process.exit(require('node:fs').existsSync(${marker("a")})?0:8)`),
+    };
+    const failure = await runSchedule(
+      [{ check: "a", lane: "one", after: [] }, { check: "b", lane: "two", after: [] }, { check: "c", lane: "one", after: [] }],
+      { commandsOf: (check) => commands[check], environmentOf: () => process.env },
+    );
+    assert.equal(failure, null);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a failure stops the run: nothing waiting on it starts, and running checks are stopped", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "verify-delta-failure-"));
+  try {
+    const started = join(directory, "dependent-started");
+    const commands = {
+      broken: nodeCheck("process.exit(3)"),
+      dependent: nodeCheck(`require('node:fs').writeFileSync(${JSON.stringify(started)},'')`),
+      slow: nodeCheck("setTimeout(() => process.exit(0), 20000)"),
+    };
+    const begun = Date.now();
+    const failure = await runSchedule(
+      [
+        { check: "slow", lane: "other", after: [] },
+        { check: "broken", lane: "one", after: [] },
+        { check: "dependent", lane: "two", after: ["broken"] },
+      ],
+      { commandsOf: (check) => commands[check], environmentOf: () => process.env },
+    );
+    assert.equal(failure.check, "broken");
+    assert.equal(failure.status, 3);
+    assert.equal(existsSync(started), false);
+    assert.ok(Date.now() - begun < 10000, "the slow check must have been stopped");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });

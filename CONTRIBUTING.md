@@ -60,14 +60,28 @@ checker consumer green in one change; producer/client protocol changes land
 atomically. Solid 2 compiler execution facts come from the pinned semantic-only
 Solid fork, the only compiler fork this build carries (ADR 0110).
 
-`make verify` keeps its Rust artifacts in `rust/target/verify` (no debug
-symbols, no incremental cache) and runs the producer's suite
-(`apps/solid-typefacts`, its own target directory) and the checker's Rust suite
-concurrently, one Cargo process per target directory. Logs and a timing summary land in
-`rust/target/verify-logs/run-*`. `SOLID_CHECKER_VERIFY_PARALLEL=0` runs the two
-sequentially on a constrained machine; `SOLID_CHECKER_RUST_TEST_RUNNER=nextest`
-swaps the Rust runner and writes per-test durations to
-`rust/target/nextest/verify/junit.xml`.
+`make verify` builds in the edit loop's `dev` profile, so after `make
+verify-delta` it reuses that build. Within a step it runs independent lanes side
+by side, one Cargo process per target directory: the checker's suite and builds
+in `rust/target`, the producer's in `apps/solid-typefacts/target`, clippy in
+`rust/target/lint` (shared with `verify-delta`), and the WASM package in
+`rust/target/wasm-package`; then the gates, WASM parity and the JS suites. Each
+lane's log is printed whole when it ends, and the timing summary lists every
+lane's own steps. `verify-performance` still runs alone. Rust suites run under
+nextest when `cargo-nextest` is installed (`SOLID_CHECKER_RUST_TEST_RUNNER=test`
+forces `cargo test`; per-test durations land in
+`rust/target/nextest/verify/junit.xml`); logs land in
+`rust/target/verify-logs/run-*`. `make clean-verify` removes the lint and WASM
+package trees.
+
+The producer build (`scripts/build-typefacts.sh`) keeps finished binaries in
+`~/.cache/solid-checker/typefacts`, keyed by the full source identity, so a new
+worktree or a branch switch back reuses one instead of relinking with fat LTO
+(`TYPEFACTS_SHARED_CACHE=` disables it; CI leaves it off). While iterating on
+the producer, `TYPEFACTS_PROFILE=bench-dev` builds it with thin LTO;
+`verify-delta` accepts either build, and `make verify` always rebuilds release.
+For dependency builds shared across worktrees, install `sccache` and export
+`RUSTC_WRAPPER=sccache`.
 
 ## Performance regressions
 

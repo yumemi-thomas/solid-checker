@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 export function verificationJobs(runner, env = process.env) {
   const cargo = ["cargo", "+1.99.1"];
   const common = ["--manifest-path", "rust/Cargo.toml", "--workspace"];
-  const profile = env.SOLID_CHECKER_CARGO_PROFILE || "verify";
+  const profile = env.SOLID_CHECKER_CARGO_PROFILE || "dev";
   return [
     // The Type Facts producer (apps/solid-typefacts) is its own Cargo workspace
     // and target directory, so it runs beside the checker workspace's tests.
@@ -18,6 +18,14 @@ export function verificationJobs(runner, env = process.env) {
     ] : [[...cargo, "test", "--profile", profile, ...common]],
     env: { ...env, RUST_TEST_THREADS: env.RUST_TEST_THREADS || "8" } },
   ];
+}
+
+/** The named jobs, every job when none is named; an unknown name is an error. */
+export function selectJobs(jobs, names) {
+  if (names.length === 0) return jobs;
+  const unknown = names.filter(name => !jobs.some(job => job.name === name));
+  if (unknown.length > 0) throw new Error(`unknown verification job(s): ${unknown.join(", ")}`);
+  return jobs.filter(job => names.includes(job.name));
 }
 
 // Each command owns a process group so interruption also stops compiler and
@@ -101,12 +109,15 @@ export async function runTestJobs(jobs, { directory, parallel = true } = {}) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const runner = process.argv[2];
+  // `verify-tests.mjs <runner> [job...]`: scripts/verify.sh runs each job in
+  // the lane that owns its target directory.
+  const [runner, ...names] = process.argv.slice(2);
   const parallel = process.env.SOLID_CHECKER_VERIFY_PARALLEL ?? "1";
   if (!["test", "nextest"].includes(runner) || !["0", "1"].includes(parallel)) {
     throw new Error("Expected runner test/nextest and SOLID_CHECKER_VERIFY_PARALLEL=0/1");
   }
-  const summary = await runTestJobs(verificationJobs(runner), {
+  const jobs = selectJobs(verificationJobs(runner), names);
+  const summary = await runTestJobs(jobs, {
     directory: "rust/target/verify-logs", parallel: parallel === "1",
   });
   process.exitCode = summary.interrupted ? 128 + ({ SIGINT: 2, SIGTERM: 15, SIGHUP: 1 }[summary.interrupted])

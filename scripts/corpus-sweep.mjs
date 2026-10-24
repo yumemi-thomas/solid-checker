@@ -5,7 +5,13 @@
 //   node scripts/corpus-sweep.mjs [--manifest scripts/corpus/rc17-manifest.json]
 //     [--apps-root ../solid-checker-rc17-corpus/apps]
 //     [--checker rust/target/release/solid-checker-rust]
-//     [--typefacts bin/solid-typefacts] [--jobs 4] --out <report.json>
+//     [--typefacts bin/solid-typefacts] [--jobs 4] [--order-from <report.json>]
+//     --out <report.json>
+//
+// `--order-from` takes an earlier report and starts the projects that took
+// longest there first, so the slowest project does not start last and set the
+// sweep's wall time on its own. Order never changes a finding: each project is
+// its own checker process, and the report is sorted.
 //
 // Use the release binary: a debug build inflates certification about 19x.
 // Prefix the run with ~/.local/bin/sc-heavy when other agents share the
@@ -25,6 +31,7 @@ const options = {
   typefacts: join(repo, "bin/solid-typefacts"),
   jobs: "4",
   timeout: "900",
+  "order-from": null,
   out: null,
 };
 const argv = process.argv.slice(2);
@@ -53,6 +60,14 @@ const rows = manifest.projects.map((row) => ({
 for (const row of rows) {
   const project = join(row.root, row.project);
   if (!existsSync(project)) throw new Error(`missing project input: ${project}`);
+}
+if (options["order-from"]) {
+  const key = (row) => `${row.app}\0${row.project}`;
+  const previous = new Map(
+    JSON.parse(readFileSync(resolve(options["order-from"]), "utf8")).results.map((row) => [key(row), row.wallMs]),
+  );
+  // Longest first; a project the earlier report lacks is assumed slow.
+  rows.sort((left, right) => (previous.get(key(right)) ?? Number.MAX_SAFE_INTEGER) - (previous.get(key(left)) ?? Number.MAX_SAFE_INTEGER));
 }
 
 const env = { ...process.env, SOLID_CHECKER_DAEMON: "0", SOLID_TYPEFACTS_BIN: typefacts };
