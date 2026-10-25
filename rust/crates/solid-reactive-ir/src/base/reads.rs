@@ -417,6 +417,11 @@ thread_local! {
     static DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// How many frames this thread has opened ([`Frame::serial`]).
     static OPENED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// The innermost open frame's serial, 0 outside every recording.
+    static CURRENT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Each section's frame of its last [`note_once`].
+    static NOTED_IN: [std::cell::Cell<u64>; Section::ALL.len()] =
+        const { [const { std::cell::Cell::new(0) }; Section::ALL.len()] };
 }
 
 /// Whether some computation on this thread is recording.
@@ -451,6 +456,19 @@ pub(crate) fn note(section: Section) {
             frame.sections |= section.bit();
         }
     });
+}
+
+/// [`note`] for a section read on a hot path: noted once per frame. A
+/// frame's serial is never reused on a thread, and the frame a skipped note
+/// would reach already holds the section.
+pub(crate) fn note_once(section: Section) {
+    if !recording() {
+        return;
+    }
+    let current = CURRENT.with(std::cell::Cell::get);
+    if NOTED_IN.with(|noted| noted[section as usize].replace(current)) != current {
+        note(section);
+    }
 }
 
 /// Records that the current computation read a memo answer.
@@ -493,8 +511,11 @@ fn replay_shared(reads: &Arc<Reads>) {
     });
 }
 
-/// Pops the frame [`push`] opened, even on unwind.
-struct FrameGuard;
+/// Pops the frame [`push`] opened, even on unwind, and makes the frame it
+/// covered the current one again.
+struct FrameGuard {
+    previous: u64,
+}
 
 impl Drop for FrameGuard {
     fn drop(&mut self) {
@@ -502,6 +523,7 @@ impl Drop for FrameGuard {
             frames.borrow_mut().pop();
         });
         DEPTH.with(|depth| depth.set(depth.get() - 1));
+        CURRENT.with(|current| current.set(self.previous));
     }
 }
 
@@ -517,7 +539,9 @@ fn push() -> FrameGuard {
         });
     });
     DEPTH.with(|depth| depth.set(depth.get() + 1));
-    FrameGuard
+    FrameGuard {
+        previous: CURRENT.with(|current| current.replace(serial)),
+    }
 }
 
 fn take_top() -> Frame {

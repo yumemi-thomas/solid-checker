@@ -70,6 +70,9 @@ pub(crate) enum Probe {
     /// The callability another entity naming a symbol carries
     /// (`smallest_contained_callability`'s last fallback). Text.
     SymbolCallability,
+    /// The dialect primitives the project names (`Section::ProjectPrimitives`'
+    /// value), sorted. Unit.
+    ProjectPrimitives,
     /// The symbol an entity or, failing one, a resolved call's declaration
     /// names at a span of a file (`ProjectIndexes::method_symbol`). FileSpan.
     DeclarationSymbolAt,

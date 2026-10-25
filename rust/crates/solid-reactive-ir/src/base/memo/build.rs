@@ -1913,6 +1913,13 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
                 crate::base::reads::Section::ReflectiveDefinition => {
                     let _ = self.hazard(crate::base::Hazard::ReflectiveDefinitionSpelling);
                 }
+                // The section's value, polled.
+                crate::base::reads::Section::ProjectPrimitives => {
+                    let _ = self.probe(
+                        super::probes::Probe::ProjectPrimitives,
+                        super::probes::PolledKey::Unit,
+                    );
+                }
                 _ => whole = true,
             }
         }

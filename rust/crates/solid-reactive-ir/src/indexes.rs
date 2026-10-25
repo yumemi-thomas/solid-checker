@@ -871,8 +871,10 @@ pub(super) struct SemanticLookup<'a> {
     file_primitives: OnceLock<Vec<crate::base::reads::Recorded<FilePrimitives>>>,
     file_named_callback_roles:
         OnceLock<Vec<crate::base::reads::Recorded<super::NamedCallbackRoles>>>,
-    project_primitives: crate::base::reads::Recorded<HashSet<solid_dialect::Primitive>>,
-    callback_capabilities: crate::base::reads::Recorded<DialectCallbackCapabilities>,
+    /// Read by every file's flags (`Section::ProjectPrimitives`, noted by
+    /// the accessors): plain caches, so a hot flag read replays nothing.
+    project_primitives: OnceLock<HashSet<solid_dialect::Primitive>>,
+    callback_capabilities: OnceLock<DialectCallbackCapabilities>,
     returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
     project_has_component_type: crate::base::reads::Recorded<bool>,
     /// Proven components, then functions whose only missing proof is an
@@ -1199,8 +1201,8 @@ impl<'a> SemanticLookup<'a> {
             base: crate::base::BaseIndexes::default(),
             file_primitives: OnceLock::new(),
             file_named_callback_roles: OnceLock::new(),
-            project_primitives: crate::base::reads::Recorded::new(),
-            callback_capabilities: crate::base::reads::Recorded::new(),
+            project_primitives: OnceLock::new(),
+            callback_capabilities: OnceLock::new(),
             returned_callback_proof_digest: OnceLock::new(),
             project_has_component_type: crate::base::reads::Recorded::new(),
             component_functions: OnceLock::new(),
@@ -1236,10 +1238,10 @@ impl<'a> SemanticLookup<'a> {
     /// binding initializer in this project. That makes the set a sound domain
     /// for probing what the dialect models.
     fn project_primitives(&self) -> &HashSet<solid_dialect::Primitive> {
+        // Every file's names: a reader's answer moves with any file's (final
+        // review R2, finding 4).
+        crate::base::reads::note_once(crate::base::reads::Section::ProjectPrimitives);
         self.project_primitives.get_or_init(|| {
-            // Every file's names: a reader's answer moves with any file's
-            // (final review R2, finding 4).
-            crate::base::reads::note(crate::base::reads::Section::ProjectPrimitives);
             self.symbol_names
                 .values()
                 .filter_map(|name| self.dialect.primitive(name.as_str()))
@@ -1248,6 +1250,7 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(super) fn callback_capabilities(&self) -> DialectCallbackCapabilities {
+        crate::base::reads::note_once(crate::base::reads::Section::ProjectPrimitives);
         *self.callback_capabilities.get_or_init(|| {
             let mut capabilities = DialectCallbackCapabilities::default();
             for primitive in self.project_primitives() {

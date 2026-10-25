@@ -191,6 +191,15 @@ impl SemanticLookup<'_> {
                 self.callability_by_symbol(symbol)
                     .map(|callability| Arc::from(format!("{callability:?}"))),
             ),
+            (Probe::ProjectPrimitives, _) => {
+                let mut names = self
+                    .project_primitives()
+                    .iter()
+                    .map(|primitive| Arc::<str>::from(format!("{primitive:?}")))
+                    .collect::<Vec<_>>();
+                names.sort_unstable();
+                ProbeAnswer::Names(names)
+            }
             (Probe::DeclarationSymbolAt, PolledKey::FileSpan(id, span)) => ProbeAnswer::Symbols(
                 self.method_symbol_ref(path(*id), *span)
                     .map(Arc::<str>::from)
