@@ -135,7 +135,10 @@ export const CHECKS = {
     why:
       "the retained daemon's answer must equal a fresh one after random edits (and shadow mode must stay " +
       "silent); this is the seconds-long fixture budget, on a copy of each fixture",
-    command: ["bun", "scripts/ir-edit-fuzz.mjs", "--fixtures", "--steps", "6"],
+    commands: [
+      ["bun", "scripts/ir-edit-fuzz.mjs", "--fixtures", "--steps", "6"],
+      ["bun", "scripts/ir-edit-fuzz.mjs", "--fixtures", "--family", "retype", "--steps", "4"],
+    ],
     env: {
       SOLID_CHECKER_BIN: join(ROOT, DEBUG_CHECKER),
       SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),

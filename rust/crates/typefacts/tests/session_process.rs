@@ -2048,3 +2048,318 @@ fn per_file_symbol_closure_patch_equals_a_fresh_closure() {
         previous = patched;
     }
 }
+
+/// A scratch project of `.ts` files under the temp directory, removed on drop.
+struct ScratchProject {
+    root: PathBuf,
+}
+
+impl ScratchProject {
+    fn new(name: &str, files: &[(&str, &str)]) -> Self {
+        let root = std::env::temp_dir().join(format!("typefacts-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("tsconfig.json"),
+            r#"{"compilerOptions":{"strict":true,"noEmit":true},"include":["*.ts"]}"#,
+        )
+        .unwrap();
+        for (name, text) in files {
+            fs::write(root.join(name), text).unwrap();
+        }
+        let root = root.canonicalize().unwrap();
+        Self { root }
+    }
+
+    fn path(&self, name: &str) -> String {
+        self.root.join(name).to_string_lossy().into_owned()
+    }
+
+    fn open(&self) -> Session {
+        Session::open(
+            Producer::at(producer()),
+            self.root.join("tsconfig.json").to_string_lossy(),
+            Vec::new(),
+        )
+        .unwrap()
+    }
+}
+
+impl Drop for ScratchProject {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
+
+/// Every identifier of every source: symbol, type, callability, and a
+/// resolved call before `(`.
+fn word_demands(sources: &std::collections::BTreeMap<String, String>) -> AnalysisDemand {
+    let mut entities = Vec::new();
+    for (file, text) in sources {
+        let bytes = text.as_bytes();
+        let ident = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
+        let mut at = 0;
+        while at < bytes.len() {
+            if !ident(bytes[at]) || bytes[at].is_ascii_digit() {
+                at += 1;
+                continue;
+            }
+            let start = at;
+            while at < bytes.len() && ident(bytes[at]) {
+                at += 1;
+            }
+            entities.push(EntityDemand {
+                location: Location {
+                    path: file.as_str().into(),
+                    start_byte: start as u64,
+                    end_byte: at as u64,
+                },
+                symbol: true,
+                type_descriptor: true,
+                callability: true,
+                resolved_call: bytes.get(at) == Some(&b'('),
+                ..EntityDemand::default()
+            });
+        }
+    }
+    AnalysisDemand { entities }
+}
+
+/// A table's entity and file rows by path, and its symbol rows by id, as text.
+fn table_rows(
+    table: &typefacts::FactTable,
+) -> (
+    std::collections::BTreeMap<String, String>,
+    std::collections::BTreeMap<String, String>,
+) {
+    let mut paths = std::collections::BTreeMap::<String, String>::new();
+    for entity in table.entities() {
+        paths
+            .entry(entity.location.path.to_string())
+            .or_default()
+            .push_str(&format!("{entity:?}\n"));
+    }
+    for file in table.files() {
+        paths
+            .entry(file.path.to_string())
+            .or_default()
+            .push_str(&format!("{file:?}\n"));
+    }
+    let symbols = table
+        .symbols()
+        .map(|symbol| {
+            (
+                symbol.id().to_owned(),
+                format!(
+                    "{} {:?} {:?}",
+                    symbol.alias_target(),
+                    symbol.declarations(),
+                    symbol.references().collect::<Vec<_>>()
+                ),
+            )
+        })
+        .collect();
+    (paths, symbols)
+}
+
+/// The keys whose value differs between `before` and `after`, either side.
+fn moved(
+    before: &std::collections::BTreeMap<String, String>,
+    after: &std::collections::BTreeMap<String, String>,
+) -> Vec<String> {
+    let mut keys: Vec<String> = before
+        .keys()
+        .chain(after.keys())
+        .filter(|key| before.get(*key) != after.get(*key))
+        .cloned()
+        .collect();
+    keys.sort();
+    keys.dedup();
+    keys
+}
+
+/// ADR 0389, after #97: the reactive IR binds a file's own Type Facts by the
+/// per-path delta alone, so every inexact producer delta must fail closed.
+/// The first table is a full replacement (the IR rebuilds every index). A
+/// file leaving or entering the program (a rebuilt reference index and a
+/// restarted merge) and a file demanded for the first time (a restarted
+/// merge over the same program) leave the producer unable to name its
+/// changed `symbols` answers, so the client closes its symbols in full; the
+/// change list must still name every path whose rows moved and every symbol
+/// whose row moved. The sequential run is a key collision's, which no
+/// project here reaches: `apps/solid-typefacts` tests it on the producer.
+#[test]
+fn every_inexact_producer_delta_names_every_moved_path_and_symbol() {
+    let scratch = ScratchProject::new(
+        "inexact-delta",
+        &[
+            ("a.ts", "export function f(x: number) { return x + 1; }\n"),
+            (
+                "b.ts",
+                "import { f } from \"./a\";\nimport { c } from \"./c\";\nexport const b = f(c);\n",
+            ),
+            ("c.ts", "export const c = 3;\n"),
+            ("d.ts", "export const d = 4;\n"),
+        ],
+    );
+    let read = |name: &str| fs::read_to_string(scratch.path(name)).unwrap();
+    let mut sources: std::collections::BTreeMap<String, String> = ["a.ts", "b.ts", "c.ts"]
+        .into_iter()
+        .map(|name| (scratch.path(name), read(name)))
+        .collect();
+    let mut session = scratch.open();
+    let mut previous = table_rows(&session.analyze(&word_demands(&sources)).unwrap());
+    let first = session.take_last_table_changes().unwrap();
+    assert!(first.full, "the first table is a full replacement");
+
+    enum Step {
+        Delete(&'static str),
+        Restore(&'static str),
+        Demand(&'static str),
+    }
+    let steps = [
+        (Step::Delete("c.ts"), "a file leaves the program"),
+        (Step::Restore("c.ts"), "a file enters the program"),
+        (Step::Demand("d.ts"), "a file demanded for the first time"),
+    ];
+    for (version, (step, what)) in steps.iter().enumerate() {
+        match step {
+            Step::Delete(name) => {
+                fs::remove_file(scratch.path(name)).unwrap();
+                sources.remove(&scratch.path(name));
+                session
+                    .update([FileChange {
+                        path: scratch.path(name),
+                        source: Vec::new(),
+                        deleted: true,
+                        version: version as u64 + 1,
+                    }])
+                    .unwrap();
+            }
+            Step::Restore(name) => {
+                let text = "export const c = 3;\n";
+                fs::write(scratch.path(name), text).unwrap();
+                sources.insert(scratch.path(name), text.to_owned());
+                session
+                    .update([FileChange {
+                        path: scratch.path(name),
+                        source: text.as_bytes().to_vec(),
+                        deleted: false,
+                        version: version as u64 + 1,
+                    }])
+                    .unwrap();
+            }
+            Step::Demand(name) => {
+                sources.insert(scratch.path(name), read(name));
+            }
+        }
+        let now = table_rows(&session.analyze(&word_demands(&sources)).unwrap());
+        let changes = session.take_last_table_changes().unwrap();
+        assert!(
+            !session.last_closure_patched(),
+            "{what}: the producer's reference delta must be inexact here"
+        );
+        assert!(!changes.full, "{what}: a delta, not a replacement");
+        let caller_moved = moved(&previous.0, &now.0).len() > 1;
+        assert!(
+            caller_moved || matches!(step, Step::Demand(_)),
+            "{what}: an importer's rows move too, its text unchanged"
+        );
+        {
+            let named: std::collections::BTreeSet<&String> = changes
+                .entity_paths
+                .iter()
+                .chain(&changes.file_paths)
+                .collect();
+            for path in moved(&previous.0, &now.0) {
+                assert!(
+                    named.contains(&path),
+                    "{what}: the rows of {path} moved but the delta does not name it"
+                );
+            }
+            let named: std::collections::BTreeSet<&String> = changes.symbol_ids.iter().collect();
+            for id in moved(&previous.1, &now.1) {
+                assert!(
+                    named.contains(&id),
+                    "{what}: the row of {id} moved but the delta does not name it"
+                );
+            }
+        }
+        previous = now;
+    }
+    session.close().unwrap();
+}
+
+/// After #97 no recorded read covers a caller's own Type Facts: only the
+/// per-path delta does. A callee body edit that changes what its caller
+/// infers (a call's return type, and a callback parameter contextually typed
+/// from it), with the caller's text unchanged, must name the caller's path,
+/// and the retained table must equal a fresh session's.
+#[test]
+fn a_callee_body_edit_that_retypes_its_caller_names_the_caller() {
+    const CALLEE: &str = "export function make() {\n  return 1;\n}\n";
+    const RETYPED: &str = "export function make() {\n  return \"s\";\n}\n";
+    const CALLER: &str = "import { make } from \"./callee\";\nexport const value = make();\nexport const mapped = [make()].map((item) => item);\n";
+    let scratch = ScratchProject::new(
+        "callee-retypes-caller",
+        &[("callee.ts", CALLEE), ("caller.ts", CALLER)],
+    );
+    let caller = scratch.path("caller.ts");
+    let mut sources: std::collections::BTreeMap<String, String> = [
+        (scratch.path("callee.ts"), CALLEE.to_owned()),
+        (caller.clone(), CALLER.to_owned()),
+    ]
+    .into_iter()
+    .collect();
+    let mut session = scratch.open();
+    let before = session.analyze(&word_demands(&sources)).unwrap();
+    let item_type = |table: &typefacts::FactTable| {
+        let at = CALLER.find("item)").unwrap() as u64;
+        table
+            .entities_for_path(&caller)
+            .iter()
+            .find(|entity| entity.location.start_byte == at)
+            .and_then(|entity| entity.type_descriptor.as_ref())
+            .map(|descriptor| format!("{descriptor:?}"))
+            .expect("a type for the callback parameter")
+    };
+    let item_before = item_type(&before);
+
+    fs::write(scratch.path("callee.ts"), RETYPED).unwrap();
+    sources.insert(scratch.path("callee.ts"), RETYPED.to_owned());
+    session
+        .update([FileChange {
+            path: scratch.path("callee.ts"),
+            source: RETYPED.as_bytes().to_vec(),
+            deleted: false,
+            version: 1,
+        }])
+        .unwrap();
+    let after = session.analyze(&word_demands(&sources)).unwrap();
+    let changes = session.take_last_table_changes().unwrap();
+    assert_ne!(
+        item_before,
+        item_type(&after),
+        "the edit must retype the caller's callback parameter"
+    );
+    assert_ne!(
+        table_rows(&before).0.get(&caller),
+        table_rows(&after).0.get(&caller),
+        "the caller's rows moved"
+    );
+    assert!(
+        changes.full || changes.entity_paths.contains(&caller),
+        "the caller's text is unchanged but its facts moved: the delta must name it ({:?})",
+        changes.entity_paths
+    );
+
+    let mut fresh = scratch.open();
+    let fresh_table = fresh.analyze(&word_demands(&sources)).unwrap();
+    assert_eq!(
+        table_rows(&after),
+        table_rows(&fresh_table),
+        "the retained table equals a fresh session's"
+    );
+    fresh.close().unwrap();
+    session.close().unwrap();
+}

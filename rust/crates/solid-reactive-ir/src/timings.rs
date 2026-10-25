@@ -189,6 +189,36 @@ impl BuildTimings {
     }
 }
 
+/// One build's Type Facts delta in full, appended to
+/// `SOLID_CHECKER_IR_DELTA_LOG` (a daemon's stderr goes nowhere): the paths
+/// and symbols the IR treats as changed. `delta` is false when there is no
+/// delta to bind files by (no change list, a whole-table replacement or a
+/// domain reset): every file is then recomputed. The IR edit fuzz reads it.
+pub(crate) fn append_delta_line(facts: &solid_facts::ProjectFacts, domain_reset: bool) {
+    let Some(path) = std::env::var_os("SOLID_CHECKER_IR_DELTA_LOG") else {
+        return;
+    };
+    let changes = facts.typescript_changes.as_ref();
+    let line = serde_json::json!({
+        "reactiveIrDelta": {
+            "generation": facts.generation.get(),
+            "delta": changes.is_some_and(|changes| !changes.full) && !domain_reset,
+            "unchanged": changes.is_some_and(|changes| changes.unchanged),
+            "entityPaths": changes.map(|changes| &changes.entity_paths),
+            "filePaths": changes.map(|changes| &changes.file_paths),
+            "symbolIds": changes.map(|changes| changes.symbol_ids.len()),
+        }
+    });
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        use std::io::Write;
+        let _ = writeln!(file, "{line}");
+    }
+}
+
 /// One build's cross-generation reuse, emitted under `SOLID_CHECKER_TIMINGS`:
 /// what the Type Facts delta named and what each retained cache reused.
 pub(crate) fn reuse_line(

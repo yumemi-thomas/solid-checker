@@ -1634,6 +1634,7 @@ impl IncrementalBuilder {
         if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {
             eprintln!("{}", timings::reuse_line(facts, &timings, domain_reset));
         }
+        timings::append_delta_line(facts, domain_reset);
         Ok((program, timings))
     }
 
