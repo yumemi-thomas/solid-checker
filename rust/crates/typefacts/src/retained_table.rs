@@ -497,6 +497,15 @@ impl FactTable {
             .map_or(&[], |entry| entry.entities.as_ref())
     }
 
+    /// [`Self::entities_for_path`] as the shared slice the table holds, for a
+    /// holder that keeps a path's rows across tables the way the table does:
+    /// a path a delta leaves alone shares the same rows with every table
+    /// made from this one.
+    #[must_use]
+    pub fn entities_shared_for_path(&self, path: &str) -> Option<&Arc<[EntityFact]>> {
+        self.paths.get(path).map(|entry| &entry.entities)
+    }
+
     #[must_use]
     pub fn file(&self, path: &str) -> Option<&FileFact> {
         self.paths.get(path).and_then(|entry| entry.file.as_ref())

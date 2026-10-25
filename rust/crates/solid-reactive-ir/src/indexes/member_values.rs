@@ -795,6 +795,11 @@ impl<'a> SemanticLookup<'a> {
         &self,
         symbol: &str,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::BindingFact)> {
+        // Which binding (the first in file order) names the symbol, or that
+        // none does: the bindings naming a symbol are its declarations', so
+        // its declarations and their files stand for the answer, absent or
+        // not (final review R2, finding 8).
+        self.note_symbol_declarations(symbol);
         let resolution = self.bindings_by_symbol().get(symbol)?;
         // A hand-out (`hand_outs`): the binding's file.
         self.note_slot_read(resolution.file);

@@ -25,7 +25,9 @@
 //! and `exported_by_ref`.
 //!
 
-use crate::binder_key::{Key, binder_key, binder_root, global_symbol, intrinsic_symbol, set_key};
+use crate::binder_key::{
+    Key, LocalChains, binder_key, binder_root, global_symbol, intrinsic_symbol, set_key,
+};
 use crate::durable::{DurableRef, minimum_declaration_ref};
 use crate::gocompat::clean;
 use crate::model::SymbolId;
@@ -105,6 +107,10 @@ pub struct Identities {
     /// `runtime_facts`. Holds node and symbol addresses: generation-scoped like
     /// `ids_by_symbol`, cleared at every point that clears it.
     pub(crate) write_indexes: HashMap<usize, Rc<WriteIndex>>,
+    /// The shift-stable chains of source declarations (`Local` keys):
+    /// node-address-keyed, so generation-scoped like `write_indexes` and
+    /// cleared with it.
+    pub(crate) local_chains: LocalChains,
     /// Derived keys: memoized acyclic type keys (with the depth each reaches)
     /// by type address, and the tuple index; address-keyed, so
     /// generation-scoped like `ids_by_symbol` and cleared with it.
@@ -196,6 +202,7 @@ impl Identities {
         self.symbols_by_id.clear();
         self.files_by_name = None;
         self.write_indexes.clear();
+        self.local_chains.clear();
         self.type_keys.clear();
         self.derived_signatures.clear();
         self.derived_first.clear();
@@ -218,6 +225,7 @@ impl Identities {
         self.ids_by_symbol.clear();
         self.symbols_by_id.clear();
         self.write_indexes.clear();
+        self.local_chains.clear();
         self.type_keys.clear();
         self.derived_signatures.clear();
         self.derived_first.clear();
@@ -555,6 +563,7 @@ impl Identities {
         self.symbols_by_id.clear();
         self.files_by_name = None;
         self.write_indexes.clear();
+        self.local_chains.clear();
         self.type_keys.clear();
         self.derived_signatures.clear();
         self.derived_first.clear();
@@ -776,17 +785,23 @@ impl Env<'_> {
     /// a derived or unproven symbol (keyed by `derived_id`).
     fn key_of(&self, symbol: P<Symbol>) -> Option<(Key, P<Symbol>)> {
         let exported = &self.ids.exported_by_ref;
-        binder_key(self.checker, symbol, |reference| {
-            exported.contains_key(reference)
-        })
+        binder_key(
+            self.checker,
+            symbol,
+            |reference| exported.contains_key(reference),
+            &self.ids.local_chains,
+        )
     }
 
     /// The `Set` key of a multi-origin property (ADR 0371).
     fn set_key_of(&self, symbol: P<Symbol>) -> Option<Key> {
         let exported = &self.ids.exported_by_ref;
-        set_key(self.checker, symbol, |reference| {
-            exported.contains_key(reference)
-        })
+        set_key(
+            self.checker,
+            symbol,
+            |reference| exported.contains_key(reference),
+            &self.ids.local_chains,
+        )
     }
 
     /// Go: `idFor`. A binder-level symbol's id is the hash of its key, a
@@ -876,6 +891,7 @@ impl Env<'_> {
                     |reference: &crate::durable::DurableRef| exported.contains_key(reference),
                     &mut memo,
                     &mut tuples,
+                    &self.ids.local_chains,
                 );
                 let (key, outcome) = keyer.derived(symbol, 0);
                 let failure = keyer.failure.take();
@@ -1037,6 +1053,7 @@ impl Env<'_> {
         let key = Arc::clone(self.ids.key(id)?);
         let candidate = match &*key {
             Key::Decl(reference) | Key::Export(reference) => self.symbol_at_reference(reference)?,
+            Key::Local { path, chain, .. } => self.symbol_at_local(path, chain)?,
             Key::Global(name) => global_symbol(self.checker, name)?,
             Key::Intrinsic(which) => intrinsic_symbol(self.checker, *which),
             // A multi-origin property or a derived symbol is made per
@@ -1056,9 +1073,10 @@ impl Env<'_> {
         Some(root)
     }
 
-    fn symbol_at_reference(&mut self, reference: &DurableRef) -> Option<P<Symbol>> {
-        let file = match self.program.get_source_file(&reference.path) {
-            Some(file) => file,
+    /// The program file at `path` (a cleaned file name).
+    fn file_at(&mut self, path: &str) -> Option<P<SourceFile>> {
+        match self.program.get_source_file(path) {
+            Some(file) => Some(file),
             None => {
                 let index = self.ids.files_by_name.get_or_insert_with(|| {
                     self.program
@@ -1067,9 +1085,28 @@ impl Env<'_> {
                         .map(|file| (clean(file.file_name()), *file))
                         .collect()
                 });
-                *index.get(&reference.path)?
+                index.get(path).copied()
             }
-        };
+        }
+    }
+
+    /// The symbol a `Local` key's declaration declares, asked at its name as
+    /// [`Self::symbol_at_reference`] asks.
+    fn symbol_at_local(
+        &mut self,
+        path: &str,
+        chain: &crate::binder_key::Chain,
+    ) -> Option<P<Symbol>> {
+        let file = self.file_at(path)?;
+        let declaration = self.ids.local_chains.declaration(file, chain)?;
+        let name = declaration.name().unwrap_or(declaration);
+        let start = tsrs_scanner::skip_trivia(file.text(), name.pos().source_offset()?);
+        let node = node_at(file, start);
+        self.checker.get_symbol_at_location_exported(node)
+    }
+
+    fn symbol_at_reference(&mut self, reference: &DurableRef) -> Option<P<Symbol>> {
+        let file = self.file_at(&reference.path)?;
         if reference.start_byte >= reference.end_byte
             || reference.end_byte as usize > file.text().len()
         {

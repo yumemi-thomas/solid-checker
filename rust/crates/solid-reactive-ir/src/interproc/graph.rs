@@ -29,6 +29,7 @@ pub(super) fn discover_summary_nodes(
     file: &solid_facts::FileFacts,
     project_indexes: &ProjectIndexes<'_>,
     entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
 ) -> Vec<SummaryNode> {
     let mut nodes = Vec::new();
     let typescript_file = project_indexes.typescript_file(file.path.as_str());
@@ -71,6 +72,9 @@ pub(super) fn discover_summary_nodes(
                 })
                 .or_else(|| {
                     crate::owners::own_method_name(file, function).and_then(|name| {
+                        // A declaration another file's call resolves to can
+                        // name the method (final review R3, plausible 2).
+                        lookup.note_declaration_symbol_at(file.path.as_str(), name.span);
                         project_indexes.method_symbol(file.path.as_str(), name.span)
                     })
                 });
