@@ -43,15 +43,19 @@ Every catalog rule is enabled by default, including `prefer-for` and
 
 An explicit `enabled: false` wins over defaults, presets, and CLI enablement.
 The repeatable `--preset preferences` and `--enable-rule` interfaces remain
-accepted for compatibility, but are redundant for these rules. Other
-per-rule options live in the same project file:
+accepted for compatibility, but are redundant for these rules. The one
+per-rule option beyond `enabled` lives in the same project file: the
+[valid-use-server](valid-use-server.md) `clientWrappers` list (upstream's
+grammar: an exact name, `*` over `[a-zA-Z0-9_$]`, or an unanchored `/regex/`),
+which names callee spellings the project itself declares to be client-side
+wrappers. Any other key is refused.
 
 ```json
 {
   "schemaVersion": 1,
   "rules": {
-    "v1/prefer-classlist": {
-      "classnames": ["cn", "clsx"]
+    "valid-use-server": {
+      "clientWrappers": ["defineLoader", "define*", "/^use[A-Z]/"]
     }
   }
 }
@@ -131,7 +135,7 @@ a superset of upstream's ([ADR 0381](../decisions.md#adr-0381)). Shipped renames
 projection shapes are built, its `delete` is not: TS2790 on a required property), SC2004 and SC2005 together as
 `no-await-primitive-in-tracked-scope` (ADR 0384; one name, two codes), and SC7006
 `valid-use-server` (ADR 0385; upstream's placement checks and `clientWrappers`
-are not built yet). Decided and not yet shipped: `reactivity` as a group key over
+are built, its acceptance of a re-export is not, and its wrapper list matches imports exactly). Decided and not yet shipped: `reactivity` as a group key over
 SC1001, SC1002, SC1005 and SC1007 ([ADR 0386](../decisions.md#adr-0386)), each
 member still configurable alone. Inline `eslint-disable` comments have no effect
 until [ADR 0387](../decisions.md#adr-0387) ships.

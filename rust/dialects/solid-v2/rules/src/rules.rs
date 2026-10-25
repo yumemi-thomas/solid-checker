@@ -231,8 +231,10 @@ impl Rule {
             Self::HttpResponseAfterFlush => {
                 ("SC7005", "http-response-after-flush", "warning", true)
             }
-            // The client build silently loses the export (RFC 10 §Compiler
-            // implications — "Minimum: a diagnostic"), so this is an error.
+            // A misplaced or unextractable directive leaves server code on
+            // the client (or fails the build), and a directive file's
+            // re-export or non-function export fails the compile or the
+            // server boot (ADR 0385), so this is an error.
             Self::ValidUseServer => ("SC7006", "valid-use-server", "error", false),
             // The default transport throws at the call site (probed, rc.0
             // server-functions client), so the proven form is an error.

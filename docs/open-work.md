@@ -32,6 +32,12 @@ Store write outside a setter (`no-store-mutation-outside-setter`, SC2003; ADR 03
 - A write through an accessor's member (`memo.a = 1`, the `ReactiveValue` arm) is TS2339/TS2540 uncasted on rc.17; the cast spellings remain, and the finding's "readonly proxy" claim does not describe a function object. Not audited here.
 - Type-correct rebinding (`count = otherAccessor`, `store = { … }` on a `let`) is silent: the accessor-binding arm is deleted, and the cast and same-type spellings are no proven defect.
 
+Server directives (`valid-use-server`, SC7006; ADR 0385):
+
+- The build plugin's version is not observable, so every claim is the audited rc.17 compiler's. A wrapped module-level export (dropped on rc.0-rc.2, a compile error on rc.3) is not reported on any release. Not built: the rc.17 compile errors for a class, enum, destructured or initializer-less export.
+- A call or alias export whose value the facts do not show to be a function is uncertifiable; Type Facts callability at the export could prove it.
+- The `clientWrappers` regex arm is a JavaScript subset: a pattern with lookaround, backreference or `\b` compares exactly where upstream matches.
+
 `flush` in an effect apply (`flush-in-effect-callback`, SC2008). The runtime reports these; the rule does not claim the open shapes below (ADR 0341). Positions and premises: rule page `flush-in-effect-callback`.
 
 - `createRenderEffect` re-runs and a returned cleanup report only on some runs (its first run is outside any flush); the rule cannot tell which run a call is in, so neither is claimed.

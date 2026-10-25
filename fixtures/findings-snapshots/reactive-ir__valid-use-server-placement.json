@@ -1,0 +1,145 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-placement/directive-file.ts",
+      "start": 463,
+      "end": 476,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-placement/late-module.ts",
+      "start": 36,
+      "end": 49,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-placement/misplaced.ts",
+      "start": 217,
+      "end": 230,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-placement/misplaced.ts",
+      "start": 313,
+      "end": 326,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-placement/misplaced.ts",
+      "start": 438,
+      "end": 451,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-placement/misplaced.ts",
+      "start": 518,
+      "end": 531,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-placement/positions.ts",
+      "start": 282,
+      "end": 295,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-placement/positions.ts",
+      "start": 335,
+      "end": 348,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-placement/positions.ts",
+      "start": 401,
+      "end": 414,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-placement/positions.ts",
+      "start": 465,
+      "end": 478,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-placement/positions.ts",
+      "start": 517,
+      "end": 530,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-placement/positions.ts",
+      "start": 569,
+      "end": 582,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-placement/template.ts",
+      "start": 97,
+      "end": 110,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-placement/template.ts",
+      "start": 161,
+      "end": 174,
+      "fixes": 0
+    }
+  ]
+}

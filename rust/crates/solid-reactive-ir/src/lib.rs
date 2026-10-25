@@ -57,6 +57,7 @@ mod indexes;
 mod interproc;
 mod literal_member_slots;
 mod local_access;
+mod name_matcher;
 mod owners;
 /// The crate's maps and sets hash spans, symbol ids and paths on every
 /// lookup; Fx hashing is several times cheaper than SipHash for such keys.
@@ -85,6 +86,7 @@ pub mod summary_semantics;
 mod symbols;
 mod timings;
 mod upstream_compat;
+mod valid_use_server;
 mod value_identity;
 
 pub use owners::function_binding_name;

@@ -391,7 +391,6 @@ for (const [index, testCase] of ledger.cases.entries()) {
 // verdict on it.
 const EXEMPT = {
   "package-behavior-unavailable": "asks whether a package's behavior is available from analyzed source, which is an analyzability fact about an external artifact; no snippet against real Solid typings can express it",
-  "valid-use-server": "needs a module-level \"use server\" prologue and the project's server surface",
   // The one catalog identity with no source subject at all. It is decided by
   // dialect detection from the nearest node_modules/solid-js/package.json,
   // before any source is read, and it is emitted without passing through the

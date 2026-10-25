@@ -974,7 +974,7 @@
      {
       "rule": "valid-use-server",
       "code": "SC7006",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "span": {
        "marker": "audited"
@@ -989,7 +989,8 @@
      }
     ],
     "absent": []
-   }
+   },
+   "note": "Was a violation (a wrapped export is dropped from the client build, RFC 10 as first written). The audited compiler registers each export of a module-level directive file by its evaluated value and never inspects its shape (`@solidjs/compiler@2.0.0-rc.17` `transform.rs:411-420`; compiler fixture `module-wrapped-exports`; RFC 10 \"Module-level directives invert this\"; the wrapped-export compile error of rc.3 was superseded in rc.4). So the export is not a defect; it is an uncertifiable result because the facts do not show the call's result is a function, which `registerServerReference` requires at server boot (`@solidjs/web@2.0.0-rc.17` `server-functions/dist/server.js:1567-1571`)."
   },
   {
    "id": "http-response-after-flush/positive/001",
@@ -1907,6 +1908,480 @@
     "absent": []
    },
    "note": "Upstream's `delete store.path` shape (test case 4) is not adopted where TypeScript speaks (ADR 0381): for a required property under strictNullChecks the published rc.17 typings give TS2790 (\"The operand of a 'delete' operator must be optional\") at the operand, and the checker is silent. The proxy does drop the delete outside a setter (`deleteProperty` trap `dist/dev.js:5760-5766`; probed). A property whose type includes `undefined` or an optional one type-checks, and no Type Fact says that at a delete operand, so it stays unreported (docs/open-work.md)."
+  },
+  {
+   "id": "valid-use-server/placement/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "export async function afterStatement(id: string) {\n  const table = \"users\";\n  \"use server\";\n  return [table, id];\n}\nexport async function inBlock(id: string) {\n  if (id) {\n    \"use server\";\n    return id;\n  }\n}\nexport async function template(id: string) {\n  `use server`;\n  return id;\n}\nexport const api = {\n  async getUser(id: string) {\n    \"use server\";\n    return id;\n  },\n  get size() {\n    \"use server\";\n    return 1;\n  },\n};\nexport class Api {\n  async getUser(id: string) {\n    \"use server\";\n    return id;\n  }\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "\"use server\";",
+       "occurrence": 1
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "\"use server\";",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "`use server`;"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "\"use server\";",
+       "occurrence": 3
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "\"use server\";",
+       "occurrence": 4
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "\"use server\";",
+       "occurrence": 5
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream's four placement shapes, adopted (eslint-plugin-solid 0.18.1 `valid-use-server` test cases 1-7). The audited compiler (`@solidjs/compiler@2.0.0-rc.17`) reads a directive only from a module's or function body's prologue (`transform.rs:897-901` `body_has_directive`, `:148-151` for the module), so a string statement after another statement, in a block, or a template literal is an ordinary expression and the function stays on the client. A directive in an object method, getter, setter or class method is never extracted, and rc.17 rejects it with a compile error (`validate.rs:403-437`, rc.8; earlier compilers ignore it)."
+  },
+  {
+   "id": "valid-use-server/stray-in-extracted-function/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "export async function outer() {\n  \"use server\";\n  const table = \"users\";\n  if (table) {\n    \"use server\";\n  }\n  const helpers = {\n    inner() {\n      \"use server\";\n      return 1;\n    },\n  };\n  return helpers.inner();\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "valid-use-server"
+     }
+    ]
+   },
+   "note": "Upstream exempts a directive in a function nested inside an extracted server function (its valid case) but reports a stray string in the extracted function's own block as misplaced. The claim there is false: `outer` is already extracted, its whole body runs on the server, and the pass skips directive checks inside an extracted function (`validate.rs:247-258`: \"that whole body ships to the server, so a directive within it changes nothing\"). Silent here; both nested spellings are silent."
+  },
+  {
+   "id": "valid-use-server/directive-file-suppresses-placement/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "\"use server\";\nexport async function getUser(id: string) {\n  const table = \"users\";\n  \"use server\";\n  return [table, id];\n}\nconst api = {\n  async load() {\n    \"use server\";\n    return 1;\n  },\n};\nexport async function useApi() {\n  return api;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "valid-use-server"
+     }
+    ]
+   },
+   "note": "Mirrors upstream (valid-use-server.md section 4, step 2): in a module-level directive file the whole module is server code, so function-level placement is not read (`validate.rs` module doc: \"Module-level directives are unaffected\"; `transform.rs:148-165` takes the module path and skips the function-level one). A template literal is still no directive even there (fixtures/reactive-ir/valid-use-server-placement)."
+  },
+  {
+   "id": "valid-use-server/re-export/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "\"use server\";\nexport { createSignal } from \"solid-js\";\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "createSignal"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence from eslint-plugin-solid 0.18.1, which accepts `export { x } from` in a directive module (\"not statically analyzable; give them the benefit of the doubt\"). The audited compiler rejects it: `check_supported_exports` returns `UnsupportedReason::ReExport` for `export { a } from` and `export * from` (`@solidjs/compiler@2.0.0-rc.17` `transform.rs:1377-1412`, changeset bb905db in rc.8; before rc.8 the export was silently missing from the client build). RFC 10: re-export \"from a module without the directive\"."
+  },
+  {
+   "id": "valid-use-server/client-wrapper-builtin/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "\"use server\";\nimport { GET, live, withMeta } from \"@solidjs/web/server-functions\";\n\nconst a = GET(async () => 1);\nconst b = live(async () => 2);\nconst c = withMeta(async () => 3, { method: \"GET\" });\n\nexport async function setup() {\n  return GET(async () => 4);\n}\nexport { a, b, c };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "GET(async () => 1)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "live(async () => 2)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "withMeta(async () => 3, { method: \"GET\" })"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream's `clientWrapper` shape (valid-use-server test cases 10-12): a module-scope call to a built-in client-side declaration wrapper in a module-level directive file. The module is rebuilt on the client as bare references (`@solidjs/compiler@2.0.0-rc.17` `transform.rs:8-11`), so `GET`'s method, `withMeta`'s metadata and `live`'s transport never reach the client (RFC 10: \"client-transport declarations like `GET` are meaningless inside a module-level file\"). Unlike upstream the callee is resolved to its exact import binding (a subpath of `@solidjs/web`, `solid-js`, `@solidjs/router` or `@solidjs/start`), not matched by spelling; a call inside a function is server code and silent."
+  },
+  {
+   "id": "valid-use-server/client-wrapper-not-imported/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "\"use server\";\nimport * as web from \"@solidjs/web/server-functions\";\n\nfunction GET<T>(fn: T): T {\n  return fn;\n}\nconst a = GET(async () => 1);\nconst b = web.GET(async () => 2);\nexport { a, b };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "valid-use-server"
+     }
+    ]
+   },
+   "note": "Where upstream and this checker differ by design: upstream's built-in list matches an imported name, so it is silent on a project function or a member call too; the ADR 0385 resolution is stricter in the same direction for built-ins (exact import binding), and a project function spelled `GET` is not the wrapper. Only the project's own `clientWrappers` option names a callee by spelling."
+  },
+  {
+   "id": "valid-use-server/client-wrappers-option/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "\"use server\";\ndeclare function defineLoader<T>(fn: T): T;\ndeclare function define<T>(fn: T): T;\ndeclare function redefine<T>(fn: T): T;\ndeclare function loadUser<T>(fn: T): T;\ndeclare function reload<T>(fn: T): T;\ndeclare function exactName<T>(fn: T): T;\ndeclare function exactNames<T>(fn: T): T;\ndeclare function amidst<T>(fn: T): T;\ndeclare function bystander<T>(fn: T): T;\ndeclare function a<T>(fn: T): T;\ndeclare function ab<T>(fn: T): T;\n\nconst r1 = defineLoader(async () => 1);\nconst r2 = define(async () => 2);\nconst r3 = redefine(async () => 3);\nconst r4 = loadUser(async () => 4);\nconst r5 = reload(async () => 5);\nconst r6 = exactName(async () => 6);\nconst r7 = exactNames(async () => 7);\nconst r8 = amidst(async () => 8);\nconst r9 = bystander(async () => 9);\nconst r10 = a(async () => 10);\nconst r11 = ab(async () => 11);\nexport { r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11 };\n"
+   },
+   "ruleOptions": {
+    "valid-use-server": {
+     "clientWrappers": [
+      "define*",
+      "/^load[A-Z]/",
+      "exactName",
+      "/mid/",
+      "/(a/",
+      "/a(?=b)/"
+     ]
+    }
+   },
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "defineLoader(async () => 1)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "define(async () => 2)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "loadUser(async () => 4)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "exactName(async () => 6)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "amidst(async () => 8)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "The `clientWrappers` option in upstream's grammar (`createNameMatcher`, eslint-plugin-solid 0.18.1 `src/utils.ts`; test case 13): `define*` is a wildcard over `[a-zA-Z0-9_$]` anchored at both ends (`defineLoader` and `define` match, `redefine` does not), `/^load[A-Z]/` is a regex (`reload` does not match), `/mid/` is **unanchored** (`amidst` matches), an exact entry matches only itself (`exactNames` does not), and an invalid regex (`/(a/`) compares exactly, so `a` is silent. A user-declared name matches the callee's local spelling: the one place this checker matches by name, because the project states it. Divergence: the regex arm is a subset of JavaScript's (no lookaround, backreference or `\\\\b`), so `/a(?=b)/` compares exactly here where upstream would match `ab`; that can only withhold a report."
+  },
+  {
+   "id": "valid-use-server/non-function-export/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "\"use server\";\nexport const LIMIT = 10;\nexport const NAME = `users`;\nexport const CONFIG = { version: 1 };\nexport default [1, 2];\nexport async function getUsers() {\n  return LIMIT;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "LIMIT",
+       "occurrence": 1
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "NAME"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "CONFIG"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "[1, 2]"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream's `nonFunctionExport` (test cases 8-9): every export of a module-level directive file is registered as a server function, and `registerServerReference` throws at module evaluation for anything else (`@solidjs/web@2.0.0-rc.17` `server-functions/dist/server.js:1567-1571`), so the server fails at boot. The set is upstream's: a literal, template literal, array or object; identifiers, calls and functions are not reported (a call or alias whose value is not shown to be a function is an uncertifiable result)."
   }
  ]
 }

@@ -1,33 +1,37 @@
 "use server";
-// SC7006 server-function-module-directive: under a module-level directive,
-// only direct function exports become client references (RFC 10 §Compiler
-// implications) — wrapped exports, non-function default expressions, and
-// re-exports are silently dropped from the client build.
+// SC7006 valid-use-server, module-level directive file (ADR 0385). Each export
+// is registered by its evaluated value, so a wrapped export is fine; a
+// re-export is a compile error (rc.8+), and a client-side declaration wrapper
+// called at module scope never runs on the client.
 import { GET } from "@solidjs/web/server-functions";
 import { logged } from "./wrappers";
 
-// Wrapped export: dropped from the client build — finding.
+// A client-side wrapper at module scope: its behavior is lost — finding on the
+// call. The export holding it is not a second finding.
 export const getUser = GET(async (id: string) => {
   return { id };
 });
 
-// A second wrapper shape, same drop — finding.
+// A server-side wrapper is the supported composition (RFC 10, export-value
+// registration): the result is not shown to be a function by the facts, so the
+// export is an uncertifiable result, never a violation.
 export const audited = logged(async () => {
   return 1;
 });
 
-// Re-export: dropped — finding (one per specifier).
+// Re-export: a compile error under a module-level directive — finding (one per
+// specifier).
 export { helper } from "./helpers";
 
-// Star re-export: dropped — finding.
+// Star re-export: finding.
 export * from "./more";
 
-// Direct function declaration: becomes a reference — silent.
+// Direct function declaration: registered — silent.
 export async function addTodo(title: string) {
   return title;
 }
 
-// Direct function expression: a reference too — silent.
+// Direct function expression: registered — silent.
 export const removeTodo = async (id: string) => {
   return id;
 };

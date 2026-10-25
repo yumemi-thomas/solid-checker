@@ -1081,6 +1081,26 @@
       ],
       "why": "Upstream's `delete store.path` shape, not adopted (ADR 0381, 0383). The proxy drops it outside a setter (rc.17 `deleteProperty` trap `dist/dev.js:5760-5766`; probed), but for a required property under strictNullChecks `tsc` reports TS2790 (\"The operand of a 'delete' operator must be optional\"), so the write is TypeScript's. The property whose type includes `undefined` (`nick` below, or an optional one) type-checks, and no Type Fact says that at a delete operand, so the checker stays silent on both (docs/open-work.md). Not strict-only in the checker's favour: a non-strict project is silent in `tsc` too, and the checker's silence there is the fail-closed default.",
       "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ req: { id: 1 }, user: { nick: undefined as string | undefined } });\nexport function Remove() {\n  delete store.req.id;\n  delete store.user.nick;\n}\n"
+    },
+    {
+      "rule": "valid-use-server",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerCount": 5,
+      "why": "SC7006's placement arm (ADR 0385), each shape one TypeScript accepts without comment: a `\"use server\"` string statement after another statement or in a block, a template literal, and a directive in an object method or class method. The audited compiler (`@solidjs/compiler@2.0.0-rc.17`) reads a directive only from the prologue and extracts only functions, function expressions and block-bodied arrows, so it leaves these on the client (or rejects the method forms, `validate.rs`); no type says so. The project fixtures `valid-use-server-placement` and the ownership cases pin the silent spellings.",
+      "code": "export async function afterStatement(id: string) {\n  const table = \"users\";\n  \"use server\";\n  return [table, id];\n}\nexport async function inBlock(id: string) {\n  if (id) {\n    \"use server\";\n    return id;\n  }\n  return \"\";\n}\nexport async function template(id: string) {\n  `use server`;\n  return id;\n}\nexport const api = {\n  async load(id: string) {\n    \"use server\";\n    return id;\n  },\n};\nexport class Api {\n  async load(id: string) {\n    \"use server\";\n    return id;\n  }\n}\n"
+    },
+    {
+      "rule": "valid-use-server",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerCount": 3,
+      "why": "SC7006's module-level arm (ADR 0385): under a module-level directive a module-scope call to a client-side declaration wrapper never runs on the client (`GET` here, imported from the real `@solidjs/web/server-functions`), a literal export makes `registerServerReference` throw at server boot (rc.17 `server-functions/dist/server.js:1567-1571`), and a re-export is a compiler error. TypeScript types all three without comment; a wrapped server-side export (`withValidation(schema, fn)`) is not a defect and is not here.",
+      "code": "\"use server\";\nimport { GET } from \"@solidjs/web/server-functions\";\nexport const getUser = GET(async (id: string) => ({ id }));\nexport const LIMIT = 10;\nexport { createSignal } from \"solid-js\";\nexport async function ok() {\n  return 1;\n}\n"
     }
   ]
 }

@@ -48,6 +48,10 @@ pub struct RuleOptions {
     /// Optional source models for development instrumentation; included in
     /// cache identity and never inferred from project rule configuration.
     pub development_feedback: bool,
+    /// `valid-use-server`'s `clientWrappers` entries, in upstream's name
+    /// grammar (ADR 0385): names the project itself declares to be client-side
+    /// declaration wrappers, beside the built-in list.
+    client_wrappers: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -117,6 +121,23 @@ impl RuleOptions {
                     RuleOverride::Disabled
                 },
             );
+            if rule == "valid-use-server"
+                && let Some(entries) = fields.remove("clientWrappers")
+            {
+                options.client_wrappers = entries
+                    .as_array()
+                    .and_then(|entries| {
+                        entries
+                            .iter()
+                            .map(|entry| entry.as_str().map(str::to_owned))
+                            .collect::<Option<Vec<_>>>()
+                    })
+                    .ok_or_else(|| {
+                        format!(
+                            "rule options for {configured_rule:?}: clientWrappers must be an array of strings"
+                        )
+                    })?;
+            }
             let value = serde_json::Value::Object(fields);
             // This module owns 1.x option shapes, not the catalog's external
             // namespace. Match the final, stable upstream rule key after the
@@ -124,20 +145,29 @@ impl RuleOptions {
             let result = if value.as_object().is_some_and(serde_json::Map::is_empty) {
                 Ok(())
             } else {
-                // No rule in the shipped catalog takes options beyond
-                // `enabled`. The one that did was 1.x's `prefer-classlist`, whose
-                // `classnames` list went with the 1.x catalog (ADR 0110). The
-                // refusal stays because this module's whole point is that a
-                // typo must not silently mean "defaults" -- when a 2.0 rule
-                // grows an option, it is this arm that grows a parser.
-                Err(
-                    "this rule takes only `enabled`; no rule in this catalog takes additional options"
-                        .to_owned(),
-                )
+                // Only `valid-use-server` takes an option beyond `enabled` (its
+                // `clientWrappers`, parsed above); the other that did was 1.x's
+                // `prefer-classlist`, whose `classnames` list went with the 1.x
+                // catalog (ADR 0110). The refusal stays because this module's
+                // whole point is that a typo must not silently mean
+                // "defaults" -- when a rule grows an option, it is this arm
+                // that grows a parser.
+                Err(if rule == "valid-use-server" {
+                    "this rule takes only `enabled` and `clientWrappers`".to_owned()
+                } else {
+                    "this rule takes only `enabled`; no other rule in this catalog takes additional options"
+                        .to_owned()
+                })
             };
             result.map_err(|error| format!("rule options for {configured_rule:?}: {error}"))?;
         }
         Ok(options)
+    }
+
+    /// The project's declared `valid-use-server` client wrappers.
+    #[must_use]
+    pub fn client_wrappers(&self) -> &[String] {
+        &self.client_wrappers
     }
 
     pub fn request_presets(&mut self, presets: impl IntoIterator<Item = String>) {
@@ -178,6 +208,7 @@ mod tests {
                 | "no-owner-cleanup"
                 | "no-owner-settled-cleanup"
                 | "strict-read-untracked"
+                | "valid-use-server"
         )
     }
 
@@ -287,5 +318,63 @@ mod tests {
         .unwrap();
         disabled.request_presets(["preferences".into()]);
         assert!(!disabled.is_enabled("prefer-classlist", true, &["preferences"]));
+    }
+
+    #[test]
+    fn valid_use_server_takes_client_wrappers_and_nothing_else() {
+        let options = RuleOptions::parse(
+            r#"{
+              "schemaVersion": 1,
+              "rules": {
+                "valid-use-server": { "clientWrappers": ["define*", "/^use[A-Z]/"] }
+              }
+            }"#,
+            known_rule,
+        )
+        .unwrap();
+        assert_eq!(options.client_wrappers(), ["define*", "/^use[A-Z]/"]);
+        assert!(options.is_enabled("valid-use-server", true, &[]));
+        assert!(RuleOptions::default().client_wrappers().is_empty());
+
+        for bad in [
+            r#"{ "clientWrappers": "define*" }"#,
+            r#"{ "clientWrappers": ["ok", 1] }"#,
+            r#"{ "clientWrappers": ["ok"], "wrappers": ["x"] }"#,
+        ] {
+            let error = RuleOptions::parse(
+                &format!(r#"{{ "schemaVersion": 1, "rules": {{ "valid-use-server": {bad} }} }}"#),
+                known_rule,
+            )
+            .expect_err(bad);
+            assert!(
+                error.contains("clientWrappers must be an array of strings")
+                    || error.contains("takes only `enabled` and `clientWrappers`"),
+                "{error}"
+            );
+        }
+        // The option belongs to this rule alone.
+        assert!(
+            RuleOptions::parse(
+                r#"{ "schemaVersion": 1, "rules": { "no-destructure": { "clientWrappers": ["x"] } } }"#,
+                known_rule,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn the_former_rule_name_carries_the_option_to_the_canonical_rule() {
+        let options = RuleOptions::parse_with_aliases(
+            r#"{
+              "schemaVersion": 1,
+              "rules": {
+                "server-function-module-directive": { "clientWrappers": ["define*"] }
+              }
+            }"#,
+            |rule| rule == "valid-use-server",
+            |rule| (rule == "server-function-module-directive").then_some("valid-use-server"),
+        )
+        .unwrap();
+        assert_eq!(options.client_wrappers(), ["define*"]);
     }
 }

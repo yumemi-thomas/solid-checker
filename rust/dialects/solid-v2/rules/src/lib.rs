@@ -596,7 +596,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
             "the call's scope renders below a Loading boundary, but request-time ordering does not prove whether the boundary settles before or after the response head commits"
         }
         Rule::ValidUseServer => {
-            "the module's directive prologue contains \"use server\" and this export is provably not a direct function declaration"
+            "the directive's position or the module-level directive file's export, re-export or module-scope wrapper call is provably one the audited compiler and server runtime reject, ignore or drop from the client"
         }
         Rule::JsxNoDuplicateProps => {
             "the intrinsic element uses more than one competing source of DOM child content"
