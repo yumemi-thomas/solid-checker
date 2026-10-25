@@ -289,6 +289,11 @@ impl<S: DerivedSchema> Ctx<'_, '_, S> {
             // A proof's check: undecided, not a pass-order bug.
             UNPUBLISHED.with(|unpublished| unpublished.set(true));
         } else if !read.published_now {
+            // A pass-order bug. The value is the last build's: the memo
+            // installs nothing and answers an error, as under a proof's
+            // check, so no reader of this build takes it (final review R2,
+            // finding 6b); the store is poisoned for the next.
+            UNPUBLISHED.with(|unpublished| unpublished.set(true));
             self.store.poison(&format!(
                 "IR derived table `{}` read at {key:?} before its pass published it in this build (failed closed)",
                 D::NAME

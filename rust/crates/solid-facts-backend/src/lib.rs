@@ -1224,14 +1224,30 @@ impl NativeIncrementalSession {
             self.last_import_identity = ImportIdentityMeasurement::default();
             return Ok(facts);
         }
+        // The attestation's exchanges can restart the producer themselves
+        // (review R1 finding 5): rows from two processes, or a kept index
+        // stamped with the new one's epoch, would then pass for the running
+        // program's. So a moved epoch asks again, in full, of the producer
+        // now running, and an epoch that moves again fails the request.
+        let epoch = self.typescript.restart_epoch();
         let kept = match edited {
             Some(edited) => self.kept_attestation(&facts, &scope, edited)?,
             None => None,
         };
-        let (index, measurement) = match kept {
+        let (mut index, mut measurement) = match kept {
             Some(kept) => kept,
             None => attest_import_identities(&mut self.typescript, &scope)?,
         };
+        if self.typescript.restart_epoch() != epoch {
+            let epoch = self.typescript.restart_epoch();
+            (index, measurement) = attest_import_identities(&mut self.typescript, &scope)?;
+            if self.typescript.restart_epoch() != epoch {
+                self.attested_epoch = None;
+                return Err(BackendError::Process(
+                    "the Type Facts producer restarted twice while attesting imports".into(),
+                ));
+            }
+        }
         self.attested_epoch = Some(self.typescript.restart_epoch());
         self.last_import_identity = measurement;
         facts.resolved_imports = Some(index);

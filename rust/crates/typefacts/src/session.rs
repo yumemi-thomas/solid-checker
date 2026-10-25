@@ -1376,6 +1376,10 @@ impl Session {
                 self.restart_and_replay()?;
                 let worked = work();
                 self.update(changes)?;
+                // As for an update re-sent after a restart below: its answer
+                // describes the replayed program, not the one before the
+                // edit (review R1 finding 4).
+                self.last_update_graph = None;
                 return Ok(worked);
             }
             Err(error) => return Err(error),

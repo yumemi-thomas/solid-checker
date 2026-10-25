@@ -120,21 +120,19 @@ struct Answer {
     after: Option<After>,
 }
 
-/// Work an answer does not need, left until the answer has been written and
-/// the connection closed: nothing the answer says reads it, and the next
-/// request is not read until it is done (the daemon answers one request at a
-/// time), so each piece is finished before anything uses it.
+/// Work an answer does not need, left until the answer has been written (or
+/// the write failed) and the connection closed: nothing the answer says reads
+/// it, and the next request is not read until it is done (the daemon answers
+/// one request at a time), so it is finished before anything uses it. That
+/// work is the memo store's sweep of the entries the build did not reach (the
+/// next build begins from a swept store, and runs a sweep still due first).
 ///
-/// - the witness learns the edited files' imports (it is only read by the
-///   next request's check);
-/// - the memo store sweeps the entries the build did not reach (the next
-///   build begins from a swept store, and runs a sweep still due first).
-///
-/// The cached answer is not deferred: the idle check records it with the
-/// answer.
+/// The witness's extension with the edited files' imports is not deferred:
+/// it observes the disk as near as it can to when the producer resolved them
+/// (review R1 finding 2), and costs about nothing. Nor is the cached answer:
+/// the idle check records it with the answer.
 #[derive(Default)]
 struct After {
-    witness: Option<(Vec<String>, bool)>,
     sweep: bool,
 }
 
@@ -152,10 +150,6 @@ impl After {
     fn run(self, state: &mut State) -> Result<(), Box<dyn Error>> {
         let timed = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
         let started = Instant::now();
-        if let Some((paths, graph_kept)) = self.witness {
-            state.extend_witness(&paths, graph_kept)?;
-        }
-        let witness = started.elapsed();
         if self.sweep {
             state.diagnostics.finish_deferred();
         }
@@ -165,8 +159,7 @@ impl After {
                 "{}",
                 serde_json::json!({
                     "daemonAfter": {
-                        "witnessMs": ms(witness),
-                        "sweepMs": ms(started.elapsed() - witness),
+                        "sweepMs": ms(started.elapsed()),
                     }
                 })
             );
@@ -557,7 +550,9 @@ fn idle_check_room(root: u32) -> Option<String> {
 }
 
 /// The memory the system can hand out without swapping: Linux
-/// `MemAvailable`; macOS free, inactive, speculative and purgeable pages.
+/// `MemAvailable`; macOS free, inactive and speculative pages. Purgeable
+/// pages are not added: they sit on the active and inactive queues already,
+/// and counting them again let the idle check start without room.
 fn available_memory_bytes() -> Option<u64> {
     if cfg!(target_os = "linux") {
         let meminfo = fs::read_to_string("/proc/meminfo").ok()?;
@@ -600,7 +595,7 @@ fn parse_vm_stat_available(output: &str) -> Option<u64> {
         };
         if matches!(
             name.trim(),
-            "Pages free" | "Pages inactive" | "Pages speculative" | "Pages purgeable"
+            "Pages free" | "Pages inactive" | "Pages speculative"
         ) {
             let count = value.trim().trim_end_matches('.').parse::<u64>().ok()?;
             pages = pages.saturating_add(count);
@@ -765,9 +760,21 @@ impl Tracking {
                 source.path.clone(),
                 fingerprint_bytes(Path::new(&source.path), source.source.as_bytes())?,
             );
-            if let Some(parent) = PathBuf::from(&source.path).parent() {
-                dirs.entry(parent.to_path_buf())
-                    .or_insert_with(|| directory_stamp(parent));
+            // A source's directory, and every directory between it and the
+            // project's: a file created in a new directory under one that
+            // holds no source itself moves only that one's stamp.
+            let project_directory = project.parent();
+            let source_path = PathBuf::from(&source.path);
+            for (index, directory) in source_path.ancestors().skip(1).enumerate() {
+                let inside = project_directory
+                    .is_some_and(|project| directory.starts_with(project) && directory != project);
+                if index > 0 && !inside {
+                    break;
+                }
+                if dirs.contains_key(directory) {
+                    break;
+                }
+                dirs.insert(directory.to_path_buf(), directory_stamp(directory));
             }
         }
         Ok(Self {
@@ -1518,11 +1525,16 @@ fn handle(
                 notice: Some(answer.notice.to_string()),
                 recovered,
             })?;
-            stream.write_all(&header)?;
-            stream.write_all(b"\n")?;
-            stream.write_all(sent)?;
-            stream.flush()?;
+            let written = (|| {
+                stream.write_all(&header)?;
+                stream.write_all(b"\n")?;
+                stream.write_all(sent)?;
+                stream.flush()
+            })();
             drop(stream);
+            // The state already holds this answer's program, so its deferred
+            // work runs whether or not the client read the answer (one that
+            // went away is a failed write, review R1 finding 1).
             if let Some(after) = after
                 && let Some(retained) = state.as_mut()
                 && let Err(error) = after.run(retained)
@@ -1534,7 +1546,7 @@ fn handle(
             if materialized {
                 idle_memory::reclaim_idle_pages();
             }
-            Ok(())
+            Ok(written?)
         }
         Err(error) => {
             let message = error.to_string();
@@ -1617,6 +1629,7 @@ fn answer_retained(
                 notice: Arc::clone(&answered.notice),
                 program: answered.program.clone(),
                 witness,
+                resolution: slot.as_ref().and_then(|state| state.resolution.clone()),
             });
         } else {
             idle_check.forget();
@@ -1698,9 +1711,9 @@ fn answer_with(
         }
         Ok(())
     };
-    // The witness and the cached answer are left until the answer is written
-    // only for the retained state; a state dropped after this answer closes
-    // its producer, which the witness asks.
+    // The memo sweep is left until the answer is written only for the
+    // retained state; the idle check's fresh state, dropped after this
+    // answer, defers nothing.
     let defer = producer == AfterFacts::Keep;
     let (sync, witness_pending) = state.resync(request)?;
     let changes = match sync {
@@ -1904,13 +1917,13 @@ fn answer_with(
     // A retained witness was found current this request, so it still holds
     // for the same program, and after an update that kept the program's
     // files it needs only the edited files' imports on top
-    // ([`State::extend_witness`]); the retained state adds them once the
-    // answer is written ([`After`]). A new session (rebuilt, reprepared, or
-    // reopened by the update) has none.
+    // ([`State::extend_witness`]), observed here, right after the facts, so
+    // the disk it records is the one the update resolved against as nearly
+    // as it can be. A new session (rebuilt, reprepared, or reopened by the
+    // update) has none.
     let mut after = After::default();
     match (state.resolution.is_some(), edited) {
         (true, None) => {}
-        (true, Some(paths)) if defer => after.witness = Some((paths, graph_kept)),
         (true, Some(paths)) => state.extend_witness(&paths, graph_kept)?,
         (false, _) => {
             let tracked = &state.tracking.fingerprints;

@@ -184,7 +184,7 @@ impl IncrementalCacheState {
             return;
         }
         // The interprocedural graph and result chunks stay (ADR
-        // 03XX-edit-residual): rebuilding them cost about 95 ms of every
+        // 0412): rebuilding them cost about 95 ms of every
         // app-game edit for about 50 MB, as do reachability's (ADR 0397).
         self.base_indexes = None;
         if retention == CacheRetention::Compact {
@@ -221,6 +221,9 @@ impl IncrementalCacheState {
 pub(crate) struct SourceDiscoveryIdentity {
     pub(crate) source_hash: SourceHash,
     pub(crate) symbols: Vec<SymbolId>,
+    /// The file's import resolutions, digested: neither is a TypeFacts row,
+    /// and either can move with the file's text and rows unchanged.
+    pub(crate) resolutions: Option<[u8; 32]>,
 }
 
 #[derive(Clone, Default)]
