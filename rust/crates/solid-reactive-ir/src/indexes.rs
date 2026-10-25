@@ -1523,7 +1523,11 @@ impl<'a> SemanticLookup<'a> {
             // code is the same walk's answer for writes. Only an answer that
             // read another module than the function's own can move with that
             // module's contents; one that read only its own is a function of
-            // its own file, which the file's fragment already keys on.
+            // its own file and of the cross-file indexes digested above (the
+            // classifier's inputs: component uses, event literals, apply
+            // answers), which the file's fragment already keys on. Pinned by
+            // `callee_summary_write_role_edits_match_cold` and
+            // `use_site_write_role_edits_match_cold`.
             let mut writes = self
                 .write_flow_answers()
                 .iter()

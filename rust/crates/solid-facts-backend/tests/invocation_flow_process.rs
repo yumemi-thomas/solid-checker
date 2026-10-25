@@ -1705,3 +1705,85 @@ fn helper_write_role_edits_match_cold() {
         ],
     );
 }
+
+const SUMMARY_WRITE_APP: &str = r#"import { createSignal } from "solid-js";
+import { track } from "./lib";
+export function App() {
+  const [, setN] = createSignal(0);
+  const bump = () => setN(1);
+  track(() => bump());
+  return <main />;
+}
+"#;
+const SUMMARY_WRITE_OWNED: &str = "import { createMemo } from \"solid-js\";\nexport function track(fn: () => void): void {\n  createMemo(() => fn());\n}\n";
+const SUMMARY_WRITE_KEEPS: &str = "const queue: Array<() => void> = [];\nexport function track(fn: () => void): void {\n  queue.push(fn);\n}\n";
+
+/// The write sits in a function of its own file (`bump`), whose only call is in
+/// a literal handed to another file's helper: the write's role is decided by
+/// what that helper does with the literal; the flow answer for `bump` enters
+/// the helper's module, so the proof digest binds it.
+#[test]
+fn callee_summary_write_role_edits_match_cold() {
+    write_twin(
+        "flow-write-summary-edit",
+        &[
+            ("App.tsx", SUMMARY_WRITE_APP),
+            ("lib.ts", SUMMARY_WRITE_OWNED),
+        ],
+        ("App.tsx", "setN(1)"),
+        ("violation", "violation"),
+        &[
+            (
+                "lib.ts",
+                SUMMARY_WRITE_KEEPS,
+                "uncertifiable",
+                "uncertifiable",
+            ),
+            ("lib.ts", SUMMARY_WRITE_OWNED, "violation", "violation"),
+        ],
+    );
+}
+
+const COMPONENT_WRITE_APP: &str = r#"import { createSignal } from "solid-js";
+export function maybe() {
+  const [, setN] = createSignal(0);
+  const bump = () => setN(1);
+  bump();
+  return null;
+}
+"#;
+const COMPONENT_WRITE_PLAIN: &str =
+    "import { maybe } from \"./App\";\nexport const value = maybe;\n";
+const COMPONENT_WRITE_RENDERED: &str =
+    "import { maybe } from \"./App\";\nconst Maybe = maybe;\nexport const view = <Maybe />;\n";
+
+/// The write sits in a function of its own file whose only call is in the
+/// body of another function of that file; whether that body is a component's
+/// (an owned scope) is decided by a use in a third file, an input of the
+/// classifier that the write-flow answer does not record as a module touched.
+#[test]
+fn use_site_write_role_edits_match_cold() {
+    write_twin(
+        "flow-write-use-site-edit",
+        &[
+            ("App.tsx", COMPONENT_WRITE_APP),
+            ("use.tsx", COMPONENT_WRITE_PLAIN),
+        ],
+        ("App.tsx", "setN(1)"),
+        ("uncertifiable", "uncertifiable"),
+        &[
+            (
+                "use.tsx",
+                COMPONENT_WRITE_RENDERED,
+                "violation",
+                "violation",
+            ),
+            (
+                "use.tsx",
+                COMPONENT_WRITE_PLAIN,
+                "uncertifiable",
+                "uncertifiable",
+            ),
+        ],
+    );
+}
