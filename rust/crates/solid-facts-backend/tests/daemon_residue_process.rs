@@ -1,7 +1,7 @@
 //! What the retained daemon sends and what it trusts between requests
 //! (ADR 0400): an `--only-file` answer is the full report's findings
-//! for that file and nothing else changes; digests kept by file stamp never
-//! outlive an edit, a revert, a package change or a configuration change.
+//! for that file and nothing else changes; nothing it keeps outlives an
+//! edit, a revert, a package change or a configuration change.
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -23,9 +23,7 @@ fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
-/// A scratch project served by its own daemon, which is stopped on drop. The
-/// daemon reuses a stamp-kept digest at once (no quiet window), so a stale one
-/// would show.
+/// A scratch project served by its own daemon, which is stopped on drop.
 struct Project {
     root: PathBuf,
     tsconfig: PathBuf,
@@ -88,7 +86,6 @@ impl Project {
             .env("SOLID_CHECKER_DAEMON", if daemon { "1" } else { "0" })
             .env("SOLID_CHECKER_DAEMON_IDLE_SECS", "60")
             .env("SOLID_CHECKER_TIMINGS", "1")
-            .env("SOLID_CHECKER_DIGEST_QUIET_MS", "0")
             .env("SOLID_CHECKER_IR_SHADOW", "0")
             .env("TMPDIR", &self.sockets)
             .args(["--format", "json", "--project"])
