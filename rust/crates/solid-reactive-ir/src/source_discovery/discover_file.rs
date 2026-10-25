@@ -529,10 +529,6 @@ pub(crate) struct SourceDiscovery {
     /// they name) are the last build's: a later stage's chunk of one of them
     /// is reused only if its recorded reads still answer as they did.
     pub(crate) unchanged_paths: HashSet<String>,
-    /// What every file's discovery and the project passes read of the
-    /// lookup ([`crate::base::reads`]): part of the proof of a later chunk
-    /// that reads these tables without recording which entries.
-    pub(crate) shared_reads: crate::base::reads::Reads,
 }
 
 /// The stable, read-mostly environment threaded through every pipeline stage:

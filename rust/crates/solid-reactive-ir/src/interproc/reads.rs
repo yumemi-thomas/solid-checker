@@ -396,10 +396,8 @@ pub(super) fn interprocedural_reads(
         results: mut interprocedural_result_cache,
     } = caches;
     // What the stage reads before its result chunks run is part of each
-    // chunk's proof (the resolver, transport, the merged graph); what the
-    // reused chunks read is part of the retained aggregate's.
+    // chunk's proof (the resolver, transport, the merged graph).
     let recording = crate::base::reads::begin();
-    let mut reused_reads = crate::base::reads::Reads::default();
     // The recomputed graph chunks' and the refresh's reads: their own
     // proofs, replayed into the stage's recording once the result chunks'
     // stage proof is taken (`stage_only`).
@@ -408,12 +406,11 @@ pub(super) fn interprocedural_reads(
     let (file_nodes, graph_node_reused_paths) = discover_summary_graph_nodes(
         context,
         interprocedural_graph_cache.as_deref_mut(),
-        &mut reused_reads,
         &mut chunk_reads,
     );
     let graph_nodes = phase_started.elapsed();
     let step_started = Instant::now();
-    let node_index = super::node_index::node_index(lookup, file_nodes);
+    let node_index = NodeIndex::new(&file_nodes);
     let NodeIndex {
         nodes,
         nodes_by_path,
@@ -672,7 +669,6 @@ pub(super) fn interprocedural_reads(
         &result_read_context,
         &mut dispatch_obligations,
         &stage_reads,
-        &mut reused_reads,
     );
     // ADR 0289: computed fresh on every analysis, never retained per file:
     // the derivation reads other files' literals and the provider census.
@@ -702,10 +698,8 @@ pub(super) fn interprocedural_reads(
         &mut fixed_points,
     );
     let results_and_exports = phase_started.elapsed();
-    super::node_index::keep(lookup, node_index);
     recording.finish();
     InterproceduralResult {
-        reused_reads,
         reads: result.into(),
         source_call_targets: Arc::new(transported_calls),
         dispatch_obligations: dispatch_obligations.into(),
@@ -795,7 +789,6 @@ fn discover_summary_graph_nodes<'a, 'c>(
     interprocedural_graph_cache: Option<
         &'c mut HashMap<solid_facts::core::SourcePath, CachedInterproceduralGraph>,
     >,
-    reused_reads: &mut crate::base::reads::Reads,
     chunk_reads: &mut Vec<crate::base::reads::Reads>,
 ) -> (Vec<(&'a str, FileNodes<'c>)>, HashSet<&'a str>) {
     let InterproceduralContext {
@@ -810,7 +803,7 @@ fn discover_summary_graph_nodes<'a, 'c>(
     let mut graph_node_reused_paths = HashSet::default();
     let Some(cache) = interprocedural_graph_cache else {
         let discovered = parallel_file_results(&facts.files, |file| {
-            discover_summary_nodes(file, project_indexes, entities)
+            discover_summary_nodes(file, project_indexes, entities, lookup)
         });
         let nodes = facts
             .files
@@ -843,12 +836,11 @@ fn discover_summary_graph_nodes<'a, 'c>(
     let discovered = parallel_file_results(&facts.files, |file| {
         (!reusable_paths.contains(file.path.as_str())).then(|| {
             crate::base::reads::record_detached(|| {
-                discover_summary_nodes(file, project_indexes, entities)
+                discover_summary_nodes(file, project_indexes, entities, lookup)
             })
         })
     });
     let mut computed = Vec::with_capacity(discovered.len());
-    let mut reused_proofs = Vec::new();
     for (file, discovered) in facts.files.iter().zip(discovered) {
         if let Some((file_nodes, reads)) = discovered {
             chunk_reads.push(reads.clone());
@@ -865,16 +857,14 @@ fn discover_summary_graph_nodes<'a, 'c>(
             );
             computed.push(Some(file_nodes));
         } else {
-            let cached = cache
-                .get(file.path.as_str())
-                .expect("reusable graph path has a cached contribution");
-            reused_proofs.push(cached.proof.reads.clone());
+            debug_assert!(
+                cache.contains_key(file.path.as_str()),
+                "reusable graph path has a cached contribution"
+            );
             graph_node_reused_paths.insert(file.path.as_str());
             computed.push(None);
         }
     }
-    // Added at once ([`crate::base::reads::Reads::extend_all`]).
-    reused_reads.extend_all(&reused_proofs);
     let cache = &*cache;
     let nodes = facts
         .files
@@ -1712,7 +1702,6 @@ fn collect_result_reads(
     result_read_context: &InterproceduralResultReadContext<'_, '_>,
     dispatch_obligations: &mut Vec<StaticDefect>,
     stage_reads: &crate::base::reads::Reads,
-    reused_reads: &mut crate::base::reads::Reads,
 ) -> ResultReads {
     let InterproceduralContext {
         facts,
@@ -1745,9 +1734,6 @@ fn collect_result_reads(
     // other takes its address during the build.
     let mut stage_proofs_hold =
         HashMap::<usize, (Arc<crate::base::reads::ReadProof>, bool)>::default();
-    // The kept files' reads, added to the stage's at once
-    // ([`crate::base::reads::Reads::extend_all`]).
-    let mut reused_proofs = Vec::new();
     let result_view = result_read_context.result;
     let result_capacity = interprocedural_result_cache.as_ref().map_or(0, |cache| {
         cache.files.values().map(|file| file.reads.len()).sum()
@@ -1834,8 +1820,6 @@ fn collect_result_reads(
                     && super::transport_reads::hold(&cached.transport, result_read_context)
                 {
                     result_reused_files += 1;
-                    reused_proofs.push(cached.proof.reads.clone());
-                    reused_proofs.push(cached.stage_proof.reads.clone());
                     result.extend(cached.reads.iter().cloned());
                     dispatch_obligations.extend(cached.dispatch_obligations.iter().cloned());
                     continue;
@@ -1896,7 +1880,6 @@ fn collect_result_reads(
                     .insert(dependency.clone(), result_view.dependency_state(dependency));
             }
         }
-        reused_reads.extend_all(&reused_proofs);
     } else {
         for file in &facts.files {
             result_recomputed_files += 1;

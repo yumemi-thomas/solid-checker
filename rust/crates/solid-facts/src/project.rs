@@ -262,6 +262,27 @@ impl TypeScriptTable {
         )
     }
 
+    /// [`Self::entities_for_path`] as a shared slice: the table's own (a
+    /// retained table hands out the rows it holds, no copy), an override's, or
+    /// a copy of a synthetic table's. A holder keeps it across tables, and
+    /// replaces it for each path a table delta names.
+    #[must_use]
+    pub fn entities_shared_for_path(&self, path: &str) -> Arc<[EntityFact]> {
+        if let Some(entities) = self
+            .entity_overrides
+            .as_deref()
+            .and_then(|overrides| overrides.get(path))
+        {
+            return Arc::clone(entities);
+        }
+        match &self.retained {
+            Some(table) => table
+                .entities_shared_for_path(path)
+                .map_or_else(|| Arc::from([]), Arc::clone),
+            None => Arc::from(self.entities_for_path(path)),
+        }
+    }
+
     #[must_use]
     pub fn file(&self, path: &str) -> Option<&FileFact> {
         if let Some(files) = &self.file_overrides {
