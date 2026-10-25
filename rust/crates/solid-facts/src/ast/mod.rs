@@ -47,7 +47,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 75;
+pub const AST_FACTS_SCHEMA: u32 = 76;
 
 mod argument_completion;
 mod completion_call_cover;
@@ -62,6 +62,7 @@ mod module_requests;
 mod primitive_completion;
 mod proxy_get_forward;
 mod span_index;
+mod suppression;
 mod unconditional_calls;
 
 mod types;
@@ -104,6 +105,7 @@ pub use emission::{
     module_emission,
 };
 pub use span_index::{AstSpanIndex, LazySpanIndex};
+pub use suppression::LineTable;
 
 #[cfg(test)]
 mod tests;

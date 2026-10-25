@@ -389,6 +389,12 @@ pub struct AstFacts {
     /// [`FunctionFact::directives`], not here.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stray_directives: Vec<StrayDirectiveFact>,
+    /// Comments that switch rules off or on (facts schema 76): the
+    /// `eslint-disable` family and the checker's own `solid-checker-disable`
+    /// family, each parsed with ESLint's directive grammar. In source order.
+    /// Every other comment is absent.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suppression_comments: Vec<SuppressionCommentFact>,
     /// Every tagged template, with its substitutions in order (facts schema
     /// 61, ADR 0309). The template calls its tag with the template object
     /// as argument 0 and substitution `i` as argument `i + 1`; no call fact
@@ -732,6 +738,47 @@ pub struct StrayDirectiveFact {
     /// function body: the statement lists that have a directive prologue. A
     /// statement in a block, a `switch` case or a class static block is not.
     pub direct: bool,
+}
+
+/// Which comment family a [`SuppressionCommentFact`] belongs to.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SuppressionOrigin {
+    /// `eslint-disable`, `eslint-enable`, `eslint-disable-line` and
+    /// `eslint-disable-next-line`.
+    Eslint,
+    /// The same four, spelled `solid-checker-*`.
+    SolidChecker,
+}
+
+/// What a suppression comment does, by its label.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SuppressionAction {
+    Disable,
+    Enable,
+    DisableLine,
+    DisableNextLine,
+}
+
+/// One comment that switches rules off or on (facts schema 76). Only the
+/// syntax is recorded: which rule a name denotes, and which findings it
+/// reaches, is the consumer's. A `//` comment is kept only for the two
+/// line-scoped actions, as in ESLint, and the justification after ` -- ` is
+/// dropped.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuppressionCommentFact {
+    /// The whole comment, delimiters included.
+    pub span: Span,
+    pub origin: SuppressionOrigin,
+    pub action: SuppressionAction,
+    /// A `/* */` comment rather than a `//` comment.
+    pub block: bool,
+    /// The comma-separated names as written, trimmed and with one pair of
+    /// surrounding quotes removed; empty when the comment names none, which
+    /// means every rule.
+    pub names: Vec<CompactString>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1872,6 +1919,7 @@ impl AstFacts {
             implicit_suspensions: Vec::new(),
             module_directives: Vec::new(),
             stray_directives: Vec::new(),
+            suppression_comments: Vec::new(),
             tagged_templates: Vec::new(),
             array_literal_elements: Vec::new(),
             pattern_elements: Vec::new(),

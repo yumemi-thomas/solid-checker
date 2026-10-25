@@ -55,6 +55,8 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
     collector.ambient_variable = source_type.is_typescript_definition();
     collector.visit_program(&parsed.program);
     let mut facts = collector.finish(identity);
+    facts.suppression_comments =
+        suppression::suppression_comments(source, &parsed.program.comments);
     if execution_semantics_valid {
         (facts.host_execution, facts.host_defaults) = host_execution::host_execution(&semantic);
         facts.host_undefined_arguments = host_execution::undefined_values(&semantic);
@@ -552,6 +554,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             implicit_suspensions: self.implicit_suspensions,
             module_directives: self.module_directives,
             stray_directives: self.stray_directives,
+            suppression_comments: Vec::new(),
             tagged_templates: self.tagged_templates,
             array_literal_elements: self.array_literal_elements,
             pattern_elements: self.pattern_elements,
