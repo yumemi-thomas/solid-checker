@@ -106,12 +106,13 @@ retired identities load as no-ops through `RETIRED_RULES`, both in
 | SC9012 | [reactive-dispatch-unresolved](reactive-dispatch-unresolved.md) | warning | on |
 | SC9013 | [unsupported-solid-runtime](unsupported-solid-runtime.md) | error | on |
 | SC9014 | [unaudited-solid-release](unaudited-solid-release.md) | warning | on |
-| SC9015 | [compiler-refused-source](compiler-refused-source.md) | warning | on |
+| SC9015 | [compiler-refused-source](compiler-refused-source.md) | error (warning notice for an unproven refusal) | on |
 
 `http-response-after-flush`, `package-behavior-unavailable`,
 `reactive-source-uncaptured`, `reactive-dispatch-unresolved`,
 `unsupported-solid-runtime`, `unaudited-solid-release`, and
-`compiler-refused-source` can produce uncertifiable results. Their pages name
+`compiler-refused-source` (for a refusal it does not prove, ADR 0399) can
+produce uncertifiable results. Their pages name
 the missing evidence and remediation.
 
 SC9005 was named `package-contract-incomplete`; that name remains an alias of

@@ -36,7 +36,8 @@ export const FILE_BUDGETS = {
   // and for ADR 0396's async and test-helper extension, 135_756 bytes against 133_600.
   // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 145_000.
   // And for the Opus review's fixes to ADRs 0384, 0394, 0396 and 0400: 150_000.
-  "docs/decisions.md": 150_000,
+  // And for ADR 0399: the file stood at 150_325 bytes against 150_000: 151_000.
+  "docs/decisions.md": 151_000,
 };
 
 export const GROUP_BUDGETS = [

@@ -483,7 +483,7 @@ impl DiagnosticSession {
         // nothing about it is proven, and neither is anything a finding
         // elsewhere reaches through it. Its sites are unplaced in the IR; a
         // violation located in it, or whose evidence passes through it, is an
-        // obligation here. Each refused file gets a project-level notice.
+        // obligation here. Each refused file gets one SC9015 (ADR 0399).
         let refused = facts
             .files
             .iter()
@@ -515,8 +515,17 @@ impl DiagnosticSession {
                     );
                 }
             }
+            let compiler = (self.dialect.compiler)();
             for (path, message) in &refused {
-                findings.push(compiler_refused_finding(path, message));
+                let reason = message
+                    .strip_prefix(path)
+                    .and_then(|rest| rest.strip_prefix(": "))
+                    .unwrap_or(message);
+                findings.push(compiler_refused_finding(
+                    path,
+                    message,
+                    compiler.classify_refusal(reason),
+                ));
             }
         }
         let metrics = analysis_metrics(facts, &program);
@@ -856,13 +865,22 @@ pub fn unaudited_router_finding(
     finding
 }
 
-/// The `SC9015` notice for a file the dialect compiler refused (ADR 0360). It
-/// is about the file, not a site in it, and states the compiler's own message:
-/// the file has no compiler facts, so the analysis claims nothing about it and
-/// withholds what depends on it. Project-level like SC9014, so a run that
-/// would otherwise look clean shows it and `--certify` fails.
+/// The `SC9015` finding for a file the dialect compiler refused (ADR 0360,
+/// 0399). It is about the file, not a site in it, and states the compiler's
+/// own message: the file has no compiler facts, so the analysis claims nothing
+/// else about it and withholds what depends on it.
+///
+/// A refusal the dialect proves a defect of the source (and `tsc` does not
+/// also report) is a violation, one per file. Any other is the project-level
+/// notice of ADR 0360, as SC9014's is, so a run that would otherwise look
+/// clean shows it and `--certify` fails.
 #[must_use]
-pub fn compiler_refused_finding(path: &str, message: &str) -> Finding {
+pub fn compiler_refused_finding(
+    path: &str,
+    message: &str,
+    verdict: solid_facts::compiler::RefusalVerdict,
+) -> Finding {
+    use solid_facts::compiler::RefusalVerdict;
     let location = typefacts::Location {
         path: path.into(),
         start_byte: 0,
@@ -875,24 +893,40 @@ pub fn compiler_refused_finding(path: &str, message: &str) -> Finding {
     // The compiler's first line names the refusal; the rest (the malformed
     // markup, say) goes in the evidence.
     let summary = reason.lines().next().unwrap_or(reason).trim_end();
+    let proven = verdict == RefusalVerdict::ProvenDefect;
     let metadata = solid_reactive_ir::RuleMetadata {
         code: dialect::COMPILER_REFUSED_CODE,
         name: dialect::COMPILER_REFUSED_RULE,
-        severity: "warning",
-        uncertifiable: true,
+        severity: if proven { "error" } else { "warning" },
+        uncertifiable: !proven,
         default_enabled: true,
         presets: &[],
     };
-    let mut finding = Finding::new(
-        metadata,
-        format!(
-            "the Solid compiler refused {path}: {summary}; the file has no compiler facts, so nothing in it is proven and findings that depend on it are not proven either"
-        ),
-        location.clone(),
-    );
-    finding.hint = "Findings beside this notice that do not depend on the file stand. To have the file analyzed, rewrite the construct the compiler names in a form the pinned Solid 2 compiler accepts.".into();
-    finding.analysis_context = "compiler-facts".into();
-    finding.subject_kind = "project".into();
+    let mut finding = if proven {
+        let mut finding = Finding::new(
+            metadata,
+            format!(
+                "the pinned Solid 2 compiler refuses {path}: {summary}; the compiler rejects this construct whatever the options, so the file does not build with it, and the file has no compiler facts"
+            ),
+            location.clone(),
+        );
+        finding.hint = "Rewrite the construct the compiler names in the form it gives, as the compiler's message says. The refusal is judged against the pinned compiler, not the one installed here (docs/rules/compiler-refused-source.md).".into();
+        finding.analysis_context = "compiler-refusal".into();
+        finding.subject_kind = "file".into();
+        finding
+    } else {
+        let mut finding = Finding::new(
+            metadata,
+            format!(
+                "the Solid compiler refused {path}: {summary}; the file has no compiler facts, so nothing in it is proven and findings that depend on it are not proven either"
+            ),
+            location.clone(),
+        );
+        finding.hint = "Findings beside this notice that do not depend on the file stand. To have the file analyzed, rewrite the construct the compiler names in a form the pinned Solid 2 compiler accepts.".into();
+        finding.analysis_context = "compiler-facts".into();
+        finding.subject_kind = "project".into();
+        finding
+    };
     finding.evidence = vec![solid_reactive_ir::EvidenceStep {
         message: format!("the compiler's message: {reason}"),
         location: Some(location),

@@ -94,6 +94,28 @@ impl AnalysisRequest {
 pub trait CompilerFactsProvider {
     fn analyze(&mut self, request: &AnalysisRequest)
     -> Result<ExecutionMap, CompilerProviderError>;
+
+    /// What a refusal this provider returned says about the source (ADR 0399).
+    /// `reason` is the compiler's own message, without the path prefix. A
+    /// provider that does not classify its refusals answers
+    /// [`RefusalVerdict::Unproven`], so none becomes a violation.
+    fn classify_refusal(&self, _reason: &str) -> RefusalVerdict {
+        RefusalVerdict::Unproven
+    }
+}
+
+/// Whether a compiler refusal is a defect of the project's source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RefusalVerdict {
+    /// The pinned compiler refuses a construct whose refusal depends on
+    /// nothing the checker does not model, and `tsc` accepts the same code.
+    ProvenDefect,
+    /// The pinned compiler refuses it, but `tsc` reports the same code too, so
+    /// the claim is `tsc`'s (invariant 1).
+    TypeScriptOwned,
+    /// The refusal depends on an option or limitation the checker does not
+    /// model: the file has no compiler facts and nothing more is claimed.
+    Unproven,
 }
 
 /// What a [`CompilerFactsProvider`] can fail with, kept free of any single

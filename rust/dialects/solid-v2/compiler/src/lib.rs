@@ -12,7 +12,7 @@ use solid_facts::compiler::{
     CompilerFactsProvider, CompilerOperationEvidence, CompilerOperationInput,
     CompilerOperationKind, CompilerOwnerRelation, CompilerProducerInput, CompilerProviderError,
     CompilerTraceInput, CompilerTrackingRelation, ExecutionMap, GeneratedCompilerOperation,
-    GeneratedCompilerOperationKind,
+    GeneratedCompilerOperationKind, RefusalVerdict,
 };
 use solid_facts::core::Span;
 
@@ -60,7 +60,59 @@ impl CompilerFactsProvider for NativeCompilerFacts {
     ) -> Result<ExecutionMap, CompilerProviderError> {
         analyze_traced(request).map(|compilation| compilation.execution_map)
     }
+
+    fn classify_refusal(&self, reason: &str) -> RefusalVerdict {
+        classify_refusal(reason)
+    }
 }
+
+/// The removed 1.x attribute namespaces: the pinned compiler errors on each
+/// on a native element (`packages/compiler/src/shared/removed.rs:19-52`, added
+/// by solidjs/solid #4199, which the pin includes), in the dom and ssr
+/// generates the checker compiles with, and no option turns the error off.
+const REMOVED_NAMESPACES: [&str; 5] = ["on", "oncapture", "attr", "bool", "use"];
+
+/// ADR 0399: which refusals are a defect of the source.
+///
+/// Only a removed 1.x attribute form (`attr:`, `bool:`, `on:`, `oncapture:`,
+/// `use:`, `classList`) is proven: the error does not depend on an option the
+/// checker does not model. It is the project's defect only where `tsc` is
+/// silent on the same attribute. TypeScript exempts a name that contains a
+/// hyphen from the excess-property check, so `attr:data-z` is accepted and
+/// `attr:title`, `bool:hidden` and `classList` are TS2322
+/// (`fixtures/tsc-oracle`, rc.17 typings). Every other refusal is unproven:
+/// malformed markup is an error only while `validate` is on, and the
+/// fragment-under-element and unimplemented-form errors belong to a generate
+/// or a limitation the checker does not claim for the project.
+#[must_use]
+pub fn classify_refusal(reason: &str) -> RefusalVerdict {
+    let Some(rest) = reason.strip_prefix('`') else {
+        return RefusalVerdict::Unproven;
+    };
+    let Some((key, rest)) = rest.split_once('`') else {
+        return RefusalVerdict::Unproven;
+    };
+    let removed = match key.split_once(':') {
+        None => key == "classList" && rest.starts_with(" on <") && rest.contains(REMOVED_SUFFIX),
+        Some((namespace, name)) => {
+            REMOVED_NAMESPACES.contains(&namespace)
+                && !name.is_empty()
+                && rest.starts_with(" on <")
+                && rest.contains(&format!(
+                    "uses the `{namespace}:` namespace, which was{REMOVED_SUFFIX}"
+                ))
+        }
+    };
+    if !removed {
+        RefusalVerdict::Unproven
+    } else if key.contains('-') {
+        RefusalVerdict::ProvenDefect
+    } else {
+        RefusalVerdict::TypeScriptOwned
+    }
+}
+
+const REMOVED_SUFFIX: &str = " removed in Solid 2.0.";
 
 /// One compiler run retained for policy-2 certification.
 ///

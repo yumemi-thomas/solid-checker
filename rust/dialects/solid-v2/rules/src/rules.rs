@@ -255,11 +255,14 @@ impl Rule {
             // the installed runtime, not the project's source -- but a warning:
             // the analysis ran, and every other finding beside it stands.
             Self::UnauditedSolidRelease => ("SC9014", "unaudited-solid-release", "warning", true),
-            // Uncertifiable: the claim is that one file has no compiler facts,
-            // so nothing about it is proven. A warning like SC9014: the rest of
-            // the project was analyzed, and the findings that do not depend on
-            // the file stand.
-            Self::CompilerRefusedSource => ("SC9015", "compiler-refused-source", "warning", true),
+            // ADR 0399: a refusal the dialect proves a defect of the source (a
+            // removed 1.x attribute `tsc` accepts) is an error, one per file.
+            // Every other refusal keeps ADR 0360's project-level notice (a
+            // warning, uncertifiable): the file has no compiler facts, so
+            // nothing about it is proven, and the findings that do not depend
+            // on it stand. The backend builds both (`compiler_refused_finding`),
+            // so this entry is the violation's identity.
+            Self::CompilerRefusedSource => ("SC9015", "compiler-refused-source", "error", false),
             Self::JsxNoDuplicateProps => ("SC8003", "jsx-no-duplicate-props", "error", false),
             Self::PreferFor => ("SC8014", "prefer-for", "error", false),
             Self::PreferShow => ("SC8015", "prefer-show", "warning", false),

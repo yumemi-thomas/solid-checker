@@ -1023,8 +1023,50 @@
       "expect": "silent",
       "checker": "reports",
       "checkerKind": "uncertifiable",
-      "why": "TypeScript accepts a <p> nested in a <p>; the pinned rc.17 compiler refuses the malformed HTML, so the file has no compiler facts and the checker can only name it as unanalyzed (SC9015), never claim a defect in it.",
+      "why": "TypeScript accepts a <p> nested in a <p>; the pinned rc.17 compiler refuses the malformed HTML, but only while `validate` is on, an option the checker does not model, so the file has no compiler facts and the checker can only name it as unanalyzed (SC9015 notice, ADR 0360), never claim a defect in it.",
       "code": "export const Case = () => <p><p>nested</p></p>;\n"
+    },
+    {
+      "rule": "compiler-refused-source",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerKind": "violation",
+      "why": "ADR 0399: `attr:data-z` is a removed 1.x form the pinned compiler refuses, and TypeScript accepts it: a name that contains a hyphen is exempt from the excess-property check, so the refusal is not `tsc`'s claim and the checker reports it as an error. The pinned rc.17 compiler errors on every removed 1.x attribute form on a native element (`packages/compiler/src/shared/removed.rs:19-52`, solidjs/solid #4199), whatever the options.",
+      "code": "export const Case = () => <p attr:data-z=\"1\">x</p>;\n"
+    },
+    {
+      "rule": "compiler-refused-source",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerKind": "violation",
+      "why": "ADR 0399: `on:custom-event` has a hyphen, so TypeScript is silent where the compiler refuses the removed `on:` namespace; the hyphen is what keeps the claim off `tsc`'s subject, whichever removed namespace it is written in. The pinned rc.17 compiler errors on every removed 1.x attribute form on a native element (`packages/compiler/src/shared/removed.rs:19-52`, solidjs/solid #4199), whatever the options.",
+      "code": "export const Case = () => <button on:custom-event={() => {}}>x</button>;\n"
+    },
+    {
+      "rule": "compiler-refused-source",
+      "dialect": "v2",
+      "expect": "distinct-claim",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "allow": [
+        2322
+      ],
+      "why": "ADR 0399: `attr:title` has no hyphen, so TypeScript reports the excess property (TS2322) on the same attribute. The checker's finding is a different, weaker claim, ADR 0360's notice that the file has no compiler facts and nothing in it is proven; it is not a violation, and it is not user-facing as one. The pinned rc.17 compiler errors on every removed 1.x attribute form on a native element (`packages/compiler/src/shared/removed.rs:19-52`, solidjs/solid #4199), whatever the options.",
+      "code": "export const Case = () => <p attr:title=\"1\">x</p>;\n"
+    },
+    {
+      "rule": "compiler-refused-source",
+      "dialect": "v2",
+      "expect": "distinct-claim",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "allow": [
+        2322
+      ],
+      "why": "ADR 0399: `classList` is a removed 1.x prop, and the rc.17 typings declare no such property, so TypeScript reports TS2322 on it. The checker keeps only the ADR 0360 notice that the file has no compiler facts, never the refusal as a violation. The pinned rc.17 compiler errors on every removed 1.x attribute form on a native element (`packages/compiler/src/shared/removed.rs:19-52`, solidjs/solid #4199), whatever the options.",
+      "code": "export const Case = () => <p classList={{ a: true }}>x</p>;\n"
     },
     {
       "rule": "no-store-mutation-outside-setter",

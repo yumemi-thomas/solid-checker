@@ -44,8 +44,8 @@
     {
       "rule": "compiler-refused-source",
       "code": "SC9015",
-      "kind": "uncertifiable",
-      "severity": "warning",
+      "kind": "violation",
+      "severity": "error",
       "path": "fixtures/reactive-ir/compiler-refused-dependents/View.tsx",
       "start": 0,
       "end": 0,
