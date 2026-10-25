@@ -198,6 +198,7 @@ fn types_name(name: &str) -> String {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct ResolutionWitness {
     observed: BTreeMap<PathBuf, Observed>,
 }

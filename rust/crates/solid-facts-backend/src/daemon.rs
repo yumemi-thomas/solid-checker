@@ -1615,6 +1615,7 @@ fn answer_retained(
                 notice: Arc::clone(&answered.notice),
                 program: answered.program.clone(),
                 witness,
+                resolution: slot.as_ref().and_then(|state| state.resolution.clone()),
             });
         } else {
             idle_check.forget();
