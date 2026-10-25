@@ -87,6 +87,7 @@ Leaf body (`leaf-owner-forbidden-call`, SC3001):
 - Inferring a `never` exit from a body: a call completes normally unless its signature is `asserts` or returns `never`, and a helper that throws undeclared is outside the model. Treating every helper call in a `try` as unproven would cost recall the owner declined (ADR 0279, option b). Reopen if a producer fact records inferred throws.
 - Per-function reads of a handed file (ADR 0408): a chunk records the whole file it was handed, so an edit anywhere in it reruns the chunk. Reopen if hand-out reruns show in a profile.
 - Cone propagation of the interprocedural summary, returned and factory fixed points on kept state (S7 design §5): they cost about 2 ms per app-game import edit (ADR 0407), about what diffing their definitions would. Reopen if their seeds become incremental.
+- Partial re-attestation of import identities per edit (ADR 03XX-memo-warm): every edit asks the producer's module graph for every file (about 23 ms on app-game, for every edit kind). An edited file's ambient module or reference directive can change another file's resolution, so an unchanged importer is exact only with the producer's word on its resolution inputs. Reopen when the producer reports them per generation.
 ## 3. Recorded precision trades
 
 A violation withheld, or turned uncertifiable, to keep zero false positives. Each loses recall on purpose.
@@ -128,6 +129,7 @@ Known false-positive shapes left open (fire today, wanted gone):
 
 ## 4. Open questions and live approximations
 
+- Import edits on app-game: the producer's update round trip is about 204 ms (module-graph work for the new specifier, producer side). The IR then reruns about 200 graph chunks and its result reads take about 60 ms (13 ms for a code edit): the inserted line renumbers the file's later local ids (ADR 03XX-edit-residual).
 - Type Facts producer (ADR 0365): tsrs is an unpublished fork pinned by rev (a bump re-baselines coverage); builds are slower than Go's and need CMake; WASM memory after open and compass-ui incremental updates are larger.
 - Type Facts reuse (ADR 0398): a per-file pass is reused whole under its read set; an edit reruns every pass whose read set holds an edited file. An edit that changes imports rebuilds the program chain (tsrs replaces a file in place only with the same imports): every pass is kept by path, but the rebuild parses every file again (~160 ms on app-game; files cannot cross chains, ADR 03XX-producer-edit) and the full export scan and text digests run again (~20 and ~8 ms, on workers). An import edit that reorders the global contributors (`Ambient`) reruns every pass. Which of two colliding export keys keeps the binder id depends on demand order (ADR 0366's augmentation corner). The exact reference delta is inexact for a first table, a restarted merge, a rebuilt reference index and the sequential run (ADR 0389).
 - ESLint adapter: native analyzes the file on disk, while the adapter maps byte offsets onto ESLint's in-memory text. An unsaved buffer, or a later `--fix` pass, places findings wrongly.

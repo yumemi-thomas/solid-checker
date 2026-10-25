@@ -145,45 +145,100 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn bindings_by_reference(&self) -> &BindingsByReference {
         self.bindings_by_reference.get_or_init(|| {
-            let symbols = self.symbols_by_id.get_or_init(|| {
-                self.facts
-                    .typescript
-                    .symbols()
-                    .map(|candidate| (candidate.id(), candidate))
-                    .collect()
-            });
-            let mut by_path = HashMap::<String, HashMap<(u64, u64), BindingResolution>>::default();
-            let mut by_symbol = HashMap::<SymbolId, BindingResolution>::default();
-            for (file_index, file) in self.facts.files.iter().enumerate() {
+            let symbols = self.symbols_by_id();
+            // Each file's binding names, and the spans each resolves, read on
+            // several workers in the order the table is written: a key's
+            // first writer in that order is its resolution.
+            let slots = self.facts.files.iter().enumerate().collect::<Vec<_>>();
+            let names = crate::pipeline::parallel_slice_results(&slots, |&(_, file)| {
+                let path = file.path.as_str();
+                let mut names = Vec::new();
+                let mut spans = Vec::new();
                 for (binding_index, binding) in file.ast.bindings.iter().enumerate() {
                     for name in &binding.names {
-                        let Some(symbol) = self.entities.at(file.path.as_str(), name.span) else {
+                        let Some(symbol) = self.entities.at(path, name.span) else {
                             continue;
                         };
-                        let resolution = BindingResolution {
-                            file: file_index,
-                            binding: binding_index,
-                            symbol: symbol.clone(),
-                        };
-                        by_symbol
-                            .entry(symbol.clone())
-                            .or_insert_with(|| resolution.clone());
-                        by_path
-                            .entry(file.path.to_string())
-                            .or_default()
-                            .entry((u64::from(name.span.start), u64::from(name.span.end)))
-                            .or_insert_with(|| resolution.clone());
+                        let name_index = names.len();
+                        names.push((binding_index, symbol));
+                        spans.push((
+                            name_index,
+                            path,
+                            (u64::from(name.span.start), u64::from(name.span.end)),
+                        ));
                         if let Some(candidate) = symbols.get(symbol.as_str()) {
-                            for reference in candidate.references() {
-                                by_path
-                                    .entry(reference.path.to_string())
-                                    .or_default()
-                                    .entry((reference.start_byte, reference.end_byte))
-                                    .or_insert_with(|| resolution.clone());
-                            }
+                            spans.extend(candidate.references().map(|reference| {
+                                (
+                                    name_index,
+                                    reference.path.as_ref(),
+                                    (reference.start_byte, reference.end_byte),
+                                )
+                            }));
                         }
                     }
                 }
+                (names, spans)
+            });
+            let mut by_symbol = HashMap::<&SymbolId, BindingResolution>::default();
+            for (file_index, (names, _)) in names.iter().enumerate() {
+                for (binding_index, symbol) in names {
+                    by_symbol
+                        .entry(symbol)
+                        .or_insert_with(|| BindingResolution {
+                            file: file_index,
+                            binding: *binding_index,
+                            symbol: (*symbol).clone(),
+                        });
+                }
+            }
+            // The paths are split among shards, each written on a worker in
+            // the same order.
+            const SHARDS: usize = 64;
+            let shard_of = |path: &str| {
+                use std::hash::BuildHasher;
+                (rustc_hash::FxBuildHasher.hash_one(path) >> 58) as usize % SHARDS
+            };
+            let mut shards = vec![Vec::new(); SHARDS];
+            for (file_index, (_, spans)) in names.iter().enumerate() {
+                let mut last: Option<(&str, usize)> = None;
+                for &(name_index, path, span) in spans {
+                    let shard = match last {
+                        Some((previous, shard)) if std::ptr::eq(previous, path) => shard,
+                        _ => {
+                            let shard = shard_of(path);
+                            last = Some((path, shard));
+                            shard
+                        }
+                    };
+                    shards[shard].push((file_index, name_index, path, span));
+                }
+            }
+            let shards = crate::pipeline::parallel_balanced_results(&shards, |spans| {
+                let mut by_path =
+                    HashMap::<&str, HashMap<(u64, u64), BindingResolution>>::default();
+                for &(file_index, name_index, path, span) in spans {
+                    by_path
+                        .entry(path)
+                        .or_default()
+                        .entry(span)
+                        .or_insert_with(|| {
+                            let (binding, symbol) = names[file_index].0[name_index];
+                            BindingResolution {
+                                file: file_index,
+                                binding,
+                                symbol: symbol.clone(),
+                            }
+                        });
+                }
+                by_path
+            });
+            let mut by_path = BindingsByReference::default();
+            for shard in shards {
+                by_path.extend(
+                    shard
+                        .into_iter()
+                        .map(|(path, references)| (path.to_owned(), references)),
+                );
             }
             // The symbol-reference table proves aliases even when no entity
             // was demanded at a use. Conversely, exact entity facts can exist
@@ -196,17 +251,36 @@ impl<'a> SemanticLookup<'a> {
             // proofs withhold findings through them; a consumer needing value
             // identity must first require an exact identifier span (accessor
             // provenance's `exact_identifier`).
-            for (path, entities) in &self.entities.by_path {
+            //
+            // Each key of a path is written at most once here, so the paths
+            // are independent: each is completed on a worker.
+            let paths = self
+                .entities
+                .by_path
+                .iter()
+                .map(|(path, entities)| {
+                    (
+                        path.as_str(),
+                        std::sync::Mutex::new(by_path.remove(path.as_str()).unwrap_or_default()),
+                        entities,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let by_symbol = &by_symbol;
+            crate::pipeline::parallel_slice_results(&paths, |(_, references, entities)| {
+                let mut references = references.lock().expect("one worker per path");
                 for ((start, end), symbol) in entities.iter() {
                     if let Some(resolution) = by_symbol.get(symbol) {
-                        by_path
-                            .entry(path.clone())
-                            .or_default()
+                        references
                             .entry((*start, *end))
                             .or_insert_with(|| resolution.clone());
                     }
                 }
-            }
+            });
+            by_path.extend(paths.into_iter().filter_map(|(path, references, _)| {
+                let references = references.into_inner().expect("one worker per path");
+                (!references.is_empty()).then(|| (path.to_owned(), references))
+            }));
             by_path
         })
     }
@@ -333,7 +407,8 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn method_symbol_ref(&self, path: &str, span: Span) -> Option<&'a str> {
         self.declaration_symbols
             .get_or_init(|| declaration_symbols(&self.facts.typescript))
-            .get(&(path, u64::from(span.start), u64::from(span.end)))
+            .get(path)?
+            .get(&(u64::from(span.start), u64::from(span.end)))
             .copied()
     }
 

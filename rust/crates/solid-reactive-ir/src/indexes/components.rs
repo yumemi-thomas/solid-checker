@@ -537,74 +537,91 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn functions_by_symbol(&self) -> &HashMap<&'a str, SymbolFunction> {
         self.functions_by_symbol.get_or_init(|| {
+            // Each file's named functions, then its function-valued bindings,
+            // read on several workers; the first in file order names a symbol.
+            let slots = self.facts.files.iter().enumerate().collect::<Vec<_>>();
+            let named = crate::pipeline::parallel_slice_results(&slots, |&(file_index, file)| {
+                self.file_symbol_functions(file_index, file)
+            });
             let mut map = HashMap::default();
-            for (file_index, file) in self.facts.files.iter().enumerate() {
-                for (function_index, function) in file.ast.functions.iter().enumerate() {
-                    let own_method = crate::owners::own_method_name(file, function);
-                    let Some(name) = function.name.as_ref().or(own_method) else {
-                        continue;
-                    };
-                    let Some(symbol) = self
-                        .entities
-                        .at(file.path.as_str(), name.span)
-                        .map(SymbolId::as_str)
-                        .or_else(|| {
-                            own_method.and_then(|method| {
-                                self.method_symbol_ref(file.path.as_str(), method.span)
-                            })
-                        })
-                    else {
-                        continue;
-                    };
-                    map.entry(symbol).or_insert(SymbolFunction::Resolved {
-                        file: file_index,
-                        function: function_index,
-                    });
-                }
-                for binding in &file.ast.bindings {
-                    if !binding.initializer_function && binding.call_initializer.is_none() {
-                        continue;
-                    }
-                    if binding.call_initializer.is_some()
-                        && (binding.shape != solid_facts::ast::BindingShape::Identifier
-                            || binding.names.len() != 1)
-                    {
-                        // A call result may name a wrapped function only when
-                        // one identifier owns the whole result. Tuple/object
-                        // bindings name slots, not closures nested in the
-                        // call's arguments (`createSignal(() => value)`).
-                        continue;
-                    }
-                    let mut outcome = None;
-                    for name in &binding.names {
-                        let Some(symbol) = self.entities.at(file.path.as_str(), name.span) else {
-                            continue;
-                        };
-                        if map.contains_key(symbol.as_str()) {
-                            continue;
-                        }
-                        let outcome = *outcome.get_or_insert_with(|| match binding.initializer {
-                            None => Some(SymbolFunction::Aborted),
-                            Some(initializer) => file
-                                .ast
-                                .functions
-                                .iter()
-                                .enumerate()
-                                .filter(|(_, function)| initializer.contains(function.span))
-                                .max_by_key(|(_, function)| function.span.end - function.span.start)
-                                .map(|(function_index, _)| SymbolFunction::Resolved {
-                                    file: file_index,
-                                    function: function_index,
-                                }),
-                        });
-                        if let Some(outcome) = outcome {
-                            map.insert(symbol.as_str(), outcome);
-                        }
-                    }
-                }
+            for (symbol, function) in named.into_iter().flatten() {
+                map.entry(symbol).or_insert(function);
             }
             map
         })
+    }
+
+    /// One file's candidates for [`Self::functions_by_symbol`], in the order
+    /// the first of a symbol wins.
+    fn file_symbol_functions(
+        &self,
+        file_index: usize,
+        file: &'a FileFacts,
+    ) -> Vec<(&'a str, SymbolFunction)> {
+        let path = file.path.as_str();
+        let mut named = Vec::new();
+        for (function_index, function) in file.ast.functions.iter().enumerate() {
+            let own_method = || crate::owners::own_method_name(file, function);
+            let Some(name) = function.name.as_ref().or_else(own_method) else {
+                continue;
+            };
+            let Some(symbol) = self
+                .entities
+                .at(path, name.span)
+                .map(SymbolId::as_str)
+                .or_else(|| {
+                    own_method().and_then(|method| self.method_symbol_ref(path, method.span))
+                })
+            else {
+                continue;
+            };
+            named.push((
+                symbol,
+                SymbolFunction::Resolved {
+                    file: file_index,
+                    function: function_index,
+                },
+            ));
+        }
+        for binding in &file.ast.bindings {
+            if !binding.initializer_function && binding.call_initializer.is_none() {
+                continue;
+            }
+            if binding.call_initializer.is_some()
+                && (binding.shape != solid_facts::ast::BindingShape::Identifier
+                    || binding.names.len() != 1)
+            {
+                // A call result may name a wrapped function only when
+                // one identifier owns the whole result. Tuple/object
+                // bindings name slots, not closures nested in the
+                // call's arguments (`createSignal(() => value)`).
+                continue;
+            }
+            let mut outcome = None;
+            for name in &binding.names {
+                let Some(symbol) = self.entities.at(path, name.span) else {
+                    continue;
+                };
+                let outcome = *outcome.get_or_insert_with(|| match binding.initializer {
+                    None => Some(SymbolFunction::Aborted),
+                    Some(initializer) => file
+                        .ast
+                        .functions
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, function)| initializer.contains(function.span))
+                        .max_by_key(|(_, function)| function.span.end - function.span.start)
+                        .map(|(function_index, _)| SymbolFunction::Resolved {
+                            file: file_index,
+                            function: function_index,
+                        }),
+                });
+                if let Some(outcome) = outcome {
+                    named.push((symbol.as_str(), outcome));
+                }
+            }
+        }
+        named
     }
 
     /// ADR 0331: the functions a tag renders through an exact alias only:

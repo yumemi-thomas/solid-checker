@@ -485,7 +485,8 @@ impl EntitySymbols {
     }
 }
 
-type DeclarationSymbols<'a> = HashMap<(&'a str, u64, u64), &'a str>;
+/// By path, then span.
+type DeclarationSymbols<'a> = HashMap<&'a str, HashMap<(u64, u64), &'a str>>;
 
 /// Symbols addressable by an exact declaration location.
 ///
@@ -495,28 +496,64 @@ type DeclarationSymbols<'a> = HashMap<(&'a str, u64, u64), &'a str>;
 /// preserving the direct-then-declaration order of the per-method lookup this
 /// replaces -- which rescanned every project entity twice per call.
 fn declaration_symbols(typescript: &TypeScriptTable) -> DeclarationSymbols<'_> {
-    let mut by_location = DeclarationSymbols::default();
-    for entity in typescript
-        .entities()
-        .filter(|entity| !entity.symbol.is_empty())
-    {
-        by_location
-            .entry((
-                entity.location.path.as_ref(),
-                entity.location.start_byte,
-                entity.location.end_byte,
-            ))
-            .or_insert(entity.symbol.as_ref());
+    // The table's entities are in path order: each path's run is indexed on
+    // a worker, in the run's order, so a span's first entity names it.
+    let entities = typescript.entities().collect::<Vec<_>>();
+    let mut runs = Vec::new();
+    let mut start = 0;
+    for index in 1..=entities.len() {
+        if index == entities.len() || entities[index].location.path != entities[start].location.path
+        {
+            runs.push(&entities[start..index]);
+            start = index;
+        }
     }
-    for declaration in typescript
-        .entities()
-        .filter_map(|entity| entity.resolved_call.as_deref())
-        .filter_map(|call| call.declaration.as_ref())
-        .filter(|declaration| !declaration.symbol.is_empty())
-    {
+    let indexed = crate::pipeline::parallel_slice_results(&runs, |run| {
+        let mut by_span = HashMap::<(u64, u64), &str>::default();
+        let mut declarations = Vec::new();
+        for entity in *run {
+            if !entity.symbol.is_empty() {
+                by_span
+                    .entry((entity.location.start_byte, entity.location.end_byte))
+                    .or_insert(entity.symbol.as_ref());
+            }
+            if let Some(declaration) = entity
+                .resolved_call
+                .as_deref()
+                .and_then(|call| call.declaration.as_ref())
+                .filter(|declaration| !declaration.symbol.is_empty())
+            {
+                declarations.push(declaration);
+            }
+        }
+        (run[0].location.path.as_ref(), by_span, declarations)
+    });
+    let mut by_location = DeclarationSymbols::default();
+    let mut declarations = Vec::new();
+    for (run, (path, by_span, run_declarations)) in runs.iter().zip(indexed) {
+        match by_location.entry(path) {
+            std::collections::hash_map::Entry::Vacant(vacant) => {
+                vacant.insert(by_span);
+            }
+            // A later run of a path: its spans come after the earlier run's,
+            // so the run's entities are read in the table's order.
+            std::collections::hash_map::Entry::Occupied(mut earlier) => {
+                for entity in run.iter().filter(|entity| !entity.symbol.is_empty()) {
+                    earlier
+                        .get_mut()
+                        .entry((entity.location.start_byte, entity.location.end_byte))
+                        .or_insert(entity.symbol.as_ref());
+                }
+            }
+        }
+        declarations.push(run_declarations);
+    }
+    // A declaration names a span no entity named, the first in table order.
+    for declaration in declarations.into_iter().flatten() {
         by_location
+            .entry(declaration.location.path.as_ref())
+            .or_default()
             .entry((
-                declaration.location.path.as_ref(),
                 declaration.location.start_byte,
                 declaration.location.end_byte,
             ))
@@ -581,7 +618,8 @@ impl<'a> ProjectIndexes<'a> {
     fn method_symbol_ref(&self, path: &str, span: Span) -> Option<&'a str> {
         self.declaration_symbols
             .get_or_init(|| declaration_symbols(self.typescript))
-            .get(&(path, u64::from(span.start), u64::from(span.end)))
+            .get(path)?
+            .get(&(u64::from(span.start), u64::from(span.end)))
             .copied()
     }
 
@@ -1676,9 +1714,12 @@ impl<'a> SemanticLookup<'a> {
                         let _ = self.object_member_targets();
                     })
                 });
-                warm(&|| {
-                    let _ = self.component_functions();
-                });
+                // The components lane is the last to finish once the others
+                // are done, so it takes the whole pool, not its share of lanes.
+                let _whole_pool = crate::pipeline::AnalysisWorkerLimit::enter(
+                    crate::pipeline::analysis_worker_limit_for_lanes(1),
+                );
+                let _ = self.component_functions();
             });
         });
     }

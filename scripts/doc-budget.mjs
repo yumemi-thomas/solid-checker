@@ -22,19 +22,21 @@ export const FILE_BUDGETS = {
   "AGENTS.md": 8_000,
   "CLAUDE.md": 1_000,
   // Raised for ADR 0383's latent-key item, and for ADR 03XX-late-stages.
-  "docs/open-work.md": 28_500,
+  // Raised for ADR 03XX-memo-warm (the file stood 28,428 bytes before its two entries).
+  "docs/open-work.md": 29_200,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for
   // ADRs 0382-0400; and for ADRs 03XX-cold-cost and 03XX-edit-residual; and
-  // for ADR 03XX-late-stages (the file stood 158,880 bytes).
-  "docs/decisions.md": 159_000,
+  // for ADR 03XX-late-stages (the file stood 158,880 bytes); and for ADR 03XX-memo-warm
+  // (the file stood 160,518 bytes).
+  "docs/decisions.md": 160_600,
 };
 
 export const GROUP_BUDGETS = [
   // Raised from 600_000 for ADRs 0382-0404 (instant-edits track), and for
   // ADRs 03XX-cold-cost and 03XX-edit-residual, and for ADR 03XX-late-stages
-  // (the group stood 628,977 bytes).
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 629_500 },
+  // (the group stood 628,977 bytes); and for ADR 03XX-memo-warm (the group stood 631,357).
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 631_500 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
