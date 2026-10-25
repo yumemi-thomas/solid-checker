@@ -390,3 +390,47 @@ fn an_answer_nobody_reads_still_leaves_what_the_edit_resolved_observed() {
     assert_eq!(count(&retained), count(&fresh), "{}", retained.stderr);
     assert!(retained.stdout == fresh.stdout, "{}", retained.stderr);
 }
+
+/// Review R1 item 12: a file created in a new directory under one that holds
+/// no source itself (only subdirectories do) is part of the project the
+/// configuration includes; the retained answer sees it as a one-shot one
+/// does.
+#[test]
+fn a_file_in_a_new_directory_under_a_source_less_one_is_seen() {
+    let Some(project) = Project::new("new-subdirectory") else {
+        return;
+    };
+    let directory = project.tsconfig.parent().unwrap().to_path_buf();
+    let config = fs::read_to_string(&project.tsconfig).unwrap();
+    fs::write(
+        &project.tsconfig,
+        config.replace(
+            r#""include": ["*.ts", "*.tsx"]"#,
+            r#""include": ["**/*.ts", "**/*.tsx"]"#,
+        ),
+    )
+    .unwrap();
+    assert!(
+        fs::read_to_string(&project.tsconfig)
+            .unwrap()
+            .contains("**/*.tsx")
+    );
+    let component = |name: &str| {
+        format!(
+            "import {{ invoke, readCount }} from \"../../source\";\nexport function {name}() {{\n  \
+             const value = invoke(readCount);\n  return <div>{{value}}</div>;\n}}\n"
+        )
+    };
+    fs::create_dir_all(directory.join("deep/a")).unwrap();
+    fs::write(directory.join("deep/a/Inner.tsx"), component("Inner")).unwrap();
+    let before = project.check(false, None);
+    assert_eq!(project.check(true, None).stdout, before.stdout);
+    fs::create_dir_all(directory.join("deep/b")).unwrap();
+    fs::write(directory.join("deep/b/Added.tsx"), component("Added")).unwrap();
+    let fresh = project.check(false, None);
+    let count = |run: &Run| run.json()["findings"].as_array().unwrap().len();
+    assert_eq!(count(&fresh), count(&before) + 1);
+    let retained = project.check(true, None);
+    assert_eq!(count(&retained), count(&fresh), "{}", retained.stderr);
+    assert!(retained.stdout == fresh.stdout, "{}", retained.stderr);
+}

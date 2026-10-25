@@ -550,7 +550,9 @@ fn idle_check_room(root: u32) -> Option<String> {
 }
 
 /// The memory the system can hand out without swapping: Linux
-/// `MemAvailable`; macOS free, inactive, speculative and purgeable pages.
+/// `MemAvailable`; macOS free, inactive and speculative pages. Purgeable
+/// pages are not added: they sit on the active and inactive queues already,
+/// and counting them again let the idle check start without room.
 fn available_memory_bytes() -> Option<u64> {
     if cfg!(target_os = "linux") {
         let meminfo = fs::read_to_string("/proc/meminfo").ok()?;
@@ -593,7 +595,7 @@ fn parse_vm_stat_available(output: &str) -> Option<u64> {
         };
         if matches!(
             name.trim(),
-            "Pages free" | "Pages inactive" | "Pages speculative" | "Pages purgeable"
+            "Pages free" | "Pages inactive" | "Pages speculative"
         ) {
             let count = value.trim().trim_end_matches('.').parse::<u64>().ok()?;
             pages = pages.saturating_add(count);
@@ -758,9 +760,21 @@ impl Tracking {
                 source.path.clone(),
                 fingerprint_bytes(Path::new(&source.path), source.source.as_bytes())?,
             );
-            if let Some(parent) = PathBuf::from(&source.path).parent() {
-                dirs.entry(parent.to_path_buf())
-                    .or_insert_with(|| directory_stamp(parent));
+            // A source's directory, and every directory between it and the
+            // project's: a file created in a new directory under one that
+            // holds no source itself moves only that one's stamp.
+            let project_directory = project.parent();
+            let source_path = PathBuf::from(&source.path);
+            for (index, directory) in source_path.ancestors().skip(1).enumerate() {
+                let inside = project_directory
+                    .is_some_and(|project| directory.starts_with(project) && directory != project);
+                if index > 0 && !inside {
+                    break;
+                }
+                if dirs.contains_key(directory) {
+                    break;
+                }
+                dirs.insert(directory.to_path_buf(), directory_stamp(directory));
             }
         }
         Ok(Self {
