@@ -1586,6 +1586,9 @@ fn answer_with(
     checkpoint()?;
     // The files an overlay update edited while the program kept its files.
     let mut edited = None;
+    // The producer replaced the edited file in place (`edited` is then the
+    // one file): the files the program holds are the ones it held.
+    let mut graph_kept = false;
     let facts = if changes.is_empty() {
         demand(state)?;
         state.session.analyze()?
@@ -1600,24 +1603,36 @@ fn answer_with(
             .iter()
             .map(|change| change.path.clone())
             .collect::<Vec<_>>();
+        let generation = state.session.generation();
         let facts = state.session.edit(changes, None);
-        let modules = state.session.program_modules();
-        // An edited import added a file to the program or dropped one, which
-        // the session's fixed source set does not follow. A dropped file can
-        // fail the update's own analysis (its source is still demanded): the
-        // program's files moved all the same, so that error is not the answer.
-        let moved = modules
-            .as_ref()
-            .is_ok_and(|modules| state.modules.as_ref() != Some(modules));
-        if moved {
-            let previous = state.generated().map(Path::to_path_buf);
-            replace_state(state, State::open(request)?, previous);
-            demand(state)?;
-            state.session.analyze()?
-        } else {
-            modules?;
+        graph_kept =
+            state.session.generation() == generation + 1 && state.session.update_kept_graph();
+        if graph_kept {
+            // The producer's own word, for this update: it replaced the file
+            // in place and rebuilt nothing, so the program's files are the
+            // ones read before the edit and there is nothing to compare.
             edited = Some(paths);
             facts?
+        } else {
+            let modules = state.session.program_modules();
+            // An edited import added a file to the program or dropped one,
+            // which the session's fixed source set does not follow. A dropped
+            // file can fail the update's own analysis (its source is still
+            // demanded): the program's files moved all the same, so that
+            // error is not the answer.
+            let moved = modules
+                .as_ref()
+                .is_ok_and(|modules| state.modules.as_ref() != Some(modules));
+            if moved {
+                let previous = state.generated().map(Path::to_path_buf);
+                replace_state(state, State::open(request)?, previous);
+                demand(state)?;
+                state.session.analyze()?
+            } else {
+                modules?;
+                edited = Some(paths);
+                facts?
+            }
         }
     };
     phases.mark("facts");
@@ -1665,7 +1680,9 @@ fn answer_with(
     match (state.resolution.as_mut(), edited) {
         (Some(_), None) => {}
         (Some(witness), Some(paths)) => {
-            let graph = state.session.resolution_graph_of(&paths)?;
+            // The inventory the witness records is the one it already holds
+            // when the program's files did not move.
+            let graph = state.session.resolution_graph_of(&paths, graph_kept)?;
             if graph.unknown_import_paths.is_empty() {
                 witness.extend(&graph, tracked);
             } else {
@@ -1798,6 +1815,7 @@ fn answer_with(
         state.session.generation(),
         &state.session.last_build_timings(),
         &diagnostic_timings,
+        state.session.last_import_identity(),
     );
     state.diagnostics.retain_for_idle(state.cache_retention);
     Ok(Answer {
@@ -2156,6 +2174,7 @@ impl PhaseClock {
         generation: u64,
         facts: &solid_facts_backend::NativeBuildTimings,
         diagnostics: &solid_facts_backend::DiagnosticTimings,
+        identity: solid_facts_backend::ImportIdentityMeasurement,
     ) {
         if !self.emit {
             return;
@@ -2183,6 +2202,12 @@ impl PhaseClock {
                         "closurePatched": facts.exchange.client_closure_patched,
                         "hydrateMs": ms(facts.hydrate),
                         "joinMs": ms(facts.join),
+                    },
+                    "importIdentity": {
+                        "kept": identity.kept,
+                        "files": identity.requested,
+                        "specifiers": identity.specifiers,
+                        "modules": identity.modules,
                     },
                     "reactiveIrMs": ms(diagnostics.reactive_ir),
                     "solveAndSnapshotMs": ms(diagnostics.solve_and_snapshot),

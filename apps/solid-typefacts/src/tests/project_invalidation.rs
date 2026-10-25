@@ -274,6 +274,7 @@ fn updates_that_cannot_reuse_the_program_rebuild_it() {
             import_paths: vec![a.clone()],
             packages: false,
             distinct_bare_imports: false,
+            omit_modules: false,
         },
     )
     .unwrap();
@@ -420,17 +421,26 @@ fn the_rebase_policy_replaces_the_chain_without_changing_the_answers() {
     let mut project = scratch.open();
     let mut rebased_at = None;
     for version in 1..=u64::from(crate::project::REBASE_AFTER_UPDATES) + 2 {
-        let affected = update(
-            &mut project,
-            &[change(
-                &a,
-                version,
-                &format!("export function a(): number {{ return {version}; }}\n"),
-            )],
-        );
+        let outcome = project
+            .update(
+                &Context::new(),
+                &[change(
+                    &a,
+                    version,
+                    &format!("export function a(): number {{ return {version}; }}\n"),
+                )],
+            )
+            .unwrap();
         assert!(
-            !affected.contains(&scratch.path("b.ts")),
-            "version {version}: {affected:?}"
+            !outcome.affected.contains(&scratch.path("b.ts")),
+            "version {version}: {:?}",
+            outcome.affected
+        );
+        // Every in-place update keeps the module graph, except the one a
+        // rebase follows: that chain was built again from the disk as it is.
+        assert_eq!(
+            outcome.graph_kept, !project.last_update.rebased,
+            "version {version}"
         );
         if project.last_update.rebased && rebased_at.is_none() {
             rebased_at = Some(version);
@@ -502,6 +512,7 @@ fn a_rebuilt_chain_over_project_references_keeps_the_reference_mapping() {
                 import_paths: Vec::new(),
                 packages: false,
                 distinct_bare_imports: false,
+                omit_modules: false,
             },
         )
         .unwrap();
@@ -577,6 +588,7 @@ fn a_file_created_after_a_failed_probe_is_found_by_the_next_build() {
                 import_paths: vec![a.clone()],
                 packages: false,
                 distinct_bare_imports: false,
+                omit_modules: false,
             },
         )
         .unwrap();
@@ -614,4 +626,164 @@ fn a_file_created_after_a_failed_probe_is_found_by_the_next_build() {
         [x.clone(), scratch.path("y.ts")],
         "the second rebuild saw y.ts, created after the first one"
     );
+}
+
+const JSX_CONFIG: &str = r#"{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","target":"esnext","jsx":"react-jsx","jsxImportSource":"solid-js"},"include":["*.ts","*.tsx"]}"#;
+
+/// What an update says about the module graph (`UpdateOutcome::graph_kept`):
+/// true exactly when the compiler replaced the one changed file in place and
+/// nothing was rebuilt, and then every other file's import rows, the files the
+/// program holds and their facts are the previous generation's. Every edit
+/// that can move another file's module resolution (an import, a reference
+/// directive, a module augmentation, a JSX runtime pragma) says false; whatever
+/// an update says, the graph it leaves equals a fresh program's.
+#[test]
+fn an_update_keeps_the_module_graph_only_when_the_compiler_replaced_the_file_in_place() {
+    use crate::backend::{ModuleGraph, ModuleInventory};
+    use typefacts::v3::ModuleGraphRequest;
+
+    let originals = [
+        ("a.ts", "import { b } from \"./b\";\nexport const a = b;\n"),
+        ("b.ts", "export const b = 1;\n"),
+        ("script.ts", "var script = 1;\n"),
+        (
+            "view.tsx",
+            "export const View = () => <div class=\"x\" />;\n",
+        ),
+    ];
+    let mut files = vec![("tsconfig.json", JSX_CONFIG)];
+    files.extend(originals);
+    let scratch = Scratch::new(&files);
+    let mut project = scratch.open();
+    let inventory = |project: &mut crate::project::Project| -> ModuleInventory {
+        project
+            .module_graph(
+                &Context::new(),
+                &ModuleGraphRequest {
+                    imports: true,
+                    packages: true,
+                    ..ModuleGraphRequest::default()
+                },
+            )
+            .unwrap()
+    };
+    let mut version = 0_u64;
+    // (name, file, edited text, whether the compiler replaces in place)
+    let steps: [(&str, &str, &str, Option<bool>); 13] = [
+        ("body edit", "b.ts", "export const b = 2;\n", Some(true)),
+        (
+            "a JSX body edit under the same runtime import",
+            "view.tsx",
+            "export const View = () => <div class=\"y\" />;\n",
+            Some(true),
+        ),
+        (
+            "an added import",
+            "a.ts",
+            "import { b } from \"./b\";\nimport { script } from \"./script\";\nexport const a = b;\n",
+            Some(false),
+        ),
+        (
+            "the import removed again",
+            "a.ts",
+            "import { b } from \"./b\";\nexport const a = b;\n",
+            Some(false),
+        ),
+        (
+            "a changed specifier",
+            "a.ts",
+            "import { b } from \"./b.ts\";\nexport const a = b;\n",
+            Some(false),
+        ),
+        (
+            "an added reference path directive",
+            "a.ts",
+            "/// <reference path=\"./script.ts\" />\nimport { b } from \"./b.ts\";\nexport const a = b;\n",
+            Some(false),
+        ),
+        (
+            "an added reference types directive",
+            "a.ts",
+            "/// <reference types=\"solid-js\" />\nimport { b } from \"./b.ts\";\nexport const a = b;\n",
+            Some(false),
+        ),
+        (
+            "an added JSX runtime pragma",
+            "view.tsx",
+            "/** @jsxImportSource preact */\nexport const View = () => <div class=\"y\" />;\n",
+            Some(false),
+        ),
+        (
+            "an added global augmentation in a module",
+            "b.ts",
+            "export const b = 2;\ndeclare global { interface Window { w: number } }\n",
+            Some(false),
+        ),
+        (
+            "an added module augmentation in a module",
+            "b.ts",
+            "export const b = 2;\ndeclare module \"x\" { export const y: number; }\n",
+            Some(false),
+        ),
+        (
+            "an added ambient module in a script",
+            "script.ts",
+            "var script = 1;\ndeclare module \"x\" { export const y: number; }\n",
+            Some(false),
+        ),
+        (
+            "the edit that removes the augmentation",
+            "b.ts",
+            "export const b = 3;\n",
+            Some(false),
+        ),
+        (
+            "a body edit on the rebuilt chain",
+            "b.ts",
+            "export const b = 4;\n",
+            Some(true),
+        ),
+    ];
+    let mut kept_updates = 0;
+    for (name, file, text, expected) in steps {
+        let before = inventory(&mut project);
+        version += 1;
+        let path = scratch.path(file);
+        let outcome = project
+            .update(&Context::new(), &[change(&path, version, text)])
+            .unwrap();
+        let kind = project.last_update.kind;
+        let rebased = project.last_update.rebased;
+        assert_eq!(
+            outcome.graph_kept,
+            kind == Some(UpdateKind::Reused) && !rebased,
+            "{name}: {kind:?}"
+        );
+        if let Some(expected) = expected {
+            assert_eq!(outcome.graph_kept, expected, "{name}: {kind:?}");
+        }
+        let after = inventory(&mut project);
+        if outcome.graph_kept {
+            kept_updates += 1;
+            // The files the program holds, and every other file's rows, are
+            // what they were: only the edited file's own rows can differ.
+            assert_eq!(before.modules, after.modules, "{name}");
+            assert_eq!(before.unmapped_roots, after.unmapped_roots, "{name}");
+            let others = |inventory: &ModuleInventory| {
+                inventory
+                    .imports
+                    .iter()
+                    .filter(|fact| *fact.specifier.path != path)
+                    .cloned()
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(others(&before), others(&after), "{name}");
+        }
+        // Whatever the update said, the graph is a fresh program's: the same
+        // edit written to disk and opened from scratch.
+        std::fs::write(&path, text).unwrap();
+        let mut fresh = scratch.open();
+        assert_eq!(inventory(&mut fresh), after, "{name}");
+    }
+    assert!(kept_updates >= 2, "{kept_updates}");
 }

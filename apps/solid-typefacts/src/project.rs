@@ -855,6 +855,7 @@ impl Project {
         if changed_paths.is_empty() {
             return Ok(UpdateOutcome {
                 affected: Vec::new(),
+                graph_kept: false,
             });
         }
         let overlay_duration = stage.elapsed();
@@ -1176,7 +1177,12 @@ impl Project {
                 ],
             );
         }
-        Ok(UpdateOutcome { affected })
+        // A rebase after the update builds the chain again from the disk as
+        // it is now: nothing the earlier program resolved is kept then.
+        Ok(UpdateOutcome {
+            affected,
+            graph_kept: reused && !rebased,
+        })
     }
 
     fn point_config_host_at_accepted_overlay(&self) {

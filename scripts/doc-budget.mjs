@@ -24,15 +24,17 @@ export const FILE_BUDGETS = {
   // Raised for ADR 0383's latent-key item, and for ADR 03XX-late-stages.
   // Raised for ADR 03XX-memo-warm (the file stood 28,428 bytes before its two entries);
   // for ADR 03XX-stable-locals (the file stood 29,958 bytes).
-  "docs/open-work.md": 30_100,
+  // and for ADR 03XX-keep-attestation (the file stood 30,082 bytes).
+  "docs/open-work.md": 30_400,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for
   // ADRs 0382-0400; and for ADRs 03XX-cold-cost and 03XX-edit-residual; and
   // for ADR 03XX-late-stages (the file stood 158,880 bytes); and for ADR 03XX-memo-warm
   // (the file stood 160,518 bytes); and for ADR 03XX-stable-locals (the file stood 163,911 bytes);
   // and for ADR 03XX-canonical-index (the file stood 163,998 bytes before its entry);
-  // and for ADR 03XX-fs-lookups (the file stood 166,991 bytes before its entry).
-  "docs/decisions.md": 170_500,
+  // and for ADR 03XX-fs-lookups (the file stood 166,991 bytes before its entry); and for
+  // ADR 03XX-keep-attestation (the file stood 170,124 bytes before its entry and one edit).
+  "docs/decisions.md": 174_200,
 };
 
 export const GROUP_BUDGETS = [
@@ -41,8 +43,10 @@ export const GROUP_BUDGETS = [
   // (the group stood 628,977 bytes); for ADR 03XX-memo-warm (the group stood 631,357); and for
   // ADR 03XX-stable-locals (the group stood 635,538 bytes); and for ADR 03XX-canonical-index
   // (the group stood 635,458 bytes before the entry, which added 2,578); and for ADR 03XX-fs-lookups
-  // (the group stood 638,451 bytes before the entry and the open-work lines, which added 3,696).
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 642_500 },
+  // (the group stood 638,451 bytes before the entry and the open-work lines, which added 3,696); and for
+  // ADR 03XX-keep-attestation (the group stood 642,147 bytes before its entry, the open-work edit and the
+  // protocol notes, which added 4,638).
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 647_000 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
