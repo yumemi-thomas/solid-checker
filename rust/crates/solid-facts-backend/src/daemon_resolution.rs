@@ -207,6 +207,10 @@ pub(crate) struct ResolutionWitness {
 /// entry already fails the moment that ancestor appears, so the descendant
 /// adds a filesystem read per check and no information. (`BTreeMap` orders
 /// paths by component, so a path's descendants follow it contiguously.)
+///
+/// Only absent descendants go. One recorded present, by an earlier request,
+/// under an ancestor observed absent now, says the ancestor was removed since:
+/// it stays, and fails the next check (review R1 finding 2).
 fn prune_shadowed_absent(observed: &mut BTreeMap<PathBuf, Observed>) {
     let mut shadow: Option<PathBuf> = None;
     let mut shadowed = Vec::new();
@@ -214,7 +218,9 @@ fn prune_shadowed_absent(observed: &mut BTreeMap<PathBuf, Observed>) {
         if let Some(absent) = &shadow
             && path.starts_with(absent)
         {
-            shadowed.push(path.clone());
+            if *seen == Observed::Absent {
+                shadowed.push(path.clone());
+            }
             continue;
         }
         shadow = (*seen == Observed::Absent).then(|| path.clone());
@@ -396,6 +402,41 @@ mod tests {
             .collect::<Vec<_>>();
         // `/a2` is not under `/a`; `/b/c/d` is under the absent `/b/c`.
         assert_eq!(kept, ["/a", "/a2", "/b", "/b/c"]);
+    }
+
+    #[test]
+    fn an_entry_recorded_present_under_one_now_absent_is_kept() {
+        // An earlier request recorded the package's declarations; this one
+        // first observes the package directory, after it was removed.
+        let mut observed = BTreeMap::new();
+        observed.insert(PathBuf::from("/m/node_modules/@s/pkg"), Observed::Absent);
+        let declarations = Observed::File {
+            stamp: (1, 2, 3, 4, 5, 6, 7),
+            hash: [0; 32],
+        };
+        observed.insert(
+            PathBuf::from("/m/node_modules/@s/pkg/index.d.ts"),
+            declarations.clone(),
+        );
+        observed.insert(
+            PathBuf::from("/m/node_modules/@s/pkg/package.json"),
+            Observed::Absent,
+        );
+        prune_shadowed_absent(&mut observed);
+        assert_eq!(
+            observed
+                .keys()
+                .map(|p| p.to_str().unwrap())
+                .collect::<Vec<_>>(),
+            [
+                "/m/node_modules/@s/pkg",
+                "/m/node_modules/@s/pkg/index.d.ts"
+            ]
+        );
+        assert!(!still(
+            Path::new("/m/node_modules/@s/pkg/index.d.ts"),
+            &declarations
+        ));
     }
 
     #[test]

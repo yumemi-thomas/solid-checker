@@ -123,18 +123,16 @@ struct Answer {
 /// Work an answer does not need, left until the answer has been written (or
 /// the write failed) and the connection closed: nothing the answer says reads
 /// it, and the next request is not read until it is done (the daemon answers
-/// one request at a time), so each piece is finished before anything uses it.
+/// one request at a time), so it is finished before anything uses it. That
+/// work is the memo store's sweep of the entries the build did not reach (the
+/// next build begins from a swept store, and runs a sweep still due first).
 ///
-/// - the witness learns the edited files' imports (it is only read by the
-///   next request's check);
-/// - the memo store sweeps the entries the build did not reach (the next
-///   build begins from a swept store, and runs a sweep still due first).
-///
-/// The cached answer is not deferred: the idle check records it with the
-/// answer.
+/// The witness's extension with the edited files' imports is not deferred:
+/// it observes the disk as near as it can to when the producer resolved them
+/// (review R1 finding 2), and costs about nothing. Nor is the cached answer:
+/// the idle check records it with the answer.
 #[derive(Default)]
 struct After {
-    witness: Option<(Vec<String>, bool)>,
     sweep: bool,
 }
 
@@ -152,10 +150,6 @@ impl After {
     fn run(self, state: &mut State) -> Result<(), Box<dyn Error>> {
         let timed = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
         let started = Instant::now();
-        if let Some((paths, graph_kept)) = self.witness {
-            state.extend_witness(&paths, graph_kept)?;
-        }
-        let witness = started.elapsed();
         if self.sweep {
             state.diagnostics.finish_deferred();
         }
@@ -165,8 +159,7 @@ impl After {
                 "{}",
                 serde_json::json!({
                     "daemonAfter": {
-                        "witnessMs": ms(witness),
-                        "sweepMs": ms(started.elapsed() - witness),
+                        "sweepMs": ms(started.elapsed()),
                     }
                 })
             );
@@ -1703,9 +1696,9 @@ fn answer_with(
         }
         Ok(())
     };
-    // The witness and the cached answer are left until the answer is written
-    // only for the retained state; a state dropped after this answer closes
-    // its producer, which the witness asks.
+    // The memo sweep is left until the answer is written only for the
+    // retained state; the idle check's fresh state, dropped after this
+    // answer, defers nothing.
     let defer = producer == AfterFacts::Keep;
     let (sync, witness_pending) = state.resync(request)?;
     let changes = match sync {
@@ -1909,13 +1902,13 @@ fn answer_with(
     // A retained witness was found current this request, so it still holds
     // for the same program, and after an update that kept the program's
     // files it needs only the edited files' imports on top
-    // ([`State::extend_witness`]); the retained state adds them once the
-    // answer is written ([`After`]). A new session (rebuilt, reprepared, or
-    // reopened by the update) has none.
+    // ([`State::extend_witness`]), observed here, right after the facts, so
+    // the disk it records is the one the update resolved against as nearly
+    // as it can be. A new session (rebuilt, reprepared, or reopened by the
+    // update) has none.
     let mut after = After::default();
     match (state.resolution.is_some(), edited) {
         (true, None) => {}
-        (true, Some(paths)) if defer => after.witness = Some((paths, graph_kept)),
         (true, Some(paths)) => state.extend_witness(&paths, graph_kept)?,
         (false, _) => {
             let tracked = &state.tracking.fingerprints;
