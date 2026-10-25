@@ -551,3 +551,67 @@ fn a_rebuilt_chain_over_project_references_keeps_the_reference_mapping() {
     assert_eq!(project.last_update.kind, Some(UpdateKind::Reused));
     assert!(affected.contains(&index));
 }
+
+/// A program build asks the disk through lookups that last one build
+/// (`OverlayFs::build_scope`). A file created on disk after a build that
+/// probed for it and found nothing is found by the next build, whichever way
+/// that build is made: nothing a build learned about the disk is kept.
+#[test]
+fn a_file_created_after_a_failed_probe_is_found_by_the_next_build() {
+    let scratch = Scratch::new(&[
+        ("tsconfig.json", SMALL_CONFIG),
+        (
+            "a.ts",
+            "import { x } from \"./x\";\nexport const a = typeof x;\n",
+        ),
+        ("b.ts", "export const b = 2;\n"),
+    ]);
+    let (a, x) = (scratch.path("a.ts"), scratch.path("x.ts"));
+    let mut project = scratch.open();
+    let resolution_of_x = |project: &mut crate::project::Project| -> String {
+        let inventory = crate::backend::ModuleGraph::module_graph(
+            project,
+            &Context::new(),
+            &typefacts::v3::ModuleGraphRequest {
+                imports: true,
+                import_paths: vec![a.clone()],
+                packages: false,
+                distinct_bare_imports: false,
+            },
+        )
+        .unwrap();
+        inventory.imports[0].resolved_path.to_string()
+    };
+    assert_eq!(resolution_of_x(&mut project), "", "x.ts does not exist yet");
+
+    scratch.write_all(&[("x.ts", "export const x = 1;\n")]);
+    // An import edit rebuilds the chain from the disk as it is now.
+    update(
+        &mut project,
+        &[change(
+            &a,
+            1,
+            "import { x } from \"./x\";\nimport { b } from \"./b\";\nexport const a = [x, b];\n",
+        )],
+    );
+    assert_eq!(project.last_update.kind, Some(UpdateKind::Rebuilt));
+    assert_eq!(resolution_of_x(&mut project), x);
+
+    // And again: a second missing file, created after the build that missed
+    // it.
+    scratch.write_all(&[("y.ts", "export const y = 1;\n")]);
+    update(
+        &mut project,
+        &[change(
+            &a,
+            2,
+            "import { x } from \"./x\";\nimport { y } from \"./y\";\nexport const a = [x, y];\n",
+        )],
+    );
+    assert_eq!(project.last_update.kind, Some(UpdateKind::Rebuilt));
+    assert_eq!(
+        project.forward_dependencies(&a),
+        [x.clone(), scratch.path("y.ts")],
+        "the second rebuild saw y.ts, created after the first one"
+    );
+}

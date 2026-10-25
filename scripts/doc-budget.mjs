@@ -30,8 +30,9 @@ export const FILE_BUDGETS = {
   // ADRs 0382-0400; and for ADRs 03XX-cold-cost and 03XX-edit-residual; and
   // for ADR 03XX-late-stages (the file stood 158,880 bytes); and for ADR 03XX-memo-warm
   // (the file stood 160,518 bytes); and for ADR 03XX-stable-locals (the file stood 163,911 bytes);
-  // and for ADR 03XX-canonical-index (the file stood 163,998 bytes before its entry).
-  "docs/decisions.md": 167_000,
+  // and for ADR 03XX-canonical-index (the file stood 163,998 bytes before its entry);
+  // and for ADR 03XX-fs-lookups (the file stood 166,991 bytes before its entry).
+  "docs/decisions.md": 170_500,
 };
 
 export const GROUP_BUDGETS = [
@@ -39,8 +40,9 @@ export const GROUP_BUDGETS = [
   // ADRs 03XX-cold-cost and 03XX-edit-residual, and for ADR 03XX-late-stages
   // (the group stood 628,977 bytes); for ADR 03XX-memo-warm (the group stood 631,357); and for
   // ADR 03XX-stable-locals (the group stood 635,538 bytes); and for ADR 03XX-canonical-index
-  // (the group stood 635,458 bytes before the entry, which added 2,578).
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 638_500 },
+  // (the group stood 635,458 bytes before the entry, which added 2,578); and for ADR 03XX-fs-lookups
+  // (the group stood 638,451 bytes before the entry and the open-work lines, which added 3,696).
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 642_500 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
