@@ -604,21 +604,8 @@ mod kept_graph {
         }
     }
 
-    /// The bit a proven source leaves behind is unobservable (module docs).
-    fn masked(context: u8) -> u8 {
-        if context & OWNER_CONTEXT_PROVEN_UNOWNED != 0 {
-            context & !super::OWNER_CONTEXT_MAY_RESUME_UNOWNED
-        } else {
-            context
-        }
-    }
-
     fn table(graph: &OwnerGraph) -> std::collections::BTreeMap<(String, Span), u8> {
-        graph
-            .context_table()
-            .into_iter()
-            .map(|(key, context)| (key, masked(context)))
-            .collect()
+        graph.context_table()
     }
 
     /// Runs `steps` random edits against one kept graph and, after each,
@@ -669,16 +656,13 @@ mod kept_graph {
                     .collect::<Vec<PathId>>()
             };
             let kept_order = order(&mut kept);
-            kept.settle(&kept_order, &hand_outs, true, false);
-            if !leaf && !namespaces {
-                assert!(kept.solvers_kept(), "seed {seed} step {step}: cones solve");
-            }
+            kept.settle(&kept_order, &hand_outs);
             let mut fresh = OwnerGraph::default();
             for (path, fragment) in &held {
                 fresh.set_fragment(path, fragment.clone());
             }
             let fresh_order = order(&mut fresh);
-            fresh.settle(&fresh_order, &hand_outs, false, false);
+            fresh.settle(&fresh_order, &hand_outs);
             assert_eq!(
                 table(&kept),
                 table(&fresh),
@@ -703,7 +687,7 @@ mod kept_graph {
     }
 
     #[test]
-    fn a_kept_graph_with_tracked_effect_edges_solves_fresh_and_equal() {
+    fn a_kept_graph_with_tracked_effect_edges_equals_a_fresh_one() {
         for seed in 1_000_000..=1_000_000 + seeds(30) {
             run(seed, 20, true, false);
         }
@@ -718,8 +702,8 @@ mod kept_graph {
 
     #[test]
     fn the_resume_bit_a_proven_source_leaves_behind_is_the_only_history() {
-        // The history difference the module docs name: the source is {OWNED}
-        // when the edge first fires and gains the proof later.
+        // The worklist's history: the source is {OWNED} when the edge first
+        // fires and gains the proof later.
         let mut graph = OwnerGraph::default();
         let node = |span: Span, seed: u8| OwnerNode {
             path: "a.ts".into(),
@@ -761,8 +745,6 @@ mod kept_graph {
                 named: &|_, _| false,
                 escapes_unnamed: &|_| false,
             },
-            false,
-            false,
         );
         let table = graph.context_table();
         // Node 1 is unreached, so its edge never fires: node 0 stays owned

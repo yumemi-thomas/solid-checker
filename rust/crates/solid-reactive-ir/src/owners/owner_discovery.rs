@@ -337,7 +337,7 @@ pub(crate) fn discover_owner_file(
 }
 
 /// What the owner stage keeps between builds: the graph with its fragments
-/// and solvers, and each file's emission ([`owner_state`], [`owner_emission`]).
+/// and contexts, and each file's emission ([`owner_state`], [`owner_emission`]).
 #[derive(Default)]
 pub(crate) struct OwnerState {
     graph: OwnerGraph,
@@ -345,9 +345,8 @@ pub(crate) struct OwnerState {
 }
 
 /// The owner requirements of the project, and the call-site gates they
-/// settled. `state` holds the previous build's graph; `retain` says it will be
-/// used again (a one-shot build solves with the plain worklist and keeps no
-/// solver).
+/// settled. `state` holds the previous build's graph (a one-shot build's is
+/// empty).
 pub(crate) fn find_missing_owners_incremental(
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
@@ -355,7 +354,6 @@ pub(crate) fn find_missing_owners_incremental(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     unchanged_paths: &HashSet<String>,
     state: &mut OwnerState,
-    retain: bool,
 ) -> (
     Vec<OwnerRequirement>,
     SettledGateDecisions,
@@ -437,8 +435,6 @@ pub(crate) fn find_missing_owners_incremental(
             named: &|path, span| lookup.hands_out_by_name(path, span),
             escapes_unnamed: &|path| lookup.escapes_unnamed(path),
         },
-        retain,
-        verify_owner_graph(),
     );
     let propagation = propagation_started.elapsed();
 
@@ -503,10 +499,4 @@ pub(crate) fn find_missing_owners_incremental(
         },
         fragment_reads,
     )
-}
-
-/// Shadow and verify-reused modes compare the kept solve with the worklist.
-fn verify_owner_graph() -> bool {
-    crate::base::memo::build::verify_reused_from_env()
-        || crate::shadow::ShadowMode::from_env() != crate::shadow::ShadowMode::Off
 }

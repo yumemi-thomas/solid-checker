@@ -90,7 +90,6 @@ pub(crate) fn collect_project(
                     ctx.symbol_names,
                     unchanged_paths,
                     &mut cache.owners,
-                    true,
                 );
             draft.missing_owners.extend(requirements);
             apply_settled_gates(&mut draft.leaf_operations, &gates);
@@ -113,7 +112,6 @@ pub(crate) fn collect_project(
             ctx.symbol_names,
             unchanged_paths,
             &mut OwnerState::default(),
-            false,
         );
         draft.missing_owners.extend(requirements);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
