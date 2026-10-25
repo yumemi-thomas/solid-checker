@@ -50,7 +50,7 @@ const STUB: &str = r#"declare module "solid-js" {
   export function createSignal<T>(value: T): [() => T, (value: T) => void];
   export function createMemo<T>(compute: () => T): () => T;
   export function createReaction(onInvalidate: () => void): (tracking: () => void) => void;
-  export function createEffect<T>(compute: () => T, apply: (value: T) => void): void;
+  export function createEffect<T>(compute: () => T, apply: (value: T) => void, options?: { defer?: boolean }): void;
 }
 
 declare namespace JSX {
@@ -911,4 +911,46 @@ fn kept_post_passes_follow_mid_chain_veto_and_mid_order_file_edits() {
     // a.tsx's rows and typed sources are kept; z.tsx's three row sets and
     // a.tsx's components recompute.
     assert_eq!((kept, recomputed), (2, 4), "row sets kept and recomputed");
+}
+
+/// ADR 0405: an effect-apply chunk is one file's deferred apply calls and the
+/// callbacks it supplies. Whether `A`'s `run(...)` is `createEffect` is
+/// answered by `A`'s own entity rows, which `B` decides: `B` flips `run`
+/// between a plain function and a re-export of `createEffect`, with `A`
+/// byte-identical. With `defer: true` and a constant compute the apply never
+/// runs, so its read and write are withheld only while `run` is the
+/// primitive. The chunk was keyed on `A`'s source, compiler map and its reads
+/// of other files only, so the scan that found no apply call in `A` was kept
+/// when `run` became `createEffect`, and the retained build kept the read the
+/// fresh one withholds. A chunk now records a read of its own file's facts.
+const ALIAS_B: &str = "export { createEffect as run } from \"solid-js\";\n";
+const FUNCTION_B: &str = "export function run<T>(compute: () => T, apply: (value: T) => void, options?: { defer?: boolean }): void {\n  apply(compute());\n}\n";
+const DEFERRED_A: &str = "import { createSignal } from \"solid-js\";\nimport { run } from \"./B\";\nconst [count, setCount] = createSignal(0);\nexport function watch() {\n  run(() => 0, (value) => setCount(count() + value), { defer: true });\n}\n";
+
+#[test]
+fn an_alias_that_stops_or_starts_naming_an_apply_primitive_in_another_file_is_not_kept() {
+    let Some(mut project) = Project::scratch_per_file(
+        "effect-apply-alias",
+        &[("B.ts", FUNCTION_B), ("A.ts", DEFERRED_A)],
+    ) else {
+        return;
+    };
+    let options = RuleOptions::default();
+    let vocabulary = solid_v2().vocabulary;
+    let fresh = |facts: &ProjectFacts| {
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap()
+            .0
+    };
+    let mut builder = IncrementalBuilder::default();
+    let first = project.analyze();
+    assert_retained_is_fresh(&mut builder, &first, &options, "function");
+    let alias = project.rewrite("B.ts", ALIAS_B);
+    assert!(
+        first_difference(&fresh(&first), &fresh(&alias)).is_some(),
+        "whether `run` is `createEffect` must change `A`'s answer"
+    );
+    assert_retained_is_fresh(&mut builder, &alias, &options, "alias");
+    let function = project.rewrite("B.ts", FUNCTION_B);
+    assert_retained_is_fresh(&mut builder, &function, &options, "function again");
 }
