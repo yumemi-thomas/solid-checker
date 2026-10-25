@@ -120,10 +120,10 @@ struct Answer {
     after: Option<After>,
 }
 
-/// Work an answer does not need, left until the answer has been written and
-/// the connection closed: nothing the answer says reads it, and the next
-/// request is not read until it is done (the daemon answers one request at a
-/// time), so each piece is finished before anything uses it.
+/// Work an answer does not need, left until the answer has been written (or
+/// the write failed) and the connection closed: nothing the answer says reads
+/// it, and the next request is not read until it is done (the daemon answers
+/// one request at a time), so each piece is finished before anything uses it.
 ///
 /// - the witness learns the edited files' imports (it is only read by the
 ///   next request's check);
@@ -1518,11 +1518,16 @@ fn handle(
                 notice: Some(answer.notice.to_string()),
                 recovered,
             })?;
-            stream.write_all(&header)?;
-            stream.write_all(b"\n")?;
-            stream.write_all(sent)?;
-            stream.flush()?;
+            let written = (|| {
+                stream.write_all(&header)?;
+                stream.write_all(b"\n")?;
+                stream.write_all(sent)?;
+                stream.flush()
+            })();
             drop(stream);
+            // The state already holds this answer's program, so its deferred
+            // work runs whether or not the client read the answer (one that
+            // went away is a failed write, review R1 finding 1).
             if let Some(after) = after
                 && let Some(retained) = state.as_mut()
                 && let Err(error) = after.run(retained)
@@ -1534,7 +1539,7 @@ fn handle(
             if materialized {
                 idle_memory::reclaim_idle_pages();
             }
-            Ok(())
+            Ok(written?)
         }
         Err(error) => {
             let message = error.to_string();

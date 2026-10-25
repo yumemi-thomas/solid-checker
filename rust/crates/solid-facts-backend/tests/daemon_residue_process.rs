@@ -54,17 +54,24 @@ impl Run {
 
 impl Project {
     fn new(label: &str) -> Option<Self> {
+        Self::in_directory(label, "")
+    }
+
+    /// [`Self::new`] with the project in `directory` under the scratch root,
+    /// so the root can hold what a monorepo hoists above it.
+    fn in_directory(label: &str, directory: &str) -> Option<Self> {
         let typefacts = env::var("SOLID_TYPEFACTS_BIN").ok()?;
         let root = temporary_directory(label).canonicalize().unwrap();
+        let project = root.join(directory);
         copy_tree(
             &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../../../fixtures/reactive-ir/callback-forwarding"),
-            &root,
+            &project,
         );
         // A second component file, so findings sit in more than one file.
-        let app = fs::read_to_string(root.join("App.tsx")).unwrap();
+        let app = fs::read_to_string(project.join("App.tsx")).unwrap();
         fs::write(
-            root.join("Other.tsx"),
+            project.join("Other.tsx"),
             app.replace("Good", "OtherGood").replace("Bad", "OtherBad"),
         )
         .unwrap();
@@ -72,7 +79,7 @@ impl Project {
         let _ = fs::remove_dir_all(&sockets);
         fs::create_dir_all(&sockets).unwrap();
         Some(Self {
-            tsconfig: root.join("tsconfig.json"),
+            tsconfig: project.join("tsconfig.json"),
             root,
             sockets,
             typefacts,
@@ -282,4 +289,104 @@ fn nothing_a_daemon_remembers_outlives_an_edit_a_revert_a_package_or_a_configura
     agree("package version changed");
     fs::remove_dir_all(project.root.join("node_modules")).unwrap();
     assert_eq!(agree("package removed"), baseline);
+}
+
+/// Review R1 finding 1: a client that goes away before reading its answer
+/// leaves the daemon a failed write. What the request learned about the
+/// edit's imports is kept all the same, so a package the edit imports,
+/// installed afterwards where no tracked directory sees it (hoisted above the
+/// project), is seen by the next request as a one-shot check sees it.
+#[test]
+fn an_answer_nobody_reads_still_leaves_what_the_edit_resolved_observed() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::os::unix::net::{UnixListener, UnixStream};
+    let Some(project) = Project::in_directory("unread", "app") else {
+        return;
+    };
+    let directory = project.tsconfig.parent().unwrap().to_path_buf();
+    let app = directory.join("App.tsx");
+    let original = fs::read_to_string(&app).unwrap();
+    // The hoisted `node_modules` is there from the start (the witness of the
+    // opened program records it as a directory), so creating a package in
+    // it moves no observation the open program made.
+    fs::create_dir_all(project.root.join("node_modules/other-package")).unwrap();
+    // An answer larger than the socket buffers, so the daemon's write is
+    // still waiting on the client when the client goes.
+    let many = (0..200)
+        .map(|index| {
+            format!(
+                "export function Many{index}() {{\n  const value = invoke(readCount);\n  return \
+                 <div>{{value}}</div>;\n}}\n"
+            )
+        })
+        .collect::<String>();
+    fs::write(
+        directory.join("Many.tsx"),
+        format!("import {{ invoke, readCount }} from \"./source\";\n{many}"),
+    )
+    .unwrap();
+    project.check(true, None);
+    fs::write(
+        &app,
+        format!(
+            "{original}\nimport {{ invoke as lateInvoke, readCount as lateRead }} from \"late-package\";\n\
+             export function Late() {{\n  const value = lateInvoke(lateRead);\n  return <div>{{value}}</div>;\n}}\n"
+        ),
+    )
+    .unwrap();
+    // Stand between the next client and the daemon: deliver the request,
+    // read none of the answer, and hang up.
+    let sockets = fs::read_dir(&project.sockets)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "sock")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(sockets.len(), 1, "{sockets:?}");
+    let socket = sockets[0].clone();
+    let real = project.sockets.join("daemon.sock.real");
+    fs::rename(&socket, &real).unwrap();
+    let proxy = UnixListener::bind(&socket).unwrap();
+    let upstream_path = real.clone();
+    let relay = std::thread::spawn(move || {
+        let (client, _) = proxy.accept().unwrap();
+        let mut line = String::new();
+        BufReader::new(&client).read_line(&mut line).unwrap();
+        let mut upstream = UnixStream::connect(&upstream_path).unwrap();
+        upstream.write_all(line.as_bytes()).unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(2));
+    });
+    // The client is answered by its one-shot fallback.
+    let unread = project.check(true, None);
+    relay.join().unwrap();
+    assert!(
+        unread.stderr.contains("daemon unavailable"),
+        "{}",
+        unread.stderr
+    );
+    fs::remove_file(&socket).unwrap();
+    fs::rename(&real, &socket).unwrap();
+    // Installed where only the edit's own resolution looked.
+    let package = project.root.join("node_modules/late-package");
+    fs::create_dir_all(&package).unwrap();
+    fs::write(
+        package.join("package.json"),
+        r#"{"name":"late-package","version":"1.0.0","types":"index.d.ts"}"#,
+    )
+    .unwrap();
+    // Resolved, the package hands back the project's own callback helpers,
+    // and `Late` reads untracked as `Bad` does; unresolved, it reads nothing.
+    fs::write(
+        package.join("index.d.ts"),
+        "export { invoke, readCount } from \"../../app/source\";\n",
+    )
+    .unwrap();
+    let fresh = project.check(false, None);
+    let count = |run: &Run| run.json()["findings"].as_array().unwrap().len();
+    assert_eq!(count(&fresh), count(&unread) + 1);
+    let retained = project.check(true, None);
+    assert_eq!(count(&retained), count(&fresh), "{}", retained.stderr);
+    assert!(retained.stdout == fresh.stdout, "{}", retained.stderr);
 }
