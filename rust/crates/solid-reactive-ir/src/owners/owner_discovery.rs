@@ -444,7 +444,9 @@ pub(crate) fn find_missing_owners_incremental(
 
     let requirements_started = Instant::now();
     // Program-wide: a context's provider census spans every file (ADR 0352).
+    let census_started = Instant::now();
     let provider_free = provider_free_contexts(facts, lookup, symbol_names);
+    let context_census = census_started.elapsed();
     let inputs = EmissionInputs {
         facts,
         lookup,
@@ -496,6 +498,7 @@ pub(crate) fn find_missing_owners_incremental(
             graph_assembly,
             propagation,
             requirement_emission,
+            context_census,
             ..timings
         },
         fragment_reads,

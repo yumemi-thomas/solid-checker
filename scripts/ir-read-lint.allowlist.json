@@ -183,7 +183,7 @@
     "hashmap-iteration": 20
   },
   "rust/crates/solid-reactive-ir/src/owners/context_census.rs": {
-    "facts.files": 5,
+    "facts.files": 3,
     "hashmap-iteration": 1
   },
   "rust/crates/solid-reactive-ir/src/owners/missing_owners.rs": {

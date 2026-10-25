@@ -1450,6 +1450,8 @@ pub struct BuildTimings {
     pub owner_graph_assembly: Duration,
     pub owner_propagation: Duration,
     pub owner_requirement_emission: Duration,
+    /// Inside `owner_requirement_emission`: the provider census (ADR 0352).
+    pub owner_context_census: Duration,
     pub final_ordering: Duration,
 }
 
