@@ -2,7 +2,7 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "until-in-tracked-scope",
+      "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2005",
       "kind": "violation",
       "severity": "error",
@@ -12,7 +12,7 @@
       "fixes": 0
     },
     {
-      "rule": "until-in-tracked-scope",
+      "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2005",
       "kind": "violation",
       "severity": "error",
@@ -22,7 +22,7 @@
       "fixes": 0
     },
     {
-      "rule": "until-in-tracked-scope",
+      "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2005",
       "kind": "violation",
       "severity": "error",
@@ -32,7 +32,7 @@
       "fixes": 0
     },
     {
-      "rule": "until-in-tracked-scope",
+      "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2005",
       "kind": "violation",
       "severity": "error",

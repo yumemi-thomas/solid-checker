@@ -219,12 +219,25 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
                 ReactiveSourceKind::Accessor => "accessor",
                 ReactiveSourceKind::Store => "store",
             };
-            (
+            let opt_in = if write.source_kind == ReactiveSourceKind::Accessor {
+                " For an internal reactive signal only, opt in with { ownedWrite: true } in that signal's creation options; a store setter has no such opt-in."
+            } else {
+                " A store setter has no ownedWrite opt-in."
+            };
+            let message = if write.owned_write == solid_reactive_ir::OwnedWriteOption::Unknown {
+                format!(
+                    "{source} setter {:?} is called inside owned scope {context}, and its source's options argument cannot be read statically; if the source sets ownedWrite: true the write is allowed, otherwise Solid throws REACTIVE_WRITE_IN_OWNED_SCOPE here in dev, and whether it does cannot be proven either way",
+                    write.setter
+                )
+            } else {
                 format!(
                     "{source} setter {:?} is called inside owned scope {context}; writes under a children-capable owner create feedback loops in the reactive graph, and Solid throws REACTIVE_WRITE_IN_OWNED_SCOPE here in dev",
                     write.setter
-                ),
-                "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking. For an internal reactive source only, opt in with { ownedWrite: true } in that source's creation options.".to_owned(),
+                )
+            };
+            (
+                message,
+                format!("Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking.{opt_in}"),
                 format!(
                     "{:?} is paired with a source proven to be a Solid {source}",
                     write.setter
@@ -245,7 +258,7 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
     } else {
         "this scope runs under a children-capable owner; writes are only legal outside one — event handlers, actions, effect apply callbacks, and the leaf scopes onSettled and createTrackedEffect — and untrack() keeps the enclosing owner".into()
     };
-    FindingWording::new(Rule::ReactiveWriteInOwnedScope.metadata(), message, hint).with_evidence(
+    FindingWording::new(Rule::NoWriteInPureComputation.metadata(), message, hint).with_evidence(
         vec![
             EvidenceStep {
                 message: provenance,
@@ -481,10 +494,17 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
             },
             ExecutionRole::TrackedJsx if !read.under_loading => (
                 Rule::AsyncOutsideLoadingBoundary,
-                format!(
-                    "async accessor {:?} is rendered without a Loading boundary above it; while it is pending nothing renders, and the mount is deferred until all uncaught async settles (Solid dev warning ASYNC_OUTSIDE_LOADING_BOUNDARY)",
-                    read.accessor
-                ),
+                if read.options_opaque {
+                    format!(
+                        "async accessor {:?} is rendered without a Loading boundary above it, and its source's options argument cannot be read statically; if the options declare a loadingValue or seedLoadingValue the first flight serves that value and no boundary is needed, and whether they do cannot be proven either way",
+                        read.accessor
+                    )
+                } else {
+                    format!(
+                        "async accessor {:?} is rendered without a Loading boundary above it; while it is pending nothing renders, and the mount is deferred until all uncaught async settles (Solid dev warning ASYNC_OUTSIDE_LOADING_BOUNDARY)",
+                        read.accessor
+                    )
+                },
                 "This is safe but shows nothing while loading. Wrap the reading subtree in <Loading fallback={...}> for visible fallback UI, or leave it as is if an empty container during load is intended. For a revalidation indicator, use isPending(() => ...) under the same boundary.".to_owned(),
             ),
             // `DiscardedRendering` is here and not above: a pending read the
@@ -557,7 +577,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::SyncNodeReceivedAsync => {
             "a sync computation is proven capable of returning Promise or AsyncIterable"
         }
-        Rule::ResolveInReactiveScope => {
+        Rule::ResolveInTrackedScope => {
             "the resolve() call runs directly in a tracked scope, where the runtime's observer guard throws in dev"
         }
         Rule::UntilInTrackedScope => {
@@ -575,7 +595,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::HttpResponseAfterFlush => {
             "the call's scope renders below a Loading boundary, but request-time ordering does not prove whether the boundary settles before or after the response head commits"
         }
-        Rule::ServerFunctionModuleDirective => {
+        Rule::ValidUseServer => {
             "the module's directive prologue contains \"use server\" and this export is provably not a direct function declaration"
         }
         Rule::JsxNoDuplicateProps => {
@@ -587,12 +607,12 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::ReactiveReadAfterAwait
         | Rule::UncalledAccessor
         | Rule::ExpectedFunctionGotExpression
-        | Rule::NoDirectMutation
+        | Rule::NoStoreMutationOutsideSetter
         | Rule::ReactiveSourceUncaptured
         | Rule::ReactiveDispatchUnresolved
         | Rule::ComponentPropsDestructure
         | Rule::ComponentReturnsConditionally
-        | Rule::ReactiveWriteInOwnedScope
+        | Rule::NoWriteInPureComputation
         | Rule::ActionCalledInOwnedScope
         | Rule::LeafOwnerForbiddenCall
         | Rule::MissingOwner
@@ -646,7 +666,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectFamily::ExpectedFunctionGotExpression => Rule::ExpectedFunctionGotExpression,
         StaticDefectFamily::HandlerOwnerUnresolved => Rule::MissingOwner,
         StaticDefectFamily::UncalledAccessor => Rule::UncalledAccessor,
-        StaticDefectFamily::DirectMutation => Rule::NoDirectMutation,
+        StaticDefectFamily::DirectMutation => Rule::NoStoreMutationOutsideSetter,
         StaticDefectFamily::ServerFunctionRichArgument => Rule::ServerFunctionRichArgument,
     };
     let text = solid_reactive_ir::static_defect_text(defect, &V2_STATIC_TERMS);

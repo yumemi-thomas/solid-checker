@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-dispatch-handler-inline/App.tsx",
+      "start": 576,
+      "end": 594,
+      "fixes": 0
+    }
+  ]
+}

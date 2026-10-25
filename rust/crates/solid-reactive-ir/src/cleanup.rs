@@ -940,19 +940,18 @@ fn member_call_operations(
     else {
         return false;
     };
-    // Optional-call signature recovery supplies declaration identity, not
-    // whole-call host behavior. An optional DOM call stays open unless its
-    // exact declaration is in the audited script-free table (ADR 0318):
-    // focus/blur, dispatch and custom-element reactions can invoke registered
-    // user code without a callback argument at this site. ADR 0329: a member
-    // that dispatches an event synchronously (`el.focus()`, `el.click()`)
-    // re-enters registered listeners in the optional form or not.
+    // ADR 0397: an optional call (`el?.scrollIntoView()`) is read like the
+    // non-optional form -- the same exact `lib.dom` declaration, the same
+    // premises. ADR 0329: a member that dispatches an event synchronously
+    // (`el.focus()`, `el.click()`) re-enters registered listeners in either
+    // form, and the one member whose optional form was refused for its own
+    // synchronous event (`getContext`) keeps that refusal.
     let dom = std::path::Path::new(declaration.source_file.as_ref())
         .file_name()
         .is_some_and(|name| name == "lib.dom.d.ts" || name == "lib.dom.iterable.d.ts");
     if dom
         && (synchronously_dispatching_dom_member(declaration.qualified_name.as_ref())
-            || (!script_free_dom_member(declaration.qualified_name.as_ref())
+            || (refused_when_optional(declaration.qualified_name.as_ref())
                 && (file
                     .ast
                     .optional_members
@@ -991,37 +990,6 @@ fn member_call_operations(
     }
     complete
 }
-
-/// ADR 0318: `lib.dom` members audited to run no author script while they
-/// execute: no event is dispatched, no custom-element reaction runs and no
-/// node's connectedness changes. Registration only (`addEventListener` and
-/// `removeEventListener` on every `EventTarget` interface; the listener is a
-/// deferred argument), selector and tree queries, layout reads, attribute
-/// reads, `DOMTokenList`/`DOMStringList.contains` and canvas serialization.
-/// `HTMLCanvasElement.getContext` is excluded: WebGL context creation can fire
-/// `webglcontextcreationerror` at the canvas synchronously.
-const SCRIPT_FREE_DOM_MEMBERS: &[&str] = &[
-    "ParentNode.querySelector",
-    "ParentNode.querySelectorAll",
-    "Document.getElementsByTagName",
-    "Document.getElementsByClassName",
-    "Element.getElementsByTagName",
-    "Element.getElementsByClassName",
-    "Element.getBoundingClientRect",
-    "Element.getClientRects",
-    "Range.getBoundingClientRect",
-    "Range.getClientRects",
-    "Node.contains",
-    "DOMTokenList.contains",
-    "DOMStringList.contains",
-    "Element.closest",
-    "Element.matches",
-    "Element.getAttribute",
-    "Element.getAttributeNames",
-    "Element.hasAttribute",
-    "Element.hasAttributes",
-    "HTMLCanvasElement.toDataURL",
-];
 
 /// Whether `resolved` is a `lib.dom` global (`dispatchEvent(…)`,
 /// `focus()`) that dispatches an event synchronously (ADR 0329).
@@ -1072,18 +1040,15 @@ fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
     )
 }
 
-/// Whether the exact `lib.dom` declaration `qualified_name` names a member of
-/// [`SCRIPT_FREE_DOM_MEMBERS`], or an `EventTarget` registration method, which
-/// every interface that is an event target redeclares with its own overloads.
-fn script_free_dom_member(qualified_name: &str) -> bool {
-    SCRIPT_FREE_DOM_MEMBERS.contains(&qualified_name)
-        || qualified_name
-            .rsplit_once('.')
-            .is_some_and(|(owner, member)| {
-                !owner.is_empty()
-                    && !owner.contains('.')
-                    && matches!(member, "addEventListener" | "removeEventListener")
-            })
+/// ADR 0397: `lib.dom` members whose optional form stays refused although the
+/// non-optional form is trusted: `getContext` creates a WebGL context, which
+/// fires `webglcontextcreationerror` at the canvas synchronously on failure
+/// (ADR 0318). The non-optional form keeps the trust it has always had.
+fn refused_when_optional(qualified_name: &str) -> bool {
+    matches!(
+        qualified_name,
+        "HTMLCanvasElement.getContext" | "OffscreenCanvas.getContext"
+    )
 }
 
 /// Whether the function arguments a standard-library call may run in the
@@ -1815,66 +1780,50 @@ fn returned_call_domain<'a>(
 }
 
 #[cfg(test)]
-mod script_free_dom_tests {
-    use super::script_free_dom_member;
+mod dom_dispatch_tests {
+    use super::{refused_when_optional, synchronously_dispatching_dom_member};
 
-    /// ADR 0318: the audited table, and the re-entrant members it must not
-    /// admit.
+    /// ADR 0329 and ADR 0397: the members refused in both forms, and the
+    /// ones an optional call reads like its non-optional form.
     #[test]
-    fn only_audited_dom_members_are_script_free() {
-        for allowed in [
-            "HTMLElement.addEventListener",
-            "Window.removeEventListener",
-            "EventTarget.addEventListener",
-            "ParentNode.querySelector",
-            "ParentNode.querySelectorAll",
-            "Element.getElementsByTagName",
-            "Document.getElementsByClassName",
-            "Element.getBoundingClientRect",
-            "Element.getClientRects",
-            "Node.contains",
-            "DOMTokenList.contains",
-            "Element.closest",
-            "Element.matches",
-            "Element.getAttribute",
-            "Element.getAttributeNames",
-            "Element.hasAttribute",
-            "Element.hasAttributes",
-            "HTMLCanvasElement.toDataURL",
-        ] {
-            assert!(script_free_dom_member(allowed), "{allowed}");
-        }
-        for refused in [
+    fn only_dispatching_dom_members_are_refused() {
+        for dispatching in [
             "HTMLOrSVGElement.focus",
             "HTMLOrSVGElement.blur",
             "HTMLElement.click",
             "EventTarget.dispatchEvent",
-            "HTMLInputElement.select",
-            "HTMLFormElement.submit",
             "HTMLFormElement.requestSubmit",
             "HTMLFormElement.reset",
             "HTMLDialogElement.show",
             "HTMLDialogElement.showModal",
             "HTMLDialogElement.close",
+            "AbortController.abort",
+        ] {
+            assert!(
+                synchronously_dispatching_dom_member(dispatching),
+                "{dispatching}"
+            );
+        }
+        for inert in [
+            "HTMLElement.addEventListener",
+            "ParentNode.querySelector",
+            "Element.getBoundingClientRect",
+            "Element.getAttribute",
             "Element.scrollIntoView",
             "Element.scrollTo",
+            "HTMLInputElement.select",
+            "HTMLFormElement.submit",
+            "Element.setAttribute",
             "ChildNode.remove",
             "ParentNode.append",
-            "ParentNode.prepend",
             "Node.appendChild",
-            "Node.insertBefore",
-            "ParentNode.replaceChildren",
-            "ChildNode.replaceWith",
-            "Element.setAttribute",
-            "Element.removeAttribute",
-            "Element.toggleAttribute",
-            "Element.setAttributeNode",
             "Animatable.animate",
             "HTMLCanvasElement.getContext",
-            "addEventListener",
-            "a.b.addEventListener",
         ] {
-            assert!(!script_free_dom_member(refused), "{refused}");
+            assert!(!synchronously_dispatching_dom_member(inert), "{inert}");
         }
+        assert!(refused_when_optional("HTMLCanvasElement.getContext"));
+        assert!(refused_when_optional("OffscreenCanvas.getContext"));
+        assert!(!refused_when_optional("Element.scrollIntoView"));
     }
 }

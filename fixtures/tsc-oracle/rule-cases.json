@@ -318,7 +318,7 @@
       "checkerKind": "violation"
     },
     {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -379,7 +379,7 @@
       "code": "function renderCard(show: boolean) {\n  return show ? <span /> : <strong />;\n}\nexport const View = () => <section>{renderCard(true)}</section>;\n"
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "dialect": "v2",
       "expect": "silent",
       "checker": "silent",
@@ -387,7 +387,7 @@
       "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count, setCount] = createSignal(0);\ncreateEffect(() => count(), () => {\n  setCount(1);\n});\n"
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -395,7 +395,7 @@
       "code": "import { createSignal, createMemo } from \"solid-js\";\nconst [count, setCount] = createSignal(0);\nexport const doubled = createMemo(() => {\n  setCount(1);\n  return count();\n});\n"
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -403,7 +403,7 @@
       "code": "import { createRoot, createSignal } from \"solid-js\";\nconst [, setCount] = createSignal(0);\ncreateRoot(() => {\n  setCount(1);\n});\n"
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -411,7 +411,7 @@
       "code": "import { createRoot, createStore } from \"solid-js\";\nconst [, setState] = createStore({ value: 0 });\ncreateRoot(() => {\n  setState((draft) => {\n    draft.value = 1;\n  });\n});\n"
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -419,7 +419,7 @@
       "code": "import { createMemo, createSignal, flush } from \"solid-js\";\nconst [count, setCount] = createSignal(0);\nexport const doubled = createMemo(() => {\n  flush(() => setCount(1));\n  return count();\n});\n"
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -523,7 +523,7 @@
       "code": "import { action, createRoot } from \"solid-js\";\nconst save = action(function* () {});\ncreateRoot(() => {\n  save();\n});\n"
     },
     {
-      "rule": "resolve-in-tracked-scope",
+      "rule": "no-await-primitive-in-tracked-scope",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -580,7 +580,7 @@
       "code": "import { createMemo } from \"solid-js\";\nimport { render } from \"@solidjs/web\";\nconst value = createMemo(async () => 1);\nconst Case = () => <div>{value()}</div>;\nrender(() => <Case />, document.body);\n"
     },
     {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -933,7 +933,7 @@
       "code": "export const Case = () => <div innerhtml=\"x\">child</div>;\n"
     },
     {
-      "rule": "until-in-tracked-scope",
+      "rule": "no-await-primitive-in-tracked-scope",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -941,7 +941,7 @@
       "code": "import { createMemo, createSignal, until } from \"solid-js\";\nconst [ready] = createSignal(false);\nexport function Waiting() {\n  const label = createMemo(() => {\n    void until(() => ready());\n    return ready();\n  });\n  return <div>{String(label())}</div>;\n}\n"
     },
     {
-      "rule": "until-in-tracked-scope",
+      "rule": "no-await-primitive-in-tracked-scope",
       "dialect": "v2",
       "expect": "silent",
       "checker": "silent",

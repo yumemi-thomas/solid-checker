@@ -31,7 +31,12 @@ pub(super) fn push_callback_return_sources(
                 (
                     display,
                     declaration,
-                    returned.created.owned_write_option,
+                    crate::owned_write_option(
+                        file,
+                        returned.created,
+                        returned.primitive,
+                        lookup.dialect,
+                    ),
                     ReactiveSourceKind::Accessor,
                 ),
             ));
@@ -45,9 +50,15 @@ pub(super) fn push_callback_return_sources(
                     .source_primitives
                     .push((symbol.clone(), spelling.into()));
             }
-            result
-                .source_owned_write
-                .push((symbol.clone(), returned.created.owned_write_option));
+            result.source_owned_write.push((
+                symbol.clone(),
+                crate::owned_write_option(
+                    file,
+                    returned.created,
+                    returned.primitive,
+                    lookup.dialect,
+                ),
+            ));
             let options =
                 async_source_options(file, returned.created, Some(primitive), lookup.dialect);
             if options != AsyncSourceOptions::default() {

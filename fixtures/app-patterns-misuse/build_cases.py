@@ -71,17 +71,17 @@ add("on-settled-read", "strict-read-untracked", "onSettled", "A read in an onSet
     "  const [count] = createSignal(1);\n  onSettled(() => { console.log(count()); });\n  return <p>{count()}</p>;",
     "  const [count] = createSignal(1);\n  createEffect(() => count(), (value) => { console.log(value); });\n  return <p>{count()}</p>;")
 
-# ---- reactive-write-in-owned-scope
-add("write-in-memo", "reactive-write-in-owned-scope", "createMemo", "A signal written inside a memo's compute.",
+# ---- no-write-in-pure-computation
+add("write-in-memo", "no-write-in-pure-computation", "createMemo", "A signal written inside a memo's compute.",
     "  const [count] = createSignal(1);\n  const [seen, setSeen] = createSignal(0);\n  const doubled = createMemo(() => { setSeen(1); return count() * 2; });\n  return <p>{doubled()} {seen()}</p>;",
     "  const [count] = createSignal(1);\n  const doubled = createMemo(() => count() * 2);\n  return <p>{doubled()}</p>;")
-add("write-in-component-body", "reactive-write-in-owned-scope", "createSignal", "A signal written directly in the component body.",
+add("write-in-component-body", "no-write-in-pure-computation", "createSignal", "A signal written directly in the component body.",
     "  const [count, setCount] = createSignal(1);\n  setCount(2);\n  return <p>{count()}</p>;",
     "  const [count] = createSignal(2);\n  return <p>{count()}</p>;")
-add("write-in-jsx-expression", "reactive-write-in-owned-scope", "createSignal", "A signal written inside a tracked JSX expression.",
+add("write-in-jsx-expression", "no-write-in-pure-computation", "createSignal", "A signal written inside a tracked JSX expression.",
     "  const [count, setCount] = createSignal(1);\n  return <p>{(setCount(2), count())}</p>;",
     "  const [count, setCount] = createSignal(1);\n  return <button onClick={() => setCount(2)}>{count()}</button>;")
-add("write-in-effect-compute", "reactive-write-in-owned-scope", "createEffect", "A signal written inside an effect's compute function.",
+add("write-in-effect-compute", "no-write-in-pure-computation", "createEffect", "A signal written inside an effect's compute function.",
     "  const [count] = createSignal(1);\n  const [copy, setCopy] = createSignal(0);\n  createEffect(() => { setCopy(count()); return count(); }, () => {});\n  return <p>{copy()}</p>;",
     "  const [count] = createSignal(1);\n  const [copy, setCopy] = createSignal(0);\n  createEffect(() => count(), (value) => { setCopy(value); });\n  return <p>{copy()}</p>;")
 

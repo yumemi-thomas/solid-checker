@@ -55,7 +55,7 @@ pub(super) struct StaticApiContext<'a> {
     pub(super) entities: &'a EntitySymbols,
     pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
-    pub(super) source_owned_write: &'a HashMap<SymbolId, bool>,
+    pub(super) source_owned_write: &'a HashMap<SymbolId, crate::OwnedWriteOption>,
     pub(super) value_form_stores: &'a HashSet<SymbolId>,
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(super) reachable_calls: &'a HashMap<Location, usize>,
@@ -181,7 +181,7 @@ impl StaticApiContext<'_> {
             {
                 result.violations.push(StaticViolation {
                     id: "SC2004".into(),
-                    rule: "resolve-in-tracked-scope".into(),
+                    rule: "no-await-primitive-in-tracked-scope".into(),
                     message: format!(
                         "resolve() is called inside {scope}; resolve() reads the expression once and never tracks updates, and an active observer makes Solid throw \"Cannot call resolve inside a reactive scope\" here in dev"
                     ),
@@ -199,7 +199,7 @@ impl StaticApiContext<'_> {
             {
                 result.violations.push(StaticViolation {
                     id: "SC2004".into(),
-                    rule: "resolve-in-tracked-scope".into(),
+                    rule: "no-await-primitive-in-tracked-scope".into(),
                     message: "resolve() is called in code the analysis cannot place; if an observer is active when it runs (a memo or effect compute, or tracked JSX, that reaches it through a helper), Solid throws \"Cannot call resolve inside a reactive scope\" in dev, and whether one is cannot be proven either way".into(),
                     hint: "Call resolve() from imperative code — an event handler, onSettled, or an effect's apply function. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on.".into(),
                     location: location(file.path.shared(), call.callee),
@@ -221,7 +221,7 @@ impl StaticApiContext<'_> {
             {
                 result.violations.push(StaticViolation {
                     id: "SC2005".into(),
-                    rule: "until-in-tracked-scope".into(),
+                    rule: "no-await-primitive-in-tracked-scope".into(),
                     message: format!(
                         "until() is called inside {scope}; an active observer makes Solid throw \"Cannot call until inside a reactive scope\" here in dev, and in production every run of the scope starts another root and effect that wait on the predicate"
                     ),
@@ -238,7 +238,7 @@ impl StaticApiContext<'_> {
             {
                 result.violations.push(StaticViolation {
                     id: "SC2005".into(),
-                    rule: "until-in-tracked-scope".into(),
+                    rule: "no-await-primitive-in-tracked-scope".into(),
                     message: "until() is called in code the analysis cannot place; if an observer is active when it runs (a memo or effect compute, or tracked JSX, that reaches it through a helper), Solid throws \"Cannot call until inside a reactive scope\" in dev, and whether one is cannot be proven either way".into(),
                     hint: "Await until() from imperative code — an action step (`yield until(...)`), an event handler, onSettled, or an effect's apply function. Inside a computation, read the condition directly: tracked reads re-run the computation when it changes.".into(),
                     location: location(file.path.shared(), call.callee),
@@ -506,11 +506,11 @@ impl StaticApiContext<'_> {
                         self.lookup,
                         RootBodyGuard::Rejects,
                     ),
-                    allowed_by_option: self
+                    owned_write: self
                         .source_owned_write
                         .get(symbol)
                         .copied()
-                        .unwrap_or(false),
+                        .unwrap_or_default(),
                     context: analysis_context(
                         file,
                         call.span,

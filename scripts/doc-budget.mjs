@@ -21,21 +21,42 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const FILE_BUDGETS = {
   "AGENTS.md": 8_000,
   "CLAUDE.md": 1_000,
-  "docs/open-work.md": 26_300,
+  // Raised for ADR 0394's open cases: the file stood 6 bytes under 26_300.
+  // And for ADRs 0395-0396's open cases: the file stood at 26_659 bytes against 26_700.
+  // And for ADR 0397's leaf obligations: 27_971 bytes against 27_500.
+  // And for ADR 0396's async and test-helper limits: 28_418 bytes against 28_000.
+  // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 32_000.
+  "docs/open-work.md": 32_000,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
-  // 14 bytes under 113_800; and for ADR 0380, 3 bytes under 114_700.
-  "docs/decisions.md": 115_600,
+  // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for the
+  // catalog review's ADRs 0381-0392, 4 bytes under 115_600; and for ADR 0393,
+  // 213 bytes over 127_000; and for ADR 0394, 87 bytes under 127_300;
+  // and for ADRs 0395-0396, 132_568 bytes against 129_100;
+  // and for ADR 0397, 133_476 bytes against 132_700;
+  // and for ADR 0396's async and test-helper extension, 135_756 bytes against 133_600.
+  // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 145_000.
+  "docs/decisions.md": 145_000,
 };
 
 export const GROUP_BUDGETS = [
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 600_000 },
+  // Raised for ADRs 0395-0396 and their rule-page mechanics: docs/ stood at 604_388 bytes.
+  // And for ADR 0397 and its two rule pages: 607_028 bytes against 605_000.
+  // And for ADR 0396's extension (decisions, open work, two rule pages): 610_122 bytes.
+  // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 650_000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 650_000 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
     // Raised from 250 KB for the context-read fixtures (ADR 0352): the group was
     // 249.8 KB before they landed, and each case README is a claim the reader needs.
     // Raised again for ADR 0378's fixture: the group stood 1 byte under 256 KB.
-    bytes: 257_000,
+    // And for ADR 0393's nine dispatch fixtures: the group stood 455 bytes under 257 KB.
+    // And for ADR 0394's four spread fixtures: four READMEs took the group 2_395 bytes past 261 KB.
+    // And for ADRs 0395-0396's fixtures (five handler READMEs, three test-runner projects): 271_432 bytes.
+    // And for ADR 0397's fixture: 271_811 bytes against 271_500.
+    // And for ADR 0396's async and helper variants and the vitest 4 project: 275_151 bytes.
+    // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 290_000.
+    bytes: 290_000,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

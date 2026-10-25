@@ -1,5 +1,5 @@
 {
-  "note": "ADR 0326/0327 reviewer r2: nested-assignment. Static-only investigation: assert the replacement and saved child both render. The static function-valued props are writable at runtime and the saved child reads in tracked JSX; no-direct-mutation remains a possible false positive for plain props.",
+  "note": "ADR 0326/0327 reviewer r2: nested-assignment. Static-only investigation: assert the replacement and saved child both render. The static function-valued props are writable at runtime and the saved child reads in tracked JSX; no-store-mutation-outside-setter remains a possible false positive for plain props.",
   "steps": [
     {
       "action": "assert-text",

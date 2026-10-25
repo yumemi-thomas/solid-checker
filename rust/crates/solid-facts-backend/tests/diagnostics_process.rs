@@ -1331,7 +1331,7 @@ fn write_scope_diagnostics_have_semantic_locations() {
     // answer, ADR 0194).
     assert_eq!(
         (
-            findings_for_rule(&findings, "reactive-write-in-owned-scope").len(),
+            findings_for_rule(&findings, "no-write-in-pure-computation").len(),
             findings_for_rule(&findings, "action-called-in-owned-scope").len(),
         ),
         (14, 2)
@@ -1342,7 +1342,7 @@ fn write_scope_diagnostics_have_semantic_locations() {
             .filter(|finding| {
                 matches!(
                     finding["rule"].as_str(),
-                    Some("reactive-write-in-owned-scope" | "action-called-in-owned-scope")
+                    Some("no-write-in-pure-computation" | "action-called-in-owned-scope")
                 )
             })
             .all(|finding| {
@@ -1412,7 +1412,7 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 ("invalid-refresh-target", 0),
                 ("invalid-affects-target", 0),
                 ("affects-keys-on-accessor", 0),
-                ("reactive-write-in-owned-scope", 1),
+                ("no-write-in-pure-computation", 1),
             ],
         ),
         (
@@ -1421,7 +1421,7 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // Building a directive value happens while the component
                 // renders; only invoking the returned directive is in the
                 // compiler's directive-application phase.
-                ("reactive-write-in-owned-scope", 2),
+                ("no-write-in-pure-computation", 2),
                 // Owner-attaching creations only: the direct createMemo, the
                 // forwarded createEffect, and the function-form createSignal.
                 // The three value-form createSignal(element) calls allocate
@@ -1580,7 +1580,7 @@ fn solid2_precision_corrections_are_end_to_end() {
         // The nested, cast and props writes, plus the three root-record
         // writes: on the audited rc.17 `Store<T> = T`, so a root write
         // type-checks and is this checker's (asserted by span below).
-        ("no-direct-mutation", 7),
+        ("no-store-mutation-outside-setter", 7),
         ("leaf-owner-forbidden-call", 1),
         // One fewer than before ADR 0345 review D: the wrapper-built callback is
         // no longer named, so its cleanup is not reported; the rest of the
@@ -1622,7 +1622,7 @@ fn solid2_precision_corrections_are_end_to_end() {
     // rc.0-rc.6 it is TS2540 (`store-root-write-rc3` pins that silence).
     for root_write in ["profile.name = ", "profile.count += ", "profile.count++"] {
         assert!(
-            starts("no-direct-mutation").contains(&start_of(root_write)),
+            starts("no-store-mutation-outside-setter").contains(&start_of(root_write)),
             "a root store property type-checks on rc.17, so {root_write:?} is reported"
         );
     }
@@ -1637,7 +1637,7 @@ fn solid2_precision_corrections_are_end_to_end() {
         "props.n = ",
     ] {
         assert!(
-            starts("no-direct-mutation").contains(&start_of(kept)),
+            starts("no-store-mutation-outside-setter").contains(&start_of(kept)),
             "{kept:?} is a write TypeScript accepts and the checker must still report"
         );
     }
@@ -1779,7 +1779,7 @@ fn props_container_and_callback_creation_do_not_prove_nested_behavior() {
         .find(|read| read["primaryLocation"]["line"] == 21)
         .expect("eager component-body read");
     assert_eq!(eager["kind"], "violation", "{eager:#?}");
-    let mutations = findings_for_rule(&props, "no-direct-mutation");
+    let mutations = findings_for_rule(&props, "no-store-mutation-outside-setter");
     assert_eq!(mutations.len(), 1, "{props:#?}");
     assert_eq!(mutations[0]["primaryLocation"]["line"], 36);
     // A write through the props container is an obligation: the props object
@@ -1962,7 +1962,7 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
     if let Some(findings) = diagnostic_fixture("server-function-directive") {
         // Two wrapped exports, one named re-export, one star re-export, one
         // wrapped default export; the direct function exports stay silent.
-        assert_rule_findings(&findings, "server-function-module-directive", 5);
+        assert_rule_findings(&findings, "valid-use-server", 5);
         assert!(
             findings.iter().all(|finding| {
                 !finding["primaryLocation"]["path"]
@@ -2005,11 +2005,11 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // Memo compute, effect compute, createTrackedEffect, tracked JSX;
         // untrack, component body, event handler, apply, and module scope
         // are observer-free and stay silent (probed, rc.0).
-        assert_rule_findings(&findings, "resolve-in-tracked-scope", 4);
+        assert_rule_findings(&findings, "no-await-primitive-in-tracked-scope", 4);
         assert!(
             findings
                 .iter()
-                .all(|finding| finding["rule"] == "resolve-in-tracked-scope"),
+                .all(|finding| finding["rule"] == "no-await-primitive-in-tracked-scope"),
             "{findings:#?}"
         );
     }
@@ -2017,7 +2017,7 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // rc.9's `until` carries resolve's observer guard, so the same four
         // tracked scopes throw and the same observer-free ones -- plus the
         // action step rc.9 documents -- stay silent.
-        assert_rule_findings(&findings, "until-in-tracked-scope", 4);
+        assert_rule_findings(&findings, "no-await-primitive-in-tracked-scope", 4);
         // rc.9 is older than the audited rc.13 (ADR 0194): one SC9014 notice
         // beside them.
         assert_eq!(
@@ -2027,7 +2027,8 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         );
         assert!(
             findings.iter().all(|finding| {
-                (finding["rule"] == "until-in-tracked-scope" && finding["kind"] == "violation")
+                (finding["rule"] == "no-await-primitive-in-tracked-scope"
+                    && finding["kind"] == "violation")
                     || finding["rule"] == "unaudited-solid-release"
             }),
             "{findings:#?}"
@@ -2165,7 +2166,7 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
             [Some(20), Some(27), Some(33)],
             "{findings:#?}"
         );
-        let writes = findings_for_rule(&findings, "reactive-write-in-owned-scope");
+        let writes = findings_for_rule(&findings, "no-write-in-pure-computation");
         // DefaultWrite, FalseWrite, DeferStreamWrite, BodyStaticWrite; the
         // module-scope static write is silent, and both unknown-form writes
         // are uncertifiable: no role places them (ADR 0332).

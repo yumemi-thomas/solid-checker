@@ -428,7 +428,15 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     /// visible is an obligation, never a read.
     pub(crate) typed_sources: &'a HashMap<SymbolId, crate::source_discovery::TypedSource>,
     pub(crate) accessor_origins: &'a HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
-    pub(crate) setters: &'a HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
+    pub(crate) setters: &'a HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    >,
     pub(crate) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) source_primitives: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) async_sources: &'a HashSet<SymbolId>,
@@ -1410,8 +1418,7 @@ impl LocalAccessContext<'_, '_> {
                 .dispatch_obligations
                 .push(typed_source_obligation(file, call.callee));
         }
-        if let Some((name, declaration, allowed_by_option, source_kind)) = self.setters.get(symbol)
-        {
+        if let Some((name, declaration, owned_write, source_kind)) = self.setters.get(symbol) {
             // Under a root owner `setSignal`'s guard throws on every
             // release; a store setter's only where the resolved signals
             // dropped the root exemption (rc.9). In dev a component body
@@ -1475,7 +1482,7 @@ impl LocalAccessContext<'_, '_> {
                     location: location(file.path.shared(), call.span),
                     declaration: declaration.clone(),
                     execution: write_execution,
-                    allowed_by_option: *allowed_by_option,
+                    owned_write: *owned_write,
                     context: analysis_context(
                         file,
                         call.span,

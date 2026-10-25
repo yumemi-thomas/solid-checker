@@ -14,8 +14,12 @@ use crate::project::declarations_for_symbol;
 use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::sync::Arc;
-use tsrs_ast::{Node, Symbol, get_source_file_of_node, is_module_declaration};
-use tsrs_checker::types::{ElementFlags, LiteralValue, SignatureKind, Type, TypeExt, TypeFlags};
+use tsrs_ast::{
+    Node, Symbol, get_source_file_of_node, is_module_block, is_module_declaration, is_source_file,
+};
+use tsrs_checker::types::{
+    ElementFlags, LiteralValue, ObjectFlags, SignatureKind, Type, TypeExt, TypeFlags,
+};
 use tsrs_compiler::Checker;
 use tsrs_compiler::Program;
 use tsrs_core::P;
@@ -725,6 +729,155 @@ fn minimum_parameter_count(checker: &mut Checker, value: P<Type>) -> u32 {
         minimum = Some(minimum.map_or(count, |current| current.min(count)));
     }
     u32::try_from(minimum.unwrap_or(0)).unwrap_or(u32::MAX)
+}
+
+/// ADR 0394: the property names the type at exactly the demanded expression
+/// declares, or `None` unless they are all known. Known means every
+/// constituent that can hold a value is an object type (a union adds the
+/// names of each member, an intersection of each member) with no index
+/// signature of any key type, whose own property list the compiler resolves
+/// completely. `any`, `unknown`, `never`, a primitive, a type parameter or any
+/// other instantiable type, a generic mapped type, a mapped type with an `as`
+/// clause, a reverse-mapped or evolving type, and a property the compiler names
+/// internally (a symbol key) each make the answer `None`; so does a type whose
+/// only constituents are nullish. Names are sorted and deduplicated.
+///
+/// The answer is the declared type's, not the value's: a value typed
+/// `{ class?: string }` may hold more keys at run time (structural subtyping).
+/// ADR 0394 states that premise.
+pub fn declared_keys_at(checker: &mut Checker, node: P<Node>) -> Option<Vec<Arc<str>>> {
+    let value = checker.get_type_at_location(node);
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    let mut objects = 0usize;
+    collect_declared_keys(checker, value, &mut names, &mut objects)?;
+    if objects == 0 {
+        return None;
+    }
+    Some(names.into_iter().map(Arc::from).collect())
+}
+
+/// Whether `value` is an instantiation of a top-level type alias whose type
+/// arguments are all [`closed_type`].
+fn closed_top_level_alias(checker: &mut Checker, value: P<Type>, depth: usize) -> bool {
+    let Some(alias) = value.alias() else {
+        return false;
+    };
+    let Some(symbol) = alias.symbol() else {
+        return false;
+    };
+    symbol.declarations().iter().all(|declaration| {
+        declaration
+            .parent()
+            .is_some_and(|parent| is_source_file(parent) || is_module_block(parent))
+    }) && alias
+        .type_arguments()
+        .iter()
+        .all(|argument| closed_type(checker, *argument, depth + 1))
+}
+
+/// Whether `value` mentions no type variable on a path that can fix a key set:
+/// an instantiable type, a reference argument or a mapped type's alias argument.
+fn closed_type(checker: &mut Checker, value: P<Type>, depth: usize) -> bool {
+    if depth > 8 || value.flags().intersects(TypeFlags::Instantiable) {
+        return false;
+    }
+    if value
+        .flags()
+        .intersects(TypeFlags::Union | TypeFlags::Intersection)
+    {
+        return value
+            .types()
+            .iter()
+            .all(|member| closed_type(checker, *member, depth + 1));
+    }
+    if !value.flags().intersects(TypeFlags::Object) {
+        return true;
+    }
+    if value.object_flags().intersects(ObjectFlags::Mapped) {
+        return closed_top_level_alias(checker, value, depth);
+    }
+    if value.object_flags().intersects(ObjectFlags::Reference) {
+        return checker
+            .get_type_arguments_exported(value)
+            .iter()
+            .all(|argument| closed_type(checker, *argument, depth + 1));
+    }
+    true
+}
+
+/// One constituent of [`declared_keys_at`]'s walk. `None` is "not exact".
+fn collect_declared_keys(
+    checker: &mut Checker,
+    value: P<Type>,
+    names: &mut BTreeSet<String>,
+    objects: &mut usize,
+) -> Option<()> {
+    let flags = value.flags();
+    if flags.intersects(OPEN | TypeFlags::Instantiable) {
+        return None;
+    }
+    if flags.intersects(TypeFlags::Union | TypeFlags::Intersection) {
+        for member in value.types() {
+            // A nullish member spreads as nothing; it adds no key.
+            if member
+                .flags()
+                .intersects(TypeFlags::Undefined | TypeFlags::Null | TypeFlags::Void)
+            {
+                continue;
+            }
+            collect_declared_keys(checker, *member, names, objects)?;
+        }
+        return Some(());
+    }
+    if flags != TypeFlags::Object
+        || value.object_flags().intersects(
+            ObjectFlags::ReverseMapped
+                | ObjectFlags::EvolvingArray
+                | ObjectFlags::InstantiationExpressionType,
+        )
+    {
+        return None;
+    }
+    let properties = checker.get_properties_of_type_exported(value);
+    if !checker.get_index_infos_of_type_exported(value).is_empty() {
+        return None;
+    }
+    if value.object_flags().intersects(ObjectFlags::Mapped) {
+        // Resolving the members above computed the constraint. Only a
+        // constraint that is a union of literal keys fixes the key set.
+        let mapped = value.as_mapped_type();
+        // An `as` clause renames each key through a type the checker drops
+        // silently when it stays deferred (a conditional on an unresolved type
+        // parameter), so the key set is trusted only for a top-level alias
+        // (`Omit<T, K>`) instantiated with arguments free of type variables.
+        if mapped
+            .declaration
+            .get()?
+            .as_mapped_type_node()
+            .name_type()
+            .is_some()
+            && !closed_top_level_alias(checker, value, 0)
+        {
+            return None;
+        }
+        let constraint = mapped.constraint_type()?;
+        if !constraint
+            .distributed()
+            .iter()
+            .all(|key| key.flags().intersects(TypeFlags::StringLiteral))
+        {
+            return None;
+        }
+    }
+    for property in properties {
+        let name = property.name();
+        if name.starts_with(tsrs_ast::INTERNAL_SYMBOL_NAME_PREFIX) {
+            return None;
+        }
+        names.insert(name.to_owned());
+    }
+    *objects += 1;
+    Some(())
 }
 
 /// Go: `libraryTypesAtLocked`: the standard-library types the type at exactly

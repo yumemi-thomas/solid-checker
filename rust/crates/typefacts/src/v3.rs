@@ -46,8 +46,11 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V21: u64 = 21;
 /// v22 keeps the rows of v21 under a new number: a v21 table from another build
 /// is refused, so the merged line's transitions carry 22.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V22: u64 = 22;
+/// v23 adds the declared-keys entity field (ADR 0394): row flag bit 16 followed,
+/// when set, by a count and that many strings, after the runtime binding kind.
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V23: u64 = 23;
 /// Every Wire table schema a transition may carry (v10 is retired).
-pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 19] = [
+pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 20] = [
     TYPE_FACTS_TABLE_SCHEMA_V3,
     TYPE_FACTS_TABLE_SCHEMA_V4,
     TYPE_FACTS_TABLE_SCHEMA_V5,
@@ -67,10 +70,11 @@ pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 19] = [
     TYPE_FACTS_TABLE_SCHEMA_V20,
     TYPE_FACTS_TABLE_SCHEMA_V21,
     TYPE_FACTS_TABLE_SCHEMA_V22,
+    TYPE_FACTS_TABLE_SCHEMA_V23,
 ];
 
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:ff5a9ac55ed6ea694c6b8a02d37652fb03ac735eae84985e6957c460040aa8b8";
+    "sha256:30a8ab33da6469011c74e8802729a9d3eca8f5c9e5d1a623ba5522ac3cc8aa2b";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -481,7 +485,9 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // Protocol 82 (ADR 0368) adds `ModuleFact.root`; a protocol-81 consumer
 // decodes with `deny_unknown_fields` and would reject it.
 // Protocol 83 (ADR 0368 review) adds the `Modules` answer's `unmappedRoots`.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 83;
+// Protocol 84 (ADR 0394) adds the `declaredKeys` demand and entity field, carried
+// by Wire table schema v23; a protocol-83 consumer would refuse the new bit.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 84;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -566,6 +572,8 @@ pub struct EntityDemand {
     pub reference_space: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub runtime_identity: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub declared_keys: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -789,6 +797,7 @@ pub const DEMAND_FLAG_PRIMITIVE_VALUE_DOMAIN: u64 = 1 << 15;
 pub const DEMAND_FLAG_CONSTRUCTABILITY: u64 = 1 << 16;
 pub const DEMAND_FLAG_PRIMITIVE_LITERAL_CANDIDATES: u64 = 1 << 17;
 pub const DEMAND_FLAG_PARAMETER_OBJECT_SHAPE: u64 = 1 << 18;
+pub const DEMAND_FLAG_DECLARED_KEYS: u64 = 1 << 19;
 
 pub(crate) fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
     while value >= 0x80 {
@@ -838,6 +847,7 @@ pub(crate) mod rows {
     pub(crate) const ENTITY_CONSTRUCTABILITY: u64 = 1 << 13;
     pub(crate) const ENTITY_PRIMITIVE_LITERAL_CANDIDATES: u64 = 1 << 14;
     pub(crate) const ENTITY_RUNTIME_BINDING_KIND: u64 = 1 << 15;
+    pub(crate) const ENTITY_DECLARED_KEYS: u64 = 1 << 16;
 
     pub(crate) const PARAMETER_DECLARATION: u64 = 1 << 0;
     pub(crate) const PARAMETER_REST: u64 = 1 << 1;
@@ -1347,6 +1357,7 @@ fn decode_entity_run(
             | TYPE_FACTS_TABLE_SCHEMA_V20
             | TYPE_FACTS_TABLE_SCHEMA_V21
             | TYPE_FACTS_TABLE_SCHEMA_V22 => 65535,
+            TYPE_FACTS_TABLE_SCHEMA_V23 => 131071,
             TYPE_FACTS_TABLE_SCHEMA_V15 | TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
             TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
@@ -1532,6 +1543,17 @@ fn decode_entity_run(
         } else {
             None
         };
+        let declared_keys = if flags & rows::ENTITY_DECLARED_KEYS != 0 {
+            let count = cursor.u64()?;
+            let mut names =
+                Vec::with_capacity(usize::try_from(count).unwrap_or_default().min(1024));
+            for _ in 0..count {
+                names.push(cursor.string_index(strings, "declared key")?);
+            }
+            Some(Arc::new(names))
+        } else {
+            None
+        };
         // Bit 6 is the unresolved flag of a symbol-less entity. From Wire v21 a
         // symbol-bearing entity reads it as "the symbol covers the whole span";
         // before v21 that row is refused, as it always was.
@@ -1568,6 +1590,7 @@ fn decode_entity_run(
             array_shape,
             tuple_shape,
             library_types,
+            declared_keys,
             primitive_value_domain,
             primitive_literal_candidates,
             reference_space,
@@ -2132,6 +2155,9 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
         }
         if demand.constructability {
             flags |= DEMAND_FLAG_CONSTRUCTABILITY;
+        }
+        if demand.declared_keys {
+            flags |= DEMAND_FLAG_DECLARED_KEYS;
         }
         let group = groups.last_mut().expect("group pushed above");
         let has_query = u64::from(demand.query_location.is_some());

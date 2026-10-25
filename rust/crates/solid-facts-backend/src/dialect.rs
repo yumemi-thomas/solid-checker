@@ -272,7 +272,27 @@ pub const RULE_ALIASES: &[(&str, &str)] = &[
         "v1/expected-function-got-expression",
         "v1/reactive-handler-frozen",
     ),
-    ("resolve-in-reactive-scope", "resolve-in-tracked-scope"),
+    // ADR 0381: catalog names follow eslint-plugin-solid where it still
+    // describes what the checker proves.
+    (
+        "reactive-write-in-owned-scope",
+        "no-write-in-pure-computation",
+    ),
+    ("no-direct-mutation", "no-store-mutation-outside-setter"),
+    // ADR 0384: `resolve` and `until` are one rule, `SC2004` and `SC2005`.
+    (
+        "resolve-in-tracked-scope",
+        "no-await-primitive-in-tracked-scope",
+    ),
+    (
+        "resolve-in-reactive-scope",
+        "no-await-primitive-in-tracked-scope",
+    ),
+    (
+        "until-in-tracked-scope",
+        "no-await-primitive-in-tracked-scope",
+    ),
+    ("server-function-module-directive", "valid-use-server"),
     (
         "sync-node-received-async",
         "sync-computation-received-async",
@@ -307,6 +327,10 @@ pub struct SemanticDemandCapabilities {
     pub array_map_receiver_types: bool,
     pub async_array_map_callbacks: bool,
     pub server_argument_library_types: bool,
+    /// ADR 0394: the declared key set of a spread argument on an intrinsic
+    /// element, which `missing-owner` asks to prove the spread holds no
+    /// listener key.
+    pub spread_declared_keys: bool,
 }
 
 impl SemanticDemandCapabilities {
@@ -314,6 +338,7 @@ impl SemanticDemandCapabilities {
         array_map_receiver_types: false,
         async_array_map_callbacks: false,
         server_argument_library_types: false,
+        spread_declared_keys: false,
     };
     /// Only the 2.0 catalog carries `server-function-rich-argument`, so only it
     /// pays for the library-type identities that rule reads.
@@ -321,6 +346,7 @@ impl SemanticDemandCapabilities {
         array_map_receiver_types: true,
         async_array_map_callbacks: true,
         server_argument_library_types: true,
+        spread_declared_keys: true,
     };
 }
 

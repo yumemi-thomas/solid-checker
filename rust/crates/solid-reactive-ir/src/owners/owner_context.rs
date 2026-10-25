@@ -997,8 +997,12 @@ pub(crate) fn fresh_stack_scheduler_edges(
             let callability = lookup
                 .entity_at(file.path.as_str(), argument.span)
                 .and_then(|entity| entity.callability);
-            crate::runtime_semantics::argument_behavior(resolved, callability, *index)
-                .is_some_and(crate::runtime_semantics::RuntimeArgumentBehavior::runs_on_fresh_stack)
+            crate::runtime_semantics::argument_behavior(resolved, callability, *index).map_or_else(
+                // ADR 0396: a reviewed test runner invokes a registered callback
+                // from its own scheduler.
+                || lookup.is_test_runner_registration(file, call),
+                crate::runtime_semantics::RuntimeArgumentBehavior::runs_on_fresh_stack,
+            )
         })
         .map(|(argument, _)| OwnerCallbackEdge {
             argument,

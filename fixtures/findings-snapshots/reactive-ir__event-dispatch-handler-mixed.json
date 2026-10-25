@@ -1,0 +1,35 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-dispatch-handler-mixed/App.tsx",
+      "start": 609,
+      "end": 630,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-dispatch-handler-mixed/App.tsx",
+      "start": 618,
+      "end": 625,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-dispatch-handler-mixed/App.tsx",
+      "start": 642,
+      "end": 660,
+      "fixes": 0
+    }
+  ]
+}

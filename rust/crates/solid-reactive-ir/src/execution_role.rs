@@ -275,7 +275,7 @@ pub(super) fn semantic_execution_role(
 /// ([`solid_dialect::Dialect::callback_runs_in_created_root`]) and, where the
 /// dialect says so, directly in a component body
 /// ([`solid_dialect::Dialect::component_body_runs_under_root`]).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(super) enum RootBodyGuard {
     /// The guard rejects the operation under a root, as under any
     /// children-capable owner: signal setters, `refresh` and action calls on

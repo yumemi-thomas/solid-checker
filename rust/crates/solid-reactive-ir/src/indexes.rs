@@ -29,6 +29,7 @@ mod initialization;
 mod intrinsics;
 mod member_values;
 mod primitive_proof;
+mod test_runner;
 pub(crate) use intrinsics::mentions_word;
 
 /// What every reflective definer spelling in the project says about the key
@@ -804,9 +805,20 @@ pub(super) struct SemanticLookup<'a> {
     identity_wrappers: OnceLock<HashMap<&'a str, usize>>,
     /// ADR 0319: every literal's invocation-flow answer.
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
+    /// ADR 0400: the write-flow answer of every function handed to project
+    /// code.
+    write_flow_answers:
+        OnceLock<HashMap<crate::execution_role::WriteFlowKey, (crate::ExecutionRole, bool)>>,
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
-    synchronous_event_dispatch: OnceLock<bool>,
+    /// ADR 0396: the literals whose every invocation is a test runner's.
+    test_invoked_literals: OnceLock<HashSet<(String, Span)>>,
+    /// ADR 0393: every dispatch call with the receiver and caller its own
+    /// position decides.
+    placed_event_dispatch: OnceLock<Vec<event_delivery::DispatchSite>>,
+    /// ADR 0395: [`Self::placed_event_dispatch`] with the sites in an
+    /// event-only function. The veto reads this one.
+    synchronous_event_dispatch: OnceLock<Vec<event_delivery::DispatchSite>>,
     /// ADR 0320: whether some call may copy keys into an existing object.
     objects_assigned_into: OnceLock<bool>,
     router_params: OnceLock<crate::router_params::RouterParamsStatus>,
@@ -1035,7 +1047,10 @@ impl<'a> SemanticLookup<'a> {
             functions_by_symbol: OnceLock::new(),
             identity_wrappers: OnceLock::new(),
             invocation_flow_answers: OnceLock::new(),
+            write_flow_answers: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
+            test_invoked_literals: OnceLock::new(),
+            placed_event_dispatch: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
             objects_assigned_into: OnceLock::new(),
             router_params: OnceLock::new(),
@@ -1499,7 +1514,32 @@ impl<'a> SemanticLookup<'a> {
                 hasher.update(file.source_hash.as_str().as_bytes());
             }
             hasher.update(b"synchronous-event-dispatch\0");
-            hasher.update([u8::from(self.synchronous_event_dispatch_present())]);
+            hasher.update([
+                u8::from(self.synchronous_event_dispatch_present()),
+                u8::from(self.synchronous_event_read_dispatch_present()),
+            ]);
+            // ADR 0400: a write's role in a function handed to project
+            // code is the same walk's answer for writes. Only an answer that
+            // read another module than the function's own can move with that
+            // module's contents; one that read only its own is a function of
+            // its own file, which the file's fragment already keys on.
+            let mut writes = self
+                .write_flow_answers()
+                .iter()
+                .filter(|(_, (_, across_modules))| *across_modules)
+                .collect::<Vec<_>>();
+            writes.sort_unstable_by(|left, right| {
+                (&left.0.0, left.0.1, left.0.2 as u8).cmp(&(&right.0.0, right.0.1, right.0.2 as u8))
+            });
+            hasher.update(b"write-flow-answers\0");
+            for ((path, span, guard), (role, _)) in writes {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+                hasher.update(format!("{guard:?}:{role:?}").as_bytes());
+                hasher.update([0]);
+            }
             // ADR 0319: an invocation-flow proof follows a function value
             // through any file of a closed program -- bindings, returns,
             // object members, callee parameters, component props -- so a
@@ -1784,11 +1824,27 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| crate::execution_role::invocation_flow_answers(self))
     }
 
+    /// ADR 0400: the write-flow answer of every function handed to project
+    /// code, computed once.
+    pub(crate) fn write_flow_answers(
+        &self,
+    ) -> &HashMap<crate::execution_role::WriteFlowKey, (crate::ExecutionRole, bool)> {
+        self.write_flow_answers
+            .get_or_init(|| crate::execution_role::write_flow_answers(self))
+    }
+
     /// The literals whose every invocation comes through event delivery, for the
     /// owner seeds; see [`crate::execution_role::event_invoked_literals`].
     pub(crate) fn event_invoked_literals(&self) -> &HashSet<(String, Span)> {
         self.event_invoked_literals
             .get_or_init(|| crate::execution_role::event_invoked_literals(self))
+    }
+
+    /// ADR 0396: the helper literals every invocation of which is written in a
+    /// test runner's callback; see [`crate::execution_role::test_invoked_literals`].
+    pub(crate) fn test_invoked_literals(&self) -> &HashSet<(String, Span)> {
+        self.test_invoked_literals
+            .get_or_init(|| crate::execution_role::test_invoked_literals(self))
     }
 
     pub(super) fn tuple_iteration_may_be_mutated(&self) -> bool {

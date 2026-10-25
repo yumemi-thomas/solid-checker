@@ -548,8 +548,29 @@ pub struct ReactiveWrite {
     pub location: Location,
     pub declaration: Location,
     pub execution: ExecutionRole,
-    pub allowed_by_option: bool,
+    #[serde(default)]
+    pub owned_write: OwnedWriteOption,
     pub context: Arc<str>,
+}
+
+/// What a source's options argument proves about `ownedWrite` (ADR 0382),
+/// the node option that exempts the source's setter from the owned-scope
+/// write guard. Only an exact object literal proves the key present or
+/// absent; an options value the syntax does not show may carry it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OwnedWriteOption {
+    /// The key is absent or `false`, or the primitive's node does not read
+    /// it (the store family: `@solidjs/signals@2.0.0-rc.17`
+    /// `dist/dev.js:5847-5944`, `storeSetter` and `createStore$1`, never
+    /// consult `options.ownedWrite`).
+    #[default]
+    Off,
+    /// The final `ownedWrite` property of an exact literal is `true`.
+    On,
+    /// An identifier, spread, wrapped literal or other value: the option may
+    /// be set, so a write is neither proven allowed nor proven a violation.
+    Unknown,
 }
 
 impl ReactiveWrite {
@@ -944,7 +965,7 @@ impl StaticDefectFamily {
             Self::ExpectedFunctionGotExpression => "expected-function-got-expression",
             Self::HandlerOwnerUnresolved => "handler-owner-unresolved",
             Self::UncalledAccessor => "uncalled-accessor",
-            Self::DirectMutation => "no-direct-mutation",
+            Self::DirectMutation => "no-store-mutation-outside-setter",
             Self::ServerFunctionRichArgument => "server-function-rich-argument",
         }
     }
@@ -1252,6 +1273,27 @@ pub struct Program {
     /// proven ([`site_in_undecided_component`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub undecided_component_regions: Vec<UndecidedRegion>,
+    /// Every synchronous DOM dispatch call (ADR 0356, 0393) and what it
+    /// withholds, so a report can list what keeps event proofs out of reach.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub event_dispatch_sites: Vec<EventDispatchSite>,
+}
+
+/// One call of `EventTarget.dispatchEvent` or `HTMLElement.click`.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventDispatchSite {
+    pub path: String,
+    pub line: u32,
+    /// `element`, `unknown`, `window` or `document`.
+    pub receiver: String,
+    /// The caller proven to have no owner, when one is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caller: Option<String>,
+    /// Owner and write proofs of event handlers are withheld program-wide.
+    pub withholds_owner_proofs: bool,
+    /// Untracked-read proofs of event handlers are withheld program-wide.
+    pub withholds_read_proofs: bool,
 }
 
 /// The body of a function analyzed as a component because it returns JSX,
@@ -2084,6 +2126,33 @@ fn call_primitive_name(
         call_option_literal(file, call, argument, key)
     });
     Some(PrimitiveName::Known(form, spelling))
+}
+
+/// What `call`'s options argument proves about `ownedWrite` for a source made
+/// by `primitive` (ADR 0382). A primitive that returns a store never reads
+/// the option, so it is `Off` whatever the argument holds; an unresolved
+/// primitive reads the first options slot and keeps an unreadable value
+/// `Unknown`.
+pub(crate) fn owned_write_option(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: Option<solid_dialect::Primitive>,
+    dialect: &dyn Dialect,
+) -> OwnedWriteOption {
+    use solid_dialect::OptionLiteral;
+    let index = match primitive {
+        Some(primitive) if dialect.returns_store(primitive) => return OwnedWriteOption::Off,
+        Some(primitive) => match dialect.options_argument(primitive) {
+            Some(index) => index,
+            None => return OwnedWriteOption::Off,
+        },
+        None => 1,
+    };
+    match call_option_literal(file, call, index, "ownedWrite") {
+        OptionLiteral::Absent | OptionLiteral::False => OwnedWriteOption::Off,
+        OptionLiteral::True => OwnedWriteOption::On,
+        OptionLiteral::Unknown => OwnedWriteOption::Unknown,
+    }
 }
 
 /// What `call`'s syntax proves about the boolean option `key` in its

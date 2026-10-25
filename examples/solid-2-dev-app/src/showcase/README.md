@@ -14,7 +14,7 @@ SOLID_TYPEFACTS_BIN=../../bin/solid-typefacts \
 
 | File | Diagnostic | Outcome | Why it needs solid-checker (not eslint) |
 | --- | --- | --- | --- |
-| `CrossFileWrite.tsx` (+ `lib/reactive-helpers.ts`) | `SC2001` reactive-write-in-owned-scope | violation | Follows an aliased `createMemo` across a re-export in another file; a per-file linter can't resolve the setter through the module boundary. |
+| `CrossFileWrite.tsx` (+ `lib/reactive-helpers.ts`) | `SC2001` no-write-in-pure-computation | violation | Follows an aliased `createMemo` across a re-export in another file; a per-file linter can't resolve the setter through the module boundary. |
 | `Uncertifiable.tsx` | `SC4001` no-owner-effect | **uncertifiable** | An exported effect whose caller ownership can't be proven in-project. Fail-closed: neither certified nor a definite violation. eslint has no "can't prove it" verdict. |
 | `AsyncLoadingBoundary.tsx` | `SC5003` async-outside-loading-boundary | violation | Uses the Solid Oxc compiler's JSX execution facts to prove an async read has no dominating `<Loading>` boundary. |
 | `LookalikeAccessor.tsx` | `SC1002` reactive-read-after-await | violation | Type-aware: flags the real branded `Accessor` read after `await` but leaves an identical-looking plain function call alone — no false positive. |

@@ -1,5 +1,8 @@
 declare namespace JSX {
-  interface IntrinsicElements { div: {} }
+  interface IntrinsicElements {
+    div: { ref?: (node: HTMLDivElement) => void };
+    dialog: { ref?: (node: HTMLDialogElement) => void };
+  }
 }
 
 declare module "solid-js" {

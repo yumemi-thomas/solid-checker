@@ -289,7 +289,7 @@ fn project_rule_options_disable_one_exact_catalog_rule() {
     assert!(
         findings
             .iter()
-            .all(|finding| finding["rule"] != "reactive-write-in-owned-scope"),
+            .all(|finding| finding["rule"] != "no-write-in-pure-computation"),
         "the exact disabled rule still reported: {findings:#?}"
     );
 }

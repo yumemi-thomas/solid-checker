@@ -8,14 +8,22 @@ use super::*;
 struct SourceTables {
     accessors: HashMap<SymbolId, (SymbolId, Location)>,
     accessor_origins: HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
-    setters: HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
+    setters: HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    >,
     actions: HashMap<SymbolId, (SymbolId, Location)>,
     source_kinds: HashMap<SymbolId, ReactiveSourceKind>,
     source_primitives: HashMap<SymbolId, SymbolId>,
     source_phases: HashMap<SymbolId, u8>,
     returned_source_symbols: HashSet<SymbolId>,
     summary_source_symbols: HashSet<SymbolId>,
-    source_owned_write: HashMap<SymbolId, bool>,
+    source_owned_write: HashMap<SymbolId, crate::OwnedWriteOption>,
     async_sources: HashSet<SymbolId>,
     source_async_options: HashMap<SymbolId, AsyncSourceOptions>,
     value_form_stores: HashSet<SymbolId>,
@@ -579,15 +587,20 @@ fn discover_typed_sources(
             | solid_dialect::TypeRole::Signal
             | solid_dialect::TypeRole::Store => unreachable!(),
             solid_dialect::TypeRole::Setter | solid_dialect::TypeRole::StoreSetter => {
-                let kind = if role == solid_dialect::TypeRole::StoreSetter {
-                    ReactiveSourceKind::Store
+                let (kind, owned_write) = if role == solid_dialect::TypeRole::StoreSetter {
+                    (ReactiveSourceKind::Store, crate::OwnedWriteOption::Off)
                 } else {
-                    ReactiveSourceKind::Accessor
+                    // Found by its type alone: the source, and so its options,
+                    // are out of view (ADR 0382).
+                    (
+                        ReactiveSourceKind::Accessor,
+                        crate::OwnedWriteOption::Unknown,
+                    )
                 };
                 setters.entry(symbol.clone()).or_insert((
                     symbol_id(name.as_ref()),
                     declaration_location,
-                    false,
+                    owned_write,
                     kind,
                 ));
             }

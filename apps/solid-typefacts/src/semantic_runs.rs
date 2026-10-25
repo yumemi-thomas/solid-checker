@@ -39,8 +39,8 @@ use crate::resolved_calls::{CallCaches, CallDemand, CallRun};
 use crate::runtime_facts::{runtime_binding_kind, runtime_identity};
 use crate::type_facts::{
     DescriptorMemo, array_shape_at, callability_of_type, constructability_of_type,
-    library_types_at, primitive_literal_candidates_of_type, primitive_value_domain_of_type,
-    runtime_value_domain_of_type, tuple_shape_at,
+    declared_keys_at, library_types_at, primitive_literal_candidates_of_type,
+    primitive_value_domain_of_type, runtime_value_domain_of_type, tuple_shape_at,
 };
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
@@ -117,6 +117,7 @@ fn wants_beyond_symbol(demand: &EntityDemand) -> bool {
         || demand.array_shape
         || demand.tuple_shape
         || demand.library_types
+        || demand.declared_keys
         || demand.reference_space
         || demand.runtime_identity
 }
@@ -438,6 +439,11 @@ pub fn run(
             {
                 entity.library_types =
                     library_types_at(env.checker, env.program, node).map(Arc::new);
+            }
+            if demand.declared_keys
+                && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
+            {
+                entity.declared_keys = declared_keys_at(env.checker, node).map(Arc::new);
             }
             note_unported(demand, unavailable);
             if demand.resolved_call {

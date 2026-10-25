@@ -91,6 +91,107 @@ pub(super) const FRESH_STACK_SCHEDULERS: &[&str] = &[
     "ReportingObserver.construct",
 ];
 
+/// ADR 0396: the test runners whose registered callbacks are reviewed to run
+/// with no Solid owner and outside every strict-read window. Each entry is a
+/// run of consecutive path components of an installed declaration file (so a
+/// project directory named `vitest` is not one: `node_modules` leads each),
+/// matched on the declaration the callee's root identifier resolves to, never
+/// on a spelling. The premise reads each runner's published source: the runner
+/// invokes every registered test, suite body and hook from its own scheduler
+/// (an awaited call from its collection or run loop), with no Solid API on
+/// the stack. A runner configured to wrap tests in a Solid root, or patched,
+/// is outside it (ADR 0396).
+///
+/// - `vitest` and `@vitest/runner`: the declarations of `test`, `it`,
+///   `describe`, `suite` and the hooks (vitest 5 declares them in its own
+///   package, vitest 4 re-exports `@vitest/runner`'s, the package that holds
+///   the runner loop; its `globals` typing lives in the same package);
+/// - `bun:test` (`bun-types/test.d.ts`) and `node:test`
+///   (`@types/node/test.d.ts`): the module declarations, whose `describe` is
+///   `suite` and `it` is `test`;
+/// - `@playwright/test` and `playwright/types/test.d.ts`, where `test` is
+///   declared;
+/// - `@jest/globals`, `@types/jest` and `@types/mocha`.
+const TEST_RUNNER_DECLARATIONS: &[&[&str]] = &[
+    &["node_modules", "vitest"],
+    &["node_modules", "@vitest", "runner"],
+    &["node_modules", "bun-types", "test.d.ts"],
+    &["node_modules", "@types", "node", "test.d.ts"],
+    &["node_modules", "@playwright", "test"],
+    &["node_modules", "playwright", "types", "test.d.ts"],
+    &["node_modules", "@jest", "globals"],
+    &["node_modules", "@types", "jest"],
+    &["node_modules", "@types", "mocha"],
+];
+
+/// The declared names of the runners' registration functions: tests and
+/// suites, and the hooks (`before` and `after` are `node:test`'s and mocha's
+/// spelling of `beforeAll` and `afterAll`).
+const TEST_RUNNER_FUNCTIONS: &[&str] = &[
+    "test",
+    "it",
+    "describe",
+    "suite",
+    "beforeEach",
+    "afterEach",
+    "beforeAll",
+    "afterAll",
+    "before",
+    "after",
+];
+
+/// The members a registration function carries that register the same kind of
+/// callback (`it.only`, `test.describe.serial`, `describe.skip`), and the ones
+/// of them that are called once before the registration (`test.each(rows)(…)`,
+/// `it.skipIf(cond)(…)`).
+const TEST_RUNNER_MODIFIERS: &[&str] = &[
+    "only",
+    "skip",
+    "todo",
+    "concurrent",
+    "sequential",
+    "parallel",
+    "serial",
+    "fails",
+    "fail",
+    "fixme",
+    "slow",
+    "describe",
+    "beforeEach",
+    "afterEach",
+    "beforeAll",
+    "afterAll",
+    "each",
+    "for",
+    "skipIf",
+    "runIf",
+];
+const TEST_RUNNER_CURRIED_MODIFIERS: &[&str] = &["each", "for", "skipIf", "runIf"];
+
+/// Whether a declaration of the name `name` in the file `path` is one of the
+/// reviewed runners' registration functions ([`TEST_RUNNER_DECLARATIONS`]).
+pub(super) fn test_runner_function_declaration(path: &str, name: &str) -> bool {
+    if !TEST_RUNNER_FUNCTIONS.contains(&name) {
+        return false;
+    }
+    let components = path.split(['/', '\\']).collect::<Vec<_>>();
+    TEST_RUNNER_DECLARATIONS.iter().any(|runner| {
+        components
+            .windows(runner.len())
+            .any(|window| window == *runner)
+    })
+}
+
+/// Whether `member` may follow a registration function in a callee chain.
+pub(super) fn test_runner_modifier(member: &str) -> bool {
+    TEST_RUNNER_MODIFIERS.contains(&member)
+}
+
+/// Whether the chain's call before the final registration may be `member(…)`.
+pub(super) fn test_runner_curried_modifier(member: &str) -> bool {
+    TEST_RUNNER_CURRIED_MODIFIERS.contains(&member)
+}
+
 /// The modules the Node runtime provides under a bare name (Node 24
 /// `module.builtinModules`, without the `_`-prefixed internals). A specifier
 /// naming one, or any `node:` specifier, loads the runtime's module rather

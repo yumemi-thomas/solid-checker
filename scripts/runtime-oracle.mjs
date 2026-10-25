@@ -175,7 +175,7 @@ const codeRules = {
   // ADR 0352: a default-less context with no provider throws when its reader renders.
   CONTEXT_NOT_FOUND: ["missing-context-provider"],
   SETTLED_CLEANUP_UNOWNED: ["missing-owner"],
-  REACTIVE_WRITE_IN_OWNED_SCOPE: ["reactive-write-in-owned-scope"],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: ["no-write-in-pure-computation"],
   CLEANUP_IN_FORBIDDEN_SCOPE: ["leaf-owner-forbidden-call"],
   PRIMITIVE_IN_FORBIDDEN_SCOPE: ["leaf-owner-forbidden-call"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["async-outside-loading-boundary"],
@@ -185,8 +185,8 @@ const codeRules = {
   MISSING_EFFECT_FN: ["missing-effect-function"],
   ACTION_CALLED_IN_OWNED_SCOPE: ["action-called-in-owned-scope"],
   // Thrown, not reported: see `thrownCodes`.
-  RESOLVE_IN_REACTIVE_SCOPE: ["resolve-in-tracked-scope"],
-  UNTIL_IN_REACTIVE_SCOPE: ["until-in-tracked-scope"],
+  RESOLVE_IN_REACTIVE_SCOPE: ["no-await-primitive-in-tracked-scope"],
+  UNTIL_IN_REACTIVE_SCOPE: ["no-await-primitive-in-tracked-scope"],
   FLUSH_IN_ACTION: ["flush-in-action"],
   FLUSH_IN_EFFECT_CALLBACK: ["flush-in-effect-callback"],
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: ["leaf-owner-forbidden-call"],

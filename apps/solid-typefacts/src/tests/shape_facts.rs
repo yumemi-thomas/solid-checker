@@ -564,6 +564,127 @@ tuple;\n";
     assert!(undemanded[0].library_types.is_none(), "undemanded");
 }
 
+/// ADR 0394: a key set is answered only when the checker resolves it
+/// completely. Every case names the expression and either its exact sorted
+/// keys or `None` for an open one.
+#[test]
+fn demanded_declared_keys_answer_only_complete_object_types() {
+    let source = "interface Props { class?: string; onClick?: () => void; id: string }\n\
+type Plain = { class?: string; style?: string };\n\
+type Other = { title?: string };\n\
+type Indexed = { class?: string; [key: string]: unknown };\n\
+type Templated = { class?: string; [key: `on${string}`]: unknown };\n\
+type Hide<T, K extends readonly (keyof T)[]> = { [P in keyof T as Exclude<P, K[number]>]: T[P] };\n\
+declare function omit<T extends Record<any, any>, K extends readonly (keyof T)[]>(props: T, ...keys: K): Hide<T, K>;\n\
+declare function generic<T extends { class?: string }>(props: T): Hide<T, [\"class\"]>;\n\
+declare function keyed<T>(props: T): Hide<T, [never]>;\n\
+declare const props: Props;\n\
+declare const plain: Plain;\n\
+declare const either: Plain | Other;\n\
+declare const optional: Plain | undefined;\n\
+declare const both: Plain & Other;\n\
+declare const indexed: Indexed;\n\
+declare const templated: Templated;\n\
+declare const loose: any;\n\
+declare const unknownValue: unknown;\n\
+declare const text: string;\n\
+declare const mixed: Plain | string;\n\
+declare const openUnion: Plain | Indexed;\n\
+declare const nothing: undefined;\n\
+declare const record: Record<string, string>;\n\
+declare const picked: Pick<Props, \"id\">;\n\
+declare const readonlyPlain: Readonly<Plain>;\n\
+declare const bare: object;\n\
+function body<T extends Plain>(genericP: T, genericQ: Hide<T, [\"class\"]>) { genericP; genericQ; }\n\
+function bodyK<K extends readonly (keyof Plain)[]>(genericR: Hide<Plain, K>) { genericR; }\n\
+\n\
+omit(props, \"class\", \"onClick\");\n\
+generic(plain);\n\
+keyed(plain);\n\
+props;\n\
+plain;\n\
+either;\n\
+optional;\n\
+both;\n\
+indexed;\n\
+templated;\n\
+loose;\n\
+unknownValue;\n\
+text;\n\
+mixed;\n\
+openUnion;\n\
+nothing;\n\
+record;\n\
+picked;\n\
+readonlyPlain;\n\
+bare;\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SHAPES_CONFIG), ("keys.ts", source)]);
+    let path = scratch.path("keys.ts");
+    let mut project = scratch.open();
+    let cases: [(&str, Option<&[&str]>); 23] = [
+        // `omit` of a known interface (the published `as`-clause shape) resolves to the keys that stay.
+        ("omit(props, \"class\", \"onClick\")", Some(&["id"])),
+        // A generic call instantiated with a concrete argument is concrete.
+        ("generic(plain)", Some(&["style"])),
+        ("keyed(plain)", Some(&["class", "style"])),
+        ("props", Some(&["class", "id", "onClick"])),
+        ("plain", Some(&["class", "style"])),
+        // A union holds the keys of every member; a nullish member adds none.
+        ("either", Some(&["class", "style", "title"])),
+        ("optional", Some(&["class", "style"])),
+        ("both", Some(&["class", "style", "title"])),
+        ("indexed", None),
+        ("templated", None),
+        ("loose", None),
+        ("unknownValue", None),
+        ("text", None),
+        ("mixed", None),
+        ("openUnion", None),
+        ("nothing", None),
+        ("record", None),
+        ("picked", Some(&["id"])),
+        ("readonlyPlain", Some(&["class", "style"])),
+        ("bare", None),
+        // Inside a generic body the key set is the instantiation's, unknown.
+        ("genericP", None),
+        ("genericQ", None),
+        // The `as` clause names its keys through a type variable.
+        ("genericR", None),
+    ];
+    let demands: Vec<EntityDemand> = cases
+        .iter()
+        .map(|(expression, _)| EntityDemand {
+            location: find_last(&path, source, expression),
+            declared_keys: true,
+            ..EntityDemand::default()
+        })
+        .collect();
+    let facts = entities(&mut project, &path, &demands);
+    assert_eq!(facts.len(), cases.len());
+    for ((expression, want), fact) in cases.iter().zip(&facts) {
+        let got: Option<Vec<&str>> = fact
+            .declared_keys
+            .as_ref()
+            .map(|names| names.iter().map(|name| &**name).collect());
+        assert_eq!(
+            got.as_deref(),
+            want.as_deref(),
+            "{expression} declared keys"
+        );
+    }
+
+    let undemanded = entities(
+        &mut project,
+        &path,
+        &[EntityDemand {
+            location: demands[0].location.clone(),
+            type_descriptor: true,
+            ..EntityDemand::default()
+        }],
+    );
+    assert!(undemanded[0].declared_keys.is_none(), "undemanded");
+}
+
 /// Go writes an internal library symbol name (`\xFEtype`) as a raw byte that
 /// clients read back as U+FFFD; the Rust producer spells what clients read.
 #[test]

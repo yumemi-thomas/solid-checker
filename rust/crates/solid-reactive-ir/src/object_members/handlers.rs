@@ -55,12 +55,35 @@ pub(crate) fn spread_index<'a>(
                         &modules,
                         &mut closed,
                     )
+                    .or_else(|| {
+                        declared_keys_hold_no_listener(lookup, file, spread.argument).then(Vec::new)
+                    })
                 };
                 spreads.insert(location(file.path.shared(), spread.argument), targets);
             }
         }
     }
     spreads
+}
+
+/// ADR 0394: a spread argument that no exact object resolves still holds no
+/// handler when the compiler gives its declared type a complete key set and the
+/// dialect lowers none of those keys as a listener. A key set the producer did
+/// not prove complete (an index signature, `any`, a union with an open member,
+/// a generic type) is no fact, and an unaudited dialect answers `None` for
+/// every key; both leave the spread unresolved.
+fn declared_keys_hold_no_listener(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    argument: Span,
+) -> bool {
+    lookup
+        .entity_at(file.path.as_str(), argument)
+        .and_then(|entity| entity.declared_keys.as_deref())
+        .is_some_and(|keys| {
+            keys.iter()
+                .all(|key| lookup.dialect.spread_key_is_event(key) == Some(false))
+        })
 }
 
 /// The handlers one spread argument supplies (see [`spread_index`]). An object

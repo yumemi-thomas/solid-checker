@@ -156,6 +156,18 @@ SC9012 is shared with Solid 1.x as
 warning severity means that no runtime defect has been proven; its
 `uncertifiable` kind still fails `--certify`.
 
+## What keeps a leaf callback open
+
+The leaf walk follows each call in the callback's synchronous extent to a
+project body or a resolved standard-library member; one call it cannot place
+leaves the callback an obligation, at the call written in it. Followed: local
+functions and arrows, imports resolved by path or alias, a method of an exact
+`new C(...)` instance. Open: a package with no dependency source, a function from
+a parameter, a destructured hook or a call result, a member of a field,
+parameter or element access, an inherited or twice-declared method, a project
+constructor, a reassigned `let` function and a synchronous DOM dispatcher
+(`focus()`, `showModal()`), optional or not (ADR 0397).
+
 ## How it is proven
 
 - **Primitive results.** A member call on the result of a primitive whose result holds a getter (`createSignal(1).slice(0)`, `createMemo(fn).bind(null)`, a chain, or a call on a `const pair = createSignal(1)` binding) is that value's method, not the primitive's, and its provenance is unstated. It raises `primitive-result-method`, an obligation, never silence. A primitive wrapper's method result is exempt only when its receiver is proven primitive at run time (a literal, a template, or an audited `String` or `Number` call), and a TypeScript assertion on the way voids the exemption, because the resolved declaration is a type fact.

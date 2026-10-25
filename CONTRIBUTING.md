@@ -8,7 +8,13 @@ compiler owns execution semantics, and tsrs owns checker facts.
 ## Prerequisites
 
 - Rust 1.99.1 with `rustfmt` and `clippy`, and the `wasm32-wasip1` target (the
-  Type Facts producer and its WASM reactor)
+  Type Facts producer and its WASM reactor) and `wasm32-wasip1-threads` (the
+  WASM lane of `make verify`; without it the build stops at "can't find crate
+  for `core`"): `rustup target add wasm32-wasip1 wasm32-wasip1-threads`
+- A one-time dependency fetch for each workspace, because the compiler-identity
+  step runs `cargo metadata --offline` and fails on a fresh machine until it
+  has run: `cargo +1.99.1 fetch --manifest-path rust/Cargo.toml` and
+  `cargo +1.99.1 fetch --manifest-path apps/solid-typefacts/Cargo.toml`
 - CMake (the producer's mimalloc allocator)
 - Node.js (the `tsc` oracle and the runtime resolver run it)
 - Bun 1.4.0 (published packages remain compatible with Node.js)

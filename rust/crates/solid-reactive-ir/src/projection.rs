@@ -593,7 +593,7 @@ pub fn project_findings(
             .writes
             .iter()
             .filter(|write| {
-                !write.allowed_by_option
+                write.owned_write != crate::OwnedWriteOption::On
                     && (write.execution.reports_disallowed_write()
                         || write.execution.reports_unplaced())
                     && (capabilities.untracked_rendering_writes
@@ -929,6 +929,11 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if write.is_uncertifiable() {
                 finding.kind = "uncertifiable".into();
             }
+            // The setter's source may carry `ownedWrite: true` in options the
+            // analysis cannot read (ADR 0382), which exempts the write.
+            if write.owned_write == crate::OwnedWriteOption::Unknown {
+                finding.kind = "uncertifiable".into();
+            }
         }
         FindingSeed::LeafOperation(operation) => {
             finding.fixes = operation.fix.clone().into_iter().collect();
@@ -963,13 +968,12 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
         FindingSeed::AsyncRead(read) => {
             finding.related_locations = vec![read.declaration.clone()];
             // Fail-honest: an options argument the analyzer cannot read may
-            // declare a loadingValue, and a declared first flight cannot
-            // throw — so the untracked-read error is no longer a *proven*
-            // runtime throw and becomes a proof obligation instead. The
-            // boundary rules keep their reporting: ordinary SC5003 is
-            // informational either way, and the leaf-owner SC5001 variant's
-            // throw is timing-dependent by nature.
-            if read.options_opaque && finding.id == "SC5001" {
+            // declare a loadingValue or seedLoadingValue, and a declared first
+            // flight neither throws (SC5001) nor needs a boundary (SC5003,
+            // SC5005; ADR 0388) — so the finding is no longer a *proven*
+            // defect and becomes a proof obligation instead.
+            if read.options_opaque && matches!(finding.id.as_str(), "SC5001" | "SC5003" | "SC5005")
+            {
                 finding.kind = "uncertifiable".into();
             }
             // The same escalation for the execution window: a host that may

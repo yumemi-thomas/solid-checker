@@ -116,13 +116,13 @@ that reaches none of the five gets no notice from this gap, and on the rc.9
 triple, the audited release, no notice at all.
 
 **The conservative answers.** An unknown or unresolved `@solidjs/signals`
-keeps the `Readonly` store answer, so [no-direct-mutation](no-direct-mutation.md)
+keeps the `Readonly` store answer, so [no-store-mutation-outside-setter](no-store-mutation-outside-setter.md)
 does not report a write to a store root's own property, and the notice says
 so. Reporting it would be unsafe: every signals release before rc.7 declares
 `Store<T> = Readonly<T>`, where `tsc` reports that write as TS2540, and the
 checker never reports what TypeScript already reports. `until` is not a name
 the vocabulary knows unless both `solid-js` and signals are at rc.5 or later,
-so [until-in-tracked-scope](until-in-tracked-scope.md) cannot fire on an
+so [no-await-primitive-in-tracked-scope](no-await-primitive-in-tracked-scope.md) cannot fire on an
 installation where the import is TS2305. `flush` is not claimed to throw
 inside an action step, so [flush-in-action](flush-in-action.md) is silent. A
 `dynamic` call with options on an unknown `@solidjs/web` is the form that
@@ -158,7 +158,7 @@ runs, and the notice keeps the project from being certified.
 
 Where a release changes an answer, the answer follows the installed package.
 From `@solidjs/signals` rc.7 the store root is not `Readonly`, so a root
-property write is reported by [no-direct-mutation](no-direct-mutation.md)
+property write is reported by [no-store-mutation-outside-setter](no-store-mutation-outside-setter.md)
 there, while through rc.6 it stays TypeScript's TS2540. rc.9's
 `omit(props, predicate)` invokes its predicate on every read of the returned
 view, so a predicate not proven inert is reported by

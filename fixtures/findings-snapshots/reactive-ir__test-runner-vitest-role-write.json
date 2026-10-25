@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/role-write/App.test.tsx",
+      "start": 687,
+      "end": 698,
+      "fixes": 0
+    }
+  ]
+}

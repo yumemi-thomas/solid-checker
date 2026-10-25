@@ -160,14 +160,22 @@ pub(crate) struct SourceDiscoveryIdentity {
 pub(crate) struct SourceDiscoveryContribution {
     pub(crate) accessors: Vec<(SymbolId, (SymbolId, Location))>,
     pub(crate) accessor_origins: Vec<(SymbolId, (SymbolId, SymbolId, Location))>,
-    pub(crate) setters: Vec<(SymbolId, (SymbolId, Location, bool, ReactiveSourceKind))>,
+    pub(crate) setters: Vec<(
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    )>,
     pub(crate) actions: Vec<(SymbolId, (SymbolId, Location))>,
     pub(crate) source_kinds: Vec<(SymbolId, ReactiveSourceKind)>,
     pub(crate) source_primitives: Vec<(SymbolId, SymbolName)>,
     pub(crate) source_phases: Vec<(SymbolId, u8)>,
     pub(crate) returned_source_symbols: Vec<SymbolId>,
     pub(crate) summary_source_symbols: Vec<SymbolId>,
-    pub(crate) source_owned_write: Vec<(SymbolId, bool)>,
+    pub(crate) source_owned_write: Vec<(SymbolId, crate::OwnedWriteOption)>,
     pub(crate) async_sources: Vec<SymbolId>,
     pub(crate) source_async_options: Vec<(SymbolId, crate::source_discovery::AsyncSourceOptions)>,
     /// Store bindings whose initializer is provably the value form
@@ -529,7 +537,12 @@ pub(crate) struct LocalAccessSymbolState {
     pub(crate) accessor: Option<(SymbolId, Location)>,
     pub(crate) typed_source: Option<crate::source_discovery::TypedSource>,
     pub(crate) accessor_origin: Option<(SymbolId, SymbolId, Location)>,
-    pub(crate) setter: Option<(SymbolId, Location, bool, ReactiveSourceKind)>,
+    pub(crate) setter: Option<(
+        SymbolId,
+        Location,
+        crate::OwnedWriteOption,
+        ReactiveSourceKind,
+    )>,
     pub(crate) action: Option<(SymbolId, Location)>,
     pub(crate) source_primitive: Option<SymbolId>,
     pub(crate) async_source: bool,

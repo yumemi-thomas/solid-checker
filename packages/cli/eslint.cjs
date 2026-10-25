@@ -710,7 +710,7 @@ function reportingRule(entry, catalog) {
     meta: {
       type: "problem",
       docs: {
-        description: `solid-checker ${entry.code} ${entry.name}`,
+        description: `solid-checker ${(entry.codes ?? [entry.code]).join("/")} ${entry.name}`,
         recommended: entry.defaultEnabled && !entry.uncertifiable,
         url: `${catalog.docsBaseUrl}/${entry.name}.md`
       },
@@ -802,7 +802,12 @@ const DEPRECATED_RULE_KEYS = [
   ["expected-function-got-expression", "reactive-handler-frozen"],
   // The `v1/` alias went with the 1.x catalog (ADR 0110): a deprecation alias
   // can only delegate to a rule that still exists, and its target does not.
-  ["resolve-in-reactive-scope", "resolve-in-tracked-scope"],
+  ["reactive-write-in-owned-scope", "no-write-in-pure-computation"],
+  ["no-direct-mutation", "no-store-mutation-outside-setter"],
+  ["resolve-in-tracked-scope", "no-await-primitive-in-tracked-scope"],
+  ["resolve-in-reactive-scope", "no-await-primitive-in-tracked-scope"],
+  ["until-in-tracked-scope", "no-await-primitive-in-tracked-scope"],
+  ["server-function-module-directive", "valid-use-server"],
   ["sync-node-received-async", "sync-computation-received-async"],
   // SC9005 was named for the removed package-contract model (ADR 0312).
   ["package-contract-incomplete", "package-behavior-unavailable"]

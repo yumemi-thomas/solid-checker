@@ -13,6 +13,10 @@
 // sweep's wall time on its own. Order never changes a finding: each project is
 // its own checker process, and the report is sorted.
 //
+// The manifest must name each app's repository and commit (`apps`); a corpus
+// that cannot be rebuilt at its commits is refused, since its sweeps compare
+// with nothing.
+//
 // Use the release binary: a debug build inflates certification about 19x.
 // Prefix the run with ~/.local/bin/sc-heavy when other agents share the
 // machine. Compare two reports with scripts/corpus-sweep-compare.mjs, by
@@ -22,6 +26,8 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { assertManifestProvenance } from "./lib/corpus-manifest.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const options = {
@@ -51,6 +57,7 @@ const appsRoot = resolve(options["apps-root"]);
 const checker = resolve(options.checker);
 const typefacts = resolve(options.typefacts);
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+assertManifestProvenance(manifest, manifestPath);
 const configuration = manifest.configuration;
 const rows = manifest.projects.map((row) => ({
   app: row.app,

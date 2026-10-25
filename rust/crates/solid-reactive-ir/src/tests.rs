@@ -504,6 +504,7 @@ fn exact_index_patch_replaces_local_alias_ids_without_retargeting_the_graph() {
         library_types: None,
         reference_space: None,
         runtime_identity: "".into(),
+        declared_keys: None,
     };
     let old = typescript_table(
         1,

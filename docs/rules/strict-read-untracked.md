@@ -30,7 +30,7 @@ and it mirrors where the runtime actually installs strict-read contexts (compone
 and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
 
 - **Plain assignment targets are writes, not reads.** `store.name = next` is
-  diagnosed by `no-direct-mutation` without also reporting `store.name` here.
+  diagnosed by `no-store-mutation-outside-setter` without also reporting `store.name` here.
   Only the member that *is* the written target is exempt: read-modify-write
   forms such as `store.count += 1` and `store.count++` keep the read finding
   because the old value is evaluated, and so do reads nested inside a target —
@@ -64,6 +64,20 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   uncertifiable. A JSX event handler (`onClick={...}`) is the compiler's event
   callback. Visible native synchronous dispatch withholds its execution proof
   (ADR 0356), so its reads are then uncertifiable; otherwise it is not reported.
+  A dispatch on the global `window` (or `document` on web rc.17), or written in
+  a scheduler callback or at module top level, does not withhold it (ADR 0393);
+  one in a `runWithOwner(null, …)` callback does, because that leaves the
+  enclosing strict-read window open. A dispatch in a callback a reviewed test
+  runner registers (ADR 0396, an async one included, or a helper only such
+  callbacks call, in a closed program, exported or not when every other
+  module's reference to it is a call, and a call past an `await` in an async
+  helper included; a literal handed to such a helper is one, ADR 0400), or
+  written in a function only events invoke (ADR 0395), does not withhold it
+  either, and a read in a registered test callback is placed outside every
+  strict-read window, as in a scheduled callback. A helper handed a literal
+  (`fireAndFlush(() => el.dispatchEvent(...))`) places the literal where the
+  helper's call runs it; the same helper also called from a component body
+  keeps the veto, and the literal's read is SC1001 there.
 - **A read an await may precede is uncertifiable.** Past an unconditional
   `await` the window is closed and the read is silent. Past a conditional
   (`if (c) await p`, `x ??= await p`, `f?.(await p)`, a labelled `break`), a

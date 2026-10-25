@@ -12,11 +12,14 @@ use super::*;
 // a slice pointer is fat. Behind a thin `Arc`, like `resolved_call` and
 // `type_descriptor` before it, it costs 8. Primitive literal candidates
 // use the same thin-Arc representation; the one new pointer raises the
-// deliberate retained-row ceiling by exactly 8 bytes.
+// deliberate retained-row ceiling by exactly 8 bytes. `declared_keys` (ADR
+// 0394) is the same thin `Arc` and raises it by 8 more: it is demanded only at
+// an intrinsic element's spread arguments, so a bare `Option` is the cheapest
+// way to carry its absence on every other row.
 #[test]
 fn retained_entity_rows_keep_optional_evidence_bounded() {
     assert!(
-        std::mem::size_of::<EntityFact>() <= 152,
+        std::mem::size_of::<EntityFact>() <= 160,
         "EntityFact is {} bytes; optional evidence exceeded the bounded row budget",
         std::mem::size_of::<EntityFact>()
     );
@@ -63,6 +66,7 @@ fn sidecar_request_fast_path_preserves_canonical_cbor() {
             library_types: false,
             reference_space: false,
             runtime_identity: false,
+            declared_keys: false,
         }],
         compact_demands: Some(v3::CompactDemands {
             groups: vec![v3::CompactDemandGroup(1, vec![7, 1, 1, 1, 1, 1])],
@@ -114,6 +118,7 @@ fn compact_demands_round_trip() {
             library_types: false,
             reference_space: false,
             runtime_identity: false,
+            declared_keys: false,
         },
         v3::EntityDemand {
             location: location("a.ts", 5, 9),
@@ -137,6 +142,7 @@ fn compact_demands_round_trip() {
             library_types: true,
             reference_space: true,
             runtime_identity: true,
+            declared_keys: false,
         },
         v3::EntityDemand {
             location: location("b.ts", 2, 8),
@@ -160,6 +166,7 @@ fn compact_demands_round_trip() {
             library_types: false,
             reference_space: false,
             runtime_identity: false,
+            declared_keys: false,
         },
     ];
     let compact = v3::compact_demands(&demands);

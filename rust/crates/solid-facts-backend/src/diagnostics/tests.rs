@@ -384,3 +384,34 @@ fn the_default_program_boundary_follows_the_nearest_manifest() {
     assert_eq!(boundary(None), Open, "no manifest above the project");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn dispatch_premises_name_what_each_site_withholds_or_why_it_is_excluded() {
+    use super::dispatch_premise;
+    let site = |receiver: &str, caller: Option<&str>, owner: bool, read: bool| {
+        solid_reactive_ir::EventDispatchSite {
+            path: "src/a.ts".into(),
+            line: 7,
+            receiver: receiver.into(),
+            caller: caller.map(str::to_owned),
+            withholds_owner_proofs: owner,
+            withholds_read_proofs: read,
+        }
+    };
+    assert_eq!(
+        dispatch_premise(&site("unknown", None, true, true)),
+        "synchronous dispatch (ADR 0393) at src/a.ts:7 withholds event handler owner and read proofs: receiver unknown"
+    );
+    assert_eq!(
+        dispatch_premise(&site("element", Some("runWithOwner(null)"), false, true)),
+        "synchronous dispatch (ADR 0393) at src/a.ts:7 withholds event handler read proofs: receiver element, caller runWithOwner(null)"
+    );
+    assert_eq!(
+        dispatch_premise(&site("window", None, false, false)),
+        "synchronous dispatch (ADR 0393) at src/a.ts:7 excluded: receiver window"
+    );
+    assert_eq!(
+        dispatch_premise(&site("element", Some("scheduled callback"), false, false)),
+        "synchronous dispatch (ADR 0393) at src/a.ts:7 excluded: caller scheduled callback"
+    );
+}

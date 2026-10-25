@@ -761,7 +761,7 @@ pub(super) fn semantic_execution_role_within(
         lookup,
         classifying,
     );
-    if role == ExecutionRole::EventCallback && lookup.synchronous_event_dispatch_present() {
+    if role == ExecutionRole::EventCallback && lookup.synchronous_event_read_dispatch_present() {
         return ExecutionRole::Unknown;
     }
     // ADR 0323: code after an await its async function reaches on every path

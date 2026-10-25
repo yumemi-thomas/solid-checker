@@ -93,5 +93,5 @@ and read it under a `<Loading>` boundary.
 
 ## Related
 
-- [reactive-write-in-owned-scope](reactive-write-in-owned-scope.md) — the same constraint for setters
+- [no-write-in-pure-computation](no-write-in-pure-computation.md) — the same constraint for setters
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — reactive data loading

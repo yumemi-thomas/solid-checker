@@ -1023,6 +1023,15 @@ pub struct EntityFact {
     /// row 16 bytes to carry an absence.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub library_types: Option<Arc<Vec<Arc<str>>>>,
+    /// Every property name the type at this span declares, sorted and
+    /// deduplicated (ADR 0394). Present only when the checker proves the set is
+    /// complete: each value-carrying constituent is an object type with no
+    /// index signature and a fully resolved property list. Absence is the
+    /// absence of that proof (not demanded, `any`, an open or generic type, an
+    /// index signature), never an empty or unknown set. The names are the
+    /// declared type's; a value of that type may hold more keys at run time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_keys: Option<Arc<Vec<Arc<str>>>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_space: Option<ReferenceSpace>,
     #[serde(default, skip_serializing_if = "str::is_empty")]

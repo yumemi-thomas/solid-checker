@@ -84,6 +84,19 @@ pub(super) struct InvocationFlow<'a, 'l, 'c> {
     /// the call (which `createRoot` and `runWithOwner` pass through from
     /// their caller although they supply an owner).
     pub(super) owner_mode: bool,
+    /// The owner question's other census (ADR 0396): the entries that count
+    /// are the function literals a reviewed test runner invokes (a
+    /// registration's callback, [`SemanticLookup::is_test_runner_registration`]),
+    /// not an event delivery. Meaningful only with `owner_mode`.
+    pub(super) test_entries: bool,
+    /// ADR 0400: the write question. A call's role is the write classifier's
+    /// role at the call under this guard, and the join keeps an owned entry
+    /// as the answer (ADR 0378). Never combined with `owner_mode`.
+    pub(super) write_root_body: Option<RootBodyGuard>,
+    /// The modules this walk read (a holder, a callee, a caller, a rendered
+    /// component): an answer that read another module than the literal's own
+    /// depends on that module's contents (ADR 0400's digest binding).
+    pub(super) touched: HashSet<&'a str>,
 }
 
 /// ADR 0319: the one role every invocation of the function literal directly
@@ -178,8 +191,206 @@ pub(super) fn literal_flow_role(
         frames: Vec::new(),
         props_stack: Vec::new(),
         owner_mode: false,
+        test_entries: false,
+        write_root_body: None,
+        touched: HashSet::default(),
     };
     let role = flow.function_role(file, literal).flatten();
     flow.classifying.remove(&key);
     role
+}
+
+thread_local! {
+    /// Set while [`write_flow_answers`] computes the table: the write walk,
+    /// asked at an invocation site, then skips its own use of the table, so
+    /// every answer is computed from an empty context and no order of
+    /// computation matters.
+    static COMPUTING_WRITE_FLOW: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The key of a write-flow answer: the literal and the guard of the write.
+pub(crate) type WriteFlowKey = (String, Span, RootBodyGuard);
+
+/// ADR 0400: the write-flow answer of every function a closed program hands
+/// to project code (a component prop value, an argument of a call that is no
+/// primitive, a named function), per guard, computed once per build. Only a
+/// proven role is kept, with whether the walk read another module than the
+/// function's own; see [`literal_write_flow_role`].
+pub(crate) fn write_flow_answers(
+    lookup: &SemanticLookup<'_>,
+) -> HashMap<WriteFlowKey, (ExecutionRole, bool)> {
+    let mut answers = HashMap::default();
+    let outer = COMPUTING_WRITE_FLOW.with(|computing| computing.replace(true));
+    for file in lookup.files() {
+        for literal in &file.ast.functions {
+            if !write_flow_candidate(file, literal) {
+                continue;
+            }
+            for guard in [RootBodyGuard::Rejects, RootBodyGuard::Exempts] {
+                if let Some(answer) = literal_write_flow_role(file, literal, guard, lookup) {
+                    answers.insert((file.path.to_string(), literal.span, guard), answer);
+                }
+            }
+        }
+    }
+    COMPUTING_WRITE_FLOW.with(|computing| computing.set(outer));
+    clear_write_site_roles();
+    answers
+}
+
+/// Whether `literal` is handed to other code where it is written: the value
+/// of a non-intrinsic JSX attribute, a whole argument of a call, or a
+/// function bound to a name. A function that is none of these has no
+/// invocation this walk could follow.
+fn write_flow_candidate(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+) -> bool {
+    !literal.generator
+        && (component_prop_literal(file, literal.span).is_some()
+            || file
+                .ast
+                .arguments_containing(literal.span)
+                .any(|(call, index)| {
+                    !call.arguments[index].spread
+                        && !call.construct
+                        && file.ast.peel_ts_sugar_span(call.arguments[index].span) == literal.span
+                })
+            || named_function_handed_on(file, literal))
+}
+
+/// Whether a function bound to a name is handed on somewhere in its own file:
+/// a whole argument (`withTx(save)`), a JSX attribute's value
+/// (`<Child onPress={save} />`) or the initializer of an alias binding
+/// (`const again = save`). A function every use of which is a call or an
+/// intrinsic handler is the write walk's own business. A named function
+/// expression is held by the binding it initializes as well as by its name.
+fn named_function_handed_on(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+) -> bool {
+    let peel = |span: Span| file.ast.peel_ts_sugar_span(span);
+    let mut holders = Vec::new();
+    holders.extend(function_binding_name(file, literal).map(|name| name.span));
+    if literal.kind == solid_facts::ast::FunctionKind::Expression && literal.name.is_some() {
+        holders.extend(
+            file.ast
+                .bindings_initializer_containing(literal.span)
+                .find(|binding| {
+                    binding.shape == solid_facts::ast::BindingShape::Identifier
+                        && binding
+                            .initializer
+                            .is_some_and(|initializer| peel(initializer) == literal.span)
+                })
+                .and_then(|binding| binding.names.first())
+                .map(|name| name.span),
+        );
+    }
+    file.ast
+        .reference_declarations
+        .iter()
+        .filter(|(reference, declaration)| {
+            holders.contains(declaration) && !holders.contains(reference)
+        })
+        .any(|(reference, _)| {
+            file.ast
+                .arguments_containing(*reference)
+                .any(|(call, index)| {
+                    !call.arguments[index].spread && peel(call.arguments[index].span) == *reference
+                })
+                || file.ast.jsx_containing(*reference).any(|element| {
+                    !intrinsic_element(file, element)
+                        && element.attributes.iter().any(|attribute| {
+                            attribute
+                                .expression
+                                .is_some_and(|value| peel(value) == *reference)
+                        })
+                })
+                || file.ast.bindings.iter().any(|binding| {
+                    binding
+                        .initializer
+                        .is_some_and(|initializer| peel(initializer) == *reference)
+                })
+        })
+}
+
+/// The one role every invocation of `literal` runs in, for a write in it
+/// (ADR 0400): followed forward as ADR 0319 follows a value, each call's role
+/// the write classifier's at the call. An invocation in an owned scope makes
+/// the answer that role, as ADR 0378's entries rule has it; every other
+/// invocation must be one proven role, and any census gap or unplaced
+/// invocation answers nothing. Open or closed program alike: what a callee
+/// does with the value does not depend on its other callers, and an exported
+/// function holding the value's invocation refuses unless the program is
+/// closed ([`InvocationFlow::exported_call_sites`]).
+fn literal_write_flow_role(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    root_body: RootBodyGuard,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(ExecutionRole, bool)> {
+    let file = lookup.file_by_path(file.path.as_str())?;
+    let literal = file.ast.function_at(literal.span)?;
+    if literal.generator
+        || lookup.function_component_status(file, literal) != ComponentStatus::No
+        || lookup.files().iter().any(|file| {
+            file.ast
+                .module_hazards
+                .iter()
+                .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
+        })
+    {
+        return None;
+    }
+    let mut classifying = HashSet::default();
+    classifying.insert((format!("\0write-flow:{}", file.path.as_str()), literal.span));
+    let mut flow = InvocationFlow {
+        lookup,
+        classifying: &mut classifying,
+        budget: FLOW_BUDGET,
+        seen: HashSet::default(),
+        frames: Vec::new(),
+        props_stack: Vec::new(),
+        owner_mode: false,
+        test_entries: false,
+        write_root_body: Some(root_body),
+        touched: HashSet::default(),
+    };
+    let role = flow.function_role(file, literal).flatten()?;
+    let across_modules = flow.touched.iter().any(|path| *path != file.path.as_str());
+    Some((role, across_modules))
+}
+
+/// ADR 0400: the role the invocations of `span`'s function (or of a function
+/// around it that runs `span` in place) give a write there, from the per-build
+/// table. `None` while the table is computed, in an open program, and for a
+/// function the walk proves nothing about.
+pub(super) fn write_flow_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    root_body: RootBodyGuard,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    if COMPUTING_WRITE_FLOW.with(std::cell::Cell::get) {
+        return None;
+    }
+    let innermost = containing_ast_function(&file.ast, span)?;
+    if !innermost.body.contains(span) {
+        return None;
+    }
+    let answers = lookup.write_flow_answers();
+    let mut enclosing = file.ast.functions_body_containing(span).collect::<Vec<_>>();
+    enclosing.sort_by_key(|function| function.span.end - function.span.start);
+    for function in enclosing {
+        if !runs_in_place_within(file, innermost, function, lookup) {
+            return None;
+        }
+        if let Some((role, _)) = answers
+            .get(&(file.path.to_string(), function.span, root_body))
+            .copied()
+        {
+            return Some(role);
+        }
+    }
+    None
 }

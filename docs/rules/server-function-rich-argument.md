@@ -142,5 +142,5 @@ to a JSON-safe shape at the call site (`date.toISOString()`,
 
 ## Related
 
-- [server-function-module-directive](server-function-module-directive.md) —
+- [valid-use-server](valid-use-server.md) —
   the compiler half of the server-function contract

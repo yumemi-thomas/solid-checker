@@ -300,7 +300,7 @@
    }
   },
   {
-   "id": "no-direct-mutation/positive/001",
+   "id": "no-store-mutation-outside-setter/positive/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -313,7 +313,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
       "severity": "warning",
@@ -329,7 +329,7 @@
       }
      },
      {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
       "severity": "warning",
@@ -352,7 +352,7 @@
    }
   },
   {
-   "id": "no-direct-mutation/nested-props-value/001",
+   "id": "no-store-mutation-outside-setter/nested-props-value/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -364,12 +364,12 @@
    "enableRules": [],
    "expect": {
     "findings": [],
-    "absent": [{ "rule": "no-direct-mutation" }]
+    "absent": [{ "rule": "no-store-mutation-outside-setter" }]
    },
    "note": "Solid 2 props container behavior is shallow. Its nested value can be a plain mutable object or an application-owned writable proxy; a root props fact does not prove a dropped nested write. This product-owned control follows the unchanged invoicer application whose proxy delegates writes to setStore. The existing positive store case still proves nested readonly store writes. Published typings accept these writes."
   },
   {
-   "id": "reactive-write-in-owned-scope/positive/001",
+   "id": "no-write-in-pure-computation/positive/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -382,7 +382,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -872,7 +872,7 @@
    "note": "Kept divergence: 2.0 rc.13 ChildProperties includes innerText (@solidjs/web dist/web.js line 33), so a write to it replaces the element's children, the same clash textContent has. eslint-plugin-solid 0.14.5 has no innerText arm (src/rules/jsx-no-duplicate-props.ts lines 77-83 at 6d3bc311 read innerHTML, innerhtml and textContent only). The published typings accept innerText as an ordinary prop (@solidjs/web types/jsx.d.ts line 953), so TypeScript reports nothing and the finding is checker-only. The camel-case spelling is jsx-no-duplicate-props/solid-v2/content-positive/001."
   },
   {
-   "id": "resolve-in-tracked-scope/positive/001",
+   "id": "no-await-primitive-in-tracked-scope/positive/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -885,7 +885,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "resolve-in-tracked-scope",
+      "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
       "kind": "violation",
       "severity": "error",
@@ -906,7 +906,7 @@
    }
   },
   {
-   "id": "resolve-in-tracked-scope/negative/001",
+   "id": "no-await-primitive-in-tracked-scope/negative/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -920,7 +920,7 @@
     "findings": [],
     "absent": [
      {
-      "rule": "resolve-in-tracked-scope"
+      "rule": "no-await-primitive-in-tracked-scope"
      }
     ]
    }
@@ -959,7 +959,7 @@
    }
   },
   {
-   "id": "server-function-module-directive/positive/001",
+   "id": "valid-use-server/positive/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".ts",
@@ -972,7 +972,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "server-function-module-directive",
+      "rule": "valid-use-server",
       "code": "SC7006",
       "kind": "violation",
       "severity": "error",
@@ -1293,7 +1293,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -1490,7 +1490,7 @@
    }
   },
   {
-   "id": "reactive-write-in-owned-scope/positive/002",
+   "id": "no-write-in-pure-computation/positive/002",
    "dialect": "solid-v2",
    "source": {
     "extension": ".ts",
@@ -1503,7 +1503,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -1519,7 +1519,7 @@
       }
      },
      {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -1540,7 +1540,7 @@
    "note": "A deliberate divergence from eslint-plugin-solid 0.14.5, whose corpus (fixtures/reactive-ir/eslint-plugin-corpus/owned-scope-valid.tsx) lists a write in `flush(fn)` inside a memo as valid. Under 2.0 the runtime decides: `flush(fn)` runs `fn` inline and touches neither the owner nor the listener (@solidjs/signals rc.3 `dist/dev.js:1788-1802`), so `fn` answers to the memo compute's owner, and on every published rc.0-rc.9 dev client build `setSignal` throws REACTIVE_WRITE_IN_OWNED_SCOPE there, inline or with the callback passed by name (probed). The module-scope `flush(flushWrite)` is legal, which is why the finding on `setCount(1)` rests on the memo call alone."
   },
   {
-   "id": "reactive-write-in-owned-scope/positive/003",
+   "id": "no-write-in-pure-computation/positive/003",
    "dialect": "solid-v2",
    "source": {
     "extension": ".ts",
@@ -1553,7 +1553,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -1574,7 +1574,7 @@
    "note": "A function passed to `createRoot` by name is its root body, exactly as an inline arrow is: it runs during the call with the new root as the ambient owner, and `setSignal` throws there on every rc.0-rc.9 dev build (probed). Resolved by the argument's symbol to the same-file declaration."
   },
   {
-   "id": "reactive-write-in-owned-scope/positive/004",
+   "id": "no-write-in-pure-computation/positive/004",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -1587,7 +1587,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -1661,6 +1661,74 @@
     "absent": []
    },
    "note": "An action call's dev guard (`getOwner()` not children-forbidden, @solidjs/signals rc.3 `dist/dev.js:5567`) has no root exemption: directly in a `createRoot` body, and in a memo compute nested in one, it throws ACTION_CALLED_IN_OWNED_SCOPE on every rc.0-rc.9 dev build (probed)."
-  }
+  },
+ {
+  "id": "no-write-in-pure-computation/const-held-options/001",
+  "dialect": "solid-v2",
+  "source": {
+   "extension": ".tsx",
+   "prelude": "",
+   "text": "import { createSignal, createMemo } from \"solid-js\";\nconst opts = { name: \"count\" };\nconst [count, setCount] = createSignal(0, opts);\nconst bad = createMemo(() => {\n  setCount(count() + 1);\n  return count();\n});\n"
+  },
+  "ruleOptions": {},
+  "presets": [],
+  "enableRules": [],
+  "expect": {
+   "findings": [
+    {
+     "rule": "no-write-in-pure-computation",
+     "code": "SC2001",
+     "kind": "uncertifiable",
+     "severity": "error",
+     "span": {
+      "marker": "setCount(count() + 1)"
+     },
+     "fix": {
+      "behavior": "none"
+     },
+     "typescript": {
+      "ownership": "checker-only",
+      "diagnostics": []
+     }
+    }
+   ],
+   "absent": []
+  },
+  "note": "Kept divergence from eslint-plugin-solid 0.18.1 (ADR 0382): upstream resolves the options argument through one level of `const` indirection and reports this write; the checker reads only an object literal written at the call, so options held in a variable may carry `ownedWrite: true` and the write is uncertifiable, never a violation and never a silent clean. Literal options without the key (`{ name: \"count\" }` at the call) stay a violation (`fixtures/reactive-ir/owned-write-option`)."
+ },
+ {
+  "id": "no-write-in-pure-computation/store-owned-write/001",
+  "dialect": "solid-v2",
+  "source": {
+   "extension": ".tsx",
+   "prelude": "",
+   "text": "import { createStore, createMemo } from \"solid-js\";\nconst storeOptions = { name: \"store\", ownedWrite: true };\nconst [store, setStore] = createStore({ count: 0 }, storeOptions);\nconst bad = createMemo(() => {\n  setStore((draft) => {\n    draft.count = 1;\n  });\n  return store.count;\n});\n"
+  },
+  "ruleOptions": {},
+  "presets": [],
+  "enableRules": [],
+  "expect": {
+   "findings": [
+    {
+     "rule": "no-write-in-pure-computation",
+     "code": "SC2001",
+     "kind": "violation",
+     "severity": "error",
+     "span": {
+      "marker": "setStore((draft) => {\n    draft.count = 1;\n  })"
+     },
+     "fix": {
+      "behavior": "none"
+     },
+     "typescript": {
+      "ownership": "checker-only",
+      "diagnostics": []
+     }
+    }
+   ],
+   "absent": []
+  },
+  "note": "`ownedWrite` is a signal option: the store setter's guard (`devGuardStoreSetterWrite`, `@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5811-5825`) has no exemption and `createStore$1` (`:5904`) never reads the option, so a store created with `ownedWrite: true` is not exempt (upstream 0.18.1 agrees, test case 8). `StoreOptions` declares no `ownedWrite` (`dist/types/store/types.d.ts:30`); the variable keeps TypeScript quiet about the key."
+ }
  ]
 }

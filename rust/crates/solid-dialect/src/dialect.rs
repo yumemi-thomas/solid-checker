@@ -938,6 +938,16 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// Whether an event dispatched on the global `document` object reaches no
+    /// event handler this runtime installs from JSX (ADR 0393): its delegated
+    /// handler starts at the event's target and looks for handler data on the
+    /// elements of the path, and `document` carries none; undelegated handlers
+    /// are listeners on their own elements, below the document. The default
+    /// is `false`: an unaudited runtime may route events differently.
+    fn document_dispatch_reaches_no_element_handler(&self) -> bool {
+        false
+    }
+
     /// Whether a call of `primitive` with exactly one argument, a compute
     /// function that takes no parameters, returns an accessor that is the
     /// only way the values the compute returns reach program code.
@@ -1508,7 +1518,7 @@ pub trait Dialect: Sync {
     /// Whether this dialect's compiler includes server functions —
     /// the `"use server"` directive, `@solidjs/web/server-functions`, and the
     /// plain-JSON argument transport. Gates the server-function rules
-    /// (`server-function-module-directive`, `server-function-rich-argument`)
+    /// (`valid-use-server`, `server-function-rich-argument`)
     /// so a same-spelled directive in a 1.x project stays out of that
     /// catalog. Solid 1.x has no core server functions, so the default is
     /// `false`.

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
   "rules": {
-    "reactive-write-in-owned-scope": { "enabled": false }
+    "no-write-in-pure-computation": { "enabled": false }
   }
 }

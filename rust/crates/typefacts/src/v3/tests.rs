@@ -11,10 +11,10 @@ use super::{
     SlotOp, TYPE_FACTS_SCHEMA_SHA256, TYPE_FACTS_TABLE_SCHEMA_V3, TYPE_FACTS_TABLE_SCHEMA_V14,
     TYPE_FACTS_TABLE_SCHEMA_V15, TYPE_FACTS_TABLE_SCHEMA_V16, TYPE_FACTS_TABLE_SCHEMA_V17,
     TYPE_FACTS_TABLE_SCHEMA_V18, TYPE_FACTS_TABLE_SCHEMA_V19, TYPE_FACTS_TABLE_SCHEMA_V21,
-    TYPE_FACTS_TABLE_SCHEMA_V22, TransitionMode, decode_table_transition,
-    parse_argument_mapping_reason, parse_argument_mapping_status, parse_call_kind,
-    parse_callability, parse_constructability, parse_reference_space, parse_resolved_call_validity,
-    push_uvarint,
+    TYPE_FACTS_TABLE_SCHEMA_V22, TYPE_FACTS_TABLE_SCHEMA_V23, TransitionMode,
+    decode_table_transition, parse_argument_mapping_reason, parse_argument_mapping_status,
+    parse_call_kind, parse_callability, parse_constructability, parse_reference_space,
+    parse_resolved_call_validity, push_uvarint,
 };
 
 fn push_test_string(frame: &mut Vec<u8>, value: &str) {
@@ -665,6 +665,7 @@ fn wire_table_v16_decodes_primitive_literal_candidates_and_v15_stays_frozen() {
     assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V19, 19);
     assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V21, 21);
     assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V22, 22);
+    assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V23, 23);
 }
 
 #[test]

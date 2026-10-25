@@ -727,7 +727,7 @@
       "entrypoint": ".",
       "export": "createBodyCursor",
       "class": "trackedCallback",
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "hosts": [
         "none",
         "browser"
@@ -950,7 +950,7 @@
       "entrypoint": ".",
       "export": "resolveFirst",
       "class": "trackedCallback",
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "hosts": [
         "none",
         "browser",
@@ -1175,7 +1175,7 @@
       "entrypoint": ".",
       "export": "createDerivedStaticStore",
       "class": "trackedCallback",
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "hosts": [
         "none",
         "browser",
@@ -1619,7 +1619,7 @@
       "entrypoint": ".",
       "export": "until",
       "class": "trackedCallback",
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "hosts": [
         "none",
         "browser",
@@ -1810,7 +1810,7 @@
       "entrypoint": ".",
       "export": "capitalize",
       "class": "trackedCallback",
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "hosts": [
         "none",
         "browser",

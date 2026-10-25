@@ -344,7 +344,7 @@ fn push_module_directive_finding(
 ) {
     draft.static_violations.push(StaticViolation {
         id: "SC7006".into(),
-        rule: "server-function-module-directive".into(),
+        rule: "valid-use-server".into(),
         message: if uncertain {
             format!(
                 "this module's top-level \"use server\" directive requires direct function exports, but export {exported} is {shape}; available syntax facts cannot prove that the compiler will turn it into a client reference"

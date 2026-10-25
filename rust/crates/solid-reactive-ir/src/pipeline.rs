@@ -46,6 +46,7 @@ pub(crate) struct ProgramDraft {
     pub(crate) leaf_operations: Vec<LeafOwnerOperation>,
     pub(crate) directive_creations: Vec<PrimitiveCreation>,
     pub(crate) undecided_component_regions: Vec<crate::UndecidedRegion>,
+    pub(crate) event_dispatch_sites: Vec<crate::EventDispatchSite>,
     pub(crate) missing_owners: Vec<OwnerRequirement>,
     pub(crate) strict_read_obligations: usize,
     pub(crate) write_action_obligations: HashSet<(&'static str, String, u64, u64)>,
@@ -140,6 +141,7 @@ impl ProgramDraft {
             missing_owners: self.missing_owners,
             async_reads: self.async_reads,
             undecided_component_regions: self.undecided_component_regions,
+            event_dispatch_sites: self.event_dispatch_sites,
             obligation_counts: ObligationCounts {
                 strict_reads: self.strict_read_obligations,
                 writes_and_actions: self.write_action_obligations.len(),
@@ -162,7 +164,15 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     /// ADR 0294: typed candidates, never proven sources.
     pub(crate) typed_sources: &'a HashMap<SymbolId, crate::source_discovery::TypedSource>,
-    pub(crate) setters: &'a HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
+    pub(crate) setters: &'a HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    >,
     pub(crate) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) uncertain_prop_sources: &'a HashSet<SymbolId>,
@@ -170,7 +180,7 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) semantic_lookup: &'a SemanticLookup<'a>,
     pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) source_primitives: &'a HashMap<SymbolId, SymbolId>,
-    pub(crate) source_owned_write: &'a HashMap<SymbolId, bool>,
+    pub(crate) source_owned_write: &'a HashMap<SymbolId, crate::OwnedWriteOption>,
     pub(crate) value_form_stores: &'a HashSet<SymbolId>,
     pub(crate) reachable_calls: &'a HashMap<Location, usize>,
     pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
@@ -564,6 +574,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     clock.finish(&mut build_timings, ReactiveIrStage::StaticApi);
     directives::discover_directive_creations(&analysis, &mut draft);
     draft.undecided_component_regions = semantic_lookup.undecided_component_regions();
+    draft.event_dispatch_sites = semantic_lookup.event_dispatch_reports();
     clock.finish(&mut build_timings, ReactiveIrStage::Directives);
     owners::collect_project(
         &analysis,

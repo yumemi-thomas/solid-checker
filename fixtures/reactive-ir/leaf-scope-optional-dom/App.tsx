@@ -2,8 +2,9 @@ import { onCleanup, onSettled } from "solid-js";
 
 type Refs = { el?: HTMLDivElement; canvas?: HTMLCanvasElement; input?: HTMLInputElement };
 
-// ---- Clean: optional calls of audited script-free members (ADR 0318) are
-// read like their non-optional form.
+// ---- Clean: an optional call is read like its non-optional form (ADR 0318,
+// ADR 0397): the exact `lib.dom` declaration decides, and only a member that
+// dispatches an event synchronously or creates a WebGL context stays open.
 
 export function OptionalQueries(props: Refs) {
   onSettled(() => {
@@ -53,26 +54,8 @@ export function DirectRemoveListener(props: { el: HTMLDivElement }) {
   return <div />;
 }
 
-// ---- Uncertifiable: optional calls of members that can run author code.
+// ---- Clean: optional calls of members that dispatch no event (ADR 0397).
 
-export function OptionalFocus(props: Refs) {
-  onSettled(() => {
-    props.el?.focus();
-  });
-  return <div />;
-}
-export function OptionalClick(props: Refs) {
-  onSettled(() => {
-    props.el?.click();
-  });
-  return <div />;
-}
-export function OptionalDispatch(props: Refs) {
-  onSettled(() => {
-    props.el?.dispatchEvent(new Event("x"));
-  });
-  return <div />;
-}
 export function OptionalSetAttribute(props: Refs) {
   onSettled(() => {
     props.el?.setAttribute("data-x", "1");
@@ -97,12 +80,6 @@ export function OptionalScroll(props: Refs) {
   });
   return <div />;
 }
-export function OptionalGetContext(props: Refs) {
-  onSettled(() => {
-    props.canvas?.getContext("webgl2");
-  });
-  return <div />;
-}
 export function OptionalSelect(props: Refs) {
   onSettled(() => {
     props.input?.select();
@@ -110,8 +87,81 @@ export function OptionalSelect(props: Refs) {
   return <div />;
 }
 
-// ---- Unchanged: the non-optional form of a re-entrant member keeps the
-// standard-library trust, which does not model dispatch.
+// Clean: a `let` ref assigned later, typed as possibly unset.
+export function LetRefScroll() {
+  let el: HTMLDivElement | undefined;
+  const assign = (node: HTMLDivElement) => {
+    el = node;
+  };
+  onSettled(() => {
+    el?.scrollIntoView({ block: "nearest" });
+    el!.scrollTo(0, 0);
+  });
+  return <div ref={assign} />;
+}
+export function LetRefObserver() {
+  let observer: ResizeObserver | undefined;
+  let target: HTMLDivElement | undefined;
+  const assign = (node: HTMLDivElement) => {
+    target = node;
+    observer = new ResizeObserver(() => {});
+  };
+  onSettled(() => {
+    if (target) observer?.observe(target);
+  });
+  return <div ref={assign} />;
+}
+
+// ---- Uncertifiable: optional calls of members that dispatch an event
+// synchronously (ADR 0329) or create a WebGL context (ADR 0318).
+
+export function OptionalFocus(props: Refs) {
+  onSettled(() => {
+    props.el?.focus();
+  });
+  return <div />;
+}
+export function OptionalClick(props: Refs) {
+  onSettled(() => {
+    props.el?.click();
+  });
+  return <div />;
+}
+export function OptionalDispatch(props: Refs) {
+  onSettled(() => {
+    props.el?.dispatchEvent(new Event("x"));
+  });
+  return <div />;
+}
+export function OptionalGetContext(props: Refs) {
+  onSettled(() => {
+    props.canvas?.getContext("webgl2");
+  });
+  return <div />;
+}
+export function LetRefFocus() {
+  let dialog: HTMLDialogElement | undefined;
+  const assign = (node: HTMLDialogElement) => {
+    dialog = node;
+  };
+  onSettled(() => {
+    dialog?.focus();
+  });
+  return <dialog ref={assign} />;
+}
+export function LetRefShowModal() {
+  let dialog: HTMLDialogElement | undefined;
+  const assign = (node: HTMLDialogElement) => {
+    dialog = node;
+  };
+  onSettled(() => {
+    dialog?.showModal();
+  });
+  return <dialog ref={assign} />;
+}
+
+// ---- The non-optional form of a dispatching member is refused alike
+// (ADR 0329).
 
 export function DirectFocus(props: { el: HTMLDivElement }) {
   onSettled(() => {

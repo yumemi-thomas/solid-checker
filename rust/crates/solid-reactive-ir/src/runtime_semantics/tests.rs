@@ -699,3 +699,43 @@ fn the_fresh_stack_list_only_refines_a_standard_deferral() {
         assert!(!behavior.runs_on_fresh_stack(), "{behavior:?}");
     }
 }
+
+/// ADR 0396: a registration function counts only when its declaration lies in
+/// an installed reviewed runner package under a registration function's name;
+/// a project path, a runner-looking directory without `node_modules`, and a
+/// helper declared in a runner's file are not one.
+#[test]
+fn a_test_runner_registration_is_a_reviewed_package_declaration() {
+    for path in [
+        "/app/node_modules/vitest/dist/index.d.ts",
+        "/app/node_modules/.pnpm/vitest@5.0.0_x/node_modules/vitest/dist/chunks/task-utils.d.ts",
+        "/app/node_modules/bun-types/test.d.ts",
+        "/app/node_modules/@types/node/test.d.ts",
+        "/app/node_modules/@playwright/test/index.d.ts",
+        "/app/node_modules/playwright/types/test.d.ts",
+        "/app/node_modules/@jest/globals/build/index.d.ts",
+        "/app/node_modules/@types/jest/index.d.ts",
+        "/app/node_modules/@types/mocha/index.d.ts",
+    ] {
+        for name in ["test", "it", "describe", "beforeEach", "afterAll", "suite"] {
+            assert!(
+                test_runner_function_declaration(path, name),
+                "{path} {name}"
+            );
+        }
+        assert!(!test_runner_function_declaration(path, "expect"), "{path}");
+        assert!(!test_runner_function_declaration(path, "vi"), "{path}");
+    }
+    for path in [
+        "/app/src/it.ts",
+        "/app/vitest/index.d.ts",
+        "/app/node_modules/other/vitest.d.ts",
+        "/app/node_modules/@types/node/fs.d.ts",
+        "/app/node_modules/@types/react/index.d.ts",
+    ] {
+        assert!(!test_runner_function_declaration(path, "it"), "{path}");
+    }
+    assert!(test_runner_modifier("only") && test_runner_modifier("each"));
+    assert!(!test_runner_modifier("step") && !test_runner_modifier("call"));
+    assert!(test_runner_curried_modifier("each") && !test_runner_curried_modifier("only"));
+}

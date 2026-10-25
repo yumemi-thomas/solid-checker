@@ -12,16 +12,6 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
-      "start": 537,
-      "end": 541,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -29,16 +19,6 @@
       "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
       "start": 711,
       "end": 722,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
-      "start": 744,
-      "end": 748,
       "fixes": 0
     },
     {
@@ -82,16 +62,6 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
-      "start": 1621,
-      "end": 1625,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -122,16 +92,6 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
-      "start": 2055,
-      "end": 2059,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -142,17 +102,7 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
-      "start": 2306,
-      "end": 2311,
-      "fixes": 0
-    },
-    {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
       "severity": "warning",
@@ -172,7 +122,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
       "severity": "warning",
@@ -192,7 +142,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
       "severity": "warning",
@@ -212,7 +162,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
       "severity": "warning",
@@ -262,17 +212,7 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
-      "start": 3690,
-      "end": 3696,
-      "fixes": 0
-    },
-    {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
       "severity": "warning",
@@ -292,17 +232,7 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
-      "start": 4014,
-      "end": 4019,
-      "fixes": 0
-    },
-    {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
       "severity": "warning",
@@ -319,16 +249,6 @@
       "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
       "start": 4202,
       "end": 4213,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
-      "start": 4235,
-      "end": 4239,
       "fixes": 0
     },
     {
@@ -349,16 +269,6 @@
       "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
       "start": 4640,
       "end": 4650,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
-      "start": 4878,
-      "end": 4882,
       "fixes": 0
     },
     {

@@ -103,6 +103,7 @@ fn all_demands(scratch: &Scratch) -> Vec<EntityDemand> {
                 primitive_literal_candidates: true,
                 reference_space: true,
                 runtime_identity: true,
+                declared_keys: false,
                 library_types: true,
                 array_shape: true,
                 ..EntityDemand::default()

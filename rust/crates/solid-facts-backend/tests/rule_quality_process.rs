@@ -14,7 +14,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
     for (rule, count) in [
         // rc.17's `createOptimistic` setter meets no owned-scope guard, so
         // `owned-leaf-extended-invalid.tsx`'s optimistic write is legal there.
-        ("reactive-write-in-owned-scope", 10),
+        ("no-write-in-pure-computation", 10),
         ("action-called-in-owned-scope", 2),
         // Review round 4: two zero-parameter `Show` children are tracked
         // inserts, not strict-read callbacks.
@@ -33,7 +33,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         (
             "owned-scope-invalid.tsx",
             [
-                ("reactive-write-in-owned-scope", 3),
+                ("no-write-in-pure-computation", 3),
                 ("action-called-in-owned-scope", 1),
             ]
             .as_slice(),
@@ -93,7 +93,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         (
             "owned-leaf-extended-invalid.tsx",
             [
-                ("reactive-write-in-owned-scope", 3),
+                ("no-write-in-pure-computation", 3),
                 ("action-called-in-owned-scope", 1),
                 ("leaf-owner-forbidden-call", 2),
             ]
@@ -101,7 +101,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "dynamic-tracking-invalid.tsx",
-            [("reactive-write-in-owned-scope", 2)].as_slice(),
+            [("no-write-in-pure-computation", 2)].as_slice(),
         ),
     ]);
 
@@ -170,8 +170,8 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
                 // memo's owner, so the inline write and the `flushWrite` it is
                 // passed throw REACTIVE_WRITE_IN_OWNED_SCOPE on every
                 // rc.0-rc.9 dev build (ownership case
-                // reactive-write-in-owned-scope/positive/002).
-                ("reactive-write-in-owned-scope", 2),
+                // no-write-in-pure-computation/positive/002).
+                ("no-write-in-pure-computation", 2),
             ]
             .as_slice(),
         ),
@@ -237,7 +237,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         (
             "owned-leaf-extended-valid.tsx",
             &[
-                "reactive-write-in-owned-scope",
+                "no-write-in-pure-computation",
                 "action-called-in-owned-scope",
                 "leaf-owner-forbidden-call",
                 "leaf-owner-forbidden-call",
@@ -246,7 +246,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "dynamic-tracking-valid.tsx",
-            &["strict-read-untracked", "reactive-write-in-owned-scope"][..],
+            &["strict-read-untracked", "no-write-in-pure-computation"][..],
         ),
     ] {
         for rule in rules {

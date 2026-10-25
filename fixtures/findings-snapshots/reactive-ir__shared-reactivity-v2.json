@@ -22,7 +22,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
       "severity": "warning",
@@ -32,7 +32,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
       "severity": "warning",

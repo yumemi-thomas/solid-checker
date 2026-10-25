@@ -13,8 +13,8 @@ use typefacts::v3::{
 #[test]
 fn handshake_declares_the_operation_sets_protocol() {
     assert_eq!(
-        TYPE_FACTS_HANDSHAKE_PROTOCOL, 83,
-        "protocol 83 adds the modules answer's unmappedRoots (ADR 0368)"
+        TYPE_FACTS_HANDSHAKE_PROTOCOL, 84,
+        "protocol 84 adds the declaredKeys demand and Wire table schema v23 (ADR 0394)"
     );
 }
 

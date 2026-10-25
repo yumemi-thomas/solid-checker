@@ -624,6 +624,7 @@ mod tests {
             array_shape: None,
             tuple_shape: None,
             library_types: None,
+            declared_keys: None,
             reference_space: None,
             runtime_identity: "".into(),
         }

@@ -1505,3 +1505,203 @@ fn literal_property_dispatch_edits_match_cold() {
         ],
     );
 }
+
+/// The kind of the `SC2001` finding at the first `needle` in `path`:
+/// `"violation"`, `"uncertifiable"`, or `"clean"` with none.
+fn write_kind(
+    findings: &[solid_reactive_ir::Finding],
+    path: &str,
+    source: &str,
+    needle: &str,
+) -> String {
+    let start = source.find(needle).unwrap() as u64;
+    findings
+        .iter()
+        .find(|finding| {
+            finding.id == "SC2001"
+                && finding.primary_location.path.as_ref() == path
+                && finding.primary_location.start_byte == start
+        })
+        .map_or_else(|| "clean".to_owned(), |finding| finding.kind.to_string())
+}
+
+/// ADR 0400: a write in a function handed to project code takes the role of the
+/// callee's invocations of it, which another file decides. Runs the edits on
+/// one retained session and checks each generation against a cold build, for
+/// a closed and an open program alike (the answer needs no closed program for
+/// a prop; an exported helper needs one, so `open_expected` can differ).
+fn write_twin(
+    label: &str,
+    files: &[(&str, &str)],
+    write: (&str, &str),
+    initially: (&str, &str),
+    edits: &[(&str, &str, &str, &str)],
+) {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let (directory, paths) = project(label, files);
+    let tsconfig = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let write_path = paths[write.0].clone();
+    let mut write_source = files
+        .iter()
+        .find(|(name, _)| *name == write.0)
+        .unwrap()
+        .1
+        .to_owned();
+    let selected = dialect::default_dialect();
+    let typescript = TypeFactsSession::open(&typefacts, &tsconfig, &[]).unwrap();
+    let (mut session, _) =
+        NativeIncrementalSession::open_pipelined(selected, tsconfig, typescript).unwrap();
+    let mut closed_builder = solid_reactive_ir::IncrementalBuilder::default();
+    let mut open_builder = solid_reactive_ir::IncrementalBuilder::default();
+    let check = |generation: &str,
+                 write_source: &str,
+                 facts: &solid_facts::ProjectFacts,
+                 closed_builder: &mut solid_reactive_ir::IncrementalBuilder,
+                 open_builder: &mut solid_reactive_ir::IncrementalBuilder,
+                 expected: (&str, &str)| {
+        for (closed, builder, expected) in [
+            (true, closed_builder, expected.0),
+            (false, open_builder, expected.1),
+        ] {
+            let retained = warm(builder, facts, selected.vocabulary, closed);
+            let fresh = cold(facts, selected.vocabulary, closed);
+            assert_eq!(retained, fresh, "{label} {generation} closed={closed}");
+            let retained_findings = selected.solve(&retained);
+            assert_eq!(
+                retained_findings,
+                selected.solve(&fresh),
+                "{label} {generation} closed={closed}: findings"
+            );
+            assert_eq!(
+                write_kind(&retained_findings, &write_path, write_source, write.1),
+                expected,
+                "{label} {generation} closed={closed}: write finding"
+            );
+        }
+    };
+    let first = session.analyze().unwrap();
+    check(
+        "initial",
+        &write_source,
+        &first,
+        &mut closed_builder,
+        &mut open_builder,
+        initially,
+    );
+    for (version, (name, text, closed, open)) in edits.iter().enumerate() {
+        let facts = session
+            .edit(
+                vec![SourceChange {
+                    path: paths[*name].clone(),
+                    version: version as u64 + 1,
+                    source: Some((*text).into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        if *name == write.0 {
+            (*text).clone_into(&mut write_source);
+        }
+        check(
+            &format!("edit {} ({name})", version + 1),
+            &write_source,
+            &facts,
+            &mut closed_builder,
+            &mut open_builder,
+            (closed, open),
+        );
+    }
+    drop(session);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+const PROP_WRITE_APP: &str = r#"import { createSignal } from "solid-js";
+import { Select } from "./Select";
+export function App() {
+  const [, setOpen] = createSignal(false);
+  return <Select onSelect={() => setOpen(true)} />;
+}
+"#;
+const PROP_WRITE_EVENT: &str = r#"export function Select(props: { onSelect: () => void }) {
+  return <button onClick={props.onSelect}>select</button>;
+}
+"#;
+const PROP_WRITE_BODY: &str = r#"export function Select(props: { onSelect: () => void }) {
+  props.onSelect();
+  return <button>select</button>;
+}
+"#;
+const PROP_WRITE_SPREAD: &str = r#"export function Select(props: { onSelect: () => void }) {
+  return <button {...props}>select</button>;
+}
+"#;
+const PROP_WRITE_DESTRUCTURED: &str = r#"export function Select({ onSelect }: { onSelect: () => void }) {
+  return <button onClick={onSelect}>select</button>;
+}
+"#;
+
+/// A component stops handing its prop to a handler and calls it in its body,
+/// then destructures it, then goes back: the caller's write follows each edit.
+#[test]
+fn prop_write_role_edits_match_cold() {
+    write_twin(
+        "flow-write-prop-edit",
+        &[
+            ("App.tsx", PROP_WRITE_APP),
+            ("Select.tsx", PROP_WRITE_EVENT),
+        ],
+        ("App.tsx", "setOpen(true)"),
+        ("clean", "clean"),
+        &[
+            ("Select.tsx", PROP_WRITE_BODY, "violation", "violation"),
+            (
+                "Select.tsx",
+                PROP_WRITE_DESTRUCTURED,
+                "uncertifiable",
+                "uncertifiable",
+            ),
+            ("Select.tsx", PROP_WRITE_SPREAD, "clean", "clean"),
+            ("Select.tsx", PROP_WRITE_EVENT, "clean", "clean"),
+        ],
+    );
+}
+
+const HELPER_WRITE_APP: &str = r#"import { createSignal } from "solid-js";
+import { withTx } from "./tx";
+export function App() {
+  const [, setX] = createSignal(0);
+  withTx(() => setX(1));
+  return <main />;
+}
+"#;
+const HELPER_WRITE_CALLS: &str = "export function withTx(fn: () => void): void {\n  fn();\n}\n";
+const HELPER_WRITE_KEEPS: &str = "const queue: Array<() => void> = [];\nexport function withTx(fn: () => void): void {\n  queue.push(fn);\n}\n";
+
+/// A helper in another file starts keeping its callback and goes back: the
+/// caller's write is a violation only while the helper calls it.
+#[test]
+fn helper_write_role_edits_match_cold() {
+    write_twin(
+        "flow-write-helper-edit",
+        &[("App.tsx", HELPER_WRITE_APP), ("tx.ts", HELPER_WRITE_CALLS)],
+        ("App.tsx", "setX(1)"),
+        ("violation", "violation"),
+        &[
+            (
+                "tx.ts",
+                HELPER_WRITE_KEEPS,
+                "uncertifiable",
+                "uncertifiable",
+            ),
+            ("tx.ts", HELPER_WRITE_CALLS, "violation", "violation"),
+        ],
+    );
+}

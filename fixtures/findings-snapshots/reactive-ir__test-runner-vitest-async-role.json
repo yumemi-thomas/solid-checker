@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/async-role/App.test.tsx",
+      "start": 1084,
+      "end": 1091,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/async-role/App.test.tsx",
+      "start": 1097,
+      "end": 1108,
+      "fixes": 0
+    }
+  ]
+}

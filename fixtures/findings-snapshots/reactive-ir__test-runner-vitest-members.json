@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/members/App.test.tsx",
+      "start": 330,
+      "end": 348,
+      "fixes": 0
+    }
+  ]
+}

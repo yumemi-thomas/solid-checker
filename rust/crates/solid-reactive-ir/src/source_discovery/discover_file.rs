@@ -98,9 +98,10 @@ pub(crate) fn discover_file_sources(
                     .source_primitives
                     .push((symbol.clone(), spelling.into()));
             }
-            result
-                .source_owned_write
-                .push((symbol.clone(), created.owned_write_option));
+            result.source_owned_write.push((
+                symbol.clone(),
+                crate::owned_write_option(origin_file, created, Some(primitive), lookup.dialect),
+            ));
             if store_is_value_form(created, Some(primitive)) {
                 result.value_form_stores.push(symbol.clone());
             }
@@ -215,9 +216,10 @@ pub(crate) fn discover_file_sources(
                 if store_is_value_form(call, resolved) {
                     result.value_form_stores.push(symbol.clone());
                 }
-                result
-                    .source_owned_write
-                    .push((symbol.clone(), call.owned_write_option));
+                result.source_owned_write.push((
+                    symbol.clone(),
+                    crate::owned_write_option(file, call, resolved, lookup.dialect),
+                ));
                 let options = async_source_options(file, call, resolved, lookup.dialect);
                 if options != AsyncSourceOptions::default() {
                     result.source_async_options.push((symbol.clone(), options));
@@ -245,7 +247,7 @@ pub(crate) fn discover_file_sources(
                     (
                         symbol_id(file.source_text(name.span).unwrap_or_default()),
                         declaration,
-                        call.owned_write_option,
+                        crate::owned_write_option(file, call, resolved, lookup.dialect),
                         source_kind,
                     ),
                 ));
@@ -317,9 +319,10 @@ pub(crate) fn discover_file_sources(
         if store_is_value_form(call, resolved) {
             result.value_form_stores.push(symbol.clone());
         }
-        result
-            .source_owned_write
-            .push((symbol.clone(), call.owned_write_option));
+        result.source_owned_write.push((
+            symbol.clone(),
+            crate::owned_write_option(file, call, resolved, lookup.dialect),
+        ));
         if let Some(setter) = assignment.array_slots.get(1).and_then(|slot| *slot)
             && let Some(setter_symbol) = entities.at(file.path.as_str(), setter)
         {
@@ -328,7 +331,7 @@ pub(crate) fn discover_file_sources(
                 (
                     symbol_id(file.source_text(setter).unwrap_or_default()),
                     location(file.path.shared(), setter),
-                    call.owned_write_option,
+                    crate::owned_write_option(file, call, resolved, lookup.dialect),
                     source_kind,
                 ),
             ));
@@ -345,14 +348,22 @@ pub(crate) fn discover_file_sources(
 pub(crate) struct SourceDiscoveryMergeTarget<'a> {
     pub(crate) accessors: &'a mut HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) accessor_origins: &'a mut HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
-    pub(crate) setters: &'a mut HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
+    pub(crate) setters: &'a mut HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    >,
     pub(crate) actions: &'a mut HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) source_kinds: &'a mut HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) source_primitives: &'a mut HashMap<SymbolId, SymbolId>,
     pub(crate) source_phases: &'a mut HashMap<SymbolId, u8>,
     pub(crate) returned_source_symbols: &'a mut HashSet<SymbolId>,
     pub(crate) summary_source_symbols: &'a mut HashSet<SymbolId>,
-    pub(crate) source_owned_write: &'a mut HashMap<SymbolId, bool>,
+    pub(crate) source_owned_write: &'a mut HashMap<SymbolId, crate::OwnedWriteOption>,
     pub(crate) async_sources: &'a mut HashSet<SymbolId>,
     pub(crate) source_async_options: &'a mut HashMap<SymbolId, AsyncSourceOptions>,
     pub(crate) value_form_stores: &'a mut HashSet<SymbolId>,
@@ -362,14 +373,22 @@ pub(crate) struct SourceDiscoveryMergeTarget<'a> {
 pub(crate) struct SourceDiscoveryAggregate {
     pub(crate) accessors: HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) accessor_origins: HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
-    pub(crate) setters: HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
+    pub(crate) setters: HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    >,
     pub(crate) actions: HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) source_kinds: HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) source_primitives: HashMap<SymbolId, SymbolId>,
     pub(crate) source_phases: HashMap<SymbolId, u8>,
     pub(crate) returned_source_symbols: HashSet<SymbolId>,
     pub(crate) summary_source_symbols: HashSet<SymbolId>,
-    pub(crate) source_owned_write: HashMap<SymbolId, bool>,
+    pub(crate) source_owned_write: HashMap<SymbolId, crate::OwnedWriteOption>,
     pub(crate) async_sources: HashSet<SymbolId>,
     pub(crate) source_async_options: HashMap<SymbolId, AsyncSourceOptions>,
     pub(crate) value_form_stores: HashSet<SymbolId>,
@@ -516,7 +535,15 @@ pub(crate) fn extend_source_discovery_symbols(
 pub(crate) struct SourceDiscovery {
     pub(crate) accessors: HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) accessor_origins: HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
-    pub(crate) setters: HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
+    pub(crate) setters: HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    >,
     pub(crate) actions: HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) source_kinds: HashMap<SymbolId, ReactiveSourceKind>,
     /// The dialect primitive (canonical spelling) that created each reactive
@@ -528,7 +555,7 @@ pub(crate) struct SourceDiscovery {
     pub(crate) source_phases: HashMap<SymbolId, u8>,
     pub(crate) returned_source_symbols: HashSet<SymbolId>,
     pub(crate) summary_source_symbols: HashSet<SymbolId>,
-    pub(crate) source_owned_write: HashMap<SymbolId, bool>,
+    pub(crate) source_owned_write: HashMap<SymbolId, crate::OwnedWriteOption>,
     pub(crate) async_sources: HashSet<SymbolId>,
     pub(crate) source_async_options: HashMap<SymbolId, AsyncSourceOptions>,
     /// Store bindings proven to come from the value form

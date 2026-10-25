@@ -950,7 +950,16 @@ pub(crate) fn fresh_stack_callback_call<'file, 'lookup>(
         let callability = lookup
             .entity_at(file.path.as_str(), call.arguments[index].span)
             .and_then(|entity| entity.callability);
-        match crate::runtime_semantics::argument_behavior(resolved, callability, index)? {
+        let Some(behavior) =
+            crate::runtime_semantics::argument_behavior(resolved, callability, index)
+        else {
+            // ADR 0396: a callback handed directly to a reviewed test runner's
+            // registration runs from the runner's own scheduler.
+            return lookup
+                .is_test_runner_registration(file, call)
+                .then_some((call, resolved));
+        };
+        match behavior {
             RuntimeArgumentBehavior::FreshStackCallback => {
                 return Some((call, resolved));
             }

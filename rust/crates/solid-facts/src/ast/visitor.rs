@@ -294,24 +294,6 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .collect(),
             static_callee: self.is_static_callee(callee_span),
             result_discarded: self.discarded_expression == Some(call.span),
-            owned_write_option: call.arguments.get(1).is_some_and(|argument| {
-                let Argument::ObjectExpression(options) = argument else {
-                    return false;
-                };
-                options.properties.iter().any(|property| {
-                    let ObjectPropertyKind::ObjectProperty(property) = property else {
-                        return false;
-                    };
-                    let PropertyKey::StaticIdentifier(key) = &property.key else {
-                        return false;
-                    };
-                    key.name == "ownedWrite"
-                        && matches!(
-                            &property.value,
-                            oxc_ast::ast::Expression::BooleanLiteral(value) if value.value
-                        )
-                })
-            }),
             construct: false,
         });
         walk::walk_call_expression(self, call);
@@ -342,7 +324,6 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .collect(),
             static_callee: self.is_static_callee(callee_span),
             result_discarded: self.discarded_expression == Some(expression.span),
-            owned_write_option: false,
             construct: true,
         });
         walk::walk_new_expression(self, expression);

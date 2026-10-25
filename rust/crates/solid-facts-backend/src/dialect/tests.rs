@@ -93,7 +93,7 @@ fn catalog_prose_program() -> Program {
             location: location(3),
             declaration: location(4),
             execution: ExecutionRole::TrackedJsx,
-            allowed_by_option: false,
+            owned_write: solid_reactive_ir::OwnedWriteOption::Off,
             context: "sample computation".into(),
         }],
         missing_owners: vec![OwnerRequirement {
@@ -195,7 +195,7 @@ fn dialect_ids_are_unique_and_resolvable() {
 fn compatibility_registry_counts_match_the_catalog_migration() {
     assert_eq!(
         RULE_ALIASES.len(),
-        20,
+        25,
         "the migration note must list every transferred configuration key"
     );
     assert_eq!(
@@ -210,9 +210,25 @@ fn every_catalog_identity_resolves_to_its_metadata() {
     for dialect in ALL {
         if dialect.id == "solid-v2" {
             for rule in solid_v2_rules::Rule::ALL {
+                // A name is the lookup key (ADR 0384): codes sharing one name
+                // resolve to the first of them, and agree on all else.
+                let found = (dialect.rule_metadata)(rule.metadata().name).unwrap();
+                let expected = rule.metadata();
                 assert_eq!(
-                    (dialect.rule_metadata)(rule.metadata().name),
-                    Some(rule.metadata())
+                    (
+                        found.name,
+                        found.severity,
+                        found.uncertifiable,
+                        found.default_enabled,
+                        found.presets
+                    ),
+                    (
+                        expected.name,
+                        expected.severity,
+                        expected.uncertifiable,
+                        expected.default_enabled,
+                        expected.presets
+                    )
                 );
             }
         }

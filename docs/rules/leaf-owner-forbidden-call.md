@@ -12,18 +12,28 @@ primitives, and `flush()` inside `createTrackedEffect` or an owner-backed
 Leaf owners manage work through their callback's return value and cannot own
 children. Consequently, `onCleanup` must be returned, derived primitives such
 as `createMemo`, `createRoot`, and function-form `createSignal` cannot attach,
-and `flush()` cannot re-enter the flush cycle. Solid throws in development for
-all three operation variants. Value-form state such as `createSignal(0)` and
+and `flush()` cannot re-enter the flush cycle. Solid throws for all three
+operation variants in its development build only: the `@solidjs/signals`
+rc.17 production bundle (`dist/prod`) carries no such guard, so there the
+call does not throw (ADR 0392). Value-form state such as `createSignal(0)` and
 `createStore(object)` is allowed because it attaches no child work.
 
 The callback must be a directly written function literal, an exact function
 reference, or a closed local callback return. For the last form, the adapter
 must have one unconditional return of a function literal or its exact callback
 parameter; the returned function is then checked in its own synchronous extent.
-Exactly resolved project helpers are followed transitively. Conditional,
+Exactly resolved project helpers are followed transitively: a function or
+`const` arrow, an import a path or alias resolves inside the program, and a
+method declared in `C` of a `const` bound to `new C(...)`. Conditional,
 aliased, wrapper-built, package, or otherwise unresolved callbacks produce
 `reactive-dispatch-unresolved` instead of being guessed. A nested function
 merely created by the callback executes outside the leaf extent.
+
+A standard-library call in that extent is judged by its exact declaration,
+optional (`el?.scrollIntoView()`) or not (ADR 0397). One that dispatches an
+event synchronously (`focus`, `click`, `dispatchEvent`, dialog and popover
+toggles, `AbortController.abort`) keeps the obligation, since a listener it
+reaches may call `onCleanup`; so does an optional `getContext`.
 
 `onSettled` becomes a leaf owner only when its call is proven owner-backed.
 Out-of-band calls enqueue a plain callback and remain outside this rule; an

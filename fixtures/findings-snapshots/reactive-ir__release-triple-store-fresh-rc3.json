@@ -12,7 +12,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
       "severity": "warning",
@@ -22,7 +22,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
       "severity": "warning",
@@ -32,7 +32,7 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -42,7 +42,7 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
       "severity": "error",

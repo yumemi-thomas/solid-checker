@@ -1021,6 +1021,21 @@ fn spread_event_keys_require_web_rc13() {
     assert_eq!(Solid2::CONSERVATIVE.spread_key_is_event("onClick"), None);
 }
 
+/// ADR 0393: only the web release whose delegated `eventHandler` was read
+/// (rc.17) answers that a `document` dispatch reaches no element handler.
+#[test]
+fn document_dispatch_exclusion_needs_the_rc17_event_handler() {
+    assert!(
+        analyzed(&same("2.0.0-rc.17"))
+            .0
+            .document_dispatch_reaches_no_element_handler()
+    );
+    assert!(!Solid2::RC13.document_dispatch_reaches_no_element_handler());
+    assert!(!Solid2::CONSERVATIVE.document_dispatch_reaches_no_element_handler());
+    let older_web = vocabulary_for(Release::Read(13), Release::Read(13), Release::Read(9));
+    assert!(!older_web.document_dispatch_reaches_no_element_handler());
+}
+
 /// The rc.17 review: `on` + an uppercase letter is a spread listener on web
 /// rc.17, `createOptimistic`'s setter is unguarded and `latest` absorbs a
 /// pending read on signals rc.17, `hydrate` may defer `code` on web rc.17,

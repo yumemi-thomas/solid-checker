@@ -10,6 +10,23 @@ use super::*;
 /// invocation through a primitive's callback slot refuses: who owns that run
 /// is the owner graph's question, not this walk's.
 pub(crate) fn event_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(String, Span)> {
+    invoked_literals(lookup, false)
+}
+
+/// ADR 0396: the census of [`event_invoked_literals`] with a reviewed test
+/// runner as the only entry. Every function literal of a closed program whose
+/// invocations, followed forward the same way, are all calls written directly
+/// in a function literal handed to a test runner's registration (or in a
+/// literal of this set, transitively and within the same bounds): each runs
+/// on the runner's stack or on a continuation of it, with no owner and no
+/// strict-read window. A reference that is an export, an alias, a value passed
+/// on, or a call from anywhere else (a component body, an event handler, a
+/// primitive's callback) refuses, as it does for the event census.
+pub(crate) fn test_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(String, Span)> {
+    invoked_literals(lookup, true)
+}
+
+fn invoked_literals(lookup: &SemanticLookup<'_>, test_entries: bool) -> HashSet<(String, Span)> {
     let mut literals = HashSet::default();
     if !lookup.program_closed
         || lookup.files().iter().any(|file| {
@@ -37,13 +54,114 @@ pub(crate) fn event_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(St
                 frames: Vec::new(),
                 props_stack: Vec::new(),
                 owner_mode: true,
+                test_entries,
+                write_root_body: None,
+                touched: HashSet::default(),
             };
-            if flow.function_role(file, literal) == Some(Some(ExecutionRole::EventCallback)) {
+            // The role a satisfied entry reports: the owner walk's event
+            // marker, or (test entries) the role a registered callback has.
+            let entry = if test_entries {
+                ExecutionRole::DeferredCallback
+            } else {
+                ExecutionRole::EventCallback
+            };
+            if flow.function_role(file, literal) == Some(Some(entry)) {
                 literals.insert((file.path.to_string(), literal.span));
             }
         }
     }
     literals
+}
+
+/// ADR 0395: whether the call at `call` is written directly in a function
+/// whose every invocation the census ([`event_invoked_literals`]) finds is an
+/// event delivery. Such a call runs on the stack of a delivery, so a dispatch
+/// there hands its handler no owner and no strict-read window the delivery did
+/// not have. Code that runs elsewhere than the function's own flow (a class
+/// field, JSX the compiler wraps in a getter) is left out, as the census's own
+/// call placement leaves it out, and so is a file whose compiler facts were
+/// withheld (ADR 0360). The census reads no dispatch veto.
+pub(crate) fn dispatch_in_event_only_function(
+    file: &solid_facts::FileFacts,
+    call: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    dispatch_in_census_function(file, call, lookup.event_invoked_literals())
+}
+
+/// ADR 0396: [`dispatch_in_event_only_function`] for the test-only census
+/// ([`test_invoked_literals`]): the call is written directly in a helper every
+/// invocation of which is a call in a test runner's callback (or in another
+/// such helper), so it runs on the runner's stack or a continuation of it.
+pub(crate) fn dispatch_in_test_only_function(
+    file: &solid_facts::FileFacts,
+    call: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    dispatch_in_census_function(file, call, lookup.test_invoked_literals())
+}
+
+fn dispatch_in_census_function(
+    file: &solid_facts::FileFacts,
+    call: Span,
+    census: &HashSet<(String, Span)>,
+) -> bool {
+    if file.compiler.withheld() {
+        return false;
+    }
+    let Some(function) = containing_ast_function(&file.ast, call) else {
+        return false;
+    };
+    crate::owners::written_directly_in(&file.ast, function, call)
+        && !class_within(file, function.span, call)
+        && !file
+            .ast
+            .jsx_containing(call)
+            .any(|element| function.body.contains(element.span))
+        && !file
+            .ast
+            .jsx_fragments
+            .iter()
+            .any(|fragment| function.body.contains(*fragment) && fragment.contains(call))
+        && census.contains(&(file.path.to_string(), function.span))
+}
+
+/// Whether `function` is a literal written directly as an argument of a
+/// reviewed test runner's registration ([`SemanticLookup::is_test_runner_registration`]):
+/// the runner invokes it, from its own scheduler. A literal behind a wrapper
+/// call (`it("x", wrap(fn))`) is not the argument, and a spread before it
+/// makes the position unknown.
+fn registered_test_callback(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .arguments_containing(function.span)
+        .any(|(call, index)| {
+            matches!(
+                call.arguments[index].value,
+                solid_facts::ast::ArgumentValueKind::Function
+                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
+            ) && file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                && !call
+                    .arguments
+                    .iter()
+                    .take(index + 1)
+                    .any(|argument| argument.spread)
+                && lookup.is_test_runner_registration(file, call)
+        })
+}
+
+thread_local! {
+    /// The write classifier's role at each call the write flow has asked of
+    /// during one table computation (empty otherwise).
+    static WRITE_SITE_ROLES: std::cell::RefCell<HashMap<(String, Span, RootBodyGuard), ExecutionRole>> =
+        std::cell::RefCell::new(HashMap::default());
+}
+
+pub(super) fn clear_write_site_roles() {
+    WRITE_SITE_ROLES.with(|cache| cache.borrow_mut().clear());
 }
 
 impl<'a> InvocationFlow<'a, '_, '_> {
@@ -54,6 +172,9 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         file: &'a solid_facts::FileFacts,
         function: &'a solid_facts::ast::FunctionFact,
     ) -> Option<Option<ExecutionRole>> {
+        if let Some(root_body) = self.write_root_body {
+            return self.write_function_role(file, function, root_body);
+        }
         let invocations = self.function_invocations(file, function)?;
         let mut role = None::<ExecutionRole>;
         for invocation in invocations {
@@ -107,6 +228,9 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         if self.owner_mode {
             return self.owner_site_role(file, call, frames);
         }
+        if let Some(root_body) = self.write_root_body {
+            return self.write_site_role(file, call, callee, frames, root_body);
+        }
         let here = semantic_execution_role_within(
             file,
             callee,
@@ -147,6 +271,144 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         role
     }
 
+    /// ADR 0400: [`Self::function_role`] for a write. An invocation in an
+    /// owned scope is the answer whatever the others are (ADR 0378: one entry
+    /// that throws is a violation); otherwise every invocation must be placed,
+    /// in one role or, when they differ, in none (`Unreported`, as for reads).
+    fn write_function_role(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        function: &'a solid_facts::ast::FunctionFact,
+        root_body: RootBodyGuard,
+    ) -> Option<Option<ExecutionRole>> {
+        let invocations = self.function_invocations(file, function)?;
+        let mut owned = None::<ExecutionRole>;
+        let mut unplaced = false;
+        let mut role = None::<ExecutionRole>;
+        for invocation in invocations {
+            let here = match invocation {
+                // A host event dispatch hands the function the delivery's
+                // owner, which a synchronous dispatch of the program's own
+                // may make the dispatcher's (ADR 0356).
+                Invocation::Role(ExecutionRole::EventCallback)
+                    if self.lookup.synchronous_event_dispatch_present() =>
+                {
+                    unplaced = true;
+                    continue;
+                }
+                Invocation::Role(role) => role,
+                Invocation::Call(call_file, call, frames) => {
+                    match self.write_site_role(
+                        call_file,
+                        call,
+                        call_file.ast.call_at(call)?.callee,
+                        frames,
+                        root_body,
+                    ) {
+                        None => {
+                            unplaced = true;
+                            continue;
+                        }
+                        // A call written in a function nothing invokes never runs.
+                        Some(None) => continue,
+                        Some(Some(here)) => here,
+                    }
+                }
+            };
+            if here.reports_disallowed_write() {
+                owned.get_or_insert(here);
+            } else if matches!(
+                here,
+                ExecutionRole::Unknown | ExecutionRole::DiscardedRendering
+            ) {
+                unplaced = true;
+            } else {
+                role = Some(match role {
+                    Some(role) if role == here => role,
+                    Some(_) => ExecutionRole::Unreported,
+                    None => here,
+                });
+            }
+        }
+        if let Some(owned) = owned {
+            return Some(Some(owned));
+        }
+        if unplaced {
+            return None;
+        }
+        Some(role)
+    }
+
+    /// ADR 0400: the role of the call at `call` for a write, as the write
+    /// classifier places it where it is written, or the one role of every
+    /// invocation of the plain function it is written in when no fact places
+    /// it there.
+    fn write_site_role(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        call: Span,
+        callee: Span,
+        frames: Vec<FlowFrame<'a>>,
+        root_body: RootBodyGuard,
+    ) -> Option<Option<ExecutionRole>> {
+        let lookup = self.lookup;
+        self.touched.insert(file.path.as_str());
+        // The classifier's answer at a call depends on where the call is
+        // written, not on the activation the walk found it in; the table
+        // computation asks it of the same call from many functions.
+        let key = (file.path.to_string(), callee, root_body);
+        let cached = WRITE_SITE_ROLES.with(|cache| cache.borrow().get(&key).copied());
+        let here = cached.unwrap_or_else(|| {
+            let allowed = write_allowed_spans(file, &allowed_callback_spans(file, lookup), lookup);
+            // Only what the position proves: another entry of the function
+            // the call is written in is not an entry of this activation.
+            let here = semantic_write_role_walk(
+                file,
+                callee,
+                &allowed,
+                lookup.entities(),
+                lookup.symbol_names(),
+                lookup,
+                root_body,
+                &mut HashSet::from_iter([lexical_only_marker()]),
+            );
+            WRITE_SITE_ROLES.with(|cache| cache.borrow_mut().insert(key, here));
+            here
+        });
+        if here != ExecutionRole::Unknown {
+            return Some(Some(here));
+        }
+        let owner = containing_ast_function(&file.ast, call)?;
+        if !owner.body.contains(call)
+            || (owner.r#async && may_follow_suspension(file, call))
+            || owner.generator
+            || lookup.function_component_status(file, owner) != ComponentStatus::No
+        {
+            return None;
+        }
+        // The call runs in the activation that handed the function its
+        // parameter: that call alone is the owner's invocation, whatever its
+        // other callers do (a helper called from a handler and from a body).
+        if let Some((callee_path, callee_span, caller_file, caller_call)) = frames.last().cloned()
+            && callee_path == file.path.as_str()
+            && callee_span == owner.span
+        {
+            let mut rest = frames;
+            rest.pop();
+            let caller_callee = caller_file.ast.call_at(caller_call)?.callee;
+            return self.write_site_role(caller_file, caller_call, caller_callee, rest, root_body);
+        }
+        let key = (format!("\0write-flow:{}", file.path.as_str()), owner.span);
+        if !self.classifying.insert(key.clone()) {
+            return None;
+        }
+        let outer = std::mem::replace(&mut self.frames, frames);
+        let role = self.function_role(file, owner);
+        self.frames = outer;
+        self.classifying.remove(&key);
+        role
+    }
+
     /// [`Self::site_role`] for the owner question: the call is written
     /// directly in a function the compiler classifies as an event handler,
     /// or it takes the one role of every invocation of the plain function it
@@ -158,8 +420,20 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         frames: Vec<FlowFrame<'a>>,
     ) -> Option<Option<ExecutionRole>> {
         let owner = containing_ast_function(&file.ast, call)?;
+        // ADR 0396: a function literal handed directly to a reviewed test
+        // runner's registration. Both its prefix up to the first await and
+        // every continuation after one run with no owner and no strict-read
+        // window (the runner's stack, then no owner at any resumption, ADR
+        // 0333), so a call written in it is a satisfied entry past an await
+        // as well; an event handler's census refuses past one.
+        let registered = self.test_entries && registered_test_callback(file, owner, self.lookup);
+        // ADR 0400: in the test census an async helper's call past a
+        // suspension is a satisfied entry as a registered callback's is: the
+        // resumption runs with no owner and no window (ADR 0333) whoever
+        // called the helper, and the part before the first await runs on its
+        // caller's stack, which the walk below requires to be a runner's.
         if !owner.body.contains(call)
-            || (owner.r#async && may_follow_suspension(file, call))
+            || (owner.r#async && may_follow_suspension(file, call) && !self.test_entries)
             || owner.generator
             || self.lookup.function_component_status(file, owner) != ComponentStatus::No
         {
@@ -183,7 +457,11 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         {
             return None;
         }
-        if file.compiler.callback_roles.iter().any(|callback| {
+        if self.test_entries {
+            if registered {
+                return Some(Some(ExecutionRole::DeferredCallback));
+            }
+        } else if file.compiler.callback_roles.iter().any(|callback| {
             callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
                 && file.ast.peel_ts_sugar_span(callback.span) == owner.span
         }) {
@@ -265,10 +543,11 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         }
         if function.kind == solid_facts::ast::FunctionKind::Declaration {
             let name = function.name.as_ref()?;
-            if flow_binding_exported(file, name.span)
-                || crate::indexes::binding_written(file, name.span)
-            {
+            if crate::indexes::binding_written(file, name.span) {
                 return None;
+            }
+            if flow_binding_exported(file, name.span) {
+                self.exported_call_sites(file, function, &mut out)?;
             }
             for (reference, _) in
                 file.ast
@@ -305,6 +584,67 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         Some(out)
     }
 
+    /// ADR 0400: the invocations of an exported function declaration in
+    /// another module of a closed program. Every other module's reference to
+    /// the declaration's symbol must be a call site the call graph accounts
+    /// for (`function_call_site_references`: no alias, re-export, argument,
+    /// type query or namespace hand-out), and each site must be a plain call
+    /// expression; any other reference refuses, as an open program does. The
+    /// module's own references are followed by the caller, as for a function
+    /// that is not exported.
+    fn exported_call_sites(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        function: &'a solid_facts::ast::FunctionFact,
+        out: &mut Vec<Invocation<'a>>,
+    ) -> Option<()> {
+        let lookup = self.lookup;
+        let path = file.path.as_str();
+        let name = function.name.as_ref()?;
+        if !lookup.program_closed
+            || lookup.escapes_unnamed(path)
+            || lookup.hands_out_by_name(path, function.span)
+        {
+            return None;
+        }
+        let symbol = lookup.entities().at(path, name.span)?;
+        let references = lookup.symbol_references_if_present(symbol.as_str())?;
+        let accounted: HashSet<(&str, u32, u32)> = lookup
+            .function_call_site_references(path, function.span)
+            .into_iter()
+            .map(|(caller, callee)| (caller.path.as_str(), callee.start, callee.end))
+            .collect();
+        for reference in &references {
+            if reference.path.as_ref() == path {
+                continue;
+            }
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
+                return None;
+            };
+            if !accounted.contains(&(reference.path.as_ref(), start, end)) {
+                return None;
+            }
+        }
+        for (caller_file, callee) in lookup.function_call_sites(path, function.span) {
+            if caller_file.path == file.path {
+                continue;
+            }
+            let call = caller_file.ast.calls.iter().find(|call| {
+                !call.construct && caller_file.ast.peel_ts_sugar_span(call.callee) == callee
+            })?;
+            self.touched.insert(caller_file.path.as_str());
+            out.push(Invocation::Call(
+                caller_file,
+                call.span,
+                self.frames.clone(),
+            ));
+        }
+        Some(())
+    }
+
     /// Follow the value the expression at `expr` evaluates to, holding the
     /// tracked function at member `path` (empty: the function itself).
     /// `origin` is the object literal that value is, when known.
@@ -321,6 +661,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
             return None;
         }
         self.budget -= 1;
+        self.touched.insert(file.path.as_str());
         let expr = file.ast.peel_ts_sugar_span(expr);
         if !self.seen.insert((
             file.path.as_str(),
@@ -390,7 +731,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
             // slot, a slot that stores the function or runs it on result
             // access, and every unmodelled slot refuse.
             if let Some(primitive) = self.lookup.primitive_at_call(file, call.span) {
-                if !path.is_empty() || self.owner_mode {
+                if !path.is_empty() || self.owner_mode || self.write_root_body.is_some() {
                     return None;
                 }
                 // A callback that runs synchronously in the call's own window
@@ -409,6 +750,30 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 let role = primitive_callback_slot_role(file, call, index, self.lookup)?;
                 out.push(Invocation::Role(role));
                 return Some(());
+            }
+            // ADR 0400: a reviewed scheduler's callback (`setTimeout(fn)`) is
+            // run from a fresh stack with no owner and no window: the
+            // scheduled role, wherever the call was written. The selected
+            // standard-library declaration says so, never the spelling.
+            if self.write_root_body.is_some() && path.is_empty() {
+                let resolved = self.lookup.resolved_callee_call(file, call.callee);
+                let callability = self
+                    .lookup
+                    .entity_at(file.path.as_str(), call.arguments[index].span)
+                    .and_then(|entity| entity.callability);
+                if resolved.is_some_and(|resolved| {
+                    resolved
+                        .declaration
+                        .as_ref()
+                        .is_some_and(|declaration| declaration.standard_library)
+                        && matches!(
+                            crate::runtime_semantics::argument_behavior(resolved, callability, index),
+                            Some(crate::runtime_semantics::RuntimeArgumentBehavior::FreshStackCallback)
+                        )
+                }) {
+                    out.push(Invocation::Role(ExecutionRole::DeferredCallback));
+                    return Some(());
+                }
             }
             let (callee_file, callee, exact) =
                 project_callee_at_parameter(file, call, index, self.lookup)?;
@@ -466,6 +831,12 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                         }
                         _ => None,
                     };
+                }
+                // A spread hands over every prop of its source, in an order
+                // later attributes can replace, so which function the
+                // component calls is not this value's to claim (ADR 0400).
+                if self.write_root_body.is_some() {
+                    return None;
                 }
                 return self.component_props_uses(
                     file,
@@ -628,6 +999,48 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 .initializer
                 .is_some_and(|initializer| peel(initializer) == expr)
         }) {
+            // ADR 0400: an object pattern holding the object the value is a
+            // member of (`const { add } = renderPanel()`): the tracked member
+            // is the one binding the pattern names for its key. A pattern
+            // with a rest element or a nested pattern (names and slots
+            // differ), or any key that is not a plain identifier (a quoted
+            // or computed key may name the member without its spelling),
+            // refuses.
+            if binding.shape == solid_facts::ast::BindingShape::Object {
+                if binding.names.len() != binding.object_slots.len()
+                    || binding
+                        .object_slots
+                        .iter()
+                        .any(|slot| !slot.plain_identifier_key)
+                {
+                    return None;
+                }
+                let (first, rest) = path.split_first()?;
+                let Some(slot) = binding
+                    .object_slots
+                    .iter()
+                    .find(|slot| slot.property.as_str() == first)
+                else {
+                    // The object is read for other members only.
+                    return Some(());
+                };
+                if !(binding.immutable || !crate::indexes::binding_written(file, slot.local.span))
+                    || flow_binding_exported(file, slot.local.span)
+                {
+                    return None;
+                }
+                for (reference, _) in
+                    file.ast
+                        .reference_declarations
+                        .iter()
+                        .filter(|(reference, declaration)| {
+                            *declaration == slot.local.span && *reference != slot.local.span
+                        })
+                {
+                    self.uses(file, *reference, rest.to_vec(), FlowOrigin::Unknown, out)?;
+                }
+                return Some(());
+            }
             let [name] = binding.names.as_slice() else {
                 return None;
             };
@@ -694,6 +1107,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         if !file_is_module(file) {
             return None;
         }
+        self.touched.insert(file.path.as_str());
         let parameter = function.parameters.get(index)?;
         let [name] = parameter.names.as_slice() else {
             return None;
@@ -742,6 +1156,27 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         if component.r#async || component.generator {
             return None;
         }
+        // ADR 0400: the prop must be the one the component receives under its
+        // name: a spread may carry another function under it, or replace it
+        // (`<Child onPress={a} {...rest} />`), and a repeated attribute
+        // competes with it. The owned-scope answer is a violation, so a prop
+        // another value may have replaced proves nothing.
+        if self.write_root_body.is_some()
+            && (!element.spreads.is_empty()
+                || path.first().is_some_and(|prop| {
+                    element
+                        .attributes
+                        .iter()
+                        .filter(|attribute| {
+                            attribute.namespace.is_none()
+                                && file.source_text(attribute.name) == Some(prop.as_str())
+                        })
+                        .count()
+                        > 1
+                }))
+        {
+            return None;
+        }
         // The tag must run that declaration: its binding is current, and a
         // member tag (`Menu.Item`) reaches exactly the declared member.
         let tag = file.ast.peel_ts_sugar_span(element.name.span);
@@ -756,6 +1191,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
             return None;
         }
         let component_file = self.lookup.file_by_path(component_file.path.as_str())?;
+        self.touched.insert(component_file.path.as_str());
         // A component rendering itself through this element again, holding
         // the value under the same member path (a tree of branches): the
         // recursive activation holds it at the same positions with the same

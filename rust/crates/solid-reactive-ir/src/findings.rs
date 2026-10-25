@@ -43,6 +43,10 @@ pub const DOCS_BASE_URL: &str =
 /// Serializes a rule catalog into the stable manifest consumed by the npm
 /// adapter. Catalogs remain responsible for ordering and metadata; this owns
 /// the shared wire shape and formatting.
+///
+/// One entry per rule *name*, the configurable identity (ADR 0384): codes that
+/// share a name become one entry whose `code` is the first and whose `codes`
+/// lists every one. Two rules of one name must agree on every other field.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RuleManifestIdentity {
     /// Stable checker dialect id (`solid-v2`).
@@ -63,16 +67,45 @@ pub fn rule_manifest_json(
         "{{\n  \"schemaVersion\": 1,\n  \"dialect\": \"{}\",\n  \"config\": \"{}\",\n  \"namespace\": \"{}\",\n  \"docsBaseUrl\": \"{docs_base_url}\",\n  \"rules\": [\n",
         identity.dialect, identity.config, identity.namespace
     );
-    let count = rules.len();
-    for (index, metadata) in rules.enumerate() {
+    let mut entries: Vec<(RuleMetadata, Vec<&'static str>)> = Vec::new();
+    for metadata in rules {
+        if let Some((first, codes)) = entries
+            .iter_mut()
+            .find(|(first, _)| first.name == metadata.name)
+        {
+            assert!(
+                first.severity == metadata.severity
+                    && first.uncertifiable == metadata.uncertifiable
+                    && first.default_enabled == metadata.default_enabled
+                    && first.presets == metadata.presets,
+                "rules named {} must share severity, certifiability and presets",
+                metadata.name
+            );
+            codes.push(metadata.code);
+        } else {
+            entries.push((metadata, vec![metadata.code]));
+        }
+    }
+    let count = entries.len();
+    for (index, (metadata, codes)) in entries.into_iter().enumerate() {
         let presets = metadata
             .presets
             .iter()
             .map(|preset| format!("\"{preset}\""))
             .collect::<Vec<_>>()
             .join(", ");
+        let all_codes = if codes.len() > 1 {
+            let listed = codes
+                .iter()
+                .map(|code| format!("\"{code}\""))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(" \"codes\": [{listed}],")
+        } else {
+            String::new()
+        };
         out.push_str(&format!(
-            "    {{ \"code\": \"{}\", \"name\": \"{}\", \"severity\": \"{}\", \"uncertifiable\": {}, \"defaultEnabled\": {}, \"presets\": [{}] }}{}\n",
+            "    {{ \"code\": \"{}\",{all_codes} \"name\": \"{}\", \"severity\": \"{}\", \"uncertifiable\": {}, \"defaultEnabled\": {}, \"presets\": [{}] }}{}\n",
             metadata.code,
             metadata.name,
             metadata.severity,

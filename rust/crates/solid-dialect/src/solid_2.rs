@@ -359,6 +359,16 @@ impl Dialect for Solid2 {
             ),
         }
     }
+    fn document_dispatch_reaches_no_element_handler(&self) -> bool {
+        // Read on the rc.17 bytes (`dist/web.js` `eventHandler`): it walks
+        // `e.composedPath()` from the event's target and calls only
+        // `node["$$" + type]` handlers, which `addEvent` sets on elements.
+        // Only the release whose `eventHandler` was read answers.
+        matches!(
+            self.spread_event_keys,
+            releases::SpreadEventKeys::OnUppercase
+        )
+    }
     fn optimistic_signal_setter_guarded(&self) -> bool {
         self.optimistic_signal_setter_guarded
     }

@@ -542,6 +542,9 @@ impl DiagnosticSession {
         if !facts.dependency_source_roots.is_empty() {
             snapshot.premises.push("package integrity (ADR 0300): code outside the analyzed program neither provides selected packages' exported contexts nor rewrites objects those packages create".into());
         }
+        snapshot
+            .premises
+            .extend(program.event_dispatch_sites.iter().map(dispatch_premise));
         let analysis = Arc::new(DiagnosticAnalysis { program, snapshot });
         self.retained = Some(RetainedDiagnostic {
             identity,
@@ -1358,6 +1361,34 @@ pub fn discovered_rule_options_path(project_directory: &Path) -> Option<PathBuf>
         }
     }
     None
+}
+
+/// ADR 0393: one synchronous DOM dispatch call. A site that withholds event
+/// proofs says which; an excluded one says why, so a report lists everything
+/// the veto decided.
+fn dispatch_premise(site: &solid_reactive_ir::EventDispatchSite) -> String {
+    let at = format!("{}:{}", site.path, site.line);
+    let withheld = match (site.withholds_owner_proofs, site.withholds_read_proofs) {
+        (true, true) => "owner and read proofs",
+        (true, false) => "owner proofs",
+        (false, true) => "read proofs",
+        (false, false) => "",
+    };
+    if withheld.is_empty() {
+        let why = match site.receiver.as_str() {
+            "window" | "document" => format!("receiver {}", site.receiver),
+            _ => format!("caller {}", site.caller.as_deref().unwrap_or("unproven")),
+        };
+        return format!("synchronous dispatch (ADR 0393) at {at} excluded: {why}");
+    }
+    let caller = site
+        .caller
+        .as_deref()
+        .map_or_else(String::new, |caller| format!(", caller {caller}"));
+    format!(
+        "synchronous dispatch (ADR 0393) at {at} withholds event handler {withheld}: receiver {}{caller}",
+        site.receiver
+    )
 }
 
 #[cfg(test)]

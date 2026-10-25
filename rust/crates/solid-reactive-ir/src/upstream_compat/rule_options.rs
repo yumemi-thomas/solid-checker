@@ -174,7 +174,7 @@ mod tests {
             rule,
             "prefer-classlist"
                 | "no-destructure"
-                | "no-direct-mutation"
+                | "no-store-mutation-outside-setter"
                 | "no-owner-cleanup"
                 | "no-owner-settled-cleanup"
                 | "strict-read-untracked"
@@ -210,7 +210,7 @@ mod tests {
             r#"{
               "schemaVersion": 1,
               "rules": {
-                "no-direct-mutation": { "enabled": false },
+                "no-store-mutation-outside-setter": { "enabled": false },
                 "no-owner-cleanup": { "enabled": false },
                 "strict-read-untracked": { "enabled": true }
               }
@@ -218,7 +218,7 @@ mod tests {
             known_rule,
         )
         .unwrap();
-        assert!(!options.is_enabled("no-direct-mutation", true, &[]));
+        assert!(!options.is_enabled("no-store-mutation-outside-setter", true, &[]));
         assert!(options.is_enabled("strict-read-untracked", true, &[]));
         assert!(options.is_enabled("no-destructure", true, &[]));
         assert!(!options.is_enabled("no-owner-cleanup", true, &[]));

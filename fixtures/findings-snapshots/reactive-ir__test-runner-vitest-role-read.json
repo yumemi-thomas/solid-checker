@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/role-read/App.test.tsx",
+      "start": 686,
+      "end": 693,
+      "fixes": 0
+    }
+  ]
+}

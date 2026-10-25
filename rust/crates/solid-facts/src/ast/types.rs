@@ -503,7 +503,6 @@ pub struct CallFact {
     pub type_arguments: bool,
     pub arguments: Vec<ArgumentFact>,
     pub static_callee: bool,
-    pub owned_write_option: bool,
     /// Whether this call's own result provably reaches nothing: the call
     /// **is** the expression of an `ExpressionStatement`.
     ///
