@@ -1149,6 +1149,90 @@ fn project_memos_are_reused_until_the_program_moves() {
     assert_eq!(stats_of(&tables, "tuple_iteration_veto").changed, 1);
 }
 
+/// [`memo_build`] that leaves the sweep to the caller
+/// ([`SemanticLookup::defer_end_memos`]): whether the build read a memo.
+fn memo_build_deferred<T>(
+    facts: &ProjectFacts,
+    store: &crate::base::memo::build::MemoStore,
+    body: impl FnOnce(&SemanticLookup<'_>) -> T,
+) -> (T, bool) {
+    let entities = entity_symbols(facts, &[]);
+    let ast_indexes = HashMap::default();
+    let symbol_names = HashMap::default();
+    let dialect = solid_dialect::Solid2;
+    let lookup = SemanticLookup::new(
+        facts,
+        &ast_indexes,
+        &entities,
+        &symbol_names,
+        &dialect,
+        false,
+    )
+    .with_memo_store(store);
+    let value = body(&lookup);
+    (value, lookup.defer_end_memos())
+}
+
+/// A sweep a build deferred is the sweep it would have run: the same entries
+/// go, run by `finish_deferred_end` or, when the caller never asks, by the
+/// next build's begin, which reads the store only after it. Without a memo
+/// read there is nothing to defer.
+#[test]
+fn a_deferred_sweep_is_the_sweep_run_later() {
+    let source = "declare function guard(message: string): never;\nfunction f() { guard(\"x\"); work(); }\nexport const label = \"x\";\n";
+    let facts = || {
+        project_over(
+            source,
+            vec![never_returning_entity(span_of(source, "guard", 1))],
+        )
+    };
+    let both = |lookup: &SemanticLookup<'_>| {
+        (
+            lookup.never_returning_calls().len(),
+            lookup.tuple_iteration_may_be_mutated(),
+        )
+    };
+    let one = |lookup: &SemanticLookup<'_>| lookup.never_returning_calls().len();
+    // The reference: the sweep runs when the build ends.
+    let immediate = crate::base::memo::build::MemoStore::new(true, true);
+    memo_build(&facts(), &immediate, &[], both);
+    let (_, immediate_second) = memo_build(&facts(), &immediate, &[], one);
+    assert_eq!(
+        stats_of(&immediate_second, "tuple_iteration_veto").entries,
+        0,
+        "the entry the second build did not ask for is swept"
+    );
+    let (_, immediate_third) = memo_build(&facts(), &immediate, &[], both);
+
+    // The same builds, the second one's sweep deferred and run by the caller.
+    let deferred = crate::base::memo::build::MemoStore::new(true, true);
+    memo_build(&facts(), &deferred, &[], both);
+    let (_, due) = memo_build_deferred(&facts(), &deferred, one);
+    assert!(due, "the build read a memo");
+    let report = deferred
+        .finish_deferred_end()
+        .expect("the build's sweep is due");
+    assert_eq!(report.tables, immediate_second);
+    assert!(deferred.finish_deferred_end().is_none(), "it runs once");
+    let (_, third) = memo_build(&facts(), &deferred, &[], both);
+    assert_eq!(third, immediate_third);
+
+    // The caller never asks: the next build's begin runs the sweep first.
+    let lazy = crate::base::memo::build::MemoStore::new(true, true);
+    memo_build(&facts(), &lazy, &[], both);
+    let (_, due) = memo_build_deferred(&facts(), &lazy, one);
+    assert!(due);
+    let (_, third) = memo_build(&facts(), &lazy, &[], both);
+    assert_eq!(third, immediate_third);
+    assert!(lazy.finish_deferred_end().is_none(), "begin ran it");
+
+    // A build that read no memo has nothing to sweep.
+    let silent = crate::base::memo::build::MemoStore::new(true, true);
+    let (_, due) = memo_build_deferred(&facts(), &silent, |_| ());
+    assert!(!due);
+    assert!(silent.finish_deferred_end().is_none());
+}
+
 /// A whole-program hazard asked in a recording is a recorded read (its
 /// probe's answer, `hand_outs`): a chunk that asked whether the program
 /// evaluates code reruns when that answer moves.

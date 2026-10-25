@@ -1074,6 +1074,12 @@ impl<'a> SemanticLookup<'a> {
         self.memos.end()
     }
 
+    /// [`Self::end_memos`] without the sweep, which the caller runs later
+    /// ([`crate::base::memo::build::LookupMemos::defer_end`]).
+    pub(crate) fn defer_end_memos(&self) -> bool {
+        self.memos.defer_end()
+    }
+
     /// Records the closed program's namespace census (ADR 0347). The pipeline
     /// sets it once per build, before any owner pass reads it.
     /// `reads` are what computing it read ([`crate::base::reads`]): a reader

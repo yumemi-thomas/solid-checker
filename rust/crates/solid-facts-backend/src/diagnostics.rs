@@ -571,6 +571,19 @@ impl DiagnosticSession {
     pub fn retain_for_idle(&mut self, retention: CacheRetention) {
         self.builder.retain_for_idle(retention);
     }
+
+    /// Whether an analysis leaves the memo store's end-of-build sweep to
+    /// [`Self::finish_deferred`] ([`IncrementalBuilder::defer_memo_end`]): for
+    /// a caller that has its answer written before it sweeps.
+    pub fn defer_memo_end(&mut self, defer: bool) {
+        self.builder.defer_memo_end(defer);
+    }
+
+    /// Runs the sweep the last analysis deferred, if one is due. The next
+    /// analysis runs a pending one itself, first.
+    pub fn finish_deferred(&mut self) {
+        self.builder.finish_deferred();
+    }
 }
 
 /// Runs ordinary analysis of one project against its package boundary.

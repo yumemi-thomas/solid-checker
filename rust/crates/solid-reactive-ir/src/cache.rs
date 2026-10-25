@@ -86,6 +86,10 @@ pub(crate) struct IncrementalCacheState {
     /// L2: memo answers with their recorded reads ([`crate::base::memo`]),
     /// reused across builds until a read changes.
     memos: Option<crate::base::memo::build::MemoStore>,
+    /// Whether a build leaves its memo sweep to
+    /// [`IncrementalCacheState::finish_deferred_end`] (a daemon sweeps after
+    /// it has answered).
+    defer_memo_end: bool,
     domain: Option<SourceDiscoveryDomain>,
 }
 
@@ -107,6 +111,8 @@ pub(crate) struct BuildCaches<'a> {
     )>,
     /// The retained memo store; `None` gives the build a store of its own.
     pub(crate) memos: Option<&'a crate::base::memo::build::MemoStore>,
+    /// Leave the memo store's end-of-build sweep to the caller.
+    pub(crate) defer_memo_end: bool,
 }
 
 impl IncrementalCacheState {
@@ -152,6 +158,22 @@ impl IncrementalCacheState {
                 self.memos
                     .get_or_insert_with(crate::base::memo::build::MemoStore::from_env),
             ),
+            defer_memo_end: self.defer_memo_end,
+        }
+    }
+
+    pub(crate) fn set_defer_memo_end(&mut self, defer: bool) {
+        self.defer_memo_end = defer;
+    }
+
+    /// Runs the memo sweep a build deferred, if one is due.
+    pub(crate) fn finish_deferred_end(&self) {
+        if let Some(report) = self
+            .memos
+            .as_ref()
+            .and_then(crate::base::memo::build::MemoStore::finish_deferred_end)
+        {
+            crate::pipeline::report_deferred_memos(&report);
         }
     }
 

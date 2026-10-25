@@ -34,8 +34,9 @@ export const FILE_BUDGETS = {
   // and for ADR 03XX-canonical-index (the file stood 163,998 bytes before its entry);
   // and for ADR 03XX-fs-lookups (the file stood 166,991 bytes before its entry); and for
   // ADR 03XX-keep-attestation (the file stood 170,124 bytes before its entry and one edit); and for
-  // ADR 03XX-entity-index (the file stood 173,980 bytes before its entry).
-  "docs/decisions.md": 176_800,
+  // ADR 03XX-entity-index (the file stood 173,980 bytes before its entry); and for
+  // ADR 03XX-edit-overlap (the file stood 176,343 bytes before its entry).
+  "docs/decisions.md": 179_000,
 };
 
 export const GROUP_BUDGETS = [
@@ -47,8 +48,9 @@ export const GROUP_BUDGETS = [
   // (the group stood 638,451 bytes before the entry and the open-work lines, which added 3,696); and for
   // ADR 03XX-keep-attestation (the group stood 642,147 bytes before its entry, the open-work edit and the
   // protocol notes, which added 4,638); and for ADR 03XX-entity-index (the group stood 646,785 bytes before
-  // its entry, which added 2,363).
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 649_500 },
+  // its entry, which added 2,363); and for ADR 03XX-edit-overlap (the group stood 649,148 bytes before
+  // its entry, which added 2,250).
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 651_800 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),

@@ -1645,6 +1645,21 @@ impl IncrementalBuilder {
         self.shadow = Some(mode);
     }
 
+    /// Whether a build leaves the memo store's end-of-build sweep (the
+    /// entries it did not reach, dropped with their edges) to
+    /// [`Self::finish_deferred`]. The answer a build makes does not depend on
+    /// the sweep, and nothing reads the store until the next build begins,
+    /// which runs a pending sweep first; so a caller that answers before it
+    /// calls `finish_deferred` pays for the sweep off its critical path.
+    pub fn defer_memo_end(&mut self, defer: bool) {
+        self.caches.set_defer_memo_end(defer);
+    }
+
+    /// Runs the memo sweep the last build deferred, if one is due.
+    pub fn finish_deferred(&mut self) {
+        self.caches.finish_deferred_end();
+    }
+
     pub fn clear(&mut self) {
         self.retained = None;
         self.runtime_configuration = None;

@@ -296,6 +296,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         late_stages: mut late_stage_cache,
         base_check,
         memos,
+        defer_memo_end,
     } = caches;
     let emit_timings = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
     let total_started = Instant::now();
@@ -677,7 +678,9 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &typescript_indexes.symbols_by_root,
         &mut draft.static_defects,
     );
-    if let Some(report) = semantic_lookup.end_memos() {
+    if defer_memo_end {
+        semantic_lookup.defer_end_memos();
+    } else if let Some(report) = semantic_lookup.end_memos() {
         report_memos(&report, &mut build_timings, emit_timings);
     }
     let mut program = draft.into_program(factory_instances);
@@ -832,6 +835,17 @@ fn report_memos(
             ];
         }
     }
+    emit_memo_report(report, emit_timings);
+}
+
+/// The report of a sweep a build deferred and the caller ran after it
+/// answered ([`crate::IncrementalBuilder::finish_deferred`]): printed as the
+/// build's own would have been, but with no build's timings to fill.
+pub(crate) fn report_deferred_memos(report: &crate::base::memo::build::MemoReport) {
+    emit_memo_report(report, std::env::var_os("SOLID_CHECKER_TIMINGS").is_some());
+}
+
+fn emit_memo_report(report: &crate::base::memo::build::MemoReport, emit_timings: bool) {
     let line = serde_json::json!({ "reactiveIrMemo": report });
     if emit_timings {
         eprintln!("{line}");
