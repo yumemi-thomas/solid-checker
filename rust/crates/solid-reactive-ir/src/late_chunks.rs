@@ -1,5 +1,5 @@
 //! Per-file chunks of the static prepass's file rules, which were
-//! whole-program loops over every file (ADR 03XX-late-stages).
+//! whole-program loops over every file (ADR 0413).
 //!
 //! Each pass is a function of one file's facts and of what it asks the
 //! rest of the program. A file's output is a chunk ([`FileChunks`]) reused
@@ -13,8 +13,8 @@
 //! other files, so a moved entry reruns only the chunks that asked it.
 //!
 //! A path held by two slots is computed for each and kept for none; a
-//! one-shot build keeps nothing. A pass that runs inside a recording (the
-//! late aggregates') hands its chunks' reads to it, reused or not.
+//! one-shot build keeps nothing. A pass that runs inside a recording hands
+//! its chunks' reads to it, reused or not.
 
 use std::cell::RefCell;
 use std::hash::{Hash, Hasher};

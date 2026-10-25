@@ -257,6 +257,27 @@ const LOADERS = { ".ts": "ts", ".tsx": "tsx", ".js": "js", ".jsx": "jsx", ".mts"
  * the IR, so edits that break syntax are not applied. Without Bun's
  * transpiler every edit is assumed to parse and a refusal is caught below.
  */
+/**
+ * Why a daemon request's answer did not come from the retained daemon, or
+ * `null` when it did. The client falls back to a one-shot check on any daemon
+ * failure and says so only on stderr; that answer equals the fresh one by
+ * construction, so a step it answered compared nothing. With
+ * `SOLID_CHECKER_TIMINGS` set, the client prints its mode for a retained
+ * answer (`"mode":"retained-daemon"`).
+ */
+export function notServedByDaemon(stderr) {
+  const fallback = /daemon unavailable[^\n]*/.exec(stderr);
+  if (fallback) return fallback[0];
+  const served = stderr.split("\n").some((line) => {
+    try {
+      return JSON.parse(line)?.mode === "retained-daemon";
+    } catch {
+      return false;
+    }
+  });
+  return served ? null : "the client reported no retained-daemon answer";
+}
+
 export function parses(path, text) {
   const loader = LOADERS[path.slice(path.lastIndexOf("."))];
   if (!loader || typeof Bun === "undefined") return true;
@@ -415,6 +436,7 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
     SOLID_TYPEFACTS_BIN: typefacts,
     // The daemon is stopped by this harness, not by its idle or memory limits.
     SOLID_CHECKER_DAEMON_MAX_RSS_MB: "0",
+    SOLID_CHECKER_DAEMON_IDLE_SECS: "3600",
     // Each IR build's Type Facts delta, for the `retype-return` check.
     SOLID_CHECKER_IR_DELTA_LOG: deltaLog,
     // Shadow mode also checks every patched Type Facts symbol closure
@@ -455,7 +477,8 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
   const check = (daemon) =>
     run(checker, ["--project", tsconfig, "--format", "json"], {
       cwd: root,
-      env: { ...environment, SOLID_CHECKER_DAEMON: daemon ? "1" : "0" }
+      // The client's timing line names the mode that answered.
+      env: { ...environment, SOLID_CHECKER_DAEMON: daemon ? "1" : "0", ...(daemon ? { SOLID_CHECKER_TIMINGS: "1" } : {}) }
     });
   // The daemon's command line carries the canonical project path (macOS
   // resolves /var to /private/var), so match that one too or it leaks.
@@ -464,6 +487,16 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
     for (const path of new Set([tsconfig, canonical])) {
       await run("pkill", ["-f", "--", `--serve --project ${path}`], {});
     }
+  };
+  // The serving daemon's pid. A step answered by a daemon started since the
+  // last one (the old one died) is a cold build, not a retained one.
+  const daemonPids = async () => {
+    const pids = new Set();
+    for (const path of new Set([tsconfig, canonical])) {
+      const found = await run("pgrep", ["-f", "--", `--serve --project ${path}`], {});
+      for (const pid of found.stdout.split(/\s+/).filter(Boolean)) pids.add(pid);
+    }
+    return [...pids].sort().join(",");
   };
   const log = [];
   const report = (line) => {
@@ -485,11 +518,18 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
   let executed = 0;
   const retainedMs = [];
   const freshMs = [];
+  let daemonPid = "";
   try {
     await stopDaemon();
-    await check(true); // The daemon's first (cold) build.
-    if (idleShadow) await awaitVerdict(0);
-    for (let step = 0; step < steps; step += 1) {
+    const cold = await check(true); // The daemon's first (cold) build.
+    const coldMiss = notServedByDaemon(cold.stderr);
+    daemonPid = await daemonPids();
+    const coldFailed = Boolean(coldMiss) || daemonPid === "" || daemonPid.includes(",");
+    if (coldFailed) {
+      mismatches += 1;
+      report(`FAILED ${label}: the cold daemon request was not served by one daemon (${coldMiss ?? `pids '${daemonPid}'`})`);
+    } else if (idleShadow) await awaitVerdict(0);
+    for (let step = 0; step < steps && !coldFailed; step += 1) {
       if (editable.length === 0) break;
       const path = editable[rand(editable.length)];
       restorer.protect(path);
@@ -516,7 +556,6 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
       }
       if (next === null) continue;
       writeFileSync(path, next);
-      executed += 1;
       const logSize = existsSync(shadowLog) ? statSync(shadowLog).size : 0;
       const deltaSize = existsSync(deltaLog) ? statSync(deltaLog).size : 0;
       const verdictsBefore = idleShadow ? verdicts() : 0;
@@ -554,7 +593,13 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
         report(`skip ${label} step ${step} ${relative(root, path)} ${kind} (refused: unparseable)`);
         continue;
       }
-      const same = !empty && retained.status === fresh.status && retained.stdout === fresh.stdout;
+      executed += 1;
+      // An answer the retained daemon did not give compares nothing.
+      const pidNow = await daemonPids();
+      const miss =
+        notServedByDaemon(retained.stderr) ??
+        (pidNow === daemonPid ? null : `the daemon changed (pid '${daemonPid}', now '${pidNow}')`);
+      const same = !miss && !empty && retained.status === fresh.status && retained.stdout === fresh.stdout;
       const name = `${label} step ${step} ${relative(root, path)} ${kind}`;
       if (same && !shadowReport) {
         report(
@@ -572,9 +617,16 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
       writeFileSync(`${out}.fresh.stderr`, fresh.stderr);
       report(
         `MISMATCH ${name} (status ${retained.status}/${fresh.status}) -> ${out}.*` +
+          (miss ? `\nnot served by the retained daemon: ${miss}` : "") +
           (shadowReport ? `\n${shadowReport.trim()}` : "")
       );
       if (!keepGoing) break;
+      // Keep comparing against whichever daemon serves now.
+      daemonPid = pidNow;
+    }
+    if (steps > 0 && executed === 0 && !coldFailed) {
+      mismatches += 1;
+      report(`FAILED ${label}: no step compared anything`);
     }
   } finally {
     await finish();
