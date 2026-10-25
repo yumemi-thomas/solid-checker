@@ -159,7 +159,10 @@ export default [solidChecker.configs.recommended];
 
 The `prefer-*` rules are enabled by default. Set an individual ESLint rule to
 `"off"`, or set `enabled: false` in `.solid-checker/rule-options.json` for
-standalone and certification-mode checks. The legacy dialect-specific
+standalone and certification-mode checks. `no-await-primitive-in-tracked-scope`
+covers both `resolve` (SC2004) and `until` (SC2005); its former names keep their
+own code, so `resolve-in-tracked-scope` configures SC2004 alone and
+`until-in-tracked-scope` SC2005 alone. The legacy dialect-specific
 `preferences-v1` and `preferences-v2` configs remain composable but are now
 redundant.
 

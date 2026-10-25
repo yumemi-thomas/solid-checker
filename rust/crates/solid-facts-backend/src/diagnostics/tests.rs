@@ -118,6 +118,55 @@ fn a_disabled_coverage_rule_returns_its_withheld_obligations() {
     );
 }
 
+/// ADR 0384: `resolve-in-tracked-scope` and `until-in-tracked-scope` disable
+/// their own code of the merged rule only; the merged name disables both.
+#[test]
+fn a_former_name_of_a_merged_rule_disables_its_own_code_only() {
+    let finding = |code: &'static str| {
+        solid_reactive_ir::Finding::new(
+            solid_reactive_ir::RuleMetadata {
+                code,
+                name: "no-await-primitive-in-tracked-scope",
+                severity: "error",
+                uncertifiable: false,
+                default_enabled: true,
+                presets: &[],
+            },
+            "synthetic".into(),
+            typefacts::Location {
+                path: "synthetic.tsx".into(),
+                start_byte: 0,
+                end_byte: 1,
+            },
+        )
+    };
+    let retained = |disabled: &str| {
+        let options = solid_reactive_ir::RuleOptions::parse_with_scoped_aliases(
+            &format!(
+                r#"{{ "schemaVersion": 1, "rules": {{ {disabled:?}: {{ "enabled": false }} }} }}"#
+            ),
+            |rule| {
+                crate::dialect::ALL
+                    .iter()
+                    .any(|dialect| (dialect.has_rule)(rule))
+            },
+            crate::dialect::rule_alias,
+            crate::dialect::rule_alias_code,
+        )
+        .unwrap();
+        let mut findings = vec![finding("SC2004"), finding("SC2005")];
+        retain_enabled(crate::dialect::default_dialect(), &options, &mut findings).unwrap();
+        findings
+            .iter()
+            .map(|finding| finding.id.as_str().to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(retained("resolve-in-tracked-scope"), ["SC2005"]);
+    assert_eq!(retained("resolve-in-reactive-scope"), ["SC2005"]);
+    assert_eq!(retained("until-in-tracked-scope"), ["SC2004"]);
+    assert!(retained("no-await-primitive-in-tracked-scope").is_empty());
+}
+
 #[test]
 fn diagnostic_session_reuses_the_complete_result() {
     let facts = ProjectFacts {
@@ -319,10 +368,20 @@ fn compatibility_rule_identities_are_tolerated_and_typos_are_not() {
         .unwrap();
         let loaded = super::discover_rule_options(&directory)
             .unwrap_or_else(|error| panic!("alias {old:?} must load: {error}"));
-        assert!(
-            !loaded.is_enabled(current, true, &[]),
-            "disabling alias {old:?} did not disable {current:?}"
-        );
+        if let Some(code) = crate::dialect::rule_alias_code(old) {
+            // ADR 0384: a name limited to one code of a merged rule disables
+            // that code alone.
+            assert!(
+                !loaded.is_enabled_for_code(current, code, true, &[])
+                    && loaded.is_enabled(current, true, &[]),
+                "disabling alias {old:?} must disable {code} and not {current:?}"
+            );
+        } else {
+            assert!(
+                !loaded.is_enabled(current, true, &[]),
+                "disabling alias {old:?} did not disable {current:?}"
+            );
+        }
         assert!(
             crate::dialect::ALL
                 .iter()

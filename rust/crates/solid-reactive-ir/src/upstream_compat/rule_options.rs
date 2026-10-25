@@ -38,6 +38,10 @@ use serde::Deserialize;
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct RuleOptions {
     overrides: BTreeMap<String, RuleOverride>,
+    /// Overrides of a single finding code, set through a former rule name that
+    /// covered one code of a merged rule (ADR 0384): `resolve-in-tracked-scope`
+    /// reaches `SC2004` alone, where the merged name reaches both codes.
+    code_overrides: BTreeMap<String, RuleOverride>,
     requested_presets: BTreeSet<String>,
     requested_rules: BTreeSet<String>,
     /// Host-selected runtime evidence is part of the retained analysis
@@ -89,6 +93,18 @@ impl RuleOptions {
         has_rule: impl Fn(&str) -> bool,
         alias: impl Fn(&str) -> Option<&'static str>,
     ) -> Result<Self, String> {
+        Self::parse_with_scoped_aliases(encoded, has_rule, alias, |_| None)
+    }
+
+    /// [`Self::parse_with_aliases`] where a former name may also be limited to
+    /// one finding code (`scope`): its `enabled` then applies to that code
+    /// alone and not to the rest of the rule it canonicalizes onto.
+    pub fn parse_with_scoped_aliases(
+        encoded: &str,
+        has_rule: impl Fn(&str) -> bool,
+        alias: impl Fn(&str) -> Option<&'static str>,
+        scope: impl Fn(&str) -> Option<&'static str>,
+    ) -> Result<Self, String> {
         let document: Document = serde_json::from_str(encoded)
             .map_err(|error| format!("rule options are not a valid document: {error}"))?;
         if document.schema_version != 1 {
@@ -113,14 +129,24 @@ impl RuleOptions {
                     format!("rule options for {configured_rule:?}: enabled must be a boolean")
                 })
             })?;
-            options.overrides.insert(
-                rule.to_owned(),
-                if enabled {
-                    RuleOverride::Enabled
-                } else {
-                    RuleOverride::Disabled
-                },
-            );
+            let requested = if enabled {
+                RuleOverride::Enabled
+            } else {
+                RuleOverride::Disabled
+            };
+            if let Some(code) = scope(&configured_rule) {
+                // Two former names of one code (`resolve-in-tracked-scope`,
+                // `resolve-in-reactive-scope`) may disagree: a disable stays.
+                let slot = options
+                    .code_overrides
+                    .entry(code.to_owned())
+                    .or_insert(requested);
+                if requested == RuleOverride::Disabled {
+                    *slot = requested;
+                }
+            } else {
+                options.overrides.insert(rule.to_owned(), requested);
+            }
             if rule == "valid-use-server"
                 && let Some(entries) = fields.remove("clientWrappers")
             {
@@ -176,6 +202,23 @@ impl RuleOptions {
 
     pub fn request_rules(&mut self, rules: impl IntoIterator<Item = String>) {
         self.requested_rules.extend(rules);
+    }
+
+    /// [`Self::is_enabled`] for a finding of `code`: an override the project set
+    /// through a former name limited to that code wins over the rule's.
+    #[must_use]
+    pub fn is_enabled_for_code(
+        &self,
+        rule: &str,
+        code: &str,
+        default_enabled: bool,
+        presets: &[&str],
+    ) -> bool {
+        match self.code_overrides.get(code) {
+            Some(RuleOverride::Disabled) => false,
+            Some(RuleOverride::Enabled) => true,
+            None | Some(RuleOverride::Unset) => self.is_enabled(rule, default_enabled, presets),
+        }
     }
 
     /// Whether a catalog finding participates in certification.
@@ -280,6 +323,40 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    /// ADR 0384: a former name limited to one code disables that code alone;
+    /// the merged name still governs both, and a code override wins for its own
+    /// code.
+    #[test]
+    fn a_scoped_alias_governs_its_own_code_only() {
+        let parse = |document: &str| {
+            RuleOptions::parse_with_scoped_aliases(
+                document,
+                |rule| rule == "merged",
+                |rule| matches!(rule, "old-a" | "old-b").then_some("merged"),
+                |rule| match rule {
+                    "old-a" => Some("SC1"),
+                    "old-b" => Some("SC2"),
+                    _ => None,
+                },
+            )
+            .unwrap()
+        };
+        let enabled = |options: &RuleOptions, code: &str| {
+            options.is_enabled_for_code("merged", code, true, &[])
+        };
+        let old_a = parse(r#"{ "schemaVersion": 1, "rules": { "old-a": { "enabled": false } } }"#);
+        assert!(!enabled(&old_a, "SC1") && enabled(&old_a, "SC2"));
+        assert!(old_a.is_enabled("merged", true, &[]));
+        let merged =
+            parse(r#"{ "schemaVersion": 1, "rules": { "merged": { "enabled": false } } }"#);
+        assert!(!enabled(&merged, "SC1") && !enabled(&merged, "SC2"));
+        let both = parse(
+            r#"{ "schemaVersion": 1, "rules": {
+                 "merged": { "enabled": false }, "old-b": { "enabled": true } } }"#,
+        );
+        assert!(!enabled(&both, "SC1") && enabled(&both, "SC2"));
     }
 
     #[test]

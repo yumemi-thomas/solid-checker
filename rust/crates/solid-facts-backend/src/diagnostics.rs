@@ -598,8 +598,9 @@ fn retain_enabled(
     for finding in std::mem::take(findings) {
         match (dialect.rule_metadata)(&finding.rule) {
             Some(metadata)
-                if options.is_enabled(
+                if options.is_enabled_for_code(
                     &finding.rule,
+                    &finding.id,
                     metadata.default_enabled,
                     metadata.presets,
                 ) =>
@@ -1334,10 +1335,15 @@ fn discover_rule_options_with(
         let candidate = ancestor.join(".solid-checker").join("rule-options.json");
         match fs::read_to_string(&candidate) {
             Ok(encoded) => {
-                return RuleOptions::parse_with_aliases(&encoded, &has_rule, dialect::rule_alias)
-                    .map_err(|error| {
-                        BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
-                    });
+                return RuleOptions::parse_with_scoped_aliases(
+                    &encoded,
+                    &has_rule,
+                    dialect::rule_alias,
+                    dialect::rule_alias_code,
+                )
+                .map_err(|error| {
+                    BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
+                });
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),

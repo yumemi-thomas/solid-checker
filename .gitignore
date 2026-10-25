@@ -185,6 +185,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/test-runner-bun/node_modules/**
 !fixtures/reactive-ir/test-runner-suites/node_modules/
 !fixtures/reactive-ir/test-runner-suites/node_modules/**
+!fixtures/reactive-ir/rule-name-scopes/node_modules/
+!fixtures/reactive-ir/rule-name-scopes/node_modules/**
 !fixtures/reactive-ir/write-scope-roots-rc3/node_modules/
 !fixtures/reactive-ir/write-scope-roots-rc3/node_modules/**
 !fixtures/reactive-ir/write-scope-roots-rc9/node_modules/

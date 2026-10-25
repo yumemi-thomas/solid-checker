@@ -299,6 +299,24 @@ pub const RULE_ALIASES: &[(&str, &str)] = &[
     ),
 ];
 
+/// Former names that covered one code of a merged rule (ADR 0384): configuring
+/// one reaches that code alone, where the current name reaches every code of
+/// the rule. Each name here is also in [`RULE_ALIASES`], which validates it.
+pub const CODE_SCOPED_ALIASES: &[(&str, &str)] = &[
+    ("resolve-in-tracked-scope", "SC2004"),
+    ("resolve-in-reactive-scope", "SC2004"),
+    ("until-in-tracked-scope", "SC2005"),
+];
+
+/// The finding code a former rule name is limited to, if it is.
+#[must_use]
+pub fn rule_alias_code(name: &str) -> Option<&'static str> {
+    CODE_SCOPED_ALIASES
+        .iter()
+        .find(|(old, _)| *old == name)
+        .map(|(_, code)| *code)
+}
+
 /// The removal note for a retired rule identity, or `None` if the checker never
 /// published that name.
 #[must_use]

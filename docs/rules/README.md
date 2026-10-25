@@ -129,7 +129,7 @@ The refusal replaces the analysis and appears **alone** when it appears at all
 
 A rule that maps onto an eslint-plugin-solid rule takes the upstream name
 unless that name no longer describes what the checker proves, and its scope is
-a superset of upstream's ([ADR 0381](../decisions.md#adr-0381)). Shipped renames (each old name is an alias, ADR 0391): SC2001
+a superset of upstream's ([ADR 0381](../decisions.md#adr-0381)). Shipped renames (each old name is an alias, ADR 0391; the two names of a merged rule are limited to their own code, ADR 0384): SC2001
 `no-write-in-pure-computation` (ADR 0382), SC2003
 `no-store-mutation-outside-setter` (ADR 0383; upstream's array-method and
 projection shapes are built, its `delete` is not: TS2790 on a required property), SC2004 and SC2005 together as

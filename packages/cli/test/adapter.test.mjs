@@ -544,6 +544,38 @@ test("deprecated rule keys delegate without entering dialect presets", () => {
   }
 });
 
+test("a former name of a merged rule reports and owns its own code only (ADR 0384)", () => {
+  const merged = "no-await-primitive-in-tracked-scope";
+  const findings = [
+    finding("SC2004", merged, 0, 2),
+    finding("SC2005", merged, 3, 5)
+  ];
+  const ids = reported => reported.map(entry => entry.data.message.slice(1, 7)).sort();
+  for (const [rules, expected] of [
+    [["resolve-in-tracked-scope"], ["SC2004"]],
+    [["resolve-in-reactive-scope"], ["SC2004"]],
+    [["until-in-tracked-scope"], ["SC2005"]],
+    [["resolve-in-tracked-scope", "until-in-tracked-scope"], ["SC2004", "SC2005"]],
+    [[merged], ["SC2004", "SC2005"]]
+  ]) {
+    const reported = [];
+    lintPass(rules, syntheticContext({ findings }, reported));
+    assert.deepEqual(ids(reported), expected, rules.join());
+  }
+  // Certification skips only the code the enabled old key owns, so the other
+  // code is neither dropped nor reported twice.
+  for (const [rules, expected] of [
+    [["certification", "resolve-in-tracked-scope"], ["SC2004", "SC2005"]],
+    [["certification", "until-in-tracked-scope"], ["SC2004", "SC2005"]],
+    [["certification", merged], ["SC2004", "SC2005"]]
+  ]) {
+    const reported = [];
+    lintPass(rules, syntheticContext({ findings }, reported));
+    assert.deepEqual(ids(reported), expected, rules.join());
+  }
+  assert.equal(plugin._testing.ownedRules.size, 0);
+});
+
 test("the former SC9005 rule name still loads and maps to package-behavior-unavailable", () => {
   assert.ok(
     plugin._testing.deprecatedRuleKeys.some(

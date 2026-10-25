@@ -6,7 +6,7 @@
 compute, a `createTrackedEffect` callback, or tracked JSX. One rule, one
 configurable name (ADR 0384); a finding carries the code of the primitive it
 names. Formerly `resolve-in-tracked-scope` (`SC2004`), `resolve-in-reactive-scope`
-and `until-in-tracked-scope` (`SC2005`); each old name is an alias.
+and `until-in-tracked-scope` (`SC2005`). Each old name is an alias limited to its own code, in `rule-options.json` and as an ESLint key: disabling `resolve-in-tracked-scope` leaves `SC2005` on, and the new name governs both.
 
 ## What it does
 

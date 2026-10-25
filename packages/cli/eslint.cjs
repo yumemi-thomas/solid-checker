@@ -74,6 +74,15 @@ function userFacing(finding) {
   return finding.kind !== "uncertifiable" || finding.subjectKind === "project";
 }
 
+/**
+ * The registry key of a rule's findings: its name, or `name#code` for a former
+ * name that covered one code of a merged rule (ADR 0384), which reports and so
+ * owns that code's findings only.
+ */
+function ownedKey(ruleName, code) {
+  return code === undefined ? ruleName : `${ruleName}#${code}`;
+}
+
 function registerOwnedRule(filename, ruleName) {
   let owned = ownedRules.get(filename);
   if (!owned) {
@@ -382,6 +391,7 @@ function loadSnapshot(context) {
   const inferredHostInputs = inferenceFingerprint(project, runtime);
   const configuredRules = Array.isArray(config.enableRule) ? config.enableRule : [];
   const activeDefaultDisabled = [...(ownedRules.get(contextFilename(context)) ?? [])]
+    .map(key => key.split("#")[0])
     .filter(rule => manifestEntriesByRule.get(rule)?.defaultEnabled === false);
   const enableRules = [...new Set([...configuredRules, ...activeDefaultDisabled])].sort();
   const key = JSON.stringify({
@@ -641,7 +651,10 @@ const certification = {
         // reporting them again would duplicate every one of its findings.
         const owned = ownedRules.get(contextFilename(context));
         const findings = (snapshot.findings ?? []).filter(
-          finding => !owned?.has(finding.rule) && userFacing(finding)
+          finding =>
+            !owned?.has(finding.rule) &&
+            !owned?.has(ownedKey(finding.rule, finding.id)) &&
+            userFacing(finding)
         );
         projectFindings(context, program, findings);
       },
@@ -705,12 +718,13 @@ const packageNote = {
  * traversal event fires, which is how `certification` knows to leave these
  * findings alone whichever config order enabled both surfaces.
  */
-function reportingRule(entry, catalog) {
+function reportingRule(entry, catalog, codes = null) {
+  const covered = codes ?? entry.codes ?? [entry.code];
   return {
     meta: {
       type: "problem",
       docs: {
-        description: `solid-checker ${(entry.codes ?? [entry.code]).join("/")} ${entry.name}`,
+        description: `solid-checker ${covered.join("/")} ${entry.name}`,
         recommended: entry.defaultEnabled && !entry.uncertifiable,
         url: `${catalog.docsBaseUrl}/${entry.name}.md`
       },
@@ -720,7 +734,8 @@ function reportingRule(entry, catalog) {
     },
     create(context) {
       const filename = contextFilename(context);
-      registerOwnedRule(filename, entry.name);
+      const owned = codes ? codes.map(code => ownedKey(entry.name, code)) : [entry.name];
+      for (const key of owned) registerOwnedRule(filename, key);
       return {
         Program(program) {
           // A namespaced compatibility rule analyzes with its manifest's
@@ -732,13 +747,16 @@ function reportingRule(entry, catalog) {
               : context;
           const snapshot = loadSnapshot(forced);
           const findings = (snapshot.findings ?? []).filter(
-            finding => finding.rule === entry.name && userFacing(finding)
+            finding =>
+              finding.rule === entry.name &&
+              (!codes || codes.includes(finding.id)) &&
+              userFacing(finding)
           );
           if (findings.length === 0) return;
           projectFindings(context, program, findings);
         },
         "Program:exit"() {
-          releaseOwnedRule(filename, entry.name);
+          for (const key of owned) releaseOwnedRule(filename, key);
           endPass(context);
         }
       };
@@ -804,9 +822,11 @@ const DEPRECATED_RULE_KEYS = [
   // can only delegate to a rule that still exists, and its target does not.
   ["reactive-write-in-owned-scope", "no-write-in-pure-computation"],
   ["no-direct-mutation", "no-store-mutation-outside-setter"],
-  ["resolve-in-tracked-scope", "no-await-primitive-in-tracked-scope"],
-  ["resolve-in-reactive-scope", "no-await-primitive-in-tracked-scope"],
-  ["until-in-tracked-scope", "no-await-primitive-in-tracked-scope"],
+  // The third entry limits a former name to the one code of the merged rule it
+  // covered (ADR 0384), so each keeps its own severity and findings.
+  ["resolve-in-tracked-scope", "no-await-primitive-in-tracked-scope", ["SC2004"]],
+  ["resolve-in-reactive-scope", "no-await-primitive-in-tracked-scope", ["SC2004"]],
+  ["until-in-tracked-scope", "no-await-primitive-in-tracked-scope", ["SC2005"]],
   ["server-function-module-directive", "valid-use-server"],
   ["sync-node-received-async", "sync-computation-received-async"],
   // SC9005 was named for the removed package-contract model (ADR 0312).
@@ -822,13 +842,13 @@ for (const catalog of Object.values(manifests)) {
   }
 }
 
-for (const [oldName, currentName] of DEPRECATED_RULE_KEYS) {
+for (const [oldName, currentName, codes] of DEPRECATED_RULE_KEYS) {
   const catalog = Object.values(manifests).find(candidate =>
     candidate.rules.some(entry => entry.name === currentName)
   );
   if (!catalog) throw new Error(`deprecated rule target ${currentName} is absent`);
   const entry = catalog.rules.find(candidate => candidate.name === currentName);
-  const delegated = reportingRule(entry, catalog);
+  const delegated = reportingRule(entry, catalog, codes ?? null);
   plugin.rules[oldName] = {
     ...delegated,
     meta: {
