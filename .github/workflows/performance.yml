@@ -63,7 +63,8 @@ jobs:
             /tmp/perf-runtime/${{ steps.base.outputs.sha }}/bench
             /tmp/perf-runtime/${{ steps.base.outputs.sha }}/solid-typefacts
             /tmp/perf-runtime/${{ steps.base.outputs.sha }}/producer
-          key: perf-runtime-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.base.outputs.sha }}
+            /tmp/perf-runtime/${{ steps.base.outputs.sha }}/ir
+          key: perf-runtime-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.base.outputs.sha }}
 
       - name: Build the benchmark runtime
         run: |
@@ -136,6 +137,9 @@ jobs:
           # Which producer built this runtime; accepted-regressions.json
           # entries are keyed on it (Go until ADR 0365 is on main).
           if [ -f go.mod ]; then echo go; else echo rust; fi > "$runtime/producer"
+          # Whether its Reactive IR keeps memo tables between builds (fresh
+          # until ADR 03XX-cold-cost is on main); entries are keyed on it too.
+          if [ -f rust/crates/solid-reactive-ir/src/base/memo.rs ]; then echo memo; else echo fresh; fi > "$runtime/ir"
 
       - name: Compare performance with the merge base
         run: |
@@ -145,7 +149,8 @@ jobs:
             --base-typefacts "$runtime/solid-typefacts" \
             --head-bench rust/target/release/solid-checker-session-bench \
             --head-typefacts bin/solid-typefacts \
-            --base-producer "$(cat "$runtime/producer" 2>/dev/null || echo unknown)"
+            --base-producer "$(cat "$runtime/producer" 2>/dev/null || echo unknown)" \
+            --base-ir "$(cat "$runtime/ir" 2>/dev/null || echo unknown)"
 
       # This commit's own pair, saved under its sha, is what the next commit on
       # main resolves as its base. Main only: a pull request's next push
@@ -160,6 +165,9 @@ jobs:
           # Which producer built this runtime; accepted-regressions.json
           # entries are keyed on it (Go until ADR 0365 is on main).
           if [ -f go.mod ]; then echo go; else echo rust; fi > "$runtime/producer"
+          # Whether its Reactive IR keeps memo tables between builds (fresh
+          # until ADR 03XX-cold-cost is on main); entries are keyed on it too.
+          if [ -f rust/crates/solid-reactive-ir/src/base/memo.rs ]; then echo memo; else echo fresh; fi > "$runtime/ir"
       - name: Publish this commit's runtime as a future base
         if: github.ref == 'refs/heads/main'
         # A re-run of an already-published commit finds its own entry present.
@@ -170,7 +178,8 @@ jobs:
             /tmp/perf-runtime/${{ github.sha }}/bench
             /tmp/perf-runtime/${{ github.sha }}/solid-typefacts
             /tmp/perf-runtime/${{ github.sha }}/producer
-          key: perf-runtime-v2-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+            /tmp/perf-runtime/${{ github.sha }}/ir
+          key: perf-runtime-v3-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
 
       - name: Prepare the deterministic corpus
         run: |

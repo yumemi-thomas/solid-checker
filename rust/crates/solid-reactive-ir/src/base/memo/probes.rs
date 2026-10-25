@@ -18,7 +18,7 @@ use std::sync::Arc;
 use solid_facts::core::Span;
 
 use super::Ctx;
-use super::build::{BuildSchema, Input};
+use super::build::BuildSchema;
 use crate::base::{FileId, Hazard};
 
 /// A question a build can ask of an unported table or an index.
@@ -58,18 +58,24 @@ pub(crate) enum Probe {
     CreateSignalCall,
     /// The standard-library declaration of a call. Site.
     StandardCall,
-    /// Some assignment writes the global binding of a name. Text.
-    GlobalWritten,
-    /// The base `symbol_uses` index at a symbol. Text.
-    SymbolUses,
-    /// The base `spellings` index at a name. Text.
-    Spellings,
     /// The member names some assignment writes. Unit.
     AssignedNames,
     /// The assignments that write through `R.prototype`, in file order. Unit.
     PrototypeSites,
     /// Some reflective definer may define a property of a name. Text.
     DefinedReflectively,
+    /// The type descriptor another entity naming a symbol carries
+    /// (`smallest_contained_descriptor`'s last fallback). Text.
+    SymbolDescriptor,
+    /// The callability another entity naming a symbol carries
+    /// (`smallest_contained_callability`'s last fallback). Text.
+    SymbolCallability,
+    /// The dialect primitives the project names (`Section::ProjectPrimitives`'
+    /// value), sorted. Unit.
+    ProjectPrimitives,
+    /// The symbol an entity or, failing one, a resolved call's declaration
+    /// names at a span of a file (`ProjectIndexes::method_symbol`). FileSpan.
+    DeclarationSymbolAt,
 }
 
 /// The key of a probe.
@@ -115,12 +121,12 @@ pub(crate) enum ProbeAnswer {
     References(Option<Vec<(Arc<str>, u64, u64)>>),
     Symbols(Vec<Arc<str>>),
     Call(Option<(Arc<str>, Arc<str>)>),
-    Uses(Vec<(FileId, u32, crate::base::SymbolUse)>),
-    Spellings(Vec<(FileId, u32, crate::base::Spelling)>),
     Names(Vec<Arc<str>>),
     Sites(Vec<(FileId, u32, u32)>),
     /// A binding (file, slot rank, ordinal) and the symbol of its name.
     Binding(Option<(FileId, u32, u32, Arc<str>)>),
+    /// A fact's value, rendered (`Debug`).
+    Rendered(Option<Arc<str>>),
 }
 
 /// What answers probes: the build's unported tables.
@@ -140,26 +146,44 @@ impl Probes for NoProbes {
     }
 }
 
-pub(crate) fn fingerprint(probes: &dyn Probes, probe: Probe, key: &PolledKey) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = rustc_hash::FxHasher::default();
-    probes.probe(probe, key).hash(&mut hasher);
-    hasher.finish()
+/// A probe answer's fingerprint: the SHA-256 of its `Hash` stream. A
+/// fingerprint collision would leave a reader clean on a moved answer (fail
+/// open), so it is collision-resistant like the section fingerprints, not a
+/// 64-bit FxHash (final review R2, finding 10).
+pub(crate) type AnswerFingerprint = [u8; 32];
+
+/// Feeds a `Hash` stream to SHA-256.
+struct Sha256Hasher(sha2::Sha256);
+
+impl std::hash::Hasher for Sha256Hasher {
+    fn write(&mut self, bytes: &[u8]) {
+        sha2::Digest::update(&mut self.0, bytes);
+    }
+
+    fn finish(&self) -> u64 {
+        unreachable!("a probe fingerprint is the whole digest")
+    }
+}
+
+pub(crate) fn answer_fingerprint(answer: &ProbeAnswer) -> AnswerFingerprint {
+    use std::hash::Hash;
+    let mut hasher = Sha256Hasher(sha2::Sha256::default());
+    answer.hash(&mut hasher);
+    sha2::Digest::finalize(hasher.0).into()
+}
+
+pub(crate) fn fingerprint(probes: &dyn Probes, probe: Probe, key: &PolledKey) -> AnswerFingerprint {
+    answer_fingerprint(&probes.probe(probe, key))
 }
 
 impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
     /// The answer of `probe` at `key`, recorded.
     pub(crate) fn probe(&self, probe: Probe, key: PolledKey) -> ProbeAnswer {
-        use std::hash::{Hash, Hasher};
         let world = self.world();
         let answer = world.probes.probe(probe, &key);
-        let mut hasher = rustc_hash::FxHasher::default();
-        answer.hash(&mut hasher);
-        let fingerprint = hasher.finish();
-        let id = world.store.polled_key(&key);
-        let input = Input::Polled(probe, id);
-        world.store.note_polled(input, fingerprint);
-        self.record_input_known(input, fingerprint);
+        let fingerprint = answer_fingerprint(&answer);
+        let input = world.store.poll(probe, &key, fingerprint);
+        self.record_input(input);
         answer
     }
 
@@ -195,10 +219,6 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
     /// (`SemanticLookup::property_may_be_defined_reflectively_as`).
     pub(crate) fn defined_reflectively(&self, name: &str) -> bool {
         self.flag(Probe::DefinedReflectively, PolledKey::Text(Arc::from(name)))
-    }
-
-    pub(crate) fn global_written(&self, name: &str) -> bool {
-        self.flag(Probe::GlobalWritten, PolledKey::Text(Arc::from(name)))
     }
 
     pub(crate) fn create_signal_call(&self, site: (FileId, u32, u32)) -> bool {
@@ -287,22 +307,6 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
         match self.probe(Probe::StandardCall, PolledKey::Site(site.0, site.1, site.2)) {
             ProbeAnswer::Call(call) => call,
             other => unreachable!("standard_call answers a call, not {other:?}"),
-        }
-    }
-
-    /// The uses of the entity symbol `symbol` (the base `symbol_uses` index).
-    pub(crate) fn symbol_uses(&self, symbol: &str) -> Vec<(FileId, u32, crate::base::SymbolUse)> {
-        match self.probe(Probe::SymbolUses, PolledKey::Text(Arc::from(symbol))) {
-            ProbeAnswer::Uses(uses) => uses,
-            other => unreachable!("symbol_uses answers uses, not {other:?}"),
-        }
-    }
-
-    /// Where `name` is spelled as a property (the base `spellings` index).
-    pub(crate) fn spellings(&self, name: &str) -> Vec<(FileId, u32, crate::base::Spelling)> {
-        match self.probe(Probe::Spellings, PolledKey::Text(Arc::from(name))) {
-            ProbeAnswer::Spellings(spellings) => spellings,
-            other => unreachable!("spellings answers spellings, not {other:?}"),
         }
     }
 

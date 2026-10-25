@@ -19,12 +19,16 @@
 //! records on each worker and merges at the join, so a chunk's record is the
 //! same whatever thread computes what.
 //!
+//! **Other files' facts.** The lookup hands a chunk another file through a
+//! few questions (which function a symbol names, a binding, a path, a
+//! function's callers); each hand-out is recorded as the question's answer
+//! and the handed file's section fingerprints (`indexes::hand_outs`), so a
+//! chunk reruns when anything it may have read of that file moves.
+//!
 //! **What is not recorded.** A memo computation's own reads are its memo's
 //! (the store records them), so nothing inside a memo computation reaches a
 //! chunk ([`suppress`]); a section's own computation likewise (its value is
-//! the fingerprint). Reads of another file's facts outside the lookup's
-//! tables are not recorded yet: a chunk that makes them keeps its stage's
-//! file-level gate (`interproc::call_role_syntax`).
+//! the fingerprint).
 //!
 //! **Soundness** is the trace-replay lemma (study §3.3): a deterministic
 //! chunk whose recorded reads all answer as recorded re-traces the same
@@ -67,12 +71,19 @@ pub(crate) enum Section {
     ReflectiveDefinition,
     /// A reflective write through a `prototype` (ADR 0292).
     ReflectivePrototypeWrite,
-    /// The exported module-level constants proven primitive (ADR 0325).
-    ExportedPrimitiveConsts,
+    /// The route component values (ADR 0334), whose router configurations
+    /// may sit in another file than the value (ADR 0408).
+    RouteComponents,
+    /// The bindings a `createContext` call initializes, in any file, and
+    /// TypeScript's references to each (`is_context_reference`).
+    ContextSymbols,
+    /// The dialect primitives the project names anywhere, which decide the
+    /// project-wide callback capability flags and their early exits.
+    ProjectPrimitives,
 }
 
 impl Section {
-    pub(crate) const ALL: [Self; 13] = [
+    pub(crate) const ALL: [Self; 15] = [
         Self::Components,
         Self::MemberTargets,
         Self::SpreadTargets,
@@ -85,7 +96,9 @@ impl Section {
         Self::SynchronousDispatch,
         Self::ReflectiveDefinition,
         Self::ReflectivePrototypeWrite,
-        Self::ExportedPrimitiveConsts,
+        Self::RouteComponents,
+        Self::ContextSymbols,
+        Self::ProjectPrimitives,
     ];
 
     const fn bit(self) -> u32 {
@@ -103,16 +116,40 @@ pub(crate) struct MemoRead {
 }
 
 /// Everything one computation read of the rest of the program.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+///
+/// The memo reads are kept as sorted runs without duplicates, shared by
+/// `Arc` with the sets they were added from, and a short unsorted tail
+/// (ADR 0406). Adding a set ([`Self::extend`]) adds its runs by
+/// pointer, skipping one already held, so a set added to a thousand others
+/// (the reads a stage made before its chunks ran) is neither copied nor
+/// sorted again for each; small runs are merged once there are many. A read
+/// may sit in more than one run: a check of the set asks it again, with the
+/// same answer.
+#[derive(Clone, Debug, Default)]
 pub(crate) struct Reads {
     sections: u32,
-    /// Sorted, without duplicates.
-    memos: Vec<MemoRead>,
+    /// Each sorted, without duplicates, never empty.
+    runs: Vec<Arc<[MemoRead]>>,
+    /// At most [`TAIL_MAX`] reads not in a run yet, in the order added.
+    tail: Vec<MemoRead>,
 }
+
+impl PartialEq for Reads {
+    fn eq(&self, other: &Self) -> bool {
+        self.sections == other.sections && self.distinct_memos() == other.distinct_memos()
+    }
+}
+
+impl Eq for Reads {}
+
+/// A tail longer than this becomes a run.
+const TAIL_MAX: usize = 64;
+/// More runs than this: the smaller half is merged into one.
+const RUNS_MAX: usize = 16;
 
 impl Reads {
     pub(crate) fn is_empty(&self) -> bool {
-        self.sections == 0 && self.memos.is_empty()
+        self.sections == 0 && self.runs.is_empty() && self.tail.is_empty()
     }
 
     pub(crate) fn sections(&self) -> impl Iterator<Item = Section> + '_ {
@@ -126,57 +163,250 @@ impl Reads {
         self.sections & section.bit() != 0
     }
 
+    /// The memo reads, sorted without duplicates.
     #[cfg(test)]
-    pub(crate) fn memos(&self) -> &[MemoRead] {
-        &self.memos
+    pub(crate) fn memos(&self) -> Vec<MemoRead> {
+        self.distinct_memos()
     }
 
-    /// Adds every set of `others`' reads: the sections at once, the memo
-    /// reads sorted and deduplicated once at the end.
-    pub(crate) fn extend_all<'a>(&mut self, others: impl IntoIterator<Item = &'a Self>) {
-        for other in others {
-            self.sections |= other.sections;
-            self.memos.extend_from_slice(&other.memos);
+    /// The memo reads, sorted without duplicates, and the whole-table
+    /// sections read: what a memo computation that recorded its lookup
+    /// reads records in its own context
+    /// ([`crate::base::memo::Ctx::project_file_recorded`]).
+    pub(crate) fn into_memo_reads(self) -> (Vec<MemoRead>, Vec<Section>) {
+        (self.distinct_memos(), self.sections().collect())
+    }
+
+    /// Every memo read, a read held twice listed twice.
+    fn memo_reads(&self) -> impl Iterator<Item = &MemoRead> + '_ {
+        self.runs
+            .iter()
+            .flat_map(|run| run.iter())
+            .chain(&self.tail)
+    }
+
+    fn has_memos(&self) -> bool {
+        !self.runs.is_empty() || !self.tail.is_empty()
+    }
+
+    fn distinct_memos(&self) -> Vec<MemoRead> {
+        let mut memos = self.memo_reads().copied().collect::<Vec<_>>();
+        memos.sort_unstable();
+        memos.dedup();
+        memos
+    }
+
+    /// The reads of a finished recording: its own notes (sorted, without
+    /// duplicates) and the runs it replayed.
+    fn of(sections: u32, mut runs: Vec<Arc<[MemoRead]>>, own: Vec<MemoRead>) -> Self {
+        if !own.is_empty() {
+            runs.push(Arc::from(own));
         }
-        self.memos.sort_unstable();
-        self.memos.dedup();
+        let mut reads = Self {
+            sections,
+            runs,
+            tail: Vec::new(),
+        };
+        reads.bound_runs();
+        reads
+    }
+
+    /// These reads without the answers of the tables in `tables`: what a
+    /// reader keeps of another computation's reads when it compares those
+    /// tables' inputs itself (`indexes::hand_outs`).
+    pub(crate) fn without_tables(&self, tables: std::ops::Range<u16>) -> Self {
+        let kept = |read: &MemoRead| !tables.contains(&read.table.0);
+        if self.memo_reads().all(kept) {
+            return self.clone();
+        }
+        let runs = self
+            .runs
+            .iter()
+            .filter_map(|run| {
+                if run.iter().all(kept) {
+                    return Some(Arc::clone(run));
+                }
+                let run = run
+                    .iter()
+                    .filter(|read| kept(read))
+                    .copied()
+                    .collect::<Vec<_>>();
+                (!run.is_empty()).then(|| Arc::from(run))
+            })
+            .collect();
+        Self {
+            sections: self.sections,
+            runs,
+            tail: self
+                .tail
+                .iter()
+                .filter(|read| kept(read))
+                .copied()
+                .collect(),
+        }
     }
 
     /// Adds `other`'s reads.
     pub(crate) fn extend(&mut self, other: &Self) {
         self.sections |= other.sections;
-        if other.memos.is_empty() {
+        for run in &other.runs {
+            self.add_run(run);
+        }
+        if other.tail.is_empty() {
+            self.bound_runs();
             return;
         }
-        self.memos.extend_from_slice(&other.memos);
-        self.memos.sort_unstable();
-        self.memos.dedup();
+        self.tail.extend_from_slice(&other.tail);
+        if self.tail.len() > TAIL_MAX {
+            let mut tail = std::mem::take(&mut self.tail);
+            cost::timed(cost::EXTEND, tail.len(), || {
+                tail.sort_unstable();
+                tail.dedup();
+            });
+            self.runs.push(Arc::from(tail));
+        }
+        self.bound_runs();
+    }
+
+    fn add_run(&mut self, run: &Arc<[MemoRead]>) {
+        if !self.runs.iter().any(|held| Arc::ptr_eq(held, run)) {
+            self.runs.push(Arc::clone(run));
+        }
+    }
+
+    /// Merges the smaller half of the runs into one while there are more
+    /// than [`RUNS_MAX`]: a read is merged again only with runs at least as
+    /// large as its own, and a large shared run stays shared.
+    fn bound_runs(&mut self) {
+        if self.runs.len() <= RUNS_MAX {
+            return;
+        }
+        self.runs.sort_by_key(|run| std::cmp::Reverse(run.len()));
+        let small = self.runs.split_off(RUNS_MAX / 2);
+        let elements = small.iter().map(|run| run.len()).sum::<usize>();
+        let merged = cost::timed(cost::MERGE, elements, || {
+            let mut merged = Vec::with_capacity(elements);
+            for run in &small {
+                merged.extend_from_slice(run);
+            }
+            // Each run is sorted: the stable sort merges the runs it finds
+            // instead of sorting the whole from scratch.
+            merged.sort();
+            merged.dedup();
+            merged
+        });
+        self.runs.push(Arc::from(merged));
+    }
+}
+
+/// What keeping read sets costs, for `SOLID_CHECKER_IR_BOOKKEEPING_LOG`
+/// (off unless that names a file): per kind of normalization, the calls,
+/// the elements they normalized and their CPU time, summed over threads.
+pub(crate) mod cost {
+    use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+
+    pub(crate) const FINISH: usize = 0;
+    pub(crate) const EXTEND: usize = 1;
+    pub(crate) const SO_FAR: usize = 2;
+    pub(crate) const MERGE: usize = 3;
+    pub(crate) const KINDS: [&str; 4] = ["finish", "tail", "soFar", "merge"];
+
+    static ON: AtomicU8 = AtomicU8::new(2);
+    static CALLS: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
+    static ELEMENTS: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
+    static NANOS: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
+
+    /// Whether the costs are measured.
+    pub(crate) fn on() -> bool {
+        match ON.load(Ordering::Relaxed) {
+            0 => false,
+            1 => true,
+            _ => {
+                let on = std::env::var_os("SOLID_CHECKER_IR_BOOKKEEPING_LOG").is_some();
+                ON.store(u8::from(on), Ordering::Relaxed);
+                on
+            }
+        }
+    }
+
+    /// Nanoseconds since the first call: what a measured computation took.
+    /// Measured phases run on one thread ([`super::super::memo::build`]),
+    /// so a duration there is CPU time, not a wait on another thread.
+    pub(crate) fn now_ns() -> u64 {
+        static EPOCH: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+        u64::try_from(
+            EPOCH
+                .get_or_init(std::time::Instant::now)
+                .elapsed()
+                .as_nanos(),
+        )
+        .unwrap_or(u64::MAX)
+    }
+
+    pub(crate) fn timed<R>(kind: usize, elements: usize, f: impl FnOnce() -> R) -> R {
+        if !on() {
+            return f();
+        }
+        let started = now_ns();
+        let value = f();
+        let nanos = now_ns().saturating_sub(started);
+        CALLS[kind].fetch_add(1, Ordering::Relaxed);
+        ELEMENTS[kind].fetch_add(elements as u64, Ordering::Relaxed);
+        NANOS[kind].fetch_add(nanos, Ordering::Relaxed);
+        value
+    }
+
+    /// The costs since the last call, `(kind, calls, elements, nanos)`.
+    pub(crate) fn take() -> Vec<(&'static str, u64, u64, u64)> {
+        KINDS
+            .iter()
+            .enumerate()
+            .map(|(kind, name)| {
+                (
+                    *name,
+                    CALLS[kind].swap(0, Ordering::Relaxed),
+                    ELEMENTS[kind].swap(0, Ordering::Relaxed),
+                    NANOS[kind].swap(0, Ordering::Relaxed),
+                )
+            })
+            .collect()
     }
 }
 
 /// One thread's recording: the innermost frame receives every note.
 #[derive(Default)]
 struct Frame {
+    /// Opened by [`suppress`]: what it receives goes nowhere.
+    suppressed: bool,
+    /// This thread's count of frames opened when this one was: tells a
+    /// frame apart from the one before it at the same depth.
+    serial: u64,
     sections: u32,
     memos: Vec<MemoRead>,
+    /// The runs of the read sets replayed into this frame, each once.
+    runs: Vec<Arc<[MemoRead]>>,
     /// The replayed [`Recorded`] read sets, by address, so a cache read a
-    /// thousand times is copied once.
+    /// thousand times is added once.
     replayed: BTreeSet<usize>,
 }
 
 impl Frame {
     fn finish(mut self) -> Reads {
-        self.memos.sort_unstable();
-        self.memos.dedup();
-        Reads {
-            sections: self.sections,
-            memos: self.memos,
-        }
+        cost::timed(cost::FINISH, self.memos.len(), || {
+            self.memos.sort_unstable();
+            self.memos.dedup();
+        });
+        Reads::of(self.sections, self.runs, self.memos)
     }
 
     fn add(&mut self, reads: &Reads) {
         self.sections |= reads.sections;
-        self.memos.extend_from_slice(&reads.memos);
+        for run in &reads.runs {
+            if !self.runs.iter().any(|held| Arc::ptr_eq(held, run)) {
+                self.runs.push(Arc::clone(run));
+            }
+        }
+        self.memos.extend_from_slice(&reads.tail);
     }
 }
 
@@ -185,11 +415,35 @@ thread_local! {
     /// `FRAMES`' length: the notes outside every recording (most lookup
     /// reads of a build) test one cell instead of borrowing the stack.
     static DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// How many frames this thread has opened ([`Frame::serial`]).
+    static OPENED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// The innermost open frame's serial, 0 outside every recording.
+    static CURRENT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Each section's frame of its last [`note_once`].
+    static NOTED_IN: [std::cell::Cell<u64>; Section::ALL.len()] =
+        const { [const { std::cell::Cell::new(0) }; Section::ALL.len()] };
 }
 
 /// Whether some computation on this thread is recording.
 pub(crate) fn recording() -> bool {
     DEPTH.with(std::cell::Cell::get) != 0
+}
+
+/// The recording a note made now reaches, by its frame's serial: `None`
+/// outside every recording and inside a [`suppress`]. A reader whose note
+/// costs a lookup (an answer it must ask) asks this first, and may skip a
+/// note it already made in the same frame.
+pub(crate) fn recording_frame() -> Option<u64> {
+    if !recording() {
+        return None;
+    }
+    FRAMES.with(|frames| {
+        frames
+            .borrow()
+            .last()
+            .filter(|frame| !frame.suppressed)
+            .map(|frame| frame.serial)
+    })
 }
 
 /// Records that the current computation read `section`.
@@ -202,6 +456,19 @@ pub(crate) fn note(section: Section) {
             frame.sections |= section.bit();
         }
     });
+}
+
+/// [`note`] for a section read on a hot path: noted once per frame. A
+/// frame's serial is never reused on a thread, and the frame a skipped note
+/// would reach already holds the section.
+pub(crate) fn note_once(section: Section) {
+    if !recording() {
+        return;
+    }
+    let current = CURRENT.with(std::cell::Cell::get);
+    if NOTED_IN.with(|noted| noted[section as usize].replace(current)) != current {
+        note(section);
+    }
 }
 
 /// Records that the current computation read a memo answer.
@@ -235,7 +502,7 @@ fn replay_shared(reads: &Arc<Reads>) {
     }
     FRAMES.with(|frames| {
         if let Some(frame) = frames.borrow_mut().last_mut() {
-            if reads.memos.is_empty() {
+            if !reads.has_memos() {
                 frame.sections |= reads.sections;
             } else if frame.replayed.insert(Arc::as_ptr(reads) as usize) {
                 frame.add(reads);
@@ -244,8 +511,11 @@ fn replay_shared(reads: &Arc<Reads>) {
     });
 }
 
-/// Pops the frame [`push`] opened, even on unwind.
-struct FrameGuard;
+/// Pops the frame [`push`] opened, even on unwind, and makes the frame it
+/// covered the current one again.
+struct FrameGuard {
+    previous: u64,
+}
 
 impl Drop for FrameGuard {
     fn drop(&mut self) {
@@ -253,13 +523,25 @@ impl Drop for FrameGuard {
             frames.borrow_mut().pop();
         });
         DEPTH.with(|depth| depth.set(depth.get() - 1));
+        CURRENT.with(|current| current.set(self.previous));
     }
 }
 
 fn push() -> FrameGuard {
-    FRAMES.with(|frames| frames.borrow_mut().push(Frame::default()));
+    let serial = OPENED.with(|opened| {
+        opened.set(opened.get() + 1);
+        opened.get()
+    });
+    FRAMES.with(|frames| {
+        frames.borrow_mut().push(Frame {
+            serial,
+            ..Frame::default()
+        });
+    });
     DEPTH.with(|depth| depth.set(depth.get() + 1));
-    FrameGuard
+    FrameGuard {
+        previous: CURRENT.with(|current| current.replace(serial)),
+    }
 }
 
 fn take_top() -> Frame {
@@ -284,6 +566,17 @@ pub(crate) fn record<R>(f: impl FnOnce() -> R) -> (R, Reads) {
     (value, reads)
 }
 
+/// [`record`], without handing the reads to the enclosing computation: a
+/// chunk whose reads its stage replays itself once it has read what the
+/// stage's own proof needs (`interproc::reads`).
+pub(crate) fn record_detached<R>(f: impl FnOnce() -> R) -> (R, Reads) {
+    let guard = push();
+    let value = f();
+    let reads = take_top().finish();
+    drop(guard);
+    (value, reads)
+}
+
 /// An open recording ([`begin`]): what the computation read so far can be
 /// read without ending it.
 pub(crate) struct Recording {
@@ -304,12 +597,11 @@ impl Recording {
             let frames = frames.borrow();
             let frame = frames.last().expect("a recording frame is open");
             let mut memos = frame.memos.clone();
-            memos.sort_unstable();
-            memos.dedup();
-            Reads {
-                sections: frame.sections,
-                memos,
-            }
+            cost::timed(cost::SO_FAR, memos.len(), || {
+                memos.sort_unstable();
+                memos.dedup();
+            });
+            Reads::of(frame.sections, frame.runs.clone(), memos)
         })
     }
 
@@ -326,13 +618,28 @@ impl Recording {
 /// memo computation (the store records its reads) or a section's value.
 pub(crate) fn suppress<R>(f: impl FnOnce() -> R) -> R {
     let _guard = push();
+    FRAMES.with(|frames| {
+        if let Some(frame) = frames.borrow_mut().last_mut() {
+            frame.suppressed = true;
+        }
+    });
     f()
 }
 
 /// A per-build cache that replays the reads its initialization made to
 /// every reader (see the module docs): `OnceLock`'s interface.
+///
+/// A probe's answer ([`crate::indexes::probing`]) makes no memo or hand-out
+/// note: the whole-program answers are asked directly and the hand-outs
+/// return early. A cache first filled inside one would keep that incomplete
+/// read set and replay it to every later reader of the build (final review
+/// R2, finding 7). So a fill made while probing goes to a cell only probes
+/// read, and the cache readers replay is filled outside every probe.
 pub(crate) struct Recorded<T> {
     cell: OnceLock<(T, Arc<Reads>)>,
+    /// The value as a probe computed it, for probes asked before the cache
+    /// is filled.
+    probed: OnceLock<T>,
 }
 
 impl<T> Default for Recorded<T> {
@@ -345,10 +652,21 @@ impl<T> Recorded<T> {
     pub(crate) const fn new() -> Self {
         Self {
             cell: OnceLock::new(),
+            probed: OnceLock::new(),
         }
     }
 
     pub(crate) fn get_or_init(&self, f: impl FnOnce() -> T) -> &T {
+        if self.cell.get().is_none() && crate::indexes::probing() {
+            return self.probed.get_or_init(|| {
+                let guard = push();
+                let value = f();
+                let reads = take_top().finish();
+                drop(guard);
+                replay(&reads);
+                value
+            });
+        }
         let (value, reads) = self.cell.get_or_init(|| {
             let guard = push();
             let value = f();
@@ -427,7 +745,7 @@ pub(crate) enum Verdict {
     Holds,
     Moved(String),
     /// Every read decided so far holds; these need a pass that has not run
-    /// yet in this build. Checked again once it has ([`ReadProof::recheck`]).
+    /// yet in this build.
     Undecided(Vec<MemoRead>),
 }
 
@@ -495,14 +813,14 @@ impl ReadProof {
                 return Verdict::Moved(format!("section {section:?}"));
             }
         }
-        if self.reads.memos.is_empty() {
+        if !self.reads.has_memos() {
             return Verdict::Holds;
         }
         if answers.memo_store_id() != self.store {
             return Verdict::Moved("another memo store".to_owned());
         }
         let mut undecided = Vec::new();
-        for read in &self.reads.memos {
+        for read in self.reads.memo_reads() {
             match answers.memo_check(self.store, *read) {
                 MemoCheck::Same => {}
                 MemoCheck::Moved => {
@@ -515,21 +833,6 @@ impl ReadProof {
             Verdict::Holds
         } else {
             Verdict::Undecided(undecided)
-        }
-    }
-
-    /// Checks again the reads a [`Verdict::Undecided`] named, once their
-    /// pass has run: whether each answers as recorded.
-    pub(crate) fn recheck(&self, undecided: &[MemoRead], answers: &dyn ReadAnswers) -> bool {
-        match undecided
-            .iter()
-            .find(|read| answers.memo_check(self.store, **read) != MemoCheck::Same)
-        {
-            None => true,
-            Some(read) => {
-                report_miss(&format!("memo {}", answers.describe_memo(*read)));
-                false
-            }
         }
     }
 }
@@ -572,6 +875,32 @@ mod tests {
         assert_eq!(second.memos(), &[read(3)]);
     }
 
+    /// A probe that asks a cache first does not fill what later readers
+    /// replay: inside a probe the memo note is not made (the whole-program
+    /// answer is asked directly), so a fill there would hand every later
+    /// reader a read set without it (final review R2, finding 7).
+    #[test]
+    fn a_cache_first_asked_by_a_probe_replays_the_full_reads_later() {
+        let cache = Recorded::<u32>::new();
+        let init = || {
+            if !crate::indexes::probing() {
+                note_memo(read(3));
+            }
+            note(Section::Components);
+            7
+        };
+        let probed = crate::indexes::as_probe(|| *cache.get_or_init(init));
+        assert_eq!(probed, 7);
+        let ((), later) = record(|| {
+            assert_eq!(*cache.get_or_init(init), 7);
+        });
+        assert_eq!(later.memos(), &[read(3)], "the memo note a probe skips");
+        assert!(later.reads_section(Section::Components));
+        // Once filled, a probe reads the full cache.
+        let again = crate::indexes::as_probe(|| *cache.get_or_init(|| unreachable!()));
+        assert_eq!(again, 7);
+    }
+
     #[test]
     fn suppressed_reads_and_nested_records_stay_where_they_belong() {
         let ((), outer) = record(|| {
@@ -588,6 +917,58 @@ mod tests {
         // Outside every recording, a note goes nowhere.
         note(Section::Components);
         assert!(!recording());
+    }
+
+    fn recorded(queries: impl IntoIterator<Item = u32>) -> Reads {
+        record(|| {
+            for query in queries {
+                note_memo(read(query));
+            }
+        })
+        .1
+    }
+
+    /// ADR 0406: a set added to many others is shared, not
+    /// copied; however many sets are added, the runs stay few and the set
+    /// is exactly the union; equality ignores how the runs fall.
+    #[test]
+    fn extended_sets_share_their_runs_and_stay_exact() {
+        let shared = recorded(0..500);
+        let mut per_chunk = Vec::new();
+        for chunk in 0..40 {
+            let mut reads = recorded([1000 + chunk, 3]);
+            reads.extend(&shared);
+            assert!(
+                reads
+                    .runs
+                    .iter()
+                    .any(|run| Arc::ptr_eq(run, &shared.runs[0])),
+                "the shared run is held, not copied"
+            );
+            per_chunk.push(reads);
+        }
+        let mut aggregate = Reads::default();
+        for reads in &per_chunk {
+            aggregate.extend(reads);
+        }
+        assert!(aggregate.runs.len() <= RUNS_MAX, "{}", aggregate.runs.len());
+        let expected = (0..500).chain(1000..1040).map(read).collect::<Vec<_>>();
+        assert_eq!(aggregate.memos(), expected);
+        assert_eq!(aggregate, recorded((0..500).chain(1000..1040)));
+        // A replayed set's runs reach the recording that replays it.
+        let ((), replayed) = record(|| replay(&aggregate));
+        assert_eq!(replayed, aggregate);
+        // A long tail becomes a run.
+        let mut tailed = Reads::default();
+        for query in 0..(TAIL_MAX as u32 * 3) {
+            tailed.extend(&Reads {
+                sections: 0,
+                runs: Vec::new(),
+                tail: vec![read(query)],
+            });
+        }
+        assert!(tailed.tail.len() <= TAIL_MAX);
+        assert_eq!(tailed, recorded(0..(TAIL_MAX as u32 * 3)));
     }
 
     /// Answers over fixed memo revisions; `undecided` holds the queries
@@ -620,11 +1001,10 @@ mod tests {
     }
 
     /// A proof checked before a pass publishes what some of its memos read
-    /// is undecided, not moved, while every decided read holds; checked again
-    /// once the pass has run, it holds exactly when those reads answer as
-    /// recorded. A decided read that moved wins over an undecided one.
+    /// is undecided, not moved, while every decided read holds, and reruns
+    /// its chunk. A decided read that moved wins over an undecided one.
     #[test]
-    fn a_proof_is_undecided_until_its_pass_runs_then_exact() {
+    fn a_proof_is_undecided_until_its_pass_runs() {
         let ((), reads) = record(|| {
             note_memo(read(1));
             note_memo(read(2));
@@ -639,15 +1019,7 @@ mod tests {
         };
         assert_eq!(pending, [read(2)]);
         assert!(!proof.holds(&answers), "an undecided read reruns the chunk");
-        answers.undecided.borrow_mut().clear();
-        assert!(proof.recheck(&pending, &answers));
-        answers.revisions.insert(2, 5);
-        assert!(
-            !proof.recheck(&pending, &answers),
-            "it moved once published"
-        );
         answers.revisions.insert(1, 7);
-        answers.undecided.borrow_mut().insert(2);
         assert!(matches!(proof.verdict(&answers), Verdict::Moved(_)));
     }
 }

@@ -53,7 +53,9 @@ use std::{
 use solid_reactive_ir::{Program, shadow};
 
 use super::{CheckRequest, Request, State};
-use crate::{daemon_cache::InputFile, idle_memory, unsafe_boundary};
+use crate::{
+    daemon_cache::InputFile, daemon_resolution::ResolutionWitness, idle_memory, unsafe_boundary,
+};
 
 const DEFAULT_DEBOUNCE: Duration = Duration::from_millis(300);
 
@@ -88,6 +90,8 @@ impl Mode {
 pub(super) struct Witness {
     sources: BTreeMap<String, [u8; 32]>,
     config: [u8; 32],
+    /// What the configuration's `extends` chain read.
+    extended: Option<Vec<(PathBuf, String)>>,
     input_files: Vec<InputFile>,
     inference_inputs: Vec<InputFile>,
 }
@@ -105,6 +109,7 @@ impl Witness {
                 .map(|(path, fingerprint)| (path.clone(), fingerprint.hash))
                 .collect(),
             config: state.tracking.tsconfig.hash,
+            extended: state.tracking.extended.clone(),
             input_files: last.input_files.clone(),
             inference_inputs: last.inference_inputs.clone(),
         })
@@ -119,6 +124,11 @@ pub(super) struct Served {
     pub(super) notice: Arc<str>,
     pub(super) program: Option<Arc<Program>>,
     pub(super) witness: Witness,
+    /// The retained program's resolution witness when it answered. Files
+    /// the program holds outside the tracked sources (a package's
+    /// declarations) are not in [`Witness`]: a fresh build reads them anew,
+    /// so this must still hold for the two answers to be comparable.
+    pub(super) resolution: Option<ResolutionWitness>,
 }
 
 struct Inner {
@@ -337,6 +347,7 @@ impl IdleShadow {
                     cancel,
                 )
             };
+            let running = Running(self);
             // A second build roughly doubles the daemon's resident memory:
             // it runs only while the machine has room for it (`room` names
             // the reason it does not), whatever the daemon's own limit.
@@ -347,8 +358,8 @@ impl IdleShadow {
                 verify(request, &served, &cancel)
             };
             idle_memory::reclaim_idle_pages();
+            drop(running);
             let mut inner = self.lock();
-            inner.running = None;
             match outcome {
                 Outcome::Cancelled if std::mem::take(&mut inner.relieved) => {
                     // Retrying would only meet the same limit.
@@ -387,6 +398,22 @@ impl IdleShadow {
                     }
                 }
             }
+        }
+    }
+}
+
+/// Clears the running check however it ends. A panic in [`verify`] ends the
+/// check thread; left set, `running` would make [`IdleShadow::relieve_memory`]
+/// answer that it relieved memory forever, and the watchdog would skip the
+/// daemon's memory limit (review R1 finding 9).
+struct Running<'a>(&'a IdleShadow);
+
+impl Drop for Running<'_> {
+    fn drop(&mut self) {
+        let mut inner = self.0.lock();
+        inner.running = None;
+        if std::thread::panicking() {
+            inner.relieved = false;
         }
     }
 }
@@ -444,6 +471,16 @@ fn verify(request: &Request, served: &Served, cancel: &AtomicBool) -> Outcome {
     };
     if witness != served.witness {
         return Outcome::Inconclusive("the inputs changed since the retained answer".into());
+    }
+    // Read after the fresh build: a package edited before it shows here.
+    if served
+        .resolution
+        .as_ref()
+        .is_some_and(|resolution| !resolution.current())
+    {
+        return Outcome::Inconclusive(
+            "the files the program resolved changed since the retained answer".into(),
+        );
     }
     if *answer.status != *served.status {
         return Outcome::Mismatch(format!(
@@ -558,6 +595,19 @@ mod tests {
             assert_eq!(Mode::from_setting(None, inline), Mode::Off);
             assert_eq!(Mode::from_setting(Some("panic"), inline), Mode::Off);
         }
+    }
+
+    #[test]
+    fn a_check_that_panics_leaves_nothing_running() {
+        let check = IdleShadow::from_env(Path::new("/nonexistent/idle.sock"));
+        check.lock().running = Some(Arc::new(AtomicBool::new(false)));
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _running = Running(&check);
+            panic!("verify failed");
+        }));
+        assert!(panicked.is_err());
+        assert!(!check.running());
+        assert!(!check.relieve_memory());
     }
 
     #[test]

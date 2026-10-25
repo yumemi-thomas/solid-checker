@@ -149,6 +149,7 @@ pub fn blank_response(schema: u64, request_id: u64, project_id: &str, generation
         reference_changes_exact: false,
         state_token: String::new(),
         affected: Vec::new(),
+        graph_kept: false,
         sources: Vec::new(),
         source_arena: String::new(),
         source_lengths: Vec::new(),

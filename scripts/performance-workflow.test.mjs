@@ -17,6 +17,10 @@ test("performance regressions are compared on pull requests and the default bran
   assert.match(workflow, /git merge-base HEAD/);
   assert.match(workflow, /git rev-parse HEAD\^/);
   assert.match(workflow, /bun benchmarks\/compare-performance\.mjs/);
+  // Accepted regressions are scoped by the base runtime's producer and IR.
+  assert.match(workflow, /--base-producer /);
+  assert.match(workflow, /--base-ir /);
+  assert.match(workflow, /solid-reactive-ir\/src\/base\/memo\.rs/);
 });
 
 test("fresh, cached, and incremental paths have independent histories", () => {

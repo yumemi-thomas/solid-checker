@@ -844,6 +844,9 @@ pub(super) fn role_at_returned_invocations(
                         .iter()
                         .find(|candidate| candidate.path.as_str() == site.path)
                         .map(|use_file| {
+                            // The site's file, handed out by path
+                            // (`indexes::hand_outs`).
+                            lookup.note_file_read(use_file);
                             classifying.insert(key.clone());
                             let role = semantic_execution_role_within(
                                 use_file,

@@ -86,8 +86,8 @@ impl<'a> Views<'a> {
     /// Every file's contribution, folded.
     pub(crate) fn fold<K, C>(&self, contribute: Contribute<K, C>) -> BaseIndex<K, C>
     where
-        K: Eq + std::hash::Hash + Clone + Send,
-        C: PartialEq + Send,
+        K: Eq + std::hash::Hash + Clone + Send + Sync,
+        C: PartialEq + Send + Sync,
     {
         let slots = (0..self.files.len()).collect::<Vec<_>>();
         let mut per_slot = crate::pipeline::parallel_slice_results(&slots, |slot| {
@@ -224,12 +224,14 @@ base_indexes! {
         hazards: Hazard => u32 = contributions::hazards;
         /// Reflective-definer keys.
         definers: DefinerKey => () = contributions::definers;
+    }
+    unread: {
         /// Uses of entity symbols, by symbol.
         symbol_uses: Arc<str> => SymbolUse = contributions::symbol_uses;
         /// Property spellings, by name.
         spellings: Arc<str> => Spelling = contributions::spellings;
-    }
-    unread: {
+        /// The global bindings assignments write, by name.
+        global_writes: Arc<str> => () = contributions::global_writes;
         /// References by symbol.
         references: Arc<str> => Span = contributions::references;
         /// The spans where a symbol's value is used like a returned callback.

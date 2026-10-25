@@ -1453,6 +1453,7 @@ dependencies = [
 name = "solid-reactive-ir"
 version = "0.1.0"
 dependencies = [
+ "parking_lot",
  "rustc-hash",
  "serde",
  "serde_json",
