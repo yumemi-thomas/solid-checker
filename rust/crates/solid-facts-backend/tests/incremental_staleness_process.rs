@@ -51,6 +51,7 @@ const STUB: &str = r#"declare module "solid-js" {
   export function createMemo<T>(compute: () => T): () => T;
   export function createReaction(onInvalidate: () => void): (tracking: () => void) => void;
   export function createEffect<T>(compute: () => T, apply: (value: T) => void, options?: { defer?: boolean }): void;
+  export function onSettled(callback: () => void | (() => void)): void;
 }
 
 declare namespace JSX {
@@ -1024,4 +1025,67 @@ fn a_post_pass_row_reruns_when_the_function_a_tag_names_moves() {
         );
         before = facts;
     }
+}
+
+/// Builds `files` on a per-file producer (stable Type Facts ids), then
+/// applies `edits` in order; every retained build must equal a fresh one.
+/// Returns, for each edit, whether it moved the fresh answer. `None` without
+/// a producer.
+fn retained_through_edits(
+    tag: &str,
+    files: &[(&str, &str)],
+    edits: &[(&str, &str)],
+) -> Option<Vec<bool>> {
+    let mut project = Project::scratch_per_file(tag, files)?;
+    let options = RuleOptions::default();
+    let vocabulary = solid_v2().vocabulary;
+    let fresh = |facts: &ProjectFacts| {
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap()
+            .0
+    };
+    let mut builder = IncrementalBuilder::default();
+    let mut before = project.analyze();
+    assert_retained_is_fresh(&mut builder, &before, &options, &format!("{tag} first"));
+    let mut moved = Vec::new();
+    for (index, (name, source)) in edits.iter().enumerate() {
+        let facts = project.rewrite(name, source);
+        moved.push(first_difference(&fresh(&before), &fresh(&facts)).is_some());
+        assert_retained_is_fresh(
+            &mut builder,
+            &facts,
+            &options,
+            &format!("{tag} edit {index}"),
+        );
+        before = facts;
+    }
+    Some(moved)
+}
+
+/// An `onSettled` cleanup's emission reads the callback file's entity rows
+/// (`function_cleanup_return_proof`: the call-result domain of `mk()` in
+/// `B`). Editing `C` moves `B`'s row at `mk()` from a callable to a number
+/// with `B`'s text unchanged, so a fresh build drops `A`'s three
+/// `SettledCleanup` requirements; the emission now records the callback
+/// file as read, and the retained build follows in both directions.
+const SETTLE_A: &str = "import { onSettled } from \"solid-js\";\nimport { settle } from \"./B\";\nonSettled(settle);\nonSettled(() => {\n  onSettled(settle);\n});\nexport function go() {\n  onSettled(() => {\n    onSettled(settle);\n  });\n}\n";
+const SETTLE_B: &str =
+    "import { mk } from \"./C\";\nexport function settle(): any {\n  return mk();\n}\n";
+const CLEANUP_C: &str = "export function mk(): () => void {\n  return () => {};\n}\n";
+const NUMBER_C: &str = "export function mk(): number {\n  return 1;\n}\n";
+
+#[test]
+fn a_settled_cleanup_follows_the_callback_files_rows() {
+    let Some(moved) = retained_through_edits(
+        "settled-cleanup",
+        &[("C.ts", CLEANUP_C), ("B.ts", SETTLE_B), ("A.ts", SETTLE_A)],
+        &[("C.ts", NUMBER_C), ("C.ts", CLEANUP_C)],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        moved,
+        [true, true],
+        "`mk`'s return type must move `A`'s answer"
+    );
 }
