@@ -13,8 +13,8 @@
       "maxRatio": 1.45,
       "baseProducer": "rust",
       "baseIr": "fresh",
-      "adr": "03XX-cold-cost",
-      "reason": "The incremental Reactive IR's per-entry bookkeeping on a cold build (ADR 03XX-cold-cost): the generated 1000-file corpus's first IR is ~1.19x the pre-memo IR on 14 cores and ~1.32-1.35x on four (CI), traded for 3-9x faster edits on real projects (whose first IR is faster than before). Applies only while the merge base's IR keeps no memo tables (`baseIr: fresh`); once the memo store is on main, the default limit applies again."
+      "adr": "0411",
+      "reason": "The incremental Reactive IR's per-entry bookkeeping on a cold build (ADR 0411): the generated 1000-file corpus's first IR is ~1.19x the pre-memo IR on 14 cores and ~1.32-1.35x on four (CI), traded for 3-9x faster edits on real projects (whose first IR is faster than before). Applies only while the merge base's IR keeps no memo tables (`baseIr: fresh`); once the memo store is on main, the default limit applies again."
     }
   ]
 }
