@@ -13,7 +13,7 @@ use std::{
     process::Command,
 };
 
-fn copy_directory(from: &Path, to: &Path) {
+pub(crate) fn copy_directory(from: &Path, to: &Path) {
     fs::create_dir_all(to).unwrap();
     for entry in fs::read_dir(from).unwrap() {
         let entry = entry.unwrap();
@@ -26,7 +26,7 @@ fn copy_directory(from: &Path, to: &Path) {
     }
 }
 
-fn check(project: &Path, producer: &str, workers: Option<&str>) -> serde_json::Value {
+pub(crate) fn check(project: &Path, producer: &str, workers: Option<&str>) -> serde_json::Value {
     let mut command = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"));
     command
         .env("SOLID_TYPEFACTS_BIN", producer)

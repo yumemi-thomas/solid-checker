@@ -581,12 +581,17 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         rule_options,
         unchanged_paths: &source_discovery.unchanged_paths,
     };
+    // The two after-await rules, the prepass's and the one over calls the
+    // interprocedural pass attributed, ask the same project-wide index: it is
+    // built once per build, by whichever asks first.
+    let async_computations = static_rules::SharedAsyncComputations::default();
     static_rules::static_prepass(
         &analysis,
         late_stage_cache
             .as_deref_mut()
             .and_then(Option::as_mut)
             .map(|cache| &mut cache.chunks),
+        &async_computations,
         &mut draft,
     );
     clock.finish(&mut build_timings, ReactiveIrStage::StaticPrepass);
@@ -609,7 +614,11 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut clock,
     );
     let substage_started = Instant::now();
-    static_rules::reactive_read_after_await_through_calls(&analysis, &mut draft);
+    static_rules::reactive_read_after_await_through_calls(
+        &analysis,
+        &async_computations,
+        &mut draft,
+    );
     build_timings.read_after_await_through_calls = substage_started.elapsed();
     let substage_started = Instant::now();
     cleanup::collect_project(&analysis, &mut draft);
