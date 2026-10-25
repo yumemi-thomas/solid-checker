@@ -458,6 +458,8 @@ pub(crate) struct OwnerIncrementalTimings {
     pub(crate) graph_assembly: Duration,
     pub(crate) propagation: Duration,
     pub(crate) requirement_emission: Duration,
+    /// Inside `requirement_emission`: the provider census.
+    pub(crate) context_census: Duration,
     pub(crate) reused_files: u64,
     pub(crate) recomputed_files: u64,
 }

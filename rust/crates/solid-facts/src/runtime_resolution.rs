@@ -74,6 +74,21 @@ impl RuntimeResolutionIndex {
         rows
     }
 
+    /// Every answered occurrence: path, specifier span, text and outcome, in
+    /// no particular order.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, Span, &str, &RuntimeOutcome)> {
+        self.by_site
+            .iter()
+            .map(|((path, start, end), (text, outcome))| {
+                (
+                    path.as_ref(),
+                    Span::new(*start, *end),
+                    text.as_str(),
+                    outcome,
+                )
+            })
+    }
+
     /// The number of answered occurrences.
     #[must_use]
     pub fn len(&self) -> usize {

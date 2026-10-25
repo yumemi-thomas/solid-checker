@@ -1531,6 +1531,65 @@ fn analyze_restarts_the_producer_and_replays_updates_after_a_crash() {
     fs::remove_dir(directory).unwrap();
 }
 
+/// Review R1 finding 4: an update whose send fails (the producer is already
+/// dead) is replayed onto a restarted producer and re-sent. What that
+/// producer says about its module graph describes the replayed program, not
+/// the one the caller read before the edit, so the session reports no kept
+/// graph for it.
+#[cfg(unix)]
+#[test]
+fn an_update_resent_after_a_failed_send_reports_no_kept_graph() {
+    let directory =
+        std::env::temp_dir().join(format!("typefacts-send-crash-{}", std::process::id()));
+    fs::create_dir_all(&directory).unwrap();
+    let pid_path = directory.join("producer.pid");
+    let wrapper = directory.join("producer");
+    fs::write(
+        &wrapper,
+        format!(
+            "printf '%s' \"$$\" > '{}'\nexec '{}' \"$@\"\n",
+            pid_path.display(),
+            producer().display()
+        ),
+    )
+    .unwrap();
+    let project = project();
+    let mut session = Session::open(
+        Producer::at("/bin/sh").with_arg(&wrapper),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+    session.analyze(&AnalysisDemand::default()).unwrap();
+    // The same edit, live, keeps the graph: the file is replaced in place.
+    session.update([touch_source(&project, 1)]).unwrap();
+    assert!(
+        session.last_update_graph().is_some_and(|graph| graph.kept),
+        "{:?}",
+        session.last_update_graph()
+    );
+    let pid = fs::read_to_string(&pid_path).unwrap();
+    assert!(
+        Command::new("kill")
+            .args(["-9", &pid])
+            .status()
+            .unwrap()
+            .success()
+    );
+    // The reader sees the pipe close, so the next send fails at once.
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let epoch = session.restart_epoch();
+    session.update([touch_source(&project, 2)]).unwrap();
+    assert!(
+        session.restart_epoch() > epoch,
+        "the producer was not restarted"
+    );
+    assert_eq!(session.generation(), 3);
+    assert_eq!(session.last_update_graph(), None);
+    session.close().unwrap();
+    let _ = fs::remove_dir_all(directory);
+}
+
 /// Builds `count` demand runs, one per path, each with one symbol demand.
 fn synthetic_groups(base: &str, count: usize) -> Vec<Vec<EntityDemand>> {
     (0..count)

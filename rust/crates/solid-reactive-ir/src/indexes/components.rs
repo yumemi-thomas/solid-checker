@@ -38,21 +38,52 @@ impl<'a> SemanticLookup<'a> {
             })
             .or_else(|| {
                 let symbol = self.entities.at(path, span)?;
-                self.descriptors_by_symbol
-                    .get_or_init(|| {
-                        self.facts
-                            .typescript
-                            .entities()
-                            .filter_map(|entity| {
-                                (!entity.symbol.is_empty())
-                                    .then_some(entity.symbol.as_ref())
-                                    .zip(entity.type_descriptor.as_deref())
-                            })
-                            .collect()
-                    })
-                    .get(symbol.as_str())
-                    .copied()
+                // Another file's entity may answer, or stop answering: the
+                // answer is recorded per symbol (final review R2, finding 3).
+                self.note_probe_read(crate::base::memo::probes::Probe::SymbolDescriptor, || {
+                    Self::symbol_key(symbol.as_str())
+                });
+                self.descriptor_by_symbol(symbol.as_str())
             })
+    }
+
+    /// The type descriptor of the last entity, in table order, that names
+    /// `symbol` and carries one, in any file. Unrecorded: a reader notes
+    /// [`crate::base::memo::probes::Probe::SymbolDescriptor`].
+    pub(super) fn descriptor_by_symbol(&self, symbol: &str) -> Option<&'a TypeDescriptor> {
+        self.descriptors_by_symbol
+            .get_or_init(|| {
+                self.facts
+                    .typescript
+                    .entities()
+                    .filter_map(|entity| {
+                        (!entity.symbol.is_empty())
+                            .then_some(entity.symbol.as_ref())
+                            .zip(entity.type_descriptor.as_deref())
+                    })
+                    .collect()
+            })
+            .get(symbol)
+            .copied()
+    }
+
+    /// [`Self::descriptor_by_symbol`] for callability; a reader notes
+    /// [`crate::base::memo::probes::Probe::SymbolCallability`].
+    pub(super) fn callability_by_symbol(&self, symbol: &str) -> Option<Callability> {
+        self.callability_by_symbol
+            .get_or_init(|| {
+                self.facts
+                    .typescript
+                    .entities()
+                    .filter_map(|entity| {
+                        (!entity.symbol.is_empty())
+                            .then_some(entity.symbol.as_ref())
+                            .zip(entity.callability)
+                    })
+                    .collect()
+            })
+            .get(symbol)
+            .copied()
     }
 
     /// Whether a function is proven to be a Solid component by a JSX call
@@ -290,20 +321,11 @@ impl<'a> SemanticLookup<'a> {
             })
             .or_else(|| {
                 let symbol = self.entities.at(path, span)?;
-                self.callability_by_symbol
-                    .get_or_init(|| {
-                        self.facts
-                            .typescript
-                            .entities()
-                            .filter_map(|entity| {
-                                (!entity.symbol.is_empty())
-                                    .then_some(entity.symbol.as_ref())
-                                    .zip(entity.callability)
-                            })
-                            .collect()
-                    })
-                    .get(symbol.as_str())
-                    .copied()
+                // As in `smallest_contained_descriptor`.
+                self.note_probe_read(crate::base::memo::probes::Probe::SymbolCallability, || {
+                    Self::symbol_key(symbol.as_str())
+                });
+                self.callability_by_symbol(symbol.as_str())
             })
     }
 
@@ -467,6 +489,11 @@ impl<'a> SemanticLookup<'a> {
     /// dialect's primitive-defining packages under that export's name.
     pub(crate) fn intrinsic_tag_prop(&self, file: &FileFacts, name: Span) -> Option<&'static str> {
         let component = self.entities.at(file.path.as_str(), name)?;
+        // The tag symbol's declarations, in any file (a project module
+        // augmentation among them).
+        self.note_probe_read(crate::base::memo::probes::Probe::SymbolInfo, || {
+            Self::symbol_key(component.as_str())
+        });
         let declarations = self.symbols_by_id().get(component.as_str())?.declarations();
         let packages = self.dialect.primitive_defining_packages();
         let (_, prop) = self
@@ -499,40 +526,9 @@ impl<'a> SemanticLookup<'a> {
         span: Span,
         predicate: impl Fn(&EntityFact) -> bool,
     ) -> Option<&'a EntityFact> {
-        let start = u64::from(span.start);
-        let end = u64::from(span.end);
-        let entities = self.contained_entities_by_path().get(path)?;
-        let first = entities.partition_point(|entity| entity.location.start_byte < start);
-        let last = entities.partition_point(|entity| entity.location.start_byte <= end);
-        entities[first..last]
-            .iter()
-            .enumerate()
-            .filter_map(|(index, entity)| {
-                (entity.location.end_byte <= end && predicate(entity)).then_some((index, *entity))
-            })
-            .min_by_key(|(index, entity)| {
-                (
-                    entity.location.end_byte - entity.location.start_byte,
-                    *index,
-                )
-            })
-            .map(|(_, entity)| entity)
-    }
-
-    fn contained_entities_by_path(&self) -> &HashMap<&'a str, Vec<&'a EntityFact>> {
-        self.contained_entities_by_path.get_or_init(|| {
-            let mut by_path = HashMap::<&str, Vec<&EntityFact>>::default();
-            for entity in self.facts.typescript.entities() {
-                by_path
-                    .entry(entity.location.path.as_ref())
-                    .or_default()
-                    .push(entity);
-            }
-            for entities in by_path.values_mut() {
-                entities.sort_by_key(|entity| entity.location.start_byte);
-            }
-            by_path
-        })
+        self.entities
+            .locations
+            .smallest_contained(path, span, predicate)
     }
 
     pub(super) fn functions_by_symbol(&self) -> &HashMap<&'a str, SymbolFunction> {
@@ -677,11 +673,6 @@ impl<'a> SemanticLookup<'a> {
             }
         }
         None
-    }
-
-    pub(crate) fn entities_by_location(&self) -> &HashMap<(&'a str, u64, u64), &'a EntityFact> {
-        self.entities_by_location
-            .get_or_init(|| super::first_entity_by_location(self.facts.typescript.entities()))
     }
 }
 

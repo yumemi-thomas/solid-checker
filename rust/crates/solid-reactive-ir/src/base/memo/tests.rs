@@ -3,7 +3,7 @@
 //! early cutoff, cycle detection, verify-reused mode, sweeping, implied
 //! inputs, concurrent readers, and that only canonical answers compile.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
 
@@ -95,6 +95,9 @@ toy_tables! {
     4 cyclic: Cyclic,
     5 leaky: Leaky,
     6 own: Own,
+    7 wide: Wide,
+    8 narrow: Narrow,
+    9 reader: Reader,
 }
 
 macro_rules! memo {
@@ -146,6 +149,35 @@ memo!(Cyclic, 4, cyclic, u32, i64, |ctx, key| Ok(
 memo!(Leaky, 5, leaky, u32, i64, |ctx, key| Ok(
     ctx.unrecorded_cell(*key)
 ));
+
+thread_local! {
+    static CLONES: Cell<usize> = const { Cell::new(0) };
+}
+
+/// An answer that counts, on this thread, the times it is cloned.
+#[derive(Debug, Default, Eq, PartialEq)]
+struct Counted(i64);
+
+impl Clone for Counted {
+    fn clone(&self) -> Self {
+        CLONES.with(|clones| clones.set(clones.get() + 1));
+        Self(self.0)
+    }
+}
+
+impl Canonical for Counted {}
+
+memo!(Wide, 7, wide, u32, Counted, |ctx, key| Ok(Counted(
+    ctx.cell(*key)
+)));
+// Coarse on purpose: a change in a small cell cuts off here.
+memo!(Narrow, 8, narrow, u32, i64, |ctx, key| Ok(
+    ctx.cell(*key) / 100
+));
+memo!(Reader, 9, reader, u32, i64, |ctx, key| Ok(ctx
+    .memo::<Wide>(key)?
+    .0
+    + ctx.memo::<Narrow>(&(key + 1))?));
 
 /// A table whose key names its own cell: the read of it is implied.
 struct Own;
@@ -260,6 +292,48 @@ fn an_unchanged_build_reuses_everything() {
     store.begin(&changed(&world, &next));
     assert_eq!(store.answer::<Top>(&next, &0), 0, "both parities flipped");
     assert_eq!(fresh::<Top>(&next, &0), 0);
+}
+
+/// Verifying a maybe-dirty entry asks each memo it read whether it changed.
+/// A clean one answers from its stamp: its value is not cloned, and a build
+/// that verifies counts it as reused once, as asking for it would have.
+#[test]
+fn verifying_an_entry_does_not_clone_the_clean_answers_it_read() {
+    let store = store();
+    let world = ToyWorld::with_cells(&[(0, 7), (1, 2)]);
+    store.begin(&[]);
+    assert_eq!(store.answer::<Reader>(&world, &0), 7);
+    store.end();
+    world.take_computed();
+
+    // Cell 1 moves inside `narrow 1`'s coarse answer: `reader 0` is
+    // maybe-dirty, `wide 0` (which it read first) is clean, and `narrow 1`
+    // reruns to the same value, so `reader 0` is verified without running.
+    let next = ToyWorld::with_cells(&[(0, 7), (1, 3)]);
+    let marked = store.begin(&changed(&world, &next));
+    assert_eq!((marked.dirty, marked.maybe_dirty), (1, 1));
+    CLONES.with(|clones| clones.set(0));
+    assert_eq!(store.answer::<Reader>(&next, &0), 7);
+    assert_eq!(next.take_computed(), ["narrow 1"]);
+    assert_eq!(
+        CLONES.with(Cell::get),
+        0,
+        "a clean answer read by a verification is never cloned"
+    );
+    let (stats, _) = store.end();
+    let stats = stats.into_iter().collect::<BTreeMap<_, _>>();
+    assert_eq!(stats["reader"].verified, 1);
+    assert_eq!(stats["wide"].reused, 1);
+    assert_eq!(stats["narrow"].unchanged, 1);
+
+    // Verify-reused mode recomputes the reused answer instead.
+    let check = Store::<Toy>::new(true, capture);
+    check.begin(&[]);
+    check.answer::<Reader>(&world, &0);
+    check.end();
+    check.begin(&changed(&world, &next));
+    assert_eq!(check.answer::<Reader>(&next, &0), 7);
+    assert!(take_reports().is_empty());
 }
 
 /// Mulberry32, as the edit harness uses.
