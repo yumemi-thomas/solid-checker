@@ -41,6 +41,24 @@ use resolver_values::Values;
 use resolver_world::{ProviderValues, World, parameter_typefacts_admit_in};
 pub(crate) use transport_memos::{TRANSPORT_TABLES_END, TRANSPORT_TABLES_FROM, TransportTables};
 
+/// Whether a recorded read of memo table `table` may be checked in this
+/// build. The resolver's and transport's memos are the only ones that read
+/// derived tables (their types are private to this module), and a derived
+/// table is exact only for readers asked after its pass publishes in the
+/// build (`base::memo::derived`). A clean memo is answered from its stamp
+/// without running, so a proof that checked one before the resolver's memo
+/// construction served could hold on a key the pass is about to move (final
+/// review R2, finding 6a): until then such a read is undecided, and the
+/// chunk reruns.
+pub(crate) fn memo_read_decidable(
+    store: &crate::base::memo::build::MemoStore,
+    table: crate::base::memo::TableId,
+) -> bool {
+    let reads_derived = RESOLVER_TABLES.contains(&table.0)
+        || (TRANSPORT_TABLES_FROM..TRANSPORT_TABLES_END).contains(&table.0);
+    !reads_derived || resolver_memos::served_this_build(store)
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum Callable {
     Accessor(SymbolId),

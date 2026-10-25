@@ -628,8 +628,18 @@ pub(crate) fn suppress<R>(f: impl FnOnce() -> R) -> R {
 
 /// A per-build cache that replays the reads its initialization made to
 /// every reader (see the module docs): `OnceLock`'s interface.
+///
+/// A probe's answer ([`crate::indexes::probing`]) makes no memo or hand-out
+/// note: the whole-program answers are asked directly and the hand-outs
+/// return early. A cache first filled inside one would keep that incomplete
+/// read set and replay it to every later reader of the build (final review
+/// R2, finding 7). So a fill made while probing goes to a cell only probes
+/// read, and the cache readers replay is filled outside every probe.
 pub(crate) struct Recorded<T> {
     cell: OnceLock<(T, Arc<Reads>)>,
+    /// The value as a probe computed it, for probes asked before the cache
+    /// is filled.
+    probed: OnceLock<T>,
 }
 
 impl<T> Default for Recorded<T> {
@@ -642,10 +652,21 @@ impl<T> Recorded<T> {
     pub(crate) const fn new() -> Self {
         Self {
             cell: OnceLock::new(),
+            probed: OnceLock::new(),
         }
     }
 
     pub(crate) fn get_or_init(&self, f: impl FnOnce() -> T) -> &T {
+        if self.cell.get().is_none() && crate::indexes::probing() {
+            return self.probed.get_or_init(|| {
+                let guard = push();
+                let value = f();
+                let reads = take_top().finish();
+                drop(guard);
+                replay(&reads);
+                value
+            });
+        }
         let (value, reads) = self.cell.get_or_init(|| {
             let guard = push();
             let value = f();
@@ -852,6 +873,32 @@ mod tests {
         assert_eq!(first, second);
         assert!(second.reads_section(Section::Components));
         assert_eq!(second.memos(), &[read(3)]);
+    }
+
+    /// A probe that asks a cache first does not fill what later readers
+    /// replay: inside a probe the memo note is not made (the whole-program
+    /// answer is asked directly), so a fill there would hand every later
+    /// reader a read set without it (final review R2, finding 7).
+    #[test]
+    fn a_cache_first_asked_by_a_probe_replays_the_full_reads_later() {
+        let cache = Recorded::<u32>::new();
+        let init = || {
+            if !crate::indexes::probing() {
+                note_memo(read(3));
+            }
+            note(Section::Components);
+            7
+        };
+        let probed = crate::indexes::as_probe(|| *cache.get_or_init(init));
+        assert_eq!(probed, 7);
+        let ((), later) = record(|| {
+            assert_eq!(*cache.get_or_init(init), 7);
+        });
+        assert_eq!(later.memos(), &[read(3)], "the memo note a probe skips");
+        assert!(later.reads_section(Section::Components));
+        // Once filled, a probe reads the full cache.
+        let again = crate::indexes::as_probe(|| *cache.get_or_init(|| unreachable!()));
+        assert_eq!(again, 7);
     }
 
     #[test]

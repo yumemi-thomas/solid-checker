@@ -521,7 +521,7 @@ fn an_argument_that_stops_being_an_accessor_in_another_file_is_not_kept_in_the_g
     assert_retained_is_fresh(&mut builder, &signal, &options, "signal again");
 }
 
-/// ADR 03XX-edit-residual: a result chunk's proof is its own reads, the
+/// ADR 0412: a result chunk's proof is its own reads, the
 /// result view's dependencies and each entry it asks of the stage's tables,
 /// not what building them read. `B` turns `count` from an opaque value (no
 /// summary node, not an accessor) into a signal getter, with `A` and `H`

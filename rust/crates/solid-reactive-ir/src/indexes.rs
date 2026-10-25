@@ -49,6 +49,8 @@ mod returned_uses;
 pub(crate) use identity_wrappers::{
     IdentityWrapper, WrapperAt, identity_wrapped_literal_span, identity_wrapper_candidates,
 };
+#[cfg(test)]
+pub(crate) use memo_probes::as_probe;
 pub(crate) use memo_probes::{BindingResolutionRows, probing};
 pub(crate) use returned_invocations::{INVOCATION_TABLES_FROM, InvocationTables};
 pub(crate) use returned_uses::{RETURNED_TABLES_FROM, ReturnedTables, UseKind};
@@ -1808,6 +1810,12 @@ impl crate::base::reads::ReadAnswers for SemanticLookup<'_> {
         if store != self.memos.store().id() {
             return MemoCheck::Moved;
         }
+        if !crate::interproc::accessor_provenance::memo_read_decidable(
+            self.memos.store(),
+            read.table,
+        ) {
+            return MemoCheck::Undecided;
+        }
         match self.memo_world().changed_at_checked(read.table, read.query) {
             (_, true) => MemoCheck::Undecided,
             (Some(changed_at), false) if changed_at == read.changed_at => MemoCheck::Same,
@@ -2342,6 +2350,11 @@ impl<'a> SemanticLookup<'a> {
         if let Some((sites, reads)) = found {
             crate::base::reads::replay(&reads);
             return sites;
+        }
+        // Inside a probe the hand-outs note nothing, so the reads would be
+        // incomplete for later readers: not kept (final review R2, finding 7).
+        if probing() {
+            return std::sync::Arc::new(compute());
         }
         // Computed outside the lock: the computation re-enters the lookup.
         // Its reads are kept for every later reader ([`crate::base::reads`]).

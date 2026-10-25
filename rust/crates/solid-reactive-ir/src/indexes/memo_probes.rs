@@ -18,6 +18,15 @@ pub(crate) fn probing() -> bool {
     PROBING.with(std::cell::Cell::get)
 }
 
+/// Runs `f` as a probe's answer does ([`probing`] set), for tests.
+#[cfg(test)]
+pub(crate) fn as_probe<R>(f: impl FnOnce() -> R) -> R {
+    let outer = PROBING.with(|probing| probing.replace(true));
+    let value = f();
+    PROBING.with(|probing| probing.set(outer));
+    value
+}
+
 /// One file's binding resolutions ([`SemanticLookup::binding_resolution_rows`]).
 pub(crate) type BindingResolutionRows = Vec<((u64, u64), (FileId, u32, u32, SymbolId))>;
 

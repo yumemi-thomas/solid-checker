@@ -184,7 +184,7 @@ impl IncrementalCacheState {
             return;
         }
         // The interprocedural graph and result chunks stay (ADR
-        // 03XX-edit-residual): rebuilding them cost about 95 ms of every
+        // 0412): rebuilding them cost about 95 ms of every
         // app-game edit for about 50 MB, as do reachability's (ADR 0397).
         self.base_indexes = None;
         if retention == CacheRetention::Compact {
