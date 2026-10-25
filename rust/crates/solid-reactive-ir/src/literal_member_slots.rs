@@ -121,6 +121,11 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
         // plausible 4).
         let ((verdict, deps), reads) =
             crate::base::reads::record(|| trace::record("", || self.compute(symbol)));
+        // Inside a probe the hand-outs note nothing: such a read set is not
+        // kept for other rows (final review R2, finding 7).
+        if crate::indexes::probing() {
+            return verdict;
+        }
         self.verdicts
             .lock()
             .expect("literal member slots lock")
