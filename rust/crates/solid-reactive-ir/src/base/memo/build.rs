@@ -519,6 +519,18 @@ fn fingerprints(
     entities.update(parts.rows_digest);
     entities.update(parts.declarations);
     entities.update(references);
+    // The file's import resolutions (`file_table::resolution_digests`).
+    match views
+        .sources
+        .resolutions
+        .and_then(|digests| digests.get(views.table.path_of(id)))
+    {
+        Some(digest) => {
+            entities.update([1]);
+            entities.update(digest);
+        }
+        None => entities.update([0]),
+    }
     let fingerprints = FileFingerprints {
         source: source.finalize().into(),
         compiler: compiler.finalize().into(),
@@ -804,7 +816,7 @@ const POLLED_SHARDS: usize = 16;
 struct PolledShard {
     keys: IndexKeys<super::probes::PolledKey>,
     /// Read in no order: `begin` re-asks each and `end` releases by key.
-    answers: HashMap<Input, u64>,
+    answers: HashMap<Input, super::probes::AnswerFingerprint>,
 }
 
 fn polled_shard_of(key: &super::probes::PolledKey) -> usize {
@@ -884,6 +896,10 @@ pub(crate) struct MemoStore {
     derived: super::derived::DerivedTables,
     /// This build's begin costs, when measured ([`crate::base::reads::cost`]).
     cost: std::sync::Mutex<Option<serde_json::Value>>,
+    /// A finished build whose [`Self::end`] has not run yet
+    /// ([`LookupMemos::defer_end`]), with the begin report it will print:
+    /// run by [`Self::finish_deferred_end`], or by the next build's begin.
+    deferred_end: std::sync::Mutex<Option<BeginReport>>,
 }
 
 fn report(message: &str) {
@@ -919,7 +935,23 @@ impl MemoStore {
             builds: AtomicU64::new(0),
             derived: super::derived::DerivedTables::default(),
             cost: std::sync::Mutex::new(None),
+            deferred_end: std::sync::Mutex::new(None),
         }
+    }
+
+    /// Runs the end of a build that deferred it, if one is due: the sweep of
+    /// the entries that build did not reach. The report the build would have
+    /// returned, or `None` when no end was due.
+    pub(crate) fn finish_deferred_end(&self) -> Option<MemoReport> {
+        let begin = self
+            .deferred_end
+            .lock()
+            .expect("memo deferred end lock")
+            .take()?;
+        Some(MemoReport {
+            begin,
+            tables: self.end(),
+        })
     }
 
     /// A store configured from the environment (verify-reused and shadow
@@ -977,6 +1009,9 @@ impl MemoStore {
         typescript_unchanged: bool,
         runtime_redirects: bool,
     ) -> BeginReport {
+        // The last build's sweep comes first: a build reads the store as the
+        // sweep left it.
+        let _ = self.finish_deferred_end();
         let mut report = BeginReport::default();
         let fresh = self.store.poisoned() || self.builds.fetch_add(1, Ordering::AcqRel) == 0;
         let mut base = self.base.write().expect("memo base lock");
@@ -1359,7 +1394,7 @@ impl MemoStore {
         &self,
         probe: super::probes::Probe,
         key: &super::probes::PolledKey,
-        fingerprint: u64,
+        fingerprint: super::probes::AnswerFingerprint,
     ) -> Input {
         let shard = polled_shard_of(key);
         let lock = &self.polled[shard];
@@ -1830,6 +1865,79 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
         self.project(|lookup| f(lookup, table))
     }
 
+    /// [`Self::project_files`] for a computation about the file `id` that
+    /// reads the rest of the program only through the lookup's recorded
+    /// questions ([`crate::base::reads`]: memo answers and what the lookup
+    /// hands out, ADR 0408): it records the file's sections and slots, the
+    /// build constants, and what `f` recorded, not the whole program. A
+    /// whole-table section read (`reads::Section`), a cycle's answer, or a
+    /// build under runtime redirects (where the lookup answers callees
+    /// unrecorded) reads the whole program ([`Input::Project`]).
+    pub(crate) fn project_file_recorded<R>(
+        &self,
+        id: FileId,
+        f: impl for<'x> FnOnce(&crate::indexes::SemanticLookup<'x>, &FileTable) -> R,
+    ) -> R {
+        if self.constant(Constant::RuntimeRedirects) {
+            return self.project_files(f);
+        }
+        let _ = self.constant(Constant::ProgramClosed);
+        for section in SECTIONS {
+            self.record_input(Input::File(id, section));
+        }
+        self.record_input(Input::Slots(id));
+        let table = self.world().views.table;
+        let access = self
+            .world()
+            .project
+            .expect("a build world with a lookup (`with_project`)");
+        let mut f = Some(f);
+        let mut out = None;
+        access.run(&mut |lookup| {
+            if let Some(f) = f.take() {
+                out = Some(crate::base::reads::record_detached(|| f(lookup, table)));
+            }
+        });
+        let (value, reads) = out.expect("the lookup ran the closure");
+        let (memos, sections) = reads.into_memo_reads();
+        // A hazard section is the hazard's answer
+        // (`SemanticLookup::section_fingerprint`): its probe stands for it.
+        let mut whole = memos
+            .iter()
+            .any(|read| read.query == super::QueryId(u32::MAX));
+        for section in sections {
+            match section {
+                crate::base::reads::Section::SynchronousDispatch => {
+                    let _ = self.hazard(crate::base::Hazard::SynchronousDispatch);
+                }
+                crate::base::reads::Section::ReflectiveDefinition => {
+                    let _ = self.hazard(crate::base::Hazard::ReflectiveDefinitionSpelling);
+                }
+                // The section's value, polled.
+                crate::base::reads::Section::ProjectPrimitives => {
+                    let _ = self.probe(
+                        super::probes::Probe::ProjectPrimitives,
+                        super::probes::PolledKey::Unit,
+                    );
+                }
+                _ => whole = true,
+            }
+        }
+        if whole {
+            self.record_input(Input::Project);
+        }
+        if self.frame.current.is_some() {
+            let mut recorded = self.reads.borrow_mut();
+            recorded.extend(
+                memos
+                    .into_iter()
+                    .filter(|read| read.query != super::QueryId(u32::MAX))
+                    .map(|read| super::Read::Memo(read.query, read.changed_at)),
+            );
+        }
+        value
+    }
+
     /// The path a file id names: the key's identity, not a read of the file.
     pub(crate) fn path_of(&self, id: FileId) -> &'w str {
         self.world().views.table.path_of(id)
@@ -2053,5 +2161,22 @@ impl<'a> LookupMemos<'a> {
             begin,
             tables: self.store().end(),
         })
+    }
+
+    /// Ends the build if it read any memo, but leaves the sweep to
+    /// [`MemoStore::finish_deferred_end`] (or to the next build's begin,
+    /// which runs it first): the store is not read in between, and the answer
+    /// the build made does not depend on what the sweep drops. Whether the
+    /// build read a memo.
+    pub(crate) fn defer_end(&self) -> bool {
+        let Some(begin) = self.begun.get() else {
+            return false;
+        };
+        *self
+            .store()
+            .deferred_end
+            .lock()
+            .expect("memo deferred end lock") = Some(*begin);
+        true
     }
 }

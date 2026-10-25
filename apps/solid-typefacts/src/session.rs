@@ -198,6 +198,7 @@ impl Session {
                     Ok(outcome) => {
                         response.generation = self.closure.generation();
                         response.affected = outcome.affected;
+                        response.graph_kept = outcome.graph_kept;
                     }
                     Err(error) => return error_response(response, "update-failed", error.0),
                 }

@@ -132,6 +132,7 @@ pub(crate) struct Keyer<'a, F: Fn(&DurableRef) -> bool> {
     pub exported: F,
     pub memo: &'a mut HashMap<usize, (Option<Digest32>, u32)>,
     pub tuples: &'a mut TupleIndex,
+    pub chains: &'a crate::binder_key::LocalChains,
     /// Types being keyed, outermost first: a revisit is a back-reference.
     stack: Vec<usize>,
     /// Whether the subtree being keyed holds a back-reference.
@@ -224,12 +225,14 @@ impl<'a, F: Fn(&DurableRef) -> bool> Keyer<'a, F> {
         exported: F,
         memo: &'a mut HashMap<usize, (Option<Digest32>, u32)>,
         tuples: &'a mut TupleIndex,
+        chains: &'a crate::binder_key::LocalChains,
     ) -> Self {
         Self {
             checker,
             exported,
             memo,
             tuples,
+            chains,
             stack: Vec::new(),
             cyclic: false,
             path_failed: false,
@@ -242,10 +245,10 @@ impl<'a, F: Fn(&DurableRef) -> bool> Keyer<'a, F> {
 
     /// The id string of any symbol: binder, `Set`, or derived.
     fn symbol_id(&mut self, symbol: P<Symbol>, depth: u32) -> Option<String> {
-        if let Some((key, _)) = binder_key(self.checker, symbol, &self.exported) {
+        if let Some((key, _)) = binder_key(self.checker, symbol, &self.exported, self.chains) {
             return Some(key.id());
         }
-        if let Some(key) = set_key(self.checker, symbol, &self.exported) {
+        if let Some(key) = set_key(self.checker, symbol, &self.exported, self.chains) {
             return Some(key.id());
         }
         if let Some(key) = binder_fallback(symbol) {

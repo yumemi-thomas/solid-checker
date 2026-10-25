@@ -4,8 +4,11 @@ use super::*;
 
 pub(crate) struct InterproceduralResultReadContext<'a, 'b> {
     pub(crate) result: InterproceduralResultView<'a>,
-    pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
-    pub(crate) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    /// Recorded per entry asked (`transport_reads`), as are the transport
+    /// tables and the resolver's answers below: a result chunk's proof names
+    /// each entry it read of the stage's tables.
+    pub(crate) source_kinds: super::transport_reads::SourceKindsRead<'a>,
+    pub(crate) accessors: super::transport_reads::AccessorsRead<'a>,
     pub(crate) entities: &'a EntitySymbols,
     pub(crate) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) lookup: &'a SemanticLookup<'b>,
@@ -665,8 +668,7 @@ fn call_summary(
         match transported {
             accessor_provenance::Callable::Accessor(symbol) => (
                 label,
-                provenance
-                    .read(symbol, file, call.span)
+                super::transport_reads::transported_read(provenance, symbol, file, call.span)
                     .into_iter()
                     .collect(),
                 None,
@@ -1787,12 +1789,12 @@ pub(super) fn captured_body_read_runs_during_call(
 /// sources need a separate provenance proof; declaration spelling is not one.
 pub(super) fn source_has_runtime_witness(
     symbol: &SymbolId,
-    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+    accessors: &impl AccessorTable,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    let Some((_, declaration)) = accessors.get(symbol) else {
+    let Some((_, declaration)) = accessors.accessor(symbol) else {
         return false;
     };
     let Some(file) = lookup.file_by_path(declaration.path.as_ref()) else {
@@ -2320,7 +2322,7 @@ fn argument_proven_not_a_getter(
     file: &solid_facts::FileFacts,
     argument: &solid_facts::ast::ArgumentFact,
     entities: &EntitySymbols,
-    source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
+    source_kinds: &super::transport_reads::SourceKindsRead<'_>,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     if argument.spread {

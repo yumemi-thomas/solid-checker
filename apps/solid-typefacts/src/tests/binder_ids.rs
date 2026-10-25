@@ -313,7 +313,7 @@ fn multi_origin_properties_have_set_keys_of_their_combination() {
                 ("}).p", 3, Combination::Spread),
             ] {
                 let symbol = symbol_in(env, &path, needle, offset);
-                match set_key(env.checker, symbol, |_| false) {
+                match set_key(env.checker, symbol, |_| false, &env.ids.local_chains) {
                     Some(Key::Set {
                         combination,
                         origins,
@@ -331,13 +331,13 @@ fn multi_origin_properties_have_set_keys_of_their_combination() {
             }
             let mixed = symbol_in(env, &path, "cd.c", 3);
             assert_eq!(mixed.declarations().len(), 2, "the case proves nothing");
-            assert!(set_key(env.checker, mixed, |_| false).is_none());
+            assert!(set_key(env.checker, mixed, |_| false, &env.ids.local_chains).is_none());
             let id = env.id_for(mixed);
             let kind = key_kind(env.ids, &id);
             assert!(kind == "derived" || kind == "none", "{id}: {kind}");
             // A declared property keeps its binder key.
             let declared = symbol_in(env, &path, "kind", 0);
-            assert!(set_key(env.checker, declared, |_| false).is_none());
+            assert!(set_key(env.checker, declared, |_| false, &env.ids.local_chains).is_none());
         })
         .unwrap();
 }
@@ -661,4 +661,215 @@ fn a_set_id_fails_closed_after_a_release_and_is_minted_again() {
         })
         .unwrap();
     assert_eq!(project.symbol_at(&ctx, &read).unwrap(), id);
+}
+
+/// A source file's unexported declarations take a `Local` key, whose chain
+/// names no span (ADR 0415): a statement inserted before them,
+/// at the top or mid-file, keeps every id; ids stay distinct for
+/// same-named declarations in sibling scopes and in one scope; an exported
+/// symbol keeps its `Export` id.
+#[test]
+fn local_ids_survive_an_insert_before_them_and_stay_distinct() {
+    let body = "function hidden(props: { v: number }) {\n  const items = [1, 2];\n  return items.map((item) => item + props.v);\n}\n\
+function other(props: { v: number }) {\n  { const x = 1; void x; }\n  { const x = 2; void x; }\n  return props.v;\n}\n\
+export const out = hidden({ v: 1 }) + other({ v: 2 });\n";
+    let needles = [
+        "hidden(",
+        "items",
+        "item)",
+        "props: { v: number }) {\n  const",
+        "other(",
+        "props.v;",
+        "x = 1",
+        "x = 2",
+        "out",
+    ];
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", body)]);
+    let path = scratch.path("a.ts");
+    let ids_of = |source: &str| -> Vec<String> {
+        scratch.write_all(&[("a.ts", source)]);
+        let mut project = scratch.open();
+        let ids: Vec<String> = needles
+            .iter()
+            .map(|needle| {
+                let at = find(&path, source, needle);
+                let word = needle
+                    .find(|c: char| !c.is_alphanumeric())
+                    .unwrap_or(needle.len());
+                let at = Location {
+                    end_byte: at.start_byte + u64::try_from(word).unwrap(),
+                    ..at
+                };
+                id_at(&mut project, &at)
+            })
+            .collect();
+        project
+            .with_env(|env, _| {
+                for (needle, id) in needles.iter().zip(&ids) {
+                    let kind = env.ids.key(&id.as_str().into()).map(|key| match **key {
+                        Key::Local { .. } => "local",
+                        Key::Export(_) => "export",
+                        _ => "other",
+                    });
+                    let want = if *needle == "out" { "export" } else { "local" };
+                    assert_eq!(kind, Some(want), "{needle}: {id}");
+                }
+            })
+            .unwrap();
+        ids
+    };
+    let before = ids_of(body);
+    let distinct: std::collections::HashSet<&String> = before.iter().collect();
+    assert_eq!(distinct.len(), before.len(), "{before:?}");
+    let top = ids_of(&format!(
+        "import {{}} from \"./a\";\nconst inserted = 0; void inserted;\n{body}"
+    ));
+    assert_eq!(before, top, "an insert at the top moved an id");
+    let at = body.find("function other").unwrap();
+    let mid = ids_of(&format!(
+        "{}const inserted = 0; void inserted;\n{}",
+        &body[..at],
+        &body[at..]
+    ));
+    assert_eq!(before, mid, "a mid-file insert moved an id");
+}
+
+/// A `Local` id minted before a release re-resolves from its chain alone.
+#[test]
+fn a_local_id_rehydrates_after_a_release() {
+    let source =
+        "function hidden() { const inner = 1; return inner; }\nexport const v = hidden();\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", source)]);
+    let path = scratch.path("a.ts");
+    let mut project = scratch.open();
+    let ctx = Context::new();
+    let ids: Vec<_> = ["hidden", "inner"]
+        .iter()
+        .map(|needle| {
+            project
+                .symbol_at(&ctx, &find(&path, source, needle))
+                .unwrap()
+        })
+        .collect();
+    project.release_analysis_state_for_test();
+    project
+        .with_env(|env, _| {
+            for id in &ids {
+                assert!(
+                    matches!(env.ids.key(id).map(|key| &**key), Some(Key::Local { .. })),
+                    "{id}"
+                );
+                let symbol = env.symbol_for(id).unwrap_or_else(|| panic!("{id} lost"));
+                assert_eq!(&env.id_for(symbol), id, "re-minted");
+            }
+        })
+        .unwrap();
+}
+
+/// The ids of the first `(needle, width)` of `source`, each checked to be a
+/// `Local` key of the program `source` makes.
+fn local_ids(scratch: &Scratch, path: &str, source: &str, names: &[(&str, u64)]) -> Vec<String> {
+    scratch.write_all(&[("a.ts", source)]);
+    let mut project = scratch.open();
+    let ids: Vec<String> = names
+        .iter()
+        .map(|(needle, width)| {
+            let at = find(path, source, needle);
+            let at = Location {
+                end_byte: at.start_byte + width,
+                ..at
+            };
+            id_at(&mut project, &at)
+        })
+        .collect();
+    project
+        .with_env(|env, _| {
+            for id in &ids {
+                let key = env.ids.key(&id.as_str().into()).map(|key| &**key);
+                assert!(matches!(key, Some(Key::Local { .. })), "{id}: {key:?}");
+            }
+        })
+        .unwrap();
+    ids
+}
+
+/// An id kept across an edit names the same declaration (ADR 0415):
+/// an inserted declaration of the same kind and name takes the rank of the one
+/// after it, and every declaration it displaces takes a new id, so no id of the
+/// new program is an id of the old one.
+#[test]
+fn an_inserted_same_named_declaration_hands_out_no_id() {
+    let before =
+        "export function run() {\n  { const x = 1; void x; }\n  { const x = 2; void x; }\n}\n";
+    let after = "export function run() {\n  { const x = 0; void x; }\n  { const x = 1; void x; }\n  { const x = 2; void x; }\n}\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", before)]);
+    let path = scratch.path("a.ts");
+    let before_ids = local_ids(&scratch, &path, before, &[("x = 1", 1), ("x = 2", 1)]);
+    let after_ids = local_ids(
+        &scratch,
+        &path,
+        after,
+        &[("x = 0", 1), ("x = 1", 1), ("x = 2", 1)],
+    );
+    for ids in [&before_ids, &after_ids] {
+        let distinct: std::collections::HashSet<&String> = ids.iter().collect();
+        assert_eq!(distinct.len(), ids.len(), "{ids:?}");
+    }
+    for id in &after_ids {
+        assert!(
+            !before_ids.contains(id),
+            "{id} names a declaration of the old program"
+        );
+    }
+}
+
+/// Two declarations with the same kind, name and text in one scope differ in
+/// rank, so their `Local` ids differ (ADR 0415).
+#[test]
+fn identical_declarations_in_one_scope_get_distinct_ids() {
+    let source = "function f() {\n  { const y = 1; void y; }\n  { const y = 1; void y; }\n}\nexport const out = f();\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", source)]);
+    let path = scratch.path("a.ts");
+    scratch.write_all(&[("a.ts", source)]);
+    let mut project = scratch.open();
+    let ids: Vec<String> = [
+        find(&path, source, "y = 1"),
+        find_last(&path, source, "y = 1"),
+    ]
+    .into_iter()
+    .map(|at| {
+        let at = Location {
+            end_byte: at.start_byte + 1,
+            ..at
+        };
+        id_at(&mut project, &at)
+    })
+    .collect();
+    assert_ne!(ids[0], ids[1], "two declarations share an id");
+    project
+        .with_env(|env, _| {
+            for id in &ids {
+                let key = env.ids.key(&id.as_str().into()).map(|key| &**key);
+                assert!(matches!(key, Some(Key::Local { .. })), "{id}: {key:?}");
+            }
+        })
+        .unwrap();
+}
+
+/// An edit inside a declaration moves that declaration's id and no nested
+/// declaration's: a nested declaration keeps its own text and position.
+#[test]
+fn an_edit_inside_a_declaration_moves_only_its_own_id() {
+    let before =
+        "function outer() {\n  const inner = 1;\n  return inner;\n}\nexport const v = outer();\n";
+    let after = "function outer() {\n  void 0;\n  const inner = 1;\n  return inner;\n}\nexport const v = outer();\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", before)]);
+    let path = scratch.path("a.ts");
+    let before_ids = local_ids(&scratch, &path, before, &[("outer", 5), ("inner", 5)]);
+    let after_ids = local_ids(&scratch, &path, after, &[("outer", 5), ("inner", 5)]);
+    assert_ne!(
+        before_ids[0], after_ids[0],
+        "the edited declaration kept its id"
+    );
+    assert_eq!(before_ids[1], after_ids[1], "a nested declaration moved");
 }
