@@ -601,6 +601,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
                     &cached.identity,
                     file.path.as_str(),
                     &file.source_hash,
+                    indexes.resolution_digest(file.path.as_str()),
                     typescript_unchanged,
                     typescript_delta,
                 ) && cached.proof.holds(lookup)

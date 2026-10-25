@@ -921,8 +921,24 @@ pub struct Session {
     reference_locations_valid: bool,
     last_exchange_timings: Option<ExchangeTimings>,
     last_update_timings: Option<UpdateTimings>,
+    /// What the last acknowledged update said about the module graph.
+    last_update_graph: Option<UpdateGraph>,
     last_table_changes: Option<TableChanges>,
     closed: bool,
+}
+
+/// What the producer said about the module graph when it acknowledged an
+/// update ([`Session::last_update_graph`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UpdateGraph {
+    /// The producer process the answer came from ([`Session::restart_epoch`]).
+    pub epoch: u64,
+    /// The generation the update produced.
+    pub generation: u64,
+    /// The producer replaced the update's one changed file in place and
+    /// rebuilt nothing (`Response::graph_kept`): the module graph is the
+    /// previous generation's but for that file's own import positions.
+    pub kept: bool,
 }
 
 fn normalize_project_id(project_id: String) -> Result<String, SessionError> {
@@ -1041,6 +1057,7 @@ impl Session {
             reference_locations_valid: false,
             last_exchange_timings: None,
             last_update_timings: None,
+            last_update_graph: None,
             last_table_changes: None,
             closed: false,
         }
@@ -1092,6 +1109,25 @@ impl Session {
     /// Returns the most recent update's send and wait split, if there was one.
     pub fn take_last_update_timings(&mut self) -> Option<UpdateTimings> {
         self.last_update_timings.take()
+    }
+
+    /// How many times the producer has been restarted: a program built by a
+    /// producer after a restart is a fresh build from the file system, so
+    /// nothing learned from an earlier producer's program carries over to it.
+    #[must_use]
+    pub const fn restart_epoch(&self) -> u64 {
+        self.restart_epoch
+    }
+
+    /// What the producer answered about the module graph to the update that
+    /// produced the session's current generation, or `None` when the last
+    /// update was answered by a producer that has since been restarted, was
+    /// re-sent after a restart, or there was none.
+    #[must_use]
+    pub fn last_update_graph(&self) -> Option<UpdateGraph> {
+        self.last_update_graph.filter(|graph| {
+            graph.generation == self.generation && graph.epoch == self.restart_epoch
+        })
     }
 
     /// Analyses one generation from demands the caller already keeps grouped by
@@ -1340,6 +1376,10 @@ impl Session {
                 self.restart_and_replay()?;
                 let worked = work();
                 self.update(changes)?;
+                // As for an update re-sent after a restart below: its answer
+                // describes the replayed program, not the one before the
+                // edit (review R1 finding 4).
+                self.last_update_graph = None;
                 return Ok(worked);
             }
             Err(error) => return Err(error),
@@ -1386,18 +1426,26 @@ impl Session {
             validate_response_identity(&response, &self.project_id, generation).map(|()| response)
         });
         match outcome {
-            Ok(_) => {
+            Ok(response) => {
                 self.commit_update(changes);
+                self.last_update_graph = Some(UpdateGraph {
+                    epoch: self.restart_epoch,
+                    generation: self.generation,
+                    kept: response.graph_kept,
+                });
                 Ok(())
             }
             Err(error) if error.is_transport_failure() && self.can_recover() => {
                 // This update is not in the replay state yet, so the replay
                 // restores everything before it and it is re-sent exactly once.
+                // Its answer says nothing about the module graph the session
+                // held before the restart.
                 self.restart_and_replay()?;
                 let mut retry = request(Operation::Update, &self.project_id, self.generation + 1);
                 retry.changes.clone_from(&changes);
                 self.exchange_once(&mut retry)?;
                 self.commit_update(changes);
+                self.last_update_graph = None;
                 Ok(())
             }
             Err(error) => Err(error),
@@ -1490,6 +1538,7 @@ impl Session {
             import_paths: demand.import_paths.clone(),
             packages: demand.packages,
             distinct_bare_imports: demand.distinct_bare_imports,
+            omit_modules: demand.omit_modules,
         });
         let response = self.exchange(modules)?;
         Ok(ModuleGraph {
@@ -1993,6 +2042,7 @@ impl Session {
             SessionError::ProducerProvenance("producer restart epoch overflow".into())
         })?;
         self.generation = 1;
+        self.last_update_graph = None;
         self.clear_retained_state();
         let mut open = request(Operation::Open, &self.project_id, 1);
         self.exchange_once(&mut open)?;

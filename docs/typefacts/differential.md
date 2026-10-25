@@ -79,9 +79,10 @@ candidate returned for the same exchange) and the ids in a `symbols` request. A
 symbol id belongs to the producer that issued it: `symbol:<generation>:<n>`
 follows its visit order, and the canonical id of a library symbol hashes offsets
 in its TypeScript snapshot's lib text. Such an id is replaced by the id the
-replaying producer gave the entity at the same source location in the preceding
-analyze tables (`rewrittenSymbolIds` in `replay.json`), unless two locations
-disagree about it, and an id no entity carries is sent as recorded. The tables
+replaying producer put at the same place in the preceding analyze tables (any
+position of an entity row) or the alias target of a translated row
+(`rewrittenSymbolIds` in `replay.json`), unless two places disagree; else it
+is sent as recorded. The tables
 themselves are compared as they came. Cancel frames are not replayed.
 
 Unless `--no-evidence` is given, each producer is also asked, just before the
@@ -129,9 +130,12 @@ Normalisation, in `normalizeTranscript`:
   left alone: a canonical id that differs without proof is a difference. A
   well-known symbol's counter suffix (`__@hasInstance@73`) is dropped from the
   name.
-- Generation-scoped `symbol:<gen>:<n>` ids are renamed from content (first
-  declaration, else first use), one mapping per transcript. Canonical
-  `symbol:h:...` ids compare exactly.
+- Generation-scoped `symbol:<gen>:<n>` ids are renamed from content, one
+  mapping per transcript: a row's first project declaration (transcript or
+  evidence), else the site an object carries it at (a call signature has no
+  row), else its first use. Ids sharing it are numbered by declaration list,
+  then uses (entity, column, JSON pointer). Canonical `symbol:h:...` ids
+  compare exactly unless `compare --canonical-ids` (ADR 0366).
 - `stateToken` keeps only its presence; timings and the source-arena path are
   dropped.
 

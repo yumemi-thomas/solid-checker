@@ -460,6 +460,93 @@ fn the_transport_names_only_paths_whose_rows_changed() {
     }
 }
 
+/// ADR 0389's inexact cases fail closed on the producer side (the reactive
+/// IR binds a file's own facts by this delta alone since #97). The first
+/// table, a restarted merge (a file demanded for the first time) and a
+/// rebuilt reference index (a file leaving the program) do not name their
+/// changed `symbols` answers, so the client closes its symbols in full; the
+/// sequential run (a key collision's) keeps no per-path versions either, so
+/// its next table names every demanded path.
+#[test]
+fn every_inexact_table_names_no_symbol_changes_and_the_sequential_run_every_path() {
+    let ctx = Context::new();
+    let scratch = Scratch::new(&files());
+    let mut sources: BTreeMap<String, String> = files()
+        .into_iter()
+        .filter(|(name, _)| name.ends_with(".ts") && *name != "e.ts")
+        .map(|(name, text)| (name.to_owned(), text.to_owned()))
+        .collect();
+    let exact = |closure: &mut DemandClosure| closure.changed_references(&ctx).unwrap().1;
+    let edit = |closure: &mut DemandClosure, name: &str, text: Option<&str>, version: u64| {
+        closure
+            .update(
+                &ctx,
+                &[FileChange {
+                    path: scratch.path(name),
+                    source: text.unwrap_or_default().as_bytes().to_vec(),
+                    deleted: text.is_none(),
+                    version,
+                }],
+            )
+            .unwrap();
+    };
+
+    let mut closure = DemandClosure::new(Box::new(open(&scratch, 2, true)), None);
+    let first = demands(&scratch, &sources);
+    closure
+        .demand_table_for_groups(&ctx, 1, &groups(&first), &paths(&first))
+        .unwrap();
+    assert!(!exact(&mut closure), "the first table");
+    // An exact edit, for contrast.
+    edit(&mut closure, "c.ts", Some(&C.replace("= 1", "= 2")), 2);
+    sources.insert("c.ts".to_owned(), C.replace("= 1", "= 2"));
+    let next = demands(&scratch, &sources);
+    closure
+        .demand_table_for_groups(&ctx, 2, &groups(&next), &[])
+        .unwrap();
+    assert!(exact(&mut closure), "an edit with the same passes is exact");
+    // e.ts demanded for the first time: its work changes, the merge starts over.
+    sources.insert("e.ts".to_owned(), E.to_owned());
+    let next = demands(&scratch, &sources);
+    closure
+        .demand_table_for_groups(&ctx, 2, &groups(&next), &paths(&next))
+        .unwrap();
+    assert!(!exact(&mut closure), "a restarted merge");
+    // d.ts leaves the program: the reference index is rebuilt.
+    edit(&mut closure, "d.ts", None, 3);
+    sources.remove("d.ts");
+    let next = demands(&scratch, &sources);
+    closure
+        .demand_table_for_groups(&ctx, 3, &groups(&next), &[])
+        .unwrap();
+    assert!(!exact(&mut closure), "a rebuilt reference index");
+
+    // The sequential run: no versions, so the manifest names every path.
+    let mut project = open(&scratch, 2, true);
+    project.select_sequential_for_test();
+    let mut closure = DemandClosure::new(Box::new(project), None);
+    let all = demands(&scratch, &sources);
+    closure
+        .demand_table_for_groups(&ctx, 1, &groups(&all), &paths(&all))
+        .unwrap();
+    edit(&mut closure, "c.ts", Some(C), 2);
+    sources.insert("c.ts".to_owned(), C.to_owned());
+    let all = demands(&scratch, &sources);
+    let table = closure
+        .demand_table_for_groups(&ctx, 2, &groups(&all), &[])
+        .unwrap();
+    assert!(!exact(&mut closure), "the sequential run");
+    let manifest = table.transport.expect("a manifest");
+    let named: std::collections::BTreeSet<String> = manifest.entity_paths.into_iter().collect();
+    for group in groups(&all) {
+        assert!(
+            named.contains(&group.path),
+            "the sequential run's table must name {} ({named:?})",
+            group.path
+        );
+    }
+}
+
 /// Every id a table's rows name (entity symbols, call targets) and each one's
 /// `symbols` answer with references, as text.
 fn answers(project: &mut Project, demands: &[EntityDemand]) -> BTreeMap<String, String> {

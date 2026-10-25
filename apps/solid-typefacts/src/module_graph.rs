@@ -31,21 +31,23 @@ pub fn module_graph(
     demand: &ModuleGraphRequest,
 ) -> Result<ModuleInventory, BackendError> {
     let files = program.source_files();
-    let mut inventory = ModuleInventory {
-        modules: Vec::with_capacity(files.len()),
-        ..ModuleInventory::default()
-    };
-    let (roots, unmapped) = root_positions(program);
-    inventory.unmapped_roots = unmapped;
-    for file in files {
-        check(ctx)?;
-        let mut fact = module_fact(program, *file);
-        fact.root = roots.get(&file.addr()).copied();
-        inventory.modules.push(fact);
+    let mut inventory = ModuleInventory::default();
+    // A caller that holds the inventory (the daemon, after an update that
+    // replaced one file in place) asks for some files' imports only.
+    if !demand.omit_modules {
+        inventory.modules = Vec::with_capacity(files.len());
+        let (roots, unmapped) = root_positions(program);
+        inventory.unmapped_roots = unmapped;
+        for file in files {
+            check(ctx)?;
+            let mut fact = module_fact(program, *file);
+            fact.root = roots.get(&file.addr()).copied();
+            inventory.modules.push(fact);
+        }
+        inventory
+            .modules
+            .sort_by(|left, right| left.path.cmp(&right.path));
     }
-    inventory
-        .modules
-        .sort_by(|left, right| left.path.cmp(&right.path));
     if !demand.imports {
         return Ok(inventory);
     }
