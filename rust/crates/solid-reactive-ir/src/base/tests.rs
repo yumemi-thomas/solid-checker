@@ -368,6 +368,7 @@ fn check(project: &Project, retained: &mut Option<RetainedBase>) -> Option<usize
             symbols: &symbols,
             typescript: &facts.typescript,
             references: &references,
+            resolutions: None,
         },
         constants: BuildConstants {
             dialect: &solid_dialect::Solid2,
@@ -653,6 +654,7 @@ fn a_contribution_reads_only_its_own_file() {
                 symbols: &symbols,
                 typescript: &facts.typescript,
                 references: &references,
+                resolutions: None,
             },
             constants: BuildConstants {
                 dialect: &solid_dialect::Solid2,
@@ -733,6 +735,7 @@ fn memo_build(project: &Project, store: &super::memo::build::MemoStore) -> Optio
             symbols: &symbols,
             typescript: &facts.typescript,
             references: &references,
+            resolutions: None,
         },
         constants: BuildConstants {
             dialect: &solid_dialect::Solid2,
@@ -845,6 +848,7 @@ fn begin_over(
             symbols,
             typescript: &facts.typescript,
             references: &references,
+            resolutions: None,
         },
         constants: BuildConstants {
             dialect: &solid_dialect::Solid2,
@@ -1884,7 +1888,7 @@ fn flow_answers_through_project_callees_are_reused_across_an_unrelated_edit() {
         );
     }
     // A site's role reads only its own file's recorded questions (ADR
-    // 03XX-late-stages), so the unrelated edit leaves it verified against
+    // 0413), so the unrelated edit leaves it verified against
     // them, not recomputed: the answer is the same, checked above.
     let sites = table_stats(&tables, "flow_site_role");
     assert!(

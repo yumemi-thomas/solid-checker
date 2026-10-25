@@ -10,6 +10,7 @@ import {
   RETYPE_FIXTURE_PROJECTS,
   ROOT,
   Restorer,
+  notServedByDaemon,
   projectFiles,
   restoreJournal,
   retypeReport,
@@ -133,4 +134,16 @@ test("every retype fixture has a site for the family", () => {
     assert.ok(sites.length > 0, id);
     assert.ok(!existsSync(join(ROOT, "fixtures", id, ".solid-checker", "runtime.json")), `${id} needs runtime flags`);
   }
+});
+
+test("a step the daemon did not answer is named, never passed", () => {
+  const retained = '{"cacheHit":false,"generation":2,"mode":"retained-daemon"}\n';
+  assert.equal(notServedByDaemon(`note: browser host not inferred\n${retained}`), null);
+  assert.match(
+    notServedByDaemon("solid-checker: daemon unavailable (Broken pipe); running one-shot\n"),
+    /daemon unavailable \(Broken pipe\)/
+  );
+  // A one-shot answer with no mode line at all is not the daemon's either.
+  assert.match(notServedByDaemon('{"hostStage":"host-discovery-config"}\n'), /no retained-daemon answer/);
+  assert.match(notServedByDaemon(""), /no retained-daemon answer/);
 });

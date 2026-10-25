@@ -1118,10 +1118,11 @@ impl Project {
     /// output changed, a changed output's references named an id it asks
     /// (the merged space and the write census of an id read only the
     /// reference contributions holding it and those files' text, and a file
-    /// whose text changed reran), or a symbol it reads entered or left the
-    /// batch's structural accessors. Otherwise its rows are the ones served
-    /// last. A merge that started over, a rebuilt reference index or the
-    /// first table answers every run.
+    /// whose text changed reran; a group is keyed by its alias-canonical id
+    /// and a space by the referenced symbol's own, so both count), or a
+    /// symbol it reads entered or left the batch's structural accessors.
+    /// Otherwise its rows are the ones served last. A merge that started
+    /// over, a rebuilt reference index or the first table answers every run.
     fn serve_runs(
         &mut self,
         state: &mut PerFile,
@@ -1152,6 +1153,10 @@ impl Project {
                 for output in old.iter().chain(std::iter::once(new)) {
                     if let Some((_, references)) = &output.references {
                         dirty.extend(references.refs.iter().map(|group| &group.id));
+                        // Review R1 finding 6: the merged space of an alias
+                        // id moves with contributions the groups name only
+                        // by the canonical id.
+                        dirty.extend(references.space_ids());
                     }
                 }
                 if *at < count {
