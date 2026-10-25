@@ -73,7 +73,10 @@ fn semantic_table_retains_only_source_digests() {
 }
 
 #[test]
-fn semantic_materialization_releases_expanded_compact_demands() {
+/// A compact group is expanded once for its lifetime: the kept passes hold
+/// that allocation (and compare it by identity), so a second table neither
+/// expands nor copies it again.
+fn semantic_materialization_expands_a_compact_group_once() {
     let demand = EntityDemand {
         location: location(PATH, 6, 11),
         symbol: true,
@@ -93,8 +96,16 @@ fn semantic_materialization_releases_expanded_compact_demands() {
     closure
         .demand_table_for_canonical_groups(&Context::new(), 1, &mut groups, &[PATH.to_owned()])
         .unwrap();
+    let expanded = groups[0].demands.clone().expect("the expansion is kept");
+    closure.force_full_materialization();
+    closure
+        .demand_table_for_canonical_groups(&Context::new(), 1, &mut groups, &[])
+        .unwrap();
     assert!(
-        groups[0].demands.is_none(),
-        "semantic materialization retained expanded demands"
+        groups[0]
+            .demands
+            .as_ref()
+            .is_some_and(|demands| std::sync::Arc::ptr_eq(demands, &expanded)),
+        "a second table expanded the compact group again"
     );
 }

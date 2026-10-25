@@ -68,7 +68,7 @@
 //! # The pool
 //!
 //! [`run_works`] runs passes on `N` scoped worker threads (default
-//! `min(cores - 2, 12)`, [`ENV_WORKERS`]). Each worker builds its own identity
+//! [`pool_size`]: every core up to 4, else `cores - 2`, at most 12; [`ENV_WORKERS`]). Each worker builds its own identity
 //! state from a [`crate::identity::PassSeed`] and installs its own file
 //! checker per pass. Outputs land by index, so the caller merges them in path
 //! order whatever the schedule. The program is shared read-only: its lazily
@@ -79,11 +79,10 @@
 use crate::backend::BackendError;
 use crate::binder_key::Key;
 use crate::context::Context;
-use crate::durable::DurableRef;
 use crate::gocompat::{absolute, clean};
-use crate::identity::{Env, Identities, PassSeed, Preserved, TableKeys};
+use crate::identity::{Env, Identities, PassSeed, TableKeys};
 use crate::inputs::{Digest, ProgramInputs};
-use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SymbolId};
+use crate::model::{SemanticDemandRun, SymbolId};
 use crate::per_file::{Row, row_for, seeds};
 use crate::references::{FileReferences, ReferenceIndex};
 use crate::resolved_calls::{PropertyWrites, file_property_writes};
@@ -115,6 +114,12 @@ fn env_is_one(name: &str) -> bool {
     std::env::var_os(name).is_some_and(|value| value == "1")
 }
 
+/// Whether [`ENV_VERIFY_REUSE`] asks every incremental answer to be checked
+/// against its recomputation.
+pub(crate) fn verify_reuse() -> bool {
+    env_is_one(ENV_VERIFY_REUSE)
+}
+
 /// How many worker threads run passes.
 #[must_use]
 pub fn workers_from_env() -> usize {
@@ -127,10 +132,17 @@ pub fn workers_from_env() -> usize {
     {
         return count.max(1);
     }
-    std::thread::available_parallelism()
-        .map_or(1, std::num::NonZeroUsize::get)
-        .saturating_sub(2)
-        .clamp(1, 12)
+    pool_size(std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get))
+}
+
+/// The pool for `cores` cores: every core up to 4, then two left for the
+/// client and the IR beside the producer, at most 12. The calling thread
+/// only waits on the pool, so on a small machine leaving cores idle costs
+/// more than sharing them (a 4-core runner: 2 workers made an edit 1.47x
+/// slower than 4).
+#[must_use]
+pub fn pool_size(cores: usize) -> usize {
+    cores.saturating_sub(2).max(cores.min(4)).clamp(1, 12)
 }
 
 /// One pass to run: a demanded file (`run`), the async facts of locations
@@ -149,10 +161,11 @@ pub(crate) struct PassWork<'a> {
 /// What one pass computed. Pointer-free.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct PassOutput {
-    /// The run's result, before the deferred answers are completed.
-    pub result: Option<SemanticDemandRunResult>,
+    /// The run's entity rows, before the deferred answers complete them.
+    pub run: Option<crate::completion::PassRows>,
     pub facts: Vec<AsyncFunctionFact>,
-    /// `library_writes` is always `None` here.
+    /// `library_writes` is always `None` here, and the spaces and library
+    /// deferrals are the run's patches.
     pub deferrals: Deferrals,
     /// The file's reference contribution, by its clean name.
     pub references: Option<(String, FileReferences)>,
@@ -267,8 +280,31 @@ pub(crate) fn run_pass(
             };
             // By id: `PassOutput::row` searches them.
             rows.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+            let run = match (work.run, result) {
+                (Some(run), Some(result)) => {
+                    let patches = crate::completion::Patches::of(&result.entities, &deferrals);
+                    deferrals.spaces = Vec::new();
+                    deferrals.library = Vec::new();
+                    let symbols = result
+                        .entities
+                        .iter()
+                        .filter(|entity| !entity.symbol.is_empty())
+                        .count();
+                    let durable = result.durable;
+                    let rows =
+                        crate::contributions::prepare_rows(run.path, run.demands, result.entities)
+                            .map_err(BackendError)?;
+                    Some(crate::completion::PassRows {
+                        rows: rows.into(),
+                        durable,
+                        symbols,
+                        patches,
+                    })
+                }
+                _ => None,
+            };
             Ok(PassOutput {
-                result,
+                run,
                 facts,
                 deferrals,
                 references: contribution,
@@ -297,7 +333,7 @@ pub(crate) struct WorkOutcome {
 }
 
 /// Stack of a pass worker: the main thread's (the checker recurses deeply).
-const WORKER_STACK: usize = 16 << 20;
+pub(crate) const WORKER_STACK: usize = 16 << 20;
 
 /// Runs `works` on `workers` threads (or on this one for a single worker or
 /// a single work). Outputs are index-aligned with `works`.
@@ -406,6 +442,26 @@ fn bit_set(bits: &mut Bits, index: u32) {
 fn bit_get(bits: &Bits, index: u32) -> bool {
     bits.get(index as usize / 64)
         .is_some_and(|word| word & (1 << (index % 64)) != 0)
+}
+
+/// `bits` over an old index space, in the new one (`moved[old] = new`);
+/// `None` when a member has no new index.
+fn translate(bits: &Bits, moved: &[u32], len: usize) -> Option<Bits> {
+    let mut out = bits_new(len);
+    for (word_at, word) in bits.iter().enumerate() {
+        let mut word = *word;
+        while word != 0 {
+            let bit = word.trailing_zeros();
+            word &= word - 1;
+            let old = word_at * 64 + bit as usize;
+            let new = *moved.get(old)?;
+            if new == u32::MAX {
+                return None;
+            }
+            bit_set(&mut out, new);
+        }
+    }
+    Some(out)
 }
 
 fn bits_intersect(left: &Bits, right: &Bits) -> bool {
@@ -565,16 +621,6 @@ impl Graph {
             .collect();
     }
 
-    /// The paths of `bits`, over this graph.
-    fn paths_of(&self, bits: &Bits) -> Vec<&str> {
-        self.paths
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| bit_get(bits, u32::try_from(*index).unwrap_or(u32::MAX)))
-            .map(|(_, path)| path.as_str())
-            .collect()
-    }
-
     /// `seeds` and every file they reach, added to `bits`.
     fn close(&self, seeds: impl IntoIterator<Item = u32>, bits: &mut Bits) {
         let mut pending: Vec<u32> = Vec::new();
@@ -599,8 +645,9 @@ impl Graph {
 
 /// A kept pass output with what it was computed from.
 struct Entry {
-    /// `None` for a pass without a run.
-    demands: Option<Vec<EntityDemand>>,
+    /// `None` for a pass without a run: the retained demands when the run
+    /// had them (compared by identity first), else a copy.
+    demands: Option<Arc<[EntityDemand]>>,
     locations: Vec<Location>,
     scan: bool,
     reads: Bits,
@@ -613,7 +660,11 @@ impl Entry {
             && self.locations == work.locations
             && match (&self.demands, work.run) {
                 (None, None) => true,
-                (Some(demands), Some(run)) => demands.as_slice() == run.demands,
+                (Some(demands), Some(run)) => {
+                    run.shared
+                        .is_some_and(|shared| Arc::ptr_eq(shared, demands))
+                        || **demands == *run.demands
+                }
                 _ => false,
             }
     }
@@ -659,6 +710,16 @@ pub(crate) struct Reuse {
     /// Each file's half of the census, by its text.
     census_files: HashMap<String, (Digest, Arc<HashSet<String>>)>,
     census: Option<PropertyWrites>,
+    /// The census kept between tables as counts per name (with the set),
+    /// patched by the files a parse-reusing update replaced.
+    census_writes: Option<(HashMap<String, u32>, PropertyWrites)>,
+    /// The files parse-reusing updates replaced since the last table.
+    replaced: HashSet<String>,
+    /// The global contributors at the last table, by clean path.
+    ambient_paths: HashSet<String>,
+    /// The program's non-declaration files, by clean path, in program
+    /// order, until the chain is rebuilt.
+    program_paths: Option<Vec<String>>,
     pub(crate) stats: ReuseStats,
 }
 
@@ -676,6 +737,10 @@ impl Default for Reuse {
             entries: HashMap::new(),
             census_files: HashMap::new(),
             census: None,
+            census_writes: None,
+            replaced: HashSet::new(),
+            ambient_paths: HashSet::new(),
+            program_paths: None,
             stats: ReuseStats::default(),
         }
     }
@@ -690,6 +755,57 @@ impl Reuse {
     /// table computes every file's resolutions again.
     pub(crate) fn program_rebuilt(&mut self) {
         self.rebuilt = true;
+        self.program_paths = None;
+    }
+
+    /// The program's non-declaration files, by clean path, in program
+    /// order: a parse-reusing update keeps the files and their order.
+    pub(crate) fn program_paths(&mut self, program: &Program) -> &[String] {
+        self.program_paths.get_or_insert_with(|| {
+            program
+                .source_files()
+                .iter()
+                .filter(|file| !file.is_declaration_file())
+                .map(|file| clean(file.file_name()))
+                .collect()
+        })
+    }
+
+    /// A parse-reusing update replaced `path`'s file in place: every other
+    /// file kept its parse, text and resolutions.
+    pub(crate) fn file_replaced(&mut self, path: &str) {
+        self.replaced.insert(clean(path));
+    }
+
+    /// `path` and every program file that reaches it over a resolution
+    /// edge, by clean path, while the graph of the last table still
+    /// describes the program (no rebuilt chain since); `None` otherwise.
+    pub(crate) fn reaching(&self, path: &str) -> Option<Vec<String>> {
+        if self.rebuilt {
+            return None;
+        }
+        let graph = self.graph.as_ref()?;
+        let target = *graph.ids.get(path)?;
+        let mut reverse: Vec<Vec<u32>> = vec![Vec::new(); graph.paths.len()];
+        for (from, edges) in graph.edges.iter().enumerate() {
+            for to in edges {
+                reverse[*to as usize].push(u32::try_from(from).unwrap_or(u32::MAX));
+            }
+        }
+        let mut seen = bits_new(graph.paths.len());
+        let mut pending = vec![target];
+        bit_set(&mut seen, target);
+        let mut found = Vec::new();
+        while let Some(at) = pending.pop() {
+            found.push(graph.paths[at as usize].clone());
+            for from in &reverse[at as usize] {
+                if !bit_get(&seen, *from) {
+                    bit_set(&mut seen, *from);
+                    pending.push(*from);
+                }
+            }
+        }
+        Some(found)
     }
 
     /// Drops every kept output.
@@ -710,11 +826,210 @@ impl Reuse {
         &mut self,
         program: &Program,
         inputs: &mut ProgramInputs,
-        exported: &HashMap<DurableRef, Preserved>,
+        ids: &mut Identities,
+        phases: &mut crate::trace::Phases,
     ) {
         self.stats = ReuseStats::default();
         self.census = None;
+        let export_changes = ids.take_export_changes();
+        let replaced = std::mem::take(&mut self.replaced);
+        if let Some(export_changes) = &export_changes
+            && self.refresh_in_place(program, inputs, ids, &replaced, export_changes)
+        {
+            phases.mark("inPlaceNs");
+            if self.verify {
+                self.verify_in_place(program, inputs, ids);
+            }
+            return;
+        }
+        self.census_writes = None;
+        self.refresh_all(program, inputs, ids, phases);
+    }
+
+    /// [`Reuse::refresh`] after nothing but parse-reusing updates of
+    /// non-global files: the program's files, edges and resolutions are the
+    /// last table's, so its graph and global contributors are kept, and only
+    /// the replaced files and the paths whose export identities moved are
+    /// compared. `false` (nothing changed) when that does not hold.
+    fn refresh_in_place(
+        &mut self,
+        program: &Program,
+        inputs: &mut ProgramInputs,
+        ids: &mut Identities,
+        replaced: &HashSet<String>,
+        export_changes: &HashSet<String>,
+    ) -> bool {
+        if self.rebuilt || !self.enabled {
+            return false;
+        }
+        let Some(graph) = &self.graph else {
+            return false;
+        };
+        if self.options != Some(inputs.options(program)) {
+            return false;
+        }
+        let mut files = Vec::with_capacity(replaced.len());
+        for path in replaced {
+            let Some(file) = program.get_source_file(path) else {
+                return false;
+            };
+            if clean(file.file_name()) != *path
+                || !graph.ids.contains_key(path)
+                || inputs.is_ambient(file)
+                || self.ambient_paths.contains(path)
+            {
+                return false;
+            }
+            files.push(file);
+        }
+        let mut changed = bits_new(graph.paths.len());
+        let mut changed_count = 0;
+        let mut now: Vec<(u32, PathInputs)> = Vec::new();
+        for path in replaced.iter().chain(export_changes) {
+            let Some(id) = graph.ids.get(path).copied() else {
+                return false;
+            };
+            let text = if replaced.contains(path) {
+                files
+                    .iter()
+                    .find(|file| clean(file.file_name()) == *path)
+                    .map(|file| inputs.text(*file))
+            } else {
+                self.snapshot.get(path).and_then(|held| held.0)
+            };
+            now.push((
+                id,
+                (
+                    text,
+                    ids.export_digest(path),
+                    graph.resolutions[id as usize],
+                ),
+            ));
+        }
+        for (id, inputs_now) in now {
+            let path = &graph.paths[id as usize];
+            if self.snapshot.get(path) != Some(&inputs_now) {
+                if !bit_get(&changed, id) {
+                    changed_count += 1;
+                }
+                bit_set(&mut changed, id);
+                self.snapshot.insert(path.clone(), inputs_now);
+            }
+        }
+        self.stats.changed_paths = changed_count;
+        let before = self.entries.len();
+        self.entries
+            .retain(|_, entry| !bits_intersect(&entry.reads, &changed));
+        self.stats.invalidated = before - self.entries.len();
+        self.stats.cleared = before > 0 && self.entries.is_empty();
+        // The census: the replaced files' halves.
+        if let Some((counts, writes)) = &mut self.census_writes {
+            let writes = Arc::make_mut(writes);
+            for file in &files {
+                if file.is_declaration_file() {
+                    continue;
+                }
+                let path = clean(file.file_name());
+                let text = inputs.text(*file);
+                if let Some((digest, _)) = self.census_files.get(&path)
+                    && *digest == text
+                {
+                    continue;
+                }
+                let half = Arc::new(file_property_writes(*file));
+                let old = self
+                    .census_files
+                    .insert(path, (text, Arc::clone(&half)))
+                    .map(|(_, half)| half);
+                for name in old.iter().flat_map(|old| old.iter()) {
+                    if let Some(count) = counts.get_mut(name) {
+                        *count -= 1;
+                        if *count == 0 {
+                            counts.remove(name);
+                            writes.remove(name);
+                        }
+                    }
+                }
+                for name in half.iter() {
+                    let count = counts.entry(name.clone()).or_default();
+                    *count += 1;
+                    if *count == 1 {
+                        writes.insert(name.clone());
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    /// [`ENV_VERIFY_REUSE`]: the kept graph, snapshot, global contributors
+    /// and census against a refresh from nothing; a difference drops every
+    /// kept output (fail closed).
+    fn verify_in_place(
+        &mut self,
+        program: &Program,
+        inputs: &mut ProgramInputs,
+        ids: &mut Identities,
+    ) {
+        let mut fresh = Graph::build(program);
+        fresh.compute_resolutions(program);
+        let kept = self.graph.as_ref();
+        let mut same = kept.is_some_and(|kept| {
+            kept.paths == fresh.paths
+                && kept.edges == fresh.edges
+                && kept.digest == fresh.digest
+                && kept.resolutions == fresh.resolutions
+        });
+        if same {
+            for (path, resolutions) in fresh.paths.iter().zip(&fresh.resolutions) {
+                let now = (
+                    inputs.text_at(program, path),
+                    ids.export_digest(path),
+                    *resolutions,
+                );
+                if self.snapshot.get(path) != Some(&now) {
+                    same = false;
+                    break;
+                }
+            }
+            same &= self.snapshot.len() == fresh.paths.len();
+        }
+        if same && let Some(paths) = &self.program_paths {
+            let fresh: Vec<String> = program
+                .source_files()
+                .iter()
+                .filter(|file| !file.is_declaration_file())
+                .map(|file| clean(file.file_name()))
+                .collect();
+            same = *paths == fresh;
+        }
+        if same && let Some((_, writes)) = &self.census_writes {
+            let writes = Arc::clone(writes);
+            self.census_writes = None;
+            let census = self.census(program, inputs);
+            same = *census == *writes;
+        }
+        if !same {
+            crate::per_file::reuse_mismatch("the kept read-set inputs");
+            self.entries.clear();
+            self.census_writes = None;
+            self.census = None;
+            self.program_rebuilt();
+        }
+    }
+
+    /// [`Reuse::refresh`] from the program itself.
+    fn refresh_all(
+        &mut self,
+        program: &Program,
+        inputs: &mut ProgramInputs,
+        ids: &mut Identities,
+        phases: &mut crate::trace::Phases,
+    ) {
+        inputs.prime(program, workers_from_env());
+        phases.mark("primeNs");
         let mut graph = Graph::build(program);
+        phases.mark("edgesNs");
         match &self.graph {
             // A parse-reusing update kept every resolution: the same graph
             // carries the same records.
@@ -723,6 +1038,7 @@ impl Reuse {
             }
             _ => graph.compute_resolutions(program),
         }
+        phases.mark("graphNs");
         self.rebuilt = false;
         let options = inputs.options(program);
         let ambient = inputs.ambient(program);
@@ -740,12 +1056,13 @@ impl Reuse {
                     path.clone(),
                     (
                         inputs.text_at(program, path),
-                        inputs.exports(exported, path),
+                        ids.export_digest(path),
                         *resolutions,
                     ),
                 )
             })
             .collect();
+        phases.mark("snapshotNs");
         let mut changed_count = 0;
         for (path, now) in &snapshot {
             if self.snapshot.get(path) != Some(now) {
@@ -759,13 +1076,19 @@ impl Reuse {
             .count();
         self.stats.changed_paths = changed_count;
         let mut ambient_reads = bits_new(graph.paths.len());
-        let ambient_files: Vec<u32> = program
-            .source_files()
-            .iter()
-            .filter(|file| inputs.is_ambient(**file))
-            .filter_map(|file| graph.ids.get(&clean(file.file_name())).copied())
-            .collect();
+        self.ambient_paths.clear();
+        let mut ambient_files: Vec<u32> = Vec::new();
+        for file in program.source_files() {
+            if inputs.is_ambient(*file) {
+                let path = clean(file.file_name());
+                if let Some(id) = graph.ids.get(&path) {
+                    ambient_files.push(*id);
+                }
+                self.ambient_paths.insert(path);
+            }
+        }
         graph.close(ambient_files, &mut ambient_reads);
+        phases.mark("ambientNs");
         let before = self.entries.len();
         match self.graph.take() {
             Some(old) if !self.entries.is_empty() => {
@@ -779,16 +1102,33 @@ impl Reuse {
                 }
                 self.entries
                     .retain(|_, entry| !bits_intersect(&entry.reads, &changed));
+                phases.mark("retainNs");
                 if old.digest != graph.digest {
                     // Same members, same edges: the closure over the new
                     // graph is the same set of paths. Checked, not assumed.
+                    // Old indexes to new ones, by path (none when the
+                    // program kept its files).
+                    let same_paths = old.paths == graph.paths;
+                    let moved: Vec<u32> = if same_paths {
+                        Vec::new()
+                    } else {
+                        old.paths
+                            .iter()
+                            .map(|path| graph.ids.get(path).copied().unwrap_or(u32::MAX))
+                            .collect()
+                    };
                     self.entries.retain(|path, entry| {
                         let Some(id) = graph.ids.get(path).copied() else {
                             return false;
                         };
                         let mut reads = ambient_reads.clone();
                         graph.close([id], &mut reads);
-                        if graph.paths_of(&reads) != old.paths_of(&entry.reads) {
+                        let held = if same_paths {
+                            Some(std::mem::take(&mut entry.reads))
+                        } else {
+                            translate(&entry.reads, &moved, graph.paths.len())
+                        };
+                        if held.as_ref() != Some(&reads) {
                             return false;
                         }
                         entry.reads = reads;
@@ -798,6 +1138,7 @@ impl Reuse {
             }
             _ => self.entries.clear(),
         }
+        phases.mark("closuresNs");
         self.stats.invalidated = before - self.entries.len();
         self.stats.cleared = self.stats.cleared || (before > 0 && self.entries.is_empty());
         self.snapshot = snapshot;
@@ -817,6 +1158,12 @@ impl Reuse {
         if let Some(census) = &self.census {
             return Arc::clone(census);
         }
+        if let Some((_, writes)) = &self.census_writes {
+            let census = Arc::clone(writes);
+            self.census = Some(Arc::clone(&census));
+            return census;
+        }
+        let mut counts: HashMap<String, u32> = HashMap::new();
         let mut writes: HashSet<String> = HashSet::new();
         let mut present: HashSet<String> = HashSet::new();
         for file in program.source_files() {
@@ -834,12 +1181,16 @@ impl Reuse {
                     half
                 }
             };
+            for name in half.iter() {
+                *counts.entry(name.clone()).or_default() += 1;
+            }
             writes.extend(half.iter().cloned());
             present.insert(path);
         }
         self.census_files.retain(|path, _| present.contains(path));
         let census = Arc::new(writes);
         self.census = Some(Arc::clone(&census));
+        self.census_writes = Some((counts, Arc::clone(&census)));
         census
     }
 
@@ -893,7 +1244,10 @@ impl Reuse {
         self.entries.insert(
             work.path.clone(),
             Entry {
-                demands: work.run.map(|run| run.demands.to_vec()),
+                demands: work.run.map(|run| {
+                    run.shared
+                        .map_or_else(|| Arc::from(run.demands), Arc::clone)
+                }),
                 locations: work.locations.clone(),
                 scan: work.scan,
                 reads,
@@ -956,6 +1310,11 @@ pub(crate) struct Merged {
     outputs: Vec<Arc<PassOutput>>,
     keys: Arc<TableKeys>,
     providers: HashMap<SymbolId, Vec<u32>>,
+    /// The served rows' alias-canonical ids, reversed: per canonical id, the
+    /// ids whose served row names it. Built by the first query after a merge
+    /// that started over, then moved by the served rows each update changes
+    /// ([`Merged::update`]); `None` until built.
+    canonical_index: Option<HashMap<SymbolId, Vec<SymbolId>>>,
     /// Whether the rows answer queries (false from a program change until
     /// the next table).
     pub(crate) serving: bool,
@@ -965,7 +1324,7 @@ pub(crate) struct Merged {
 /// new output.
 pub(crate) struct MergeUpdate {
     pub full: bool,
-    pub changed: Vec<(Option<Arc<PassOutput>>, Arc<PassOutput>)>,
+    pub changed: Vec<(usize, Option<Arc<PassOutput>>, Arc<PassOutput>)>,
     /// Rows a later provider computed again, and how many differed
     /// (`per_file::ENV_VERIFY_ROWS`).
     pub rows_verified: usize,
@@ -998,8 +1357,24 @@ impl Merged {
         self.outputs.get(first as usize)?.row(id)
     }
 
-    /// Every id whose served row's alias-canonical id is in `canonical`.
-    pub(crate) fn ids_with_canonical(&self, canonical: &HashSet<SymbolId>) -> Vec<SymbolId> {
+    /// Every id whose served row's alias-canonical id is in `canonical`
+    /// (the same set as [`Merged::ids_with_canonical_scan`]).
+    pub(crate) fn ids_with_canonical(&mut self, canonical: &HashSet<SymbolId>) -> Vec<SymbolId> {
+        let index = match self.canonical_index.take() {
+            Some(index) => index,
+            None => self.canonical_index_of_rows(),
+        };
+        let ids = canonical
+            .iter()
+            .flat_map(|canonical| index.get(canonical).into_iter().flatten().cloned())
+            .collect();
+        self.canonical_index = Some(index);
+        ids
+    }
+
+    /// [`Merged::ids_with_canonical`] by scanning every id: the reference it
+    /// is verified against (`ENV_VERIFY_REUSE`, and every test build).
+    pub(crate) fn ids_with_canonical_scan(&self, canonical: &HashSet<SymbolId>) -> Vec<SymbolId> {
         self.providers
             .keys()
             .filter(|id| {
@@ -1008,6 +1383,46 @@ impl Merged {
             })
             .cloned()
             .collect()
+    }
+
+    /// The served rows' canonical ids, reversed, from every id.
+    fn canonical_index_of_rows(&self) -> HashMap<SymbolId, Vec<SymbolId>> {
+        let mut index: HashMap<SymbolId, Vec<SymbolId>> = HashMap::new();
+        for id in self.providers.keys() {
+            if let Some(row) = self.row(id) {
+                index
+                    .entry(row.canonical.clone())
+                    .or_default()
+                    .push(id.clone());
+            }
+        }
+        index
+    }
+
+    /// Moves `id` from the bucket of its served row's old canonical id to the
+    /// bucket of its new one (`None`: no served row).
+    fn reindex(
+        index: &mut HashMap<SymbolId, Vec<SymbolId>>,
+        id: &SymbolId,
+        before: Option<&SymbolId>,
+        after: Option<&SymbolId>,
+    ) {
+        if before == after {
+            return;
+        }
+        if let Some(canonical) = before
+            && let Some(ids) = index.get_mut(canonical)
+        {
+            if let Some(at) = ids.iter().position(|other| other == id) {
+                ids.swap_remove(at);
+            }
+            if ids.is_empty() {
+                index.remove(canonical);
+            }
+        }
+        if let Some(canonical) = after {
+            index.entry(canonical.clone()).or_default().push(id.clone());
+        }
     }
 
     /// Ids with a row.
@@ -1043,6 +1458,7 @@ impl Merged {
             self.keys = Arc::default();
             self.providers.clear();
             self.outputs.clear();
+            self.canonical_index = None;
         }
         let mut changed: Vec<(usize, Option<Arc<PassOutput>>)> = Vec::new();
         for (at, output) in outputs.iter().enumerate() {
@@ -1118,13 +1534,25 @@ impl Merged {
         }
         self.works = works;
         self.outputs = outputs;
-        let changed_rows = served_before.map(|before| {
-            before
-                .into_iter()
-                .filter(|(id, row)| self.row(id) != row.as_ref())
-                .map(|(id, _)| id)
-                .collect()
-        });
+        let changed_rows = match served_before {
+            Some(before) => {
+                let moved: Vec<(SymbolId, Option<Row>)> = before
+                    .into_iter()
+                    .filter(|(id, row)| self.row(id) != row.as_ref())
+                    .collect();
+                if self.canonical_index.is_some() {
+                    for (id, before) in &moved {
+                        let before = before.as_ref().map(|row| &row.canonical);
+                        let after = self.row(id).map(|row| row.canonical.clone());
+                        if let Some(index) = self.canonical_index.as_mut() {
+                            Self::reindex(index, id, before, after.as_ref());
+                        }
+                    }
+                }
+                Some(moved.into_iter().map(|(id, _)| id).collect())
+            }
+            None => None,
+        };
         let (mut rows_verified, mut row_mismatches) = (0, 0);
         if verify_rows {
             for (at, _) in &changed {
@@ -1146,11 +1574,114 @@ impl Merged {
             full,
             changed: changed
                 .into_iter()
-                .map(|(at, old)| (old, Arc::clone(&self.outputs[at])))
+                .map(|(at, old)| (at, old, Arc::clone(&self.outputs[at])))
                 .collect(),
             rows_verified,
             row_mismatches,
             changed_rows,
         })
+    }
+}
+
+#[cfg(test)]
+mod pool_size_tests {
+    #[test]
+    fn small_machines_use_every_core_and_big_ones_keep_two() {
+        let sizes: Vec<usize> = [1, 2, 3, 4, 5, 6, 8, 14, 32]
+            .into_iter()
+            .map(super::pool_size)
+            .collect();
+        assert_eq!(sizes, [1, 2, 3, 4, 4, 4, 6, 12, 12]);
+    }
+}
+
+#[cfg(test)]
+mod canonical_index_tests {
+    use super::*;
+
+    fn symbol(name: &str) -> SymbolId {
+        Arc::from(name)
+    }
+
+    /// A pass output providing `(id, canonical)` rows, sorted by id as
+    /// `PassOutput::row` searches them.
+    fn output(rows: &[(usize, usize)], ids: &[SymbolId]) -> Arc<PassOutput> {
+        let mut rows = rows.to_vec();
+        rows.sort_unstable_by_key(|(id, _)| *id);
+        rows.dedup_by_key(|(id, _)| *id);
+        Arc::new(PassOutput {
+            rows: rows
+                .into_iter()
+                .map(|(id, canonical)| {
+                    let row = crate::per_file::Row {
+                        found: true,
+                        alias_target: ids[id].clone(),
+                        declarations: Arc::from(Vec::new()),
+                        canonical: ids[canonical].clone(),
+                    };
+                    (ids[id].clone(), row)
+                })
+                .collect(),
+            ..Default::default()
+        })
+    }
+
+    /// Random merges, incremental and starting over, with queries between
+    /// them: the reverse index answers every canonical set as the scan does.
+    #[test]
+    fn the_reverse_index_answers_what_the_scan_answers() {
+        const IDS: usize = 24;
+        const PASSES: usize = 5;
+        let ids: Vec<SymbolId> = (0..IDS).map(|i| symbol(&format!("s{i}"))).collect();
+        let mut works: Vec<WorkId> = (0..PASSES)
+            .map(|i| WorkId {
+                path: format!("f{i}.ts"),
+                run: true,
+                scan: false,
+                reusable: true,
+            })
+            .collect();
+        let mut outputs: Vec<Arc<PassOutput>> = (0..PASSES).map(|_| output(&[], &ids)).collect();
+        let mut merged = Merged::default();
+        // A small deterministic generator: the same cases on every run.
+        let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = move |bound: usize| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            usize::try_from(state % bound as u64).unwrap_or(0)
+        };
+        for step in 0..600 {
+            // A work list that changed starts the merge over.
+            if step % 97 == 96 {
+                let at = next(PASSES);
+                works[at].reusable = !works[at].reusable;
+            }
+            for _ in 0..=next(3) {
+                let at = next(PASSES);
+                let count = next(7);
+                let rows: Vec<(usize, usize)> =
+                    (0..count).map(|_| (next(IDS), next(IDS))).collect();
+                outputs[at] = output(&rows, &ids);
+            }
+            merged
+                .update(works.clone(), outputs.clone(), false)
+                .expect("no output has keys, so no key can collide");
+            // Queried on some edits only: the index is built lazily, then
+            // moved by every update that follows.
+            if step % 3 != 0 {
+                continue;
+            }
+            for _ in 0..3 {
+                let count = next(4);
+                let canonical: HashSet<SymbolId> =
+                    (0..=count).map(|_| ids[next(IDS)].clone()).collect();
+                let mut indexed = merged.ids_with_canonical(&canonical);
+                let mut scanned = merged.ids_with_canonical_scan(&canonical);
+                indexed.sort_unstable();
+                scanned.sort_unstable();
+                assert_eq!(indexed, scanned, "step {step}");
+            }
+        }
     }
 }

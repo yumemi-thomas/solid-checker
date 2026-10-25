@@ -148,6 +148,7 @@ census_tables! {
     redirected_calls: RedirectedCalls = 88;
     redirected_callee: RedirectedCallee = 89;
     result_access: ResultAccessAnswered = 90;
+    component_spans: ComponentSpansOf = 91;
 }
 
 /// A memo over a lookup table not yet ported: its whole computation is one
@@ -1123,6 +1124,69 @@ impl Memo<BuildSchema> for FileComponentStatuses {
 
     fn implied((id, _): &(FileId, u32)) -> Vec<Input> {
         // What the file decides reads its syntax only.
+        vec![Input::File(*id, Section::Source)]
+    }
+}
+
+/// [`ComponentSpansOf`]'s bit for a function the census proves a component
+/// (an escaped one included).
+pub(crate) const COMPONENT_PROVEN: u8 = 1;
+/// [`ComponentSpansOf`]'s bit for an escaped component.
+pub(crate) const COMPONENT_ESCAPED: u8 = 2;
+/// [`ComponentSpansOf`]'s bit for a possible component.
+pub(crate) const COMPONENT_POSSIBLE: u8 = 4;
+
+/// The component identities of one path's functions as the lookup's three
+/// sets hold them (`SemanticLookup::component_statuses`): for each function
+/// span some slot of the path proves, escapes or leaves possible, the union
+/// of its bits over the slots, sorted by span. Exactly the part of those sets
+/// whose key names the path, so a reader asking about one file's functions
+/// reads this answer, not the whole census (`Section::Components`).
+pub(crate) struct ComponentSpansOf;
+
+impl Memo<BuildSchema> for ComponentSpansOf {
+    type Key = FileId;
+    type Value = Arc<Vec<(Span, u8)>>;
+    const NAME: &'static str = "component_spans";
+    const ID: TableId = Self::TABLE;
+
+    fn table(tables: &BuildTables) -> &Table<BuildSchema, Self> {
+        Self::of(tables)
+    }
+
+    fn compute(ctx: &Ctx<'_, '_, BuildSchema>, id: &FileId) -> Result<Arc<Vec<(Span, u8)>>, Cycle> {
+        let mut spans = Vec::new();
+        for rank in 0..ctx.slots(*id).len() {
+            let Some(read) = ctx.file(*id, rank) else {
+                continue;
+            };
+            let identities = ctx.memo::<FileComponentStatuses>(&(*id, ordinal32(rank)))?;
+            for (function, identity) in read.facts().ast.functions.iter().zip(identities.iter()) {
+                let bits = match identity {
+                    ComponentIdentity::Proven => COMPONENT_PROVEN,
+                    ComponentIdentity::Escaped => COMPONENT_PROVEN | COMPONENT_ESCAPED,
+                    ComponentIdentity::Possible => COMPONENT_POSSIBLE,
+                    ComponentIdentity::No => continue,
+                };
+                spans.push((function.span, bits));
+            }
+        }
+        spans.sort_unstable();
+        spans.dedup_by(|later, kept| {
+            let same = later.0 == kept.0;
+            if same {
+                kept.1 |= later.1;
+            }
+            same
+        });
+        Ok(Arc::new(spans))
+    }
+
+    fn on_cycle(_: &FileId) -> Arc<Vec<(Span, u8)>> {
+        Arc::default()
+    }
+
+    fn implied(id: &FileId) -> Vec<Input> {
         vec![Input::File(*id, Section::Source)]
     }
 }

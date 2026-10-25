@@ -48,6 +48,39 @@ pub fn metrics_line(name: &str, values: &[(&str, i64)]) -> String {
     line
 }
 
+/// Consecutive phases of one operation, reported as one metrics line of
+/// `<name>Ns` fields when a trace is listening (and timed only then).
+pub struct Phases {
+    last: Option<std::time::Instant>,
+    phases: Vec<(&'static str, i64)>,
+}
+
+impl Phases {
+    #[must_use]
+    pub fn new(trace: &SharedTrace) -> Self {
+        Self {
+            last: trace.is_some().then(std::time::Instant::now),
+            phases: Vec::new(),
+        }
+    }
+
+    /// Ends the phase `name` (a field name ending in `Ns`).
+    pub fn mark(&mut self, name: &'static str) {
+        if let Some(last) = &mut self.last {
+            let now = std::time::Instant::now();
+            let elapsed = i64::try_from((now - *last).as_nanos()).unwrap_or(i64::MAX);
+            self.phases.push((name, elapsed));
+            *last = now;
+        }
+    }
+
+    pub fn report(&self, trace: &SharedTrace, metrics: &str) {
+        if let Some(trace) = trace {
+            trace.metrics(metrics, &self.phases);
+        }
+    }
+}
+
 impl Trace for StderrTrace {
     fn stage(&self, name: &str, elapsed: Duration) {
         let _ = std::io::stderr().write_all(stage_line(name, elapsed).as_bytes());

@@ -22,7 +22,7 @@
 //! there; it need not be `Send` (tsrs state is thread-local).
 
 use crate::context::Context;
-use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SymbolId};
+use crate::model::{RunAnswer, SemanticDemandRun, SemanticDemandRunResult, SymbolId};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -66,6 +66,13 @@ pub const ERR_SOURCE_FACTS_UNAVAILABLE: &str = "type facts backend has no source
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct UpdateOutcome {
     pub affected: Vec<String>,
+    /// The update replaced its one changed file in place and rebuilt nothing
+    /// (not the program chain, not after it either): every other file's text,
+    /// every file's module resolution and the program's file set are the
+    /// previous generation's, and only the changed file's own import
+    /// positions can differ (`Response::graph_kept`). The compiler's own
+    /// in-place condition (`UpdateKind::Reused`) is what this reports.
+    pub graph_kept: bool,
 }
 
 /// The `modules` answer, flattened as the response carries it (Go:
@@ -165,14 +172,14 @@ pub trait ClosureBackend {
         ctx: &Context,
         runs: &[SemanticDemandRun<'_>],
         async_locations: &[Location],
-    ) -> Result<(Vec<SemanticDemandRunResult>, Vec<AsyncFunctionFact>), BackendError> {
+    ) -> Result<(Vec<RunAnswer>, Vec<AsyncFunctionFact>), BackendError> {
         let facts = self.async_functions_at(ctx, async_locations)?;
         let results = if runs.is_empty() {
             Vec::new()
         } else {
             self.semantic_demand_runs(ctx, runs)?
         };
-        Ok((results, facts))
+        Ok((results.into_iter().map(RunAnswer::Result).collect(), facts))
     }
 
     /// The call expressions of one file in source order, each with its

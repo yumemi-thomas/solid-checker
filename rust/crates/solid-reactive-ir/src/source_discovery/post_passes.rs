@@ -135,24 +135,9 @@ impl<T: Eq + Send + Sync> ChunkSet<T> {
                     dirty.insert(*key);
                 }
             }
-            // Binding resolutions are asked per path, the path's table found
-            // once; every other answer on its own.
-            let mut bindings = HashMap::<&Arc<str>, Vec<(&Dep, Span)>>::default();
             for (dep, readers) in &self.readers {
-                if let Dep::BindingAt(path, span, _) = dep {
-                    bindings.entry(path).or_default().push((dep, *span));
-                } else if !dep.holds(answers) {
+                if !dep.holds(answers) {
                     dirty.extend(readers.iter().copied());
-                }
-            }
-            for (path, asked) in bindings {
-                let spans = asked.iter().map(|(_, span)| *span).collect::<Vec<_>>();
-                for ((dep, _), now) in asked.iter().zip(lookup.binding_symbols_at(path, &spans)) {
-                    if let Dep::BindingAt(_, _, answer) = dep
-                        && *answer != now
-                    {
-                        dirty.extend(self.readers[*dep].iter().copied());
-                    }
                 }
             }
             for (key, chunk) in &self.chunks {

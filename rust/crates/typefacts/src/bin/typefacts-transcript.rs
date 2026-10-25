@@ -2,6 +2,9 @@
 //!
 //!   typefacts-transcript decode <requests.bin> <responses.bin>
 //!       Prints the decoded transcript as JSON.
+//!   typefacts-transcript compare <a-responses.bin> <b-responses.bin>
+//!       Compares two response streams of one request stream (two replays)
+//!       answer by answer, timings aside; exits 1 at the first difference.
 //!   typefacts-transcript replay <requests.bin> <go-responses.bin> <argv.json> <out-responses.bin>
 //!       Replays the recorded requests against the producer named by argv[0],
 //!       writes its response stream (handshake first) in the recorded format
@@ -17,9 +20,11 @@
 //! recorded `symbols` request that names one would ask the replaying producer
 //! about some other symbol, or none. Like a state token, such an id is
 //! translated: it is replaced by the id the replaying producer gave the entity
-//! at the same source location (the one the recorded producer gave it, in the
-//! preceding analyze tables), when that correspondence is unambiguous; any
-//! other id is sent as recorded. The entity tables are still compared as they
+//! at the same place (the same entity's symbol, or the same position inside
+//! another of its columns, such as a resolved call's target, in the preceding
+//! analyze tables; or the alias target of the row answered for an id already
+//! translated), when that correspondence is unambiguous; any other id is sent
+//! as recorded. The entity tables are still compared as they
 //! came, so a symbol that differs is reported there.
 //!
 //! With `TYPEFACTS_REPLAY_EVIDENCE=<file>` the replay also asks the producer,
@@ -47,6 +52,7 @@ fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let result = match arguments.first().map(String::as_str) {
         Some("decode") if arguments.len() == 3 => decode(&arguments[1], &arguments[2]),
+        Some("compare") if arguments.len() == 3 => compare(&arguments[1], &arguments[2]),
         Some("replay") if arguments.len() == 5 => {
             replay(&arguments[1], &arguments[2], &arguments[3], &arguments[4])
         }
@@ -70,6 +76,43 @@ fn decode(requests: &str, responses: &str) -> Result<(), String> {
     let mut out = std::io::stdout().lock();
     serde_json::to_writer(&mut out, &value).map_err(|error| error.to_string())?;
     writeln!(out).map_err(|error| error.to_string())
+}
+
+/// Two response streams answer the same: every response after the
+/// handshake equal once its timings are dropped.
+fn compare(left: &str, right: &str) -> Result<(), String> {
+    let (left, right) = (read(left)?, read(right)?);
+    let (left, right) = (split_frames(&left)?, split_frames(&right)?);
+    if left.len() != right.len() {
+        return Err(format!("{} responses against {}", left.len(), right.len()));
+    }
+    for (index, (left, right)) in left.iter().zip(&right).enumerate().skip(1) {
+        if left == right {
+            continue;
+        }
+        let mut left = decode_response(left)?;
+        let mut right = decode_response(right)?;
+        left.timings = None;
+        right.timings = None;
+        if left != right {
+            let fields = |response: &typefacts::v3::Response| {
+                serde_json::to_value(response)
+                    .ok()
+                    .and_then(|value| value.as_object().cloned())
+                    .unwrap_or_default()
+            };
+            let (a, b) = (fields(&left), fields(&right));
+            let differing: Vec<&String> = a
+                .keys()
+                .chain(b.keys())
+                .filter(|key| a.get(*key) != b.get(*key))
+                .collect();
+            eprintln!("response {index} differs in {differing:?}");
+            std::process::exit(1);
+        }
+    }
+    println!("{} responses equal", left.len().saturating_sub(1));
+    Ok(())
 }
 
 fn replay(requests: &str, go_responses: &str, argv: &str, output: &str) -> Result<(), String> {
@@ -171,6 +214,11 @@ fn replay(requests: &str, go_responses: &str, argv: &str, output: &str) -> Resul
         if canonicalize {
             payload = typefacts::encode(&request).map_err(|e| e.to_string())?;
         }
+        let recorded_ids: Vec<String> = request
+            .symbol_queries
+            .iter()
+            .map(|query| query.id.to_string())
+            .collect();
         let translated = id_map.translate(&mut request);
         if translated > 0 {
             rewritten_ids += translated;
@@ -227,6 +275,9 @@ fn replay(requests: &str, go_responses: &str, argv: &str, output: &str) -> Resul
                     go_tables.observe(request.operation, &recorded);
                     if request.operation == Operation::Analyze && response.ok && recorded.ok {
                         id_map.reconcile(&go_tables, &evidence.tables);
+                    }
+                    if request.operation == Operation::Symbols {
+                        id_map.reconcile_symbols(&recorded_ids, &recorded, &response);
                     }
                 }
                 captured.push(bytes);

@@ -836,7 +836,7 @@ impl Memo<BuildSchema> for FlowSiteRole {
         // As every flow memo, a nested role query computes in this context
         // whoever asks ([`computing_flow`]).
         Ok(computing_flow(|| {
-            ctx.project_files(|lookup, table| {
+            ctx.project_file_recorded(*id, |lookup, table| {
                 let file = path_file(lookup, table, *id)?;
                 let mut classifying = context.iter().cloned().collect::<HashSet<_>>();
                 site_role_in(lookup, file, *call, &mut classifying)

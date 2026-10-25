@@ -33,6 +33,9 @@ pub struct DemandGroup {
     pub demands: Option<Arc<[EntityDemand]>>,
     pub compact: Option<CompactBacking>,
     pub contribution: Option<ContributionRef>,
+    /// The clean locations of [`DemandGroup::append_async_demands`]'s
+    /// answer, computed once.
+    pub async_locations: Option<Arc<[typefacts::Location]>>,
 }
 
 impl DemandGroup {
@@ -70,6 +73,27 @@ impl DemandGroup {
         if self.is_compact() {
             self.demands = None;
         }
+    }
+
+    /// The clean locations of the run's async demands
+    /// ([`DemandGroup::append_async_demands`]), computed on first use: a
+    /// group is replaced, never edited, when its demands change.
+    pub fn async_locations(&mut self) -> Result<&[typefacts::Location], String> {
+        if self.async_locations.is_none() {
+            let mut demands = Vec::new();
+            self.append_async_demands(&mut demands)?;
+            let locations: Vec<typefacts::Location> = demands
+                .into_iter()
+                .filter(|demand| demand.r#async)
+                .map(|demand| {
+                    let mut location = demand.location;
+                    location.path = clean(&location.path).into();
+                    location
+                })
+                .collect();
+            self.async_locations = Some(locations.into());
+        }
+        Ok(self.async_locations.as_deref().unwrap_or_default())
     }
 
     /// Appends the run's async demands without expanding a compact run's other

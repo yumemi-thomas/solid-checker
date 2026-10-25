@@ -185,6 +185,7 @@ fn every_family_is_answered_and_none_is_counted_unavailable_on_the_corpus() {
                     &[SemanticDemandRun {
                         path: &path,
                         demands: &demands,
+                        shared: None,
                     }],
                 )
                 .unwrap_or_else(|error| panic!("{config} {path}: {error}"));
