@@ -1483,7 +1483,20 @@ impl Project {
             let mut answered: HashSet<SymbolId> = changes.rows.iter().cloned().collect();
             answered.extend(state.scratch_ids.iter().cloned());
             if !changes.buckets.is_empty() {
-                answered.extend(state.merged.ids_with_canonical(&changes.buckets));
+                let mut owners = state.merged.ids_with_canonical(&changes.buckets);
+                // The reverse index is checked against the scan under the
+                // reuse verify switch and in every test build; a mismatch
+                // serves the scan.
+                if state.reuse.verify || cfg!(test) {
+                    let mut scanned = state.merged.ids_with_canonical_scan(&changes.buckets);
+                    owners.sort_unstable();
+                    scanned.sort_unstable();
+                    if owners != scanned {
+                        reuse_mismatch("the canonical index");
+                        owners = scanned;
+                    }
+                }
+                answered.extend(owners);
             }
             let mut answered: Vec<SymbolId> = answered.into_iter().collect();
             answered.sort_unstable();
