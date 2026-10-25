@@ -345,6 +345,7 @@ fn diagnostic_session_keys_retention_on_requested_enablement() {
                 rules: &[],
                 runtime: RuntimeEnvironment::default(),
                 feedback_facts: false,
+                host_suppressions: &[],
             },
         )
         .unwrap();
@@ -359,6 +360,7 @@ fn diagnostic_session_keys_retention_on_requested_enablement() {
                 rules: &[],
                 runtime: RuntimeEnvironment::default(),
                 feedback_facts: false,
+                host_suppressions: &[],
             },
         )
         .unwrap();
@@ -373,6 +375,7 @@ fn diagnostic_session_keys_retention_on_requested_enablement() {
                 rules: &["prefer-show".into()],
                 runtime: RuntimeEnvironment::default(),
                 feedback_facts: false,
+                host_suppressions: &[],
             },
         )
         .unwrap();

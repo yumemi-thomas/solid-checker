@@ -118,6 +118,8 @@ pub struct RequestedRuleEnablement<'a> {
     pub rules: &'a [String],
     pub runtime: RuntimeEnvironment,
     pub feedback_facts: bool,
+    /// Rule ids the host suppresses `eslint-disable` comments for (ADR 0387).
+    pub host_suppressions: &'a [String],
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -332,6 +334,7 @@ impl DiagnosticSession {
         let mut rule_options = discover_rule_options(project)?;
         rule_options.request_presets(enablement.presets.iter().cloned());
         rule_options.request_rules(enablement.rules.iter().cloned());
+        rule_options.request_host_suppressions(enablement.host_suppressions.iter().cloned());
         enablement
             .runtime
             .validate()
@@ -528,6 +531,16 @@ impl DiagnosticSession {
                 ));
             }
         }
+        // ADR 0387: after every reclassification, so a comment removes only a
+        // violation that would have been reported, and before the notices,
+        // which have no site to comment on.
+        let unknown_names = crate::suppression::apply(
+            self.dialect,
+            facts,
+            rule_options.host_suppressions(),
+            &mut findings,
+        );
+        findings.extend(unknown_names);
         let metrics = analysis_metrics(facts, &program);
         let mut snapshot = snapshot_of(sources, metrics, findings);
         // A disabled coverage rule hides its obligations, not the gap they

@@ -45,6 +45,8 @@ pub struct Options {
     pub presets: Vec<String>,
     pub enable_rules: Vec<String>,
     pub feedback_facts: bool,
+    /// Rule ids the host suppresses `eslint-disable` comments for (ADR 0387).
+    pub host_suppressions: Vec<String>,
     /// The effective dependency-source selection (names or `*`).
     pub dependency_sources: Vec<String>,
     /// The selection was the implicit default rather than a request: a
@@ -200,6 +202,7 @@ pub fn run(
         rules: &options.enable_rules,
         runtime: options.runtime.clone(),
         feedback_facts: options.feedback_facts,
+        host_suppressions: &options.host_suppressions,
     };
     let semantic_demand_options = crate::semantic_demand_options_for_enablement(
         options.dialect,

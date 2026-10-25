@@ -646,7 +646,9 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         // detected release and the dialect's review of it.
         | Rule::UnauditedSolidRelease
         // Likewise: the backend builds it from a file the compiler refused.
-        | Rule::CompilerRefusedSource => panic!(
+        | Rule::CompilerRefusedSource
+        // Likewise: the backend builds it from the suppression comments.
+        | Rule::UnknownSuppressionRule => panic!(
             "rule {} is not emitted through the static-violation channel",
             rule.metadata().name
         ),

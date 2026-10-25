@@ -248,6 +248,17 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
     ),
 ];
 
+/// Diagnostic codes that no longer exist (ADR 0398): SC9011 merged into SC9012.
+/// A `solid-checker-*` suppression comment may still name one; it is accepted
+/// silently and suppresses nothing.
+pub const RETIRED_CODES: &[&str] = &["SC9011"];
+
+/// Whether `code` is a diagnostic code the catalog retired.
+#[must_use]
+pub fn retired_code(code: &str) -> bool {
+    RETIRED_CODES.contains(&code)
+}
+
 /// Former external rule identities that canonicalize onto a current rule.
 ///
 /// Unlike [`RETIRED_RULES`], an alias transfers configuration: disabling its
@@ -332,6 +343,53 @@ pub const RULE_GROUPS: &[(&str, &[&str])] = &[(
         "reactive-handler-frozen",
     ],
 )];
+
+/// The rule names eslint-plugin-solid v0.18.1 registers (`allRules` in
+/// `src/plugin.ts`; `validate-jsx-nesting` is commented out there). A
+/// suppression comment naming `solid/<name>` for one of them is accepted
+/// whether or not this checker has a rule of that name (ADR 0387); any other
+/// `solid/*` name belongs to whatever plugin owns that namespace.
+pub const UPSTREAM_RULE_NAMES: &[&str] = &[
+    "components-return-once",
+    "event-handlers",
+    "imports",
+    "jsx-no-duplicate-props",
+    "jsx-no-undef",
+    "jsx-no-script-url",
+    "jsx-uses-vars",
+    "no-accessor-as-prop",
+    "no-boolean-enumerated-attribute",
+    "no-browser-globals-in-server-function",
+    "no-destructure",
+    "no-innerhtml",
+    "no-invalid-server-capture",
+    "no-module-scope-reactive-primitive",
+    "no-proxy-apis",
+    "no-react-deps",
+    "no-react-specific-props",
+    "no-restated-default-options",
+    "no-single-arg-create-effect",
+    "no-store-mutation-outside-setter",
+    "no-unknown-namespaces",
+    "no-unused-signal",
+    "no-write-in-pure-computation",
+    "prefer-classlist",
+    "prefer-for",
+    "prefer-onSettled-for-side-effects",
+    "prefer-show",
+    "prefer-structured-class",
+    "reactivity",
+    "removed-api",
+    "require-async-server-function",
+    "self-closing-comp",
+    "style-prop",
+    "valid-use-server",
+    "no-array-handlers",
+];
+
+/// The ESLint adapter's own rule ids, which a project writes in disable
+/// comments but which report no finding of their own.
+pub const ADAPTER_RULE_IDS: &[&str] = &["certification", "package-note", "contract-note"];
 
 /// The member rules of a group key, if `name` is one.
 #[must_use]
@@ -431,6 +489,8 @@ pub struct Dialect {
     /// condition work on catalog capability (for example, which type facts to
     /// demand) instead of naming a version.
     pub has_rule: fn(&str) -> bool,
+    /// Whether the catalog declares a diagnostic with this code.
+    pub has_code: fn(&str) -> bool,
     /// Catalog metadata for one exact external rule identity.
     pub rule_metadata: fn(&str) -> Option<RuleMetadata>,
     /// Typed fact-acquisition requirements of the catalog.
@@ -592,6 +652,13 @@ pub const UNAUDITED_RELEASE_RULE: &str = "unaudited-solid-release";
 pub const COMPILER_REFUSED_CODE: &str = "SC9015";
 /// The rule name paired with [`COMPILER_REFUSED_CODE`].
 pub const COMPILER_REFUSED_RULE: &str = "compiler-refused-source";
+
+/// The diagnostic identity of the notice for a suppression comment that names
+/// no rule of this checker (ADR 0387). Suppression parsing decides it, not a
+/// rule, and it is pinned to the catalog like [`COMPILER_REFUSED_CODE`].
+pub const UNKNOWN_SUPPRESSION_CODE: &str = "SC9016";
+/// The rule name paired with [`UNKNOWN_SUPPRESSION_CODE`].
+pub const UNKNOWN_SUPPRESSION_RULE: &str = "unknown-suppression-rule";
 
 /// What the dialect walk found, and where it found it.
 ///
@@ -992,6 +1059,11 @@ const SOLID_V2_LANGUAGE: Dialect = Dialect {
             let metadata = rule.metadata();
             metadata.name == name && metadata.configurable
         })
+    },
+    has_code: |code| {
+        solid_v2_rules::Rule::ALL
+            .into_iter()
+            .any(|rule| rule.metadata().code == code)
     },
     rule_metadata: |name| {
         solid_v2_rules::Rule::ALL

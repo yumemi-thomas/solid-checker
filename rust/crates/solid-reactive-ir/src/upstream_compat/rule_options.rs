@@ -44,6 +44,12 @@ pub struct RuleOptions {
     code_overrides: BTreeMap<String, RuleOverride>,
     requested_presets: BTreeSet<String>,
     requested_rules: BTreeSet<String>,
+    /// Rule ids the host applies `eslint-disable` comments for itself
+    /// (ADR 0387): the ESLint adapter reports per-rule ids, and ESLint
+    /// suppresses a message by the id it was reported under, so the checker
+    /// must not suppress the same comment a second time. Host-selected, like
+    /// [`Self::runtime`], and never read from the project's configuration.
+    host_suppressions: BTreeSet<String>,
     /// Host-selected runtime evidence is part of the retained analysis
     /// identity, but is not a rule-owned option. Keeping it beside the
     /// catalog options lets the shared pipeline thread one immutable selector
@@ -232,6 +238,16 @@ impl RuleOptions {
 
     pub fn request_rules(&mut self, rules: impl IntoIterator<Item = String>) {
         self.requested_rules.extend(rules);
+    }
+
+    pub fn request_host_suppressions(&mut self, rules: impl IntoIterator<Item = String>) {
+        self.host_suppressions.extend(rules);
+    }
+
+    /// The rule ids the host suppresses `eslint-disable` comments for.
+    #[must_use]
+    pub fn host_suppressions(&self) -> &BTreeSet<String> {
+        &self.host_suppressions
     }
 
     /// [`Self::is_enabled`] for a finding of `code`: an override the project set

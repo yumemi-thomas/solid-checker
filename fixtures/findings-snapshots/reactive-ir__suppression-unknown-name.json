@@ -1,0 +1,75 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "unknown-suppression-rule",
+      "code": "SC9016",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-unknown-name/App.tsx",
+      "start": 360,
+      "end": 422,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-unknown-name/App.tsx",
+      "start": 437,
+      "end": 446,
+      "fixes": 0
+    },
+    {
+      "rule": "unknown-suppression-rule",
+      "code": "SC9016",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-unknown-name/App.tsx",
+      "start": 933,
+      "end": 981,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-unknown-name/App.tsx",
+      "start": 996,
+      "end": 1005,
+      "fixes": 0
+    },
+    {
+      "rule": "unknown-suppression-rule",
+      "code": "SC9016",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-unknown-name/App.tsx",
+      "start": 1145,
+      "end": 1186,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-unknown-name/App.tsx",
+      "start": 1201,
+      "end": 1210,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-unknown-name/App.tsx",
+      "start": 2276,
+      "end": 2285,
+      "fixes": 0
+    }
+  ]
+}

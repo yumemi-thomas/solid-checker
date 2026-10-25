@@ -58,6 +58,11 @@ pub enum Rule {
     /// carries no compiler facts (ADR 0360). The backend appends it beside the
     /// analysis (`diagnostics.rs`); the rules engine never produces it.
     CompilerRefusedSource,
+    /// Decided by suppression comments (ADR 0387): a `solid-checker/*` name in
+    /// an `eslint-disable` or `solid-checker-disable` comment that names no
+    /// rule of this checker. The backend appends it beside the analysis
+    /// (`diagnostics.rs`); the rules engine never produces it.
+    UnknownSuppressionRule,
     JsxNoDuplicateProps,
     PreferFor,
     PreferShow,
@@ -75,7 +80,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 33] = [
+    pub const ALL: [Self; 34] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -106,6 +111,7 @@ impl Rule {
         Self::UnsupportedSolidRuntime,
         Self::UnauditedSolidRelease,
         Self::CompilerRefusedSource,
+        Self::UnknownSuppressionRule,
         Self::JsxNoDuplicateProps,
         Self::PreferFor,
         Self::PreferShow,
@@ -261,6 +267,10 @@ impl Rule {
             // on it stand. The backend builds both (`compiler_refused_finding`),
             // so this entry is the violation's identity.
             Self::CompilerRefusedSource => ("SC9015", "compiler-refused-source", "error", false),
+            // Uncertifiable: a name nothing resolves suppresses nothing, so the
+            // comment is not a claim about any site. Project-level and a warning
+            // like SC9015, because the findings beside it stand.
+            Self::UnknownSuppressionRule => ("SC9016", "unknown-suppression-rule", "warning", true),
             Self::JsxNoDuplicateProps => ("SC8003", "jsx-no-duplicate-props", "error", false),
             Self::PreferFor => ("SC8014", "prefer-for", "error", false),
             Self::PreferShow => ("SC8015", "prefer-show", "warning", false),

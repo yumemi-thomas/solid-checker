@@ -1093,6 +1093,15 @@
       "code": "export const Case = () => <p classList={{ a: true }}>x</p>;\n"
     },
     {
+      "rule": "unknown-suppression-rule",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "why": "ADR 0387: a comment is not part of the typed program, so TypeScript has no opinion on which rule names an `eslint-disable` comment carries; the checker's SC9016 notice says only that `solid-checker/strict-read-untrackd` names no rule of this checker and so suppresses nothing.",
+      "code": "// eslint-disable-next-line solid-checker/strict-read-untrackd\nexport const answer = 42;\n"
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "dialect": "v2",
       "sourceExtension": "ts",

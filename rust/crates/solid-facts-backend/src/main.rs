@@ -40,6 +40,10 @@ struct Request {
     presets: Vec<String>,
     #[serde(default)]
     enable_rules: Vec<String>,
+    /// Rule ids the host applies `eslint-disable` comments for itself
+    /// (ADR 0387).
+    #[serde(default)]
+    host_suppressions: Vec<String>,
     #[serde(default = "json_format")]
     format: String,
     #[serde(default)]
@@ -113,6 +117,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     request.presets.dedup();
     request.enable_rules.sort();
     request.enable_rules.dedup();
+    request.host_suppressions.sort();
+    request.host_suppressions.dedup();
     // ADR 0297: the effective dependency selection, decided once and before
     // the daemon branch reads it, so a retained check serves the selection a
     // one-shot check analyzes.
@@ -209,6 +215,7 @@ fn check_options(
         presets: request.presets.clone(),
         enable_rules: request.enable_rules.clone(),
         feedback_facts: request.feedback_facts,
+        host_suppressions: request.host_suppressions.clone(),
         dependency_sources: request.dependency_sources.clone(),
         implicit_dependency_sources,
         window_realm: request.window_realm,
@@ -408,6 +415,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut export_conditions = std::collections::BTreeSet::<String>::new();
     let mut presets = Vec::new();
     let mut enable_rules = Vec::new();
+    let mut host_suppressions = Vec::new();
     let mut format = "default".to_owned();
     let mut certify = false;
     let mut internal = false;
@@ -438,6 +446,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         }
         if let Some(value) = argument.strip_prefix("--enable-rule=") {
             enable_rules.push(value.into());
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--host-suppresses=") {
+            host_suppressions.push(value.into());
             continue;
         }
         if let Some(value) = argument.strip_prefix("--format=") {
@@ -499,6 +511,9 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             "--preset" => presets.push(args.next().ok_or("--preset needs a name")?),
             "--enable-rule" => {
                 enable_rules.push(args.next().ok_or("--enable-rule needs a rule name")?)
+            }
+            "--host-suppresses" => {
+                host_suppressions.push(args.next().ok_or("--host-suppresses needs a rule name")?)
             }
             "--format" => format = args.next().ok_or("--format needs a value")?,
             "--certify" => certify = true,
@@ -601,6 +616,8 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     presets.dedup();
     enable_rules.sort();
     enable_rules.dedup();
+    host_suppressions.sort();
+    host_suppressions.dedup();
     Ok(Request {
         project_id: project.to_string_lossy().into_owned(),
         dialect: dialect_id,
@@ -610,6 +627,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         typefacts_args: vec!["-project".into(), project.to_string_lossy().into_owned()],
         presets,
         enable_rules,
+        host_suppressions,
         format,
         certify,
         internal,
@@ -703,6 +721,9 @@ fn print_help() {
                                         worker script); off (default)\n\
            --preset <NAME>              Enable a catalog preset (repeatable)\n\
            --enable-rule <NAME>         Explicitly enable one rule (repeatable)\n\
+           --host-suppresses <NAME>     The host applies `eslint-disable` comments naming\n\
+                                        solid-checker/<NAME> itself, so the checker skips\n\
+                                        them (repeatable; the ESLint adapter sets it)\n\
            --runtime-target <browser|node>\n\
                                         Select the runtime target explicitly\n\
            --runtime-build <development|production>\n\

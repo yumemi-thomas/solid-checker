@@ -140,6 +140,7 @@ Known false-positive shapes left open (fire today, wanted gone):
 
 - `strict-read-untracked` (SC1001): a function rendered by a tag the program never reaches (`<Show when={false}><Row/></Show>`) and also called plainly (`items().map(Row)`) keeps its component proof.
 - `leaf-owner-forbidden-call` (SC3001), precision (minor): a site in a dead tracked-effect body is claimed although the body never runs, when every path to its creation is an owned leaf body (probe m4, line 8).
+- Suppression comments (ADR 0387): comment lines break as ESLint's do (`\r`, U+2028/9), a finding's line only at `\n`; `/* eslint solid/reactivity: [...] */` is ESLint's alone; an upstream name with no checker rule suppresses nothing; a comment only native applies draws ESLint's unused-directive warning.
 
 ## 4. Open questions and live approximations
 

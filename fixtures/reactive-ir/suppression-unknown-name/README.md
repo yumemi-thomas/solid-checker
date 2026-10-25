@@ -1,0 +1,3 @@
+# suppression-unknown-name
+
+Claim (ADR 0387): a `solid-checker/*` name that resolves to nothing is the project notice SC9016, once per distinct name at its first use (a typo used twice is one notice with a related location), and the read it was meant to suppress is still reported. A code in an `eslint-disable` comment (`solid-checker/SC1001`) and an unknown code in a `solid-checker-*` comment are unknown. The adapter ids, eslint-plugin-solid's pinned names, retired identities (the obligations SC9005 and SC9012 by name or code, and SC9011, ADR 0398), former names and another plugin's names raise no notice.

@@ -931,6 +931,7 @@ static STUB_DIALECT: dialect::Dialect = dialect::Dialect {
     solve_measured: stub_solve,
     docs_url: |rule| format!("stub://docs/{rule}"),
     has_rule: |_| false,
+    has_code: |_| false,
     rule_metadata: |rule| (rule == STUB_RULE.name).then_some(STUB_RULE),
     semantic_demands: dialect::SemanticDemandCapabilities::NONE,
     catalog_capabilities: solid_reactive_ir::CatalogCapabilities::SOLID_2,

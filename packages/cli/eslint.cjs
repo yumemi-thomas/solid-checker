@@ -80,6 +80,34 @@ function ownedKey(ruleName, code) {
   return code === undefined ? ruleName : `${ruleName}#${code}`;
 }
 
+/**
+ * Per-file registry of the ESLint rule keys that are enabled for the file
+ * during the current lint pass (ADR 0387). ESLint applies an
+ * `eslint-disable solid-checker/<key>` comment to the messages reported under
+ * that key, so native must not apply the same comment again: the unused
+ * directive would be reported by ESLint, and a finding suppressed twice is
+ * suppressed once. A member whose own rule is not enabled is reported through
+ * `certification`, which ESLint's comment does not match, so native applies
+ * it. Filled and released like `ownedRules`.
+ */
+const hostSuppressedRules = new Map();
+
+function registerHostSuppressedRule(filename, ruleKey) {
+  let keys = hostSuppressedRules.get(filename);
+  if (!keys) {
+    keys = new Set();
+    hostSuppressedRules.set(filename, keys);
+  }
+  keys.add(ruleKey);
+}
+
+function releaseHostSuppressedRule(filename, ruleKey) {
+  const keys = hostSuppressedRules.get(filename);
+  if (!keys) return;
+  keys.delete(ruleKey);
+  if (keys.size === 0) hostSuppressedRules.delete(filename);
+}
+
 function registerOwnedRule(filename, ruleName) {
   let owned = ownedRules.get(filename);
   if (!owned) {
@@ -268,7 +296,7 @@ function inferenceFingerprint(project, runtime) {
  */
 const NATIVE_VALUE_OPTIONS = new Set([
   "--project", "-project", "--typefacts", "--dialect", "--conditions", "--preset",
-  "--enable-rule", "--format", "--runtime-resolution", "--daemon-runtime",
+  "--enable-rule", "--host-suppresses", "--format", "--runtime-resolution", "--daemon-runtime",
   "--dependency-source", "--runtime-realm", "--runtime-target", "--runtime-build",
   "--rendering", "--program-boundary", "--runtime-condition", "--runtime-conditions",
   "--framework-transform"
@@ -391,6 +419,7 @@ function loadSnapshot(context) {
     .map(key => key.split("#")[0])
     .filter(rule => manifestEntriesByRule.get(rule)?.defaultEnabled === false);
   const enableRules = [...new Set([...configuredRules, ...activeDefaultDisabled])].sort();
+  const hostSuppressions = [...(hostSuppressedRules.get(contextFilename(context)) ?? [])].sort();
   const key = JSON.stringify({
     command,
     commandArgs,
@@ -398,6 +427,7 @@ function loadSnapshot(context) {
     dialect,
     presets,
     enableRules,
+    hostSuppressions,
     runtime,
     runtimeResolution,
     inferredHostInputs
@@ -436,6 +466,7 @@ function loadSnapshot(context) {
   if (runtimeResolution === "required") args.push("--runtime-resolution", "required");
   for (const preset of presets) args.push("--preset", preset);
   for (const rule of enableRules) args.push("--enable-rule", rule);
+  for (const rule of hostSuppressions) args.push("--host-suppresses", rule);
   if (runtime?.target) args.push("--runtime-target", runtime.target);
   if (runtime?.build) args.push("--runtime-build", runtime.build);
   if (runtime?.rendering) args.push("--rendering", runtime.rendering);
@@ -715,7 +746,7 @@ const packageNote = {
  * traversal event fires, which is how `certification` knows to leave these
  * findings alone whichever config order enabled both surfaces.
  */
-function reportingRule(entry, catalog, codes = null) {
+function reportingRule(entry, catalog, codes = null, ruleKey = entry.name) {
   const covered = codes ?? entry.codes ?? [entry.code];
   return {
     meta: {
@@ -733,6 +764,7 @@ function reportingRule(entry, catalog, codes = null) {
       const filename = contextFilename(context);
       const owned = codes ? codes.map(code => ownedKey(entry.name, code)) : [entry.name];
       for (const key of owned) registerOwnedRule(filename, key);
+      registerHostSuppressedRule(filename, ruleKey);
       return {
         Program(program) {
           // A namespaced compatibility rule analyzes with its manifest's
@@ -754,6 +786,7 @@ function reportingRule(entry, catalog, codes = null) {
         },
         "Program:exit"() {
           for (const key of owned) releaseOwnedRule(filename, key);
+          releaseHostSuppressedRule(filename, ruleKey);
           endPass(context);
         }
       };
@@ -888,7 +921,7 @@ for (const [oldName, currentName, codes] of DEPRECATED_RULE_KEYS) {
   );
   if (!catalog) throw new Error(`deprecated rule target ${currentName} is absent`);
   const entry = catalog.rules.find(candidate => candidate.name === currentName);
-  const delegated = reportingRule(entry, catalog, codes ?? null);
+  const delegated = reportingRule(entry, catalog, codes ?? null, oldName);
   plugin.rules[oldName] = {
     ...delegated,
     meta: {

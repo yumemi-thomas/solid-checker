@@ -60,6 +60,9 @@ struct CheckRequest {
     presets: Vec<String>,
     #[serde(default)]
     enable_rules: Vec<String>,
+    /// Rule ids the host applies `eslint-disable` comments for (ADR 0387).
+    #[serde(default)]
+    host_suppressions: Vec<String>,
     #[serde(default)]
     runtime: RuntimeEnvironment,
     /// ADR 0296: the `--dependency-source` selection, normalized. A daemon
@@ -1194,6 +1197,8 @@ fn normalize_enablement(check: &mut CheckRequest) {
     check.presets.dedup();
     check.enable_rules.sort();
     check.enable_rules.dedup();
+    check.host_suppressions.sort();
+    check.host_suppressions.dedup();
     check.dependency_sources = normalized_selection(&check.dependency_sources);
 }
 
@@ -1313,6 +1318,7 @@ fn answer(
                 rules: &check.enable_rules,
                 runtime: check.runtime.clone(),
                 feedback_facts: false,
+                host_suppressions: &check.host_suppressions,
             },
         )?;
         state.session.set_semantic_demand_options(options);
@@ -1446,6 +1452,7 @@ fn answer(
                 rules: &check.enable_rules,
                 runtime: check.runtime.clone(),
                 feedback_facts: false,
+                host_suppressions: &check.host_suppressions,
             },
         )?
         .0;
@@ -1478,6 +1485,7 @@ fn answer(
             notice: Arc::clone(&notice),
             presets: check.presets.clone(),
             enable_rules: check.enable_rules.clone(),
+            host_suppressions: check.host_suppressions.clone(),
             runtime: check.runtime.clone(),
             modules,
             router_roots,
@@ -1509,6 +1517,7 @@ fn cached_answer(
     if cached.generation != state.session.generation()
         || cached.presets != check.presets
         || cached.enable_rules != check.enable_rules
+        || cached.host_suppressions != check.host_suppressions
         || cached.runtime != check.runtime
         || !inference_inputs_current(&cached.inference_inputs)
     {
@@ -1520,6 +1529,7 @@ fn cached_answer(
         &current,
         &check.presets,
         &check.enable_rules,
+        &check.host_suppressions,
         &check.runtime,
     ))
 }
@@ -1686,6 +1696,7 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
         project_id: request.project_id.clone(),
         presets: request.presets.clone(),
         enable_rules: request.enable_rules.clone(),
+        host_suppressions: request.host_suppressions.clone(),
         runtime: request.runtime.clone(),
         dependency_sources: normalized_selection(&request.dependency_sources),
     })?;

@@ -25,6 +25,7 @@ pub(crate) struct CachedAnswer {
     pub(crate) inference_inputs: Vec<InputFile>,
     pub(crate) presets: Vec<String>,
     pub(crate) enable_rules: Vec<String>,
+    pub(crate) host_suppressions: Vec<String>,
     pub(crate) runtime: RuntimeEnvironment,
     pub(crate) status: Arc<str>,
     pub(crate) body: Arc<[u8]>,
@@ -40,12 +41,14 @@ impl CachedAnswer {
         input_files: &[InputFile],
         presets: &[String],
         enable_rules: &[String],
+        host_suppressions: &[String],
         runtime: &RuntimeEnvironment,
     ) -> Option<CachedSnapshot> {
         (self.generation == generation
             && self.input_files == input_files
             && self.presets == presets
             && self.enable_rules == enable_rules
+            && self.host_suppressions == host_suppressions
             && self.runtime == *runtime)
             .then(|| (Arc::clone(&self.status), Arc::clone(&self.body)))
     }
@@ -67,6 +70,7 @@ mod tests {
             inference_inputs: Vec::new(),
             presets: vec!["preferences".into()],
             enable_rules: vec!["prefer-show".into()],
+            host_suppressions: Vec::new(),
             runtime: RuntimeEnvironment::default(),
             status: Arc::from("certified"),
             body: Arc::from(&b"snapshot"[..]),
@@ -84,6 +88,7 @@ mod tests {
                 &inputs,
                 &cached.presets,
                 &cached.enable_rules,
+                &cached.host_suppressions,
                 &cached.runtime,
             ),
             Some((Arc::from("certified"), Arc::from(&b"snapshot"[..])))
@@ -94,6 +99,7 @@ mod tests {
                 &cached.input_files,
                 &cached.presets,
                 &cached.enable_rules,
+                &cached.host_suppressions,
                 &cached.runtime,
             ),
             cached.snapshot_if_current(
@@ -101,6 +107,7 @@ mod tests {
                 &[],
                 &cached.presets,
                 &cached.enable_rules,
+                &cached.host_suppressions,
                 &cached.runtime,
             ),
             cached.snapshot_if_current(
@@ -108,6 +115,7 @@ mod tests {
                 &cached.input_files,
                 &[],
                 &cached.enable_rules,
+                &cached.host_suppressions,
                 &cached.runtime,
             ),
             cached.snapshot_if_current(
@@ -115,6 +123,7 @@ mod tests {
                 &cached.input_files,
                 &cached.presets,
                 &[],
+                &cached.host_suppressions,
                 &cached.runtime,
             ),
             cached.snapshot_if_current(
@@ -122,6 +131,15 @@ mod tests {
                 &cached.input_files,
                 &cached.presets,
                 &cached.enable_rules,
+                &["strict-read-untracked".into()],
+                &cached.runtime,
+            ),
+            cached.snapshot_if_current(
+                cached.generation,
+                &cached.input_files,
+                &cached.presets,
+                &cached.enable_rules,
+                &cached.host_suppressions,
                 &RuntimeEnvironment {
                     target: Some(RuntimeTarget::Browser),
                     ..RuntimeEnvironment::default()

@@ -533,6 +533,90 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
   plugin._testing.snapshotCache.clear();
 });
 
+test("the rules enabled for a file are forwarded so native skips the comments ESLint applies (ADR 0387)", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-host-suppresses-"));
+  const project = join(root, "tsconfig.json");
+  const calls = join(root, "calls.txt");
+  const analyzer = join(root, "analyzer.mjs");
+  const filename = join(root, "App.tsx");
+  writeFileSync(project, "{}\n");
+  writeFileSync(filename, "export {};\n");
+  writeFileSync(analyzer, `import { writeFileSync } from "node:fs";
+writeFileSync(process.argv[2], JSON.stringify(process.argv.slice(3)));
+process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
+`);
+  const context = {
+    filename,
+    physicalFilename: filename,
+    settings: { solidChecker: { command: process.execPath, commandArgs: [analyzer, calls], project } },
+    options: [],
+    sourceCode: sourceCode("export {};\n"),
+    report() {}
+  };
+  const flagged = () => {
+    const args = JSON.parse(readFileSync(calls, "utf8"));
+    return args.flatMap((arg, index) => (arg === "--host-suppresses" ? [args[index + 1]] : []));
+  };
+  try {
+    // A member reported through `certification` is not ESLint's to suppress.
+    plugin._testing.snapshotCache.clear();
+    const certification = plugin.rules.certification.create(context);
+    certification.Program({ type: "Program" });
+    certification["Program:exit"]();
+    assert.deepEqual(flagged(), []);
+
+    // Enabled per-rule rules, a deprecated key and the no-op group key: ESLint
+    // matches a comment against the ids that reported, so those that report
+    // are forwarded and `reactivity` (which never reports) is not.
+    const created = ["strict-read-untracked", "no-direct-mutation", "reactivity"].map(
+      name => plugin.rules[name].create(context)
+    );
+    created[0].Program({ type: "Program" });
+    assert.deepEqual(flagged(), ["no-direct-mutation", "strict-read-untracked"]);
+    for (const listeners of created) listeners["Program:exit"]?.();
+
+    // Released with the pass: the next one starts clean.
+    plugin._testing.snapshotCache.clear();
+    const next = plugin.rules.certification.create(context);
+    next.Program({ type: "Program" });
+    next["Program:exit"]();
+    assert.deepEqual(flagged(), []);
+  } finally {
+    plugin._testing.snapshotCache.clear();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ESLint applies a disable comment to the per-rule id that reported (ADR 0387)", () => {
+  const finding = (rule, code, start, end) => ({
+    id: code, rule, kind: "violation", severity: "error", message: `${rule} here`,
+    primaryLocation: { path: "App.js", startByte: start, endByte: end, line: 2, column: 1 }
+  });
+  const source = "// eslint-disable-next-line solid-checker/strict-read-untracked\nvalue;\nother;\n";
+  const at = needle => source.indexOf(needle);
+  const verify = rules => new Linter().verify(
+    source,
+    [{
+      plugins: { "solid-checker": plugin },
+      linterOptions: { reportUnusedDisableDirectives: "error" },
+      settings: { solidChecker: { snapshot: { status: "violation", findings: [
+        finding("strict-read-untracked", "SC1001", at("value"), at("value") + 5)
+      ] } } },
+      rules
+    }],
+    { filename: "App.js" }
+  );
+  // Reported under its own id: ESLint suppresses it, and the directive is used.
+  assert.deepEqual(verify({ "solid-checker/strict-read-untracked": "error" }), []);
+  // Reported through `certification`, the comment does not match what ESLint
+  // sees: native is the one that applies it (and then reports nothing).
+  const unmatched = verify({ "solid-checker/certification": "error" });
+  assert.deepEqual(
+    unmatched.map(message => message.ruleId).sort(),
+    [null, "solid-checker/certification"]
+  );
+});
+
 test("deprecated rule keys delegate without entering dialect presets", () => {
   for (const [oldName, currentName] of plugin._testing.deprecatedRuleKeys) {
     const rule = plugin.rules[oldName];

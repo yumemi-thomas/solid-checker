@@ -56,6 +56,7 @@ mod package_requirements;
 mod release_scope;
 pub mod runtime_resolution;
 pub mod source_redirects;
+mod suppression;
 mod wire;
 
 pub use cache::{CacheStats, FactsCache};

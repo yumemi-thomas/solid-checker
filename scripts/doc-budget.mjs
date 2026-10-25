@@ -40,7 +40,8 @@ export const FILE_BUDGETS = {
   // And for ADR 0399: the file stood at 150_325 bytes against 150_000: 151_000.
   // And for ADR 0398: 152_282 bytes against 151_000: 153_000.
   // And for ADR 0401: 154_913 bytes against 153_000: 156_000.
-  "docs/decisions.md": 156_000,
+  // And for ADRs 0386-0387's suppression comments: 156_435 bytes against 156_000: 157_000.
+  "docs/decisions.md": 157_000,
 };
 
 export const GROUP_BUDGETS = [
@@ -49,7 +50,8 @@ export const GROUP_BUDGETS = [
   // And for ADR 0396's extension (decisions, open work, two rule pages): 610_122 bytes.
   // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 650_000.
   // And for ADRs 0398-0401 and their rule pages: 650_087 bytes against 650_000: 656_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 656_000 },
+  // And for ADRs 0386-0387 (suppression section, SC9016's page): 658_058 bytes against 656_000: 660_000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 660_000 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
@@ -63,7 +65,8 @@ export const GROUP_BUDGETS = [
     // And for ADR 0396's async and helper variants and the vitest 4 project: 275_151 bytes.
     // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 290_000.
     // And for the Opus review's fixes (suite bodies per runner, after-await and sync-dispatch variants): 295_000.
-    bytes: 295_000,
+    // And for ADRs 0386-0387's fixtures (group key, suppression comments): 297_071 bytes against 295_000: 298_000.
+    bytes: 298_000,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

@@ -1,10 +1,10 @@
 # Rules
 
-solid-checker ships one dialect-owned catalog: 33 identities for Solid 2.0,
+solid-checker ships one dialect-owned catalog: 34 identities for Solid 2.0,
 with unprefixed rule names: 28 rule identities a project configures (SC2004 and
 SC2005 share one name), two obligations
-(SC9005 and SC9012, [ADR 0398](../decisions.md#adr-0398)) and three findings
-decided before or beside the analysis (SC9013 to SC9015).
+(SC9005 and SC9012, [ADR 0398](../decisions.md#adr-0398)) and four findings
+decided before or beside the analysis (SC9013 to SC9016).
 The checker detects the installed `solid-js` major and **refuses** a project
 whose runtime it has no vocabulary for
 ([`unsupported-solid-runtime`](unsupported-solid-runtime.md)) rather than
@@ -79,7 +79,7 @@ Renamed configuration keys transfer their setting through `RULE_ALIASES`, and
 retired identities load as no-ops through `RETIRED_RULES`, both in
 `rust/crates/solid-facts-backend/src/dialect.rs` ([ADR 0391](../decisions.md#adr-0391)).
 
-## Solid 2.0 catalog — 28 rule identities and 3 detection findings
+## Solid 2.0 catalog — 28 rule identities and 4 detection findings
 
 | Code | Rule | Severity | Default |
 | --- | --- | --- | --- |
@@ -113,11 +113,12 @@ retired identities load as no-ops through `RETIRED_RULES`, both in
 | SC9013 | [unsupported-solid-runtime](unsupported-solid-runtime.md) | error | on |
 | SC9014 | [unaudited-solid-release](unaudited-solid-release.md) | warning | on |
 | SC9015 | [compiler-refused-source](compiler-refused-source.md) | error (warning notice for an unproven refusal) | on |
+| SC9016 | [unknown-suppression-rule](unknown-suppression-rule.md) | warning | on |
 
 `http-response-after-flush`, `unsupported-solid-runtime`,
-`unaudited-solid-release`, and `compiler-refused-source` (for a refusal it does
-not prove, ADR 0399) can produce uncertifiable results. Their pages name the
-missing evidence and remediation.
+`unaudited-solid-release`, `compiler-refused-source` (for a refusal it does
+not prove, ADR 0399) and `unknown-suppression-rule` can produce
+uncertifiable results. Their pages name the missing evidence and remediation.
 
 ## Obligations
 
@@ -141,11 +142,56 @@ the ESLint plugin: `package-behavior-unavailable`, `package-contract-incomplete`
 Package contracts and receipts are no longer consumed; see
 [ADR 0312](../decisions.md#adr-0312).
 
-`unsupported-solid-runtime`, `unaudited-solid-release` and
-`compiler-refused-source` are the three identities here the rules engine never
-produces. Dialect detection decides the first two, fact building the third.
+`unsupported-solid-runtime`, `unaudited-solid-release`,
+`compiler-refused-source` and `unknown-suppression-rule` are the four
+identities here the rules engine never produces. Dialect detection decides the
+first two, fact building the third, suppression comments the fourth.
 The refusal replaces the analysis and appears **alone** when it appears at all
 (ADR 0110). The notices accompany the analysis.
+
+## Suppressing a finding
+
+A comment removes the **violations at its site**. It never removes an
+uncertifiable result (an obligation is not a defect the author can accept), a
+notice, or a project-level finding.
+
+```ts
+// eslint-disable-next-line solid-checker/strict-read-untracked
+console.log(doubled());
+/* solid-checker-disable uncalled-accessor, SC1007 */
+// ...
+/* solid-checker-enable uncalled-accessor, SC1007 */
+```
+
+- Forms, with ESLint's grammar and meaning: `disable`, `enable`, `disable-line`
+  and `disable-next-line`, in the `eslint-` and `solid-checker-` families
+  (a `//` comment carries only the two line forms; names are separated by
+  commas; ` -- reason` is ignored; a `-line` comment must stay on one line;
+  `disable-next-line` counts from the comment's last line). No names means
+  every checker rule.
+- Names: `solid-checker/<rule>` in either family; `solid/<name>` for
+  eslint-plugin-solid's pinned names (`solid/reactivity` is the group,
+  `solid/no-destructure` SC1003); a `solid-checker-*` comment also takes the
+  bare name and an SC code (`SC1001`). A rule's former name works, and
+  `resolve-in-tracked-scope` and `until-in-tracked-scope` reach their own code
+  only. `reactivity` reaches its four members (ADR 0386).
+- The two families scan independently, as ESLint's comments and a comment it
+  does not read do. A name from another plugin or a foreign prefix is not read.
+- An obligation (SC9005, SC9012; [ADR 0398](../decisions.md#adr-0398)) is never
+  suppressed. Its rule names, its codes and every retired name or code
+  (`package-contract-*`, `reactive-source-uncaptured`, SC9011) are accepted
+  without a notice and suppress nothing.
+- A `solid-checker/*` name nothing resolves is reported as
+  [unknown-suppression-rule](unknown-suppression-rule.md), and `--certify`
+  fails on it.
+- Lines are counted as ESLint counts them (`\n`, `\r\n`, `\r`, U+2028, U+2029),
+  which can differ from a finding's reported line on a lone `\r`.
+- Under ESLint the adapter forwards the rule keys it enables for the file and
+  native skips `eslint-disable solid-checker/<key>` for those, because ESLint
+  applies them to the key that reported. A member reported through
+  `certification`, and `solid-checker/reactivity` (a no-op rule), are applied
+  by native instead, and ESLint's own `reportUnusedDisableDirectives` then
+  warns that the comment matched nothing it reported.
 
 ## Migrating from eslint-plugin-solid
 
@@ -161,8 +207,8 @@ are built, its acceptance of a re-export is not, and its wrapper list matches im
 SC1001, SC1002, SC1005 and SC1007 ([ADR 0386](../decisions.md#adr-0386)), each
 member still configurable alone. SC1003 stays outside it: upstream's `reactivity`
 also reports destructured props, which the checker reports as
-[no-destructure](no-destructure.md). Inline `eslint-disable` comments have no effect
-until [ADR 0387](../decisions.md#adr-0387) ships.
+[no-destructure](no-destructure.md). Inline `eslint-disable` comments work
+under both prefixes ([ADR 0387](../decisions.md#adr-0387); below).
 
 Formatting, browser-policy, CSS-policy, compatibility-policy, and analyzer
 bookkeeping rules were retired instead of being presented as certified runtime
