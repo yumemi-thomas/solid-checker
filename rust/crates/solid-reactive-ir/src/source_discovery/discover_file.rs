@@ -31,6 +31,34 @@ pub(super) fn store_is_value_form(
     })
 }
 
+/// What a source-discovery fragment reads of the call creating a source that
+/// a project function returns (ADR 0222): computed by the fragment and by the
+/// section fingerprint that binds it (ADR 0392), so the two cannot differ.
+#[derive(Debug)]
+pub(crate) struct ReturnedSourceFacts {
+    pub(crate) owned_write: bool,
+    pub(crate) value_form: bool,
+    pub(crate) async_options: AsyncSourceOptions,
+    pub(crate) async_source: bool,
+}
+
+pub(crate) fn returned_source_facts(
+    lookup: &SemanticLookup<'_>,
+    origin: &FileFacts,
+    created: &solid_facts::ast::CallFact,
+    primitive: Primitive,
+) -> ReturnedSourceFacts {
+    ReturnedSourceFacts {
+        owned_write: created.owned_write_option,
+        value_form: store_is_value_form(created, Some(primitive)),
+        async_options: async_source_options(origin, created, Some(primitive), lookup.dialect),
+        async_source: created
+            .arguments
+            .first()
+            .is_some_and(|argument| computation_is_async(lookup, origin, argument.span)),
+    }
+}
+
 pub(crate) fn discover_file_sources(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
@@ -72,7 +100,7 @@ pub(crate) fn discover_file_sources(
             && !crate::indexes::binding_written(file, name.span)
             && let Some(symbol) = entities.at(file.path.as_str(), name.span)
             && let Some((origin_file, created, primitive)) =
-                project_returned_source(lookup, file, call, entities, symbol_names)
+                lookup.returned_source_at(file, call.span)
         {
             // The caller binding is this call's source, never the callee's
             // declaration symbol. Separate calls keep separate identities.
@@ -98,22 +126,19 @@ pub(crate) fn discover_file_sources(
                     .source_primitives
                     .push((symbol.clone(), spelling.into()));
             }
+            let facts = returned_source_facts(lookup, origin_file, created, primitive);
             result
                 .source_owned_write
-                .push((symbol.clone(), created.owned_write_option));
-            if store_is_value_form(created, Some(primitive)) {
+                .push((symbol.clone(), facts.owned_write));
+            if facts.value_form {
                 result.value_form_stores.push(symbol.clone());
             }
-            let options =
-                async_source_options(origin_file, created, Some(primitive), lookup.dialect);
-            if options != AsyncSourceOptions::default() {
-                result.source_async_options.push((symbol.clone(), options));
+            if facts.async_options != AsyncSourceOptions::default() {
+                result
+                    .source_async_options
+                    .push((symbol.clone(), facts.async_options));
             }
-            if created
-                .arguments
-                .first()
-                .is_some_and(|argument| computation_is_async(lookup, origin_file, argument.span))
-            {
+            if facts.async_source {
                 result.async_sources.push(symbol.clone());
             }
             continue;
@@ -461,56 +486,6 @@ pub(crate) fn merge_source_discovery(
         .extend(contribution.value_form_stores.iter().cloned());
 }
 
-pub(crate) fn extend_source_discovery_symbols(
-    symbols: &mut HashSet<SymbolId>,
-    contribution: &SourceDiscoveryContribution,
-) {
-    symbols.extend(
-        contribution
-            .accessors
-            .iter()
-            .map(|(symbol, _)| symbol.clone()),
-    );
-    symbols.extend(
-        contribution
-            .accessor_origins
-            .iter()
-            .map(|(symbol, _)| symbol.clone()),
-    );
-    symbols.extend(
-        contribution
-            .setters
-            .iter()
-            .map(|(symbol, _)| symbol.clone()),
-    );
-    symbols.extend(
-        contribution
-            .actions
-            .iter()
-            .map(|(symbol, _)| symbol.clone()),
-    );
-    symbols.extend(
-        contribution
-            .source_kinds
-            .iter()
-            .map(|(symbol, _)| symbol.clone()),
-    );
-    symbols.extend(
-        contribution
-            .source_primitives
-            .iter()
-            .map(|(symbol, _)| symbol.clone()),
-    );
-    symbols.extend(contribution.async_sources.iter().cloned());
-    symbols.extend(
-        contribution
-            .source_async_options
-            .iter()
-            .map(|(symbol, _)| symbol.clone()),
-    );
-    symbols.extend(contribution.value_form_stores.iter().cloned());
-}
-
 /// Owned reactive-source facts produced by the source-discovery stage and
 /// consumed by the later interprocedural, static, and owner stages.
 pub(crate) struct SourceDiscovery {
@@ -550,8 +525,10 @@ pub(crate) struct SourceDiscovery {
     /// `Reactive` everywhere) for dialects that keep the upstream
     /// over-approximation.
     pub(crate) props_reactivity: PropsReactivityIndex,
-    pub(crate) retained_source_paths: HashSet<String>,
-    pub(crate) changed_source_symbols: HashSet<SymbolId>,
+    /// The files whose own facts (source, Type Facts rows and the symbols
+    /// they name) are the last build's: a later stage's chunk of one of them
+    /// is reused only if its recorded reads still answer as they did.
+    pub(crate) unchanged_paths: HashSet<String>,
 }
 
 /// The stable, read-mostly environment threaded through every pipeline stage:

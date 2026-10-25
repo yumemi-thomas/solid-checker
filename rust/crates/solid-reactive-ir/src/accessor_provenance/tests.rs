@@ -51,7 +51,7 @@ fn visible_member_writes_use_normalized_targets_and_cooked_keys() {
     ] {
         let file = file(source);
         let mut index = MemberStability::default();
-        index.syntax(&file);
+        index.syntax(&file, &crate::base::contributions::stability_writes(&file));
         assert!(
             matches!(index.state("rows"), Stability::Vetoed(_)),
             "{source}"
@@ -69,7 +69,7 @@ fn visible_member_writes_use_normalized_targets_and_cooked_keys() {
     ] {
         let file = file(source);
         let mut index = MemberStability::default();
-        index.syntax(&file);
+        index.syntax(&file, &crate::base::contributions::stability_writes(&file));
         assert!(
             matches!(index.state("rows"), Stability::Assumed),
             "{source}"
@@ -338,6 +338,7 @@ fn wildcard_target_requires_every_local_identity_input_to_be_distinct() {
         let entities = crate::EntitySymbols {
             by_path: HashMap::default(),
             exact_by_path: HashMap::default(),
+            locations: crate::EntityLocations::default(),
         };
         let ast_indexes = HashMap::default();
         let names = HashMap::default();

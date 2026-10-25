@@ -69,7 +69,7 @@ pub use diagnostics::{
 pub use host_config::{tsconfig_extends_chain, tsconfig_extends_witness};
 pub use inferred_host::{
     InferredHost, inferred_host_directory_digest, inferred_host_input_digest,
-    inferred_host_input_paths, inferred_host_input_paths_for_project,
+    inferred_host_input_digests, inferred_host_input_paths, inferred_host_input_paths_for_project,
     inferred_host_input_paths_for_sources, inferred_project_host_with_note,
 };
 pub use package_requirements::{external_package_boundary, unsupplied_package_boundary};
@@ -291,6 +291,16 @@ impl TypeFactsSession {
         })
     }
 
+    /// Ends the producer process. Every later exchange fails with
+    /// `Closed`; none relaunches it. For a build whose remaining phases read
+    /// only the facts already answered (the idle check's fresh build), so
+    /// its program does not stay resident beside the retained one.
+    pub fn close(&mut self) {
+        // `close` terminates the child on every path; a refusal of the
+        // goodbye leaves nothing open either.
+        let _ = self.session.close();
+    }
+
     /// The project's configured source set, as the TypeScript program sees it.
     pub fn configured_sources(&mut self) -> Result<Vec<SourceFile>, BackendError> {
         Ok(self
@@ -326,6 +336,21 @@ impl TypeFactsSession {
         demand: &typefacts::ModuleGraphDemand,
     ) -> Result<typefacts::ModuleGraph, BackendError> {
         Ok(self.session.module_graph(demand)?)
+    }
+
+    /// How many times the producer process has been restarted
+    /// ([`typefacts::Session::restart_epoch`]).
+    #[must_use]
+    pub fn restart_epoch(&self) -> u64 {
+        self.session.restart_epoch()
+    }
+
+    /// What the producer said about the module graph when it acknowledged the
+    /// update that made the current generation
+    /// ([`typefacts::Session::last_update_graph`]).
+    #[must_use]
+    pub fn last_update_graph(&self) -> Option<typefacts::UpdateGraph> {
+        self.session.last_update_graph()
     }
 
     /// The validity this program answers for the call demanded at each of
@@ -367,6 +392,16 @@ impl TypeFactsSession {
         Ok(())
     }
 
+    /// [`Self::update`] with `work` running while the producer applies it
+    /// ([`typefacts::Session::update_during`]); the work's value.
+    pub fn update_during<T>(
+        &mut self,
+        changes: Vec<typefacts::v3::FileChange>,
+        work: impl FnOnce() -> T,
+    ) -> Result<T, BackendError> {
+        Ok(self.session.update_during(changes, work)?)
+    }
+
     #[must_use]
     pub fn generation(&self) -> u64 {
         self.session.generation()
@@ -398,16 +433,23 @@ impl TypeFactsSession {
                     server_retained_files: timings.server_retained_files,
                     server_recomputed_files: timings.server_recomputed_files,
                     server_non_durable_files: timings.server_non_durable_files,
+                    client_close_symbols: timings.client_close_symbols,
+                    client_closure_patched: timings.client_closure_patched,
                 });
-        self.last_table_changes =
-            self.session
-                .take_last_table_changes()
-                .map(|changes| TypeScriptChanges {
-                    unchanged: changes.unchanged,
-                    entity_paths: changes.entity_paths,
-                    symbol_ids: changes.symbol_ids,
-                    file_paths: changes.file_paths,
-                });
+        // A full transition's lists name only the new table's paths, not the
+        // ones it dropped: it reaches the IR as no change set at all, which
+        // every consumer reads as "anything may have changed".
+        self.last_table_changes = self
+            .session
+            .take_last_table_changes()
+            .filter(|changes| !changes.full)
+            .map(|changes| TypeScriptChanges {
+                unchanged: changes.unchanged,
+                full: changes.full,
+                entity_paths: changes.entity_paths,
+                symbol_ids: changes.symbol_ids,
+                file_paths: changes.file_paths,
+            });
     }
 }
 
@@ -452,6 +494,9 @@ pub struct NativeIncrementalSession {
     known_paths: HashSet<String>,
     last_build_timings: NativeBuildTimings,
     last_import_identity: ImportIdentityMeasurement,
+    /// The producer process ([`TypeFactsSession::restart_epoch`]) whose
+    /// program `last_facts`' attested imports describe.
+    attested_epoch: Option<u64>,
     semantic_demand_options: SemanticDemandOptions,
     /// Per path, the digest of the program's text where the session's source
     /// is a span-preserving rewrite of it (ADR 0166's host-constant fold, as
@@ -463,6 +508,17 @@ pub struct NativeIncrementalSession {
 /// An edited path's previous source and program digest, restored when the
 /// edit never lands.
 type DisplacedSource = (String, Option<SourceFile>, Option<SourceHash>);
+
+/// What [`NativeIncrementalSession::edit_during`] made of an edit.
+pub enum Edited<T> {
+    /// The edit's facts, with what the caller's overlapping work made: `None`
+    /// when the update was sent again after a producer failure, which the
+    /// work does not overlap.
+    Facts(Arc<ProjectFacts>, Option<T>),
+    /// The caller's work said not to analyze: the update has landed and no
+    /// facts were built. What the work made.
+    Abandoned(T),
+}
 
 /// A step every generation's joined facts pass through before their import
 /// identities are attested, with the session's own Type Facts program (ADR
@@ -521,8 +577,14 @@ pub struct ImportIdentityMeasurement {
     pub unknown: usize,
     /// Specifiers attested.
     pub specifiers: usize,
-    /// Files the program included, which the operation always answers for.
+    /// Files the program included, which the operation always answers for
+    /// (zero when the answer omitted the inventory: a kept attestation).
     pub modules: usize,
+    /// The generation's attestation is the previous one with only the edited
+    /// files' rows asked again ([`NativeIncrementalSession::edit`]): the
+    /// producer replaced the edited file in place, so no other file's
+    /// resolution moved. `requested` then counts those files alone.
+    pub kept: bool,
 }
 
 /// Asks the compiler where each specifier in `scope` resolves, and to which
@@ -552,6 +614,34 @@ pub fn attest_import_identities(
         .iter()
         .map(|path| path.to_string())
         .collect::<HashSet<_>>();
+    let mut rows = attested_rows(&graph);
+    let mut index = AttestedImportIndex::default();
+    let mut specifiers = 0;
+    let mut attested = 0;
+    for path in scope {
+        if unknown.contains(path) {
+            continue;
+        }
+        let file = rows.remove(path.as_str()).unwrap_or_default();
+        specifiers += file.len();
+        attested += 1;
+        index.insert_file(path.as_str(), file);
+    }
+    Ok((
+        index,
+        ImportIdentityMeasurement {
+            requested: scope.len(),
+            attested,
+            unknown: unknown.len(),
+            specifiers,
+            modules: graph.modules.len(),
+            kept: false,
+        },
+    ))
+}
+
+/// One module-graph answer's import rows as attested rows, by importing file.
+fn attested_rows(graph: &typefacts::ModuleGraph) -> HashMap<&str, Vec<AttestedImport>> {
     let mut rows = HashMap::<&str, Vec<AttestedImport>>::new();
     for import in &graph.imports {
         rows.entry(&import.specifier.path)
@@ -606,28 +696,100 @@ pub fn attest_import_identities(
                     .map(Into::into),
             });
     }
-    let mut index = AttestedImportIndex::default();
+    rows
+}
+
+/// A kept attestation differed from the full one asked beside it (shadow
+/// mode): reported as the IR's shadow findings are, and the full one served.
+fn report_attestation_mismatch(
+    mode: solid_reactive_ir::shadow::ShadowMode,
+    kept: &AttestedImportIndex,
+    full: &AttestedImportIndex,
+) {
+    let first = full
+        .iter()
+        .find(|(path, row)| {
+            !kept
+                .iter()
+                .any(|(kept_path, kept_row)| kept_path == *path && kept_row == *row)
+        })
+        .map(|(path, row)| format!("full row {path}: {row:?}"))
+        .or_else(|| {
+            kept.iter()
+                .find(|(path, row)| {
+                    !full
+                        .iter()
+                        .any(|(full_path, full_row)| full_path == *path && full_row == *row)
+                })
+                .map(|(path, row)| format!("kept row {path}: {row:?}"))
+        })
+        .unwrap_or_else(|| "the covered file sets differ".to_owned());
+    let message = format!(
+        "solid-checker: kept attestation mismatch (served the full one): {} files {} rows against {} files {} rows; first {first}",
+        kept.files(),
+        kept.specifiers(),
+        full.files(),
+        full.specifiers(),
+    );
+    if mode == solid_reactive_ir::shadow::ShadowMode::Panic {
+        panic!("{message}");
+    }
+    eprintln!("{message}");
+    if let Some(path) = std::env::var_os("SOLID_CHECKER_IR_SHADOW_LOG")
+        && let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+    {
+        use std::io::Write as _;
+        let _ = writeln!(file, "{message}");
+    }
+}
+
+/// The previous generation's attested imports with the rows of `edited` asked
+/// again, or `None` where the answer is not exact (the producer does not hold
+/// an edited file under that path).
+///
+/// Exact only when no file but the edited ones can have moved: the caller
+/// holds the producer's word that the update replaced its changed file in
+/// place ([`typefacts::Session::last_update_graph`]), the program's file set,
+/// every file's text but the edited one's and every module resolution are the
+/// previous generation's, so an unedited file's rows are the ones already
+/// held. The edited files' rows are asked of the producer, without the module
+/// inventory the caller holds.
+fn patch_import_identities(
+    typescript: &mut TypeFactsSession,
+    previous: &AttestedImportIndex,
+    edited: &[String],
+) -> Result<Option<(AttestedImportIndex, ImportIdentityMeasurement)>, BackendError> {
+    let graph = typescript.module_graph(
+        &typefacts::ModuleGraphDemand::default()
+            .import_paths(edited.iter().cloned())
+            .with_packages()
+            .without_modules(),
+    )?;
+    if !graph.unknown_import_paths.is_empty() {
+        return Ok(None);
+    }
+    let mut rows = attested_rows(&graph);
+    let mut index = previous.clone();
     let mut specifiers = 0;
-    let mut attested = 0;
-    for path in scope {
-        if unknown.contains(path) {
-            continue;
-        }
+    for path in edited {
         let file = rows.remove(path.as_str()).unwrap_or_default();
         specifiers += file.len();
-        attested += 1;
         index.insert_file(path.as_str(), file);
     }
-    Ok((
+    Ok(Some((
         index,
         ImportIdentityMeasurement {
-            requested: scope.len(),
-            attested,
-            unknown: unknown.len(),
+            requested: edited.len(),
+            attested: edited.len(),
+            unknown: 0,
             specifiers,
-            modules: graph.modules.len(),
+            modules: 0,
+            kept: true,
         },
-    ))
+    )))
 }
 
 impl NativeIncrementalSession {
@@ -699,6 +861,7 @@ impl NativeIncrementalSession {
             typescript,
             last_build_timings: NativeBuildTimings::default(),
             last_import_identity: ImportIdentityMeasurement::default(),
+            attested_epoch: None,
             semantic_demand_options: SemanticDemandOptions::NONE,
             program_hashes: HashMap::new(),
             facts_transform: None,
@@ -719,20 +882,45 @@ impl NativeIncrementalSession {
     }
 
     /// One edit exchange: the update that advances the generation always
-    /// lands, and only the analyze half is cancellable. Local preparation
-    /// (Oxc parse, native compiler facts, demand assembly) overlaps the
-    /// update round trip; the analyze request is sent once the service has
-    /// acknowledged the new generation. A transport failure restarts the
-    /// service, replays local state, and retries exactly the half that
-    /// failed.
+    /// lands, and only the analyze half is cancellable. The analyze request
+    /// is sent once the service has acknowledged the new generation. A
+    /// transport failure restarts the service, replays local state, and
+    /// retries exactly the half that failed.
     pub fn edit(
         &mut self,
         changes: Vec<SourceChange>,
         cancelled: Option<&std::sync::atomic::AtomicBool>,
     ) -> Result<Arc<ProjectFacts>, BackendError> {
+        match self.edit_during(changes, cancelled, || (), |()| false)? {
+            Edited::Facts(facts, _) => Ok(facts),
+            Edited::Abandoned(()) => Err(BackendError::Cancelled),
+        }
+    }
+
+    /// [`Self::edit`] with work of the caller's overlapping the update round
+    /// trip: `during` runs once the update is written and before it is
+    /// awaited, so the edit pays `max(update, during)` rather than their sum
+    /// (`typefacts::Session::update_during`). It cannot touch the session. If
+    /// `abandon` says no to what it made, the edit stops once the update has
+    /// landed, before any analysis is asked for ([`Edited::Abandoned`]): the
+    /// caller's work found the session not worth answering from. `during`
+    /// runs on the first attempt only, so a producer failure that restarts
+    /// the exchange may return facts with no result of its work: the caller
+    /// then does that work after the fact.
+    pub fn edit_during<T, D, A>(
+        &mut self,
+        changes: Vec<SourceChange>,
+        cancelled: Option<&std::sync::atomic::AtomicBool>,
+        during: D,
+        abandon: A,
+    ) -> Result<Edited<T>, BackendError>
+    where
+        D: FnOnce() -> T,
+        A: Fn(&T) -> bool,
+    {
         check_cancelled(cancelled)?;
         if changes.is_empty() {
-            return self.analyze_with_recovery(cancelled);
+            return Ok(Edited::Facts(self.analyze_with_recovery(cancelled)?, None));
         }
         let next_generation = self
             .generation
@@ -778,12 +966,17 @@ impl NativeIncrementalSession {
         }
         let mut update_landed = false;
         let mut attempt = 0_u32;
+        let mut during = Some(during);
+        let mut overlapped = None;
         loop {
             let result = self.edit_attempt(
                 next_generation,
                 &wire_changes,
                 &mut update_landed,
                 cancelled,
+                &mut during,
+                &mut overlapped,
+                &abandon,
             );
             if update_landed {
                 self.generation = next_generation;
@@ -810,10 +1003,19 @@ impl NativeIncrementalSession {
                     }
                     return Err(error);
                 }
-                Ok(facts) => {
-                    let facts = Arc::new(self.attested(facts)?);
+                Ok(None) => {
+                    return Ok(Edited::Abandoned(
+                        overlapped.expect("an abandoned edit has what made it abandoned"),
+                    ));
+                }
+                Ok(Some(facts)) => {
+                    let edited = wire_changes
+                        .iter()
+                        .map(|change| change.path.clone())
+                        .collect::<Vec<_>>();
+                    let facts = Arc::new(self.attested(facts, Some(&edited))?);
                     self.last_facts = Some(Arc::clone(&facts));
-                    return Ok(facts);
+                    return Ok(Edited::Facts(facts, overlapped));
                 }
             }
         }
@@ -825,20 +1027,39 @@ impl NativeIncrementalSession {
     /// the build never reached the semantic stage. A written update is
     /// always awaited: the service applies it regardless, so returning
     /// without committing the generation would desynchronize the session.
-    fn edit_attempt(
+    /// `None`: the overlapping work said to abandon the edit once the update
+    /// landed.
+    #[allow(clippy::too_many_arguments)]
+    fn edit_attempt<T, D, A>(
         &mut self,
         next_generation: u64,
         wire_changes: &[typefacts::v3::FileChange],
         update_landed: &mut bool,
         cancelled: Option<&std::sync::atomic::AtomicBool>,
-    ) -> Result<ProjectFacts, BackendError> {
+        during: &mut Option<D>,
+        overlapped: &mut Option<T>,
+        abandon: &A,
+    ) -> Result<Option<ProjectFacts>, BackendError>
+    where
+        D: FnOnce() -> T,
+        A: Fn(&T) -> bool,
+    {
         // The session applies the overlay and advances its own generation.
         // `Session` owns transport recovery, so a failure here is already
         // past its internal restart-and-replay.
         if !*update_landed {
-            self.typescript.update(wire_changes.to_vec())?;
+            let work = during.take();
+            let made = self
+                .typescript
+                .update_during(wire_changes.to_vec(), move || work.map(|work| work()))?;
             *update_landed = true;
+            if let Some(made) = made {
+                *overlapped = Some(made);
+            }
             check_cancelled(cancelled)?;
+            if overlapped.as_ref().is_some_and(abandon) {
+                return Ok(None);
+            }
         }
         let mut sources = self.sources.values().cloned().collect::<Vec<_>>();
         sources.sort_by(|left, right| left.path.cmp(&right.path));
@@ -868,7 +1089,7 @@ impl NativeIncrementalSession {
         );
         result.map(|(facts, timings)| {
             self.last_build_timings = timings;
-            facts
+            Some(facts)
         })
     }
 
@@ -941,7 +1162,7 @@ impl NativeIncrementalSession {
             &self.program_hashes,
         )?;
         self.last_build_timings = timings;
-        let facts = Arc::new(self.attested(facts)?);
+        let facts = Arc::new(self.attested(facts, None)?);
         self.last_facts = Some(Arc::clone(&facts));
         Ok(facts)
     }
@@ -974,7 +1195,7 @@ impl NativeIncrementalSession {
             &self.program_hashes,
         )?;
         self.last_build_timings = timings;
-        let facts = Arc::new(self.attested(facts)?);
+        let facts = Arc::new(self.attested(facts, None)?);
         self.last_facts = Some(Arc::clone(&facts));
         Ok(facts)
     }
@@ -988,7 +1209,11 @@ impl NativeIncrementalSession {
     /// checks, so the attestation is computed once per generation with it — and
     /// it must not be conditional on anything that can change between checks
     /// (see [`import_identity_scope`]).
-    fn attested(&mut self, mut facts: ProjectFacts) -> Result<ProjectFacts, BackendError> {
+    fn attested(
+        &mut self,
+        mut facts: ProjectFacts,
+        edited: Option<&[String]>,
+    ) -> Result<ProjectFacts, BackendError> {
         if let Some(transform) = &mut self.facts_transform {
             transform(&mut facts, &mut self.typescript)?;
         }
@@ -999,16 +1224,113 @@ impl NativeIncrementalSession {
             self.last_import_identity = ImportIdentityMeasurement::default();
             return Ok(facts);
         }
-        let (index, measurement) = attest_import_identities(&mut self.typescript, &scope)?;
+        // The attestation's exchanges can restart the producer themselves
+        // (review R1 finding 5): rows from two processes, or a kept index
+        // stamped with the new one's epoch, would then pass for the running
+        // program's. So a moved epoch asks again, in full, of the producer
+        // now running, and an epoch that moves again fails the request.
+        let epoch = self.typescript.restart_epoch();
+        let kept = match edited {
+            Some(edited) => self.kept_attestation(&facts, &scope, edited)?,
+            None => None,
+        };
+        let (mut index, mut measurement) = match kept {
+            Some(kept) => kept,
+            None => attest_import_identities(&mut self.typescript, &scope)?,
+        };
+        if self.typescript.restart_epoch() != epoch {
+            let epoch = self.typescript.restart_epoch();
+            (index, measurement) = attest_import_identities(&mut self.typescript, &scope)?;
+            if self.typescript.restart_epoch() != epoch {
+                self.attested_epoch = None;
+                return Err(BackendError::Process(
+                    "the Type Facts producer restarted twice while attesting imports".into(),
+                ));
+            }
+        }
+        self.attested_epoch = Some(self.typescript.restart_epoch());
         self.last_import_identity = measurement;
         facts.resolved_imports = Some(index);
         Ok(facts)
+    }
+
+    /// This generation's attested imports when the producer replaced the
+    /// edited file in place, else `None` (and every file is asked about).
+    ///
+    /// Everything the shortcut rests on must hold:
+    /// - the producer said so for exactly this update: it replaced the one
+    ///   changed file in place and rebuilt nothing, so the program's file set,
+    ///   every other file's text and every module resolution are the previous
+    ///   generation's ([`typefacts::Session::last_update_graph`]; any
+    ///   producer restart since, and a re-sent update, answer no);
+    /// - the previous generation's facts hold a full attestation for the
+    ///   producer process that is still running, and the generation directly
+    ///   before this one;
+    /// - this generation asks about exactly the files that attestation
+    ///   covers.
+    ///
+    /// Under shadow mode (`SOLID_CHECKER_IR_SHADOW`) the full attestation is
+    /// asked too and compared; a difference is reported and the full one
+    /// served.
+    fn kept_attestation(
+        &mut self,
+        facts: &ProjectFacts,
+        scope: &[String],
+        edited: &[String],
+    ) -> Result<Option<(AttestedImportIndex, ImportIdentityMeasurement)>, BackendError> {
+        let Some(update) = self.typescript.last_update_graph() else {
+            return Ok(None);
+        };
+        if !update.kept
+            || update.generation != facts.generation.get()
+            || self.attested_epoch != Some(update.epoch)
+        {
+            return Ok(None);
+        }
+        let Some(previous) = self
+            .last_facts
+            .as_deref()
+            .filter(|previous| previous.generation.get() + 1 == facts.generation.get())
+            .and_then(|previous| previous.resolved_imports.as_ref())
+        else {
+            return Ok(None);
+        };
+        if previous.files() != scope.len() || scope.iter().any(|path| !previous.covers(path)) {
+            return Ok(None);
+        }
+        // Only a file this generation asks about has a row to replace.
+        let edited = edited
+            .iter()
+            .filter(|path| scope.contains(path))
+            .cloned()
+            .collect::<Vec<_>>();
+        let Some((index, measurement)) =
+            patch_import_identities(&mut self.typescript, previous, &edited)?
+        else {
+            return Ok(None);
+        };
+        let mode = solid_reactive_ir::shadow::ShadowMode::from_env();
+        if mode != solid_reactive_ir::shadow::ShadowMode::Off {
+            let (full, full_measurement) = attest_import_identities(&mut self.typescript, scope)?;
+            if full != index {
+                report_attestation_mismatch(mode, &index, &full);
+                return Ok(Some((full, full_measurement)));
+            }
+        }
+        Ok(Some((index, measurement)))
     }
 
     /// What the last attestation on this session cost and covered.
     #[must_use]
     pub const fn last_import_identity(&self) -> ImportIdentityMeasurement {
         self.last_import_identity
+    }
+
+    /// The text the session holds for `path`: before an edit, the text the
+    /// edit replaces.
+    #[must_use]
+    pub fn source_text(&self, path: &str) -> Option<&str> {
+        self.sources.get(path).map(|source| &*source.source)
     }
 
     #[must_use]
@@ -1044,14 +1366,49 @@ impl NativeIncrementalSession {
             .collect())
     }
 
-    /// The open program's module graph with every import's resolution: what
-    /// a retained caller observes to notice that the filesystem now resolves
-    /// the program differently (a relinked package, an edited manifest).
+    /// The open program's module graph with each file's distinct non-relative
+    /// import resolutions: what a retained caller observes to notice that the
+    /// filesystem now resolves the program differently (a relinked package, an
+    /// edited manifest). Relative imports and repeated specifiers read nothing
+    /// more, and all of them together can exceed the frame limit.
     pub fn resolution_graph(&mut self) -> Result<typefacts::ModuleGraph, BackendError> {
-        self.typescript.module_graph(&typefacts::ModuleGraphDemand {
-            imports: true,
-            ..typefacts::ModuleGraphDemand::default()
+        self.typescript
+            .module_graph(&typefacts::ModuleGraphDemand::with_distinct_bare_imports())
+    }
+
+    /// [`Self::resolution_graph`] scoped to the imports of `paths`, without
+    /// the module inventory when `without_modules` (the caller holds it).
+    pub fn resolution_graph_of(
+        &mut self,
+        paths: &[String],
+        without_modules: bool,
+    ) -> Result<typefacts::ModuleGraph, BackendError> {
+        let demand = typefacts::ModuleGraphDemand::with_distinct_bare_imports()
+            .import_paths(paths.iter().cloned());
+        self.typescript.module_graph(&if without_modules {
+            demand.without_modules()
+        } else {
+            demand
         })
+    }
+
+    /// Whether the producer answered the update that made this session's
+    /// current generation by saying it replaced its changed file in place and
+    /// rebuilt nothing: the open program holds the files it held before the
+    /// edit, with every module resolution, and only the edited file's own
+    /// import positions can differ. False after a producer restart, for an
+    /// update re-sent after one, and before any update.
+    #[must_use]
+    pub fn update_kept_graph(&self) -> bool {
+        self.typescript
+            .last_update_graph()
+            .is_some_and(|update| update.kept)
+    }
+
+    /// Ends this session's producer ([`TypeFactsSession::close`]): a later
+    /// analysis or module query fails instead of answering.
+    pub fn close_typefacts(&mut self) {
+        self.typescript.close();
     }
 
     /// Recovery is the session's own concern now.

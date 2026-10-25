@@ -111,6 +111,7 @@ fn response(generation: u64, state_token: &str, table_transition: Vec<u8>) -> Re
         reference_changes_exact: false,
         state_token: state_token.into(),
         affected: Vec::new(),
+        graph_kept: false,
         sources: Vec::new(),
         source_arena: String::new(),
         source_lengths: Vec::new(),
@@ -156,11 +157,16 @@ fn repeated_edits_to_one_path_keep_only_the_newest_replay_overlay() {
         state_token: String::new(),
         retained_demands: HashMap::new(),
         retained_table: None,
-        affected_paths: HashSet::new(),
         reference_tier: HashSet::new(),
         symbols_by_path: HashMap::new(),
+        closure_index: None,
+        last_closure_patched: false,
+        pending_demand_paths: HashSet::new(),
+        retained_reference_locations: HashMap::new(),
+        reference_locations_valid: false,
         last_exchange_timings: None,
         last_update_timings: None,
+        last_update_graph: None,
         last_table_changes: None,
         closed: false,
     };
@@ -227,6 +233,7 @@ fn reference_transition_replaces_only_the_named_paths_run() {
     assert_eq!(
         changes,
         TableChanges {
+            full: false,
             unchanged: false,
             entity_paths: Vec::new(),
             symbol_ids: vec!["shared".into()],

@@ -211,18 +211,11 @@ fn reference_index_after_release_answers_pruned_symbol() {
         "expected references to pruned before release"
     );
 
-    // Only `used` is retained by a fact.
-    project
-        .reference_index_mut_for_test()
-        .set_used_for_test(std::slice::from_ref(&used));
     project.release_analysis_state_for_test();
     let got = project.references(&ctx, &pruned).unwrap();
     assert_eq!(got, want, "pruned symbol after release");
 
     // Patching after a release must not leave a partial bucket either.
-    project
-        .reference_index_mut_for_test()
-        .set_used_for_test(std::slice::from_ref(&used));
     project.release_analysis_state_for_test();
     let edited = format!("{a_source}export const a2 = pruned;\n");
     project.update(&ctx, &[change(&a, 1, &edited)]).unwrap();

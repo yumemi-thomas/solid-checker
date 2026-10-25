@@ -34,6 +34,10 @@ struct TransferLimits {
 enum EditMode {
     Prefix,
     SameSpanBody,
+    /// Replaces the first occurrence of the first text with the second
+    /// (`--edit-replace FROM TO`): a body, TSX or import edit of the
+    /// caller's choosing. Leaked once, so the mode stays `Copy`.
+    Replace(&'static (String, String)),
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -185,6 +189,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             "editMode": edit_path.map(|_| match options.edit_mode {
                 EditMode::Prefix => "span-shifting-prefix",
                 EditMode::SameSpanBody => "same-span-body",
+                EditMode::Replace(_) => "replace",
             }),
             "sourceCount": source_count,
             "iterations": options.iterations,
@@ -277,15 +282,18 @@ fn analyze_iteration(
             match edit_mode {
                 EditMode::Prefix => format!("// solid-checker benchmark edit\n{original}"),
                 EditMode::SameSpanBody => original.replacen("count() + 1", "count() + 2", 1),
+                EditMode::Replace((from, to)) => original.replacen(from.as_str(), to, 1),
             }
         } else {
             original.into()
         };
         if iteration.is_multiple_of(2)
-            && matches!(edit_mode, EditMode::SameSpanBody)
+            && matches!(edit_mode, EditMode::SameSpanBody | EditMode::Replace(_))
             && source == original
         {
-            return Err("same-span body edit marker `count() + 1` was not found".into());
+            return Err(
+                "the edit's text (`count() + 1`, or --edit-replace's) was not found".into(),
+            );
         }
         let facts = session.edit(
             vec![SourceChange {
@@ -433,17 +441,13 @@ fn rust_pipeline_breakdown(
         "reactiveIrTotal": durations(|timing| timing.reactive_ir.total),
         "reactiveIrCacheLookup": durations(|timing| timing.reactive_ir.cache_lookup),
         "reactiveIrReusedSamples": samples.iter().filter(|timing| timing.reactive_ir.reused).count(),
-        "sourceDiscoveryReusedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.source_discovery_reused_files).collect()),
-        "sourceDiscoveryRecomputedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.source_discovery_recomputed_files).collect()),
+        "sourceDiscoveryUnchangedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.source_discovery_unchanged_files).collect()),
         "typescriptIndexesReusedSamples": samples.iter().filter(|timing| timing.reactive_ir.typescript_indexes_reused).count(),
         "reachabilityReusedSamples": samples.iter().filter(|timing| timing.reactive_ir.reachability_reused).count(),
         "reachabilityReusedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.reachability_reused_files).collect()),
         "reachabilityRecomputedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.reachability_recomputed_files).collect()),
-        "localAccessesReusedSamples": samples.iter().filter(|timing| timing.reactive_ir.local_accesses_reused).count(),
         "localAccessReusedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.local_access_reused_files).collect()),
         "localAccessRecomputedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.local_access_recomputed_files).collect()),
-        "interproceduralReusedSamples": samples.iter().filter(|timing| timing.reactive_ir.interprocedural_reused).count(),
-        "ownerFixedPointReusedSamples": samples.iter().filter(|timing| timing.reactive_ir.owner_fixed_point_reused).count(),
         "ownerReusedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.owner_reused_files).collect()),
         "ownerRecomputedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.owner_recomputed_files).collect()),
         "interproceduralGraphReusedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.interprocedural_graph_reused_files).collect()),
@@ -530,6 +534,11 @@ fn parse_args() -> Result<Options, Box<dyn std::error::Error>> {
                     mode => return Err(format!("unsupported edit mode {mode:?}").into()),
                 }
             }
+            "--edit-replace" => {
+                let from = value(&mut index)?.to_owned();
+                let to = value(&mut index)?.to_owned();
+                edit_mode = EditMode::Replace(Box::leak(Box::new((from, to))));
+            }
             "--max-first-request-bytes" => {
                 limits.first_request_bytes = Some(value(&mut index)?.parse()?)
             }
@@ -552,6 +561,7 @@ fn parse_args() -> Result<Options, Box<dyn std::error::Error>> {
                      --warmups <COUNT>      Warm-up iterations (default: 3)\n\
                      --edit <PATH>          Alternate an in-memory edit before each analysis\n\
                      --edit-mode <MODE>     prefix (default) or same-span-body\n\
+                     --edit-replace <FROM> <TO>  Edit by replacing FROM's first occurrence\n\
                      --max-first-request-bytes <BYTES>\n\
                      --max-first-response-bytes <BYTES>\n\
                      --max-sample-request-bytes <BYTES>\n\

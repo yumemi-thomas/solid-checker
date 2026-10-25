@@ -128,11 +128,15 @@ resynchronizes source and runtime inputs before every answer, and makes
 repeated CLI and editor checks incremental. Set `SOLID_CHECKER_DAEMON=0` for a
 strict one-shot process, or `SOLID_CHECKER_DAEMON_IDLE_SECS=<seconds>` to tune
 the idle lifetime. The actor and its Type Facts child are evicted when their
-combined resident memory exceeds 2048 MiB; tune that with
+combined resident memory exceeds 15% of physical memory (at least 2 GiB, at
+most 8 GiB); tune that with
 `SOLID_CHECKER_DAEMON_MAX_RSS_MB=<MiB>`, or set it to `0` to disable the memory
 ceiling. `SOLID_CHECKER_TIMINGS=1` emits retained cache-hit, generation,
-analysis, round-trip, and payload measurements as JSON on stderr. Debug builds
-remain one-shot unless `SOLID_CHECKER_DAEMON=1` is set explicitly.
+analysis, round-trip, and payload measurements as JSON on stderr.
+`SOLID_CHECKER_IR_WORKERS=<n>` caps the Reactive IR's analysis workers (default:
+every core), for example `4` to reproduce a four-core CI runner's schedule; it
+changes timing only. Debug builds remain one-shot unless `SOLID_CHECKER_DAEMON=1`
+is set explicitly.
 
 For projects with at least 1,000 source files, the retained actor releases its
 largest derived Reactive IR indexes after each materialized answer while

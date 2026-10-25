@@ -47,13 +47,17 @@ impl RuntimeConfigurationPremise {
 
 /// Follow exact binder aliases. Missing, cyclic, synthetic or merged evidence
 /// supplies no positive identity and therefore cannot veto this premise.
+///
+/// `chain` receives every symbol whose row the answer read: the identity is a
+/// function of those rows, the package roots and the dialect alone.
 fn configuration_api(
     table: &TypeScriptTable,
     symbol: &str,
     dialect: &dyn Dialect,
     package_roots: &[(String, String)],
+    chain: &mut Vec<String>,
 ) -> Option<RuntimeConfigurationApi> {
-    let (path, start, end) = canonical_symbol_declaration(table, symbol, package_roots)?;
+    let (path, start, end) = canonical_symbol_declaration(table, symbol, package_roots, chain)?;
     dialect.runtime_configuration_api(&path, start, end)
 }
 
@@ -61,6 +65,7 @@ fn canonical_symbol_declaration(
     table: &TypeScriptTable,
     symbol: &str,
     package_roots: &[(String, String)],
+    chain: &mut Vec<String>,
 ) -> Option<(String, u64, u64)> {
     let mut current = symbol;
     let mut seen = HashSet::default();
@@ -68,6 +73,7 @@ fn canonical_symbol_declaration(
         if !seen.insert(current) {
             return None;
         }
+        chain.push(current.to_owned());
         let resolved = table.symbol(current)?;
         if !resolved.alias_target().is_empty() {
             current = resolved.alias_target();
@@ -248,17 +254,30 @@ pub(crate) fn scan(facts: &ProjectFacts, dialect: &dyn Dialect) -> RuntimeConfig
 
 /// Each file's part of [`scan`], retained across generations. A file's answer
 /// is a function of its source, its own Type Facts entities, and the
-/// configuration identity of each symbol its lookups asked about; reuse
-/// checks each of those directly against the current facts rather than
-/// trusting a change set, which may describe a table other than the one this
-/// cache read (a cancelled exchange).
+/// configuration identity of each symbol its lookups asked about. Reuse
+/// checks the first two against the current facts, and keeps each asked
+/// symbol's identity with the symbols its alias chain read: one is asked
+/// again only when a row it read differs between the table it was read from
+/// and the current one ([`TypeScriptTable::symbols_with_moved_declarations`]),
+/// never on the word of a change set, which may describe a table other than
+/// the one this cache read (a cancelled exchange).
 #[derive(Default)]
 pub(crate) struct ScanCache {
     basis: Option<ScanBasis>,
     /// The table the retained answers were read from: a file's entities are
-    /// compared with the ones read there.
+    /// compared with the ones read there, and its symbol rows with the
+    /// current table's.
     table: Option<TypeScriptTable>,
     files: HashMap<String, FileScan>,
+    /// The identity in `table` of every symbol a kept scan asked about.
+    identities: HashMap<String, Identity>,
+    /// For each symbol some identity's chain read, the symbols whose chain
+    /// read it.
+    chain_readers: HashMap<String, HashSet<String>>,
+    /// For each asked symbol, the files whose kept scan asked it.
+    askers: HashMap<String, HashSet<String>>,
+    /// The last scan's (reused, scanned) file counts, for timings.
+    pub(crate) last_counts: (u64, u64),
 }
 
 #[derive(Eq, PartialEq)]
@@ -271,16 +290,80 @@ struct ScanBasis {
 
 struct FileScan {
     source_hash: solid_facts::core::SourceHash,
-    /// Each symbol the file's lookups resolved and the identity it had.
-    asked: Vec<(String, Option<RuntimeConfigurationApi>)>,
+    /// Each symbol the file's lookups resolved, sorted.
+    asked: Vec<String>,
     veto: Option<Location>,
+}
+
+/// A symbol's configuration identity and the symbols whose rows it read.
+struct Identity {
+    api: Option<RuntimeConfigurationApi>,
+    chain: Vec<String>,
+}
+
+impl ScanCache {
+    /// `symbol`'s identity in `table`: the kept one, else computed and kept.
+    fn identity(
+        &mut self,
+        table: &TypeScriptTable,
+        dialect: &dyn Dialect,
+        roots: &[(String, String)],
+        symbol: &str,
+    ) -> Option<RuntimeConfigurationApi> {
+        if let Some(identity) = self.identities.get(symbol) {
+            return identity.api;
+        }
+        let mut chain = Vec::new();
+        let api = configuration_api(table, symbol, dialect, roots, &mut chain);
+        for read in &chain {
+            self.chain_readers
+                .entry(read.clone())
+                .or_default()
+                .insert(symbol.to_owned());
+        }
+        self.identities
+            .insert(symbol.to_owned(), Identity { api, chain });
+        api
+    }
+
+    /// Drops `symbol`'s kept identity, returning it.
+    fn forget(&mut self, symbol: &str) -> Option<Identity> {
+        let identity = self.identities.remove(symbol)?;
+        for read in &identity.chain {
+            if let Some(readers) = self.chain_readers.get_mut(read.as_str()) {
+                readers.remove(symbol);
+                if readers.is_empty() {
+                    self.chain_readers.remove(read.as_str());
+                }
+            }
+        }
+        Some(identity)
+    }
+
+    /// Drops the kept scan of `path`, and every identity no kept scan asks
+    /// about any more.
+    fn drop_file(&mut self, path: &str) {
+        let Some(scan) = self.files.remove(path) else {
+            return;
+        };
+        for symbol in &scan.asked {
+            let Some(files) = self.askers.get_mut(symbol.as_str()) else {
+                continue;
+            };
+            files.remove(path);
+            if files.is_empty() {
+                self.askers.remove(symbol.as_str());
+                self.forget(symbol);
+            }
+        }
+    }
 }
 
 /// [`scan`], reusing a file's retained answer only under the same dialect,
 /// project, package roots and dependency-source roots, when the file's
-/// source hash is unchanged, its entities equal the ones read before, and every
-/// symbol it asked about still has the configuration identity it had. The
-/// answer is the first veto in file order, as a full scan's.
+/// source hash is unchanged, its entities equal the ones read before, and no
+/// symbol it asked about changed identity. The answer is the first veto in
+/// file order, as a full scan's.
 pub(crate) fn scan_retained(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
@@ -292,65 +375,112 @@ pub(crate) fn scan_retained(
         roots: package_roots(facts),
         dependency_roots: facts.dependency_source_roots.clone(),
     };
-    let previous_table = cache
-        .table
-        .take()
-        .filter(|_| cache.basis.as_ref() == Some(&basis));
-    let mut identities = HashMap::default();
-    let mut files = HashMap::default();
+    if cache.basis.as_ref() != Some(&basis) || cache.table.is_none() {
+        *cache = ScanCache::default();
+    }
+    let previous_table = cache.table.take();
+    let table = &facts.typescript;
+    // The kept identities whose chain read a row that moved, asked again.
+    let mut changed = HashSet::default();
+    if let Some(previous) = &previous_table {
+        let stale = table
+            .symbols_with_moved_declarations(previous)
+            .iter()
+            .filter_map(|moved| cache.chain_readers.get(moved.as_ref()))
+            .flatten()
+            .cloned()
+            .collect::<HashSet<_>>();
+        for symbol in stale {
+            let before = cache.forget(&symbol).and_then(|identity| identity.api);
+            if cache.identity(table, dialect, &basis.roots, &symbol) != before {
+                changed.insert(symbol);
+            }
+        }
+    }
+    let scanned_paths = facts
+        .files
+        .iter()
+        .filter(|file| !is_dependency_source(facts, file))
+        .map(|file| file.path.as_str())
+        .collect::<HashSet<_>>();
+    let removed = cache
+        .files
+        .keys()
+        .filter(|path| !scanned_paths.contains(path.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    for path in removed {
+        cache.drop_file(&path);
+    }
+    let mut rescan = changed
+        .iter()
+        .filter_map(|symbol| cache.askers.get(symbol.as_str()))
+        .flatten()
+        .cloned()
+        .collect::<HashSet<_>>();
     let mut premise = RuntimeConfigurationPremise::Assumed;
+    let mut counts = (0, 0);
     for file in facts
         .files
         .iter()
         .filter(|file| !is_dependency_source(facts, file))
     {
         let path = file.path.as_str();
-        let retained = previous_table
-            .as_ref()
-            .and_then(|table| Some((table, cache.files.remove(path)?)))
-            .filter(|(table, previous)| {
-                previous.source_hash == file.source_hash
-                    && same_scanned_entities(
-                        table.entities_for_path(path),
-                        facts.typescript.entities_for_path(path),
-                    )
-                    && previous.asked.iter().all(|(symbol, api)| {
-                        identity(facts, dialect, &basis.roots, &mut identities, symbol).0 == *api
-                    })
-            })
-            .map(|(_, previous)| previous);
-        let scanned = retained.unwrap_or_else(|| {
+        let retained = !rescan.contains(path)
+            && previous_table.as_ref().is_some_and(|previous| {
+                cache.files.get(path).is_some_and(|scan| {
+                    scan.source_hash == file.source_hash
+                        && same_scanned_entities(
+                            previous.entities_for_path(path),
+                            table.entities_for_path(path),
+                        )
+                })
+            });
+        if retained {
+            counts.0 += 1;
+        } else {
+            counts.1 += 1;
+            cache.drop_file(path);
             let mut asked = Vec::new();
             let veto = scan_file(
                 facts,
                 file,
                 dialect,
-                &basis.roots,
-                &mut identities,
+                &mut |symbol| cache.identity(table, dialect, &basis.roots, symbol),
                 &mut asked,
             );
-            asked.sort_unstable_by(|left, right| left.0.cmp(&right.0));
-            asked.dedup_by(|left, right| left.0 == right.0);
-            FileScan {
-                source_hash: file.source_hash.clone(),
-                asked,
-                veto,
+            asked.sort_unstable();
+            asked.dedup();
+            for symbol in &asked {
+                cache
+                    .askers
+                    .entry(symbol.clone())
+                    .or_default()
+                    .insert(path.to_owned());
             }
-        });
+            cache.files.insert(
+                path.to_owned(),
+                FileScan {
+                    source_hash: file.source_hash.clone(),
+                    asked,
+                    veto,
+                },
+            );
+            // A path listed twice is scanned once (its slots carry one
+            // source).
+            rescan.remove(path);
+        }
         if premise == RuntimeConfigurationPremise::Assumed
-            && let Some(location) = &scanned.veto
+            && let Some(location) = cache.files.get(path).and_then(|scan| scan.veto.as_ref())
         {
             premise = RuntimeConfigurationPremise::Vetoed {
                 location: location.clone(),
             };
         }
-        files.insert(path.to_owned(), scanned);
     }
-    *cache = ScanCache {
-        basis: Some(basis),
-        table: Some(facts.typescript.clone()),
-        files,
-    };
+    cache.basis = Some(basis);
+    cache.table = Some(table.clone());
+    cache.last_counts = counts;
     premise
 }
 
@@ -367,34 +497,14 @@ fn same_scanned_entities(left: &[typefacts::EntityFact], right: &[typefacts::Ent
             })
 }
 
-/// The configuration identity of `symbol` in the current table, memoized.
-fn identity<'m>(
-    facts: &ProjectFacts,
-    dialect: &dyn Dialect,
-    roots: &[(String, String)],
-    identities: &'m mut HashMap<String, Option<RuntimeConfigurationApi>>,
-    symbol: &str,
-) -> (
-    Option<RuntimeConfigurationApi>,
-    &'m mut HashMap<String, Option<RuntimeConfigurationApi>>,
-) {
-    if let Some(api) = identities.get(symbol) {
-        return (*api, identities);
-    }
-    let api = configuration_api(&facts.typescript, symbol, dialect, roots);
-    identities.insert(symbol.to_owned(), api);
-    (api, identities)
-}
-
 /// One file's first veto, if any; `asked` receives every symbol resolved and
 /// the identity it had.
 fn scan_file(
     facts: &ProjectFacts,
     file: &solid_facts::FileFacts,
     dialect: &dyn Dialect,
-    roots: &[(String, String)],
-    identities: &mut HashMap<String, Option<RuntimeConfigurationApi>>,
-    asked: &mut Vec<(String, Option<RuntimeConfigurationApi>)>,
+    identity: &mut dyn FnMut(&str) -> Option<RuntimeConfigurationApi>,
+    asked: &mut Vec<String>,
 ) -> Option<Location> {
     // Index only entities already supplied by the analysis. A duplicate
     // exact span is ambiguous; contained entities are never substitutes.
@@ -413,9 +523,8 @@ fn scan_file(
             .get(&(u64::from(span.start), u64::from(span.end)))
             .copied()
             .flatten()?;
-        let (api, _) = identity(facts, dialect, roots, identities, symbol);
-        asked.push((symbol.to_owned(), api));
-        api
+        asked.push(symbol.to_owned());
+        identity(symbol)
     };
     let member_properties = file
         .ast

@@ -142,8 +142,9 @@ impl BuildTimings {
     /// [`BuildTimings`] it accumulated on its own thread.
     pub(crate) fn absorb_source_discovery(&mut self, lane: &Self) {
         self.source_discovery = lane.source_discovery;
-        self.source_discovery_reused_files = lane.source_discovery_reused_files;
-        self.source_discovery_recomputed_files = lane.source_discovery_recomputed_files;
+        self.source_discovery_unchanged_files = lane.source_discovery_unchanged_files;
+        self.source_discovery_identity_misses = lane.source_discovery_identity_misses;
+        self.source_post_pass_row_sets = lane.source_post_pass_row_sets;
         self.typed_accessors_and_prop_roots = lane.typed_accessors_and_prop_roots;
         self.prop_propagation_and_control_flow = lane.prop_propagation_and_control_flow;
     }
@@ -151,6 +152,12 @@ impl BuildTimings {
     /// Copies the interprocedural stage's own timing breakdown.
     pub(crate) fn absorb_interprocedural(&mut self, timings: &InterproceduralTimings) {
         self.interprocedural_graph = timings.graph;
+        self.interprocedural_graph_nodes = timings.graph_nodes;
+        self.interprocedural_node_index = timings.node_index;
+        self.interprocedural_resolver = timings.resolver;
+        self.interprocedural_transport = timings.transport;
+        self.interprocedural_merge = timings.merge;
+        self.interprocedural_refresh = timings.refresh;
         self.interprocedural_direct_summaries = timings.direct_summaries;
         self.interprocedural_direct_index = timings.direct_index;
         self.interprocedural_direct_references = timings.direct_references;
@@ -162,6 +169,7 @@ impl BuildTimings {
         self.interprocedural_results_and_exports = timings.results_and_exports;
         self.interprocedural_result_reads = timings.result_reads;
         self.interprocedural_export_summaries = timings.export_summaries;
+        self.interprocedural_fixed_points = timings.fixed_points;
         self.interprocedural_graph_reused_files = timings.graph_reused_files;
         self.interprocedural_graph_recomputed_files = timings.graph_recomputed_files;
         self.interprocedural_result_reused_files = timings.result_reused_files;
@@ -175,9 +183,129 @@ impl BuildTimings {
         self.owner_graph_assembly = timings.graph_assembly;
         self.owner_propagation = timings.propagation;
         self.owner_requirement_emission = timings.requirement_emission;
+        self.owner_context_census = timings.context_census;
         self.owner_reused_files += timings.reused_files;
         self.owner_recomputed_files += timings.recomputed_files;
     }
+}
+
+/// One build's Type Facts delta in full, appended to
+/// `SOLID_CHECKER_IR_DELTA_LOG` (a daemon's stderr goes nowhere): the paths
+/// and symbols the IR treats as changed. `delta` is false when there is no
+/// delta to bind files by (no change list, a whole-table replacement or a
+/// domain reset): every file is then recomputed. The IR edit fuzz reads it.
+pub(crate) fn append_delta_line(facts: &solid_facts::ProjectFacts, domain_reset: bool) {
+    let Some(path) = std::env::var_os("SOLID_CHECKER_IR_DELTA_LOG") else {
+        return;
+    };
+    let changes = facts.typescript_changes.as_ref();
+    let line = serde_json::json!({
+        "reactiveIrDelta": {
+            "generation": facts.generation.get(),
+            "delta": changes.is_some_and(|changes| !changes.full) && !domain_reset,
+            "unchanged": changes.is_some_and(|changes| changes.unchanged),
+            "entityPaths": changes.map(|changes| &changes.entity_paths),
+            "filePaths": changes.map(|changes| &changes.file_paths),
+            "symbolIds": changes.map(|changes| changes.symbol_ids.len()),
+        }
+    });
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        use std::io::Write;
+        let _ = writeln!(file, "{line}");
+    }
+}
+
+/// One build's cross-generation reuse, emitted under `SOLID_CHECKER_TIMINGS`:
+/// what the Type Facts delta named and what each retained cache reused.
+pub(crate) fn reuse_line(
+    facts: &solid_facts::ProjectFacts,
+    timings: &BuildTimings,
+    domain_reset: bool,
+) -> serde_json::Value {
+    let changes = facts.typescript_changes.as_ref();
+    let ms = |duration: Duration| duration.as_secs_f64() * 1000.0;
+    let count = |select: fn(&solid_facts::TypeScriptChanges) -> usize| changes.map(select);
+    serde_json::json!({
+        "reactiveIrReuse": {
+            "generation": facts.generation.get(),
+            "domainReset": domain_reset,
+            "typescriptChanges": changes.is_some(),
+            "typescriptUnchanged": changes.is_some_and(|changes| changes.unchanged),
+            "entityPaths": count(|changes| changes.entity_paths.len()),
+            "filePaths": count(|changes| changes.file_paths.len()),
+            "symbolIds": count(|changes| changes.symbol_ids.len()),
+            "entityPathSample": changes.map(|changes| changes.entity_paths.iter().take(4).collect::<Vec<_>>()),
+            "symbolIdSample": changes.map(|changes| changes.symbol_ids.iter().take(16).collect::<Vec<_>>()),
+            "typescriptIndexesReused": timings.typescript_indexes_reused,
+            "typescriptIndexesPatched": timings.typescript_indexes_patched,
+            "runtimeScan": [timings.runtime_scan_reused_files, timings.runtime_scan_scanned_files],
+            "baseIndexChangedFiles": timings.base_index_changed_files,
+            "memo": [timings.memo_reused, timings.memo_computed],
+            "sourceDiscoveryUnchanged": timings.source_discovery_unchanged_files,
+            "sourceDiscoveryIdentityMisses": timings.source_discovery_identity_misses,
+            "sourcePostPassRowSets": timings.source_post_pass_row_sets,
+            "reachability": [timings.reachability_reused_files, timings.reachability_recomputed_files],
+            "localAccess": [timings.local_access_reused_files, timings.local_access_recomputed_files],
+            "interprocGraph": [timings.interprocedural_graph_reused_files, timings.interprocedural_graph_recomputed_files],
+            "interprocResults": [timings.interprocedural_result_reused_files, timings.interprocedural_result_recomputed_files],
+            "owners": [timings.owner_reused_files, timings.owner_recomputed_files],
+            "substagesMs": {
+                "cacheLookup": ms(timings.cache_lookup),
+                "projectIndexes": ms(timings.project_indexes),
+                "typescriptIndexes": ms(timings.alias_and_entity_indexes),
+                "symbolNames": ms(timings.symbol_name_indexes),
+                "boundaryDefects": ms(timings.boundary_defects),
+                "namespaceHandOuts": ms(timings.namespace_hand_outs),
+                "upstreamCompat": ms(timings.upstream_compat),
+                "readAfterAwaitThroughCalls": ms(timings.read_after_await_through_calls),
+                "leafOperations": ms(timings.leaf_operations),
+                "staticApiFiles": ms(timings.static_api_files),
+                "serverRules": ms(timings.server_rules),
+                "reachability": ms(timings.reachability),
+                "memoBegin": ms(timings.memo_begin),
+                "memoWarm": ms(timings.memo_warm),
+                "baseIndexUpdate": ms(timings.base_index_update),
+            },
+            "interprocMs": {
+                "graph": ms(timings.interprocedural_graph),
+                "graphNodes": ms(timings.interprocedural_graph_nodes),
+                "nodeIndex": ms(timings.interprocedural_node_index),
+                "resolver": ms(timings.interprocedural_resolver),
+                "transport": ms(timings.interprocedural_transport),
+                "merge": ms(timings.interprocedural_merge),
+                "refresh": ms(timings.interprocedural_refresh),
+                "directSummaries": ms(timings.interprocedural_direct_summaries),
+                "propagation": ms(timings.interprocedural_propagation),
+                "resultReads": ms(timings.interprocedural_result_reads),
+                "exportSummaries": ms(timings.interprocedural_export_summaries),
+            },
+            "ownerMs": {
+                "fragmentBuild": ms(timings.owner_fragment_build),
+                "graphAssembly": ms(timings.owner_graph_assembly),
+                "propagation": ms(timings.owner_propagation),
+                "requirementEmission": ms(timings.owner_requirement_emission),
+                "contextCensus": ms(timings.owner_context_census),
+            },
+            "fixedPointsMs": {
+                "transported": ms(timings.interprocedural_fixed_points.transported),
+                "callbackForwarding": ms(timings.interprocedural_fixed_points.callback_forwarding),
+                "returnedSeeds": ms(timings.interprocedural_returned_direct),
+                "returned": ms(timings.interprocedural_fixed_points.returned),
+                "calls": ms(timings.interprocedural_fixed_points.calls),
+                "dispatch": ms(timings.interprocedural_fixed_points.dispatch),
+                "returnedFunctions": ms(timings.interprocedural_fixed_points.returned_functions),
+                "factory": ms(timings.interprocedural_fixed_points.factory),
+                "parameterMemberObligations": ms(timings.interprocedural_fixed_points.parameter_member_obligations),
+                "shorthandObligations": ms(timings.interprocedural_fixed_points.shorthand_obligations),
+            },
+            "totalNs": u64::try_from(timings.total.as_nanos()).unwrap_or(u64::MAX),
+            "shadowNs": u64::try_from(timings.shadow.as_nanos()).unwrap_or(u64::MAX),
+        }
+    })
 }
 
 #[cfg(test)]

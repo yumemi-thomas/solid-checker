@@ -22,7 +22,7 @@
 //! there; it need not be `Send` (tsrs state is thread-local).
 
 use crate::context::Context;
-use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SymbolId};
+use crate::model::{RunAnswer, SemanticDemandRun, SemanticDemandRunResult, SymbolId};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -66,6 +66,13 @@ pub const ERR_SOURCE_FACTS_UNAVAILABLE: &str = "type facts backend has no source
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct UpdateOutcome {
     pub affected: Vec<String>,
+    /// The update replaced its one changed file in place and rebuilt nothing
+    /// (not the program chain, not after it either): every other file's text,
+    /// every file's module resolution and the program's file set are the
+    /// previous generation's, and only the changed file's own import
+    /// positions can differ (`Response::graph_kept`). The compiler's own
+    /// in-place condition (`UpdateKind::Reused`) is what this reports.
+    pub graph_kept: bool,
 }
 
 /// The `modules` answer, flattened as the response carries it (Go:
@@ -138,18 +145,6 @@ pub trait ClosureBackend {
         id: &str,
     ) -> Result<Option<Vec<Declaration>>, BackendError>;
 
-    /// Fully checks the demanded files, in the given (path) order, before a
-    /// table answers any of their demands (ADR 0367). Inside a file every
-    /// later answer is then the one tsc's source-order check computes (an
-    /// enclosing call resolved before the calls in its arguments, contextual
-    /// parameter types assigned), whatever order the demands, the batches and
-    /// earlier requests came in. The default does nothing: a backend without
-    /// a checker has no checker history.
-    fn check_demanded_files(&mut self, ctx: &Context, paths: &[&str]) -> Result<(), BackendError> {
-        let _ = (ctx, paths);
-        Ok(())
-    }
-
     /// Resolves canonically ordered per-file runs of demands (Go:
     /// `SemanticDemandRuns`, `tsgo/semantic_runs.go`). Results are
     /// index-aligned with `runs` and with each run's demands.
@@ -166,6 +161,26 @@ pub trait ClosureBackend {
         ctx: &Context,
         locations: &[Location],
     ) -> Result<Vec<AsyncFunctionFact>, BackendError>;
+
+    /// What a table asks: the runs' results (as `semantic_demand_runs`) and
+    /// the async facts of `async_locations` (as `async_functions_at`). The
+    /// tsrs project answers each file in a pass of a checker of its own
+    /// (`per_file`, ADR 0398); the default composes the two calls, for
+    /// backends without a checker.
+    fn per_file_demand_runs(
+        &mut self,
+        ctx: &Context,
+        runs: &[SemanticDemandRun<'_>],
+        async_locations: &[Location],
+    ) -> Result<(Vec<RunAnswer>, Vec<AsyncFunctionFact>), BackendError> {
+        let facts = self.async_functions_at(ctx, async_locations)?;
+        let results = if runs.is_empty() {
+            Vec::new()
+        } else {
+            self.semantic_demand_runs(ctx, runs)?
+        };
+        Ok((results.into_iter().map(RunAnswer::Result).collect(), facts))
+    }
 
     /// The call expressions of one file in source order, each with its
     /// alias-resolved target (Go: the optional `CallDiscoverer`). Not every
@@ -229,6 +244,23 @@ pub trait ClosureBackend {
     /// How much binder-level work was reused since the last call (ADR 0369).
     fn binder_retention(&mut self) -> crate::references::BinderRetention {
         crate::references::BinderRetention::default()
+    }
+
+    /// Per-file passes with reuse (instant-edits P3): whether the last
+    /// [`ClosureBackend::per_file_demand_runs`] tracked, per path, whether its
+    /// rows changed ([`ClosureBackend::content_version`]).
+    fn tracks_content_versions(&self) -> bool {
+        false
+    }
+
+    /// A number that changes exactly when the rows the last
+    /// [`ClosureBackend::per_file_demand_runs`] answered for `path` (its run's
+    /// entities and its async facts) differ from any earlier answer; `None`
+    /// for a path without rows. Meaningful only while
+    /// [`ClosureBackend::tracks_content_versions`].
+    fn content_version(&self, path: &str) -> Option<u64> {
+        let _ = path;
+        None
     }
 }
 

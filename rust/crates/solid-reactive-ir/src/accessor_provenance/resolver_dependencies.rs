@@ -2,7 +2,7 @@
 
 use super::*;
 
-impl Resolver<'_, '_> {
+impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
     /// ADR 0300: every visible value must carry the same reactive member
     /// claim. Unlike `dependency_getters`, this walk refuses open literals,
     /// unknown providers, mutable bindings and visible member/descriptor
@@ -10,7 +10,7 @@ impl Resolver<'_, '_> {
     /// census only for objects created by a selected package.
     pub fn proven_dependency_getters(
         &self,
-        file: &FileFacts,
+        file: &'a FileFacts,
         span: Span,
         name: &str,
     ) -> Option<Vec<Location>> {
@@ -46,7 +46,7 @@ impl Resolver<'_, '_> {
 
     fn closed_dependency_objects(
         &self,
-        file: &FileFacts,
+        file: &'a FileFacts,
         span: Span,
         depth: usize,
     ) -> Option<Vec<(String, Span)>> {
@@ -256,82 +256,6 @@ impl Resolver<'_, '_> {
         Some(values)
     }
 
-    pub(super) fn dependency_member_stable(&self, path: &str, object: Span, name: &str) -> bool {
-        // Named writes anywhere retain their veto. Every visible unknown
-        // target needs an exact disjoint identity before the integrity proof.
-        if self.member_stability.written.contains_key(name) {
-            return false;
-        }
-        let object = location(path, object);
-        // Visible syntax cannot disappear when receiver derivation is
-        // incomplete. In particular a package's unknown receiver can be an
-        // object from another selected package, or one handed it by the app.
-        if !self
-            .member_stability
-            .unknown_receivers
-            .iter()
-            .chain(
-                self.member_stability
-                    .dependencies
-                    .values()
-                    .flat_map(|p| &p.unknown_receivers),
-            )
-            .all(|receiver| {
-                let Some(file) = self.lookup.file_by_path(receiver.path.as_ref()) else {
-                    return false;
-                };
-                let (Ok(start), Ok(end)) = (
-                    u32::try_from(receiver.start_byte),
-                    u32::try_from(receiver.end_byte),
-                ) else {
-                    return false;
-                };
-                mutation_target_is_distinct(
-                    file,
-                    Span::new(start, end),
-                    &object,
-                    self.lookup,
-                    32,
-                    &mut HashSet::default(),
-                )
-            })
-        {
-            return false;
-        }
-        self.member_stability
-            .wildcard_sites
-            .iter()
-            .chain(
-                self.member_stability
-                    .dependencies
-                    .values()
-                    .flat_map(|package| &package.wildcard_sites),
-            )
-            .all(|site| {
-                let Some(file) = self.lookup.file_by_path(site.path.as_ref()) else {
-                    return false;
-                };
-                let Some(call) = file.ast.calls.iter().find(|call| {
-                    u64::from(call.span.start) == site.start_byte
-                        && u64::from(call.span.end) == site.end_byte
-                }) else {
-                    return false;
-                };
-                // A target spread can supply the getter object itself.
-                let Some(target) = call.arguments.first().filter(|a| !a.spread) else {
-                    return false;
-                };
-                mutation_target_is_distinct(
-                    file,
-                    target.span,
-                    &object,
-                    self.lookup,
-                    32,
-                    &mut HashSet::default(),
-                )
-            })
-    }
-
     /// ADR 0289: derivation only, like [`Self::context_origin`]. The getters
     /// a Get of `name` on the value at `span` may run, when a package analyzed
     /// as source (ADR 0284) defines them and they read an exact accessor.
@@ -341,7 +265,7 @@ impl Resolver<'_, '_> {
     /// members of object literals and every provider of an exact context. It
     /// ignores every closure, census and member-stability requirement, so it
     /// is never a proof: its one consumer is an uncertifiable obligation.
-    pub fn dependency_getters(&self, file: &FileFacts, span: Span, name: &str) -> Vec<Location> {
+    pub fn dependency_getters(&self, file: &'a FileFacts, span: Span, name: &str) -> Vec<Location> {
         let mut objects = Vec::new();
         let mut visited = HashSet::default();
         self.derived_objects(file, span, 24, &mut visited, &mut objects);
@@ -378,7 +302,7 @@ impl Resolver<'_, '_> {
 
     /// Whether the getter function at `getter` calls an exact accessor
     /// directly in its body: the read a Get of it may perform.
-    fn getter_reads_accessor(&self, file: &FileFacts, getter: Span) -> bool {
+    fn getter_reads_accessor(&self, file: &'a FileFacts, getter: Span) -> bool {
         let Some(function) = file.ast.function_at(getter) else {
             return false;
         };
@@ -394,7 +318,7 @@ impl Resolver<'_, '_> {
     /// mutually recursive bindings and functions.
     fn derived_objects(
         &self,
-        file: &FileFacts,
+        file: &'a FileFacts,
         span: Span,
         depth: usize,
         visited: &mut HashSet<Location>,
@@ -581,8 +505,11 @@ impl Resolver<'_, '_> {
             self.derived_objects(bound_file, initializer, depth - 1, visited, objects);
         }
     }
+}
 
-    pub(super) fn created_accessor(&self, file: &FileFacts, span: Span, depth: usize) -> bool {
+/// The resolver's accessor-creation and closure questions, over any [`World`].
+pub(super) trait Dependencies<'w>: World<'w> {
+    fn created_accessor(&self, file: &'w FileFacts, span: Span, depth: usize) -> bool {
         if depth == 0 {
             return false;
         }
@@ -592,44 +519,36 @@ impl Resolver<'_, '_> {
         if call.construct || !file.ast.straight_line_calls.contains(&call.span) {
             return false;
         }
-        if let Some(primitive) = crate::call_primitive_name_cached(
-            self.lookup,
-            file,
-            call,
-            self.lookup.entities(),
-            self.names,
-            self.lookup.dialect,
-        )
-        .and_then(|p| p.primitive())
-        {
-            return self.lookup.dialect.creates_reactive_source(primitive)
-                && !self.lookup.dialect.returns_reactive_tuple(primitive)
-                && !self.lookup.dialect.returns_store(primitive);
+        if let Some(primitive) = self.primitive(file, call) {
+            let dialect = self.dialect();
+            return dialect.creates_reactive_source(primitive)
+                && !dialect.returns_reactive_tuple(primitive)
+                && !dialect.returns_store(primitive);
         }
         let callee = file.ast.peel_ts_sugar_span(call.callee);
         let target = if file.ast.identifiers.iter().any(|id| id.span == callee) {
-            self.lookup.function_called_at(file.path.as_str(), callee)
+            self.function_called_at(file, callee)
         } else {
-            self.lookup.namespace_member_function(file, callee)
+            self.namespace_member_function(file, callee)
         };
         let Some((target_file, function)) = target else {
             return false;
         };
         !function.r#async
             && !function.generator
-            && self.lookup.function_value_is_current(target_file, function)
+            && crate::indexes::function_value_is_current_in(target_file, function)
             && single_return(target_file, function)
                 .is_some_and(|returned| self.created_accessor(target_file, returned, depth - 1))
     }
 
-    pub(super) fn binding_is_closed(
+    fn binding_is_closed(
         &self,
-        file: &FileFacts,
-        binding: &ast::BindingFact,
+        file: &'w FileFacts,
+        binding: &'w ast::BindingFact,
         object: bool,
     ) -> bool {
         let key = location(file.path.shared(), binding.pattern);
-        self.uses.get(&key).is_none_or(|uses| {
+        self.uses_of(&key).is_none_or(|uses| {
             if object {
                 !uses.object_escaped
             } else {
@@ -637,4 +556,90 @@ impl Resolver<'_, '_> {
             }
         })
     }
+}
+
+impl<'w, T: World<'w> + ?Sized> Dependencies<'w> for T {}
+
+/// ADR 0300: whether no visible write can replace `name` of the object
+/// literal at `object` in `path`: no named write anywhere, and every unknown
+/// receiver and reflective wildcard target an exactly disjoint identity.
+pub(super) fn dependency_member_stable(
+    lookup: &SemanticLookup<'_>,
+    stability: &MemberStability,
+    path: &str,
+    object: Span,
+    name: &str,
+) -> bool {
+    // Named writes anywhere retain their veto. Every visible unknown
+    // target needs an exact disjoint identity before the integrity proof.
+    if stability.written.contains_key(name) {
+        return false;
+    }
+    let object = location(path, object);
+    // Visible syntax cannot disappear when receiver derivation is
+    // incomplete. In particular a package's unknown receiver can be an
+    // object from another selected package, or one handed it by the app.
+    if !stability
+        .unknown_receivers
+        .iter()
+        .chain(
+            stability
+                .dependencies
+                .values()
+                .flat_map(|p| &p.unknown_receivers),
+        )
+        .all(|receiver| {
+            let Some(file) = lookup.file_by_path(receiver.path.as_ref()) else {
+                return false;
+            };
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(receiver.start_byte),
+                u32::try_from(receiver.end_byte),
+            ) else {
+                return false;
+            };
+            mutation_target_is_distinct(
+                file,
+                Span::new(start, end),
+                &object,
+                lookup,
+                32,
+                &mut HashSet::default(),
+            )
+        })
+    {
+        return false;
+    }
+    stability
+        .wildcard_sites
+        .iter()
+        .chain(
+            stability
+                .dependencies
+                .values()
+                .flat_map(|package| &package.wildcard_sites),
+        )
+        .all(|site| {
+            let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
+                return false;
+            };
+            let Some(call) = file.ast.calls.iter().find(|call| {
+                u64::from(call.span.start) == site.start_byte
+                    && u64::from(call.span.end) == site.end_byte
+            }) else {
+                return false;
+            };
+            // A target spread can supply the getter object itself.
+            let Some(target) = call.arguments.first().filter(|a| !a.spread) else {
+                return false;
+            };
+            mutation_target_is_distinct(
+                file,
+                target.span,
+                &object,
+                lookup,
+                32,
+                &mut HashSet::default(),
+            )
+        })
 }

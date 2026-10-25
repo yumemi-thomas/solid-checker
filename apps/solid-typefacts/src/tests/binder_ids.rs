@@ -1,12 +1,41 @@
 //! Binder-level ids inside the producer (ADR 0366): the merge map, rehydration
-//! by key, and the symbols that must keep counters. Order, history and
-//! file-order independence run end to end in `tests/binder_ids.rs`.
+//! by key, and the symbols that must not take a binder or `Set` key (they
+//! take an exact derived key, or no id). Order, history and file-order
+//! independence run end to end in `tests/binder_ids.rs`.
 
 use super::project_support::{SMALL_CONFIG, Scratch, find, find_last};
 use crate::backend::ClosureBackend;
+use crate::binder_key::Key;
 use crate::context::Context;
+use crate::identity::Identities;
 use crate::model::durable_symbol_id;
+use crate::project::Project;
 use tsrs_ast::SymbolFlags;
+use typefacts::Location;
+
+/// What `id` was minted from: `binder` (ADR 0366), `set` (ADR 0371),
+/// `derived` (an exact derived key, `derived_key.rs`), or `none` (no exact
+/// key: the empty id).
+fn key_kind(ids: &Identities, id: &str) -> &'static str {
+    if id.is_empty() {
+        return "none";
+    }
+    match ids.key(&id.into()).map(|key| &**key) {
+        Some(Key::Derived { .. }) => "derived",
+        Some(Key::Set { .. }) => "set",
+        Some(_) => "binder",
+        None => panic!("{id} was minted from no key"),
+    }
+}
+
+/// The id at `location`, the empty id when the symbol has no exact key.
+fn id_at(project: &mut Project, location: &Location) -> String {
+    match project.symbol_at(&Context::new(), location) {
+        Ok(id) => id.to_string(),
+        Err(error) if error.0.contains("has no exact id") => String::new(),
+        Err(error) => panic!("{error:?}"),
+    }
+}
 
 const SOURCE: &str = "export interface Box<T> { value: T }\n\
 export const box: Box<number> = { value: 1 }\n\
@@ -123,7 +152,8 @@ fn an_unknown_hash_id_resolves_to_nothing() {
 /// (the constructor's locals) and the property `x` (the class members), and
 /// both share the declaration a `Decl` key hashes. TypeScript keeps them
 /// apart (find-all-references lists both), so the ids must too: the property,
-/// which owns the node, keeps the binder id and the parameter takes a counter.
+/// which owns the node, keeps the binder id and the parameter does not take
+/// one.
 /// A module export and its local half (`localSymbol`) are one symbol and keep
 /// sharing an id.
 #[test]
@@ -145,8 +175,12 @@ fn a_parameter_property_and_its_parameter_never_share_an_id() {
             (project.symbol_at(&ctx, &parameter_use).unwrap(), property)
         };
         assert_ne!(parameter, property, "parameter and property conflated");
-        assert!(property.starts_with("symbol:h:"), "{property}");
-        assert!(!parameter.starts_with("symbol:h:"), "{parameter}");
+        assert_eq!(key_kind(project.identities(), &property), "binder");
+        assert_ne!(
+            key_kind(project.identities(), &parameter),
+            "binder",
+            "{parameter}"
+        );
         assert_eq!(
             project.symbol_at(&ctx, &property_use).unwrap(),
             property,
@@ -171,8 +205,7 @@ fn a_parameter_property_and_its_parameter_never_share_an_id() {
 /// An `Export` id hashes only (path, name). A module that exports its own
 /// `Box` and augments another module's `Box` holds the minimum declaration of
 /// both (`a.ts` sorts before `lib.ts`), so both export keys spell one id: the
-/// collision check must hand the second one asked a counter, never the first
-/// one's id.
+/// collision check must never hand the second one asked the first one's id.
 #[test]
 fn an_augmentation_beside_a_same_named_export_never_shares_its_id() {
     let lib = "export interface Box<T> { value: T }\n";
@@ -191,30 +224,38 @@ fn an_augmentation_beside_a_same_named_export_never_shares_its_id() {
         let own = find(&a, aug, "Box {");
         let augmented = find(&l, lib, "Box<T>");
         let (own_id, lib_id) = if lib_first {
-            let lib_id = project.symbol_at(&ctx, &augmented).unwrap();
-            (project.symbol_at(&ctx, &own).unwrap(), lib_id)
+            let lib_id = id_at(&mut project, &augmented);
+            (id_at(&mut project, &own), lib_id)
         } else {
-            let own_id = project.symbol_at(&ctx, &own).unwrap();
-            (own_id, project.symbol_at(&ctx, &augmented).unwrap())
+            let own_id = id_at(&mut project, &own);
+            (own_id, id_at(&mut project, &augmented))
         };
         assert_ne!(own_id, lib_id, "lib first {lib_first}");
         // The collision is real (the case proves something): whichever is
-        // asked second fails closed to a counter. Which one that is depends on
-        // demand order, a known gap in order independence for this corner.
+        // asked second does not take the binder id. Which one that is depends
+        // on demand order, a known gap in order independence for this corner.
         assert_eq!(
             [&own_id, &lib_id]
                 .iter()
-                .filter(|id| id.starts_with("symbol:h:"))
+                .filter(|id| key_kind(project.identities(), id) == "binder")
                 .count(),
             1,
             "lib first {lib_first}: {own_id} {lib_id}"
         );
-        let declarations = project.declarations(&ctx, &lib_id).unwrap().unwrap();
-        assert_eq!(
-            declarations.len(),
-            2,
-            "lib first {lib_first}: {declarations:?}"
-        );
+        // The binder id answers both of `lib.ts`'s merged declarations; a
+        // derived id names a symbol of the pass that minted it only, so asked
+        // later it fails closed.
+        let declarations = project.declarations(&ctx, &lib_id).unwrap();
+        if key_kind(project.identities(), &lib_id) == "binder" {
+            let declarations = declarations.unwrap();
+            assert_eq!(
+                declarations.len(),
+                2,
+                "lib first {lib_first}: {declarations:?}"
+            );
+        } else {
+            assert!(declarations.is_none(), "lib first {lib_first}");
+        }
     }
 }
 
@@ -272,7 +313,7 @@ fn multi_origin_properties_have_set_keys_of_their_combination() {
                 ("}).p", 3, Combination::Spread),
             ] {
                 let symbol = symbol_in(env, &path, needle, offset);
-                match set_key(env.checker, symbol, |_| false) {
+                match set_key(env.checker, symbol, |_| false, &env.ids.local_chains) {
                     Some(Key::Set {
                         combination,
                         origins,
@@ -290,12 +331,13 @@ fn multi_origin_properties_have_set_keys_of_their_combination() {
             }
             let mixed = symbol_in(env, &path, "cd.c", 3);
             assert_eq!(mixed.declarations().len(), 2, "the case proves nothing");
-            assert!(set_key(env.checker, mixed, |_| false).is_none());
+            assert!(set_key(env.checker, mixed, |_| false, &env.ids.local_chains).is_none());
             let id = env.id_for(mixed);
-            assert!(!id.starts_with("symbol:h:"), "{id}");
+            let kind = key_kind(env.ids, &id);
+            assert!(kind == "derived" || kind == "none", "{id}: {kind}");
             // A declared property keeps its binder key.
             let declared = symbol_in(env, &path, "kind", 0);
-            assert!(set_key(env.checker, declared, |_| false).is_none());
+            assert!(set_key(env.checker, declared, |_| false, &env.ids.local_chains).is_none());
         })
         .unwrap();
 }
@@ -356,7 +398,23 @@ export const d = iqp.v\n";
             raw[0], raw[1],
             "one constituent order: the case proves nothing"
         );
-        let row = project.declarations(&ctx, &ids[0]).unwrap().unwrap();
+        // A `Set` id names a property made inside a pass: its row is read in
+        // a pass that mints it again.
+        let mut row = Vec::new();
+        project
+            .with_env(|env, _| {
+                let file = env.program.get_source_file(&path).unwrap();
+                for n in [first, 1 - first] {
+                    let at = u32::try_from(reads[n].start_byte).unwrap();
+                    let node = crate::nodes::node_at(file, at);
+                    let symbol = env.checker.get_symbol_at_location_exported(node).unwrap();
+                    assert_eq!(env.id_for(symbol), ids[0]);
+                }
+                let id: crate::model::SymbolId = ids[0].clone();
+                row = crate::per_file::row_for(env, &id).declarations.to_vec();
+            })
+            .unwrap();
+        assert!(!row.is_empty());
         let starts: Vec<u64> = row.iter().map(|d| d.location.start_byte).collect();
         assert!(
             starts.windows(2).all(|pair| pair[0] < pair[1]),
@@ -375,7 +433,7 @@ export const d = iqp.v\n";
 /// A key is only given when every property sharing it has one type: the
 /// same origins under a generic container whose member reads the type
 /// parameter, under a mapped constituent, or with a constituent that only
-/// has an index signature, keep counters.
+/// has an index signature, take a derived key or no id.
 #[test]
 fn a_set_key_needs_one_type_for_every_container() {
     let source = "interface Box<T> { v: T; k: \"box\" }\n\
@@ -402,20 +460,27 @@ export const e = cd.v\n";
         let mut at = find(&path, source, needle);
         at.start_byte += u64::try_from(needle.len()).unwrap() - 1;
         at.end_byte = at.start_byte + 1;
-        project.symbol_at(&ctx, &at).unwrap()
+        id_at(&mut project, &at)
     };
     // `k` does not read `T`: one type under every instantiation.
-    assert!(id("n.k").starts_with("symbol:h:"));
-    for open in ["n.v", "w.v", "r.v", "cd.v"] {
-        let got = id(open);
-        assert!(!got.starts_with("symbol:h:"), "{open}: {got}");
+    let k = id("n.k");
+    let opens: Vec<(&str, String)> = ["n.v", "w.v", "r.v", "cd.v"]
+        .into_iter()
+        .map(|open| (open, id(open)))
+        .collect();
+    let _ = &ctx;
+    assert_eq!(key_kind(project.identities(), &k), "set");
+    for (open, got) in opens {
+        let kind = key_kind(project.identities(), &got);
+        assert!(kind == "derived" || kind == "none", "{open}: {got} {kind}");
     }
 }
 
 /// PR #75 review: properties of different types never share a `Set` id.
 /// Each pair below has the same origins; the second property's type differs
 /// (inherited mapped members, a nested spread, an inferred polymorphic
-/// `this`), so it keeps a counter while the first keeps its key.
+/// `this`), so it takes a derived key or no id while the first keeps its
+/// `Set` key.
 #[test]
 fn transformed_or_inferred_origins_never_share_a_set_id() {
     let source = "interface P { v: number }\n\
@@ -460,22 +525,15 @@ export const r = [plain.v, wrapped.v, iplain.v, iwrapped.v, three.s, nested.s, a
         let mut at = find(&path, source, needle);
         at.start_byte += u64::try_from(needle.len()).unwrap() - 1;
         at.end_byte = at.start_byte + 1;
-        project.symbol_at(&ctx, &at).unwrap()
+        id_at(&mut project, &at)
     };
-    let hashed = |id: &str| id.starts_with("symbol:h:");
-    // The plain readers keep their keys (each case proves something).
-    for keyed in [
+    let keyed: Vec<(&str, String)> = [
         "plain.v", "iplain.v", "three.s", "cd.w", "cd.k", "cd1.w", "cd1.k",
-    ] {
-        assert!(hashed(&id(keyed)), "{keyed}");
-    }
-    // Written types read through subclasses do not change: one id.
-    assert_eq!(id("cd.w"), id("cd1.w"));
-    assert_eq!(id("cd.k"), id("cd1.k"));
-    // A transformed or inferred member keeps a counter, so it shares nothing;
-    // so does an inferred one whose type happens to be fixed (`u = 1`, a
-    // method without a return annotation): only written types qualify.
-    for open in [
+    ]
+    .into_iter()
+    .map(|needle| (needle, id(needle)))
+    .collect();
+    let open: Vec<(&str, String)> = [
         "wrapped.v",
         "iwrapped.v",
         "nested.s",
@@ -485,9 +543,30 @@ export const r = [plain.v, wrapped.v, iplain.v, iwrapped.v, three.s, nested.s, a
         "ab1.n",
         "ef.u",
         "ef.j",
-    ] {
-        let got = id(open);
-        assert!(!hashed(&got), "{open}: {got}");
+    ]
+    .into_iter()
+    .map(|needle| (needle, id(needle)))
+    .collect();
+    let (w, w1, k, k1) = (id("cd.w"), id("cd1.w"), id("cd.k"), id("cd1.k"));
+    let _ = &ctx;
+    let ids = project.identities();
+    // The plain readers keep their keys (each case proves something).
+    for (needle, got) in &keyed {
+        assert_eq!(key_kind(ids, got), "set", "{needle}: {got}");
+    }
+    // Written types read through subclasses do not change: one id.
+    assert_eq!(w, w1);
+    assert_eq!(k, k1);
+    // A transformed or inferred member takes no `Set` key, so it shares no
+    // id with another container's; so does an inferred one whose type
+    // happens to be fixed (`u = 1`, a method without a return annotation):
+    // only written types qualify.
+    for (needle, got) in &open {
+        let kind = key_kind(ids, got);
+        assert!(
+            kind == "derived" || kind == "none",
+            "{needle}: {got} {kind}"
+        );
     }
 }
 
@@ -527,44 +606,50 @@ export const r = [g.q, gb.q, g.r, gb.r, g.e, gb.e, arrs.gw, arrs2.gw, arrs.gt, m
         let mut at = find(&path, source, needle);
         at.start_byte += u64::try_from(needle.len()).unwrap() - 1;
         at.end_byte = at.start_byte + 1;
-        project.symbol_at(&ctx, &at).unwrap()
+        id_at(&mut project, &at)
     };
-    let hashed = |id: &str| id.starts_with("symbol:h:");
+    let (gw, gw2) = (id("arrs.gw"), id("arrs2.gw"));
+    let pairs: Vec<(&str, String, String)> = [("g.q", "gb.q"), ("g.r", "gb.r"), ("g.e", "gb.e")]
+        .into_iter()
+        .map(|(left, right)| (left, id(left), id(right)))
+        .collect();
+    let keyed: Vec<(&str, String)> = ["mn.added", "mn.mv"]
+        .into_iter()
+        .map(|needle| (needle, id(needle)))
+        .collect();
+    let gt = id("arrs.gt");
+    let _ = &ctx;
+    let ids = project.identities();
+    let unset = |id: &str| matches!(key_kind(ids, id), "derived" | "none");
     // `number[] | string[]` reads `gw` through two instantiations of one
-    // member with one type: the checker's merged-instantiation clone (a
-    // counter, ADR 0366), not a union property.
-    let (a, b) = (id("arrs.gw"), id("arrs2.gw"));
-    assert!(!hashed(&a) && !hashed(&b), "{a} {b}");
-    for (left, right) in [("g.q", "gb.q"), ("g.r", "gb.r"), ("g.e", "gb.e")] {
-        let (a, b) = (id(left), id(right));
-        assert!(hashed(&a), "{left}: {a}");
-        assert_eq!(a, b, "{left} / {right}");
+    // member with one type: the checker's merged-instantiation clone, not a
+    // union property. `gw` reads no type variable, so every instantiation
+    // answers with the declaration itself and takes its binder id
+    // (`derived_key.rs`).
+    assert_eq!(gw, gw2);
+    assert_eq!(key_kind(ids, &gw), "binder", "{gw}");
+    for (left, a, b) in &pairs {
+        assert_eq!(key_kind(ids, a), "set", "{left}: {a}");
+        assert_eq!(a, b, "{left}");
     }
-    for keyed in ["mn.added", "mn.mv"] {
-        assert!(hashed(&id(keyed)), "{keyed}");
+    for (needle, got) in &keyed {
+        assert_eq!(key_kind(ids, got), "set", "{needle}: {got}");
     }
-    let got = id("arrs.gt");
-    assert!(!hashed(&got), "arrs.gt: {got}");
+    assert!(unset(&gt), "arrs.gt: {gt}");
 }
 
 /// A `Set` id names a checker-made property, which no position re-resolves:
-/// after a release it fails closed until the generation mints it again (to
-/// the same id), and no retained binder-level answer may hold it.
+/// after a release it fails closed until a pass mints it again (to the same
+/// id).
 #[test]
-fn a_set_id_fails_closed_after_a_release_and_is_never_retained() {
+fn a_set_id_fails_closed_after_a_release_and_is_minted_again() {
     let (scratch, path) = set_scratch();
     let ctx = Context::new();
     let mut project = scratch.open();
     let read = find(&path, SET_SOURCE, "kind\n");
     let id = project.symbol_at(&ctx, &read).unwrap();
     project
-        .with_env(|env, _| {
-            assert!(env.ids.is_set_id(&id));
-            assert!(
-                env.ids.key_of_id(&id).is_none(),
-                "a binder answer could hold it"
-            );
-        })
+        .with_env(|env, _| assert!(env.ids.is_set_id(&id)))
         .unwrap();
     project.release_analysis_state_for_test();
     project
@@ -573,13 +658,218 @@ fn a_set_id_fails_closed_after_a_release_and_is_never_retained() {
                 env.symbol_for(&id).is_none(),
                 "{id} resolved after a release"
             );
-            let key = std::sync::Arc::new(crate::binder_key::Key::Set {
-                combination: crate::binder_key::Combination::Union,
-                name: "kind".into(),
-                origins: Vec::new(),
-            });
-            assert!(!env.ids.register_key(&key.id().as_str().into(), &key));
         })
         .unwrap();
     assert_eq!(project.symbol_at(&ctx, &read).unwrap(), id);
+}
+
+/// A source file's unexported declarations take a `Local` key, whose chain
+/// names no span (ADR 0415): a statement inserted before them,
+/// at the top or mid-file, keeps every id; ids stay distinct for
+/// same-named declarations in sibling scopes and in one scope; an exported
+/// symbol keeps its `Export` id.
+#[test]
+fn local_ids_survive_an_insert_before_them_and_stay_distinct() {
+    let body = "function hidden(props: { v: number }) {\n  const items = [1, 2];\n  return items.map((item) => item + props.v);\n}\n\
+function other(props: { v: number }) {\n  { const x = 1; void x; }\n  { const x = 2; void x; }\n  return props.v;\n}\n\
+export const out = hidden({ v: 1 }) + other({ v: 2 });\n";
+    let needles = [
+        "hidden(",
+        "items",
+        "item)",
+        "props: { v: number }) {\n  const",
+        "other(",
+        "props.v;",
+        "x = 1",
+        "x = 2",
+        "out",
+    ];
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", body)]);
+    let path = scratch.path("a.ts");
+    let ids_of = |source: &str| -> Vec<String> {
+        scratch.write_all(&[("a.ts", source)]);
+        let mut project = scratch.open();
+        let ids: Vec<String> = needles
+            .iter()
+            .map(|needle| {
+                let at = find(&path, source, needle);
+                let word = needle
+                    .find(|c: char| !c.is_alphanumeric())
+                    .unwrap_or(needle.len());
+                let at = Location {
+                    end_byte: at.start_byte + u64::try_from(word).unwrap(),
+                    ..at
+                };
+                id_at(&mut project, &at)
+            })
+            .collect();
+        project
+            .with_env(|env, _| {
+                for (needle, id) in needles.iter().zip(&ids) {
+                    let kind = env.ids.key(&id.as_str().into()).map(|key| match **key {
+                        Key::Local { .. } => "local",
+                        Key::Export(_) => "export",
+                        _ => "other",
+                    });
+                    let want = if *needle == "out" { "export" } else { "local" };
+                    assert_eq!(kind, Some(want), "{needle}: {id}");
+                }
+            })
+            .unwrap();
+        ids
+    };
+    let before = ids_of(body);
+    let distinct: std::collections::HashSet<&String> = before.iter().collect();
+    assert_eq!(distinct.len(), before.len(), "{before:?}");
+    let top = ids_of(&format!(
+        "import {{}} from \"./a\";\nconst inserted = 0; void inserted;\n{body}"
+    ));
+    assert_eq!(before, top, "an insert at the top moved an id");
+    let at = body.find("function other").unwrap();
+    let mid = ids_of(&format!(
+        "{}const inserted = 0; void inserted;\n{}",
+        &body[..at],
+        &body[at..]
+    ));
+    assert_eq!(before, mid, "a mid-file insert moved an id");
+}
+
+/// A `Local` id minted before a release re-resolves from its chain alone.
+#[test]
+fn a_local_id_rehydrates_after_a_release() {
+    let source =
+        "function hidden() { const inner = 1; return inner; }\nexport const v = hidden();\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", source)]);
+    let path = scratch.path("a.ts");
+    let mut project = scratch.open();
+    let ctx = Context::new();
+    let ids: Vec<_> = ["hidden", "inner"]
+        .iter()
+        .map(|needle| {
+            project
+                .symbol_at(&ctx, &find(&path, source, needle))
+                .unwrap()
+        })
+        .collect();
+    project.release_analysis_state_for_test();
+    project
+        .with_env(|env, _| {
+            for id in &ids {
+                assert!(
+                    matches!(env.ids.key(id).map(|key| &**key), Some(Key::Local { .. })),
+                    "{id}"
+                );
+                let symbol = env.symbol_for(id).unwrap_or_else(|| panic!("{id} lost"));
+                assert_eq!(&env.id_for(symbol), id, "re-minted");
+            }
+        })
+        .unwrap();
+}
+
+/// The ids of the first `(needle, width)` of `source`, each checked to be a
+/// `Local` key of the program `source` makes.
+fn local_ids(scratch: &Scratch, path: &str, source: &str, names: &[(&str, u64)]) -> Vec<String> {
+    scratch.write_all(&[("a.ts", source)]);
+    let mut project = scratch.open();
+    let ids: Vec<String> = names
+        .iter()
+        .map(|(needle, width)| {
+            let at = find(path, source, needle);
+            let at = Location {
+                end_byte: at.start_byte + width,
+                ..at
+            };
+            id_at(&mut project, &at)
+        })
+        .collect();
+    project
+        .with_env(|env, _| {
+            for id in &ids {
+                let key = env.ids.key(&id.as_str().into()).map(|key| &**key);
+                assert!(matches!(key, Some(Key::Local { .. })), "{id}: {key:?}");
+            }
+        })
+        .unwrap();
+    ids
+}
+
+/// An id kept across an edit names the same declaration (ADR 0415):
+/// an inserted declaration of the same kind and name takes the rank of the one
+/// after it, and every declaration it displaces takes a new id, so no id of the
+/// new program is an id of the old one.
+#[test]
+fn an_inserted_same_named_declaration_hands_out_no_id() {
+    let before =
+        "export function run() {\n  { const x = 1; void x; }\n  { const x = 2; void x; }\n}\n";
+    let after = "export function run() {\n  { const x = 0; void x; }\n  { const x = 1; void x; }\n  { const x = 2; void x; }\n}\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", before)]);
+    let path = scratch.path("a.ts");
+    let before_ids = local_ids(&scratch, &path, before, &[("x = 1", 1), ("x = 2", 1)]);
+    let after_ids = local_ids(
+        &scratch,
+        &path,
+        after,
+        &[("x = 0", 1), ("x = 1", 1), ("x = 2", 1)],
+    );
+    for ids in [&before_ids, &after_ids] {
+        let distinct: std::collections::HashSet<&String> = ids.iter().collect();
+        assert_eq!(distinct.len(), ids.len(), "{ids:?}");
+    }
+    for id in &after_ids {
+        assert!(
+            !before_ids.contains(id),
+            "{id} names a declaration of the old program"
+        );
+    }
+}
+
+/// Two declarations with the same kind, name and text in one scope differ in
+/// rank, so their `Local` ids differ (ADR 0415).
+#[test]
+fn identical_declarations_in_one_scope_get_distinct_ids() {
+    let source = "function f() {\n  { const y = 1; void y; }\n  { const y = 1; void y; }\n}\nexport const out = f();\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", source)]);
+    let path = scratch.path("a.ts");
+    scratch.write_all(&[("a.ts", source)]);
+    let mut project = scratch.open();
+    let ids: Vec<String> = [
+        find(&path, source, "y = 1"),
+        find_last(&path, source, "y = 1"),
+    ]
+    .into_iter()
+    .map(|at| {
+        let at = Location {
+            end_byte: at.start_byte + 1,
+            ..at
+        };
+        id_at(&mut project, &at)
+    })
+    .collect();
+    assert_ne!(ids[0], ids[1], "two declarations share an id");
+    project
+        .with_env(|env, _| {
+            for id in &ids {
+                let key = env.ids.key(&id.as_str().into()).map(|key| &**key);
+                assert!(matches!(key, Some(Key::Local { .. })), "{id}: {key:?}");
+            }
+        })
+        .unwrap();
+}
+
+/// An edit inside a declaration moves that declaration's id and no nested
+/// declaration's: a nested declaration keeps its own text and position.
+#[test]
+fn an_edit_inside_a_declaration_moves_only_its_own_id() {
+    let before =
+        "function outer() {\n  const inner = 1;\n  return inner;\n}\nexport const v = outer();\n";
+    let after = "function outer() {\n  void 0;\n  const inner = 1;\n  return inner;\n}\nexport const v = outer();\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", before)]);
+    let path = scratch.path("a.ts");
+    let before_ids = local_ids(&scratch, &path, before, &[("outer", 5), ("inner", 5)]);
+    let after_ids = local_ids(&scratch, &path, after, &[("outer", 5), ("inner", 5)]);
+    assert_ne!(
+        before_ids[0], after_ids[0],
+        "the edited declaration kept its id"
+    );
+    assert_eq!(before_ids[1], after_ids[1], "a nested declaration moved");
 }

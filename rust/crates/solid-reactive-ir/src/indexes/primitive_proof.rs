@@ -3,54 +3,6 @@
 use super::*;
 
 impl<'a> SemanticLookup<'a> {
-    /// Review round 1 of ADR 0293: the project-wide inputs of an exempt store
-    /// Get's proof (`local_access::store_get_decision`), for the cross-file
-    /// digest: per key the dialect exempts that some Get spells, whether a
-    /// member of that name is written; then the prototype-write flag and
-    /// [`Self::property_may_be_defined_reflectively`]. `None` when no Get
-    /// spells an exempt key, so such a project keeps the digest it had.
-    pub(super) fn exempt_store_key_census(&self) -> Option<Vec<(String, bool)>> {
-        let mut keys = self
-            .files()
-            .iter()
-            .flat_map(|file| {
-                file.ast
-                    .members
-                    .iter()
-                    .filter_map(|member| file.source_text(member.property))
-                    .chain(
-                        file.ast
-                            .literal_computed_members
-                            .iter()
-                            .map(|literal| literal.key.as_str()),
-                    )
-            })
-            .filter(|key| self.dialect.store_key_may_skip_strict_read(key))
-            .map(str::to_owned)
-            .collect::<Vec<_>>();
-        if keys.is_empty() {
-            return None;
-        }
-        keys.sort_unstable();
-        keys.dedup();
-        let mut census = keys
-            .into_iter()
-            .map(|key| {
-                let written = self.member_name_may_be_reassigned(&key);
-                (key, written)
-            })
-            .collect::<Vec<_>>();
-        census.push((
-            "\0reflective-property-definition".into(),
-            self.property_may_be_defined_reflectively(),
-        ));
-        census.push((
-            "\0reflective-prototype-write".into(),
-            crate::interproc::accessor_provenance::reflective_prototype_write(self),
-        ));
-        Some(census)
-    }
-
     /// The expression inside any parentheses around `value`; `None` when a
     /// type assertion (`as`, `<T>`, `!`, `satisfies`) wraps it on the way,
     /// which changes the declared type and never the value.
@@ -197,6 +149,10 @@ impl<'a> SemanticLookup<'a> {
         depth: usize,
     ) -> bool {
         use solid_facts::ast::{BindingShape, ExportKind, ImportKind};
+        // Another file's constant: `binding_file` is the answer of
+        // `binding_at_reference`, a recorded hand-out (`indexes::hand_outs`): the
+        // asking file's binding rows and every section of `binding_file`, all
+        // this reads of it.
         let value = file.ast.peel_ts_sugar_span(value);
         let Some(declaration) = file.ast.reference_declaration(value) else {
             return false;
@@ -261,65 +217,6 @@ impl<'a> SemanticLookup<'a> {
             && binding.initializer.is_some_and(|initializer| {
                 self.proven_primitive(binding_file, initializer, depth.saturating_sub(1))
             })
-    }
-
-    /// ADR 0325: the imported-constant answers the cross-file proofs read,
-    /// as `(path, declaration span)` of every exported module-level `const`
-    /// of one identifier whose initializer is proven primitive: the set
-    /// [`Self::imported_const_is_primitive`] can accept. Empty when no file
-    /// imports a binding by name.
-    pub(super) fn exported_primitive_consts(&self) -> Vec<(String, Span)> {
-        use solid_facts::ast::{BindingShape, ImportKind};
-        if !self.files().iter().any(|file| {
-            file.ast.imports.iter().any(|import| {
-                import
-                    .bindings
-                    .iter()
-                    .any(|binding| binding.kind == ImportKind::Named)
-            })
-        }) {
-            return Vec::new();
-        }
-        let mut found = Vec::new();
-        for file in self.files() {
-            if !crate::execution_role::file_is_module(file) || file_names_commonjs_exports(file) {
-                continue;
-            }
-            for binding in &file.ast.bindings {
-                let [name] = binding.names.as_slice() else {
-                    continue;
-                };
-                if !binding.immutable
-                    || binding.shape != BindingShape::Identifier
-                    || file
-                        .ast
-                        .functions
-                        .iter()
-                        .any(|function| function.span.contains(binding.declaration))
-                    || !file.ast.exports.iter().any(|export| {
-                        export.module.is_none()
-                            && (export
-                                .declarations
-                                .iter()
-                                .any(|specifier| specifier.local.span == name.span)
-                                || export.specifiers.iter().any(|specifier| {
-                                    file.ast.reference_declaration(specifier.local.span)
-                                        == Some(name.span)
-                                }))
-                    })
-                {
-                    continue;
-                }
-                if binding
-                    .initializer
-                    .is_some_and(|initializer| self.proven_primitive(file, initializer, 6))
-                {
-                    found.push((file.path.to_string(), name.span));
-                }
-            }
-        }
-        found.sort_unstable();
-        found
     }
 
     /// ADR 0211: what the origin of the value at `value` proves about the

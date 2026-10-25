@@ -46,11 +46,12 @@ use solid_reactive_ir::RuntimeEnvironment;
 
 use super::{Request, snapshot_emission};
 use crate::daemon_cache::{CachedAnswer, CachedSnapshot, InputFile};
+use crate::daemon_digests::{content_hash as cached_content_hash, input_digests, parallel_map};
 use crate::daemon_resolution::ResolutionWitness;
 use crate::idle_memory;
 use solid_facts_backend::dependency_program::{self, PreparedDependencies};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CheckRequest {
     #[serde(default)]
@@ -66,6 +67,11 @@ struct CheckRequest {
     /// serves exactly one, with exactly one runtime host.
     #[serde(default)]
     dependency_sources: Vec<String>,
+    /// `--only-file`: the answer carries the findings that can matter to this
+    /// file. Not part of an answer's validity: the cached answer is the full
+    /// report, narrowed when it is sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    only_file: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -90,15 +96,76 @@ struct CheckHeader {
     /// daemon's stderr is not the user's terminal, so it answers them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     notice: Option<String>,
+    /// The idle check found the previous answer differed from a fresh build
+    /// (ADR 0394). The retained state was dropped; this answer
+    /// is the fresh one, and a client that kept the earlier answer should
+    /// replace it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    recovered: bool,
 }
 
 struct Answer {
     status: Arc<str>,
     body: Arc<[u8]>,
+    /// Where each finding sits in `body`, for an `--only-file` answer.
+    index: Arc<crate::json_output::FindingIndex>,
     cache_hit: bool,
     generation: u64,
     analysis_ns: u64,
     notice: Arc<str>,
+    /// The reactive IR program the answer came from, for the idle check.
+    program: Option<Arc<solid_reactive_ir::Program>>,
+    /// Work the answer did not wait for ([`After`]): the caller runs it once
+    /// the answer is written.
+    after: Option<After>,
+}
+
+/// Work an answer does not need, left until the answer has been written (or
+/// the write failed) and the connection closed: nothing the answer says reads
+/// it, and the next request is not read until it is done (the daemon answers
+/// one request at a time), so it is finished before anything uses it. That
+/// work is the memo store's sweep of the entries the build did not reach (the
+/// next build begins from a swept store, and runs a sweep still due first).
+///
+/// The witness's extension with the edited files' imports is not deferred:
+/// it observes the disk as near as it can to when the producer resolved them
+/// (review R1 finding 2), and costs about nothing. Nor is the cached answer:
+/// the idle check records it with the answer.
+#[derive(Default)]
+struct After {
+    sweep: bool,
+}
+
+/// What [`State::edit_overlapped`] did while the producer applied an update.
+struct Overlap {
+    /// The resolution witness still held (or there was none to check).
+    witness_current: bool,
+    /// The inference closure's inputs ([`inference_inputs_of`]).
+    captured: Option<Vec<InputFile>>,
+}
+
+impl After {
+    /// Does the deferred work. An error leaves the state not to be trusted:
+    /// the caller discards it, and the next request opens the program afresh.
+    fn run(self, state: &mut State) -> Result<(), Box<dyn Error>> {
+        let timed = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
+        let started = Instant::now();
+        if self.sweep {
+            state.diagnostics.finish_deferred();
+        }
+        if timed {
+            let ms = |duration: Duration| duration.as_secs_f64() * 1000.0;
+            eprintln!(
+                "{}",
+                serde_json::json!({
+                    "daemonAfter": {
+                        "sweepMs": ms(started.elapsed()),
+                    }
+                })
+            );
+        }
+        Ok(())
+    }
 }
 
 pub fn enabled() -> bool {
@@ -329,12 +396,60 @@ fn idle_limit() -> Duration {
     Duration::from_secs(seconds.max(1))
 }
 
+/// The daemon's memory limit: `SOLID_CHECKER_DAEMON_MAX_RSS_MB` (0 = none),
+/// else [`default_memory_limit_bytes`] of the machine's physical memory.
 fn memory_limit_bytes() -> Option<u64> {
-    let mebibytes = std::env::var("SOLID_CHECKER_DAEMON_MAX_RSS_MB")
+    match std::env::var("SOLID_CHECKER_DAEMON_MAX_RSS_MB")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
-        .unwrap_or(2048);
-    (mebibytes != 0).then(|| mebibytes.saturating_mul(1024 * 1024))
+    {
+        Some(0) => None,
+        Some(mebibytes) => Some(mebibytes.saturating_mul(1024 * 1024)),
+        None => Some(default_memory_limit_bytes(physical_memory_bytes())),
+    }
+}
+
+const MIB: u64 = 1024 * 1024;
+
+/// 15% of physical memory, at least 2 GiB and at most 8 GiB (2 GiB when the
+/// size is unknown). A fixed 2 GiB ended a large project's daemon after every
+/// check (app-game holds about 2.45 GiB), so its edits ran cold.
+fn default_memory_limit_bytes(physical: Option<u64>) -> u64 {
+    physical.map_or(2048 * MIB, |bytes| {
+        (bytes / 100 * 15).clamp(2048 * MIB, 8192 * MIB)
+    })
+}
+
+/// Physical memory: Linux `MemTotal`, macOS `hw.memsize`.
+fn physical_memory_bytes() -> Option<u64> {
+    if cfg!(target_os = "linux") {
+        let meminfo = fs::read_to_string("/proc/meminfo").ok()?;
+        return meminfo.lines().find_map(|line| {
+            let kib = line
+                .strip_prefix("MemTotal:")?
+                .trim()
+                .strip_suffix("kB")?
+                .trim();
+            Some(kib.parse::<u64>().ok()?.saturating_mul(1024))
+        });
+    }
+    if cfg!(target_os = "macos") {
+        let output = Command::new("sysctl")
+            .args(["-n", "hw.memsize"])
+            .output()
+            .ok()?;
+        return output
+            .status
+            .success()
+            .then(|| {
+                String::from_utf8_lossy(&output.stdout)
+                    .trim()
+                    .parse::<u64>()
+                    .ok()
+            })
+            .flatten();
+    }
+    None
 }
 
 const LARGE_PROJECT_SOURCE_THRESHOLD: usize = 1_000;
@@ -401,6 +516,93 @@ fn process_tree_resident_bytes_from(samples: &[ProcessMemory], root: u32) -> u64
         }
     }
     resident_kib.saturating_mul(1024)
+}
+
+/// The free memory the idle check keeps beyond its own second build
+/// (`SOLID_CHECKER_IDLE_SHADOW_MIN_FREE_MB`, default 1 GiB).
+fn idle_check_headroom_bytes() -> u64 {
+    std::env::var("SOLID_CHECKER_IDLE_SHADOW_MIN_FREE_MB")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(1024)
+        .saturating_mul(1024 * 1024)
+}
+
+/// Whether the machine has room for the idle check's second build (about
+/// the daemon's own resident size) plus the headroom: `None` if it has, else
+/// why not. Unknown memory counts as no room: a skipped check is only a
+/// missed verification, never a served answer.
+fn idle_check_room(root: u32) -> Option<String> {
+    let Some(available) = available_memory_bytes() else {
+        return Some("available memory unknown".to_owned());
+    };
+    let Some(resident) = process_tree_resident_bytes(root) else {
+        return Some("resident memory unknown".to_owned());
+    };
+    let needed = resident.saturating_add(idle_check_headroom_bytes());
+    (available < needed).then(|| {
+        format!(
+            "{} MiB available, {} MiB needed",
+            available / (1024 * 1024),
+            needed / (1024 * 1024)
+        )
+    })
+}
+
+/// The memory the system can hand out without swapping: Linux
+/// `MemAvailable`; macOS free, inactive and speculative pages. Purgeable
+/// pages are not added: they sit on the active and inactive queues already,
+/// and counting them again let the idle check start without room.
+fn available_memory_bytes() -> Option<u64> {
+    if cfg!(target_os = "linux") {
+        let meminfo = fs::read_to_string("/proc/meminfo").ok()?;
+        return parse_meminfo_available(&meminfo);
+    }
+    if cfg!(target_os = "macos") {
+        let output = Command::new("vm_stat").output().ok()?;
+        return output
+            .status
+            .success()
+            .then(|| parse_vm_stat_available(&String::from_utf8_lossy(&output.stdout)))
+            .flatten();
+    }
+    None
+}
+
+fn parse_meminfo_available(meminfo: &str) -> Option<u64> {
+    meminfo.lines().find_map(|line| {
+        let rest = line.strip_prefix("MemAvailable:")?;
+        let kib = rest.trim().strip_suffix("kB")?.trim().parse::<u64>().ok()?;
+        Some(kib.saturating_mul(1024))
+    })
+}
+
+fn parse_vm_stat_available(output: &str) -> Option<u64> {
+    let mut lines = output.lines();
+    let page = lines
+        .next()?
+        .split("page size of ")
+        .nth(1)?
+        .split_whitespace()
+        .next()?
+        .parse::<u64>()
+        .ok()?;
+    let mut pages = 0_u64;
+    let mut seen = false;
+    for line in lines {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        if matches!(
+            name.trim(),
+            "Pages free" | "Pages inactive" | "Pages speculative"
+        ) {
+            let count = value.trim().trim_end_matches('.').parse::<u64>().ok()?;
+            pages = pages.saturating_add(count);
+            seen = true;
+        }
+    }
+    seen.then(|| pages.saturating_mul(page))
 }
 
 fn process_tree_resident_bytes(root: u32) -> Option<u64> {
@@ -558,9 +760,21 @@ impl Tracking {
                 source.path.clone(),
                 fingerprint_bytes(Path::new(&source.path), source.source.as_bytes())?,
             );
-            if let Some(parent) = PathBuf::from(&source.path).parent() {
-                dirs.entry(parent.to_path_buf())
-                    .or_insert_with(|| directory_stamp(parent));
+            // A source's directory, and every directory between it and the
+            // project's: a file created in a new directory under one that
+            // holds no source itself moves only that one's stamp.
+            let project_directory = project.parent();
+            let source_path = PathBuf::from(&source.path);
+            for (index, directory) in source_path.ancestors().skip(1).enumerate() {
+                let inside = project_directory
+                    .is_some_and(|project| directory.starts_with(project) && directory != project);
+                if index > 0 && !inside {
+                    break;
+                }
+                if dirs.contains_key(directory) {
+                    break;
+                }
+                dirs.insert(directory.to_path_buf(), directory_stamp(directory));
             }
         }
         Ok(Self {
@@ -646,18 +860,34 @@ fn resync_tracked(
     {
         return Ok(Sync::Rebuild);
     }
-    for (dir, recorded) in &tracking.dirs {
-        if directory_stamp(dir) != *recorded {
-            return Ok(Sync::Rebuild);
-        }
+    // The stamps are independent filesystem reads, a thousand or more for a
+    // large project: read on several workers, then decide in order.
+    let dirs = tracking.dirs.iter().collect::<Vec<_>>();
+    let stamps = parallel_map(&dirs, |(dir, _)| directory_stamp(dir));
+    if dirs
+        .iter()
+        .zip(&stamps)
+        .any(|((_, recorded), now)| now != *recorded)
+    {
+        return Ok(Sync::Rebuild);
     }
     let mut changes = Vec::new();
     let paths = tracking.fingerprints.keys().cloned().collect::<Vec<_>>();
-    for path in paths {
+    let stamps = parallel_map(&paths, |path| file_stamp(Path::new(path)));
+    for (path, stamp) in paths.into_iter().zip(stamps) {
         let recorded = tracking.fingerprints[&path];
-        let refresh = match refresh_file_with(Path::new(&path), &recorded, |path| fs::read(path)) {
-            Ok(refresh) => refresh,
-            Err(_) => return Ok(Sync::Rebuild),
+        // A file whose stamp is unchanged is not read, as `refresh_file_with`
+        // decides; a stamp that cannot be read is a rebuild.
+        let Ok(stamp) = stamp else {
+            return Ok(Sync::Rebuild);
+        };
+        let refresh = if stamp == recorded.stamp {
+            FileRefresh::Unchanged
+        } else {
+            match refresh_file_with(Path::new(&path), &recorded, |path| fs::read(path)) {
+                Ok(refresh) => refresh,
+                Err(_) => return Ok(Sync::Rebuild),
+            }
         };
         match refresh {
             FileRefresh::Unchanged => {}
@@ -843,20 +1073,106 @@ impl State {
             .and_then(|dependency| dependency.generated.as_deref())
     }
 
+    /// Sends the edit to the producer, and while the producer applies it does
+    /// what the answer needs of the disk and not of the producer: checks the
+    /// resolution witness (`witness_pending`: [`Self::resync`] left it
+    /// unchecked) and reads the inference closure's inputs. The closure is
+    /// read before package discovery, as it must be, and before the facts:
+    /// anything that changes after is seen when the cached answer is next
+    /// asked for. A witness that no longer holds abandons the edit once the
+    /// producer has the update, with no analysis: the caller rebuilds the
+    /// program, and what was read here goes with the state it described.
+    fn edit_overlapped(
+        &mut self,
+        changes: Vec<solid_facts_backend::SourceChange>,
+        check: &CheckRequest,
+        witness_pending: bool,
+    ) -> Result<solid_facts_backend::Edited<Overlap>, solid_facts_backend::BackendError> {
+        let Self {
+            session,
+            resolution,
+            project,
+            sources,
+            ..
+        } = self;
+        let witness = resolution.as_ref().filter(|_| witness_pending);
+        session.edit_during(
+            changes,
+            None,
+            || {
+                std::thread::scope(|scope| {
+                    let capture = scope.spawn(|| inference_inputs_of(project, sources, check));
+                    let witness_current = witness.is_none_or(ResolutionWitness::current);
+                    Overlap {
+                        witness_current,
+                        captured: capture
+                            .join()
+                            .unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
+                    }
+                })
+            },
+            |overlap| !overlap.witness_current,
+        )
+    }
+
+    /// Adds the imports of `paths`, edited this request, to the retained
+    /// witness (after an update that kept the program's files the inventory
+    /// the witness holds is the program's, and is not asked for again), or
+    /// replaces the witness when the producer holds one of them under another
+    /// path. A witness found current by this request's check still holds for
+    /// the same program.
+    fn extend_witness(&mut self, paths: &[String], graph_kept: bool) -> Result<(), Box<dyn Error>> {
+        let tracked = &self.tracking.fingerprints;
+        let tracked = |path: &str| tracked.contains_key(path);
+        let Some(witness) = self.resolution.as_mut() else {
+            return Ok(());
+        };
+        let graph = self.session.resolution_graph_of(paths, graph_kept)?;
+        if graph.unknown_import_paths.is_empty() {
+            witness.extend(&graph, tracked);
+        } else {
+            let graph = self.session.resolution_graph()?;
+            self.resolution = Some(ResolutionWitness::of(&graph, tracked));
+        }
+        Ok(())
+    }
+
     /// The program's own analysis answer may be reused only when this holds:
     /// in dependency-source mode, the project's own program and the fold
     /// answer as they did too.
-    fn resync(&mut self, request: &Request) -> Result<Sync, Box<dyn Error>> {
+    ///
+    /// The second value says the resolution witness has not been checked yet:
+    /// an ordinary retained edit checks it while the producer applies the
+    /// update ([`Self::edit_overlapped`]), where the check costs the update's
+    /// time instead of adding to it. Nothing is sent to the producer without
+    /// an edit, and a dependency-source program is checked first, as before.
+    fn resync(&mut self, request: &Request) -> Result<(Sync, bool), Box<dyn Error>> {
+        let ordinary = request.dependency_sources.is_empty();
+        let stale = |state: &Self| {
+            state
+                .resolution
+                .as_ref()
+                .is_some_and(|witness| !witness.current())
+        };
         // The retained session resolved its imports when it opened; if the
         // filesystem would now resolve them differently, only a new session
         // answers as a one-shot check does.
-        if self
-            .resolution
-            .as_ref()
-            .is_some_and(|witness| !witness.current())
-        {
-            return Ok(Sync::Rebuild);
+        if !ordinary && stale(self) {
+            return Ok((Sync::Rebuild, false));
         }
+        match self.resync_files(request)? {
+            Sync::Ready(changes) if ordinary && !changes.is_empty() => {
+                let pending = self.resolution.is_some();
+                Ok((Sync::Ready(changes), pending))
+            }
+            Sync::Ready(_) if ordinary && stale(self) => Ok((Sync::Rebuild, false)),
+            sync => Ok((sync, false)),
+        }
+    }
+
+    /// [`Self::resync`] after the witness: the tracked files, and in
+    /// dependency-source mode the project's own program and the fold.
+    fn resync_files(&mut self, request: &Request) -> Result<Sync, Box<dyn Error>> {
         let changes = match resync_tracked(
             &mut self.tracking,
             &mut self.sources,
@@ -973,6 +1289,7 @@ fn content_hash(bytes: &[u8]) -> [u8; 32] {
     Sha256::digest(bytes).into()
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn hash_file(path: &std::path::Path) -> Result<[u8; 32], Box<dyn Error>> {
     Ok(content_hash(&fs::read(path)?))
 }
@@ -1062,6 +1379,9 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
         last: Instant::now(),
         serving: false,
     }));
+    let idle_check = idle_shadow::IdleShadow::from_env(&socket);
+    idle_check.spawn(request.clone(), move || idle_check_room(process_id));
+    let watchdog_check = Arc::clone(&idle_check);
     let watchdog_activity = std::sync::Arc::clone(&activity);
     let watchdog_socket = socket.clone();
     std::thread::spawn(move || {
@@ -1091,6 +1411,17 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
             if memory_limit.is_some_and(|limit| {
                 process_tree_resident_bytes(process_id).is_some_and(|resident| resident > limit)
             }) {
+                // The idle check's second build is transient: while the
+                // machine still has room for it, it is not held to the
+                // daemon's limit. Short of room it is the first thing to
+                // give up: abandon it, and end the daemon only if the next
+                // sample is still over the limit.
+                if watchdog_check.running() && idle_check_room(process_id).is_none() {
+                    continue;
+                }
+                if watchdog_check.relieve_memory() {
+                    continue;
+                }
                 let _ = fs::remove_file(&watchdog_socket);
                 remove_owned_program();
                 std::process::exit(0);
@@ -1103,9 +1434,20 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
                 if let Ok(mut activity) = activity.lock() {
                     activity.serving = true;
                 }
-                if let Err(error) = handle(&mut state, request, stream) {
+                let recovered = idle_check.begin_request();
+                if recovered {
+                    // The idle check proved the retained state wrong: every
+                    // retained cache goes with it, and this request opens a
+                    // state from scratch.
+                    if let Some(generated) = state.take().as_ref().and_then(State::generated) {
+                        let _ = fs::remove_file(generated);
+                    }
+                    own_program(None);
+                }
+                if let Err(error) = handle(&mut state, request, stream, &idle_check, recovered) {
                     eprintln!("solid-checker daemon: {error}");
                 }
+                idle_check.end_request();
                 if let Ok(mut activity) = activity.lock() {
                     activity.serving = false;
                     activity.last = Instant::now();
@@ -1131,6 +1473,8 @@ fn handle(
     state: &mut Option<State>,
     request: &Request,
     stream: UnixStream,
+    idle_check: &idle_shadow::IdleShadow,
+    recovered: bool,
 ) -> Result<(), Box<dyn Error>> {
     stream.set_read_timeout(Some(Duration::from_secs(10)))?;
     let mut reader = BufReader::new(stream);
@@ -1157,10 +1501,18 @@ fn handle(
     if !request.dependency_sources.is_empty() && check.runtime != request.runtime {
         return respond_error(&mut stream, "daemon serves a different runtime host");
     }
-    let outcome = answer_retained(state, request, &check);
+    let outcome = answer_retained(state, request, &check, idle_check);
     match outcome {
-        Ok(answer) => {
+        Ok(mut answer) => {
+            let after = answer.after.take();
             let materialized = !answer.cache_hit;
+            // The cached answer stays the full report; this caller gets the
+            // findings it asked about.
+            let narrowed = check
+                .only_file
+                .as_deref()
+                .and_then(|file| answer.index.only_file(&answer.body, file));
+            let sent: &[u8] = narrowed.as_deref().unwrap_or(&answer.body);
             let header = serde_json::to_vec(&CheckHeader {
                 implementation: implementation_identity()?.to_owned(),
                 ok: true,
@@ -1169,17 +1521,32 @@ fn handle(
                 cache_hit: answer.cache_hit,
                 generation: answer.generation,
                 analysis_ns: answer.analysis_ns,
-                response_bytes: u64::try_from(answer.body.len()).unwrap_or(u64::MAX),
+                response_bytes: u64::try_from(sent.len()).unwrap_or(u64::MAX),
                 notice: Some(answer.notice.to_string()),
+                recovered,
             })?;
-            stream.write_all(&header)?;
-            stream.write_all(b"\n")?;
-            stream.write_all(&answer.body)?;
-            stream.flush()?;
+            let written = (|| {
+                stream.write_all(&header)?;
+                stream.write_all(b"\n")?;
+                stream.write_all(sent)?;
+                stream.flush()
+            })();
+            drop(stream);
+            // The state already holds this answer's program, so its deferred
+            // work runs whether or not the client read the answer (one that
+            // went away is a failed write, review R1 finding 1).
+            if let Some(after) = after
+                && let Some(retained) = state.as_mut()
+                && let Err(error) = after.run(retained)
+            {
+                // As after a failed request: the state is not trusted again.
+                discard_state(state, idle_check);
+                return Err(error);
+            }
             if materialized {
                 idle_memory::reclaim_idle_pages();
             }
-            Ok(())
+            Ok(written?)
         }
         Err(error) => {
             let message = error.to_string();
@@ -1208,6 +1575,7 @@ fn respond_error(stream: &mut UnixStream, message: &str) -> Result<(), Box<dyn E
         analysis_ns: 0,
         response_bytes: 0,
         notice: None,
+        recovered: false,
     })?;
     stream.write_all(&header)?;
     stream.write_all(b"\n")?;
@@ -1229,6 +1597,7 @@ fn answer_retained(
     slot: &mut Option<State>,
     request: &Request,
     check: &CheckRequest,
+    idle_check: &idle_shadow::IdleShadow,
 ) -> Result<Answer, Box<dyn Error>> {
     if slot.is_none() {
         let opened = State::open(request)?;
@@ -1238,23 +1607,116 @@ fn answer_retained(
     let Some(state) = slot.as_mut() else {
         return Err("daemon state was not opened".into());
     };
-    let outcome = answer(state, request, check);
-    if outcome.is_err() {
-        if let Some(generated) = slot.take().as_ref().and_then(State::generated) {
-            let _ = fs::remove_file(generated);
+    let outcome = answer_with(state, request, check, true, None, AfterFacts::Keep);
+    let Ok(mut answered) = outcome else {
+        discard_state(slot, idle_check);
+        return outcome;
+    };
+    if !answered.cache_hit && idle_check.enabled() {
+        // The test fault hook perturbs the retained answer itself, so a
+        // cache hit keeps serving it until the idle check drops the state.
+        if let Some(perturbed) = idle_shadow::fault(&answered.body) {
+            answered.body = Arc::clone(&perturbed);
+            if let Some(last) = state_last(slot) {
+                last.body = perturbed;
+            }
         }
-        own_program(None);
+        if let Some(witness) = slot.as_ref().and_then(idle_shadow::Witness::of) {
+            idle_check.record(idle_shadow::Served {
+                check: check.clone(),
+                status: Arc::clone(&answered.status),
+                body: Arc::clone(&answered.body),
+                notice: Arc::clone(&answered.notice),
+                program: answered.program.clone(),
+                witness,
+                resolution: slot.as_ref().and_then(|state| state.resolution.clone()),
+            });
+        } else {
+            idle_check.forget();
+        }
     }
-    outcome
+    Ok(answered)
 }
 
-fn answer(
+/// Whether every change keeps its file's module lines (imports, re-exports,
+/// requires, reference directives, module and global declarations): the
+/// update then likely replaces the file in place, and the
+/// work [`State::edit_overlapped`] does beside it is cheaper than the wait.
+/// When it rebuilds the program, that work slows the rebuild's file-system
+/// lookups by more than it saves. Only a choice of order: both are exact.
+fn module_lines_kept(state: &State, changes: &[solid_facts_backend::SourceChange]) -> bool {
+    fn module_lines(text: &str) -> impl Iterator<Item = &str> {
+        text.lines().filter(|line| {
+            ["import", "from", "require", "<reference", "declare"]
+                .iter()
+                .any(|word| line.contains(word))
+        })
+    }
+    changes.iter().all(|change| {
+        match (
+            state.session.source_text(&change.path),
+            change.source.as_deref(),
+        ) {
+            (Some(old), Some(new)) => module_lines(old).eq(module_lines(new)),
+            _ => false,
+        }
+    })
+}
+
+/// Drops the retained state, its program file and the idle check's record:
+/// the next request opens the program afresh.
+fn discard_state(slot: &mut Option<State>, idle_check: &idle_shadow::IdleShadow) {
+    if let Some(generated) = slot.take().as_ref().and_then(State::generated) {
+        let _ = fs::remove_file(generated);
+    }
+    own_program(None);
+    idle_check.forget();
+}
+
+fn state_last(slot: &mut Option<State>) -> Option<&mut CachedAnswer> {
+    slot.as_mut().and_then(|state| state.last.as_mut())
+}
+
+/// The reason an answer was abandoned because its idle check was cancelled.
+const CANCELLED: &str = "cancelled";
+
+/// Answer a check from `state`. `timings` reports the phases under
+/// `SOLID_CHECKER_TIMINGS`; `cancel` abandons the answer between phases (the
+/// idle check's fresh build only).
+/// What [`answer_with`] does with the state's producer once the facts are
+/// answered.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AfterFacts {
+    /// The retained state answers the next edit from it.
+    Keep,
+    /// A state dropped after this one answer (the idle check's fresh build,
+    /// ADR 0399): its producer's program would otherwise stay resident
+    /// beside the retained one while the analysis runs.
+    Close,
+}
+
+fn answer_with(
     state: &mut State,
     request: &Request,
     check: &CheckRequest,
+    timings: bool,
+    cancel: Option<&std::sync::atomic::AtomicBool>,
+    producer: AfterFacts,
 ) -> Result<Answer, Box<dyn Error>> {
     let started = Instant::now();
-    let changes = match state.resync(request)? {
+    let mut phases = PhaseClock::new(timings);
+    let checkpoint = || -> Result<(), Box<dyn Error>> {
+        if cancel.is_some_and(|cancel| cancel.load(std::sync::atomic::Ordering::Relaxed)) {
+            return Err(CANCELLED.into());
+        }
+        Ok(())
+    };
+    // The memo sweep is left until the answer is written only for the
+    // retained state; the idle check's fresh state, dropped after this
+    // answer, defers nothing.
+    let defer = producer == AfterFacts::Keep;
+    let (sync, witness_pending) = state.resync(request)?;
+    let changes = match sync {
         Sync::Rebuild => {
             let previous = state.generated().map(Path::to_path_buf);
             replace_state(state, State::open(request)?, previous);
@@ -1295,6 +1757,10 @@ fn answer(
         return Ok(Answer {
             status: cached.0,
             body: cached.1,
+            index: state
+                .last
+                .as_ref()
+                .map_or_else(Default::default, |last| Arc::clone(&last.index)),
             notice: state
                 .last
                 .as_ref()
@@ -1302,6 +1768,8 @@ fn answer(
             cache_hit: true,
             generation: state.session.generation(),
             analysis_ns: u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
+            program: None,
+            after: None,
         });
     }
     let demand = |state: &mut State| -> Result<(), Box<dyn Error>> {
@@ -1318,6 +1786,16 @@ fn answer(
         state.session.set_semantic_demand_options(options);
         Ok(())
     };
+    phases.mark("resync");
+    checkpoint()?;
+    // The files an overlay update edited while the program kept its files.
+    let mut edited = None;
+    // The producer replaced the edited file in place (`edited` is then the
+    // one file): the files the program holds are the ones it held.
+    let mut graph_kept = false;
+    // The inference closure read while the producer applied the update, for
+    // the program that answers (`None`: read it below).
+    let mut captured = None;
     let facts = if changes.is_empty() {
         demand(state)?;
         state.session.analyze()?
@@ -1328,19 +1806,80 @@ fn answer(
             state.modules = Some(state.session.program_modules()?);
         }
         demand(state)?;
-        let facts = state.session.edit(changes, None)?;
-        let modules = state.session.program_modules()?;
-        if state.modules.as_ref() == Some(&modules) {
-            facts
+        let paths = changes
+            .iter()
+            .map(|change| change.path.clone())
+            .collect::<Vec<_>>();
+        let generation = state.session.generation();
+        let stale = |state: &State| {
+            witness_pending
+                && state
+                    .resolution
+                    .as_ref()
+                    .is_some_and(|witness| !witness.current())
+        };
+        // `None`: the resolution witness no longer holds, and only a new
+        // session answers as a one-shot check does (the edit has landed on
+        // the old one, which goes). A witness the overlap did not check (the
+        // exchange was retried, or failed) is checked here, as `resync` did
+        // before.
+        let overlap = module_lines_kept(state, &changes);
+        let edited_facts = if !overlap {
+            // Checked first, as before: the overlap's file-system reads slow
+            // a program rebuild down more than they save.
+            (!stale(state)).then(|| state.session.edit(changes, None))
         } else {
+            match state.edit_overlapped(changes, check, witness_pending) {
+                Ok(solid_facts_backend::Edited::Abandoned(_)) => None,
+                Ok(solid_facts_backend::Edited::Facts(facts, Some(overlap))) => {
+                    captured = Some(overlap.captured);
+                    Some(Ok(facts))
+                }
+                Ok(solid_facts_backend::Edited::Facts(facts, None)) => {
+                    (!stale(state)).then_some(Ok(facts))
+                }
+                Err(error) => (!stale(state)).then_some(Err(error)),
+            }
+        };
+        // `None`: only a new session answers, as a one-shot check does.
+        let kept = edited_facts.and_then(|facts| {
+            graph_kept =
+                state.session.generation() == generation + 1 && state.session.update_kept_graph();
+            if graph_kept {
+                // The producer's own word, for this update: it replaced the
+                // file in place and rebuilt nothing, so the program's files
+                // are the ones read before the edit and there is nothing to
+                // compare.
+                return Some(facts);
+            }
+            let modules = state.session.program_modules();
             // An edited import added a file to the program or dropped one,
-            // which the session's fixed source set does not follow.
-            let previous = state.generated().map(Path::to_path_buf);
-            replace_state(state, State::open(request)?, previous);
-            demand(state)?;
-            state.session.analyze()?
+            // which the session's fixed source set does not follow. A dropped
+            // file can fail the update's own analysis (its source is still
+            // demanded): the program's files moved all the same, so that
+            // error is not the answer.
+            let moved = modules
+                .as_ref()
+                .is_ok_and(|modules| state.modules.as_ref() != Some(modules));
+            (!moved).then(|| modules.and(facts))
+        });
+        match kept {
+            Some(facts) => {
+                edited = Some(paths);
+                facts?
+            }
+            None => {
+                // What the overlap read described the old session.
+                captured = None;
+                let previous = state.generated().map(Path::to_path_buf);
+                replace_state(state, State::open(request)?, previous);
+                demand(state)?;
+                state.session.analyze()?
+            }
         }
     };
+    phases.mark("facts");
+    checkpoint()?;
     // Review of ADR 0368: a project call's validity is the project's own
     // program's (the retained original, current: `resync` ran), and a package
     // whose own source has a call error is unproven.
@@ -1373,8 +1912,32 @@ fn answer(
         }
         _ => facts,
     };
-    // Observe what this program's resolution read, for the next request.
-    state.resolution = Some(ResolutionWitness::of(&state.session.resolution_graph()?));
+    // Observe what this program's resolution read, for the next request. The
+    // tracked sources are `resync_tracked`'s: their edits are overlay updates.
+    // A retained witness was found current this request, so it still holds
+    // for the same program, and after an update that kept the program's
+    // files it needs only the edited files' imports on top
+    // ([`State::extend_witness`]), observed here, right after the facts, so
+    // the disk it records is the one the update resolved against as nearly
+    // as it can be. A new session (rebuilt, reprepared, or reopened by the
+    // update) has none.
+    let mut after = After::default();
+    match (state.resolution.is_some(), edited) {
+        (true, None) => {}
+        (true, Some(paths)) => state.extend_witness(&paths, graph_kept)?,
+        (false, _) => {
+            let tracked = &state.tracking.fingerprints;
+            let tracked = |path: &str| tracked.contains_key(path);
+            let graph = state.session.resolution_graph()?;
+            state.resolution = Some(ResolutionWitness::of(&graph, tracked));
+        }
+    }
+    phases.mark("resolution");
+    // Nothing below exchanges with the producer: package inputs, analysis
+    // and emission read the facts answered above.
+    if producer == AfterFacts::Close {
+        state.session.close_typefacts();
+    }
     let directory = state
         .project
         .parent()
@@ -1388,7 +1951,7 @@ fn answer(
     // The same package inputs the one-shot path reads.
     // Capture discovery's exact input generation before it runs. A refusal
     // needs only its witness; success retains the complete graph-input closure.
-    let mut inference_inputs = inference_inputs_for_check(state, check);
+    let mut inference_inputs = captured.unwrap_or_else(|| inference_inputs_for_check(state, check));
     let (
         boundary,
         solid_facts_backend::InferredHost {
@@ -1431,9 +1994,12 @@ fn answer(
         .collect::<Vec<_>>()
         .join("\n")
         .into();
-    let analysis = state
-        .diagnostics
-        .analyze_inputs_measured_with_enablement(
+    phases.mark("package-inputs");
+    checkpoint()?;
+    state.diagnostics.defer_memo_end(defer);
+    after.sweep = defer;
+    let (analysis, diagnostic_timings) =
+        state.diagnostics.analyze_inputs_measured_with_enablement(
             &state.project,
             &state.sources,
             &facts,
@@ -1447,19 +2013,15 @@ fn answer(
                 runtime: check.runtime.clone(),
                 feedback_facts: false,
             },
-        )?
-        .0;
-    let body: Arc<[u8]> = snapshot_emission::emit(
-        resolve_dialect(request)?,
-        "json",
-        &request.project_id,
-        &analysis.snapshot,
-        false,
-        true,
-        Duration::ZERO,
-    )?
-    .output
-    .into();
+        )?;
+    phases.mark("analyze");
+    checkpoint()?;
+    let report = crate::json_output::go_compatible_report(&analysis.snapshot)?;
+    let mut output = report.output;
+    output.push(b'\n');
+    let body: Arc<[u8]> = output.into();
+    let index = Arc::new(report.index);
+    phases.mark("emit");
     let status: Arc<str> = analysis.snapshot.status.as_str().into();
     let modules = imported_package_roots(&facts);
     // ADR 0334: the route-components premise reads the TanStack router's and
@@ -1483,17 +2045,28 @@ fn answer(
             router_roots,
             status: Arc::clone(&status),
             body: Arc::clone(&body),
+            index: Arc::clone(&index),
         }),
         None => None,
     };
+    phases.mark("cache");
+    phases.report(
+        state.session.generation(),
+        &state.session.last_build_timings(),
+        &diagnostic_timings,
+        state.session.last_import_identity(),
+    );
     state.diagnostics.retain_for_idle(state.cache_retention);
     Ok(Answer {
         status,
         body,
+        index,
         cache_hit: false,
         generation: state.session.generation(),
         analysis_ns: u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
         notice,
+        program: Some(Arc::clone(&analysis.program)),
+        after: defer.then_some(after),
     })
 }
 
@@ -1525,6 +2098,18 @@ fn cached_answer(
 }
 
 fn inference_inputs_for_check(state: &State, check: &CheckRequest) -> Option<Vec<InputFile>> {
+    inference_inputs_of(&state.project, &state.sources, check)
+}
+
+/// The inference closure of the program `project` opened, over its `sources`:
+/// every path discovery may read, with the digest it has now. Read before
+/// discovery does, so that what discovery reads is no newer than what this
+/// recorded.
+fn inference_inputs_of(
+    project: &Path,
+    source_files: &[SourceFile],
+    check: &CheckRequest,
+) -> Option<Vec<InputFile>> {
     let runtime = &check.runtime;
     if runtime.target.is_some()
         || !runtime.selected_conditions().is_empty()
@@ -1532,19 +2117,15 @@ fn inference_inputs_for_check(state: &State, check: &CheckRequest) -> Option<Vec
     {
         return Some(Vec::new());
     }
-    let directory = state.project.parent()?;
-    let sources = state
-        .sources
+    let directory = project.parent()?;
+    let sources = source_files
         .iter()
         .map(|source| PathBuf::from(&source.path))
         .collect::<Vec<_>>();
-    let mut paths = solid_facts_backend::inferred_host_input_paths_for_sources(
-        directory,
-        &state.project,
-        &sources,
-    );
+    let mut paths =
+        solid_facts_backend::inferred_host_input_paths_for_sources(directory, project, &sources);
     // Nested execution boundaries are facts even without an accepted catalog.
-    paths.extend(state.sources.iter().flat_map(|source| {
+    paths.extend(source_files.iter().flat_map(|source| {
         Path::new(&source.path)
             .parent()
             .into_iter()
@@ -1553,21 +2134,25 @@ fn inference_inputs_for_check(state: &State, check: &CheckRequest) -> Option<Vec
     }));
     paths.sort();
     paths.dedup();
+    let digests = input_digests(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
     paths
         .into_iter()
-        .map(|path| {
-            Some((
-                path.clone(),
-                solid_facts_backend::inferred_host_input_digest(&path)?,
-            ))
-        })
+        .zip(digests)
+        .map(|(path, digest)| Some((path, digest?)))
         .collect()
 }
 
+/// Every input still digests as recorded. Each is read again (never trusted
+/// on metadata), in parallel: a project tree is thousands of inputs.
 fn inference_inputs_current(inputs: &[InputFile]) -> bool {
-    inputs.iter().all(|(path, expected)| {
-        solid_facts_backend::inferred_host_input_digest(path).as_ref() == Some(expected)
-    })
+    let paths = inputs
+        .iter()
+        .map(|(path, _)| path.as_path())
+        .collect::<Vec<_>>();
+    input_digests(&paths)
+        .iter()
+        .zip(inputs)
+        .all(|(digest, (_, expected))| digest.as_ref() == Some(expected))
 }
 
 /// The current on-disk inputs besides the program and the inference closure:
@@ -1641,7 +2226,7 @@ fn input_files(
             solid_facts_backend::inferred_host_directory_digest(&path)
                 .ok_or_else(|| "cannot fingerprint inferred host directory".into())
         } else {
-            hash_file(&path)
+            cached_content_hash(&path).map_err(Into::into)
         } {
             Ok(hash) => hash,
             Err(_) if !path.exists() => [0_u8; 32],
@@ -1688,6 +2273,10 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
         enable_rules: request.enable_rules.clone(),
         runtime: request.runtime.clone(),
         dependency_sources: normalized_selection(&request.dependency_sources),
+        only_file: request
+            .only_file
+            .clone()
+            .filter(|_| request.format == "json"),
     })?;
     let mut stream = stream;
     stream.write_all(&payload)?;
@@ -1751,6 +2340,12 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     if let Some(notice) = header.notice.as_deref().filter(|notice| !notice.is_empty()) {
         eprintln!("{notice}");
     }
+    if header.recovered {
+        eprintln!(
+            "solid-checker: the daemon's earlier answer differed from a fresh build and was \
+             dropped; this answer is the fresh one"
+        );
+    }
     // Past here the answer is this check's: a failed write is reported, never
     // followed by a one-shot answer on the same stdout.
     if let Err(error) = io::stdout().write_all(&output) {
@@ -1796,6 +2391,78 @@ fn executable_path(executable: &str) -> Result<String, Box<dyn Error>> {
         })
         .ok_or_else(|| format!("Type Facts executable {executable:?} is not on PATH").into())
         .and_then(|found| absolute(&found.to_string_lossy()))
+}
+
+/// The phases of one uncached daemon answer, emitted under
+/// `SOLID_CHECKER_TIMINGS` on the daemon's stderr.
+struct PhaseClock {
+    emit: bool,
+    last: Instant,
+    phases: Vec<(&'static str, Duration)>,
+}
+
+impl PhaseClock {
+    fn new(enabled: bool) -> Self {
+        Self {
+            emit: enabled && std::env::var_os("SOLID_CHECKER_TIMINGS").is_some(),
+            last: Instant::now(),
+            phases: Vec::new(),
+        }
+    }
+
+    fn mark(&mut self, phase: &'static str) {
+        if self.emit {
+            self.phases.push((phase, self.last.elapsed()));
+            self.last = Instant::now();
+        }
+    }
+
+    fn report(
+        &self,
+        generation: u64,
+        facts: &solid_facts_backend::NativeBuildTimings,
+        diagnostics: &solid_facts_backend::DiagnosticTimings,
+        identity: solid_facts_backend::ImportIdentityMeasurement,
+    ) {
+        if !self.emit {
+            return;
+        }
+        let ms = |duration: Duration| duration.as_secs_f64() * 1000.0;
+        let phases = self
+            .phases
+            .iter()
+            .map(|(phase, duration)| ((*phase).to_owned(), serde_json::json!(ms(*duration))))
+            .collect::<serde_json::Map<_, _>>();
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "daemonPhases": {
+                    "generation": generation,
+                    "phasesMs": phases,
+                    "facts": {
+                        "sourceAnalysisMs": ms(facts.source_analysis),
+                        "sourceFiles": [facts.source_files_reused, facts.source_files_recomputed],
+                        "typeFactsMs": ms(facts.type_facts),
+                        "exchangeRoundtripMs": ms(facts.exchange.roundtrip),
+                        "serverAnalyzeMs": ms(facts.exchange.server_analyze),
+                        "responseDecodeMs": ms(facts.exchange.response_decode),
+                        "closeSymbolsMs": ms(facts.exchange.client_close_symbols),
+                        "closurePatched": facts.exchange.client_closure_patched,
+                        "hydrateMs": ms(facts.hydrate),
+                        "joinMs": ms(facts.join),
+                    },
+                    "importIdentity": {
+                        "kept": identity.kept,
+                        "files": identity.requested,
+                        "specifiers": identity.specifiers,
+                        "modules": identity.modules,
+                    },
+                    "reactiveIrMs": ms(diagnostics.reactive_ir),
+                    "solveAndSnapshotMs": ms(diagnostics.solve_and_snapshot),
+                }
+            })
+        );
+    }
 }
 
 fn report_timings(header: &CheckHeader, elapsed: Duration, received_bytes: u64) {
@@ -1879,5 +2546,6 @@ fn spawn_and_connect(
     }
 }
 
+mod idle_shadow;
 #[cfg(test)]
 mod tests;

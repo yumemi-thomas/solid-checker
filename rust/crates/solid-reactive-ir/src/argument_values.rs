@@ -122,6 +122,8 @@ pub(crate) fn parameter_values(
     lookup: &SemanticLookup<'_>,
 ) -> Option<Vec<ParameterValue>> {
     // A function that tests none of its parameters has nothing to decide.
+    // The values decide sites by re-parsing the callee's text (ADR 0280).
+    lookup.note_source_read(callee_file);
     if !lookup.tests_its_parameters(callee_file, callee) {
         return None;
     }
@@ -149,6 +151,8 @@ pub(crate) fn parameter_values_for_literal_call(
     callee: &FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> Option<Vec<ParameterValue>> {
+    // The values decide sites by re-parsing the callee's text (ADR 0280).
+    lookup.note_source_read(callee_file);
     if !lookup.tests_its_parameters(callee_file, callee) {
         return None;
     }
@@ -167,6 +171,8 @@ pub(crate) fn parameter_values_for_transported_call(
     exact_target: &crate::interproc::accessor_provenance::Callable,
     lookup: &SemanticLookup<'_>,
 ) -> Option<Vec<ParameterValue>> {
+    // The values decide sites by re-parsing the callee's text (ADR 0280).
+    lookup.note_source_read(callee_file);
     if !lookup.tests_its_parameters(callee_file, callee) {
         return None;
     }
@@ -467,6 +473,7 @@ fn getter_is_only_called_or_decided(
             return false;
         }
         let path = std::path::Path::new(callee_file.path.as_str());
+        lookup.note_source_read(callee_file);
         let Some(uses) =
             solid_facts::ast::parameter_value_uses(path, &callee_file.source, callee.span, index)
         else {

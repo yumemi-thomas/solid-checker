@@ -1342,10 +1342,12 @@ export const beta = mapped.run(1);\n";
         SemanticDemandRun {
             path: &beta_path,
             demands: &beta_demands,
+            shared: None,
         },
         SemanticDemandRun {
             path: &alpha_path,
             demands: &alpha_demands,
+            shared: None,
         },
     ];
     let results = project
@@ -1396,24 +1398,22 @@ export const beta = mapped.run(1);\n";
         "parameter type alias paths"
     );
 
+    // Every embedded id is a hash, the mapped call's derived ones included
+    // (exact derived keys, no counter), and the evidence says so.
     for (index, result) in results.iter().enumerate() {
         let ids = embedded_semantic_ids(result);
-        let want_durable = ids.iter().all(|id| durable_symbol_id(id));
-        assert_eq!(
-            result.durable, want_durable,
+        assert!(
+            ids.iter().all(|id| durable_symbol_id(id)),
+            "result {index} embeds a counter id: {ids:?}"
+        );
+        assert!(
+            ids.iter().any(|id| !id.is_empty()),
+            "result {index} embeds no id; coverage is vacuous"
+        );
+        assert!(
+            result.durable,
             "result {index} Durable, embedded ids {ids:?}"
         );
-        if index == 0 {
-            assert!(
-                !want_durable,
-                "mapped call embedded only durable ids {ids:?}; non-durable coverage is vacuous"
-            );
-        } else {
-            assert!(
-                want_durable,
-                "source-backed call embedded non-durable ids {ids:?}; durable coverage is vacuous"
-            );
-        }
     }
 }
 

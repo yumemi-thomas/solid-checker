@@ -15,6 +15,9 @@ pub type SymbolId = Arc<str>;
 pub struct SemanticDemandRun<'a> {
     pub path: &'a str,
     pub demands: &'a [EntityDemand],
+    /// The retained allocation `demands` borrows from, when there is one:
+    /// a kept pass compares it by identity instead of by value.
+    pub shared: Option<&'a std::sync::Arc<[EntityDemand]>>,
 }
 
 /// One input run's aligned semantic answer (Go: `SemanticDemandRunResult`).
@@ -24,10 +27,40 @@ pub struct SemanticDemandRun<'a> {
 /// `symbol_claim` carries what Go spreads over `SymbolCoversSpan` and
 /// `SymbolUnresolved`: with a symbol, `Covering` is "covers span" and anything
 /// else is the partial claim; without one, `Unresolved` is "symbol unresolved".
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct SemanticDemandRunResult {
     pub entities: Vec<EntityFact>,
     pub durable: bool,
+}
+
+/// One run's answer to a table: its aligned result, or the entity rows a
+/// pass already prepared from it (`contributions::prepare_rows`) and
+/// completed (ADR 0398).
+#[derive(Clone, Debug, PartialEq)]
+pub enum RunAnswer {
+    Result(SemanticDemandRunResult),
+    Rows {
+        entities: Arc<[EntityFact]>,
+        durable: bool,
+    },
+}
+
+impl RunAnswer {
+    /// The run's entity rows and whether every identity in them is
+    /// binder-level.
+    pub fn into_rows(
+        self,
+        path: &str,
+        demands: &[EntityDemand],
+    ) -> Result<(Arc<[EntityFact]>, bool), String> {
+        match self {
+            Self::Result(result) => Ok((
+                crate::contributions::prepare_rows(path, demands, result.entities)?.into(),
+                result.durable,
+            )),
+            Self::Rows { entities, durable } => Ok((entities, durable)),
+        }
+    }
 }
 
 /// An entity row carrying only its location.
@@ -67,9 +100,9 @@ pub fn blank_symbol(id: SymbolId) -> SymbolFact {
 }
 
 /// Reports whether an identity survives its minting generation: durable ids
-/// hash the declaration (ADR 0001), while generation-scoped counter ids are
-/// meaningless outside the generation that issued them. The empty id is
-/// trivially durable (Go: `DurableSymbolID`).
+/// are hashes (ADR 0001); the producer mints no other kind since every
+/// derived symbol takes an exact key (ADR 0398). The empty id is trivially
+/// durable (Go: `DurableSymbolID`).
 #[must_use]
 pub fn durable_symbol_id(id: &str) -> bool {
     id.is_empty() || id.starts_with("symbol:h:")

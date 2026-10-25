@@ -33,6 +33,9 @@ pub struct DemandGroup {
     pub demands: Option<Arc<[EntityDemand]>>,
     pub compact: Option<CompactBacking>,
     pub contribution: Option<ContributionRef>,
+    /// The clean locations of [`DemandGroup::append_async_demands`]'s
+    /// answer, computed once.
+    pub async_locations: Option<Arc<[typefacts::Location]>>,
 }
 
 impl DemandGroup {
@@ -72,6 +75,27 @@ impl DemandGroup {
         }
     }
 
+    /// The clean locations of the run's async demands
+    /// ([`DemandGroup::append_async_demands`]), computed on first use: a
+    /// group is replaced, never edited, when its demands change.
+    pub fn async_locations(&mut self) -> Result<&[typefacts::Location], String> {
+        if self.async_locations.is_none() {
+            let mut demands = Vec::new();
+            self.append_async_demands(&mut demands)?;
+            let locations: Vec<typefacts::Location> = demands
+                .into_iter()
+                .filter(|demand| demand.r#async)
+                .map(|demand| {
+                    let mut location = demand.location;
+                    location.path = clean(&location.path).into();
+                    location
+                })
+                .collect();
+            self.async_locations = Some(locations.into());
+        }
+        Ok(self.async_locations.as_deref().unwrap_or_default())
+    }
+
     /// Appends the run's async demands without expanding a compact run's other
     /// rows (Go: `appendAsyncDemands`).
     pub fn append_async_demands(&self, target: &mut Vec<EntityDemand>) -> Result<(), String> {
@@ -97,10 +121,18 @@ impl DemandGroup {
 /// rows. The compact string table carries paths as the client sent them
 /// (Go: `canonicalizeDemandRun`).
 fn canonicalize_demand_run(path: &str, demands: &mut [EntityDemand]) {
+    // One shared path for the run (a retained group holds every location):
+    // the same strings as one allocation per demand.
+    let shared: Arc<str> = path.into();
     for demand in demands {
-        demand.location.path = path.into();
+        demand.location.path = Arc::clone(&shared);
         if let Some(query) = &mut demand.query_location {
-            query.path = clean(&query.path).into();
+            let cleaned = clean(&query.path);
+            if *cleaned == *shared {
+                query.path = Arc::clone(&shared);
+            } else if *cleaned != *query.path {
+                query.path = cleaned.into();
+            }
         }
     }
 }

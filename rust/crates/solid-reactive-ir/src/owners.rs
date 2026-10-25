@@ -20,10 +20,10 @@ use crate::cleanup::{CleanupReturnProof, function_cleanup_return_proof};
 use crate::effect_api::ProofStatus;
 use crate::execution_role::{argument_references_callback_symbol, execution_role, function_symbol};
 use crate::identity::SymbolId;
-use crate::indexes::{CrossFileProofDigest, EntitySymbols, ProjectIndexes, SemanticLookup};
+use crate::indexes::{EntitySymbols, ProjectIndexes, SemanticLookup};
 use solid_dialect::{Dialect, OwnerRequirementRole, Primitive};
 use solid_facts::ProjectFacts;
-use solid_facts::core::{SourceHash, SourcePath, Span};
+use solid_facts::core::{SourceHash, Span};
 
 mod owner_graph;
 pub(crate) use owner_graph::*;
@@ -31,6 +31,11 @@ mod missing_owners;
 pub(crate) use missing_owners::*;
 mod context_census;
 pub(crate) use context_census::*;
+mod owner_state;
+use owner_state::{HandOuts, OwnerGraph, PathId};
+mod owner_emission;
+pub(crate) use owner_emission::Emission;
+use owner_emission::{EmissionInputs, emit_file};
 mod owner_discovery;
 pub(crate) use owner_discovery::*;
 mod owner_context;
@@ -47,57 +52,40 @@ pub use bindings::*;
 pub(crate) fn collect_project(
     ctx: &AnalysisContext<'_>,
     project_indexes: &ProjectIndexes<'_>,
-    retained_source_paths: &HashSet<String>,
+    unchanged_paths: &HashSet<String>,
     cache: Option<&mut CachedLateStages>,
-    reusable: bool,
     draft: &mut ProgramDraft,
     timings: &mut BuildTimings,
 ) {
-    let cached = reusable
-        .then(|| {
-            cache.as_ref().and_then(|cache| {
-                cache
-                    .missing_owners
-                    .clone()
-                    .zip(cache.settled_gates.clone())
-            })
-        })
-        .flatten();
-    if let Some((cached, gates)) = cached {
-        // `cache.missing_owners` is stored *after* the requirement gates ran,
-        // so the cached vector is already gated. Re-running them here would be
-        // pure repeated work on the fast path.
-        draft.missing_owners = cached;
-        apply_settled_gates(&mut draft.leaf_operations, &gates);
-        timings.owner_fixed_point_reused = true;
-        timings.owner_reused_files = u64::try_from(ctx.facts.files.len()).unwrap_or(u64::MAX);
-        return;
-    }
     if let Some(cache) = cache {
         let (requirements, gates, owner_timings) = find_missing_owners_incremental(
             ctx.facts,
             ctx.semantic_lookup,
             project_indexes,
             ctx.symbol_names,
-            retained_source_paths,
-            &mut cache.owner_files,
+            unchanged_paths,
+            &mut cache.owners,
         );
         draft.missing_owners.extend(requirements);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
         apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
         timings.absorb_owner(&owner_timings);
-        cache.missing_owners = Some(draft.missing_owners.clone());
-        cache.settled_gates = Some(gates);
     } else {
-        let (requirements, gates) = find_missing_owners(
+        // A build with no retained cache runs the same pass over a scratch
+        // state: one owner analysis, so a fresh and a retained build cannot
+        // disagree (the duplicate batch pass drifted, S7f-0).
+        let (requirements, gates, owner_timings) = find_missing_owners_incremental(
             ctx.facts,
             ctx.semantic_lookup,
             project_indexes,
             ctx.symbol_names,
+            unchanged_paths,
+            &mut OwnerState::default(),
         );
         draft.missing_owners.extend(requirements);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
         apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
+        timings.absorb_owner(&owner_timings);
         timings.owner_recomputed_files = u64::try_from(ctx.facts.files.len()).unwrap_or(u64::MAX);
     }
 }
@@ -362,7 +350,7 @@ pub(crate) struct OwnerCallbackEdge {
     pub(crate) source: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct OwnerNode {
     pub(crate) path: String,
     pub(crate) span: Span,

@@ -60,7 +60,7 @@ fn project(source: &str) -> ProjectFacts {
 
 /// Every listed span names its symbol exactly: these fixtures describe spans
 /// whose entity covers them, so `exact` and `get` agree.
-fn entity_symbols(spans: &[(Span, &str)]) -> EntitySymbols {
+fn entity_symbols(facts: &ProjectFacts, spans: &[(Span, &str)]) -> EntitySymbols {
     let entries: HashMap<(u64, u64), SymbolId> = spans
         .iter()
         .map(|(span, symbol)| {
@@ -71,8 +71,9 @@ fn entity_symbols(spans: &[(Span, &str)]) -> EntitySymbols {
         })
         .collect();
     EntitySymbols {
-        by_path: HashMap::from_iter([(PATH.to_string(), entries.clone())]),
-        exact_by_path: HashMap::from_iter([(PATH.to_string(), entries)]),
+        by_path: HashMap::from_iter([(PATH.to_string(), Arc::new(entries.clone()))]),
+        exact_by_path: HashMap::from_iter([(PATH.to_string(), Arc::new(entries))]),
+        locations: EntityLocations::of(&facts.typescript),
     }
 }
 
@@ -83,7 +84,7 @@ fn with_lookup<T>(
     body: impl FnOnce(&SemanticLookup<'_>) -> T,
 ) -> T {
     let facts = project(source);
-    let entities = entity_symbols(spans);
+    let entities = entity_symbols(&facts, spans);
     let ast_indexes = HashMap::default();
     let symbol_names = HashMap::default();
     let dialect = solid_dialect::Solid2;
@@ -256,21 +257,176 @@ fn exact_object_member_calls_require_a_closed_const_receiver() {
     }
 }
 
+/// Builds a lookup over one synthetic file reading the retained `store`, and
+/// runs `body` against it, ending the build's memo use after.
+fn with_lookup_in<T>(
+    store: &crate::base::memo::build::MemoStore,
+    source: &str,
+    spans: &[(Span, &str)],
+    body: impl FnOnce(&SemanticLookup<'_>) -> T,
+) -> T {
+    let facts = project(source);
+    let entities = entity_symbols(&facts, spans);
+    let ast_indexes = HashMap::default();
+    let symbol_names = HashMap::default();
+    let dialect = solid_dialect::Solid2;
+    let lookup = SemanticLookup::new(
+        &facts,
+        &ast_indexes,
+        &entities,
+        &symbol_names,
+        &dialect,
+        false,
+    )
+    .with_memo_store(store);
+    let answer = body(&lookup);
+    lookup.end_memos();
+    answer
+}
+
+/// Everything the member-resolution memos answer, rendered in a canonical
+/// order.
+fn member_answers(lookup: &SemanticLookup<'_>) -> Vec<String> {
+    let mut answers = Vec::new();
+    answers.extend(
+        lookup
+            .object_member_targets()
+            .iter()
+            .map(|(site, target)| format!("target {site:?} -> {target:?}")),
+    );
+    answers.extend(
+        lookup
+            .spread_handler_targets()
+            .iter()
+            .map(|(site, targets)| format!("spread {site:?} -> {targets:?}")),
+    );
+    answers.extend(
+        lookup
+            .literal_receiver_members()
+            .iter()
+            .map(|member| format!("literal receiver {member:?}")),
+    );
+    answers.sort();
+    for name in ["run", "m", "onClick", "bind"] {
+        answers.push(format!(
+            "reassigned {name}: {} {}",
+            lookup.member_name_may_be_reassigned(name),
+            lookup.member_may_be_reassigned_on_builtin(name)
+        ));
+    }
+    answers.push(format!("assigned {:?}", lookup.assigned_members().hosts));
+    answers
+}
+
+/// A retained store walked through edits answers what a fresh lookup answers
+/// at every step (verify-reused recomputes each reused answer), and an edit
+/// that leaves a file's text alone reuses its answers.
+#[test]
+fn member_resolution_memos_through_edits_equal_a_fresh_build() {
+    let sources = [
+        "const obj = { run() {} }; function use() { obj.run(); }",
+        "const obj = { run() {} }; function use() { obj.run(); } obj.run = other;",
+        "const obj = { run() {} }; function use() { obj.run(); }",
+        "function use() { const obj = { run() {} }; obj.run(); }",
+        "function use() { const obj = { run() {} }; keep(obj); obj.run(); }",
+        "function use() { const obj = { run() {} }; eval('x'); obj.run(); }",
+        "function use() { const obj = { onClick() {} }; return <div {...obj} />; }",
+        "function use() { const obj = { onClick() {} }; keep(obj); return <div {...obj} />; }",
+        "function C() {} C.prototype.m = function () {}; const obj = { run() {} }; function use() { obj.run(); }",
+        "const C = class {}; C.prototype.run = other; const obj = { run() {} }; function use() { obj.run(); }",
+        "function patch(t) { t.prototype.run = other; } patch(Foo); const obj = { run() {} }; function use() { obj.run(); }",
+        "const obj = { run() {} }; function use() { obj.run(); }",
+        "const obj = { run() {} }; function use() { obj.run(); }",
+    ];
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    for source in sources {
+        let ast = solid_facts::ast::extract(PATH, source).unwrap();
+        let spans = ast
+            .identifiers
+            .iter()
+            .filter(|id| &source[id.span.start as usize..id.span.end as usize] == "obj")
+            .map(|id| (id.span, "object"))
+            .collect::<Vec<_>>();
+        let fresh = with_lookup(source, &spans, member_answers);
+        let retained = with_lookup_in(&store, source, &spans, member_answers);
+        assert_eq!(retained, fresh, "{source}");
+    }
+}
+
+/// The receiver closure of an object literal is its own memo, keyed by the
+/// receiver: an unchanged file reuses it, and a use that appears (a second
+/// escape of the receiver) recomputes it to a different answer.
+#[test]
+fn a_receiver_closure_is_reused_until_a_use_of_the_receiver_changes() {
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    let closed = "function use() { const obj = { run() {} }; obj.run(); }";
+    let escaped = "function use() { const obj = { run() {} }; keep(obj); obj.run(); }";
+    let targets = |source: &str| {
+        let ast = solid_facts::ast::extract(PATH, source).unwrap();
+        let spans = ast
+            .identifiers
+            .iter()
+            .filter(|id| &source[id.span.start as usize..id.span.end as usize] == "obj")
+            .map(|id| (id.span, "object"))
+            .collect::<Vec<_>>();
+        let facts = project(source);
+        let entities = entity_symbols(&facts, &spans);
+        let ast_indexes = HashMap::default();
+        let symbol_names = HashMap::default();
+        let dialect = solid_dialect::Solid2;
+        let lookup = SemanticLookup::new(
+            &facts,
+            &ast_indexes,
+            &entities,
+            &symbol_names,
+            &dialect,
+            false,
+        )
+        .with_memo_store(&store);
+        let found = lookup.object_member_targets().len();
+        let report = lookup.end_memos().expect("the build read memos");
+        let closure = report
+            .tables
+            .into_iter()
+            .find(|(name, _)| *name == "receiver_closed")
+            .map(|(_, stats)| stats)
+            .expect("the receiver closure table");
+        (found, closure)
+    };
+    let (found, first) = targets(closed);
+    assert_eq!(found, 1);
+    assert_eq!(first.fresh, 1);
+    let (found, again) = targets(closed);
+    assert_eq!(found, 1);
+    assert_eq!(
+        again.fresh + again.changed + again.unchanged,
+        0,
+        "{again:?}"
+    );
+    assert_eq!(again.reused + again.verified, 1, "{again:?}");
+    let (found, edited) = targets(escaped);
+    assert_eq!(found, 0);
+    assert_eq!(edited.changed, 1, "{edited:?}");
+}
+
 /// Call sites keyed by target function span, as `(callee start, end)`.
 /// One entry per invocation, which is what every consumer but the escape
 /// test reads.
 fn call_sites(source: &str, spans: &[(Span, &str)]) -> Vec<(Span, Vec<(u32, u32)>)> {
     with_lookup(source, spans, |lookup| {
         let mut sites = lookup
-            .all_function_call_sites()
+            .files()
             .iter()
-            .map(|((_, function), sites)| {
-                let mut callees = sites
-                    .iter()
-                    .map(|site| (site.callee.start, site.callee.end))
-                    .collect::<Vec<_>>();
-                callees.sort_unstable();
-                (*function, callees)
+            .flat_map(|file| {
+                file.ast.functions.iter().filter_map(|function| {
+                    let mut callees = lookup
+                        .function_call_sites(file.path.as_str(), function.span)
+                        .into_iter()
+                        .map(|(_, callee)| (callee.start, callee.end))
+                        .collect::<Vec<_>>();
+                    callees.sort_unstable();
+                    (!callees.is_empty()).then_some((function.span, callees))
+                })
             })
             .collect::<Vec<_>>();
         sites.sort_by_key(|(function, _)| (function.start, function.end));
@@ -520,7 +676,7 @@ fn member_callee_path(
         .iter()
         .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
         .collect::<HashMap<_, _>>();
-    let entities = entity_symbols(spans);
+    let entities = entity_symbols(&facts, spans);
     let symbol_names = HashMap::default();
     let dialect = solid_dialect::Solid2;
     let lookup = SemanticLookup::new(
@@ -769,5 +925,327 @@ fn a_renderer_declaration_must_sit_in_a_dialect_package() {
         "/p/node_modules/not-@solidjs/web/index.d.ts",
     ] {
         assert!(!declared_in_package(outside, &packages), "{outside}");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The project-wide memos ([`project_memos`], study S5d).
+
+fn project_over(source: &str, entities: Vec<typefacts::EntityFact>) -> ProjectFacts {
+    let mut facts = project(source);
+    facts.typescript = TypeScriptTable::from_parts(
+        3,
+        1,
+        "fixture",
+        Vec::new(),
+        entities,
+        Vec::new(),
+        Vec::new(),
+    );
+    facts
+}
+
+fn never_returning_entity(span: Span) -> typefacts::EntityFact {
+    serde_json::from_value(serde_json::json!({
+        "location": { "path": PATH, "startByte": span.start, "endByte": span.end },
+        "resolvedCall": { "validity": "valid", "kind": "call", "neverReturns": true },
+    }))
+    .expect("an entity row with a never-returning call")
+}
+
+/// A lookup over `facts` reading a retained `store`; runs `body`, ends the
+/// build and returns its table stats beside the body's value.
+fn memo_build<T>(
+    facts: &ProjectFacts,
+    store: &crate::base::memo::build::MemoStore,
+    spans: &[(Span, &str)],
+    body: impl FnOnce(&SemanticLookup<'_>) -> T,
+) -> (T, Vec<(&'static str, crate::base::memo::TableStats)>) {
+    let entities = entity_symbols(facts, spans);
+    let ast_indexes = HashMap::default();
+    let symbol_names = HashMap::default();
+    let dialect = solid_dialect::Solid2;
+    let lookup = SemanticLookup::new(
+        facts,
+        &ast_indexes,
+        &entities,
+        &symbol_names,
+        &dialect,
+        false,
+    )
+    .with_memo_store(store);
+    let value = body(&lookup);
+    let report = lookup.end_memos().expect("the build read a memo");
+    (value, report.tables)
+}
+
+fn stats_of(
+    tables: &[(&'static str, crate::base::memo::TableStats)],
+    name: &str,
+) -> crate::base::memo::TableStats {
+    tables
+        .iter()
+        .find(|(table, _)| *table == name)
+        .map(|(_, stats)| *stats)
+        .unwrap_or_else(|| panic!("no table {name}"))
+}
+
+#[test]
+fn never_returning_calls_come_from_each_files_own_resolved_calls() {
+    let source =
+        "declare function guard(message: string): never;\nfunction f() { guard(\"x\"); work(); }\n";
+    let facts = project_over(
+        source,
+        vec![never_returning_entity(span_of(source, "guard", 1))],
+    );
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    let (calls, _) = memo_build(&facts, &store, &[], |lookup| {
+        lookup
+            .never_returning_calls()
+            .iter()
+            .map(|(path, spans)| ((*path).to_owned(), spans.clone()))
+            .collect::<HashMap<_, _>>()
+    });
+    assert_eq!(
+        calls.get(PATH).map(Vec::as_slice),
+        Some(&[span_of(source, "guard(\"x\")", 0)][..])
+    );
+    // A project with no such resolved call answers nothing.
+    let quiet = project_over(source, Vec::new());
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    let (calls, _) = memo_build(&quiet, &store, &[], |lookup| {
+        lookup
+            .never_returning_calls()
+            .iter()
+            .map(|(path, spans)| ((*path).to_owned(), spans.clone()))
+            .collect::<HashMap<_, _>>()
+    });
+    assert!(calls.is_empty());
+}
+
+#[test]
+fn the_any_file_vetoes_follow_what_the_project_writes() {
+    let veto = |source: &str| {
+        let facts = project(source);
+        let store = crate::base::memo::build::MemoStore::new(true, true);
+        memo_build(&facts, &store, &[], |lookup| {
+            (
+                lookup.visible_string_code(),
+                lookup.tuple_iteration_may_be_mutated(),
+                lookup.objects_may_be_assigned_into(),
+                lookup.function_bind_may_be_patched(),
+                lookup.promise_intrinsics_intact(),
+                lookup.array_iteration_intact(),
+            )
+        })
+        .0
+    };
+    assert_eq!(
+        veto("export const answer = 1;"),
+        (false, false, false, false, true, true)
+    );
+    let (string_code, tuple, ..) = veto("eval(\"1\");");
+    assert!(string_code && tuple, "eval is string code, and mutates all");
+    assert!(veto("Object.assign(target, extra);").2);
+    assert!(veto("Function.prototype.bind = null;").3);
+    let promise = veto("Promise.prototype.then = null;");
+    assert!(!promise.4 && !promise.5, "a prototype write spells both");
+    let iterator = veto("Array.prototype[Symbol.iterator] = null;");
+    assert!(iterator.4 && !iterator.5);
+}
+
+#[test]
+fn parameter_completion_calls_are_a_memo_view() {
+    let source = "function run(cb) { cb(); }\nfunction maybe(cb) { if (flag) cb(); }\n";
+    let spans = [
+        (span_of(source, "cb", 0), "s:run-cb"),
+        (span_of(source, "cb", 1), "s:run-cb"),
+        (span_of(source, "cb", 2), "s:maybe-cb"),
+        (span_of(source, "cb", 3), "s:maybe-cb"),
+    ];
+    let facts = project(source);
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    let (calls, _) = memo_build(&facts, &store, &spans, |lookup| {
+        lookup
+            .parameter_completion_calls()
+            .iter()
+            .map(|(path, span, index)| ((*path).to_owned(), *span, *index))
+            .collect::<HashSet<_>>()
+    });
+    let run = span_of(source, "function run(cb) { cb(); }", 0);
+    assert_eq!(calls, HashSet::from_iter([(PATH.to_owned(), run, 0)]));
+}
+
+#[test]
+fn project_memos_are_reused_until_the_program_moves() {
+    let source = "declare function guard(message: string): never;\nfunction f() { guard(\"x\"); work(); }\nexport const label = \"x\";\n";
+    let entities = || vec![never_returning_entity(span_of(source, "guard", 1))];
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    let ask = |lookup: &SemanticLookup<'_>| {
+        (
+            lookup.never_returning_calls().len(),
+            lookup.tuple_iteration_may_be_mutated(),
+            lookup.objects_may_be_assigned_into(),
+        )
+    };
+    let first = project_over(source, entities());
+    let (answer, tables) = memo_build(&first, &store, &[], ask);
+    assert_eq!(answer, (1, false, false));
+    assert_eq!(stats_of(&tables, "tuple_iteration_veto").fresh, 1);
+    assert_eq!(stats_of(&tables, "never_returning_calls").fresh, 1);
+
+    // The producer says the TypeScript table is the last build's: nothing
+    // moved, so nothing runs.
+    let mut same = project_over(source, entities());
+    same.typescript_changes = Some(solid_facts::TypeScriptChanges {
+        full: false,
+        unchanged: true,
+        ..Default::default()
+    });
+    let (answer, tables) = memo_build(&same, &store, &[], ask);
+    assert_eq!(answer, (1, false, false));
+    for name in [
+        "tuple_iteration_veto",
+        "objects_assigned_into",
+        "never_returning_calls",
+    ] {
+        let stats = stats_of(&tables, name);
+        assert_eq!(
+            (stats.reused, stats.fresh + stats.changed + stats.unchanged),
+            (1, 0),
+            "{name}: {stats:?}"
+        );
+        assert_eq!(stats.mismatches, 0, "{name}");
+    }
+
+    // A same-length body edit moves the program: the whole-program answers
+    // rerun and come out equal (cutoff); the edited file's own answer too.
+    let edited_source = source.replace("label = \"x\"", "label = \"y\"");
+    let mut edited = project_over(&edited_source, entities());
+    edited.typescript_changes = Some(solid_facts::TypeScriptChanges {
+        full: false,
+        unchanged: true,
+        ..Default::default()
+    });
+    let (answer, tables) = memo_build(&edited, &store, &[], ask);
+    assert_eq!(answer, (1, false, false));
+    let stats = stats_of(&tables, "tuple_iteration_veto");
+    assert_eq!(
+        (stats.unchanged, stats.changed, stats.mismatches),
+        (1, 0, 0),
+        "{stats:?}"
+    );
+    let stats = stats_of(&tables, "never_returning_calls");
+    assert_eq!(
+        (stats.unchanged, stats.changed, stats.mismatches),
+        (1, 0, 0)
+    );
+
+    // A new `eval` flips the veto.
+    let flipped_source = format!("{edited_source}eval(\"1\");\n");
+    let flipped = project_over(&flipped_source, entities());
+    let (answer, tables) = memo_build(&flipped, &store, &[], ask);
+    assert_eq!(answer, (1, true, false));
+    assert_eq!(stats_of(&tables, "tuple_iteration_veto").changed, 1);
+}
+
+/// [`memo_build`] that leaves the sweep to the caller
+/// ([`SemanticLookup::defer_end_memos`]): whether the build read a memo.
+fn memo_build_deferred<T>(
+    facts: &ProjectFacts,
+    store: &crate::base::memo::build::MemoStore,
+    body: impl FnOnce(&SemanticLookup<'_>) -> T,
+) -> (T, bool) {
+    let entities = entity_symbols(facts, &[]);
+    let ast_indexes = HashMap::default();
+    let symbol_names = HashMap::default();
+    let dialect = solid_dialect::Solid2;
+    let lookup = SemanticLookup::new(
+        facts,
+        &ast_indexes,
+        &entities,
+        &symbol_names,
+        &dialect,
+        false,
+    )
+    .with_memo_store(store);
+    let value = body(&lookup);
+    (value, lookup.defer_end_memos())
+}
+
+/// A sweep a build deferred is the sweep it would have run: the same entries
+/// go, run by `finish_deferred_end` or, when the caller never asks, by the
+/// next build's begin, which reads the store only after it. Without a memo
+/// read there is nothing to defer.
+#[test]
+fn a_deferred_sweep_is_the_sweep_run_later() {
+    let source = "declare function guard(message: string): never;\nfunction f() { guard(\"x\"); work(); }\nexport const label = \"x\";\n";
+    let facts = || {
+        project_over(
+            source,
+            vec![never_returning_entity(span_of(source, "guard", 1))],
+        )
+    };
+    let both = |lookup: &SemanticLookup<'_>| {
+        (
+            lookup.never_returning_calls().len(),
+            lookup.tuple_iteration_may_be_mutated(),
+        )
+    };
+    let one = |lookup: &SemanticLookup<'_>| lookup.never_returning_calls().len();
+    // The reference: the sweep runs when the build ends.
+    let immediate = crate::base::memo::build::MemoStore::new(true, true);
+    memo_build(&facts(), &immediate, &[], both);
+    let (_, immediate_second) = memo_build(&facts(), &immediate, &[], one);
+    assert_eq!(
+        stats_of(&immediate_second, "tuple_iteration_veto").entries,
+        0,
+        "the entry the second build did not ask for is swept"
+    );
+    let (_, immediate_third) = memo_build(&facts(), &immediate, &[], both);
+
+    // The same builds, the second one's sweep deferred and run by the caller.
+    let deferred = crate::base::memo::build::MemoStore::new(true, true);
+    memo_build(&facts(), &deferred, &[], both);
+    let (_, due) = memo_build_deferred(&facts(), &deferred, one);
+    assert!(due, "the build read a memo");
+    let report = deferred
+        .finish_deferred_end()
+        .expect("the build's sweep is due");
+    assert_eq!(report.tables, immediate_second);
+    assert!(deferred.finish_deferred_end().is_none(), "it runs once");
+    let (_, third) = memo_build(&facts(), &deferred, &[], both);
+    assert_eq!(third, immediate_third);
+
+    // The caller never asks: the next build's begin runs the sweep first.
+    let lazy = crate::base::memo::build::MemoStore::new(true, true);
+    memo_build(&facts(), &lazy, &[], both);
+    let (_, due) = memo_build_deferred(&facts(), &lazy, one);
+    assert!(due);
+    let (_, third) = memo_build(&facts(), &lazy, &[], both);
+    assert_eq!(third, immediate_third);
+    assert!(lazy.finish_deferred_end().is_none(), "begin ran it");
+
+    // A build that read no memo has nothing to sweep.
+    let silent = crate::base::memo::build::MemoStore::new(true, true);
+    let (_, due) = memo_build_deferred(&facts(), &silent, |_| ());
+    assert!(!due);
+    assert!(silent.finish_deferred_end().is_none());
+}
+
+/// A whole-program hazard asked in a recording is a recorded read (its
+/// probe's answer, `hand_outs`): a chunk that asked whether the program
+/// evaluates code reruns when that answer moves.
+#[test]
+fn a_hazard_question_is_a_recorded_read() {
+    for (source, expected) in [("eval(\"1\");\n", true), ("export const k = 1;\n", false)] {
+        let facts = project(source);
+        let store = crate::base::memo::build::MemoStore::new(true, true);
+        let ((present, reads), _) = memo_build(&facts, &store, &[], |lookup| {
+            lookup.begin_memos();
+            crate::base::reads::record(|| lookup.program_has_eval())
+        });
+        assert_eq!(present, expected, "{source}");
+        assert_eq!(reads.memos().len(), 1, "{source}: the hazard's probe");
     }
 }

@@ -10,7 +10,7 @@
 //! decide is withheld from call sites and reachability, so a finding that
 //! rested on it is uncertifiable, never a violation (ADR 0339).
 
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 
 use super::*;
 use crate::object_members::ModuleCensus;
@@ -21,8 +21,8 @@ type RunningBeforeDeclarator = HashMap<(String, Span), Arc<HashSet<Span>>>;
 
 #[derive(Default)]
 pub(super) struct State {
-    rejected: OnceLock<HashMap<String, HashSet<Span>>>,
-    census: OnceLock<ModuleCensus>,
+    rejected: crate::base::reads::Recorded<HashMap<String, HashSet<Span>>>,
+    census: crate::base::reads::Recorded<ModuleCensus>,
     file_refs: Mutex<HashMap<String, Arc<FileFunctionRefs>>>,
     running: Mutex<RunningBeforeDeclarator>,
 }
@@ -124,6 +124,19 @@ impl<'a> SemanticLookup<'a> {
     /// digest: another module's imports decide a mention here.
     pub(super) fn uninitialized_references(&self) -> &HashMap<String, HashSet<Span>> {
         self.initialization.rejected.get_or_init(|| {
+            self.whole_program_answer::<super::project_memos::UninitializedReferences>()
+                .into_iter()
+                .map(|(path, spans)| (path, spans.into_iter().collect()))
+                .collect()
+        })
+    }
+
+    /// The memo's computation: the withheld mentions by path, sorted. The
+    /// recursive `initialized_before` / `declaration_runs_after` proof runs
+    /// inside this one top-level answer (its working tables are scratch of the
+    /// call); the memo is keyed per program, a per-mention memo is study S7.
+    pub(super) fn compute_uninitialized_references(&self) -> Vec<(String, Vec<Span>)> {
+        {
             let mut scratch = Scratch::default();
             // Every mention of each function-valued binding, by binding.
             let mut mentions = Vec::<(usize, usize, usize, Span)>::new();
@@ -171,15 +184,21 @@ impl<'a> SemanticLookup<'a> {
                     .or_default()
                     .insert(span);
             }
-            rejected
-        })
+            let mut answer = rejected
+                .into_iter()
+                .map(|(path, spans)| {
+                    let mut spans = spans.into_iter().collect::<Vec<_>>();
+                    spans.sort_unstable();
+                    (path, spans)
+                })
+                .collect::<Vec<_>>();
+            answer.sort_unstable();
+            answer
+        }
     }
 
     fn files_by_path_index(&self, path: &str) -> Option<usize> {
-        self.facts
-            .files
-            .iter()
-            .position(|file| file.path.as_str() == path)
+        self.first_file_index(path)
     }
 
     fn declarator(file: &FileFacts, binding: &BindingFact) -> Option<Declarator> {
@@ -212,10 +231,22 @@ impl<'a> SemanticLookup<'a> {
         Some(position)
     }
 
-    pub(super) fn module_census(&self) -> &ModuleCensus {
+    /// [`ModuleCensus::new`] of the lookup's files, built once per build.
+    pub(crate) fn module_census(&self) -> &ModuleCensus {
         self.initialization
             .census
             .get_or_init(|| ModuleCensus::new(self.facts, self))
+    }
+
+    /// [`MemberStability::index`] of the lookup's files, built once per build.
+    ///
+    /// [`MemberStability::index`]: crate::interproc::accessor_provenance::MemberStability::index
+    pub(crate) fn member_stability(
+        &self,
+    ) -> &crate::interproc::accessor_provenance::MemberStability {
+        use crate::interproc::accessor_provenance::MemberStability;
+        self.member_stability
+            .get_or_init(|| MemberStability::index(self.facts, self))
     }
 
     /// Whether code at `span` in file `caller` runs after the declarator of

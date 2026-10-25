@@ -1430,6 +1430,7 @@ dependencies = [
 name = "solid-facts-backend"
 version = "0.1.0"
 dependencies = [
+ "memchr",
  "oxc-miette 2.7.1",
  "oxc_allocator 0.118.0",
  "oxc_ast 0.118.0",
@@ -1452,6 +1453,7 @@ dependencies = [
 name = "solid-reactive-ir"
 version = "0.1.0"
 dependencies = [
+ "parking_lot",
  "rustc-hash",
  "serde",
  "serde_json",

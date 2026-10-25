@@ -3,6 +3,7 @@
 //! omissions testable before they become missing diagnostics.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
@@ -11,7 +12,7 @@ use typefacts::v3::EntityDemand;
 use crate::dialect::Dialect;
 use crate::{
     BackendError, PrimitiveImports, SemanticDemandOptions, callee_property_location,
-    structural_accessor_spans, typefacts_location,
+    structural_accessor_spans,
 };
 
 pub(crate) fn plan(
@@ -50,13 +51,19 @@ fn add_symbol_span(symbol_spans: &mut HashMap<Span, bool>, span: Span, reference
         .or_insert(references);
 }
 
+/// The location of `span` in the file at `path`, sharing its path.
+fn file_location(path: &Arc<str>, span: Span) -> typefacts::Location {
+    span.location(Arc::clone(path))
+}
+
 fn plan_file(
     dialect: &'static Dialect,
     file: &FileFacts,
     options: SemanticDemandOptions,
     demands: &mut Vec<EntityDemand>,
 ) -> Result<(), BackendError> {
-    let path = file.path.to_string();
+    // One shared path for every demand of the file: each location holds it.
+    let path: Arc<str> = file.path.as_str().into();
     let structural_accessors = structural_accessor_spans(dialect, file);
     let mut spans = DemandSpans::default();
     // An expression-bodied arrow's return lives on its function fact, so both
@@ -361,7 +368,7 @@ fn collect_return_spans(
     file: &FileFacts,
     spans: &mut DemandSpans,
     demands: &mut Vec<EntityDemand>,
-    (path, returned_callees): (&str, &HashSet<Span>),
+    (path, returned_callees): (&Arc<str>, &HashSet<Span>),
 ) {
     let DemandSpans {
         symbol_spans,
@@ -389,7 +396,7 @@ fn collect_return_spans(
         if !returned_callees.contains(&call.callee) {
             continue;
         }
-        let mut planned = demand(typefacts_location(path, call.span));
+        let mut planned = demand(file_location(path, call.span));
         planned.call_result_domain = true;
         demands.push(planned);
     }
@@ -786,7 +793,7 @@ fn emit_span_demands(
     file: &FileFacts,
     spans: DemandSpans,
     demands: &mut Vec<EntityDemand>,
-    (path, structural_accessors): (&str, &HashSet<Span>),
+    (path, structural_accessors): (&Arc<str>, &HashSet<Span>),
     (import_bindings, import_references): (&HashSet<Span>, &HashSet<Span>),
 ) -> Result<(), BackendError> {
     let DemandSpans {
@@ -805,12 +812,12 @@ fn emit_span_demands(
     // otherwise undemanded uses (for example a typeof constructor wrapper).
     // Those observations can alter independent baseline dispatch findings.
     for reference in import_references {
-        let mut planned = demand(typefacts_location(path, *reference));
+        let mut planned = demand(file_location(path, *reference));
         planned.reference_space = true;
         demands.push(planned);
     }
     for (span, references) in symbol_spans {
-        let mut planned = demand(typefacts_location(path, span)).symbol(references);
+        let mut planned = demand(file_location(path, span)).symbol(references);
         planned.structural_accessor = structural_accessors.contains(&span);
         planned.r#async = async_symbol_spans.contains(&span);
         planned.type_descriptor = type_descriptor_spans.contains(&span);
@@ -850,14 +857,14 @@ fn emit_span_demands(
         demands.push(demand(location).symbol(false));
     }
     for span in &file.ast.awaits {
-        demands.push(demand(typefacts_location(path, *span)).async_context());
+        demands.push(demand(file_location(path, *span)).async_context());
     }
 
     // Async facts are consumed only for function-valued call arguments and
     // functions containing await. Query those exact locations instead of
     // using one call as a whole-file discovery trigger.
     for span in async_value_spans {
-        demands.push(demand(typefacts_location(path, span)).async_context());
+        demands.push(demand(file_location(path, span)).async_context());
     }
     Ok(())
 }
@@ -888,7 +895,7 @@ fn plan_call_demands(
     dialect: &'static Dialect,
     file: &FileFacts,
     demands: &mut Vec<EntityDemand>,
-    (path, returned_callees): (&str, &HashSet<Span>),
+    (path, returned_callees): (&Arc<str>, &HashSet<Span>),
 ) {
     let primitive_imports = PrimitiveImports::new(dialect, file);
     // The callbacks a leaf owner (`onSettled`, `createTrackedEffect`) runs,
@@ -920,7 +927,7 @@ fn plan_call_demands(
         .collect::<Vec<_>>();
     extend_leaf_demand_regions(file, &mut leaf_callbacks);
     for call in &file.ast.calls {
-        let callee = typefacts_location(path, call.callee);
+        let callee = file_location(path, call.callee);
         let property = callee_property_location(&file.source, &callee);
         let mut planned = demand(callee.clone()).symbol(false);
         // Signature-to-argument mapping is consumed when a call has an
@@ -1027,7 +1034,7 @@ fn plan_call_demands(
             .call_at(file.ast.peel_ts_sugar_span(call.callee))
             .is_some();
         if nested_callee && planned.resolved_call {
-            let mut outer = demand(typefacts_location(path, call.span));
+            let mut outer = demand(file_location(path, call.span));
             outer.resolved_call = true;
             demands.push(outer);
         }
