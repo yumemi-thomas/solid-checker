@@ -1,0 +1,4 @@
+{
+  "schemaVersion": 1,
+  "rules": { "reactive-read-after-await": { "enabled": true }, "uncalled-accessor": { "enabled": true }, "reactivity": { "enabled": false } }
+}
