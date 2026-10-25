@@ -183,6 +183,14 @@ impl SemanticLookup<'_> {
                     ))
                 }))
             }
+            (Probe::SymbolDescriptor, PolledKey::Text(symbol)) => ProbeAnswer::Rendered(
+                self.descriptor_by_symbol(symbol)
+                    .map(|descriptor| Arc::from(format!("{descriptor:?}"))),
+            ),
+            (Probe::SymbolCallability, PolledKey::Text(symbol)) => ProbeAnswer::Rendered(
+                self.callability_by_symbol(symbol)
+                    .map(|callability| Arc::from(format!("{callability:?}"))),
+            ),
             (Probe::DefinedReflectively, PolledKey::Text(name)) => {
                 ProbeAnswer::Flag(self.property_may_be_defined_reflectively_as(name))
             }

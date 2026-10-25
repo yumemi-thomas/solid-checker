@@ -64,6 +64,12 @@ pub(crate) enum Probe {
     PrototypeSites,
     /// Some reflective definer may define a property of a name. Text.
     DefinedReflectively,
+    /// The type descriptor another entity naming a symbol carries
+    /// (`smallest_contained_descriptor`'s last fallback). Text.
+    SymbolDescriptor,
+    /// The callability another entity naming a symbol carries
+    /// (`smallest_contained_callability`'s last fallback). Text.
+    SymbolCallability,
 }
 
 /// The key of a probe.
@@ -113,6 +119,8 @@ pub(crate) enum ProbeAnswer {
     Sites(Vec<(FileId, u32, u32)>),
     /// A binding (file, slot rank, ordinal) and the symbol of its name.
     Binding(Option<(FileId, u32, u32, Arc<str>)>),
+    /// A fact's value, rendered (`Debug`).
+    Rendered(Option<Arc<str>>),
 }
 
 /// What answers probes: the build's unported tables.
