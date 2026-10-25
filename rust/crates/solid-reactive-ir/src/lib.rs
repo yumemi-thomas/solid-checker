@@ -139,7 +139,7 @@ use execution_role::{
     named_callback_roles, semantic_execution_role,
 };
 use identity::{SymbolId, SymbolInterner, SymbolName, symbol_id, symbol_name};
-use indexes::{EntitySymbols, ProjectIndexes, SemanticLookup};
+use indexes::{EntityLocations, EntitySymbols, ProjectIndexes, SemanticLookup};
 use interproc::{SummaryNode, SummaryRead, SummaryReads};
 use serde::{Deserialize, Serialize};
 use solid_dialect::{Dialect, Primitive};

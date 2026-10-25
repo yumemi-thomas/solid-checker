@@ -464,9 +464,7 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(crate) fn entity_at(&self, path: &str, span: Span) -> Option<&'a EntityFact> {
-        self.entities_by_location()
-            .get(&(path, u64::from(span.start), u64::from(span.end)))
-            .copied()
+        self.entities.locations.at(path, span)
     }
 
     pub(crate) fn typescript_file(&self, path: &str) -> Option<&'a FileFact> {

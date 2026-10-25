@@ -99,8 +99,7 @@
   "rust/crates/solid-reactive-ir/src/indexes/components.rs": {
     "facts.files": 2,
     "files()": 2,
-    "file_by_path": 1,
-    "hashmap-iteration": 1
+    "file_by_path": 1
   },
   "rust/crates/solid-reactive-ir/src/indexes/compound.rs": {
     "facts.files": 1,

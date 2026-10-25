@@ -499,40 +499,9 @@ impl<'a> SemanticLookup<'a> {
         span: Span,
         predicate: impl Fn(&EntityFact) -> bool,
     ) -> Option<&'a EntityFact> {
-        let start = u64::from(span.start);
-        let end = u64::from(span.end);
-        let entities = self.contained_entities_by_path().get(path)?;
-        let first = entities.partition_point(|entity| entity.location.start_byte < start);
-        let last = entities.partition_point(|entity| entity.location.start_byte <= end);
-        entities[first..last]
-            .iter()
-            .enumerate()
-            .filter_map(|(index, entity)| {
-                (entity.location.end_byte <= end && predicate(entity)).then_some((index, *entity))
-            })
-            .min_by_key(|(index, entity)| {
-                (
-                    entity.location.end_byte - entity.location.start_byte,
-                    *index,
-                )
-            })
-            .map(|(_, entity)| entity)
-    }
-
-    fn contained_entities_by_path(&self) -> &HashMap<&'a str, Vec<&'a EntityFact>> {
-        self.contained_entities_by_path.get_or_init(|| {
-            let mut by_path = HashMap::<&str, Vec<&EntityFact>>::default();
-            for entity in self.facts.typescript.entities() {
-                by_path
-                    .entry(entity.location.path.as_ref())
-                    .or_default()
-                    .push(entity);
-            }
-            for entities in by_path.values_mut() {
-                entities.sort_by_key(|entity| entity.location.start_byte);
-            }
-            by_path
-        })
+        self.entities
+            .locations
+            .smallest_contained(path, span, predicate)
     }
 
     pub(super) fn functions_by_symbol(&self) -> &HashMap<&'a str, SymbolFunction> {
@@ -677,11 +646,6 @@ impl<'a> SemanticLookup<'a> {
             }
         }
         None
-    }
-
-    pub(crate) fn entities_by_location(&self) -> &HashMap<(&'a str, u64, u64), &'a EntityFact> {
-        self.entities_by_location
-            .get_or_init(|| super::first_entity_by_location(self.facts.typescript.entities()))
     }
 }
 

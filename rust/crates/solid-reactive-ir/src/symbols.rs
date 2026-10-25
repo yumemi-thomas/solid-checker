@@ -13,8 +13,8 @@ use solid_facts::{ProjectFacts, TypeScriptSymbol, TypeScriptTable};
 use typefacts::{Declaration, EntityFact, Location};
 
 use super::{
-    EntitySymbols, SymbolId, SymbolInterner, SymbolName, location, location_order, symbol_id,
-    symbol_name,
+    EntityLocations, EntitySymbols, SymbolId, SymbolInterner, SymbolName, location, location_order,
+    symbol_id, symbol_name,
 };
 use crate::cache::{
     CachedTypeScriptIndexes, SourceDiscoverySymbolFingerprint, SourceDiscoveryTypeScriptDelta,
@@ -438,6 +438,7 @@ pub(super) fn patch_typescript_indexes(
     for path in &changes.entity_paths {
         cache.entities.by_path.remove(path);
         cache.entities.exact_by_path.remove(path);
+        cache.entities.locations.replace_path(table, path);
         for entity in table.entities_for_path(path) {
             if entity.symbol.is_empty() {
                 continue;
@@ -451,6 +452,7 @@ pub(super) fn patch_typescript_indexes(
         }
     }
     let entities_elapsed = entities_started.elapsed();
+    verify_entity_locations(&mut cache.entities.locations, table);
     cache.source_discovery_delta = Some(SourceDiscoveryTypeScriptDelta {
         entity_paths: changes.entity_paths.iter().cloned().collect(),
         file_paths: changes.file_paths.iter().cloned().collect(),
@@ -458,6 +460,24 @@ pub(super) fn patch_typescript_indexes(
     });
 
     Some((alias_elapsed, entities_elapsed))
+}
+
+/// Under shadow mode (`SOLID_CHECKER_IR_SHADOW`): the patched entity locations
+/// are compared with ones built from the whole table. A difference is reported
+/// like any shadow finding and the fresh ones are served.
+fn verify_entity_locations(locations: &mut EntityLocations, table: &TypeScriptTable) {
+    let mode = crate::shadow::ShadowMode::from_env();
+    if mode == crate::shadow::ShadowMode::Off {
+        return;
+    }
+    let fresh = EntityLocations::of(table);
+    if *locations != fresh {
+        crate::shadow::report_message(
+            mode,
+            "entity location index mismatch: the patched index differs from one built from the whole table (served the fresh one)",
+        );
+        *locations = fresh;
+    }
 }
 
 /// The async-function alias chains of one project: an async function's symbol
@@ -503,6 +523,7 @@ pub(super) fn entity_symbols(
     let mut entities = EntitySymbols {
         by_path: HashMap::default(),
         exact_by_path: HashMap::default(),
+        locations: EntityLocations::of(table),
     };
     for entity in table.entities().filter(|entity| !entity.symbol.is_empty()) {
         let symbol = roots

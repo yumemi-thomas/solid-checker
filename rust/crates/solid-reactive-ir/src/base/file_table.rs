@@ -245,7 +245,6 @@ pub(crate) fn reference_rows(typescript: &TypeScriptTable) -> ReferenceRows {
 pub(crate) struct ViewSources<'a> {
     pub(crate) ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
     pub(crate) symbols: &'a EntitySymbols,
-    pub(crate) entities: &'a HashMap<(&'a str, u64, u64), &'a EntityFact>,
     pub(crate) typescript: &'a TypeScriptTable,
     pub(crate) references: &'a OnceLock<ReferenceRows>,
 }
@@ -318,10 +317,7 @@ impl<'a> FileView<'a> {
     }
 
     pub(crate) fn entity_at(&self, span: Span) -> Option<&'a EntityFact> {
-        self.sources
-            .entities
-            .get(&(self.path(), u64::from(span.start), u64::from(span.end)))
-            .copied()
+        self.sources.symbols.locations.at(self.path(), span)
     }
 
     /// [`crate::indexes::SemanticLookup::resolved_callee_call`] for a callee

@@ -332,6 +332,7 @@ fn entity_symbols(facts: &ProjectFacts) -> EntitySymbols {
     let mut symbols = EntitySymbols {
         by_path: HashMap::default(),
         exact_by_path: HashMap::default(),
+        locations: crate::indexes::EntityLocations::of(&facts.typescript),
     };
     for entity in facts.typescript.entities() {
         if entity.symbol.is_empty() {
@@ -357,7 +358,6 @@ fn check(project: &Project, retained: &mut Option<RetainedBase>) -> Option<usize
         .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
         .collect::<HashMap<_, _>>();
     let symbols = entity_symbols(&facts);
-    let entities = crate::indexes::first_entity_by_location(facts.typescript.entities());
     let references = OnceLock::new();
     let table = retained::table(retained, &facts.files);
     let views = Views {
@@ -366,7 +366,6 @@ fn check(project: &Project, retained: &mut Option<RetainedBase>) -> Option<usize
         sources: ViewSources {
             ast_indexes: &ast_indexes,
             symbols: &symbols,
-            entities: &entities,
             typescript: &facts.typescript,
             references: &references,
         },
@@ -644,7 +643,6 @@ fn a_contribution_reads_only_its_own_file() {
             .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
             .collect::<HashMap<_, _>>();
         let symbols = entity_symbols(&facts);
-        let entities = crate::indexes::first_entity_by_location(facts.typescript.entities());
         let references = OnceLock::new();
         let table = super::FileTable::new(&facts.files);
         let views = Views {
@@ -653,7 +651,6 @@ fn a_contribution_reads_only_its_own_file() {
             sources: ViewSources {
                 ast_indexes: &ast_indexes,
                 symbols: &symbols,
-                entities: &entities,
                 typescript: &facts.typescript,
                 references: &references,
             },
@@ -726,7 +723,6 @@ fn memo_build(project: &Project, store: &super::memo::build::MemoStore) -> Optio
         .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
         .collect::<HashMap<_, _>>();
     let symbols = entity_symbols(&facts);
-    let entities = crate::indexes::first_entity_by_location(facts.typescript.entities());
     let references = OnceLock::new();
     let table = store.table(&super::FileTable::new(&facts.files));
     let views = Views {
@@ -735,7 +731,6 @@ fn memo_build(project: &Project, store: &super::memo::build::MemoStore) -> Optio
         sources: ViewSources {
             ast_indexes: &ast_indexes,
             symbols: &symbols,
-            entities: &entities,
             typescript: &facts.typescript,
             references: &references,
         },
@@ -840,7 +835,6 @@ fn begin_over(
         .iter()
         .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
         .collect::<HashMap<_, _>>();
-    let entities = crate::indexes::first_entity_by_location(facts.typescript.entities());
     let references = OnceLock::new();
     let table = store.table(&super::FileTable::new(&facts.files));
     let views = Views {
@@ -849,7 +843,6 @@ fn begin_over(
         sources: ViewSources {
             ast_indexes: &ast_indexes,
             symbols,
-            entities: &entities,
             typescript: &facts.typescript,
             references: &references,
         },

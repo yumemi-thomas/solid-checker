@@ -40,6 +40,8 @@ mod hand_outs;
 pub(crate) use hand_outs::{
     HAND_OUT_TABLES, HAND_OUT_TABLES_END, HAND_OUT_TABLES_FROM, HandOutTables,
 };
+mod entity_locations;
+pub(crate) use entity_locations::EntityLocations;
 mod identity_wrappers;
 mod memo_probes;
 mod returned_invocations;
@@ -421,6 +423,9 @@ pub(super) struct EntitySymbols {
     /// The entries of `by_path` whose symbol names the whole span
     /// (`EntityFact::symbol_covers_span`).
     pub(super) exact_by_path: HashMap<String, PathSymbols>,
+    /// The entity rows themselves, by position (`EntityLocations`): patched
+    /// beside the symbols, for the same paths.
+    pub(super) locations: EntityLocations,
 }
 
 /// One path's entity symbols by span. Shared, and changed only through
@@ -761,23 +766,6 @@ pub(super) struct ResultAccessForwarded {
     pub(super) primitive: solid_dialect::Primitive,
 }
 
-/// The entity at each exact `(path, start_byte, end_byte)`: the first in
-/// `entities`' order when several share one location.
-pub(crate) fn first_entity_by_location<'a>(
-    entities: impl Iterator<Item = &'a EntityFact>,
-) -> HashMap<(&'a str, u64, u64), &'a EntityFact> {
-    let mut map = HashMap::default();
-    for entity in entities {
-        map.entry((
-            entity.location.path.as_ref(),
-            entity.location.start_byte,
-            entity.location.end_byte,
-        ))
-        .or_insert(entity);
-    }
-    map
-}
-
 /// Lazy project-wide lookups that replace repeated whole-project scans.
 ///
 /// Every map is built at most once per build, on first use, in the exact
@@ -840,9 +828,6 @@ pub(super) struct SemanticLookup<'a> {
     intrinsics: crate::base::reads::Recorded<intrinsics::Intrinsics>,
     /// ADR 0351: each member read that names a closed object literal's function.
     closed_members: crate::base::reads::Recorded<HashMap<(&'a str, Span), Span>>,
-    entities_by_location:
-        crate::base::reads::Recorded<HashMap<(&'a str, u64, u64), &'a EntityFact>>,
-    contained_entities_by_path: crate::base::reads::Recorded<HashMap<&'a str, Vec<&'a EntityFact>>>,
     descriptors_by_symbol: crate::base::reads::Recorded<HashMap<&'a str, &'a TypeDescriptor>>,
     callability_by_symbol: crate::base::reads::Recorded<HashMap<&'a str, Callability>>,
     symbols_by_id:
@@ -1175,8 +1160,6 @@ impl<'a> SemanticLookup<'a> {
             invocation_answers: returned_invocations::State::default(),
             intrinsics: crate::base::reads::Recorded::new(),
             closed_members: crate::base::reads::Recorded::new(),
-            entities_by_location: crate::base::reads::Recorded::new(),
-            contained_entities_by_path: crate::base::reads::Recorded::new(),
             descriptors_by_symbol: crate::base::reads::Recorded::new(),
             callability_by_symbol: crate::base::reads::Recorded::new(),
             symbols_by_id: crate::base::reads::Recorded::new(),
@@ -2075,7 +2058,6 @@ impl<'a> SemanticLookup<'a> {
             sources: crate::base::ViewSources {
                 ast_indexes: self.ast_indexes,
                 symbols: self.entities,
-                entities: self.entities_by_location(),
                 typescript: &self.facts.typescript,
                 references: &self.reference_rows,
             },

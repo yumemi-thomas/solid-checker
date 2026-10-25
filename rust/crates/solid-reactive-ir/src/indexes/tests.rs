@@ -73,6 +73,7 @@ fn entity_symbols(spans: &[(Span, &str)]) -> EntitySymbols {
     EntitySymbols {
         by_path: HashMap::from_iter([(PATH.to_string(), Arc::new(entries.clone()))]),
         exact_by_path: HashMap::from_iter([(PATH.to_string(), Arc::new(entries))]),
+        locations: EntityLocations::default(),
     }
 }
 
