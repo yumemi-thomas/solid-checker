@@ -191,6 +191,12 @@ impl SemanticLookup<'_> {
                 self.callability_by_symbol(symbol)
                     .map(|callability| Arc::from(format!("{callability:?}"))),
             ),
+            (Probe::DeclarationSymbolAt, PolledKey::FileSpan(id, span)) => ProbeAnswer::Symbols(
+                self.method_symbol_ref(path(*id), *span)
+                    .map(Arc::<str>::from)
+                    .into_iter()
+                    .collect(),
+            ),
             (Probe::DefinedReflectively, PolledKey::Text(name)) => {
                 ProbeAnswer::Flag(self.property_may_be_defined_reflectively_as(name))
             }

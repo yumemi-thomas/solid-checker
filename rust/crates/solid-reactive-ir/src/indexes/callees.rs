@@ -382,6 +382,18 @@ impl<'a> SemanticLookup<'a> {
         self.function_for_symbol(symbol)
     }
 
+    /// Records, for the computation recording, which symbol
+    /// [`Self::method_symbol_ref`] names at `span` of `path`: an entity of the
+    /// path, or else a resolved call's declaration in any file.
+    pub(crate) fn note_declaration_symbol_at(&self, path: &str, span: Span) {
+        if let Some(id) = self.memos.table().id_of(path) {
+            self.note_probe_read(
+                crate::base::memo::probes::Probe::DeclarationSymbolAt,
+                || crate::base::memo::probes::PolledKey::FileSpan(id, span),
+            );
+        }
+    }
+
     pub(super) fn method_symbol_ref(&self, path: &str, span: Span) -> Option<&'a str> {
         self.declaration_symbols
             .get_or_init(|| declaration_symbols(&self.facts.typescript))
