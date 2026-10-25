@@ -101,22 +101,6 @@ impl<'a> SemanticLookup<'a> {
         self.resolution_in(references, self.file_by_path(path), span)
     }
 
-    /// The symbol [`Self::binding_at_reference`] names at each of `spans` of
-    /// `path`, finding the path's resolutions once.
-    pub(crate) fn binding_symbols_at(&self, path: &str, spans: &[Span]) -> Vec<Option<SymbolId>> {
-        let Some(references) = self.bindings_by_reference().get(path) else {
-            return vec![None; spans.len()];
-        };
-        let file = self.file_by_path(path);
-        spans
-            .iter()
-            .map(|span| {
-                self.resolution_in(references, file, *span)
-                    .map(|resolution| resolution.symbol.clone())
-            })
-            .collect()
-    }
-
     fn resolution_in<'t>(
         &self,
         references: &'t HashMap<(u64, u64), BindingResolution>,
@@ -421,30 +405,6 @@ impl<'a> SemanticLookup<'a> {
         callee: Span,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
         super::callee_world::namespace_member_function_in(self, file, callee)
-    }
-
-    /// The exported value a static member of a namespace import names: what
-    /// [`Self::namespace_member_function`] reads of `file` alone. Must agree
-    /// with `callee_world::namespace_member_function_in`, which that method
-    /// delegates to (S7a's kept discovery rows read the two halves apart).
-    pub(crate) fn namespace_member_symbol(
-        &self,
-        file: &FileFacts,
-        callee: Span,
-    ) -> Option<&'a SymbolId> {
-        let property = super::callee_world::namespace_member_property(file, callee)?;
-        self.entities.at(file.path.as_str(), property)
-    }
-
-    /// [`Self::namespace_member_function`]'s answer from the member
-    /// symbol's function: what it reads of the function's file.
-    pub(crate) fn namespace_member_target(
-        &self,
-        found: Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)>,
-    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
-        found.filter(|(target_file, function)| {
-            super::callee_world::namespace_member_value_is_current(target_file, function)
-        })
     }
 
     pub(crate) fn function_for_symbol(

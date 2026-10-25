@@ -955,3 +955,73 @@ fn an_alias_that_stops_or_starts_naming_an_apply_primitive_in_another_file_is_no
     let function = project.rewrite("B.ts", FUNCTION_B);
     assert_retained_is_fresh(&mut builder, &function, &options, "function again");
 }
+
+/// ADR 0403, 0408: a post-pass row that names a function another file holds
+/// (pass 10's render targets, `trace::render_target`) asks
+/// `function_for_symbol`, which hands the row's proof the symbol's bucket of
+/// answers and the function's file; no `trace::Dep` records the answer
+/// again. (`binding_at_reference` likewise hands out the asking file's
+/// binding rows, every answer `resolution_in` reads besides that file's
+/// own AST, and the binding's file.) `C` turns `Panel` from a parenthesized
+/// function expression into an arrow with a same-length edit, so the
+/// declaration `A`'s rows name keeps its span and `A` is byte-identical and
+/// unchanged, while the function `Panel` names moves. `A`'s render row
+/// reruns (without the proof's reads it was kept: 3 row sets, not 2), and
+/// the retained build equals a fresh one.
+const RENDERS_A: &str =
+    "import { Panel } from \"./C\";\nexport function App() {\n  return <Panel x={1} />;\n}\n";
+const FUNCTION_PANEL_C: &str = "import { createEffect } from \"solid-js\";\nexport const Panel = (function (props: { x: number }) {\n  createEffect(() => props.x, () => {});\n  return <div />;\n});\n";
+const ARROW_PANEL_C: &str = "import { createEffect } from \"solid-js\";\nexport const Panel = (/****/(props: { x: number }) => {\n  createEffect(() => props.x, () => {});\n  return <div />;\n});\n";
+
+#[test]
+fn a_post_pass_row_reruns_when_the_function_a_tag_names_moves() {
+    assert_eq!(FUNCTION_PANEL_C.len(), ARROW_PANEL_C.len());
+    let Some(mut project) = Project::scratch_per_file(
+        "render-target",
+        &[("C.tsx", FUNCTION_PANEL_C), ("A.tsx", RENDERS_A)],
+    ) else {
+        return;
+    };
+    let options = RuleOptions::default();
+    let vocabulary = solid_v2().vocabulary;
+    let fresh = |facts: &ProjectFacts| {
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap()
+            .0
+    };
+    let mut builder = IncrementalBuilder::default();
+    let mut before = project.analyze();
+    assert_retained_is_fresh(&mut builder, &before, &options, "function");
+    for (label, source) in [
+        ("arrow", ARROW_PANEL_C),
+        ("function again", FUNCTION_PANEL_C),
+    ] {
+        let facts = project.rewrite("C.tsx", source);
+        assert!(
+            first_difference(&fresh(&before), &fresh(&facts)).is_some(),
+            "{label}: which function `Panel` names must change the program"
+        );
+        builder.set_shadow_mode(ShadowMode::Off);
+        let (retained, timings) = builder
+            .build_with_analysis_inputs_shared(
+                &facts,
+                vocabulary,
+                AnalysisInputs::empty(),
+                &options,
+            )
+            .unwrap();
+        if let Some(difference) = first_difference(&retained, &fresh(&facts)) {
+            panic!("{label}: {difference}");
+        }
+        assert_eq!(
+            timings.source_discovery_unchanged_files, 1,
+            "{label}: `A` is unchanged"
+        );
+        assert_eq!(
+            timings.source_post_pass_row_sets,
+            [2, 4],
+            "{label}: `C`'s three row sets and `A`'s render row rerun"
+        );
+        before = facts;
+    }
+}
