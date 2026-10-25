@@ -633,7 +633,10 @@ impl OwnerGraph {
         let touched = std::mem::take(&mut self.touched);
         let removed = std::mem::take(&mut self.removed);
         self.structural = false;
-        let cones = retain && self.candidates.is_empty() && self.leaf_edges == 0;
+        let cones = retain
+            && self.candidates.is_empty()
+            && self.leaf_edges == 0
+            && !crate::audit_off("owner_cones");
         let mut moved = if cones {
             self.solve_cones(&touched, &removed)
         } else {

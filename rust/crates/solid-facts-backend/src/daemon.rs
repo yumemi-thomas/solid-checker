@@ -1121,7 +1121,7 @@ impl State {
             return Ok(());
         };
         let graph = self.session.resolution_graph_of(paths, graph_kept)?;
-        if graph.unknown_import_paths.is_empty() {
+        if graph.unknown_import_paths.is_empty() && !solid_reactive_ir::audit_off("witness_extend") {
             witness.extend(&graph, tracked);
         } else {
             let graph = self.session.resolution_graph()?;
@@ -1701,7 +1701,7 @@ fn answer_with(
     // The witness and the cached answer are left until the answer is written
     // only for the retained state; a state dropped after this answer closes
     // its producer, which the witness asks.
-    let defer = producer == AfterFacts::Keep;
+    let defer = producer == AfterFacts::Keep && !solid_reactive_ir::audit_off("defer_after");
     let (sync, witness_pending) = state.resync(request)?;
     let changes = match sync {
         Sync::Rebuild => {
@@ -1810,7 +1810,7 @@ fn answer_with(
         // the old one, which goes). A witness the overlap did not check (the
         // exchange was retried, or failed) is checked here, as `resync` did
         // before.
-        let overlap = module_lines_kept(state, &changes);
+        let overlap = !solid_reactive_ir::audit_off("edit_overlap") && module_lines_kept(state, &changes);
         let edited_facts = if !overlap {
             // Checked first, as before: the overlap's file-system reads slow
             // a program rebuild down more than they save.

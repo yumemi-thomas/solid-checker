@@ -1158,6 +1158,7 @@ pub(super) fn build<'a, 'facts: 'a>(
     // key.
     if files.iter().any(|((_, rank), _)| *rank != 0)
         || !std::ptr::eq(resolver.names, lookup.symbol_names())
+        || crate::audit_off("resolver")
     {
         return resolver.fresh(timer);
     }

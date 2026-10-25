@@ -109,7 +109,7 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
     pub fn transported_calls(&self) -> (HashMap<Location, Callable>, HashSet<Location>) {
         let lookup = self.lookup;
         let store = lookup.memo_store();
-        if !served_this_build(store) {
+        if !served_this_build(store) || crate::audit_off("transport") {
             return self.calls();
         }
         let mut files = Vec::with_capacity(self.facts.files.len());

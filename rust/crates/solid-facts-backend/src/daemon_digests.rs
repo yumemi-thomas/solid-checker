@@ -91,7 +91,8 @@ fn content_hash_within(path: &Path, window: Duration) -> io::Result<[u8; 32]> {
         return Ok(Sha256::digest(fs::read(path)?).into());
     }
     let stamp = stamp_of(&before);
-    if let Ok(known) = memo().lock()
+    if !solid_reactive_ir::audit_off("digest_stamp")
+        && let Ok(known) = memo().lock()
         && let Some((recorded, hash)) = known.get(path)
         && *recorded == stamp
     {

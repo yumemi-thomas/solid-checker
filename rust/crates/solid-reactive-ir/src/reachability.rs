@@ -497,6 +497,7 @@ pub(super) fn reachability_stage(
         return Some(calls);
     };
     let can_reuse = inputs.typescript_unchanged
+        && !crate::audit_off("reach_chunks")
         && cache.as_ref().is_some_and(|cached| {
             cached.inputs.len() == facts.files.len()
                 && facts.files.iter().all(|file| {
@@ -592,10 +593,13 @@ pub(super) fn reachable_call_multiplicity_incremental(
     let mut reused_files = 0;
     let mut recomputed_files = 0;
     let mut recomputed_paths = HashSet::<String>::default();
-    let mut topology_unchanged = !multiplicity_by_path.is_empty() && removed_paths.is_empty();
+    let mut topology_unchanged = !multiplicity_by_path.is_empty()
+        && removed_paths.is_empty()
+        && !crate::audit_off("reach_chunks");
     let mut recomputed = Vec::new();
     for file in &facts.files {
         let reusable = (typescript_unchanged || typescript_delta.is_some())
+            && !crate::audit_off("reach_chunks")
             && cache.get(file.path.as_str()).is_some_and(|cached| {
                 source_discovery_identity_matches(
                     &cached.identity,

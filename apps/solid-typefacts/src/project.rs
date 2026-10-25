@@ -1047,7 +1047,7 @@ impl Project {
         // A parse-reusing update kept every other file's parse and
         // resolutions: only the modules that reach the edited file can export
         // something else.
-        let rescan = (reused && !global_exports)
+        let rescan = (reused && !global_exports && !typefacts::audit_off("export_scan"))
             .then(|| self.per_file.reuse.reaching(&clean(&incremental_path)))
             .flatten();
         // Every module rescanned: on the pass workers first.
@@ -1181,7 +1181,7 @@ impl Project {
         // it is now: nothing the earlier program resolved is kept then.
         Ok(UpdateOutcome {
             affected,
-            graph_kept: reused && !rebased,
+            graph_kept: reused && !rebased && !typefacts::audit_off("keep_attestation"),
         })
     }
 

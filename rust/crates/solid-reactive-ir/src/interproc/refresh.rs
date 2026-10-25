@@ -202,6 +202,9 @@ pub(super) fn refresh_member_invocation_contexts(
     let mut state = store
         .derived()
         .solver::<RefreshState, _>(REFRESH_STATE, |state, _| std::mem::take(state));
+    if crate::audit_off("refresh") {
+        state = RefreshState::default();
+    }
     if kept_refresh(
         context,
         nodes,

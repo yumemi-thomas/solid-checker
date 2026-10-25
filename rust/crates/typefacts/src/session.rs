@@ -1632,7 +1632,10 @@ impl Session {
         )?;
         let close_started = std::time::Instant::now();
         if response.timings.is_some_and(|timings| timings.materialized) {
-            let exact = (delta && !reset_state && response.reference_changes_exact)
+            let exact = (delta
+                && !reset_state
+                && response.reference_changes_exact
+                && !crate::audit_off("symbol_patch"))
                 .then_some(response.changed_reference_symbols.as_slice());
             let previous = self.retained_table.clone();
             let demand_paths = std::mem::take(&mut self.pending_demand_paths);
@@ -1761,7 +1764,12 @@ impl Session {
             self.closure_index = fresh_index;
             return Ok(fresh_changes);
         }
-        self.close_symbols_full(table, reference_locations, state_token, true)
+        self.close_symbols_full(
+            table,
+            reference_locations,
+            state_token,
+            !crate::audit_off("symbol_patch"),
+        )
     }
 
     fn close_symbols_full(

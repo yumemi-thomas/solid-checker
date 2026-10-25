@@ -1017,7 +1017,7 @@ impl ReusePlan {
     ) -> Self {
         let typescript_unchanged = typescript_unchanged(facts);
         let mut undecided = Vec::new();
-        let verdict = if typescript_unchanged {
+        let verdict = if typescript_unchanged && !crate::audit_off("late_aggregates") {
             late_stages
                 .as_deref()
                 .and_then(Option::as_ref)

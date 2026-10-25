@@ -452,6 +452,9 @@ pub(super) fn patch_typescript_indexes(
         }
     }
     let entities_elapsed = entities_started.elapsed();
+    if crate::audit_off("entity_index") {
+        cache.entities.locations = EntityLocations::of(table);
+    }
     verify_entity_locations(&mut cache.entities.locations, table);
     cache.source_discovery_delta = Some(SourceDiscoveryTypeScriptDelta {
         entity_paths: changes.entity_paths.iter().cloned().collect(),

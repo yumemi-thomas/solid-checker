@@ -396,6 +396,7 @@ pub(crate) fn find_missing_owners_incremental(
     let mut reused_proofs = Vec::new();
     for (file, pid) in files.iter().zip(&order) {
         if unchanged_paths.contains(file.path.as_str())
+            && !crate::audit_off("owner_chunks")
             && let Some(entry) = graph.file(*pid)
             && entry.fragment.source_hash == file.source_hash
             && entry.fragment.proof.holds(lookup)
@@ -459,6 +460,7 @@ pub(crate) fn find_missing_owners_incremental(
     let mut settled_gates = SettledGateDecisions::default();
     for (file, pid) in files.iter().zip(&order) {
         let reusable = !dirty.contains(pid)
+            && !crate::audit_off("owner_chunks")
             && emissions
                 .get(pid)
                 .is_some_and(|emission| inputs.holds(graph, *pid, emission));

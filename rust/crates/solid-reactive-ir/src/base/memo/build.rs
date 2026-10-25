@@ -717,6 +717,17 @@ where
     ) -> usize {
         let mut count = 0;
         match self.index.as_mut() {
+            Some(index) if crate::audit_off("kept_index") => {
+                let fresh = views.fold(contribute);
+                let delta = index.changed_keys(&fresh);
+                *index = fresh;
+                count = delta.len();
+                for key in delta {
+                    if let Some(key) = self.keys.ids.get(&key) {
+                        changed.push(Input::Index(id, *key));
+                    }
+                }
+            }
             Some(index) => {
                 let delta = index.update(
                     crate::pipeline::parallel_slice_results(changed_files, |file| {
@@ -1022,7 +1033,11 @@ impl MemoStore {
         let one_thread =
             crate::base::reads::cost::on().then(|| crate::pipeline::AnalysisWorkerLimit::enter(1));
         // The last build's parts are valid only against the table it kept.
-        let previous = base.typescript.as_ref().map(|_| &base.parts);
+        let previous = base
+            .typescript
+            .as_ref()
+            .filter(|_| !crate::audit_off("fingerprint_parts"))
+            .map(|_| &base.parts);
         let check = self.check_indexes;
         let costed = crate::pipeline::parallel_slice_results(&ids, |id| {
             let mut cost = [0; 5];
@@ -1106,6 +1121,7 @@ impl MemoStore {
             base.ids = views.table.ids().to_vec();
         }
         let project_moved = fresh
+            || crate::audit_off("project_input")
             || !changed_files.is_empty()
             || !removed.is_empty()
             || !typescript_unchanged
@@ -1311,7 +1327,13 @@ impl MemoStore {
                 let cost = asked.map_or(0, |asked| {
                     crate::base::reads::cost::now_ns().saturating_sub(asked)
                 });
-                (*input, *probe, fingerprint, fingerprint != *last, cost)
+                (
+                    *input,
+                    *probe,
+                    fingerprint,
+                    fingerprint != *last || crate::audit_off("probes_moved"),
+                    cost,
+                )
             });
         report.probe_ns = nanos(started.elapsed());
         drop(one_thread);

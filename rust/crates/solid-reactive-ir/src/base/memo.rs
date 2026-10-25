@@ -1252,6 +1252,7 @@ impl<S: Schema> Store<S> {
         let table = self.tables.table(table);
         // A clean entry answers as it is (verify-reused mode recomputes it).
         if !self.verify_reused
+            && !crate::audit_off("memo_reuse")
             && let Some(changed_at) = table.clean_changed_at(query, self.revision())
         {
             return Some(changed_at);
@@ -1322,6 +1323,9 @@ impl<S: Schema> Store<S> {
             };
             match found {
                 Some((CLEAN, first_use, value, changed_at, computed_at)) => {
+                    if computed_at != revision && crate::audit_off("memo_reuse") {
+                        return self.recompute::<M>(parent, query, key);
+                    }
                     if computed_at != revision && first_use {
                         AtomicStats::bump(&table.stats.reused);
                     }
@@ -1338,7 +1342,7 @@ impl<S: Schema> Store<S> {
                     if parent.frame.contains(query) {
                         return Err(self.cycle::<M>(parent, key));
                     }
-                    if self.reads_unchanged(parent, query, M::ID)? {
+                    if !crate::audit_off("memo_reuse") && self.reads_unchanged(parent, query, M::ID)? {
                         let data = table.shard(query).read().expect("memo table lock");
                         // Only this verification lowers maybe-dirty; the
                         // next turn answers the clean entry (its use is
@@ -1411,7 +1415,7 @@ impl<S: Schema> Store<S> {
                 Some(NodeKind::Input(_)) => {}
                 Some(NodeKind::Memo(dependency)) => {
                     let dependency = self.tables.table(dependency);
-                    let clean = if self.verify_reused {
+                    let clean = if self.verify_reused || crate::audit_off("memo_reuse") {
                         None
                     } else {
                         dependency.clean_changed_at(read, revision)

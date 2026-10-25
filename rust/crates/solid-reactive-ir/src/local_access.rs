@@ -595,6 +595,7 @@ impl LocalAccessContext<'_, '_> {
             for file in &self.facts.files {
                 if let Some(cached) = cache.files.get(file.path.as_str())
                     && exact_typescript_delta
+                    && !crate::audit_off("local_chunks")
                     && self.cached_matches(
                         file,
                         cached,

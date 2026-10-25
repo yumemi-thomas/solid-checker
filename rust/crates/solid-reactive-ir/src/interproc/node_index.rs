@@ -186,6 +186,9 @@ pub(super) fn node_index(
     let mut index = store
         .derived()
         .solver::<NodeIndex, _>(NODE_INDEX_STATE, |index, _| std::mem::take(index));
+    if crate::audit_off("node_index") {
+        index = NodeIndex::default();
+    }
     let check = store
         .check_solvers()
         .then(|| {

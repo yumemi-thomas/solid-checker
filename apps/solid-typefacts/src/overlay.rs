@@ -156,7 +156,7 @@ impl OverlayFs {
             .lookups
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if lookups.is_some() {
+        if lookups.is_some() || typefacts::audit_off("fs_lookups") {
             return BuildScope { fs: None };
         }
         *lookups = Some(Lookups {

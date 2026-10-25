@@ -375,7 +375,10 @@ pub(crate) fn scan_retained(
         roots: package_roots(facts),
         dependency_roots: facts.dependency_source_roots.clone(),
     };
-    if cache.basis.as_ref() != Some(&basis) || cache.table.is_none() {
+    if cache.basis.as_ref() != Some(&basis)
+        || cache.table.is_none()
+        || crate::audit_off("runtime_scan")
+    {
         *cache = ScanCache::default();
     }
     let previous_table = cache.table.take();

@@ -106,6 +106,7 @@ impl<T: Send + Sync> FileChunks<T> {
         let held_once = |file: &FileFacts| slots.get(file.path.as_str()) == Some(&1);
         let outcomes = crate::pipeline::parallel_slice_results(inputs.files, |file| {
             if inputs.unchanged_paths.contains(file.path.as_str())
+                && !crate::audit_off("late_chunks")
                 && held_once(file)
                 && let Some(chunk) = chunks.get(file.path.as_str())
                 && chunk.source_hash == file.source_hash

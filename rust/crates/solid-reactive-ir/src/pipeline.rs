@@ -315,6 +315,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             if cache
                 .get(file.path.as_str())
                 .is_some_and(|index| Arc::ptr_eq(&index.ast, &file.ast))
+                && !crate::audit_off("ast_index")
             {
                 continue;
             }
@@ -334,7 +335,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     let typescript_unchanged = crate::cache::typescript_unchanged(facts);
     let owned_typescript_indexes;
     let typescript_indexes = if let Some(cache) = typescript_indexes_cache {
-        let patch_timings = (!typescript_unchanged)
+        let patch_timings = (!typescript_unchanged && !crate::audit_off("ts_index_patch"))
             .then(|| {
                 cache.as_mut().and_then(|cached| {
                     facts.typescript_changes.as_ref().and_then(|changes| {

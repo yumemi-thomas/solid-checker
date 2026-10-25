@@ -1169,6 +1169,7 @@ impl LineStarts {
     fn of(&mut self, source: &SourceFile) -> Arc<[u32]> {
         if let Some((text, starts)) = self.by_path.get(source.path.as_str())
             && Arc::ptr_eq(text, &source.source)
+            && !solid_reactive_ir::audit_off("line_starts")
         {
             return Arc::clone(starts);
         }

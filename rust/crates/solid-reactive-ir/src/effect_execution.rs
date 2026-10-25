@@ -103,7 +103,8 @@ fn chunked<T: Clone>(
     if !kept {
         return compute();
     }
-    if let Some(chunk) = chunks.get(file.path.as_str())
+    if !crate::audit_off("effect_chunks")
+        && let Some(chunk) = chunks.get(file.path.as_str())
         && chunk.source_hash == file.source_hash
         && (std::sync::Arc::ptr_eq(&chunk.compiler, &file.compiler)
             || crate::cache::same_compiler_semantics(&chunk.compiler, &file.compiler))

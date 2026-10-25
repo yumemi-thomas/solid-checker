@@ -58,7 +58,14 @@ pub(crate) fn discover_sources(
     let store = ctx.semantic_lookup.memo_store();
     let mut kept = store.derived().solver::<super::post_passes::KeptPasses, _>(
         super::post_passes::POST_PASSES_STATE,
-        |kept, _| std::mem::take(kept),
+        |kept, _| {
+            let taken = std::mem::take(kept);
+            if crate::audit_off("post_passes") {
+                super::post_passes::KeptPasses::default()
+            } else {
+                taken
+            }
+        },
     );
     let mut tables = SourceTables::default();
     let (unchanged_paths, chunk_reads) = merge_file_source_contributions(
@@ -308,7 +315,9 @@ fn merge_file_source_contributions(
                             if identity {
                                 unchanged_paths.insert(file.path.to_string());
                             }
-                            identity && cached.proof.holds(semantic_lookup)
+                            identity
+                                && !crate::audit_off("discovery_chunks")
+                                && cached.proof.holds(semantic_lookup)
                         })
                         .then_some(file.path.as_str())
                 })

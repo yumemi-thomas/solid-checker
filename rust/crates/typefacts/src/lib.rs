@@ -1790,3 +1790,21 @@ fn is_zero_u32(value: &u32) -> bool {
 
 #[cfg(test)]
 mod tests;
+
+/// Layer audit (throwaway): `SC_AUDIT_OFF=a,b,...` makes the named reuse
+/// layers always miss and recompute.
+#[doc(hidden)]
+#[must_use]
+pub fn audit_off(name: &str) -> bool {
+    static OFF: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    OFF.get_or_init(|| {
+        std::env::var("SC_AUDIT_OFF")
+            .unwrap_or_default()
+            .split(',')
+            .map(|part| part.trim().to_owned())
+            .filter(|part| !part.is_empty())
+            .collect()
+    })
+    .iter()
+    .any(|part| part == name)
+}

@@ -859,7 +859,7 @@ impl Reuse {
         replaced: &HashSet<String>,
         export_changes: &HashSet<String>,
     ) -> bool {
-        if self.rebuilt || !self.enabled {
+        if self.rebuilt || !self.enabled || typefacts::audit_off("in_place") {
             return false;
         }
         let Some(graph) = &self.graph else {
@@ -1202,7 +1202,7 @@ impl Reuse {
         program: &Program,
         inputs: &mut ProgramInputs,
     ) -> Option<Arc<PassOutput>> {
-        if !work.reusable {
+        if !work.reusable || typefacts::audit_off("pass_reuse") {
             return None;
         }
         let entry = self.entries.get(&work.path)?;
@@ -1360,6 +1360,9 @@ impl Merged {
     /// Every id whose served row's alias-canonical id is in `canonical`
     /// (the same set as [`Merged::ids_with_canonical_scan`]).
     pub(crate) fn ids_with_canonical(&mut self, canonical: &HashSet<SymbolId>) -> Vec<SymbolId> {
+        if typefacts::audit_off("canonical_index") {
+            return self.ids_with_canonical_scan(canonical);
+        }
         let index = match self.canonical_index.take() {
             Some(index) => index,
             None => self.canonical_index_of_rows(),
@@ -1453,7 +1456,7 @@ impl Merged {
         outputs: Vec<Arc<PassOutput>>,
         verify_rows: bool,
     ) -> Result<MergeUpdate, SymbolId> {
-        let full = self.works != works;
+        let full = typefacts::audit_off("merge") || self.works != works;
         if full {
             self.keys = Arc::default();
             self.providers.clear();

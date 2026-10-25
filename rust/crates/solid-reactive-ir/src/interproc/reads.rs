@@ -831,6 +831,7 @@ fn discover_summary_graph_nodes<'a, 'c>(
         .iter()
         .filter_map(|file| {
             (unchanged_paths.contains(file.path.as_str())
+                && !crate::audit_off("graph_chunks")
                 && cache.get(file.path.as_str()).is_some_and(|cached| {
                     cached.proof.holds(*lookup)
                         && super::transport_reads::hold_accessors(&cached.accessor_reads, accessors)
@@ -1817,6 +1818,7 @@ fn collect_result_reads(
                 .collect::<HashSet<_>>();
             for file in &facts.files {
                 if unchanged_paths.contains(file.path.as_str())
+                    && !crate::audit_off("result_chunks")
                     && let Some(cached) = cache.files.get(file.path.as_str())
                     && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                         || same_compiler_semantics(&cached.compiler, &file.compiler))

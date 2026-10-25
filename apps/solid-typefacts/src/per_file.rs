@@ -952,7 +952,10 @@ impl Project {
             .or_else(|| state.stashed_index.take());
         state.stashed_current = false;
         let patched = kept.and_then(|mut index| {
-            if update.full || index.paths() != sorted_paths.as_slice() {
+            if update.full
+                || typefacts::audit_off("pass_index")
+                || index.paths() != sorted_paths.as_slice()
+            {
                 return None;
             }
             for (_, old, new) in &update.changed {
@@ -1132,8 +1135,11 @@ impl Project {
         index_patched: bool,
     ) -> (Vec<crate::model::RunAnswer>, bool) {
         let count = works.len();
-        let full =
-            update.full || !index_patched || !state.versions_valid || state.served.len() != count;
+        let full = typefacts::audit_off("deferred")
+            || update.full
+            || !index_patched
+            || !state.versions_valid
+            || state.served.len() != count;
         let mut again = vec![full; count];
         let mut flipped: HashSet<SymbolId> = HashSet::new();
         if full {
