@@ -20,9 +20,11 @@
 //! recorded `symbols` request that names one would ask the replaying producer
 //! about some other symbol, or none. Like a state token, such an id is
 //! translated: it is replaced by the id the replaying producer gave the entity
-//! at the same source location (the one the recorded producer gave it, in the
-//! preceding analyze tables), when that correspondence is unambiguous; any
-//! other id is sent as recorded. The entity tables are still compared as they
+//! at the same place (the same entity's symbol, or the same position inside
+//! another of its columns, such as a resolved call's target, in the preceding
+//! analyze tables; or the alias target of the row answered for an id already
+//! translated), when that correspondence is unambiguous; any other id is sent
+//! as recorded. The entity tables are still compared as they
 //! came, so a symbol that differs is reported there.
 //!
 //! With `TYPEFACTS_REPLAY_EVIDENCE=<file>` the replay also asks the producer,
@@ -212,6 +214,11 @@ fn replay(requests: &str, go_responses: &str, argv: &str, output: &str) -> Resul
         if canonicalize {
             payload = typefacts::encode(&request).map_err(|e| e.to_string())?;
         }
+        let recorded_ids: Vec<String> = request
+            .symbol_queries
+            .iter()
+            .map(|query| query.id.to_string())
+            .collect();
         let translated = id_map.translate(&mut request);
         if translated > 0 {
             rewritten_ids += translated;
@@ -268,6 +275,9 @@ fn replay(requests: &str, go_responses: &str, argv: &str, output: &str) -> Resul
                     go_tables.observe(request.operation, &recorded);
                     if request.operation == Operation::Analyze && response.ok && recorded.ok {
                         id_map.reconcile(&go_tables, &evidence.tables);
+                    }
+                    if request.operation == Operation::Symbols {
+                        id_map.reconcile_symbols(&recorded_ids, &recorded, &response);
                     }
                 }
                 captured.push(bytes);

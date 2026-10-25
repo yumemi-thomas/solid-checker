@@ -1310,6 +1310,11 @@ pub(crate) struct Merged {
     outputs: Vec<Arc<PassOutput>>,
     keys: Arc<TableKeys>,
     providers: HashMap<SymbolId, Vec<u32>>,
+    /// The served rows' alias-canonical ids, reversed: per canonical id, the
+    /// ids whose served row names it. Built by the first query after a merge
+    /// that started over, then moved by the served rows each update changes
+    /// ([`Merged::update`]); `None` until built.
+    canonical_index: Option<HashMap<SymbolId, Vec<SymbolId>>>,
     /// Whether the rows answer queries (false from a program change until
     /// the next table).
     pub(crate) serving: bool,
@@ -1352,8 +1357,24 @@ impl Merged {
         self.outputs.get(first as usize)?.row(id)
     }
 
-    /// Every id whose served row's alias-canonical id is in `canonical`.
-    pub(crate) fn ids_with_canonical(&self, canonical: &HashSet<SymbolId>) -> Vec<SymbolId> {
+    /// Every id whose served row's alias-canonical id is in `canonical`
+    /// (the same set as [`Merged::ids_with_canonical_scan`]).
+    pub(crate) fn ids_with_canonical(&mut self, canonical: &HashSet<SymbolId>) -> Vec<SymbolId> {
+        let index = match self.canonical_index.take() {
+            Some(index) => index,
+            None => self.canonical_index_of_rows(),
+        };
+        let ids = canonical
+            .iter()
+            .flat_map(|canonical| index.get(canonical).into_iter().flatten().cloned())
+            .collect();
+        self.canonical_index = Some(index);
+        ids
+    }
+
+    /// [`Merged::ids_with_canonical`] by scanning every id: the reference it
+    /// is verified against (`ENV_VERIFY_REUSE`, and every test build).
+    pub(crate) fn ids_with_canonical_scan(&self, canonical: &HashSet<SymbolId>) -> Vec<SymbolId> {
         self.providers
             .keys()
             .filter(|id| {
@@ -1362,6 +1383,46 @@ impl Merged {
             })
             .cloned()
             .collect()
+    }
+
+    /// The served rows' canonical ids, reversed, from every id.
+    fn canonical_index_of_rows(&self) -> HashMap<SymbolId, Vec<SymbolId>> {
+        let mut index: HashMap<SymbolId, Vec<SymbolId>> = HashMap::new();
+        for id in self.providers.keys() {
+            if let Some(row) = self.row(id) {
+                index
+                    .entry(row.canonical.clone())
+                    .or_default()
+                    .push(id.clone());
+            }
+        }
+        index
+    }
+
+    /// Moves `id` from the bucket of its served row's old canonical id to the
+    /// bucket of its new one (`None`: no served row).
+    fn reindex(
+        index: &mut HashMap<SymbolId, Vec<SymbolId>>,
+        id: &SymbolId,
+        before: Option<&SymbolId>,
+        after: Option<&SymbolId>,
+    ) {
+        if before == after {
+            return;
+        }
+        if let Some(canonical) = before
+            && let Some(ids) = index.get_mut(canonical)
+        {
+            if let Some(at) = ids.iter().position(|other| other == id) {
+                ids.swap_remove(at);
+            }
+            if ids.is_empty() {
+                index.remove(canonical);
+            }
+        }
+        if let Some(canonical) = after {
+            index.entry(canonical.clone()).or_default().push(id.clone());
+        }
     }
 
     /// Ids with a row.
@@ -1397,6 +1458,7 @@ impl Merged {
             self.keys = Arc::default();
             self.providers.clear();
             self.outputs.clear();
+            self.canonical_index = None;
         }
         let mut changed: Vec<(usize, Option<Arc<PassOutput>>)> = Vec::new();
         for (at, output) in outputs.iter().enumerate() {
@@ -1472,13 +1534,25 @@ impl Merged {
         }
         self.works = works;
         self.outputs = outputs;
-        let changed_rows = served_before.map(|before| {
-            before
-                .into_iter()
-                .filter(|(id, row)| self.row(id) != row.as_ref())
-                .map(|(id, _)| id)
-                .collect()
-        });
+        let changed_rows = match served_before {
+            Some(before) => {
+                let moved: Vec<(SymbolId, Option<Row>)> = before
+                    .into_iter()
+                    .filter(|(id, row)| self.row(id) != row.as_ref())
+                    .collect();
+                if self.canonical_index.is_some() {
+                    for (id, before) in &moved {
+                        let before = before.as_ref().map(|row| &row.canonical);
+                        let after = self.row(id).map(|row| row.canonical.clone());
+                        if let Some(index) = self.canonical_index.as_mut() {
+                            Self::reindex(index, id, before, after.as_ref());
+                        }
+                    }
+                }
+                Some(moved.into_iter().map(|(id, _)| id).collect())
+            }
+            None => None,
+        };
         let (mut rows_verified, mut row_mismatches) = (0, 0);
         if verify_rows {
             for (at, _) in &changed {
@@ -1518,5 +1592,96 @@ mod pool_size_tests {
             .map(super::pool_size)
             .collect();
         assert_eq!(sizes, [1, 2, 3, 4, 4, 4, 6, 12, 12]);
+    }
+}
+
+#[cfg(test)]
+mod canonical_index_tests {
+    use super::*;
+
+    fn symbol(name: &str) -> SymbolId {
+        Arc::from(name)
+    }
+
+    /// A pass output providing `(id, canonical)` rows, sorted by id as
+    /// `PassOutput::row` searches them.
+    fn output(rows: &[(usize, usize)], ids: &[SymbolId]) -> Arc<PassOutput> {
+        let mut rows = rows.to_vec();
+        rows.sort_unstable_by_key(|(id, _)| *id);
+        rows.dedup_by_key(|(id, _)| *id);
+        Arc::new(PassOutput {
+            rows: rows
+                .into_iter()
+                .map(|(id, canonical)| {
+                    let row = crate::per_file::Row {
+                        found: true,
+                        alias_target: ids[id].clone(),
+                        declarations: Arc::from(Vec::new()),
+                        canonical: ids[canonical].clone(),
+                    };
+                    (ids[id].clone(), row)
+                })
+                .collect(),
+            ..Default::default()
+        })
+    }
+
+    /// Random merges, incremental and starting over, with queries between
+    /// them: the reverse index answers every canonical set as the scan does.
+    #[test]
+    fn the_reverse_index_answers_what_the_scan_answers() {
+        const IDS: usize = 24;
+        const PASSES: usize = 5;
+        let ids: Vec<SymbolId> = (0..IDS).map(|i| symbol(&format!("s{i}"))).collect();
+        let mut works: Vec<WorkId> = (0..PASSES)
+            .map(|i| WorkId {
+                path: format!("f{i}.ts"),
+                run: true,
+                scan: false,
+                reusable: true,
+            })
+            .collect();
+        let mut outputs: Vec<Arc<PassOutput>> = (0..PASSES).map(|_| output(&[], &ids)).collect();
+        let mut merged = Merged::default();
+        // A small deterministic generator: the same cases on every run.
+        let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = move |bound: usize| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            usize::try_from(state % bound as u64).unwrap_or(0)
+        };
+        for step in 0..600 {
+            // A work list that changed starts the merge over.
+            if step % 97 == 96 {
+                let at = next(PASSES);
+                works[at].reusable = !works[at].reusable;
+            }
+            for _ in 0..=next(3) {
+                let at = next(PASSES);
+                let count = next(7);
+                let rows: Vec<(usize, usize)> =
+                    (0..count).map(|_| (next(IDS), next(IDS))).collect();
+                outputs[at] = output(&rows, &ids);
+            }
+            merged
+                .update(works.clone(), outputs.clone(), false)
+                .expect("no output has keys, so no key can collide");
+            // Queried on some edits only: the index is built lazily, then
+            // moved by every update that follows.
+            if step % 3 != 0 {
+                continue;
+            }
+            for _ in 0..3 {
+                let count = next(4);
+                let canonical: HashSet<SymbolId> =
+                    (0..=count).map(|_| ids[next(IDS)].clone()).collect();
+                let mut indexed = merged.ids_with_canonical(&canonical);
+                let mut scanned = merged.ids_with_canonical_scan(&canonical);
+                indexed.sort_unstable();
+                scanned.sort_unstable();
+                assert_eq!(indexed, scanned, "step {step}");
+            }
+        }
     }
 }

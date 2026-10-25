@@ -399,6 +399,7 @@ fn session_answers_the_module_graph_without_touching_retained_state() {
         import_paths: vec![SOURCE.to_owned()],
         packages: true,
         distinct_bare_imports: false,
+        omit_modules: false,
     });
     let modules = lifecycle(&mut session, modules_request);
     assert!(modules.ok, "modules response = {modules:?}");
@@ -448,4 +449,30 @@ fn session_fails_closed_when_the_backend_has_no_module_graph() {
         response.modules.is_empty(),
         "a failed modules response carried modules"
     );
+}
+
+/// `graphKept` is the backend's word about an update, carried to the client
+/// on the update's own answer and on no other.
+#[test]
+fn an_update_answer_carries_the_backends_graph_word() {
+    for kept in [false, true] {
+        let mut backend = source_backend();
+        backend.graph_kept = kept;
+        let mut session = session_over(backend);
+        let open = lifecycle(&mut session, lifecycle_request(1, Operation::Open, 1));
+        assert!(open.ok && !open.graph_kept, "{open:?}");
+        let mut update = lifecycle_request(2, Operation::Update, 2);
+        update.changes = vec![FileChange {
+            path: SOURCE.into(),
+            version: 1,
+            source: b"export const value = 2\n".to_vec(),
+            deleted: false,
+        }];
+        let answer = lifecycle(&mut session, update);
+        assert!(answer.ok, "{answer:?}");
+        assert_eq!(answer.graph_kept, kept);
+        let mut analyze = lifecycle_request(3, Operation::Analyze, 2);
+        analyze.reset_state = true;
+        assert!(!lifecycle(&mut session, analyze).graph_kept);
+    }
 }

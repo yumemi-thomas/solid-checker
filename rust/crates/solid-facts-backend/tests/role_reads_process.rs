@@ -135,9 +135,8 @@ fn retained_is_fresh(
         build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
             .unwrap();
     eprintln!(
-        "{label}: discovery {}/{} reachability {}/{} local {}/{} graph {}/{} results {}/{} owners {}/{}",
-        timings.source_discovery_reused_files,
-        timings.source_discovery_recomputed_files,
+        "{label}: discovery unchanged {} reachability {}/{} local {}/{} graph {}/{} results {}/{} owners {}/{}",
+        timings.source_discovery_unchanged_files,
         timings.reachability_reused_files,
         timings.reachability_recomputed_files,
         timings.local_access_reused_files,
@@ -211,8 +210,8 @@ fn a_callee_use_site_edit_in_another_file_moves_the_callers_roles() {
 /// ADR 0315: a callee that only tests an options property (`p.f && …`)
 /// runs nothing of it there; one that does not (`p.f || …`) leaves the
 /// literal unplaced. The edit flips one operator in the callee's file:
-/// every AST table the late stages compare keeps its value
-/// (`cache::late_stage_inputs_match`), and so does every Type Facts row.
+/// every AST table but the operator's keeps its value, and so does every
+/// Type Facts row.
 const TESTED_APP: &str = "import { createSignal } from \"solid-js\";\nimport { on } from \"./b\";\nexport function App() {\n  const [count] = createSignal(0);\n  on({ f: () => {\n    count();\n  } });\n  return <div />;\n}\n";
 const TESTED_AND: &str = "export function on(p: { f: () => void }) {\n  p.f && queueMicrotask(function () {\n    p.f();\n  });\n}\n";
 const TESTED_OR: &str = "export function on(p: { f: () => void }) {\n  p.f || queueMicrotask(function () {\n    p.f();\n  });\n}\n";

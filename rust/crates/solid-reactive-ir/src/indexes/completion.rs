@@ -27,8 +27,7 @@ impl<'a> SemanticLookup<'a> {
         function: &solid_facts::ast::FunctionFact,
         site: Span,
     ) -> bool {
-        self.never_returning_calls()
-            .get(file.path.as_str())
+        self.never_returning_calls_of(file.path.as_str())
             .is_some_and(|calls| {
                 // In the body or the parameter list (a default may call one),
                 // never in a nested function.
@@ -49,8 +48,7 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         function: &solid_facts::ast::FunctionFact,
     ) -> Vec<Span> {
-        self.never_returning_calls()
-            .get(file.path.as_str())
+        self.never_returning_calls_of(file.path.as_str())
             .map(|calls| {
                 calls
                     .iter()
@@ -114,8 +112,21 @@ impl<'a> SemanticLookup<'a> {
     /// per-file [`NeverReturning`] memos built once per build.
     pub(super) fn never_returning_calls(&self) -> &HashMap<&'a str, Vec<Span>> {
         crate::base::reads::note(crate::base::reads::Section::NeverReturning);
+        self.never_returning_call_map()
+    }
+
+    fn never_returning_call_map(&self) -> &HashMap<&'a str, Vec<Span>> {
         self.never_returning_calls
             .get_or_init(|| crate::base::reads::suppress(|| self.never_returning_calls_uncached()))
+    }
+
+    /// The `never` and `asserts` calls of `path`: a read of the path's
+    /// [`NeverReturning`] memo, not of every path's.
+    fn never_returning_calls_of(&self, path: &str) -> Option<&Vec<Span>> {
+        if !self.note_never_returning_of(path) {
+            crate::base::reads::note(crate::base::reads::Section::NeverReturning);
+        }
+        self.never_returning_call_map().get(path)
     }
 
     fn never_returning_calls_uncached(&self) -> HashMap<&'a str, Vec<Span>> {
@@ -152,136 +163,121 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
-    /// The memo's computation: every `(path, function, parameter)` called on
-    /// the function's every completion, sorted. The forwards fixed point
-    /// reads the whole program (study S7 moves it onto its cone).
+    /// The memo's computation straight from the lookup: every `(path,
+    /// function, parameter)` called on the function's every completion,
+    /// sorted. Each slot's part ([`Self::parameter_completion_slot`]) and
+    /// the forwards' fixed point ([`parameter_completion_fixpoint`]), as
+    /// the memos compute them.
     pub(super) fn compute_parameter_completion_calls(&self) -> Vec<(String, Span, usize)> {
+        let slots = self
+            .facts
+            .files
+            .iter()
+            .map(|file| (file.path.as_str(), self.parameter_completion_slot(file)))
+            .collect::<Vec<_>>();
+        parameter_completion_fixpoint(slots.iter().map(|(path, slot)| (*path, slot)))
+    }
+
+    /// One file's part of ADR 0277's answer: the parameters its functions
+    /// call on their every completion, and the calls that pass a parameter
+    /// on unchanged to another function on every completion (ADR 0285),
+    /// each with the exact function-declaration callee it reaches, if any.
+    /// Nothing under a direct `eval`, which can write any parameter it sees
+    /// (review round 1 of ADR 0285).
+    pub(super) fn parameter_completion_slot(&self, file: &'a FileFacts) -> CompletionSlot {
+        let mut slot = CompletionSlot::default();
+        if file
+            .ast
+            .module_hazards
+            .iter()
+            .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
+            || file.ast.calls.iter().any(|call| {
+                file.source_text(file.ast.peel_ts_sugar_span(call.callee)) == Some("eval")
+            })
         {
-            let facts: &'a ProjectFacts = self.facts;
-            let mut calls = HashSet::default();
-            // ADR 0285: calls passing a parameter on to another function.
-            let mut forwards = Vec::new();
-            for file in &facts.files {
-                // Direct `eval` can write any parameter it sees (review
-                // round 1 of ADR 0285).
-                if file
-                    .ast
-                    .module_hazards
-                    .iter()
-                    .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
-                    || file.ast.calls.iter().any(|call| {
-                        file.source_text(file.ast.peel_ts_sugar_span(call.callee)) == Some("eval")
-                    })
+            return slot;
+        }
+        let mut parameters = HashMap::<&str, (Span, usize)>::default();
+        for function in &file.ast.functions {
+            if function.r#async || function.generator {
+                continue;
+            }
+            for (index, parameter) in function.parameters.iter().enumerate() {
+                if parameter.shape != solid_facts::ast::BindingShape::Identifier {
+                    continue;
+                }
+                let Some(name) = parameter.names.first() else {
+                    continue;
+                };
+                // A written parameter may hold a replacement by the time it
+                // is called (`cb = () => 0; cb()`).
+                if binding_written(file, name.span) {
+                    continue;
+                }
+                if let Some(symbol) = self.entities().at(file.path.as_str(), name.span) {
+                    parameters.insert(symbol.as_str(), (function.span, index));
+                }
+            }
+        }
+        if parameters.is_empty() {
+            return slot;
+        }
+        let mut calls = HashSet::<(Span, usize)>::default();
+        for call in &file.ast.calls {
+            let Some(&(function, index)) = self
+                .callee_symbol(file, call.callee)
+                .and_then(|symbol| parameters.get(symbol))
+            else {
+                continue;
+            };
+            if crate::owners::containing_ast_function(&file.ast, call.span)
+                .is_some_and(|owner| owner.span == function)
+                && crate::interproc::site_on_every_completion(self, file, function, call.span)
+            {
+                calls.insert((function, index));
+            }
+        }
+        for call in &file.ast.calls {
+            for (position, argument) in call.arguments.iter().enumerate() {
+                let span = file.ast.peel_ts_sugar_span(argument.span);
+                if argument.spread
+                    || file
+                        .ast
+                        .identifiers
+                        .binary_search_by_key(&span, |identifier| identifier.span)
+                        .is_err()
                 {
                     continue;
                 }
-                let mut parameters = HashMap::<&str, (Span, usize)>::default();
-                for function in &file.ast.functions {
-                    if function.r#async || function.generator {
-                        continue;
-                    }
-                    for (index, parameter) in function.parameters.iter().enumerate() {
-                        if parameter.shape != solid_facts::ast::BindingShape::Identifier {
-                            continue;
-                        }
-                        let Some(name) = parameter.names.first() else {
-                            continue;
-                        };
-                        // A written parameter may hold a replacement by the
-                        // time it is called (`cb = () => 0; cb()`).
-                        if binding_written(file, name.span) {
-                            continue;
-                        }
-                        if let Some(symbol) = self.entities().at(file.path.as_str(), name.span) {
-                            parameters.insert(symbol.as_str(), (function.span, index));
-                        }
-                    }
-                }
-                if parameters.is_empty() {
+                let Some(&(function, index)) = self
+                    .entities()
+                    .at(file.path.as_str(), span)
+                    .and_then(|symbol| parameters.get(symbol.as_str()))
+                else {
                     continue;
-                }
-                for call in &file.ast.calls {
-                    let Some(&(function, index)) = self
-                        .callee_symbol(file, call.callee)
-                        .and_then(|symbol| parameters.get(symbol))
-                    else {
-                        continue;
-                    };
-                    if crate::owners::containing_ast_function(&file.ast, call.span)
-                        .is_some_and(|owner| owner.span == function)
-                        && crate::interproc::site_on_every_completion(
-                            self, file, function, call.span,
-                        )
-                    {
-                        calls.insert((file.path.as_str(), function, index));
-                    }
-                }
-                for call in &file.ast.calls {
-                    for (position, argument) in call.arguments.iter().enumerate() {
-                        let span = file.ast.peel_ts_sugar_span(argument.span);
-                        if argument.spread
-                            || file
-                                .ast
-                                .identifiers
-                                .binary_search_by_key(&span, |identifier| identifier.span)
-                                .is_err()
-                        {
-                            continue;
-                        }
-                        let Some(&(function, index)) = self
-                            .entities()
-                            .at(file.path.as_str(), span)
-                            .and_then(|symbol| parameters.get(symbol.as_str()))
-                        else {
-                            continue;
-                        };
-                        if crate::owners::containing_ast_function(&file.ast, call.span)
-                            .is_some_and(|owner| owner.span == function)
-                            && crate::interproc::site_on_every_completion(
-                                self, file, function, call.span,
-                            )
-                        {
-                            forwards.push((file, call, position, function, index));
-                        }
-                    }
-                }
-            }
-            // ADR 0285: `function f(cb) { g(cb) }` calls `cb` on every
-            // completion when the call is on f's every-completion path, the
-            // argument is the parameter itself, unchanged, at an exactly
-            // mapped position, and `g` calls that position on every
-            // completion. `g` must be a function declaration: a `const`
-            // callee may be in its temporal dead zone (ADR 0218). To a
-            // fixpoint, so a chain of forwards composes.
-            let mut changed = true;
-            while changed {
-                changed = false;
-                for &(file, call, position, function, index) in &forwards {
-                    let key = (file.path.as_str(), function, index);
-                    if calls.contains(&key) {
-                        continue;
-                    }
-                    let forwarded = crate::execution_role::project_callee_at_parameter(
+                };
+                if crate::owners::containing_ast_function(&file.ast, call.span)
+                    .is_some_and(|owner| owner.span == function)
+                    && crate::interproc::site_on_every_completion(self, file, function, call.span)
+                {
+                    // `g` must be a function declaration: a `const` callee
+                    // may be in its temporal dead zone (ADR 0218).
+                    let target = crate::execution_role::project_callee_at_parameter(
                         file, call, position, self,
                     )
-                    .is_some_and(|(callee_file, callee, exact)| {
-                        exact
-                            && callee.kind == solid_facts::ast::FunctionKind::Declaration
-                            && calls.contains(&(callee_file.path.as_str(), callee.span, position))
-                    });
-                    if forwarded {
-                        calls.insert(key);
-                        changed = true;
-                    }
+                    .filter(|(_, callee, exact)| {
+                        *exact && callee.kind == solid_facts::ast::FunctionKind::Declaration
+                    })
+                    .map(|(callee_file, callee, _)| (callee_file.path.to_string(), callee.span));
+                    slot.forwards.push((function, index, position, target));
                 }
             }
-            let mut answer = calls
-                .into_iter()
-                .map(|(path, span, index)| (path.to_owned(), span, index))
-                .collect::<Vec<_>>();
-            answer.sort_unstable();
-            answer
         }
+        slot.calls = calls.into_iter().collect();
+        slot.calls.sort_unstable();
+        slot.forwards.sort_unstable();
+        slot.forwards.dedup();
+        slot
     }
 
     /// The arguments in `path` that a project function forwards, unchanged,
@@ -340,4 +336,64 @@ impl<'a> SemanticLookup<'a> {
             })
         })
     }
+}
+
+/// One file's part of ADR 0277's answer ([`SemanticLookup::parameter_completion_slot`]).
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct CompletionSlot {
+    /// `(function, parameter)` the function calls on its every completion.
+    calls: Vec<(Span, usize)>,
+    /// `(function, parameter, position, callee)`: the function passes the
+    /// parameter, unchanged, at `position` of a call on its every
+    /// completion, to the exact function declaration `callee` (`None`: no
+    /// such callee, so the forward proves nothing).
+    forwards: Vec<(Span, usize, usize, ForwardCallee)>,
+}
+
+/// The exact function declaration a forward reaches: its file and span.
+type ForwardCallee = Option<(String, Span)>;
+
+impl crate::base::memo::Canonical for CompletionSlot {}
+
+/// ADR 0285: `function f(cb) { g(cb) }` calls `cb` on every completion when
+/// the call is on f's every-completion path, the argument is the parameter
+/// itself, unchanged, at an exactly mapped position, and `g` calls that
+/// position on every completion. To a fixpoint, so a chain of forwards
+/// composes; the least fixpoint does not depend on the slots' order.
+pub(super) fn parameter_completion_fixpoint<'s>(
+    slots: impl IntoIterator<Item = (&'s str, &'s CompletionSlot)>,
+) -> Vec<(String, Span, usize)> {
+    let mut calls = HashSet::<(&str, Span, usize)>::default();
+    let mut forwards = Vec::new();
+    for (path, slot) in slots {
+        calls.extend(
+            slot.calls
+                .iter()
+                .map(|&(function, index)| (path, function, index)),
+        );
+        for (function, index, position, target) in &slot.forwards {
+            if let Some((target_path, target_span)) = target {
+                forwards.push((
+                    (path, *function, *index),
+                    (target_path.as_str(), *target_span, *position),
+                ));
+            }
+        }
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (key, target) in &forwards {
+            if !calls.contains(key) && calls.contains(target) {
+                calls.insert(*key);
+                changed = true;
+            }
+        }
+    }
+    let mut answer = calls
+        .into_iter()
+        .map(|(path, span, index)| (path.to_owned(), span, index))
+        .collect::<Vec<_>>();
+    answer.sort_unstable();
+    answer
 }

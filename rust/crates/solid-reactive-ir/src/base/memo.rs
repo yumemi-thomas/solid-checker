@@ -899,7 +899,7 @@ pub(crate) struct Invalidation {
 /// A schema's memo tables, their read graph, and the current revision.
 pub(crate) struct Store<S: Schema> {
     tables: S::Tables,
-    graph: Mutex<Graph<S::Input>>,
+    graph: RwLock<Graph<S::Input>>,
     /// The next query id's sequence number ([`Self::allocate`]).
     next: AtomicU32,
     /// The interned inputs, split by hash ([`input_shard`]).
@@ -920,7 +920,7 @@ impl<S: Schema> Store<S> {
     pub(crate) fn new(verify_reused: bool, report: fn(&str)) -> Self {
         Self {
             tables: S::Tables::default(),
-            graph: Mutex::default(),
+            graph: RwLock::default(),
             next: AtomicU32::new(0),
             inputs: Box::new(std::array::from_fn(|_| Mutex::default())),
             records: Box::new(std::array::from_fn(|_| Mutex::default())),
@@ -1130,7 +1130,7 @@ impl<S: Schema> Store<S> {
         for table in self.tables.tables() {
             table.clear();
         }
-        let mut graph = self.graph.lock().expect("memo graph lock");
+        let mut graph = self.graph.write().expect("memo graph lock");
         *graph = Graph::default();
         for shard in self.inputs.iter() {
             *shard.lock().expect("memo input lock") = Interned::default();
@@ -1179,8 +1179,8 @@ impl<S: Schema> Store<S> {
     /// recorded since the last call moved into the graph (each record in
     /// its shard's order: a query's records are all in its own shard).
     /// Locks are taken graph, then input or record shard.
-    fn synced_graph(&self) -> parking_lot::MutexGuard<'_, Graph<S::Input>> {
-        let mut graph = self.graph.lock().expect("memo graph lock");
+    fn synced_graph(&self) -> parking_lot::RwLockWriteGuard<'_, Graph<S::Input>> {
+        let mut graph = self.graph.write().expect("memo graph lock");
         // Shard by shard: an input's id and a record's query are in the
         // graph shard of their own shard.
         each_shard(
@@ -1382,15 +1382,18 @@ impl<S: Schema> Store<S> {
     /// Whether every memo `query` read answers with the revision recorded,
     /// each brought up to date in recorded order (stopping at the first that
     /// changed: a recomputation may no longer read the rest). Input reads
-    /// need no check: a changed input made the entry dirty.
+    /// need no check: a changed input made the entry dirty. A read that is
+    /// clean answers as it is, without its key or its value cloned (verify-
+    /// reused mode recomputes it, as in [`Self::changed_at`]).
     fn reads_unchanged(
         &self,
         parent: &Ctx<'_, '_, S>,
         query: QueryId,
         table: TableId,
     ) -> Result<bool, Cycle> {
+        let revision = self.revision();
         let reads = {
-            let graph = self.graph.lock().expect("memo graph lock");
+            let graph = self.graph.read().expect("memo graph lock");
             let Some(node) = graph.node(&query) else {
                 return Ok(false);
             };
@@ -1407,10 +1410,16 @@ impl<S: Schema> Store<S> {
                 None => return Ok(false),
                 Some(NodeKind::Input(_)) => {}
                 Some(NodeKind::Memo(dependency)) => {
-                    let current = self
-                        .tables
-                        .table(dependency)
-                        .ensure(self, &verifying, read)?;
+                    let dependency = self.tables.table(dependency);
+                    let clean = if self.verify_reused {
+                        None
+                    } else {
+                        dependency.clean_changed_at(read, revision)
+                    };
+                    let current = match clean {
+                        Some(changed_at) => Some(changed_at),
+                        None => dependency.ensure(self, &verifying, read)?,
+                    };
                     if current.map(u64::from) != Some(fingerprint) {
                         return Ok(false);
                     }
@@ -1609,7 +1618,7 @@ impl<S: Schema> Store<S> {
         AtomicStats::bump(&table.stats.mismatches);
         self.poisoned.store(true, Ordering::Release);
         let recorded = {
-            let graph = self.graph.lock().expect("memo graph lock");
+            let graph = self.graph.read().expect("memo graph lock");
             graph
                 .node(&query)
                 .map(|node| {

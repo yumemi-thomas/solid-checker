@@ -13,8 +13,8 @@ use solid_facts::{ProjectFacts, TypeScriptSymbol, TypeScriptTable};
 use typefacts::{Declaration, EntityFact, Location};
 
 use super::{
-    EntitySymbols, SymbolId, SymbolInterner, SymbolName, location, location_order, symbol_id,
-    symbol_name,
+    EntityLocations, EntitySymbols, SymbolId, SymbolInterner, SymbolName, location, location_order,
+    symbol_id, symbol_name,
 };
 use crate::cache::{
     CachedTypeScriptIndexes, SourceDiscoverySymbolFingerprint, SourceDiscoveryTypeScriptDelta,
@@ -315,6 +315,42 @@ pub(super) fn patch_typescript_indexes(
     if !alias_graph_is_local {
         return None;
     }
+    // An id the table holds before and after keeps its root. One that gains
+    // or loses an alias target (or whose target's root moves) moves the root
+    // of every entity row that names it, in any path, and the delta names
+    // only the paths whose rows changed: an unedited file that reads the id
+    // through a namespace member keeps byte-identical rows (final review R2,
+    // finding 1). Only new and removed ids (an edited import) move a root.
+    let changed_targets = current_targets
+        .iter()
+        .map(|(id, target)| (id.as_str(), *target))
+        .collect::<HashMap<_, _>>();
+    let current_target = |id: &str| {
+        changed_targets
+            .get(id)
+            .copied()
+            .unwrap_or_else(|| cache.symbol_alias_targets.get(id).map(SymbolId::as_str))
+    };
+    let keeps_root = |id: &str, old_root: &str| {
+        let mut root = id;
+        for _ in 0..=cache.symbol_alias_targets.len() + changed_targets.len() {
+            let Some(next) = current_target(root) else {
+                break;
+            };
+            root = next;
+        }
+        root == old_root
+    };
+    let retained_roots_kept = current_targets.iter().all(|(id, _)| {
+        cache
+            .aliases
+            .get(id.as_str())
+            .filter(|_| symbols_by_id.contains_key(id.as_str()))
+            .is_none_or(|old_root| keeps_root(id, old_root))
+    });
+    if !retained_roots_kept {
+        return None;
+    }
 
     let mut semantic_symbol_ids = changes
         .symbol_ids
@@ -438,6 +474,7 @@ pub(super) fn patch_typescript_indexes(
     for path in &changes.entity_paths {
         cache.entities.by_path.remove(path);
         cache.entities.exact_by_path.remove(path);
+        cache.entities.locations.replace_path(table, path);
         for entity in table.entities_for_path(path) {
             if entity.symbol.is_empty() {
                 continue;
@@ -451,6 +488,9 @@ pub(super) fn patch_typescript_indexes(
         }
     }
     let entities_elapsed = entities_started.elapsed();
+    if !patch_matches_rebuild(cache, table) {
+        return None;
+    }
     cache.source_discovery_delta = Some(SourceDiscoveryTypeScriptDelta {
         entity_paths: changes.entity_paths.iter().cloned().collect(),
         file_paths: changes.file_paths.iter().cloned().collect(),
@@ -458,6 +498,40 @@ pub(super) fn patch_typescript_indexes(
     });
 
     Some((alias_elapsed, entities_elapsed))
+}
+
+/// Under shadow mode (`SOLID_CHECKER_IR_SHADOW`): the patched alias roots
+/// and entity indexes (symbols by span, exact symbols, locations) are
+/// compared with ones built from the whole table. A difference is reported
+/// like any shadow finding, and the patch is refused, so the caller serves a
+/// rebuild. The patch runs only without runtime redirects, so the rebuild
+/// here takes none.
+fn patch_matches_rebuild(cache: &CachedTypeScriptIndexes, table: &TypeScriptTable) -> bool {
+    let mode = crate::shadow::ShadowMode::from_env();
+    if mode == crate::shadow::ShadowMode::Off {
+        return true;
+    }
+    let (aliases, _) = alias_roots_and_source_declarations(
+        table,
+        &cache.interner,
+        &std::collections::HashMap::default(),
+    );
+    let differing = if cache.aliases != aliases {
+        "alias roots"
+    } else if cache.entities.locations != EntityLocations::of(table) {
+        "entity locations"
+    } else if cache.entities != entity_symbols(table, &aliases, &cache.interner) {
+        "entity symbols"
+    } else {
+        return true;
+    };
+    crate::shadow::report_message(
+        mode,
+        &format!(
+            "TypeScript index patch mismatch: the patched {differing} differ from ones built from the whole table (served a rebuild)"
+        ),
+    );
+    false
 }
 
 /// The async-function alias chains of one project: an async function's symbol
@@ -503,6 +577,7 @@ pub(super) fn entity_symbols(
     let mut entities = EntitySymbols {
         by_path: HashMap::default(),
         exact_by_path: HashMap::default(),
+        locations: EntityLocations::of(table),
     };
     for entity in table.entities().filter(|entity| !entity.symbol.is_empty()) {
         let symbol = roots

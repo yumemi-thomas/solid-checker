@@ -21,18 +21,36 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const FILE_BUDGETS = {
   "AGENTS.md": 8_000,
   "CLAUDE.md": 1_000,
-  // Raised for ADR 0383's latent-key item.
-  "docs/open-work.md": 27_750,
+  // Raised for ADR 0383's latent-key item, and for ADR 0413.
+  // Raised for ADR 0414 (the file stood 28,428 bytes before its two entries);
+  // for ADR 0415 (the file stood 29,958 bytes).
+  // and for ADR 0419 (the file stood 30,082 bytes).
+  "docs/open-work.md": 30_400,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for
-  // ADRs 0382-0400; and for ADRs 03XX-cold-cost and 03XX-edit-residual.
-  "docs/decisions.md": 156_600,
+  // ADRs 0382-0400; and for ADRs 0411 and 0412; and
+  // for ADR 0413 (the file stood 158,880 bytes); and for ADR 0414
+  // (the file stood 160,518 bytes); and for ADR 0415 (the file stood 163,911 bytes);
+  // and for ADR 0416 (the file stood 163,998 bytes before its entry);
+  // and for ADR 0418 (the file stood 166,991 bytes before its entry); and for
+  // ADR 0419 (the file stood 170,124 bytes before its entry and one edit); and for
+  // ADR 0420 (the file stood 173,980 bytes before its entry); and for
+  // ADR 0421 (the file stood 176,343 bytes before its entry).
+  "docs/decisions.md": 179_000,
 };
 
 export const GROUP_BUDGETS = [
   // Raised from 600_000 for ADRs 0382-0404 (instant-edits track), and for
-  // ADRs 03XX-cold-cost and 03XX-edit-residual.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 626_000 },
+  // ADRs 0411 and 0412, and for ADR 0413
+  // (the group stood 628,977 bytes); for ADR 0414 (the group stood 631,357); and for
+  // ADR 0415 (the group stood 635,538 bytes); and for ADR 0416
+  // (the group stood 635,458 bytes before the entry, which added 2,578); and for ADR 0418
+  // (the group stood 638,451 bytes before the entry and the open-work lines, which added 3,696); and for
+  // ADR 0419 (the group stood 642,147 bytes before its entry, the open-work edit and the
+  // protocol notes, which added 4,638); and for ADR 0420 (the group stood 646,785 bytes before
+  // its entry, which added 2,363); and for ADR 0421 (the group stood 649,148 bytes before
+  // its entry, which added 2,250).
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 651_800 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),

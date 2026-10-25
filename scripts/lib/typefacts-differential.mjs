@@ -57,6 +57,15 @@ export function mapStrings(value, fn) {
   return value;
 }
 
+/** `forEachString` with each string's JSON pointer below `at`. */
+function forEachStringAt(value, at, fn) {
+  if (typeof value === "string") fn(value, at);
+  else if (Array.isArray(value)) value.forEach((item, index) => forEachStringAt(item, `${at}/${index}`, fn));
+  else if (value && typeof value === "object") {
+    for (const [key, item] of Object.entries(value)) forEachStringAt(item, `${at}/${key}`, fn);
+  }
+}
+
 function forEachString(value, fn) {
   if (typeof value === "string") fn(value);
   else if (Array.isArray(value)) for (const item of value) forEachString(item, fn);
@@ -146,43 +155,105 @@ export function normalizeTranscript(transcript, evidence = [], { canonicalIds = 
   // declaration paths take the same `bundled:///` spelling as the rest.
   proofs(mapStrings(evidence, normalizeBundled));
 
-  // (3) signatures for the remaining non-durable ids
+  // (3) content signatures for the remaining ids, best tier first:
+  //   decl@  a symbol row's first declaration (the row may sit in the
+  //          transcript or in the producer's evidence, its own answer to
+  //          "declare this id", which is never compared);
+  //   site@  an object that carries the id as `symbol` beside its own
+  //          `location` (or `declaration.location`) and `name`, such as a
+  //          resolved call's declaration or parameter: a call signature has
+  //          no declaration row but has a site;
+  //   use@   the first entity whose `symbol` it is;
+  //   other@ the id itself (no content found: a difference stays visible).
+  // Within a tier the smallest signature wins.
+  const TIERS = ["decl@", "site@", "use@", "other@"];
+  const tierOf = (signature) => TIERS.findIndex((prefix) => signature.startsWith(prefix));
   const signatures = new Map(); // id -> signature
+  const declarationLists = new Map(); // id -> every project declaration, sorted
   const noteSignature = (id, signature) => {
     const known = signatures.get(id);
-    if (known === undefined || (signature < known && !known.startsWith("decl@"))) {
+    if (
+      known === undefined ||
+      tierOf(signature) < tierOf(known) ||
+      (tierOf(signature) === tierOf(known) && signature < known)
+    ) {
       signatures.set(id, signature);
     }
   };
+  const declare = (row) => {
+    if (typeof row?.id !== "string" || libIds.has(row.id)) return;
+    const decls = declarationsOf(row)
+      .filter((d) => !isLibPath(d.location?.path))
+      .map((d) => `decl@${locationKey(d.location)}:${d.name}`)
+      .sort();
+    if (decls.length === 0) return;
+    noteSignature(row.id, decls[0]);
+    const list = decls.join("|");
+    if (!declarationLists.has(row.id) || list < declarationLists.get(row.id)) declarationLists.set(row.id, list);
+  };
+  const sites = (value) => {
+    if (Array.isArray(value)) {
+      for (const item of value) sites(item);
+    } else if (value && typeof value === "object") {
+      const id = typeof value.symbol === "string" ? value.symbol : null;
+      const site = value.location ?? value.declaration?.location;
+      const name = value.name ?? value.declaration?.name;
+      if (id && site && (value.symbol.match(idPattern) ?? [])[0] === id) {
+        noteSignature(id, `site@${locationKey(site)}:${name ?? ""}`);
+      }
+      for (const item of Object.values(value)) sites(item);
+    }
+  };
+  // Where each id is used: entity location, column and the place inside it
+  // (a resolved call's `target` against its `declaration.symbol`). Two ids
+  // with the same declarations (a shorthand property and its binding, a
+  // method and its signature) are told apart by their uses, not by their
+  // spelling.
+  const uses = new Map(); // id -> Set of use coordinates
+  for (const { response } of exchanges) {
+    if (response) for (const row of symbolRows(response)) declare(row);
+  }
+  for (const row of mapStrings(evidence, normalizeBundled)) declare(row);
   for (const { response } of exchanges) {
     if (!response) continue;
-    for (const row of symbolRows(response)) {
-      if (libIds.has(row.id)) continue;
-      const decls = declarationsOf(row).map(
-        (d) => `decl@${locationKey(d.location)}:${d.name}`
-      );
-      if (decls.length > 0) signatures.set(row.id, decls.sort()[0]);
-    }
     for (const entity of response.table?.entities ?? []) {
+      const where = locationKey(entity.location);
+      for (const [column, value] of Object.entries(entity)) {
+        if (column === "location") continue;
+        forEachStringAt(value, `${where}:${column}`, (text, pointer) => {
+          for (const id of text.match(idPattern) ?? []) {
+            if (!uses.has(id)) uses.set(id, new Set());
+            uses.get(id).add(pointer);
+          }
+        });
+        if (column !== "symbol") sites(value);
+      }
       if (typeof entity.symbol === "string") {
-        for (const id of entity.symbol.match(idPattern) ?? []) {
-          if (!signatures.has(id)) noteSignature(id, `use@${locationKey(entity.location)}`);
-        }
+        for (const id of entity.symbol.match(idPattern) ?? []) noteSignature(id, `use@${where}`);
       }
     }
     forEachString(response, (text) => {
-      for (const id of text.match(idPattern) ?? []) {
-        if (!signatures.has(id)) noteSignature(id, `other@${id}`);
-      }
+      for (const id of text.match(idPattern) ?? []) noteSignature(id, `other@${id}`);
     });
   }
   const seen = new Map();
   const renames = new Map();
-  // Ids sharing a signature (one declaration, several ids) are numbered hashed
-  // before counter, then by id; a counter's own spelling is a visit order.
+  // Ids sharing a signature (one first declaration, several ids) are numbered
+  // by their whole declaration list, then by their uses, and only then by
+  // spelling: hashed before counter, then by id. Ids equal in all of these
+  // are interchangeable in every cell that names them by use.
   const rank = (id) => (canonicalIds && id.startsWith("symbol:h:") ? 0 : 1);
-  const ordered = [...signatures.entries()].sort((a, b) =>
-    a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : rank(a[0]) - rank(b[0]) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)
+  const usesOf = (id) => [...(uses.get(id) ?? [])].sort().join("|");
+  const tieKey = new Map(
+    [...signatures.keys()].map((id) => [id, `${declarationLists.get(id) ?? ""}\u0000${usesOf(id)}`])
+  );
+  const compareText = (x, y) => (x < y ? -1 : x > y ? 1 : 0);
+  const ordered = [...signatures.entries()].sort(
+    (a, b) =>
+      compareText(a[1], b[1]) ||
+      compareText(tieKey.get(a[0]), tieKey.get(b[0])) ||
+      rank(a[0]) - rank(b[0]) ||
+      compareText(a[0], b[0])
   );
   for (const [id, signature] of ordered) {
     const count = seen.get(signature) ?? 0;
