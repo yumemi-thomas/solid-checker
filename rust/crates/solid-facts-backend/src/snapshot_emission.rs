@@ -129,7 +129,6 @@ pub(crate) fn emit(
 const COVERAGE_RULES: &[&str] = &[
     "package-behavior-unavailable",
     "reactive-dispatch-unresolved",
-    "reactive-source-uncaptured",
     "unaudited-solid-release",
 ];
 

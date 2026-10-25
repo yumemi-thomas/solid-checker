@@ -356,16 +356,18 @@ test("per-rule surface: every discovered catalog identity is an ESLint rule", ()
     assert.ok(!entry.name.includes("/"), `v2 stays unprefixed: ${entry.name}`);
   }
   assert.equal(v2.namespace, "");
-  // The dialect config enables exactly its default-enabled catalog, less the
-  // opt-in unavailable-package-behavior rule (ADR 0248), plus the certification switch-off
-  // that keeps it composable with `recommended` and the note rule every
-  // shipped config carries.
+  // The dialect config enables exactly its default-enabled catalog, plus the
+  // certification switch-off that keeps it composable with `recommended` and
+  // the note rule every shipped config carries. An obligation (SC9005, SC9012)
+  // has no manifest entry and so no key (ADR 0398).
   assert.equal(
     Object.keys(plugin.configs.v2.rules).length,
-    v2.rules.filter(entry => entry.defaultEnabled && entry.name !== "package-behavior-unavailable")
-      .length + 2
+    v2.rules.filter(entry => entry.defaultEnabled).length + 2
   );
-  assert.equal(plugin.configs.v2.rules["solid-checker/package-behavior-unavailable"], undefined);
+  for (const obligation of plugin._testing.retiredRuleKeys) {
+    assert.equal(plugin.configs.v2.rules[`solid-checker/${obligation}`], undefined);
+    assert.ok(!v2.rules.some(entry => entry.name === obligation));
+  }
   assert.equal(plugin.configs.v2.rules["solid-checker/certification"], "off");
   assert.equal(plugin.configs.v2.rules["solid-checker/contract-note"], "warn");
 });
@@ -398,7 +400,7 @@ test("preference configs and recommendation metadata follow generated catalogs",
       );
       assert.equal(
         `solid-checker/${entry.name}` in plugin.configs[catalog.config].rules,
-        entry.defaultEnabled && entry.name !== "package-behavior-unavailable"
+        entry.defaultEnabled
       );
     }
   }
@@ -576,17 +578,25 @@ test("a former name of a merged rule reports and owns its own code only (ADR 038
   assert.equal(plugin._testing.ownedRules.size, 0);
 });
 
-test("the former SC9005 rule name still loads and maps to package-behavior-unavailable", () => {
+test("the keys of SC9005, SC9011 and SC9012 still load and do nothing (ADR 0398)", () => {
+  for (const name of [
+    "package-behavior-unavailable",
+    "package-contract-incomplete",
+    "reactive-dispatch-unresolved",
+    "reactive-source-uncaptured"
+  ]) {
+    assert.ok(plugin._testing.retiredRuleKeys.includes(name), name);
+    const retired = plugin.rules[name];
+    assert.ok(retired, name);
+    assert.equal(retired.meta.deprecated, true);
+    assert.deepEqual(retired.meta.replacedBy, []);
+    // It registers nothing and reports nothing, whatever the snapshot holds.
+    assert.deepEqual(retired.create({}), {});
+  }
   assert.ok(
-    plugin._testing.deprecatedRuleKeys.some(
-      ([oldName, currentName]) =>
-        oldName === "package-contract-incomplete" && currentName === "package-behavior-unavailable"
-    )
+    !plugin._testing.deprecatedRuleKeys.some(([oldName]) => oldName === "package-contract-incomplete"),
+    "it no longer delegates to a rule"
   );
-  const old = plugin.rules["package-contract-incomplete"];
-  assert.ok(old);
-  assert.equal(old.meta.deprecated, true);
-  assert.deepEqual(old.meta.replacedBy, ["package-behavior-unavailable"]);
 });
 
 test("recommended followed by a dialect config reports each finding once", () => {
@@ -743,16 +753,17 @@ test("a project-scoped finding is reported on every linted file, not matched by 
 });
 
 test("a finding collapsed over a package export is reported in every file holding a site", () => {
-  // An SC9005 finding is collapsed over the whole project: its related
-  // locations are further sites, not context.
+  // A finding of a package subject (SC9005's shape, though SC9005 is an
+  // internal obligation and has no rule of its own, ADR 0398) is collapsed over
+  // the whole project: its related locations are further sites, not context.
   // A per-file reporter must still see it in each file that has one, once, at
   // that file's first site.
   // A violation, because uncertifiable findings are internal and never
   // reported (`internal findings are never reported` below); the collapse
   // depends on the subject kind alone.
   const collapsed = {
-    id: "SC9005",
-    rule: "package-behavior-unavailable",
+    id: "SC1001",
+    rule: "strict-read-untracked",
     kind: "violation",
     severity: "warning",
     message: "pkg is not analyzed from source here, so the behaviour of imported export run is unknown; " +
@@ -767,7 +778,7 @@ test("a finding collapsed over a package export is reported in every file holdin
   };
   const snapshot = { status: "uncertifiable", findings: [collapsed] };
   const text = "0123456789ab";
-  const rule = "package-behavior-unavailable";
+  const rule = "strict-read-untracked";
 
   // The per-rule rule reports it; the catch-all leaves findings a
   // per-rule rule owns to that rule.
@@ -816,6 +827,34 @@ test("internal findings are never reported, project notices are", () => {
   const all = run(snapshot, "/tmp/app/App.ts", text);
   assert.equal(all.length, 1);
   assert.match(all[0].data.message, /^\[SC9014\] unaudited release/);
+});
+
+test("a proven compiler refusal is reported in its own file, an unproven one in every file (ADR 0399)", () => {
+  const text = "0123456789ab";
+  const refusal = {
+    id: "SC9015",
+    rule: "compiler-refused-source",
+    kind: "violation",
+    severity: "error",
+    message: "the pinned Solid 2 compiler refuses /tmp/app/Refused.tsx",
+    subjectKind: "file",
+    primaryLocation: { path: "/tmp/app/Refused.tsx", startByte: 0, endByte: 0 }
+  };
+  const snapshot = { status: "violation", findings: [refusal] };
+  const own = run(snapshot, "/tmp/app/Refused.tsx", text, "compiler-refused-source");
+  assert.equal(own.length, 1);
+  assert.match(own[0].data.message, /^\[SC9015\] the pinned Solid 2 compiler refuses/);
+  assert.equal(run(snapshot, "/tmp/app/Other.tsx", text, "compiler-refused-source").length, 0);
+
+  const notice = {
+    ...refusal,
+    kind: "uncertifiable",
+    severity: "warning",
+    subjectKind: "project",
+    message: "the Solid compiler refused /tmp/app/Refused.tsx"
+  };
+  const noticed = { status: "uncertifiable", findings: [notice] };
+  assert.equal(run(noticed, "/tmp/app/Other.tsx", text, "compiler-refused-source").length, 1);
 });
 
 function finding(id, rule, start, end) {

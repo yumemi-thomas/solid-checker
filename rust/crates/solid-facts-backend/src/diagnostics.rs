@@ -594,9 +594,10 @@ pub fn analyze_project_inputs_measured_with_enablement(
         .analyze_inputs_measured_with_enablement(project, sources, facts, inputs, enablement)
 }
 
-/// Drops the findings of disabled rules. Returns the dropped findings of
-/// coverage rules (`RuleMetadata::uncertifiable`: SC9005, SC9011, SC9012),
-/// which report where the analysis is incomplete rather than a defect.
+/// Drops the findings of disabled rules. Returns the dropped uncertifiable
+/// findings (`RuleMetadata::uncertifiable`), which report where the analysis is
+/// incomplete rather than a defect. An obligation (SC9005, SC9012) is never
+/// dropped: it has no key to disable it (ADR 0398).
 fn retain_enabled(
     dialect: &Dialect,
     options: &RuleOptions,
@@ -606,13 +607,15 @@ fn retain_enabled(
     let mut withheld_coverage = Vec::new();
     for finding in std::mem::take(findings) {
         match (dialect.rule_metadata)(&finding.rule) {
+            // An obligation has no key, so nothing disables it (ADR 0398).
             Some(metadata)
-                if options.is_enabled_for_code(
-                    &finding.rule,
-                    &finding.id,
-                    metadata.default_enabled,
-                    metadata.presets,
-                ) =>
+                if !metadata.configurable
+                    || options.is_enabled_for_code(
+                        &finding.rule,
+                        &finding.id,
+                        metadata.default_enabled,
+                        metadata.presets,
+                    ) =>
             {
                 findings.push(finding);
             }
@@ -792,6 +795,7 @@ pub fn unaudited_release_finding(notice: &dialect::ReleaseNotice) -> Finding {
         severity: "warning",
         uncertifiable: true,
         default_enabled: true,
+        configurable: true,
         presets: &[],
     };
     let mut finding = Finding::new(metadata, message, location);
@@ -844,6 +848,7 @@ pub fn unaudited_router_finding(
         severity: "warning",
         uncertifiable: true,
         default_enabled: true,
+        configurable: true,
         presets: &[],
     };
     let mut finding = Finding::new(metadata, message, location.clone());
@@ -900,6 +905,7 @@ pub fn compiler_refused_finding(
         severity: if proven { "error" } else { "warning" },
         uncertifiable: !proven,
         default_enabled: true,
+        configurable: true,
         presets: &[],
     };
     let mut finding = if proven {

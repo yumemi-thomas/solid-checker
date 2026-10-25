@@ -18,7 +18,6 @@ pub enum Rule {
     UncalledAccessor,
     ExpectedFunctionGotExpression,
     NoStoreMutationOutsideSetter,
-    ReactiveSourceUncaptured,
     ReactiveDispatchUnresolved,
     ComponentPropsDestructure,
     ComponentReturnsConditionally,
@@ -76,13 +75,12 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 33] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
         Self::ExpectedFunctionGotExpression,
         Self::NoStoreMutationOutsideSetter,
-        Self::ReactiveSourceUncaptured,
         Self::ReactiveDispatchUnresolved,
         Self::ComponentPropsDestructure,
         Self::ComponentReturnsConditionally,
@@ -128,9 +126,9 @@ impl Rule {
                 "warning",
                 false,
             ),
-            Self::ReactiveSourceUncaptured => {
-                ("SC9011", "reactive-source-uncaptured", "warning", true)
-            }
+            // ADR 0398: SC9012 and SC9005 are obligations, not rules. SC9012
+            // also carries what SC9011 (`reactive-source-uncaptured`) was, as
+            // the context `package-callee`; no key configures either.
             Self::ReactiveDispatchUnresolved => {
                 ("SC9012", "reactive-dispatch-unresolved", "warning", true)
             }
@@ -274,6 +272,10 @@ impl Rule {
             severity,
             uncertifiable,
             default_enabled: true,
+            configurable: !matches!(
+                self,
+                Self::PackageBehaviorUnavailable | Self::ReactiveDispatchUnresolved
+            ),
             presets: if preference { &["preferences"] } else { &[] },
         }
     }

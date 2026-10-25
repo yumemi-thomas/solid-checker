@@ -1,6 +1,15 @@
 # reactive-dispatch-unresolved
 
-`SC9012` · **warning** · uncertifiable
+`SC9012` · **obligation** · uncertifiable · not configurable
+
+An **obligation**, not a rule ([ADR 0398](../decisions.md#adr-0398)): an
+internal uncertifiable result ([ADR 0328](../decisions.md#adr-0328)), never a
+proven violation. The human formats and ESLint do not show it and `--certify`
+ignores it; `--format json` and `--internal` keep it and the `uncertifiable`
+status it sets. It has no rule-options key and no ESLint rule, and nothing
+disables it. A configuration that still names `reactive-dispatch-unresolved`
+or `reactive-source-uncaptured` (SC9011, merged into this one) loads, and the
+key does nothing.
 
 A type-correct call can reach runtime implementations with different or
 unknown reactivity or ownership behavior, or an exact synchronous callback
@@ -35,8 +44,8 @@ reactivity analysis but cannot be established. Covered forms include:
 - a callback that runs whenever the call's **returned object is read**, which
   is rc.9's `omit(props, predicate)`. See below.
 - a proven source passed to an analyzed function (also through `.call` or
-  `.apply`) whose parameter at that position may reach a callee
-  `reactive-source-uncaptured` would report: a reference to the parameter or
+  `.apply`) whose parameter at that position may reach a callee the
+  `package-callee` context below names: a reference to the parameter or
   a binding initialized with it, a rest element or spread, or `arguments`,
   anywhere in its body or through further analyzed functions
   (`forwarded-to-undescribed-callee:<callee>`, ADR 0370). Neither the callee's
@@ -151,10 +160,35 @@ candidate is present and has the same reactive-read summary, the checker uses
 that common summary. If one candidate is missing or the summaries differ, it
 reports SC9012 instead of silently choosing a candidate or dropping the call.
 
-SC9012 is shared with Solid 1.x as
-[v1/reactive-dispatch-unresolved](v1/reactive-dispatch-unresolved.md). Its
-warning severity means that no runtime defect has been proven; its
-`uncertifiable` kind still fails `--certify`.
+No runtime defect is proven here. The finding is internal, so it does not fail
+`--certify` for a user; with `--internal` every uncertifiable result does.
+
+### Context `package-callee` (SC9011 before ADR 0398)
+
+A reactive source (a signal accessor, a derived function) is passed, as a bare
+reference, to a function **imported from a package** whose reactive behavior no
+analyzed source or primitive describes, and the callee may invoke that
+argument. Whether reads through it stay tracked cannot be certified: it may be
+read at once (severing reactivity), called in a tracking scope (correct), or
+stored for later.
+
+The finding's `analysisContext` is `package-callee`. Its evidence says only
+that a reference bound to a reactive accessor occupies the call's argument
+position and that, if the call executes, the available analysis does not
+establish whether reads through the accessor stay tracked. The statement is
+conditional: it does not claim the call runs, that the import or API is valid,
+or that any read is untracked. Whether a call, import or member is valid is
+TypeScript's to report, so the finding can appear beside a TypeScript error on
+the same call (open item B5 in [precision-backlog.md](../precision-backlog.md)).
+
+Only callees imported from a package are covered, at this boundary. Ambient
+globals (`setTimeout`, `console.log`, an array method) are outside it. A source
+passed to an analyzed function (project code, or a package analyzed from
+source) takes the `forwarded-to-undescribed-callee` context above when that
+function may hand its parameter on to such a callee (ADR 0370).
+
+To let the analysis see the call, keep the receiving function in the project,
+or provide analyzable runtime source for the package under the declared host.
 
 ## What keeps a leaf callback open
 
@@ -198,5 +232,4 @@ An unresolved package boundary remains uncertifiable.
 
 ## Related
 
-- [reactive-source-uncaptured](reactive-source-uncaptured.md) — a reactive value crosses an undescribed package call
 - [strict-read-untracked](strict-read-untracked.md) — a reactive read is proven to execute untracked

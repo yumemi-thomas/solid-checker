@@ -36,6 +36,12 @@ use solid_reactive_ir::{Finding, Program, RuleMetadata, SolveTimings};
 /// claim was TypeScript's", and "the dialect is gone" would not tell them that.
 const RETIRED_WITH_THE_V1_CATALOG: &str = "removed 2026-09-16: the Solid 1.x catalog was deleted with its dialect (ADR 0110); a project whose installed solid-js resolves to 1.x is refused with SC9013 rather than analyzed under another catalog";
 
+/// The note for every former name of SC9005 (ADR 0398).
+const RETIRED_AS_OBLIGATION_SC9005: &str = "became an obligation 2026-10-26: required package behavior unavailable from source (SC9005) is an internal uncertifiable result, not a rule, and no option disables it (ADR 0398); the key does nothing";
+
+/// The note for SC9012 (ADR 0398).
+const RETIRED_AS_OBLIGATION_SC9012: &str = "became an obligation 2026-10-26: an unresolved reactive dispatch (SC9012) is an internal uncertifiable result, not a rule, and no option disables it (ADR 0398); the key does nothing";
+
 pub const RETIRED_RULES: &[(&str, &str)] = &[
     (
         "invalid-cleanup-return",
@@ -221,6 +227,25 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
         "v1/package-contract-incomplete",
         RETIRED_WITH_THE_V1_CATALOG,
     ),
+    // ADR 0398: SC9005, SC9011 and SC9012 are obligations, internal
+    // uncertifiable results, not rules. A configuration that named one still
+    // loads, and the key does nothing: no option reaches an obligation.
+    ("package-behavior-unavailable", RETIRED_AS_OBLIGATION_SC9005),
+    ("package-contract-incomplete", RETIRED_AS_OBLIGATION_SC9005),
+    (
+        "package-contract-export-missing",
+        RETIRED_AS_OBLIGATION_SC9005,
+    ),
+    ("package-contract-missing", RETIRED_AS_OBLIGATION_SC9005),
+    (
+        "package-contract-callback-missing",
+        RETIRED_AS_OBLIGATION_SC9005,
+    ),
+    ("reactive-dispatch-unresolved", RETIRED_AS_OBLIGATION_SC9012),
+    (
+        "reactive-source-uncaptured",
+        "merged 2026-10-26 into SC9012 as the context `package-callee`, which is an obligation and not a rule (ADR 0398); the key does nothing",
+    ),
 ];
 
 /// Former external rule identities that canonicalize onto a current rule.
@@ -247,20 +272,6 @@ pub const RULE_ALIASES: &[(&str, &str)] = &[
     (
         "v1/package-contract-callback-missing",
         "v1/package-contract-incomplete",
-    ),
-    (
-        "package-contract-export-missing",
-        "package-behavior-unavailable",
-    ),
-    ("package-contract-missing", "package-behavior-unavailable"),
-    (
-        "package-contract-callback-missing",
-        "package-behavior-unavailable",
-    ),
-    // SC9005 was named for the removed package-contract model (ADR 0312).
-    (
-        "package-contract-incomplete",
-        "package-behavior-unavailable",
     ),
     ("component-props-destructure", "no-destructure"),
     ("component-returns-conditionally", "components-return-once"),
@@ -390,10 +401,12 @@ pub struct Dialect {
     /// Documentation page for a rule, addressed by its externally visible
     /// name.
     pub docs_url: fn(&str) -> String,
-    /// Whether the catalog carries a rule with this externally visible name.
-    /// Lets shared backend code condition work on catalog capability
-    /// (for example, which type facts to demand) instead of naming a
-    /// version.
+    /// Whether the catalog carries a *configurable* rule with this externally
+    /// visible name: the names a rule-options document, an alias and the
+    /// plugin manifest may use. An obligation (SC9005, SC9012; ADR 0398) has
+    /// metadata but no key, so it is not one. Lets shared backend code
+    /// condition work on catalog capability (for example, which type facts to
+    /// demand) instead of naming a version.
     pub has_rule: fn(&str) -> bool,
     /// Catalog metadata for one exact external rule identity.
     pub rule_metadata: fn(&str) -> Option<RuleMetadata>,
@@ -952,9 +965,10 @@ const SOLID_V2_LANGUAGE: Dialect = Dialect {
     solve_measured: solid_v2_rules::solve_measured,
     docs_url: solid_v2_rules::docs_url,
     has_rule: |name| {
-        solid_v2_rules::Rule::ALL
-            .into_iter()
-            .any(|rule| rule.metadata().name == name)
+        solid_v2_rules::Rule::ALL.into_iter().any(|rule| {
+            let metadata = rule.metadata();
+            metadata.name == name && metadata.configurable
+        })
     },
     rule_metadata: |name| {
         solid_v2_rules::Rule::ALL

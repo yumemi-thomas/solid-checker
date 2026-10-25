@@ -67,9 +67,6 @@ const ownedRules = new Map();
  * project that was never analyzed as stated would look clean. The native
  * `--format default` applies the same rule (`snapshot_emission::user_facing`).
  */
-/** The unavailable-package-behavior rule no shipped config enables (ADR 0248). */
-const UNAVAILABLE_BEHAVIOR_RULE = "package-behavior-unavailable";
-
 function userFacing(finding) {
   return finding.kind !== "uncertifiable" || finding.subjectKind === "project";
 }
@@ -828,9 +825,18 @@ const DEPRECATED_RULE_KEYS = [
   ["resolve-in-reactive-scope", "no-await-primitive-in-tracked-scope", ["SC2004"]],
   ["until-in-tracked-scope", "no-await-primitive-in-tracked-scope", ["SC2005"]],
   ["server-function-module-directive", "valid-use-server"],
-  ["sync-node-received-async", "sync-computation-received-async"],
-  // SC9005 was named for the removed package-contract model (ADR 0312).
-  ["package-contract-incomplete", "package-behavior-unavailable"]
+  ["sync-node-received-async", "sync-computation-received-async"]
+];
+
+// ADR 0398: SC9005 and SC9012 (with SC9011 merged into it) are obligations,
+// internal uncertifiable results, and no ESLint key configures one. A key a
+// config still names stays a deprecated rule that reports nothing, so an
+// existing config loads and its setting changes nothing.
+const RETIRED_RULE_KEYS = [
+  "package-behavior-unavailable",
+  "package-contract-incomplete",
+  "reactive-dispatch-unresolved",
+  "reactive-source-uncaptured"
 ];
 
 for (const catalog of Object.values(manifests)) {
@@ -859,6 +865,27 @@ for (const [oldName, currentName, codes] of DEPRECATED_RULE_KEYS) {
   };
 }
 
+for (const name of RETIRED_RULE_KEYS) {
+  if (Object.hasOwn(plugin.rules, name)) {
+    throw new Error(`retired rule key ${name} is still a catalog rule`);
+  }
+  plugin.rules[name] = {
+    meta: {
+      type: "problem",
+      docs: {
+        description: `solid-checker ${name} is an obligation, not a rule (ADR 0398); this key does nothing`
+      },
+      deprecated: true,
+      replacedBy: [],
+      schema: adapterSchema,
+      messages: {}
+    },
+    create() {
+      return {};
+    }
+  };
+}
+
 plugin.configs.recommended = {
   plugins: { "solid-checker": plugin },
   rules: {
@@ -880,11 +907,11 @@ for (const catalog of Object.values(manifests)) {
       // Shipped configs keep the historical key: a user config that turned
       // `contract-note` off must keep silencing the note.
       "solid-checker/contract-note": "warn",
-      // ADR 0248: unavailable package behavior is opt-in. They are not findings about the
-      // user's code, so no shipped config enables them.
+      // The manifest lists configurable rules only (ADR 0398): an obligation
+      // has no key.
       ...Object.fromEntries(
         catalog.rules
-          .filter(entry => entry.defaultEnabled && entry.name !== UNAVAILABLE_BEHAVIOR_RULE)
+          .filter(entry => entry.defaultEnabled)
           .map(entry => [
           `solid-checker/${entry.name}`,
           entry.severity === "error" ? "error" : "warn"
@@ -931,6 +958,7 @@ module.exports._testing = {
   manifests,
   manifestEntriesByRule,
   deprecatedRuleKeys: DEPRECATED_RULE_KEYS,
+  retiredRuleKeys: RETIRED_RULE_KEYS,
   ownedRules,
   snapshotCache
 };

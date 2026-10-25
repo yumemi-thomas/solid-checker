@@ -1198,7 +1198,7 @@
    }
   },
   {
-   "id": "reactive-source-uncaptured/positive/001",
+   "id": "reactive-dispatch-unresolved/package-callee/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -1211,8 +1211,8 @@
    "expect": {
     "findings": [
      {
-      "rule": "reactive-source-uncaptured",
-      "code": "SC9011",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "span": {

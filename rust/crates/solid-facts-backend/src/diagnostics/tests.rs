@@ -46,6 +46,7 @@ fn unknown_finding_identities_fail_closed() {
             severity: "error",
             uncertifiable: false,
             default_enabled: true,
+            configurable: true,
             presets: &[],
         },
         "synthetic".into(),
@@ -70,7 +71,8 @@ fn unknown_finding_identities_fail_closed() {
 }
 
 #[test]
-fn a_disabled_coverage_rule_returns_its_withheld_obligations() {
+fn a_disabled_coverage_rule_returns_its_withheld_obligations_and_an_obligation_cannot_be_disabled()
+{
     let finding = |code: &'static str, name: &'static str, uncertifiable: bool| {
         let mut finding = solid_reactive_ir::Finding::new(
             solid_reactive_ir::RuleMetadata {
@@ -79,6 +81,7 @@ fn a_disabled_coverage_rule_returns_its_withheld_obligations() {
                 severity: "warning",
                 uncertifiable,
                 default_enabled: true,
+                configurable: true,
                 presets: &[],
             },
             "synthetic".into(),
@@ -94,19 +97,31 @@ fn a_disabled_coverage_rule_returns_its_withheld_obligations() {
         finding
     };
     let mut findings = vec![
-        finding("SC9012", "reactive-dispatch-unresolved", true),
+        finding("SC7005", "http-response-after-flush", true),
         finding("SC1001", "strict-read-untracked", false),
+        // An obligation has no key: the options below cannot disable it.
+        finding("SC9012", "reactive-dispatch-unresolved", true),
+        finding("SC9005", "package-behavior-unavailable", true),
     ];
     let options = solid_reactive_ir::RuleOptions::parse(
         r#"{ "schemaVersion": 1, "rules": {
+          "http-response-after-flush": { "enabled": false },
           "reactive-dispatch-unresolved": { "enabled": false },
+          "package-behavior-unavailable": { "enabled": false },
           "strict-read-untracked": { "enabled": false } } }"#,
         |_| true,
     )
     .unwrap();
     let withheld =
         retain_enabled(crate::dialect::default_dialect(), &options, &mut findings).unwrap();
-    assert!(findings.is_empty());
+    // The obligations stay (ADR 0398); the disabled rules go.
+    assert_eq!(
+        findings
+            .iter()
+            .map(|finding| finding.id.as_str())
+            .collect::<Vec<_>>(),
+        ["SC9012", "SC9005"]
+    );
     // Only the coverage rule's obligation keeps the result from certifying;
     // a disabled defect rule is a rule the project chose not to check.
     assert_eq!(
@@ -114,7 +129,7 @@ fn a_disabled_coverage_rule_returns_its_withheld_obligations() {
             .iter()
             .map(|finding| finding.id.as_str())
             .collect::<Vec<_>>(),
-        ["SC9012"]
+        ["SC7005"]
     );
 }
 
@@ -130,6 +145,7 @@ fn a_former_name_of_a_merged_rule_disables_its_own_code_only() {
                 severity: "error",
                 uncertifiable: false,
                 default_enabled: true,
+                configurable: true,
                 presets: &[],
             },
             "synthetic".into(),

@@ -191,13 +191,13 @@ fn dialect_ids_are_unique_and_resolvable() {
 fn compatibility_registry_counts_match_the_catalog_migration() {
     assert_eq!(
         RULE_ALIASES.len(),
-        25,
+        21,
         "the migration note must list every transferred configuration key"
     );
     assert_eq!(
         RETIRED_RULES.len(),
-        57,
-        "eight pre-existing TypeScript redundancies, 31 catalog-reduction identities, and the 18 the 1.x catalog still declared when ADR 0110 deleted it"
+        64,
+        "eight pre-existing TypeScript redundancies, 31 catalog-reduction identities, the 18 the 1.x catalog still declared when ADR 0110 deleted it, and the seven names of SC9005, SC9011 and SC9012 (ADR 0398)"
     );
 }
 

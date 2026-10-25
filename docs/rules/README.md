@@ -1,7 +1,10 @@
 # Rules
 
-solid-checker ships one dialect-owned catalog: 34 identities for Solid 2.0,
-with unprefixed rule names: 31 rules the engine produces and three notices.
+solid-checker ships one dialect-owned catalog: 33 identities for Solid 2.0,
+with unprefixed rule names: 28 rule identities a project configures (SC2004 and
+SC2005 share one name), two obligations
+(SC9005 and SC9012, [ADR 0398](../decisions.md#adr-0398)) and three findings
+decided before or beside the analysis (SC9013 to SC9015).
 The checker detects the installed `solid-js` major and **refuses** a project
 whose runtime it has no vocabulary for
 ([`unsupported-solid-runtime`](unsupported-solid-runtime.md)) rather than
@@ -70,7 +73,7 @@ Renamed configuration keys transfer their setting through `RULE_ALIASES`, and
 retired identities load as no-ops through `RETIRED_RULES`, both in
 `rust/crates/solid-facts-backend/src/dialect.rs` ([ADR 0391](../decisions.md#adr-0391)).
 
-## Solid 2.0 catalog — 34 rules
+## Solid 2.0 catalog — 28 rule identities and 3 detection findings
 
 | Code | Rule | Severity | Default |
 | --- | --- | --- | --- |
@@ -101,24 +104,36 @@ retired identities load as no-ops through `RETIRED_RULES`, both in
 | SC8003 | [jsx-no-duplicate-props](jsx-no-duplicate-props.md) | error | on |
 | SC8014 | [prefer-for](prefer-for.md) | error | on |
 | SC8015 | [prefer-show](prefer-show.md) | warning | on |
-| SC9005 | [package-behavior-unavailable](package-behavior-unavailable.md) | error | on |
-| SC9011 | [reactive-source-uncaptured](reactive-source-uncaptured.md) | warning | on |
-| SC9012 | [reactive-dispatch-unresolved](reactive-dispatch-unresolved.md) | warning | on |
 | SC9013 | [unsupported-solid-runtime](unsupported-solid-runtime.md) | error | on |
 | SC9014 | [unaudited-solid-release](unaudited-solid-release.md) | warning | on |
 | SC9015 | [compiler-refused-source](compiler-refused-source.md) | error (warning notice for an unproven refusal) | on |
 
-`http-response-after-flush`, `package-behavior-unavailable`,
-`reactive-source-uncaptured`, `reactive-dispatch-unresolved`,
-`unsupported-solid-runtime`, `unaudited-solid-release`, and
-`compiler-refused-source` (for a refusal it does not prove, ADR 0399) can
-produce uncertifiable results. Their pages name
-the missing evidence and remediation.
+`http-response-after-flush`, `unsupported-solid-runtime`,
+`unaudited-solid-release`, and `compiler-refused-source` (for a refusal it does
+not prove, ADR 0399) can produce uncertifiable results. Their pages name the
+missing evidence and remediation.
 
-SC9005 was named `package-contract-incomplete`; that name remains an alias of
-`package-behavior-unavailable`, which means required package behavior is
-unavailable from source. Package contracts and receipts are no longer consumed;
-see [ADR 0312](../decisions.md#adr-0312).
+## Obligations
+
+An obligation is an internal uncertifiable result ([ADR 0328](../decisions.md#adr-0328)):
+what the analysis could not establish, never a claim about the user's code. It
+has no rule-options key, no ESLint rule and no switch, so nothing disables it
+([ADR 0398](../decisions.md#adr-0398)). The human formats and ESLint do not
+show it and `--certify` ignores it; `--format json` and `--internal` keep it,
+with the `uncertifiable` status it sets.
+
+| Code | Obligation | Raised when |
+| --- | --- | --- |
+| SC9005 | [package-behavior-unavailable](package-behavior-unavailable.md) | an imported package's required runtime behavior is unavailable from source |
+| SC9012 | [reactive-dispatch-unresolved](reactive-dispatch-unresolved.md) | a type-correct call's runtime target, or a source handed to a package callee (context `package-callee`, formerly SC9011), cannot be established |
+
+Every former name configures nothing and still loads, through `RETIRED_RULES` in
+`rust/crates/solid-facts-backend/src/dialect.rs` and the matching no-op keys of
+the ESLint plugin: `package-behavior-unavailable`, `package-contract-incomplete`
+(SC9005's name before ADR 0312) and its three `package-contract-*` aliases,
+`reactive-dispatch-unresolved`, and `reactive-source-uncaptured` (SC9011).
+Package contracts and receipts are no longer consumed; see
+[ADR 0312](../decisions.md#adr-0312).
 
 `unsupported-solid-runtime`, `unaudited-solid-release` and
 `compiler-refused-source` are the three identities here the rules engine never

@@ -898,6 +898,7 @@ const STUB_RULE: solid_reactive_ir::RuleMetadata = solid_reactive_ir::RuleMetada
     severity: "warning",
     uncertifiable: false,
     default_enabled: true,
+    configurable: true,
     presets: &[],
 };
 

@@ -31,6 +31,10 @@ pub struct RuleMetadata {
     pub severity: &'static str,
     pub uncertifiable: bool,
     pub default_enabled: bool,
+    /// Whether a project may configure the rule by name. `false` for an
+    /// obligation (SC9005, SC9012): an internal uncertifiable result that no
+    /// option reaches and no key names (ADR 0398).
+    pub configurable: bool,
     pub presets: &'static [&'static str],
 }
 
@@ -69,6 +73,11 @@ pub fn rule_manifest_json(
     );
     let mut entries: Vec<(RuleMetadata, Vec<&'static str>)> = Vec::new();
     for metadata in rules {
+        // An obligation has no key to configure, so the plugin has no entry
+        // for it (ADR 0398).
+        if !metadata.configurable {
+            continue;
+        }
         if let Some((first, codes)) = entries
             .iter_mut()
             .find(|(first, _)| first.name == metadata.name)

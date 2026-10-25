@@ -96,6 +96,7 @@ fn assumed_is_default_and_projection_is_byte_identical() {
             severity: "error",
             uncertifiable: false,
             default_enabled: true,
+            configurable: true,
             presets: &[],
         },
         "original wording".into(),

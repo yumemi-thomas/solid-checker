@@ -608,7 +608,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::UncalledAccessor
         | Rule::ExpectedFunctionGotExpression
         | Rule::NoStoreMutationOutsideSetter
-        | Rule::ReactiveSourceUncaptured
         | Rule::ReactiveDispatchUnresolved
         | Rule::ComponentPropsDestructure
         | Rule::ComponentReturnsConditionally
@@ -661,7 +660,9 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectFamily::ComponentReturnsConditionally => Rule::ComponentReturnsConditionally,
         StaticDefectFamily::PackageBehaviorUnavailable => Rule::PackageBehaviorUnavailable,
         StaticDefectFamily::MissingEffectFunction => Rule::MissingEffectFunction,
-        StaticDefectFamily::ReactiveSourceUncaptured => Rule::ReactiveSourceUncaptured,
+        // ADR 0398: the source handed to a package callee is SC9012's
+        // `package-callee` context, not an identity of its own.
+        StaticDefectFamily::ReactiveSourceUncaptured => Rule::ReactiveDispatchUnresolved,
         StaticDefectFamily::ReactiveDispatchUnresolved => Rule::ReactiveDispatchUnresolved,
         StaticDefectFamily::ExpectedFunctionGotExpression => Rule::ExpectedFunctionGotExpression,
         StaticDefectFamily::HandlerOwnerUnresolved => Rule::MissingOwner,
@@ -919,7 +920,8 @@ mod source_argument_evidence_tests {
         }))
         .unwrap();
         let finding = project_finding(FindingSeed::StaticDefect(&defect), &Catalog);
-        assert_eq!(finding.id, "SC9011");
+        assert_eq!(finding.id, "SC9012");
+        assert_eq!(finding.rule, "reactive-dispatch-unresolved");
         assert_eq!(finding.kind, "uncertifiable");
         assert_eq!(finding.evidence.len(), 1);
         assert_eq!(

@@ -327,7 +327,7 @@
       "code": "import { createStore } from \"solid-js\";\nconst [profile] = createStore({ count: 0, user: { name: \"Ada\" } });\n// The readonly-ness is shallow.\nexport function Nested() {\n  profile.user.name = \"Grace\";\n}\n// A cast erases it from a root property too.\nexport function Cast() {\n  (profile as { count: number }).count = 1;\n}\n// A props member is not readonly at all.\nexport function Props(props: { n: number }) {\n  props.n = 1;\n}\n"
     },
     {
-      "rule": "reactive-source-uncaptured",
+      "rule": "reactive-dispatch-unresolved",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -337,7 +337,7 @@
       "code": "import { createSignal } from \"solid-js\";\nimport { isEqual } from \"@solidjs/signals\";\n\nexport function Widget() {\n  const [count] = createSignal(0);\n  const same = isEqual(count, count);\n  return <div>{same ? count() : 0}</div>;\n}\n"
     },
     {
-      "rule": "reactive-source-uncaptured",
+      "rule": "reactive-dispatch-unresolved",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",

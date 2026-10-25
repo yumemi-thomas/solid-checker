@@ -234,6 +234,7 @@ fn a_census_gap_makes_an_owner_requirement_uncertifiable_not_a_violation() {
         severity: "error",
         uncertifiable: false,
         default_enabled: true,
+        configurable: true,
         presets: &[],
     };
     let requirement = || OwnerRequirement {

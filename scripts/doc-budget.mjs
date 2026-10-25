@@ -37,7 +37,8 @@ export const FILE_BUDGETS = {
   // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 145_000.
   // And for the Opus review's fixes to ADRs 0384, 0394, 0396 and 0400: 150_000.
   // And for ADR 0399: the file stood at 150_325 bytes against 150_000: 151_000.
-  "docs/decisions.md": 151_000,
+  // And for ADR 0398: 152_282 bytes against 151_000: 153_000.
+  "docs/decisions.md": 153_000,
 };
 
 export const GROUP_BUDGETS = [

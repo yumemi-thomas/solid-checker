@@ -151,7 +151,7 @@ fn reactive_source_uncaptured(
                     callee: callee_text.to_owned(),
                 },
                 location: location(file.path.shared(), argument.span),
-                analysis_context: String::new(),
+                analysis_context: crate::PACKAGE_CALLEE.to_owned(),
                 fixes: vec![],
                 uncertain: false,
             });
@@ -297,7 +297,7 @@ fn bound_method_entry<'a>(
     })
 }
 
-/// The analyzed function a caller's call enters, as the SC9011 rule decides
+/// The analyzed function a caller's call enters, as the `package-callee` check decides
 /// it: the identifier callee's function, or `.call`/`.apply` of one. A
 /// member callee stays the rule's own question.
 fn caller_target<'a>(

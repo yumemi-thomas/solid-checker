@@ -715,6 +715,13 @@ pub const EXPORTED_PARAMETER_MEMBER_DISPATCH: &str = "exported-parameter-member-
 /// `projection.rs`, which words it.
 pub const DEPENDENCY_SOURCE_GETTER: &str = "dependency-source-getter:";
 
+/// ADR 0398: the `analysis_context` of a dispatch obligation at an argument
+/// position where a reactive source is handed to a callee imported from a
+/// package, whose reactive behavior no analyzed source or primitive describes
+/// (SC9011 before the merge). Producer: `upstream_compat/shared_reactivity.rs`;
+/// consumers: `projection.rs`, which words it.
+pub const PACKAGE_CALLEE: &str = "package-callee";
+
 /// ADR 0293: the `analysis_context` prefix of a dispatch obligation at an
 /// untracked store Get whose strict-read warning depends on a key
 /// solid-checker cannot decide; the rest is the reason. Its `callee` is the

@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import { log } from "plain-log";
 
-// reactive-source-uncaptured (SC9011): a package function receives a value,
+// SC9012 `package-callee`: a package function receives a value,
 // not the accessor; the accessor goes to a project function or an ambient
 // global, which this rule does not cover.
 function show(read: () => number) {
