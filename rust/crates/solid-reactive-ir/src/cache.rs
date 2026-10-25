@@ -221,6 +221,9 @@ impl IncrementalCacheState {
 pub(crate) struct SourceDiscoveryIdentity {
     pub(crate) source_hash: SourceHash,
     pub(crate) symbols: Vec<SymbolId>,
+    /// The file's import resolutions, digested: neither is a TypeFacts row,
+    /// and either can move with the file's text and rows unchanged.
+    pub(crate) resolutions: Option<[u8; 32]>,
 }
 
 #[derive(Clone, Default)]

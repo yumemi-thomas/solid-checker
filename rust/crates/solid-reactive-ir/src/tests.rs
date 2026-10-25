@@ -295,6 +295,7 @@ fn compact_source_identity_reuses_only_exact_typefacts_manifests() {
     let cached = SourceDiscoveryIdentity {
         source_hash: source_hash.clone(),
         symbols: vec![SymbolId::from("source-symbol")],
+        resolutions: Some([1; 32]),
     };
     let exact = SourceDiscoveryTypeScriptDelta {
         entity_paths: HashSet::default(),
@@ -305,6 +306,7 @@ fn compact_source_identity_reuses_only_exact_typefacts_manifests() {
         &cached,
         "fixture.ts",
         &source_hash,
+        Some([1; 32]),
         false,
         Some(&exact),
     ));
@@ -312,6 +314,7 @@ fn compact_source_identity_reuses_only_exact_typefacts_manifests() {
         &cached,
         "fixture.ts",
         &source_hash,
+        Some([1; 32]),
         false,
         None,
     ));
@@ -325,6 +328,7 @@ fn compact_source_identity_reuses_only_exact_typefacts_manifests() {
         &cached,
         "fixture.ts",
         &source_hash,
+        Some([1; 32]),
         false,
         Some(&affected),
     ));
@@ -337,9 +341,23 @@ fn compact_source_identity_reuses_only_exact_typefacts_manifests() {
         &cached,
         "fixture.ts",
         &source_hash,
+        Some([1; 32]),
         false,
         Some(&changed_symbol),
     ));
+    // Final review R2, finding 5: the file's import resolutions moved (an
+    // ambient module edited elsewhere, a bundler alias that now lands)
+    // with its text and rows the same, even with the table unchanged.
+    for resolutions in [Some([2; 32]), None] {
+        assert!(!source_discovery_identity_matches(
+            &cached,
+            "fixture.ts",
+            &source_hash,
+            resolutions,
+            true,
+            None,
+        ));
+    }
 }
 
 fn typescript_index_cache(table: &TypeScriptTable) -> CachedTypeScriptIndexes {

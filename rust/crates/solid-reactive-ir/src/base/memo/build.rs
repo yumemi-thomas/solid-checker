@@ -519,6 +519,18 @@ fn fingerprints(
     entities.update(parts.rows_digest);
     entities.update(parts.declarations);
     entities.update(references);
+    // The file's import resolutions (`file_table::resolution_digests`).
+    match views
+        .sources
+        .resolutions
+        .and_then(|digests| digests.get(views.table.path_of(id)))
+    {
+        Some(digest) => {
+            entities.update([1]);
+            entities.update(digest);
+        }
+        None => entities.update([0]),
+    }
     let fingerprints = FileFingerprints {
         source: source.finalize().into(),
         compiler: compiler.finalize().into(),

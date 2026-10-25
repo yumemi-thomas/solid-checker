@@ -573,6 +573,8 @@ pub(super) struct ProjectIndexes<'a> {
     typescript: &'a TypeScriptTable,
     pub(super) symbols_by_id: HashMap<&'a str, TypeScriptSymbol<'a>>,
     declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
+    facts: &'a ProjectFacts,
+    resolution_digests: OnceLock<crate::base::file_table::ResolutionDigests>,
 }
 
 impl<'a> ProjectIndexes<'a> {
@@ -605,7 +607,18 @@ impl<'a> ProjectIndexes<'a> {
             typescript: &facts.typescript,
             symbols_by_id,
             declaration_symbols: OnceLock::new(),
+            facts,
+            resolution_digests: OnceLock::new(),
         }
+    }
+
+    /// The digest of `path`'s import resolutions
+    /// ([`crate::base::file_table::resolution_digests`]).
+    pub(super) fn resolution_digest(&self, path: &str) -> Option<[u8; 32]> {
+        self.resolution_digests
+            .get_or_init(|| crate::base::file_table::resolution_digests(self.facts))
+            .get(path)
+            .copied()
     }
 
     pub(super) fn typescript_file(&self, path: &str) -> Option<&'a FileFact> {
@@ -851,6 +864,8 @@ pub(super) struct SemanticLookup<'a> {
     file_table: crate::base::FileTable,
     /// Each path's TypeFacts references, read by the references index.
     reference_rows: OnceLock<crate::base::file_table::ReferenceRows>,
+    /// Each path's import resolutions, digested into its Entities section.
+    resolution_digests: OnceLock<crate::base::file_table::ResolutionDigests>,
     /// L1: the base indexes, each folded on first read ([`crate::base`]).
     base: crate::base::BaseIndexes,
     file_primitives: OnceLock<Vec<crate::base::reads::Recorded<FilePrimitives>>>,
@@ -1179,6 +1194,7 @@ impl<'a> SemanticLookup<'a> {
             bindings_by_symbol: crate::base::reads::Recorded::new(),
             bindings_by_reference: crate::base::reads::Recorded::new(),
             file_table,
+            resolution_digests: OnceLock::new(),
             reference_rows: OnceLock::new(),
             base: crate::base::BaseIndexes::default(),
             file_primitives: OnceLock::new(),
@@ -2110,11 +2126,17 @@ impl<'a> SemanticLookup<'a> {
                 symbols: self.entities,
                 typescript: &self.facts.typescript,
                 references: &self.reference_rows,
+                resolutions: Some(self.resolution_digests()),
             },
             constants: crate::base::BuildConstants {
                 dialect: self.dialect,
             },
         }
+    }
+
+    fn resolution_digests(&self) -> &crate::base::file_table::ResolutionDigests {
+        self.resolution_digests
+            .get_or_init(|| crate::base::file_table::resolution_digests(self.facts))
     }
 
     fn base_views(&self) -> crate::base::Views<'_> {

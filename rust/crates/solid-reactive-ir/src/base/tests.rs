@@ -368,6 +368,7 @@ fn check(project: &Project, retained: &mut Option<RetainedBase>) -> Option<usize
             symbols: &symbols,
             typescript: &facts.typescript,
             references: &references,
+            resolutions: None,
         },
         constants: BuildConstants {
             dialect: &solid_dialect::Solid2,
@@ -653,6 +654,7 @@ fn a_contribution_reads_only_its_own_file() {
                 symbols: &symbols,
                 typescript: &facts.typescript,
                 references: &references,
+                resolutions: None,
             },
             constants: BuildConstants {
                 dialect: &solid_dialect::Solid2,
@@ -733,6 +735,7 @@ fn memo_build(project: &Project, store: &super::memo::build::MemoStore) -> Optio
             symbols: &symbols,
             typescript: &facts.typescript,
             references: &references,
+            resolutions: None,
         },
         constants: BuildConstants {
             dialect: &solid_dialect::Solid2,
@@ -845,6 +848,7 @@ fn begin_over(
             symbols,
             typescript: &facts.typescript,
             references: &references,
+            resolutions: None,
         },
         constants: BuildConstants {
             dialect: &solid_dialect::Solid2,
