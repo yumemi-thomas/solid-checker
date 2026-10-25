@@ -337,7 +337,7 @@ pub(crate) fn discover_owner_file(
 }
 
 /// What the owner stage keeps between builds: the graph with its fragments
-/// and solvers, and each file's emission ([`owner_state`], [`owner_emission`]).
+/// and contexts, and each file's emission ([`owner_state`], [`owner_emission`]).
 #[derive(Default)]
 pub(crate) struct OwnerState {
     graph: OwnerGraph,
@@ -345,9 +345,8 @@ pub(crate) struct OwnerState {
 }
 
 /// The owner requirements of the project, and the call-site gates they
-/// settled. `state` holds the previous build's graph; `retain` says it will be
-/// used again (a one-shot build solves with the plain worklist and keeps no
-/// solver).
+/// settled. `state` holds the previous build's graph (a one-shot build's is
+/// empty).
 pub(crate) fn find_missing_owners_incremental(
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
@@ -355,16 +354,12 @@ pub(crate) fn find_missing_owners_incremental(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     unchanged_paths: &HashSet<String>,
     state: &mut OwnerState,
-    retain: bool,
 ) -> (
     Vec<OwnerRequirement>,
     SettledGateDecisions,
     OwnerIncrementalTimings,
-    crate::base::reads::Reads,
 ) {
     let entities = lookup.entities();
-    // What the reused fragments read: the retained requirements read it too.
-    let mut fragment_reads = crate::base::reads::Reads::default();
     let mut timings = OwnerIncrementalTimings::default();
     let total_started = Instant::now();
     // The files of the build, each path once: a path listed twice is the
@@ -393,7 +388,6 @@ pub(crate) fn find_missing_owners_incremental(
         }
     }
     let mut recomputed = Vec::new();
-    let mut reused_proofs = Vec::new();
     for (file, pid) in files.iter().zip(&order) {
         if unchanged_paths.contains(file.path.as_str())
             && let Some(entry) = graph.file(*pid)
@@ -403,13 +397,11 @@ pub(crate) fn find_missing_owners_incremental(
                 || same_compiler_semantics(&entry.fragment.compiler, &file.compiler))
         {
             timings.reused_files += 1;
-            reused_proofs.push(&entry.fragment.proof.reads);
             continue;
         }
         recomputed.push(*file);
         timings.recomputed_files += 1;
     }
-    fragment_reads.extend_all(reused_proofs);
     let discovered = parallel_slice_results(&recomputed, |file| {
         // What the fragment read of other files is its proof.
         let (mut discovered, reads) = crate::base::reads::record(|| {
@@ -437,8 +429,6 @@ pub(crate) fn find_missing_owners_incremental(
             named: &|path, span| lookup.hands_out_by_name(path, span),
             escapes_unnamed: &|path| lookup.escapes_unnamed(path),
         },
-        retain,
-        verify_owner_graph(),
     );
     let propagation = propagation_started.elapsed();
 
@@ -501,12 +491,5 @@ pub(crate) fn find_missing_owners_incremental(
             context_census,
             ..timings
         },
-        fragment_reads,
     )
-}
-
-/// Shadow and verify-reused modes compare the kept solve with the worklist.
-fn verify_owner_graph() -> bool {
-    crate::base::memo::build::verify_reused_from_env()
-        || crate::shadow::ShadowMode::from_env() != crate::shadow::ShadowMode::Off
 }

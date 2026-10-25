@@ -237,6 +237,7 @@ mod tests {
             let entities = EntitySymbols {
                 by_path: HashMap::from_iter([("test.ts".into(), Arc::new(symbols.clone()))]),
                 exact_by_path: HashMap::from_iter([("test.ts".into(), Arc::new(symbols))]),
+                locations: crate::indexes::EntityLocations::default(),
             };
             let file = FileFacts {
                 generation: Generation::new(1).unwrap(),
