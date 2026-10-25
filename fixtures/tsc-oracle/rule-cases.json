@@ -1077,6 +1077,19 @@
       "expect": "removed-because-redundant",
       "checker": "silent",
       "allow": [
+        2339,
+        7053
+      ],
+      "why": "SC2003's accessor-member arm (`memo.a = 1`, target `reactive-value`), deleted. The uncast spellings are TypeScript's on the audited rc.17 typings: TS2339 `Property 'a' does not exist on type 'SourceAccessor<number>'` for a signal or memo accessor, a non-null assertion and a nested object, and TS7053 for a computed key under `strict` (the loose pass is silent there, which the absolute rule does not treat as an exception). The cast spellings type-check, but the finding's claim, that Solid hands out a readonly proxy and drops the write, does not describe an accessor: it is an ordinary extensible function and the property lands (probed on rc.17 `dist/dev.js`: `count.c = 3` reads back 3, neither frozen nor a proxy), and attaching metadata to a function is deliberate as often as not, so nothing proven remains. Store, projection and props writes keep their own arms.",
+      "code": "import { createSignal, createMemo } from \"solid-js\";\nconst [count] = createSignal(0);\nconst memo = createMemo(() => 1);\nconst [obj] = createSignal({ a: 1 });\n// TypeScript's: a property the accessor function type does not declare.\ncount.a = 1;\nmemo.b = 2;\ncount!.f = 6;\ncount[\"g\"] = 7;\nobj.a = 8;\ncount.a++;\n// Type-checks, and writes a property on an ordinary function object: it lands.\n(count as any).c = 3;\n(memo as any).d = 4;\n(count as unknown as { e: number }).e = 5;\n(obj as any).a = 9;\nexport { count, memo, obj };\n"
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "removed-because-redundant",
+      "checker": "silent",
+      "allow": [
         2790
       ],
       "why": "Upstream's `delete store.path` shape, not adopted (ADR 0381, 0383). The proxy drops it outside a setter (rc.17 `deleteProperty` trap `dist/dev.js:5761-5767`; probed), but for a required property under strictNullChecks `tsc` reports TS2790 (\"The operand of a 'delete' operator must be optional\"), so the write is TypeScript's. The property whose type includes `undefined` (`nick` below, or an optional one) type-checks, and no Type Fact says that at a delete operand, so the checker stays silent on both (docs/open-work.md). Not strict-only in the checker's favour: a non-strict project is silent in `tsc` too, and the checker's silence there is the fail-closed default.",

@@ -698,21 +698,14 @@ pub fn direct_mutation_wording(
                 "Derive the value inside the projection's compute function instead of mutating the result {name}."
             ),
         ),
-        DirectMutationTarget::Props | DirectMutationTarget::ReactiveValue => {
-            let object = if target == DirectMutationTarget::Props {
-                "props object"
-            } else {
-                "value"
-            };
-            (
-                format!(
-                    "{name:?} is a reactive {object} and is written through directly; Solid hands out a readonly proxy, so the write is dropped and nothing re-runs"
-                ),
-                format!(
-                    "Props are readonly by design: the parent owns the value. Lift the state to the parent and pass a callback down, rather than assigning to {name}."
-                ),
-            )
-        }
+        DirectMutationTarget::Props => (
+            format!(
+                "{name:?} is a reactive props object and is written through directly; Solid hands out a readonly proxy, so the write is dropped and nothing re-runs"
+            ),
+            format!(
+                "Props are readonly by design: the parent owns the value. Lift the state to the parent and pass a callback down, rather than assigning to {name}."
+            ),
+        ),
     }
 }
 

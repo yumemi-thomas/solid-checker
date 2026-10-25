@@ -1225,12 +1225,19 @@ fn no_direct_mutation(
         {
             continue;
         }
+        // A member written on an accessor function (`memo.a = 1`) is not a
+        // write through a readonly proxy: the accessor is an ordinary
+        // extensible function, so the property lands (probed on rc.17: the
+        // value reads back, and the accessor is neither frozen nor a proxy).
+        // The uncast spelling is TypeScript's (TS2339, TS7053 under `strict`)
+        // and a cast one may attach metadata deliberately, so no claim
+        // remains (tsc-oracle `removed-because-redundant`).
         let target = if props {
             DirectMutationTarget::Props
         } else if kind == Some(ReactiveSourceKind::Store) {
             store_target(context, symbol)
         } else {
-            DirectMutationTarget::ReactiveValue
+            continue;
         };
         if matches!(
             target,

@@ -76,6 +76,14 @@ Not reported, deliberately:
   of its type) is a deliberate rebinding that drops no write (fixture
   `accessor-rebinding`).
 
+- A write to a property of an accessor function (`memo.a = 1`, `count.x++`;
+  this rule's former `reactive-value` target). The uncast spelling is
+  TypeScript's on rc.17 (TS2339, TS7053 for a computed key under `strict`). A
+  cast one type-checks but is no dropped write: an accessor is an ordinary
+  extensible function, so the property lands (probed on rc.17: it reads back,
+  the accessor is neither frozen nor a proxy), and attaching metadata to a
+  function is as often deliberate. tsc-oracle `removed-because-redundant`.
+
 A write to a store **root record's own property** is TypeScript's on the
 releases whose typings make it `readonly`, and this rule's where they do not.
 The runtime drops the write outside a setter either way. The difference is the

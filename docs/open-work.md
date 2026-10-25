@@ -29,8 +29,7 @@ Store write outside a setter (`no-store-mutation-outside-setter`, SC2003; ADR 03
 
 - `delete store.path` is dropped (rc.17 `dist/dev.js:5761-5767`) but not reported: a required property is TS2790 under strictNullChecks, and a property whose type includes `undefined` or is optional type-checks, with no Type Fact at a delete operand saying which (a demand would be a producer, wire and protocol change). Pinned: tsc-oracle and ownership case `delete-required-property`. Reopen with a Type Facts "type includes undefined at this operand" demand.
 - The path proof stops at the root identifier: a mutator or assignment through an intermediate the store does not wrap (a frozen object, a `Map`) is reported although it lands. `createOptimisticStore` results are treated as stores (unprobed on rc.17; upstream ignores them).
-- A write through an accessor's member (`memo.a = 1`, the `ReactiveValue` arm) is TS2339/TS2540 uncasted on rc.17; the cast spellings remain, and the finding's "readonly proxy" claim does not describe a function object. Not audited here.
-- Type-correct rebinding (`count = otherAccessor`, `store = { … }` on a `let`) is silent: the accessor-binding arm is deleted, and the cast and same-type spellings are no proven defect.
+- Type-correct rebinding (`count = otherAccessor`, `store = { … }` on a `let`) is silent: the accessor-binding and accessor-member (`memo.a = 1`) arms are deleted, and the cast and same-type spellings are no proven defect.
 
 Server directives (`valid-use-server`, SC7006; ADR 0385):
 

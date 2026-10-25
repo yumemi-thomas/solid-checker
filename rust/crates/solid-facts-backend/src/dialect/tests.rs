@@ -61,10 +61,6 @@ fn catalog_prose_program() -> Program {
             name: "sampleProps".into(),
             target: DirectMutationTarget::Props,
         },
-        StaticDefectKind::DirectMutation {
-            name: "sampleValue".into(),
-            target: DirectMutationTarget::ReactiveValue,
-        },
     ];
     Program {
         reads: vec![ReactiveRead {

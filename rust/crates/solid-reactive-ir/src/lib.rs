@@ -1074,7 +1074,6 @@ pub enum DirectMutationTarget {
     Store,
     /// A `createProjection` result: derived, with no setter to route through.
     Projection,
-    ReactiveValue,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
