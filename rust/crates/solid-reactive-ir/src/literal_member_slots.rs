@@ -73,8 +73,11 @@ pub(crate) struct LiteralMemberSlots<'l, 'a> {
     members: Mutex<HashMap<&'a str, Arc<HashMap<Span, usize>>>>,
 }
 
-/// A symbol's verdict and what computing it read.
-type Verdict = (bool, Arc<[Dep]>);
+/// A symbol's verdict and what computing it read: its trace dependencies
+/// and its recorded reads (`base::reads`), the hand-outs among them (the
+/// "names no function" answer of `function_for_symbol` has no trace
+/// counterpart).
+type Verdict = (bool, Arc<[Dep]>, Arc<crate::base::reads::Reads>);
 
 /// The declaring object-literal keys of one property symbol.
 type DeclaringKeys<'f> = Vec<(&'f str, Span)>;
@@ -107,16 +110,21 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
             .expect("literal member slots lock")
             .get(symbol)
             .cloned();
-        if let Some((verdict, deps)) = cached {
+        if let Some((verdict, deps, reads)) = cached {
             trace::replay(&deps);
+            crate::base::reads::replay(&reads);
             return verdict;
         }
-        // No file of its own: every file it reads is recorded.
-        let (verdict, deps) = trace::record("", || self.compute(symbol));
+        // No file of its own: every file it reads is recorded. A row that
+        // finds the verdict cached replays both records, so each row's proof
+        // is the same whichever row computed it (final review R3,
+        // plausible 4).
+        let ((verdict, deps), reads) =
+            crate::base::reads::record(|| trace::record("", || self.compute(symbol)));
         self.verdicts
             .lock()
             .expect("literal member slots lock")
-            .insert(symbol.clone(), (verdict, Arc::from(deps)));
+            .insert(symbol.clone(), (verdict, Arc::from(deps), Arc::new(reads)));
         verdict
     }
 
