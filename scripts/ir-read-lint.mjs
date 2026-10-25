@@ -19,8 +19,13 @@
 // file and kind. A new site, or a new file with one, fails this check; a site
 // removed makes the recorded count stale, which also fails so the allow-list
 // only ever shrinks (--update rewrites it; a growing diff in review is the
-// signal). Test code (tests.rs, tests/, a trailing `#[cfg(test)]` module) is
-// not scanned.
+// signal). Test code (tests.rs, tests/, and each item annotated
+// `#[cfg(test)]`, to the end of that item) is not scanned; production code
+// after such an item is.
+//
+// An entry may carry a "pending-review" list: sites recorded without a
+// verdict yet on whether the read is recorded (the lint counts them like any
+// other; --update keeps the list).
 //
 //   bun scripts/ir-read-lint.mjs            check, exit 1 on any difference
 //   bun scripts/ir-read-lint.mjs --update   rewrite the allow-list
@@ -49,17 +54,77 @@ export function sourceFiles(directory) {
   return found;
 }
 
-/** The non-test, non-comment lines of a Rust source. */
+const TEST_ATTRIBUTE = /^\s*#\[cfg\(test\)\]/;
+
+/** `line` without string and char literals or a line comment, for brace counting. */
+function bare(line) {
+  return line
+    .replace(/"(?:\\.|[^"\\])*"/g, '""')
+    .replace(/'(?:\\.|[^'\\])'/g, "''")
+    .replace(/\/\/.*$/, "");
+}
+
+/**
+ * The index of the last line of the item whose `#[cfg(test)]` attribute is on
+ * line `start`: the line closing its first brace block, or the line of the
+ * `;` or `,` that ends it before any block opens (`#[cfg(test)] use ...;`, a
+ * field or a variant), outside parentheses and brackets. A `}` closing the
+ * enclosing block first ends the item on the line before.
+ */
+function itemEnd(lines, start) {
+  let depth = 0;
+  let nested = 0;
+  let opened = false;
+  for (let index = start; index < lines.length; index += 1) {
+    const text = bare(index === start ? lines[index].replace(TEST_ATTRIBUTE, "") : lines[index]);
+    for (const character of text) {
+      if (character === "(" || character === "[") nested += 1;
+      else if (character === ")" || character === "]") nested -= 1;
+      else if (character === "{") {
+        depth += 1;
+        opened = true;
+      } else if (character === "}") {
+        if (!opened && depth === 0) return Math.max(start, index - 1);
+        depth -= 1;
+        if (opened && depth === 0) return index;
+      } else if ((character === ";" || character === ",") && !opened && depth === 0 && nested === 0) {
+        return index;
+      }
+    }
+  }
+  return lines.length - 1;
+}
+
+/**
+ * The lines of a Rust source with comments removed and every `#[cfg(test)]`
+ * item blanked (so line numbers stay the source's).
+ */
 export function codeLines(text) {
   const lines = text.split("\n");
-  const end = lines.findIndex((line) => /^\s*#\[cfg\(test\)\]/.test(line));
-  return (end === -1 ? lines : lines.slice(0, end)).map((line) => line.replace(/\/\/.*$/, ""));
+  const code = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    if (TEST_ATTRIBUTE.test(lines[index])) {
+      const end = itemEnd(lines, index);
+      for (; index <= end; index += 1) code.push("");
+      index -= 1;
+      continue;
+    }
+    code.push(lines[index].replace(/\/\/.*$/, ""));
+  }
+  return code;
 }
 
 /** Counts of each raw-read kind in one source text. */
 export function countReads(text) {
-  const lines = codeLines(text);
   const counts = { "facts.files": 0, "files()": 0, file_by_path: 0, "hashmap-iteration": 0 };
+  for (const { kind } of readSites(text)) counts[kind] += 1;
+  return counts;
+}
+
+/** Each raw read in one source text, as `{ line (1-based), kind }`. */
+export function readSites(text) {
+  const lines = codeLines(text);
+  const sites = [];
   const names = new Set();
   const declarations = [
     /\b([a-z_][a-z0-9_]*)\s*:\s*&?(?:mut\s+)?(?:std::collections::)?Hash(?:Map|Set)\s*</,
@@ -78,13 +143,16 @@ export function countReads(text) {
         new RegExp(`\\bfor\\b[^\\n{]*\\bin\\s+&?(?:mut\\s+)?(?:self\\.)?(?:${[...names].join("|")})\\b`)
       ]
     : [];
-  for (const line of lines) {
-    counts["facts.files"] += (line.match(/\bfacts\s*\.\s*files\b/g) ?? []).length;
-    counts["files()"] += (line.match(/\.\s*files\s*\(\s*\)/g) ?? []).length;
-    counts.file_by_path += (line.match(/\bfile_by_path\b/g) ?? []).length;
-    if (iterated.some((pattern) => pattern.test(line))) counts["hashmap-iteration"] += 1;
-  }
-  return counts;
+  lines.forEach((line, index) => {
+    const add = (kind, count) => {
+      for (let n = 0; n < count; n += 1) sites.push({ line: index + 1, kind });
+    };
+    add("facts.files", (line.match(/\bfacts\s*\.\s*files\b/g) ?? []).length);
+    add("files()", (line.match(/\.\s*files\s*\(\s*\)/g) ?? []).length);
+    add("file_by_path", (line.match(/\bfile_by_path\b/g) ?? []).length);
+    if (iterated.some((pattern) => pattern.test(line))) add("hashmap-iteration", 1);
+  });
+  return sites;
 }
 
 /** `{ relative path: { kind: count } }` for the IR's non-test sources. */
@@ -100,12 +168,15 @@ export function measure(root = ROOT) {
 }
 
 /** Human-readable differences between the allow-list and the measurement. */
+export const PENDING = "pending-review";
+
 export function violations(allowed, measured) {
   const problems = [];
   for (const path of [...new Set([...Object.keys(allowed), ...Object.keys(measured)])].sort()) {
     const before = allowed[path] ?? {};
     const after = measured[path] ?? {};
-    for (const kind of [...new Set([...Object.keys(before), ...Object.keys(after)])].sort()) {
+    const kinds = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((kind) => kind !== PENDING);
+    for (const kind of kinds.sort()) {
       const was = before[kind] ?? 0;
       const now = after[kind] ?? 0;
       if (now > was) {
@@ -126,8 +197,12 @@ export function violations(allowed, measured) {
 function main() {
   const measured = measure();
   if (process.argv.includes("--update")) {
+    const previous = existsSync(ALLOWLIST) ? JSON.parse(readFileSync(ALLOWLIST, "utf8")) : {};
+    for (const [path, counts] of Object.entries(measured)) {
+      if (previous[path]?.[PENDING]) counts[PENDING] = previous[path][PENDING];
+    }
     writeFileSync(ALLOWLIST, `${JSON.stringify(measured, null, 2)}\n`);
-    const total = Object.values(measured).flatMap((counts) => Object.values(counts)).reduce((a, b) => a + b, 0);
+    const total = Object.values(measured).flatMap((counts) => Object.values(counts)).filter(Number.isInteger).reduce((a, b) => a + b, 0);
     console.log(`ir-read-lint: allow-list rewritten (${Object.keys(measured).length} files, ${total} sites)`);
     return 0;
   }
@@ -135,7 +210,7 @@ function main() {
   const problems = violations(allowed, measured);
   for (const problem of problems) console.error(problem);
   if (problems.length > 0) return 1;
-  const total = Object.values(measured).flatMap((counts) => Object.values(counts)).reduce((a, b) => a + b, 0);
+  const total = Object.values(measured).flatMap((counts) => Object.values(counts)).filter(Number.isInteger).reduce((a, b) => a + b, 0);
   console.log(`ir-read-lint: ok (${total} allow-listed raw cross-file reads in ${Object.keys(measured).length} files)`);
   return 0;
 }

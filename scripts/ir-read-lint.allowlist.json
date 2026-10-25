@@ -38,6 +38,12 @@
   "rust/crates/solid-reactive-ir/src/base/index.rs": {
     "hashmap-iteration": 4
   },
+  "rust/crates/solid-reactive-ir/src/base/memo.rs": {
+    "hashmap-iteration": 1,
+    "pending-review": [
+      "520 hashmap-iteration (Graph::nodes): the memo store's own read graph, summed per table into a BTreeMap for stats (memo.rs:1112); order-insensitive and not a read of another file. Unscanned until the lint stopped at the first #[cfg(test)] (memo.rs:50)."
+    ]
+  },
   "rust/crates/solid-reactive-ir/src/boundary_defects.rs": {
     "facts.files": 1
   },
@@ -196,6 +202,12 @@
     "facts.files": 1,
     "files()": 1,
     "file_by_path": 1
+  },
+  "rust/crates/solid-reactive-ir/src/owners/owner_graph.rs": {
+    "file_by_path": 1,
+    "pending-review": [
+      "399 file_by_path (apply_settled_requirement_gates): reads another file's AST at a settled gate's call. Runs every build on both owners.rs paths over the current lookup, outside any memo query, and its result is not cached, so it reads the current program; the IR reviewer to confirm. Unscanned until the lint stopped at the #[cfg(test)] fn at :134."
+    ]
   },
   "rust/crates/solid-reactive-ir/src/owners/owner_state.rs": {
     "hashmap-iteration": 3
