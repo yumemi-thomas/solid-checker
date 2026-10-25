@@ -46,18 +46,32 @@ pub fn prepare_retained_contribution(
     demands: &[EntityDemand],
     result: SemanticDemandRunResult,
 ) -> Result<ContributionRef, String> {
-    if result.entities.len() != demands.len() {
+    let entities = prepare_rows(path, demands, result.entities)?;
+    Ok(Rc::new(RefCell::new(RetainedContribution {
+        entities: Some(entities.into()),
+        durable: result.durable,
+    })))
+}
+
+/// The entity rows of an aligned run result: one row per location, each
+/// field from the last entity at the location that has it.
+pub fn prepare_rows(
+    path: &str,
+    demands: &[EntityDemand],
+    result: Vec<EntityFact>,
+) -> Result<Vec<EntityFact>, String> {
+    if result.len() != demands.len() {
         return Err(format!(
             "semantic demand run {} returned {} entities for {} demands",
             quote(path),
-            result.entities.len(),
+            result.len(),
             demands.len()
         ));
     }
 
-    let mut entities: Vec<EntityFact> = Vec::with_capacity(result.entities.len());
+    let mut entities: Vec<EntityFact> = Vec::with_capacity(result.len());
 
-    for (index, entity) in result.entities.into_iter().enumerate() {
+    for (index, entity) in result.into_iter().enumerate() {
         let demand = &demands[index];
         if entity.location != demand.location {
             return Err(format!(
@@ -137,10 +151,7 @@ pub fn prepare_retained_contribution(
         }
     }
 
-    Ok(Rc::new(RefCell::new(RetainedContribution {
-        entities: Some(entities.into()),
-        durable: result.durable,
-    })))
+    Ok(entities)
 }
 
 /// The contributions a table published, by clean path, until the packed

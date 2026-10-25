@@ -75,9 +75,8 @@ mod result_view;
 pub(crate) use result_view::*;
 mod result_reads;
 mod transport_reads;
-pub(crate) use graph::GraphCalleeRead;
 pub(crate) use result_reads::*;
-pub(crate) use transport_reads::TransportReads;
+pub(crate) use transport_reads::{AccessorTable, SourceKindTable, TransportReads};
 mod node_index;
 mod reads;
 mod refresh;
@@ -453,10 +452,6 @@ impl FunctionBoundary for SummaryNode {
 
 #[derive(Clone)]
 pub(super) struct InterproceduralResult {
-    /// What the reused graph and result chunks read when they ran
-    /// ([`crate::base::reads`]): with the build's own reads, what the
-    /// retained result read.
-    pub(super) reused_reads: crate::base::reads::Reads,
     pub(super) reads: Arc<[ReactiveRead]>,
     pub(super) source_call_targets: Arc<HashMap<Location, accessor_provenance::Callable>>,
     pub(super) dispatch_obligations: Arc<[StaticDefect]>,

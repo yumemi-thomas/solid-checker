@@ -57,6 +57,9 @@ where
             .as_ref()
             .is_none_or(|previous| !order.keeps_relative_order(previous));
         let mut changes = changes.into_iter().collect::<BTreeMap<_, _>>();
+        if self.rows.is_empty() && self.postings.is_empty() && self.values.is_empty() {
+            return self.fold_all(order, changes, fold, fresh);
+        }
         for file in self.rows.keys() {
             if order.rank(*file).is_none() {
                 changes.insert(*file, None);
@@ -138,6 +141,66 @@ where
         Solved {
             changed,
             recomputed: delta.len(),
+            fresh,
+        }
+    }
+
+    /// [`Self::update`] from nothing kept (a store's first build): every
+    /// key is in the delta, so the rows are sorted once by key, path rank,
+    /// file and production order -- each key's values in the order the
+    /// per-key refold reads them -- instead of each key scanning its files'
+    /// rows, and the maps are built from sorted runs.
+    fn fold_all(
+        &mut self,
+        order: FileOrder,
+        changes: BTreeMap<FileId, Option<Vec<(K, C)>>>,
+        fold: &impl Fn(&K, &[&C]) -> Option<V>,
+        fresh: bool,
+    ) -> Solved<K> {
+        for (file, next) in changes {
+            if let Some(rows) = next.filter(|rows| !rows.is_empty()) {
+                self.rows.insert(file, rows);
+            }
+        }
+        let mut all = self
+            .rows
+            .iter()
+            .flat_map(|(file, rows)| {
+                let rank = order.rank(*file);
+                rows.iter()
+                    .enumerate()
+                    .map(move |(position, (key, value))| (key, rank, *file, position, value))
+            })
+            .collect::<Vec<_>>();
+        all.sort_unstable_by(|a, b| {
+            a.0.cmp(b.0)
+                .then(a.1.cmp(&b.1))
+                .then(a.2.cmp(&b.2))
+                .then(a.3.cmp(&b.3))
+        });
+        let mut postings = Vec::new();
+        let mut values = Vec::new();
+        let mut changed = Vec::new();
+        let mut recomputed = 0;
+        for group in all.chunk_by(|a, b| a.0.cmp(b.0).is_eq()) {
+            let key = group[0].0;
+            recomputed += 1;
+            let folded = group.iter().map(|row| row.4).collect::<Vec<_>>();
+            if let Some(value) = fold(key, &folded) {
+                values.push((key.clone(), value));
+                changed.push(key.clone());
+            }
+            postings.push((
+                key.clone(),
+                group.iter().map(|row| row.2).collect::<BTreeSet<_>>(),
+            ));
+        }
+        self.postings = postings.into_iter().collect();
+        self.values = values.into_iter().collect();
+        self.order = Some(order);
+        Solved {
+            changed,
+            recomputed,
             fresh,
         }
     }

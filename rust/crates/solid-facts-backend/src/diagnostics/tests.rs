@@ -389,7 +389,7 @@ fn the_default_program_boundary_follows_the_nearest_manifest() {
 fn the_line_index_places_every_offset_where_the_scan_does() {
     use crate::SourceFile;
 
-    use super::{LineStarts, SourcePlacer, source_location};
+    use super::{SourcePlacer, source_location};
     let texts = [
         "",
         "one",
@@ -407,31 +407,28 @@ fn the_line_index_places_every_offset_where_the_scan_does() {
             compiler_options: Default::default(),
         })
         .collect::<Vec<_>>();
-    let mut lines = LineStarts::default();
-    for round in 0..2 {
-        let mut placer = SourcePlacer::new(&sources, &mut lines);
-        for (index, text) in texts.iter().enumerate() {
-            for offset in 0..=text.len() + 2 {
-                let location = typefacts::Location {
-                    path: format!("/p/{index}.ts").into(),
-                    start_byte: offset as u64,
-                    end_byte: offset as u64,
-                };
-                let placed = placer.place(&location);
-                let scanned = source_location(&location, &sources);
-                assert_eq!(
-                    (placed.line, placed.column),
-                    (scanned.line, scanned.column),
-                    "{text:?} at {offset} (round {round})"
-                );
-            }
+    let mut placer = SourcePlacer::new(&sources);
+    for (index, text) in texts.iter().enumerate() {
+        for offset in 0..=text.len() + 2 {
+            let location = typefacts::Location {
+                path: format!("/p/{index}.ts").into(),
+                start_byte: offset as u64,
+                end_byte: offset as u64,
+            };
+            let placed = placer.place(&location);
+            let scanned = source_location(&location, &sources);
+            assert_eq!(
+                (placed.line, placed.column),
+                (scanned.line, scanned.column),
+                "{text:?} at {offset}"
+            );
         }
-        let unknown = typefacts::Location {
-            path: "/p/missing.ts".into(),
-            start_byte: 3,
-            end_byte: 4,
-        };
-        let placed = placer.place(&unknown);
-        assert_eq!((placed.line, placed.column), (1, 1));
     }
+    let unknown = typefacts::Location {
+        path: "/p/missing.ts".into(),
+        start_byte: 3,
+        end_byte: 4,
+    };
+    let placed = placer.place(&unknown);
+    assert_eq!((placed.line, placed.column), (1, 1));
 }

@@ -204,6 +204,10 @@ pub(crate) struct HandOutReads {
     files: OnceLock<Vec<OnceLock<MemoRead>>>,
     rows: OnceLock<Vec<OnceLock<MemoRead>>>,
     buckets: OnceLock<Vec<OnceLock<MemoRead>>>,
+    component_spans: OnceLock<Vec<OnceLock<MemoRead>>>,
+    member_targets: OnceLock<Vec<OnceLock<MemoRead>>>,
+    literal_receivers: OnceLock<Vec<OnceLock<MemoRead>>>,
+    never_returning: OnceLock<Vec<OnceLock<MemoRead>>>,
 }
 
 /// The cached read of slot `index` of `cells` (sized `len` on first use),
@@ -246,6 +250,11 @@ enum Noted {
     Probe(Probe, PolledKey),
     FunctionBucket(u16),
     BindingRows(FileId),
+    ComponentSpans(FileId),
+    MemberTargets(FileId),
+    LiteralReceivers(FileId),
+    NeverReturning(FileId),
+    NamespaceHandOuts(FileId),
 }
 
 thread_local! {
@@ -350,6 +359,156 @@ impl<'a> SemanticLookup<'a> {
                     slot,
                     || self.memo_world().memo_read::<BindingRowsOf>(&id),
                 );
+            }
+        }
+    }
+
+    /// Records, for the computation recording, the component identities of
+    /// the functions of the file at `path` ([`super::census::ComponentSpansOf`]):
+    /// what a question about one of them reads of the census. `false` when no
+    /// such read stands for it (outside a recording, or a path the build does
+    /// not hold), so the reader records the whole census instead.
+    pub(crate) fn note_component_spans(&self, path: &str) -> bool {
+        if probing() {
+            return false;
+        }
+        let Some(frame) = crate::base::reads::recording_frame() else {
+            return true;
+        };
+        let Some(slot) = self.file_table.last_slot(path) else {
+            return false;
+        };
+        let (id, _) = self.memo_slot_of(slot);
+        if first_in_frame(frame, Noted::ComponentSpans(id)) {
+            cached_read(
+                &self.hand_out_reads.component_spans,
+                self.file_table.slot_count(),
+                slot,
+                || {
+                    self.memo_world()
+                        .memo_read::<super::census::ComponentSpansOf>(&id)
+                },
+            );
+        }
+        true
+    }
+
+    /// Records, for the computation recording, the exact object-member
+    /// targets of every slot of the file at `path`
+    /// ([`crate::object_members::ObjectMemberTargets`]): what a question
+    /// about one call site of that file reads of the whole map. `false` when
+    /// no such read stands for it, as [`Self::note_component_spans`].
+    pub(crate) fn note_member_targets_of(&self, path: &str) -> bool {
+        self.note_slot_memos::<crate::object_members::ObjectMemberTargets>(
+            path,
+            Noted::MemberTargets,
+            &self.hand_out_reads.member_targets,
+        )
+    }
+
+    /// [`Self::note_member_targets_of`] for the literal-receiver census
+    /// ([`crate::object_members::LiteralReceivers`]).
+    pub(crate) fn note_literal_receivers_of(&self, path: &str) -> bool {
+        self.note_slot_memos::<crate::object_members::LiteralReceivers>(
+            path,
+            Noted::LiteralReceivers,
+            &self.hand_out_reads.literal_receivers,
+        )
+    }
+
+    /// Records, for the computation recording, the `never`-returning calls
+    /// of the file at `path` ([`super::project_memos::NeverReturning`]):
+    /// what a question about that file reads of the whole table. `false`
+    /// when no such read stands for it, as [`Self::note_component_spans`].
+    pub(crate) fn note_never_returning_of(&self, path: &str) -> bool {
+        if probing() {
+            return false;
+        }
+        let Some(frame) = crate::base::reads::recording_frame() else {
+            return true;
+        };
+        let Some(slot) = self.file_table.last_slot(path) else {
+            return false;
+        };
+        let (id, _) = self.memo_slot_of(slot);
+        if first_in_frame(frame, Noted::NeverReturning(id)) {
+            cached_read(
+                &self.hand_out_reads.never_returning,
+                self.file_table.slot_count(),
+                slot,
+                || {
+                    self.memo_world()
+                        .memo_read::<super::project_memos::NeverReturning>(&id)
+                },
+            );
+        }
+        true
+    }
+
+    /// Notes `M`'s answer of every slot of the file at `path`: the entries
+    /// a whole-program map assembled from those answers holds for the path
+    /// (a later slot's entry replaces an earlier one's, so each may decide).
+    fn note_slot_memos<M>(
+        &self,
+        path: &str,
+        noted: fn(FileId) -> Noted,
+        cells: &OnceLock<Vec<OnceLock<MemoRead>>>,
+    ) -> bool
+    where
+        M: Memo<BuildSchema, Key = (FileId, u32)>,
+    {
+        if probing() {
+            return false;
+        }
+        let Some(frame) = crate::base::reads::recording_frame() else {
+            return true;
+        };
+        let Some(slot) = self.file_table.last_slot(path) else {
+            return false;
+        };
+        let (id, _) = self.memo_slot_of(slot);
+        if first_in_frame(frame, noted(id)) {
+            for &slot in self.memos.table().slots_of(id) {
+                cached_read(cells, self.file_table.slot_count(), slot, || {
+                    self.memo_world().memo_read::<M>(&self.memo_slot_of(slot))
+                });
+            }
+        }
+        true
+    }
+
+    /// Records, for the computation recording, the closed program's
+    /// namespace census of the module at `path` ([`super::census::HandOuts`]:
+    /// whether it escapes unnamed, which functions it hands out by name):
+    /// what `hands_out_by_name` and `escapes_unnamed` read of every file's
+    /// namespace uses.
+    pub(crate) fn note_namespace_hand_outs_of(&self, path: &str) {
+        let Some(frame) = self.hand_out_frame() else {
+            return;
+        };
+        let Some(id) = self.memos.table().id_of(path) else {
+            return;
+        };
+        if first_in_frame(frame, Noted::NamespaceHandOuts(id)) {
+            let _ = self.memo_world().answer::<super::census::HandOuts>(&id);
+        }
+    }
+
+    /// Records, for the computation recording, `symbol`'s declarations and
+    /// every analyzed file that holds one: what a question about the
+    /// bindings that name the symbol reads, as a binding naming a symbol is
+    /// one of its declarations.
+    pub(crate) fn note_symbol_declarations(&self, symbol: &str) {
+        if self.hand_out_frame().is_none() {
+            return;
+        }
+        self.note_probe_read(Probe::SymbolInfo, || Self::symbol_key(symbol));
+        for declaration in self.symbol_declarations(symbol).into_iter().flatten() {
+            if let Some(slot) = self
+                .file_table
+                .last_slot(declaration.location.path.as_ref())
+            {
+                self.note_slot_read(slot);
             }
         }
     }

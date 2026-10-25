@@ -102,6 +102,7 @@ fn semantic_demand_runs_reject_a_cross_file_query_location() {
             &[SemanticDemandRun {
                 path: &run_path,
                 demands: &demands,
+                shared: None,
             }],
         )
         .unwrap_err();
@@ -205,6 +206,7 @@ fn a_batch_structural_accessor_keeps_no_descriptor() {
             &[SemanticDemandRun {
                 path: &path,
                 demands: &demands,
+                shared: None,
             }],
         )
         .unwrap();
@@ -249,6 +251,7 @@ fn a_descriptor_depends_on_its_location_only() {
                 &[SemanticDemandRun {
                     path: &path,
                     demands: &demands,
+                    shared: None,
                 }],
             )
             .unwrap();

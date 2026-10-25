@@ -33,12 +33,16 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
         (calls, unavailable)
     }
 
-    pub fn read(&self, symbol: &SymbolId, file: &'a FileFacts, span: Span) -> Option<SummaryRead> {
-        let (display, declaration) = self
-            .accessors
+    /// What [`Self::read`] reads of the resolver for `symbol`: its display
+    /// and declaration.
+    pub fn read_entry(&self, symbol: &SymbolId) -> Option<&(SymbolId, Location)> {
+        self.accessors
             .get(symbol)
             .or_else(|| self.declarations.get(symbol))
-            .cloned()?;
+    }
+
+    pub fn read(&self, symbol: &SymbolId, file: &'a FileFacts, span: Span) -> Option<SummaryRead> {
+        let (display, declaration) = self.read_entry(symbol).cloned()?;
         Some(SummaryRead {
             transported: true,
             symbol: symbol.clone(),

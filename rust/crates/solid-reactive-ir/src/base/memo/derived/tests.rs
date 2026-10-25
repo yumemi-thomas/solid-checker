@@ -18,11 +18,7 @@ struct ToyWorld<'w> {
     computed: Mutex<Vec<u32>>,
 }
 
-impl World<Toy> for ToyWorld<'_> {
-    fn fingerprint(&self, input: u32) -> u64 {
-        self.derived.fingerprint(DERIVED, input)
-    }
-}
+impl World<Toy> for ToyWorld<'_> {}
 
 impl Schema for Toy {
     type Input = u32;

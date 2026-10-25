@@ -13,6 +13,10 @@
 //   bun scripts/ir-edit-fuzz.mjs --fixtures [--steps 6] [--seed 1]
 //       The short budget `make verify` runs: each listed fixture is copied to
 //       a temp directory (never edited in place), edited and compared.
+//   bun scripts/ir-edit-fuzz.mjs --fixtures --family retype [--steps 4]
+//       Callee body edits that retype a caller whose text is unchanged
+//       (`retype-return`): the retained build must name a caller in its Type
+//       Facts delta (`SOLID_CHECKER_IR_DELTA_LOG`) and answer as a fresh run.
 //   bun scripts/ir-edit-fuzz.mjs --project <tsconfig.json> --steps 30 --seed 7
 //       The long manual budget, on any project (the rc17 corpus: app-game
 //       apps/web, solid-groove, compass-ui apps/ui). Edits happen in place.
@@ -60,6 +64,18 @@ export const FIXTURE_PROJECTS = [
   "reactive-ir/deferred-effect-apply",
   "reactive-ir/call-valued-callee-identity",
   "reactive-ir/callback-props-reads"
+];
+
+/**
+ * The `retype` family (`--fixtures --family retype`): fixtures whose callee
+ * files export a function with an inferred return type that another file
+ * calls, edited only by `retype-return` (and reverts).
+ */
+export const RETYPE_FIXTURE_PROJECTS = [
+  "reactive-ir/returned-closure",
+  "reactive-ir/interprocedural",
+  "reactive-ir/summary-direct-read",
+  "reactive-ir/accessor-provenance"
 ];
 
 /** Mulberry32: a seeded generator, so a failing run replays from its seed. */
@@ -139,10 +155,99 @@ export const EDIT_KINDS = {
       ? `${text}\nexport function FzComp${serial}(props: { v: number }) {\n  return <div>{props.v}</div>;\n}\n`
       : `${text}\nexport function fzHelper${serial}(value: number) {\n  return value + 1;\n}\n`;
   },
+  "retype-return"({ text, path, others, rand }) {
+    // A callee body edit that changes its callers' inferred types, their text
+    // unchanged: the first top-level `return` of an exported function with
+    // no declared return type, imported and called by another file, now
+    // returns a one-element tuple. Each caller's call result (and a
+    // parameter contextually typed from it) moves, so the caller must be in
+    // the Type Facts delta the IR binds its files by (#97, ADR 0389).
+    const sites = [];
+    for (const found of text.matchAll(/\bexport\s+function\s+([A-Za-z_$][\w$]*)\s*(?:<[^>()]*>)?\s*\(([^()]*)\)\s*\{/g)) {
+      const name = found[1];
+      const open = found.index + found[0].length - 1;
+      const statement = topLevelReturn(text, open);
+      if (!statement) continue;
+      const callers = callersOf(path, name, others);
+      if (callers.length > 0) sites.push({ name, statement, callers });
+    }
+    if (sites.length === 0) return null;
+    const { name, statement, callers } = sites[rand(sites.length)];
+    const replaced = `return [${statement.expression}] as const;`;
+    return {
+      text: text.slice(0, statement.start) + replaced + text.slice(statement.end),
+      expect: { retyped: name, callers }
+    };
+  },
   "add-eval": ({ text, serial }) => `${text}\nexport const __fzEval${serial} = (code: string) => eval(code);\n`,
   "add-prototype-write": ({ text, path, serial }) =>
     `${text}\n${/\.tsx?$/.test(path) ? "(Object.prototype as any)" : "Object.prototype"}.__fz${serial} = 1;\n`
 };
+
+/**
+ * The first `return <expression>;` directly in the block opened at `open`
+ * (nested blocks and functions skipped), or null.
+ */
+export function topLevelReturn(text, open) {
+  let depth = 0;
+  for (let at = open; at < text.length; at += 1) {
+    const char = text[at];
+    if (char === "{") depth += 1;
+    else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return null;
+    } else if (depth === 1 && text.startsWith("return", at) && !/[\w$]/.test(text[at - 1] ?? "") && /\s/.test(text[at + 6] ?? "")) {
+      const end = text.indexOf(";", at);
+      const newline = text.indexOf("\n", at);
+      if (end === -1 || (newline !== -1 && newline < end)) return null;
+      const expression = text.slice(at + 6, end).trim();
+      if (expression === "" || /[{}]/.test(expression)) return null;
+      return { start: at, end: end + 1, expression };
+    }
+  }
+  return null;
+}
+
+/**
+ * What a `retype-return` step's IR build lacked, or "": the retained build
+ * (the first delta line the daemon appended) must name a caller of the
+ * retyped function among the Type Facts delta's paths, unless it had no
+ * delta to bind files by (every file recomputed).
+ */
+export function retypeReport(expect, appended) {
+  const builds = appended
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line).reactiveIrDelta)
+    .filter(Boolean);
+  if (builds.length === 0) return `retype-return ${expect.retyped}: no IR build was logged\n`;
+  const build = builds[0];
+  if (!build.delta) return "";
+  const canonical = (path) => (existsSync(path) ? realpathSync(path) : path);
+  const named = new Set([...(build.entityPaths ?? []), ...(build.filePaths ?? [])].map(canonical));
+  return expect.callers.some((caller) => named.has(canonical(caller)))
+    ? ""
+    : `retype-return ${expect.retyped}: no caller (${expect.callers.join(", ")}) in the Type Facts delta ${JSON.stringify(build.entityPaths)}\n`;
+}
+
+/** The files of `others` that import `name` from `path` and call it. */
+export function callersOf(path, name, others) {
+  const base = path.replace(/\.(tsx?|jsx?)$/, "");
+  return others.filter((other) => {
+    let text;
+    try {
+      text = readFileSync(other, "utf8");
+    } catch {
+      return false;
+    }
+    if (!new RegExp(`\\b${name.replace(/\$/g, "\\$")}\\s*\\(`).test(text)) return false;
+    return [...text.matchAll(/\bimport\s+\{([^}]*)\}\s+from\s+["'](\.[^"']*)["']/g)].some(
+      (found) =>
+        found[1].split(",").some((item) => item.trim().split(/\s+as\s+/)[0] === name) &&
+        join(dirname(other), found[2]).replace(/\.(tsx?|jsx?)$/, "") === base
+    );
+  });
+}
 
 const LOADERS = { ".ts": "ts", ".tsx": "tsx", ".js": "js", ".jsx": "jsx", ".mts": "ts", ".cts": "ts", ".mjs": "js", ".cjs": "js" };
 
@@ -152,6 +257,27 @@ const LOADERS = { ".ts": "ts", ".tsx": "tsx", ".js": "js", ".jsx": "jsx", ".mts"
  * the IR, so edits that break syntax are not applied. Without Bun's
  * transpiler every edit is assumed to parse and a refusal is caught below.
  */
+/**
+ * Why a daemon request's answer did not come from the retained daemon, or
+ * `null` when it did. The client falls back to a one-shot check on any daemon
+ * failure and says so only on stderr; that answer equals the fresh one by
+ * construction, so a step it answered compared nothing. With
+ * `SOLID_CHECKER_TIMINGS` set, the client prints its mode for a retained
+ * answer (`"mode":"retained-daemon"`).
+ */
+export function notServedByDaemon(stderr) {
+  const fallback = /daemon unavailable[^\n]*/.exec(stderr);
+  if (fallback) return fallback[0];
+  const served = stderr.split("\n").some((line) => {
+    try {
+      return JSON.parse(line)?.mode === "retained-daemon";
+    } catch {
+      return false;
+    }
+  });
+  return served ? null : "the client reported no retained-daemon answer";
+}
+
 export function parses(path, text) {
   const loader = LOADERS[path.slice(path.lastIndexOf("."))];
   if (!loader || typeof Bun === "undefined") return true;
@@ -255,11 +381,16 @@ function parseArguments(argv) {
     else if (flag === "--checker") options.checker = resolve(value());
     else if (flag === "--typefacts") options.typefacts = resolve(value());
     else if (flag === "--kinds") options.kinds = value().split(",");
+    else if (flag === "--family") options.family = value();
     else if (flag === "--restore") options.restore = resolve(value());
     else if (flag === "--keep-going") options.keepGoing = true;
     else if (flag === "--no-shadow") options.shadow = false;
     else if (flag === "--idle-shadow") options.idleShadow = true;
     else throw new Error(`unknown argument ${flag}`);
+  }
+  if (options.family !== undefined) {
+    if (options.family !== "retype") throw new Error(`unknown family ${options.family}`);
+    options.kinds = ["retype-return"];
   }
   for (const kind of options.kinds) {
     if (!(kind in EDIT_KINDS)) throw new Error(`unknown edit kind ${kind}`);
@@ -276,19 +407,38 @@ function locate(variable, ...candidates) {
  * One project's run. Returns `{ steps, mismatches, restoreProblems, log }`.
  * `directory` is edited in place; the caller copies a fixture first.
  */
-export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typefacts, shadow, idleShadow, keepGoing, label }) {
+export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typefacts, shadow, idleShadow, keepGoing, label, family }) {
   const root = dirname(tsconfig);
   const files = projectFiles(root);
+  // A family edits only the files its kinds have a site in.
+  const editable = family
+    ? files.filter((path) =>
+        kinds.some(
+          (kind) =>
+            EDIT_KINDS[kind]({
+              text: readFileSync(path, "utf8"),
+              path,
+              others: files.filter((other) => other !== path),
+              rand: () => 0,
+              serial: 0
+            }) !== null
+        )
+      )
+    : files;
   const rand = seededRandom(seed);
   const scratch = mkdtempSync(join(tmpdir(), "ir-edit-fuzz-"));
   const restorer = new Restorer(join(scratch, "journal"));
   const shadowLog = join(scratch, "shadow.log");
+  const deltaLog = join(scratch, "delta.log");
   const idleLog = join(scratch, "idle-shadow.log");
   const environment = {
     ...process.env,
     SOLID_TYPEFACTS_BIN: typefacts,
     // The daemon is stopped by this harness, not by its idle or memory limits.
     SOLID_CHECKER_DAEMON_MAX_RSS_MB: "0",
+    SOLID_CHECKER_DAEMON_IDLE_SECS: "3600",
+    // Each IR build's Type Facts delta, for the `retype-return` check.
+    SOLID_CHECKER_IR_DELTA_LOG: deltaLog,
     // Shadow mode also checks every patched Type Facts symbol closure
     // against a full one (typefacts session/closure.rs), into the same log.
     ...(shadow
@@ -327,7 +477,8 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
   const check = (daemon) =>
     run(checker, ["--project", tsconfig, "--format", "json"], {
       cwd: root,
-      env: { ...environment, SOLID_CHECKER_DAEMON: daemon ? "1" : "0" }
+      // The client's timing line names the mode that answered.
+      env: { ...environment, SOLID_CHECKER_DAEMON: daemon ? "1" : "0", ...(daemon ? { SOLID_CHECKER_TIMINGS: "1" } : {}) }
     });
   // The daemon's command line carries the canonical project path (macOS
   // resolves /var to /private/var), so match that one too or it leaks.
@@ -336,6 +487,16 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
     for (const path of new Set([tsconfig, canonical])) {
       await run("pkill", ["-f", "--", `--serve --project ${path}`], {});
     }
+  };
+  // The serving daemon's pid. A step answered by a daemon started since the
+  // last one (the old one died) is a cold build, not a retained one.
+  const daemonPids = async () => {
+    const pids = new Set();
+    for (const path of new Set([tsconfig, canonical])) {
+      const found = await run("pgrep", ["-f", "--", `--serve --project ${path}`], {});
+      for (const pid of found.stdout.split(/\s+/).filter(Boolean)) pids.add(pid);
+    }
+    return [...pids].sort().join(",");
   };
   const log = [];
   const report = (line) => {
@@ -357,20 +518,29 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
   let executed = 0;
   const retainedMs = [];
   const freshMs = [];
+  let daemonPid = "";
   try {
     await stopDaemon();
-    await check(true); // The daemon's first (cold) build.
-    if (idleShadow) await awaitVerdict(0);
-    for (let step = 0; step < steps; step += 1) {
-      const path = files[rand(files.length)];
+    const cold = await check(true); // The daemon's first (cold) build.
+    const coldMiss = notServedByDaemon(cold.stderr);
+    daemonPid = await daemonPids();
+    const coldFailed = Boolean(coldMiss) || daemonPid === "" || daemonPid.includes(",");
+    if (coldFailed) {
+      mismatches += 1;
+      report(`FAILED ${label}: the cold daemon request was not served by one daemon (${coldMiss ?? `pids '${daemonPid}'`})`);
+    } else if (idleShadow) await awaitVerdict(0);
+    for (let step = 0; step < steps && !coldFailed; step += 1) {
+      if (editable.length === 0) break;
+      const path = editable[rand(editable.length)];
       restorer.protect(path);
       const current = readFileSync(path, "utf8");
       const original = restorer.originals.get(path).toString("utf8");
       let kind;
       let next = null;
+      let expect = null;
       for (let attempt = 0; attempt < 12 && next === null; attempt += 1) {
         kind = rand(5) === 0 && current !== original ? "revert" : kinds[rand(kinds.length)];
-        next =
+        const edited =
           kind === "revert"
             ? original
             : EDIT_KINDS[kind]({
@@ -380,12 +550,14 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
                 rand,
                 serial: step
               });
+        next = edited && typeof edited === "object" ? edited.text : edited;
+        expect = edited && typeof edited === "object" ? edited.expect : null;
         if (next !== null && !parses(path, next)) next = null;
       }
       if (next === null) continue;
       writeFileSync(path, next);
-      executed += 1;
       const logSize = existsSync(shadowLog) ? statSync(shadowLog).size : 0;
+      const deltaSize = existsSync(deltaLog) ? statSync(deltaLog).size : 0;
       const verdictsBefore = idleShadow ? verdicts() : 0;
       const idleBefore = idleLines().length;
       const started = performance.now();
@@ -403,10 +575,15 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
             .filter((line) => !/: (verified|cancelled)$/.test(line))
             .join("\n")
         : "";
+      const deltaReport = expect
+        ? retypeReport(expect, existsSync(deltaLog) ? readFileSync(deltaLog, "utf8").slice(deltaSize) : "")
+        : "";
       const shadowReport =
         (existsSync(shadowLog) && statSync(shadowLog).size > logSize
           ? readFileSync(shadowLog, "utf8").slice(logSize)
-          : "") + idleReport;
+          : "") +
+        idleReport +
+        deltaReport;
       // Two empty answers are equal and prove nothing: a checker that cannot
       // run the project must fail the run, not pass it. A refusal for syntax
       // the pre-check let through is skipped, and the file put back.
@@ -416,7 +593,13 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
         report(`skip ${label} step ${step} ${relative(root, path)} ${kind} (refused: unparseable)`);
         continue;
       }
-      const same = !empty && retained.status === fresh.status && retained.stdout === fresh.stdout;
+      executed += 1;
+      // An answer the retained daemon did not give compares nothing.
+      const pidNow = await daemonPids();
+      const miss =
+        notServedByDaemon(retained.stderr) ??
+        (pidNow === daemonPid ? null : `the daemon changed (pid '${daemonPid}', now '${pidNow}')`);
+      const same = !miss && !empty && retained.status === fresh.status && retained.stdout === fresh.stdout;
       const name = `${label} step ${step} ${relative(root, path)} ${kind}`;
       if (same && !shadowReport) {
         report(
@@ -434,9 +617,16 @@ export async function fuzzProject({ tsconfig, steps, seed, kinds, checker, typef
       writeFileSync(`${out}.fresh.stderr`, fresh.stderr);
       report(
         `MISMATCH ${name} (status ${retained.status}/${fresh.status}) -> ${out}.*` +
+          (miss ? `\nnot served by the retained daemon: ${miss}` : "") +
           (shadowReport ? `\n${shadowReport.trim()}` : "")
       );
       if (!keepGoing) break;
+      // Keep comparing against whichever daemon serves now.
+      daemonPid = pidNow;
+    }
+    if (steps > 0 && executed === 0 && !coldFailed) {
+      mismatches += 1;
+      report(`FAILED ${label}: no step compared anything`);
     }
   } finally {
     await finish();
@@ -472,7 +662,8 @@ async function main() {
   let total = 0;
   let mismatches = 0;
   if (options.fixtures) {
-    const results = await mapPool(FIXTURE_PROJECTS, async (id, index) => {
+    const projects = options.family === "retype" ? RETYPE_FIXTURE_PROJECTS : FIXTURE_PROJECTS;
+    const results = await mapPool(projects, async (id, index) => {
       // A copy: the fixture tree is never edited in place.
       const copy = mkdtempSync(join(tmpdir(), "ir-edit-fuzz-fixture-"));
       try {

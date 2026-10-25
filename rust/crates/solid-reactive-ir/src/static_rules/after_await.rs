@@ -40,7 +40,7 @@ use super::native_promise::{
 };
 use super::pre_await::{PreAwait, Tracking};
 use super::{
-    AsyncComputations, call_accessor_symbol, member_read_site, member_reads_after_await,
+    SharedAsyncComputations, call_accessor_symbol, member_read_site, member_reads_after_await,
     tracked_async_computation_context, typed_after_await_obligation, typed_unknown,
 };
 use crate::HashSet;
@@ -105,7 +105,11 @@ struct Reach<'f, 'a> {
     pre: PreAwait<'f, 'a>,
 }
 
-pub(super) fn run(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
+pub(super) fn run<'a>(
+    ctx: &AnalysisContext<'a>,
+    computations: &SharedAsyncComputations<'a>,
+    draft: &mut ProgramDraft,
+) {
     let mut reach = Reach {
         ctx,
         files: ctx
@@ -151,8 +155,6 @@ pub(super) fn run(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
         done: HashSet::default(),
         pre: PreAwait::new(ctx),
     };
-    // Built on first use: only a function with something to report needs it.
-    let mut computations: Option<AsyncComputations> = None;
     for typescript_file in ctx.facts.typescript.files() {
         for function in typescript_file.async_functions.iter() {
             let member_site = ctx
@@ -168,9 +170,11 @@ pub(super) fn run(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
             {
                 continue;
             }
-            let index = computations
-                .get_or_insert_with(|| AsyncComputations::new(ctx, &ctx.facts.typescript));
-            let Some(context) = tracked_async_computation_context(ctx, function, index) else {
+            // Built on first use, once per build: only a function with
+            // something to report needs it.
+            let Some(context) =
+                tracked_async_computation_context(ctx, function, computations.get(ctx))
+            else {
                 continue;
             };
             let function = Rc::new(function.clone());

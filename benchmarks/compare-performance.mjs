@@ -13,6 +13,10 @@
 //     --head-bench <path> --head-typefacts <path> \
 //     [--rounds 5]
 //
+// CI runners have four cores; SOLID_CHECKER_IR_WORKERS=4 (read by both
+// benchmark binaries' Reactive IR) reproduces their schedule on a larger
+// machine.
+//
 // The regression threshold is a ratio, SOLID_CHECKER_MAX_RELATIVE_REGRESSION
 // (default 1.25). Interleaved same-machine medians are stable to a few
 // percent: across ten consecutive shared-runner runs in September 2026 the
@@ -22,9 +26,10 @@
 //
 // A regression a decision accepted is listed in
 // benchmarks/accepted-regressions.json: one metric, a ratio ceiling, the ADR,
-// and the merge base it applies to (`--base-producer`, which the workflow
-// records with the base runtime). An entry for an older base expires by
-// itself once the change is on main.
+// and the merge base it applies to (`baseProducer` and, when set, `baseIr`:
+// what `--base-producer` and `--base-ir` say, which the workflow records with
+// the base runtime). An entry for an older base expires by itself once the
+// change is on main.
 
 import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -59,9 +64,14 @@ const threshold = Number(
   process.env.SOLID_CHECKER_MAX_RELATIVE_REGRESSION ?? 1.25
 );
 const baseProducer = argument("--base-producer") ?? "unknown";
+const baseIr = argument("--base-ir") ?? "unknown";
 const accepted = JSON.parse(
   readFileSync(join(repository, "benchmarks/accepted-regressions.json"), "utf8")
-).entries.filter(entry => entry.baseProducer === baseProducer);
+).entries.filter(
+  entry =>
+    entry.baseProducer === baseProducer &&
+    (entry.baseIr === undefined || entry.baseIr === baseIr)
+);
 
 function run(command, arguments_) {
   const result = spawnSync(command, arguments_, {

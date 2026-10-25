@@ -51,7 +51,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use tsrs_ast::SymbolFlags;
 use typefacts::v3::SymbolQuery;
-use typefacts::{AsyncFunctionFact, Declaration, Location, SymbolFact};
+use typefacts::{AsyncFunctionFact, Declaration, EntityFact, Location, SymbolFact};
 
 /// Opt-in self-check: a row already computed by an earlier pass is computed
 /// again by every later pass that reaches its binder id, and differences are
@@ -93,7 +93,7 @@ impl Row {
 /// (`passes::ENV_VERIFY_REUSE`): reported on stderr and appended to
 /// [`crate::passes::ENV_VERIFY_REUSE_LOG`] when set (the IR edit fuzz fails
 /// on that log), and the fresh output is served; a test build panics.
-fn reuse_mismatch(path: &str) {
+pub(crate) fn reuse_mismatch(path: &str) {
     let message = format!("per-file reuse mismatch: {path} (served fresh)");
     eprintln!("{message}");
     if let Some(log) = std::env::var_os(crate::passes::ENV_VERIFY_REUSE_LOG) {
@@ -112,7 +112,7 @@ fn reuse_mismatch(path: &str) {
 }
 
 /// What the runs and async locations of one table answer.
-type RunsAnswer = (Vec<SemanticDemandRunResult>, Vec<AsyncFunctionFact>);
+type RunsAnswer = (Vec<crate::model::RunAnswer>, Vec<AsyncFunctionFact>);
 
 /// Counters of the per-file mode, for measurement.
 #[derive(Clone, Copy, Debug, Default)]
@@ -158,12 +158,22 @@ pub(crate) struct PerFile {
     /// Kept pass outputs (instant-edits P3).
     pub(crate) reuse: crate::passes::Reuse,
     /// Worker threads for the passes.
-    workers: usize,
+    pub(crate) workers: usize,
     /// What the last table served per path, and a version per path that
     /// changes exactly when what the path's rows hold changed
     /// ([`Project::per_file_content_version`]).
-    served_runs: HashMap<String, (Arc<crate::passes::PassOutput>, Vec<Completion>)>,
+    served: Vec<Served>,
+    /// The paths of `served`, in the same order.
+    served_paths: Vec<String>,
     served_async: HashMap<String, Vec<AsyncFunctionFact>>,
+    /// The async facts the last table served, with its async work count.
+    served_facts: Option<(usize, Vec<AsyncFunctionFact>)>,
+    /// Run positions by the ids their deferred answers read, and by the
+    /// symbols whose structural standing their descriptors read.
+    asking: HashMap<SymbolId, Vec<u32>>,
+    candidates: HashMap<SymbolId, Vec<u32>>,
+    /// The structural accessors of the served runs.
+    structural: crate::completion::Structural,
     versions: HashMap<String, u64>,
     next_version: u64,
     /// Whether `versions` describes the last table.
@@ -234,6 +244,42 @@ fn changed_buckets(
         if !old.contains_key(id) {
             buckets.insert((*id).clone());
         }
+    }
+}
+
+/// One run as the last table served it: the pass output, the answers that
+/// completed it, and the rows they made.
+struct Served {
+    output: Arc<crate::passes::PassOutput>,
+    answers: crate::completion::Answers,
+    rows: Arc<[EntityFact]>,
+}
+
+/// Adds (or removes) run position `at` under the ids and symbols `output`'s
+/// deferred answers read.
+fn index_asks(state: &mut PerFile, at: usize, output: &crate::passes::PassOutput, add: bool) {
+    let Some(run) = &output.run else {
+        return;
+    };
+    let at = u32::try_from(at).unwrap_or(u32::MAX);
+    let edit = |index: &mut HashMap<SymbolId, Vec<u32>>, id: &SymbolId| {
+        if add {
+            let positions = index.entry(id.clone()).or_default();
+            if positions.last() != Some(&at) {
+                positions.push(at);
+            }
+        } else if let Some(positions) = index.get_mut(id) {
+            positions.retain(|held| *held != at);
+            if positions.is_empty() {
+                index.remove(id);
+            }
+        }
+    };
+    for id in run.patches.asked() {
+        edit(&mut state.asking, id);
+    }
+    for id in run.patches.candidates() {
+        edit(&mut state.candidates, id);
     }
 }
 
@@ -456,7 +502,7 @@ impl Project {
         ctx: &Context,
         runs: &[SemanticDemandRun<'_>],
         async_locations: &[Location],
-    ) -> Result<(Vec<SemanticDemandRunResult>, Vec<AsyncFunctionFact>), BackendError> {
+    ) -> Result<RunsAnswer, BackendError> {
         #[cfg(test)]
         let pooled = !self.per_file.sequential_for_test;
         #[cfg(not(test))]
@@ -464,10 +510,31 @@ impl Project {
         if pooled && let Some(answer) = self.pooled_demand_runs(ctx, runs, async_locations)? {
             return Ok(answer);
         }
+        let (results, facts) = self.sequential_results(ctx, runs, async_locations)?;
+        Ok((
+            results
+                .into_iter()
+                .map(crate::model::RunAnswer::Result)
+                .collect(),
+            facts,
+        ))
+    }
+
+    /// The runs' aligned results and the async facts, from the sequential
+    /// run over the project's one identity state (the pooled passes keep
+    /// only rows); what the pooled state kept is dropped.
+    pub(crate) fn sequential_results(
+        &mut self,
+        ctx: &Context,
+        runs: &[SemanticDemandRun<'_>],
+        async_locations: &[Location],
+    ) -> Result<(Vec<SemanticDemandRunResult>, Vec<AsyncFunctionFact>), BackendError> {
         let state = self.per_file_state();
         state.versions_valid = false;
-        state.served_runs.clear();
+        state.served.clear();
+        state.served_paths.clear();
         state.served_async.clear();
+        state.served_facts = None;
         state.symbol_changes = None;
         state.merged_base = false;
         state.merged = crate::passes::Merged::default();
@@ -630,17 +697,30 @@ impl Project {
         async_locations: &[Location],
     ) -> Result<Option<RunsAnswer>, BackendError> {
         use crate::passes::{PassOutput, PassWork, run_works};
+        let mut phases = crate::trace::Phases::new(&self.trace);
         check(ctx)?;
         let program = self.live()?.program();
         let mut state = std::mem::take(self.per_file_state());
         state.clear_rows();
-        let mut async_by_path: BTreeMap<Arc<str>, Vec<Location>> = BTreeMap::new();
-        for location in async_locations {
-            async_by_path
-                .entry(location.path.clone())
-                .or_default()
-                .push(location.clone());
+        // Each path's async locations, in order, as ranges of the list (a
+        // path's locations are one range when the caller grouped them).
+        let mut async_by_path: HashMap<&str, Vec<std::ops::Range<usize>>> = HashMap::new();
+        let mut start = 0;
+        while start < async_locations.len() {
+            let path = &async_locations[start].path;
+            let mut end = start + 1;
+            while end < async_locations.len() && async_locations[end].path == *path {
+                end += 1;
+            }
+            async_by_path.entry(path).or_default().push(start..end);
+            start = end;
         }
+        let gather = |ranges: Vec<std::ops::Range<usize>>| -> Vec<Location> {
+            ranges
+                .into_iter()
+                .flat_map(|range| async_locations[range].iter().cloned())
+                .collect()
+        };
         // The works, in the order their outputs merge: the runs (path
         // order), async locations outside every run, then every other
         // non-declaration file's reference contribution.
@@ -657,28 +737,30 @@ impl Project {
             works.push(PassWork {
                 path: run.path.to_owned(),
                 run: Some(run),
-                locations: async_by_path.remove(run.path).unwrap_or_default(),
+                locations: async_by_path
+                    .remove(run.path)
+                    .map(gather)
+                    .unwrap_or_default(),
                 scan: true,
                 reusable: true,
             });
         }
         let async_count = works.len() + async_by_path.len();
-        for (path, locations) in std::mem::take(&mut async_by_path) {
+        let mut rest: Vec<(&str, Vec<std::ops::Range<usize>>)> =
+            async_by_path.into_iter().collect();
+        rest.sort_unstable_by(|left, right| left.0.cmp(right.0));
+        for (path, ranges) in rest {
             works.push(PassWork {
-                path: path.to_string(),
+                path: path.to_owned(),
                 run: None,
-                locations,
+                locations: gather(ranges),
                 scan: false,
                 reusable: false,
             });
         }
-        let mut paths: Vec<String> = Vec::new();
-        for file in program.source_files() {
-            if file.is_declaration_file() {
-                continue;
-            }
-            let path = clean(file.file_name());
-            if !scanned.contains(&path) {
+        let paths: Vec<String> = state.reuse.program_paths(program).to_vec();
+        for path in &paths {
+            if !scanned.contains(path) {
                 works.push(PassWork {
                     path: path.clone(),
                     run: None,
@@ -687,14 +769,15 @@ impl Project {
                     reusable: true,
                 });
             }
-            paths.push(path);
         }
 
+        phases.mark("worksNs");
         // Kept outputs whose read set is unchanged.
         let started = std::time::Instant::now();
         state
             .reuse
-            .refresh(program, &mut self.inputs, self.ids.exported_by_ref());
+            .refresh(program, &mut self.inputs, &mut self.ids, &mut phases);
+        phases.mark("refreshNs");
         let mut outputs: Vec<Option<Arc<PassOutput>>> = works
             .iter()
             .map(|work| state.reuse.lookup(work, program, &mut self.inputs))
@@ -703,8 +786,10 @@ impl Project {
         let to_run: Vec<usize> = (0..works.len())
             .filter(|index| verify || outputs[*index].is_none())
             .collect();
+        phases.mark("lookupNs");
         let census = (!to_run.is_empty()).then(|| state.reuse.census(program, &mut self.inputs));
         let refresh = started.elapsed();
+        phases.mark("censusNs");
 
         let started = std::time::Instant::now();
         let seed = self.ids.pass_seed();
@@ -719,6 +804,7 @@ impl Project {
             workers,
         );
         let pool = started.elapsed();
+        phases.mark("poolNs");
         for paths in outcome.runtime_paths {
             self.ids.absorb_runtime_paths(paths);
         }
@@ -808,6 +894,7 @@ impl Project {
                 return Ok(None);
             }
         };
+        phases.mark("mergeKeysNs");
         let mut exact = state.merged_base && update.changed_rows.is_some();
         if state.reuse.verify && !update.full {
             let mut fresh = crate::passes::Merged::default();
@@ -838,13 +925,7 @@ impl Project {
         let mut reuse = crate::references::BinderRetention::default();
         for (output, recomputed) in outputs.iter().zip(&recomputed) {
             let reused = !recomputed;
-            let symbols = output.result.as_ref().map_or(0, |result| {
-                result
-                    .entities
-                    .iter()
-                    .filter(|entity| !entity.symbol.is_empty())
-                    .count()
-            });
+            let symbols = output.run.as_ref().map_or(0, |run| run.symbols);
             let references = usize::from(output.references.is_some());
             if reused {
                 reuse.reused_reference_files += references;
@@ -860,6 +941,7 @@ impl Project {
                 *self.unavailable.0.entry(family).or_default() += count;
             }
         }
+        phases.mark("mergeCountsNs");
         // The reference index: patched by the changed contributions while
         // the program's paths are the same, else built from every one.
         let mut sorted_paths = paths.clone();
@@ -873,7 +955,7 @@ impl Project {
             if update.full || index.paths() != sorted_paths.as_slice() {
                 return None;
             }
-            for (old, new) in &update.changed {
+            for (_, old, new) in &update.changed {
                 if let Some((path, references)) =
                     old.as_ref().and_then(|old| old.references.as_ref())
                     && !index.patch(path, Some(references), None)
@@ -888,7 +970,8 @@ impl Project {
             }
             Some(index)
         });
-        exact &= patched.is_some();
+        let index_patched = patched.is_some();
+        exact &= index_patched;
         let build = |paths: Vec<String>| {
             crate::references::PassIndex::build(
                 paths,
@@ -915,9 +998,10 @@ impl Project {
             None => build(paths),
         };
         self.references.install_pass_index(index);
+        phases.mark("indexNs");
         state.symbol_changes = exact.then(|| {
             let mut buckets = HashSet::new();
-            for (old, new) in &update.changed {
+            for (_, old, new) in &update.changed {
                 let old = old.as_ref().and_then(|old| old.references.as_ref());
                 if old.is_some() || new.references.is_some() {
                     changed_buckets(
@@ -934,29 +1018,62 @@ impl Project {
             }
         });
         state.merged_base = true;
-        let mut results: Vec<SemanticDemandRunResult> = outputs[..runs.len()]
-            .iter()
-            .map(|output| output.result.clone().unwrap_or_default())
-            .collect();
-        let deferred: Vec<&Deferrals> = outputs[..runs.len()]
-            .iter()
-            .map(|output| &output.deferrals)
-            .collect();
-        let completions =
-            self.complete_deferred(program, &mut results, &deferred, &mut state.stats);
-        let facts = crate::source_facts::merge_async_facts(
-            outputs[..async_count]
-                .iter()
-                .map(|output| output.facts.clone())
-                .collect(),
-        );
-        self.record_versions(
+        phases.mark("changesNs");
+        let (results, every) = self.serve_runs(
             &mut state,
+            program,
             &works[..runs.len()],
-            &outputs[..runs.len()],
-            completions,
-            &facts,
+            &outputs,
+            &update,
+            index_patched,
         );
+        phases.mark("completeNs");
+        // The async facts move only with an output holding some.
+        let facts_moved = every
+            || state
+                .served_facts
+                .as_ref()
+                .is_none_or(|(count, _)| *count != async_count)
+            || update.changed.iter().any(|(at, old, new)| {
+                *at < async_count
+                    && (!new.facts.is_empty()
+                        || old.as_ref().is_some_and(|old| !old.facts.is_empty()))
+            });
+        let facts = if facts_moved {
+            let facts = crate::source_facts::merge_async_facts(
+                outputs[..async_count]
+                    .iter()
+                    .map(|output| output.facts.clone())
+                    .collect(),
+            );
+            Self::record_async_versions(&mut state, &facts);
+            state.served_facts = Some((async_count, facts.clone()));
+            facts
+        } else {
+            let kept = state
+                .served_facts
+                .as_ref()
+                .map(|(_, facts)| facts.clone())
+                .unwrap_or_default();
+            if state.reuse.verify {
+                let fresh = crate::source_facts::merge_async_facts(
+                    outputs[..async_count]
+                        .iter()
+                        .map(|output| output.facts.clone())
+                        .collect(),
+                );
+                if fresh != kept {
+                    reuse_mismatch("the async facts");
+                    Self::record_async_versions(&mut state, &fresh);
+                    state.served_facts = Some((async_count, fresh.clone()));
+                }
+                fresh
+            } else {
+                kept
+            }
+        };
+        phases.mark("versionsNs");
+        phases.report(&self.trace, "per-file-phases");
         let merge = started.elapsed();
         if env_is_one(ENV_STATS) {
             eprintln!(
@@ -993,21 +1110,225 @@ impl Project {
         Ok(Some((results, facts)))
     }
 
-    /// Advances the version of every path whose rows (its run's entities,
-    /// its async facts) differ from what the previous table served.
-    fn record_versions(
+    /// The rows of every run (positions `..works.len()` of `outputs`), each
+    /// completed by the answers that read every file, and the version of
+    /// every path whose rows changed.
+    ///
+    /// A run's answers are asked again only when they can have moved: its
+    /// output changed, a changed output's references named an id it asks
+    /// (the merged space and the write census of an id read only the
+    /// reference contributions holding it and those files' text, and a file
+    /// whose text changed reran; a group is keyed by its alias-canonical id
+    /// and a space by the referenced symbol's own, so both count), or a
+    /// symbol it reads entered or left the batch's structural accessors.
+    /// Otherwise its rows are the ones served last. A merge that started
+    /// over, a rebuilt reference index or the first table answers every run.
+    fn serve_runs(
         &mut self,
         state: &mut PerFile,
+        program: &'static tsrs_compiler::Program,
         works: &[crate::passes::PassWork<'_>],
         outputs: &[Arc<crate::passes::PassOutput>],
-        completions: Vec<Vec<Completion>>,
-        facts: &[AsyncFunctionFact],
-    ) {
-        let mut runs: HashMap<String, (Arc<crate::passes::PassOutput>, Vec<Completion>)> =
-            HashMap::with_capacity(works.len());
-        for ((work, output), completion) in works.iter().zip(outputs).zip(completions) {
-            runs.insert(work.path.clone(), (Arc::clone(output), completion));
+        update: &crate::passes::MergeUpdate,
+        index_patched: bool,
+    ) -> (Vec<crate::model::RunAnswer>, bool) {
+        let count = works.len();
+        let full =
+            update.full || !index_patched || !state.versions_valid || state.served.len() != count;
+        let mut again = vec![full; count];
+        let mut flipped: HashSet<SymbolId> = HashSet::new();
+        if full {
+            state.structural.clear();
+            state.asking.clear();
+            state.candidates.clear();
+            for (at, output) in outputs[..count].iter().enumerate() {
+                state
+                    .structural
+                    .count(&output.deferrals.structural, true, &mut flipped);
+                index_asks(state, at, output, true);
+            }
+        } else {
+            let mut dirty: HashSet<&SymbolId> = HashSet::new();
+            for (at, old, new) in &update.changed {
+                for output in old.iter().chain(std::iter::once(new)) {
+                    if let Some((_, references)) = &output.references {
+                        dirty.extend(references.refs.iter().map(|group| &group.id));
+                        // Review R1 finding 6: the merged space of an alias
+                        // id moves with contributions the groups name only
+                        // by the canonical id.
+                        dirty.extend(references.space_ids());
+                    }
+                }
+                if *at < count {
+                    again[*at] = true;
+                    if let Some(old) = old {
+                        state
+                            .structural
+                            .count(&old.deferrals.structural, false, &mut flipped);
+                        index_asks(state, *at, old, false);
+                    }
+                    state
+                        .structural
+                        .count(&new.deferrals.structural, true, &mut flipped);
+                    index_asks(state, *at, new, true);
+                }
+            }
+            for id in dirty {
+                for at in state.asking.get(id).into_iter().flatten() {
+                    again[*at as usize] = true;
+                }
+            }
+            for id in &flipped {
+                for at in state.candidates.get(id).into_iter().flatten() {
+                    again[*at as usize] = true;
+                }
+            }
         }
+        // What the previous table served, by path: a path's version moves
+        // when its output or its answers differ from it.
+        let previous_served = if full {
+            std::mem::take(&mut state.served)
+        } else {
+            Vec::new()
+        };
+        let before: HashMap<&str, &Served> = state
+            .served_paths
+            .iter()
+            .map(String::as_str)
+            .zip(&previous_served)
+            .collect();
+        let references = &self.references;
+        let structural = &state.structural;
+        let mut moved: Vec<String> = Vec::new();
+        let mut served: Vec<Served> = if full {
+            Vec::with_capacity(count)
+        } else {
+            std::mem::take(&mut state.served)
+        };
+        for (at, output) in outputs[..count].iter().enumerate() {
+            if !again[at] {
+                continue;
+            }
+            let answers = output.run.as_ref().map_or_else(Default::default, |run| {
+                state.stats.deferred_spaces += run.patches.spaces.len();
+                state.stats.deferred_library += run.patches.library.len();
+                run.patches.answer(
+                    |id| references.merged_space(id),
+                    |id| {
+                        references.locations(id).iter().any(|reference| {
+                            let Some(source) = program.get_source_file(&reference.path) else {
+                                return true;
+                            };
+                            u32::try_from(reference.start_byte)
+                                .map_or(true, |start| reference_is_write(source, start))
+                        })
+                    },
+                    |id| structural.contains(id),
+                )
+            });
+            if !full && Arc::ptr_eq(&served[at].output, output) && served[at].answers == answers {
+                continue;
+            }
+            let rows: Arc<[EntityFact]> = output.run.as_ref().map_or_else(
+                || Arc::from(Vec::new()),
+                |run| run.patches.apply(&run.rows, &answers),
+            );
+            let previous = if full {
+                before.get(works[at].path.as_str()).copied()
+            } else {
+                Some(&served[at])
+            };
+            if previous.is_none_or(|previous| {
+                !(Arc::ptr_eq(&previous.output, output) || *previous.output == **output)
+                    || previous.answers != answers
+            }) {
+                moved.push(works[at].path.clone());
+            }
+            let next = Served {
+                output: Arc::clone(output),
+                answers,
+                rows,
+            };
+            if full {
+                served.push(next);
+            } else {
+                served[at] = next;
+            }
+        }
+        if full {
+            if !state.versions_valid {
+                state.versions.clear();
+            }
+            // Paths that left the runs lose their rows.
+            let now: HashSet<&str> = works.iter().map(|work| work.path.as_str()).collect();
+            let gone: Vec<String> = state
+                .served_paths
+                .iter()
+                .filter(|path| !now.contains(path.as_str()))
+                .cloned()
+                .collect();
+            for path in gone {
+                if !state.served_async.contains_key(&path) {
+                    state.versions.remove(&path);
+                }
+            }
+            state.served_paths = works.iter().map(|work| work.path.clone()).collect();
+            // A path the previous table did not version is new.
+            for work in works {
+                if !state.versions.contains_key(&work.path) {
+                    moved.push(work.path.clone());
+                }
+            }
+        }
+        for path in moved {
+            state.next_version += 1;
+            state.versions.insert(path, state.next_version);
+        }
+        if state.reuse.verify && !full {
+            // Every run answered afresh against what the kept ones served.
+            for (at, output) in outputs[..count].iter().enumerate() {
+                let Some(run) = &output.run else {
+                    continue;
+                };
+                let answers = run.patches.answer(
+                    |id| references.merged_space(id),
+                    |id| {
+                        references.locations(id).iter().any(|reference| {
+                            let Some(source) = program.get_source_file(&reference.path) else {
+                                return true;
+                            };
+                            u32::try_from(reference.start_byte)
+                                .map_or(true, |start| reference_is_write(source, start))
+                        })
+                    },
+                    |id| structural.contains(id),
+                );
+                let rows = run.patches.apply(&run.rows, &answers);
+                if answers != served[at].answers || *rows != *served[at].rows {
+                    reuse_mismatch(&format!("the completed rows of {}", works[at].path));
+                    served[at] = Served {
+                        output: Arc::clone(output),
+                        answers,
+                        rows,
+                    };
+                }
+            }
+        }
+        let answers = served
+            .iter()
+            .map(|served| crate::model::RunAnswer::Rows {
+                entities: Arc::clone(&served.rows),
+                durable: served.output.run.as_ref().is_some_and(|run| run.durable),
+            })
+            .collect();
+        state.served = served;
+        (answers, full)
+    }
+
+    /// Advances the version of every path whose async facts differ from
+    /// what the previous table served (the runs' rows are versioned by
+    /// [`Project::serve_runs`]); a path with neither loses its version.
+    fn record_async_versions(state: &mut PerFile, facts: &[AsyncFunctionFact]) {
         let mut by_path: HashMap<String, Vec<AsyncFunctionFact>> = HashMap::new();
         for fact in facts {
             by_path
@@ -1015,32 +1336,20 @@ impl Project {
                 .or_default()
                 .push(fact.clone());
         }
-        let mut every: HashSet<String> = HashSet::new();
-        every.extend(state.served_runs.keys().cloned());
-        every.extend(state.served_async.keys().cloned());
-        every.extend(runs.keys().cloned());
-        every.extend(by_path.keys().cloned());
-        if !state.versions_valid {
-            state.versions.clear();
-        }
-        for path in every {
-            let same_run = match (state.served_runs.get(&path), runs.get(&path)) {
-                (None, None) => true,
-                (Some(before), Some(now)) => {
-                    (Arc::ptr_eq(&before.0, &now.0) || *before.0 == *now.0) && before.1 == now.1
-                }
-                _ => false,
-            };
-            let same_async = state.served_async.get(&path) == by_path.get(&path);
-            let present = runs.contains_key(&path) || by_path.contains_key(&path);
-            if !present {
-                state.versions.remove(&path);
-            } else if !same_run || !same_async || !state.versions.contains_key(&path) {
+        let mut paths: HashSet<String> = state.served_async.keys().cloned().collect();
+        paths.extend(by_path.keys().cloned());
+        let runs: HashSet<&str> = state.served_paths.iter().map(String::as_str).collect();
+        for path in paths {
+            if state.served_async.get(&path) == by_path.get(&path) {
+                continue;
+            }
+            if by_path.contains_key(&path) || runs.contains(path.as_str()) {
                 state.next_version += 1;
                 state.versions.insert(path, state.next_version);
+            } else {
+                state.versions.remove(&path);
             }
         }
-        state.served_runs = runs;
         state.served_async = by_path;
         state.versions_valid = true;
     }
@@ -1179,7 +1488,20 @@ impl Project {
             let mut answered: HashSet<SymbolId> = changes.rows.iter().cloned().collect();
             answered.extend(state.scratch_ids.iter().cloned());
             if !changes.buckets.is_empty() {
-                answered.extend(state.merged.ids_with_canonical(&changes.buckets));
+                let mut owners = state.merged.ids_with_canonical(&changes.buckets);
+                // The reverse index is checked against the scan under the
+                // reuse verify switch and in every test build; a mismatch
+                // serves the scan.
+                if state.reuse.verify || cfg!(test) {
+                    let mut scanned = state.merged.ids_with_canonical_scan(&changes.buckets);
+                    owners.sort_unstable();
+                    scanned.sort_unstable();
+                    if owners != scanned {
+                        reuse_mismatch("the canonical index");
+                        owners = scanned;
+                    }
+                }
+                answered.extend(owners);
             }
             let mut answered: Vec<SymbolId> = answered.into_iter().collect();
             answered.sort_unstable();

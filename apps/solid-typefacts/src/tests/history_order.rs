@@ -224,7 +224,11 @@ fn facts_do_not_depend_on_demand_order_inside_a_batch() {
                 &ctx,
                 &runs
                     .iter()
-                    .map(|(path, demands)| SemanticDemandRun { path, demands })
+                    .map(|(path, demands)| SemanticDemandRun {
+                        path,
+                        demands,
+                        shared: None,
+                    })
                     .collect::<Vec<_>>(),
             )
             .unwrap();

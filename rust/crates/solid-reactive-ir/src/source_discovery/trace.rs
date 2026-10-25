@@ -4,7 +4,11 @@
 //! being one of the build's `unchanged_paths`), of the memo answers and
 //! lookup sections it read (a [`crate::base::reads::ReadProof`]), and of the
 //! answers recorded here: another file's facts, a lookup question about
-//! another file or a symbol, and an earlier pass's state at a key. A row is
+//! another file or a symbol, and an earlier pass's state at a key. Which
+//! function a symbol names and which binding a reference resolves to are
+//! not recorded here: the lookup hands them out as reads of the proof (the
+//! symbol's bucket of answers, the asking file's binding rows, and the file
+//! each answer names; ADR 0408). A row is
 //! kept while each of them answers as recorded (the trace-replay lemma,
 //! study §3.3): re-asking a question is exact whatever the lookup computes
 //! it from.
@@ -35,10 +39,6 @@ pub(crate) enum Dep {
     /// Another file's facts (its source, entity rows and the symbols they
     /// name), and whether an analyzed file had that path.
     File(Arc<str>, bool),
-    /// `function_for_symbol(symbol)`.
-    FunctionFor(SymbolId, FunctionAt),
-    /// The symbol `binding_at_reference(path, span)` names.
-    BindingAt(Arc<str>, Span, Option<SymbolId>),
     /// `symbol_references(symbol)`, fingerprinted.
     References(SymbolId, u64),
     /// `symbol_declarations(symbol)`, fingerprinted.
@@ -201,9 +201,8 @@ pub(crate) fn called_at<'a>(
     function_for(lookup, symbol)
 }
 
-/// The function a JSX tag of `file` renders, as its file and span: recorded
-/// as the tag symbol's function only, since the caller reads nothing of that
-/// function's file.
+/// The function a JSX tag of `file` renders, as its file and span: the
+/// caller reads nothing of that function's file.
 pub(crate) fn render_target(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
@@ -211,22 +210,21 @@ pub(crate) fn render_target(
 ) -> FunctionAt {
     let file = lookup.file_by_path(file.path.as_str())?;
     let symbol = lookup.entities().value_symbol(file, tag)?;
-    let found = function_at(lookup.function_for_symbol(symbol));
-    if recording() {
-        note(Dep::FunctionFor(symbol.clone(), found.clone()));
-    }
-    found
+    function_at(lookup.function_for_symbol(symbol))
 }
 
-/// [`SemanticLookup::namespace_member_function`]: the member symbol is the
-/// caller's file's, its function recorded with that function's file.
+/// [`SemanticLookup::namespace_member_function`], recorded with the
+/// function's file.
 pub(crate) fn namespace_member<'a>(
     lookup: &SemanticLookup<'a>,
     file: &FileFacts,
     callee: Span,
 ) -> Option<(&'a FileFacts, &'a FunctionFact)> {
-    let symbol = lookup.namespace_member_symbol(file, callee)?;
-    lookup.namespace_member_target(function_for(lookup, symbol))
+    let found = lookup.namespace_member_function(file, callee);
+    if let Some((file, _)) = found {
+        read_file(file);
+    }
+    found
 }
 
 /// [`SemanticLookup::function_for_symbol`], recorded with the function's
@@ -236,28 +234,21 @@ pub(crate) fn function_for<'a>(
     symbol: &str,
 ) -> Option<(&'a FileFacts, &'a FunctionFact)> {
     let found = lookup.function_for_symbol(symbol);
-    if recording() {
-        note(Dep::FunctionFor(SymbolId::from(symbol), function_at(found)));
-        if let Some((file, _)) = found {
-            read_file(file);
-        }
+    if let Some((file, _)) = found {
+        read_file(file);
     }
     found
 }
 
-/// The symbol [`SemanticLookup::binding_at_reference`] names, recorded.
+/// The symbol [`SemanticLookup::binding_at_reference`] names.
 pub(crate) fn binding_symbol(
     lookup: &SemanticLookup<'_>,
     path: &str,
     span: Span,
 ) -> Option<SymbolId> {
-    let symbol = lookup
+    lookup
         .binding_at_reference(path, span)
-        .map(|(_, _, symbol)| symbol);
-    if recording() {
-        note(Dep::BindingAt(Arc::from(path), span, symbol.clone()));
-    }
-    symbol
+        .map(|(_, _, symbol)| symbol)
 }
 
 /// [`SemanticLookup::symbol_references`], recorded.
@@ -326,15 +317,6 @@ impl Dep {
                 } else {
                     lookup.file_by_path(path).is_none()
                 }
-            }
-            Self::FunctionFor(symbol, answer) => {
-                function_at(lookup.function_for_symbol(symbol)) == *answer
-            }
-            Self::BindingAt(path, span, answer) => {
-                lookup
-                    .binding_at_reference(path, *span)
-                    .map(|(_, _, symbol)| symbol)
-                    == *answer
             }
             Self::References(symbol, answer) => {
                 (answers.symbol_unchanged)(symbol)

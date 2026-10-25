@@ -58,6 +58,7 @@ mod findings;
 mod identity;
 mod indexes;
 mod interproc;
+mod late_chunks;
 mod literal_member_slots;
 mod local_access;
 mod owners;
@@ -138,7 +139,7 @@ use execution_role::{
     named_callback_roles, semantic_execution_role,
 };
 use identity::{SymbolId, SymbolInterner, SymbolName, symbol_id, symbol_name};
-use indexes::{EntitySymbols, ProjectIndexes, SemanticLookup};
+use indexes::{EntityLocations, EntitySymbols, ProjectIndexes, SemanticLookup};
 use interproc::{SummaryNode, SummaryRead, SummaryReads};
 use serde::{Deserialize, Serialize};
 use solid_dialect::{Dialect, Primitive};
@@ -1338,6 +1339,9 @@ pub struct BuildTimings {
     /// L2 memos ([`base::memo`]): finding the changed inputs and marking
     /// their readers, before the build's first memo read.
     pub memo_begin: Duration,
+    /// The project-wide answers most stages read, warmed concurrently once
+    /// the memos have begun (`SemanticLookup::begin_memos`).
+    pub memo_warm: Duration,
     /// Memo answers reused from an earlier build (clean, or maybe-dirty and
     /// verified), each key counted once per build.
     pub memo_reused: u64,
@@ -1350,11 +1354,10 @@ pub struct BuildTimings {
     /// 0392): reused, recomputed, and recomputed to a new answer.
     pub returned_invocation_files: [u64; 3],
     pub reused: bool,
-    pub source_discovery_reused_files: u64,
-    pub source_discovery_recomputed_files: u64,
-    /// Retained source-discovery files whose identity (source hash and Type
-    /// Facts delta) no longer matched; the rest of the recomputed retained
-    /// files read an answer that moved ([`base::reads`]).
+    /// Files whose identity (source hash and Type Facts delta) is the last
+    /// build's: the build's `unchanged_paths`.
+    pub source_discovery_unchanged_files: u64,
+    /// Retained source-discovery files whose identity no longer matched.
     pub source_discovery_identity_misses: u64,
     /// Source discovery's post-pass row sets (S7a): kept, recomputed.
     pub source_post_pass_row_sets: [u64; 2],
@@ -1377,11 +1380,8 @@ pub struct BuildTimings {
     pub reachability_reused: bool,
     pub reachability_reused_files: u64,
     pub reachability_recomputed_files: u64,
-    pub local_accesses_reused: bool,
     pub local_access_reused_files: u64,
     pub local_access_recomputed_files: u64,
-    pub interprocedural_reused: bool,
-    pub owner_fixed_point_reused: bool,
     pub owner_reused_files: u64,
     pub owner_recomputed_files: u64,
     pub indexes_and_reachability: Duration,
@@ -1391,11 +1391,9 @@ pub struct BuildTimings {
     pub entity_symbols: Duration,
     pub symbol_name_indexes: Duration,
     pub boundary_defects: Duration,
-    /// The namespace hand-out census (ADR 0347) and the cross-file reuse
-    /// gate (`ReusePlan::prepare`, which computes the member-resolution
-    /// digest), both in the indexes-and-reachability stage.
+    /// The namespace hand-out census (ADR 0347), in the
+    /// indexes-and-reachability stage.
     pub namespace_hand_outs: Duration,
-    pub reuse_plan: Duration,
     pub reachability: Duration,
     pub source_discovery: Duration,
     pub typed_accessors_and_prop_roots: Duration,
@@ -1446,6 +1444,8 @@ pub struct BuildTimings {
     pub owner_graph_assembly: Duration,
     pub owner_propagation: Duration,
     pub owner_requirement_emission: Duration,
+    /// Inside `owner_requirement_emission`: the provider census (ADR 0352).
+    pub owner_context_census: Duration,
     pub final_ordering: Duration,
 }
 
@@ -1484,7 +1484,8 @@ pub enum CacheRetention {
     /// Keep every incremental index for the lowest edit latency.
     #[default]
     Performance,
-    /// Drop the largest low-cost-to-rebuild indexes.
+    /// Drop the indexes that only the shadow check reads; keep every cache
+    /// an edit reuses (ADR 0412).
     Balanced,
     /// Keep only the current coherent program.
     Compact,
@@ -1629,12 +1630,28 @@ impl IncrementalBuilder {
         if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {
             eprintln!("{}", timings::reuse_line(facts, &timings, domain_reset));
         }
+        timings::append_delta_line(facts, domain_reset);
         Ok((program, timings))
     }
 
     /// Overrides `SOLID_CHECKER_IR_SHADOW` for this builder.
     pub fn set_shadow_mode(&mut self, mode: shadow::ShadowMode) {
         self.shadow = Some(mode);
+    }
+
+    /// Whether a build leaves the memo store's end-of-build sweep (the
+    /// entries it did not reach, dropped with their edges) to
+    /// [`Self::finish_deferred`]. The answer a build makes does not depend on
+    /// the sweep, and nothing reads the store until the next build begins,
+    /// which runs a pending sweep first; so a caller that answers before it
+    /// calls `finish_deferred` pays for the sweep off its critical path.
+    pub fn defer_memo_end(&mut self, defer: bool) {
+        self.caches.set_defer_memo_end(defer);
+    }
+
+    /// Runs the memo sweep the last build deferred, if one is due.
+    pub fn finish_deferred(&mut self) {
+        self.caches.finish_deferred_end();
     }
 
     pub fn clear(&mut self) {
@@ -1645,9 +1662,10 @@ impl IncrementalBuilder {
 
     /// Applies the idle-memory policy without invalidating the current result.
     ///
-    /// `Balanced` targets the cache families that profiling found to
-    /// account for most retained bytes per millisecond of recomputation; it
-    /// keeps the TypeScript indexes, which an exact Type Facts delta patches.
+    /// `Balanced` releases the retained base indexes, which only shadow mode
+    /// reads, and keeps every cache an edit reuses: the interprocedural graph
+    /// and result chunks cost about 95 ms of an app-game edit to rebuild for
+    /// about 50 MB.
     /// `Compact` releases every derived index while preserving the current
     /// generation and its source-discovery domain identity.
     pub fn retain_for_idle(&mut self, retention: CacheRetention) {

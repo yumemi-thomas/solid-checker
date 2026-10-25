@@ -468,7 +468,8 @@ Pages active:                                 99.\n\
 Pages inactive:                               20.\n\
 Pages speculative:                             3.\n\
 Pages purgeable:                               1.\n";
-    assert_eq!(parse_vm_stat_available(vm_stat), Some(34 * 16384));
+    // Purgeable pages are already among the inactive (or active) ones.
+    assert_eq!(parse_vm_stat_available(vm_stat), Some(33 * 16384));
     assert_eq!(parse_vm_stat_available("garbage"), None);
 }
 
