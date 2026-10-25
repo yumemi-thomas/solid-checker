@@ -410,7 +410,7 @@ pub(super) fn interprocedural_reads(
     );
     let graph_nodes = phase_started.elapsed();
     let step_started = Instant::now();
-    let node_index = super::node_index::node_index(lookup, file_nodes);
+    let node_index = NodeIndex::new(&file_nodes);
     let NodeIndex {
         nodes,
         nodes_by_path,
@@ -698,7 +698,6 @@ pub(super) fn interprocedural_reads(
         &mut fixed_points,
     );
     let results_and_exports = phase_started.elapsed();
-    super::node_index::keep(lookup, node_index);
     recording.finish();
     InterproceduralResult {
         reads: result.into(),
