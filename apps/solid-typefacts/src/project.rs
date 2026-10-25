@@ -35,7 +35,7 @@ use crate::inputs::ProgramInputs;
 use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SymbolId};
 use crate::module_graph::{normalize_type_script_path, type_script_path_dir};
 use crate::nodes::node_at;
-use crate::overlay::OverlayFs;
+use crate::overlay::{LookupStats, OverlayFs};
 use crate::references::ReferenceIndex;
 use crate::semantic_runs::Unavailable;
 use crate::shape::{
@@ -163,6 +163,9 @@ pub struct UpdateMetrics {
     pub kind: Option<UpdateKind>,
     /// Whether the chain was rebuilt after this update (the rebase policy).
     pub rebased: bool,
+    /// What the candidate program's build asked the base file system, and
+    /// what its lookups answered (zero unless a trace is listening).
+    pub fs: LookupStats,
 }
 
 pub struct Project {
@@ -225,7 +228,7 @@ impl Project {
             },
             directory: type_script_path_dir(&config_path),
         });
-        let generation = build_program(ctx, &config_path, &fs, &config_host)?;
+        let generation = build_program(ctx, &config_path, &fs, &config_host, trace.is_some())?;
         let mut project = Self {
             trace,
             config_path,
@@ -434,10 +437,14 @@ fn build_program(
     config_path: &str,
     fs: &Arc<OverlayFs>,
     config_host: &HostLease<ConfigHost>,
+    counting: bool,
 ) -> Result<Generation, String> {
     if let Some(reason) = ctx.err() {
         return Err(reason.to_owned());
     }
+    // The configuration's file lists and the program's resolutions ask the
+    // disk the same questions again and again: one build, one set of answers.
+    let _lookups = fs.build_scope(counting);
     let directory = type_script_path_dir(config_path);
     let config_host = config_host.as_static();
     *config_host
@@ -848,6 +855,7 @@ impl Project {
         if changed_paths.is_empty() {
             return Ok(UpdateOutcome {
                 affected: Vec::new(),
+                graph_kept: false,
             });
         }
         let overlay_duration = stage.elapsed();
@@ -893,8 +901,12 @@ impl Project {
         let old_shape_duration = stage.elapsed();
 
         // The candidate program. The accepted generation stays intact until
-        // the candidate is committed below.
+        // the candidate is committed below. Whatever the candidate's build
+        // asks the disk, it asks once (`OverlayFs::build_scope`): an in-place
+        // replacement asks next to nothing, a rebuilt chain re-resolves every
+        // import of every file.
         let stage = Instant::now();
+        let lookups = candidate_fs.build_scope(self.trace.is_some());
         let candidate = if incremental
             && generation
                 .program()
@@ -905,9 +917,16 @@ impl Project {
             let host = compiler_host(&type_script_path_dir(&self.config_path), &candidate_fs);
             generation.prepare_update(&incremental_path, host)
         } else {
-            build_program(ctx, &self.config_path, &candidate_fs, &self.config_host)
-                .map_err(BackendError)?
+            build_program(
+                ctx,
+                &self.config_path,
+                &candidate_fs,
+                &self.config_host,
+                self.trace.is_some(),
+            )
+            .map_err(BackendError)?
         };
+        let lookup_stats = lookups.finish();
         let program_duration = stage.elapsed();
 
         let mut semantic_cutoff = false;
@@ -1128,6 +1147,7 @@ impl Project {
             identities: identities_duration,
             kind: Some(candidate_kind),
             rebased,
+            fs: lookup_stats,
         };
         if let Some(trace) = &self.trace {
             let metrics = self.last_update;
@@ -1145,10 +1165,24 @@ impl Project {
                     ("affectedNs", nanos(metrics.affected)),
                     ("invalidationNs", nanos(metrics.invalidation)),
                     ("identitiesNs", nanos(metrics.identities)),
+                    ("fsHits", i64::try_from(metrics.fs.hits).unwrap_or(i64::MAX)),
+                    (
+                        "fsMisses",
+                        i64::try_from(metrics.fs.misses).unwrap_or(i64::MAX),
+                    ),
+                    (
+                        "fsReads",
+                        i64::try_from(metrics.fs.reads).unwrap_or(i64::MAX),
+                    ),
                 ],
             );
         }
-        Ok(UpdateOutcome { affected })
+        // A rebase after the update builds the chain again from the disk as
+        // it is now: nothing the earlier program resolved is kept then.
+        Ok(UpdateOutcome {
+            affected,
+            graph_kept: reused && !rebased,
+        })
     }
 
     fn point_config_host_at_accepted_overlay(&self) {
@@ -1177,7 +1211,9 @@ impl Project {
             return false;
         }
         let host = compiler_host(&type_script_path_dir(&self.config_path), &self.fs);
+        let lookups = self.fs.build_scope(false);
         let fresh = generation.rebuilt(host);
+        drop(lookups);
         // The identity maps and the generation-scoped reference ids name the
         // chain about to be freed.
         self.ids.release_pointers();

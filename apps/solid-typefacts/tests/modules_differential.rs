@@ -134,6 +134,7 @@ fn script(project: &str) -> Vec<u8> {
                 import_paths: Vec::new(),
                 packages: true,
                 distinct_bare_imports: false,
+                omit_modules: false,
             });
         }),
         with(3, Operation::Modules, &|r| {
@@ -725,6 +726,7 @@ fn update_case(go: &Path, rust: &Path, label: &str, project: &str, report: &mut 
             import_paths: Vec::new(),
             packages: true,
             distinct_bare_imports: false,
+            omit_modules: false,
         });
     }));
     bytes.extend(with(102, Operation::Close, end, &|_| {}));

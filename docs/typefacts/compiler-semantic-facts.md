@@ -524,7 +524,9 @@ independently of any demand set. See
 Type Facts ADR 0019 (archived) for the full decision;
 the shape is:
 
-- The **module inventory** is unconditional: every file the program included,
+- The **module inventory** is answered unless the demand sets `omitModules`
+  (protocol 85, for a caller that holds it and asks about some files' imports
+  only): every file the program included,
   with its path, whether it is a declaration file, its emit module format, the
   compiler's project-reference input/output pairing, and its duplicate-install
   redirect targets. Paths are realpaths, and default library files are in it,
@@ -553,6 +555,13 @@ negatives:
 
 `unknownImportPaths` names requested files the program does not hold, so an empty
 import list is distinguishable from an unanalyzed file.
+
+An `update` answer carries `graphKept` (protocol 85) when the compiler replaced
+the one changed file in place and nothing was rebuilt (a rebase after the update
+included): the program's files, every file's module resolution and every other
+file's text are the previous generation's, and only the changed file's own
+import positions can differ. Any other update, and every answer after a producer
+restart, leaves it absent.
 
 The active lifecycle schema is V1 and the active Wire table model is v19. The
 `modules` and `invocations` operations carry no Wire table transition: their

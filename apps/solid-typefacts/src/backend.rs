@@ -66,6 +66,13 @@ pub const ERR_SOURCE_FACTS_UNAVAILABLE: &str = "type facts backend has no source
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct UpdateOutcome {
     pub affected: Vec<String>,
+    /// The update replaced its one changed file in place and rebuilt nothing
+    /// (not the program chain, not after it either): every other file's text,
+    /// every file's module resolution and the program's file set are the
+    /// previous generation's, and only the changed file's own import
+    /// positions can differ (`Response::graph_kept`). The compiler's own
+    /// in-place condition (`UpdateKind::Reused`) is what this reports.
+    pub graph_kept: bool,
 }
 
 /// The `modules` answer, flattened as the response carries it (Go:

@@ -239,15 +239,120 @@ pub(crate) fn reference_rows(typescript: &TypeScriptTable) -> ReferenceRows {
     rows
 }
 
+/// Each path's import resolutions, digested: the compiler's attested rows
+/// for the specifiers the file writes (and whether it was answered at all)
+/// and the bundler's runtime outcome of each (ADR 0220). Neither is part of
+/// the TypeFacts table, and either can move while the file's text and rows
+/// stay the same (an ambient module or reference directive edited in another
+/// file, a file a bundler alias now lands on), so they are folded into the
+/// file's Entities fingerprint and its source-discovery identity.
+pub(crate) type ResolutionDigests = HashMap<Arc<str>, [u8; 32]>;
+
+pub(crate) fn resolution_digests(facts: &solid_facts::ProjectFacts) -> ResolutionDigests {
+    use sha2::{Digest, Sha256};
+    fn text(hasher: &mut Sha256, value: &str) {
+        hasher.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
+        hasher.update(value.as_bytes());
+    }
+    fn optional(hasher: &mut Sha256, value: Option<&str>) {
+        hasher.update([u8::from(value.is_some())]);
+        text(hasher, value.unwrap_or_default());
+    }
+    let mut attested = HashMap::<&str, Vec<&solid_facts::AttestedImport>>::default();
+    if let Some(imports) = &facts.resolved_imports {
+        for file in &facts.files {
+            if imports.covers(file.path.as_str()) {
+                attested.entry(file.path.as_str()).or_default();
+            }
+        }
+        for (path, row) in imports.iter() {
+            attested.entry(path).or_default().push(row);
+        }
+    }
+    let mut runtime = HashMap::<&str, Vec<_>>::default();
+    if let Some(resolutions) = &facts.runtime_resolutions {
+        for (path, span, specifier, outcome) in resolutions.iter() {
+            runtime
+                .entry(path)
+                .or_default()
+                .push((span, specifier, outcome));
+        }
+    }
+    let mut digests = ResolutionDigests::default();
+    for file in &facts.files {
+        let path = file.path.as_str();
+        let (rows, outcomes) = (attested.get(path), runtime.get_mut(path));
+        if rows.is_none() && outcomes.is_none() {
+            continue;
+        }
+        let mut hasher = Sha256::new();
+        hasher.update([u8::from(rows.is_some())]);
+        for row in rows.into_iter().flatten() {
+            hasher.update(row.span.start.to_le_bytes());
+            hasher.update(row.span.end.to_le_bytes());
+            text(&mut hasher, &row.text);
+            text(&mut hasher, &format!("{:?}", row.resolution));
+            for value in [
+                &row.resolved_path,
+                &row.included_path,
+                &row.symlink_path,
+                &row.extension,
+            ] {
+                text(&mut hasher, value);
+            }
+            for value in [
+                row.package_name.as_deref(),
+                row.package_version.as_deref(),
+                row.package_manifest.as_deref(),
+                row.resolver_package_name.as_deref(),
+                row.resolver_package_version.as_deref(),
+            ] {
+                optional(&mut hasher, value);
+            }
+        }
+        hasher.update([0xff, u8::from(outcomes.is_some())]);
+        if let Some(outcomes) = outcomes {
+            outcomes.sort_unstable_by_key(|(span, specifier, _)| (*span, *specifier));
+            for (span, specifier, outcome) in outcomes.iter() {
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+                text(&mut hasher, specifier);
+                match outcome {
+                    solid_facts::runtime_resolution::RuntimeOutcome::File {
+                        path,
+                        physical_path,
+                    } => {
+                        hasher.update([0]);
+                        text(&mut hasher, path);
+                        text(&mut hasher, physical_path);
+                    }
+                    solid_facts::runtime_resolution::RuntimeOutcome::External => {
+                        hasher.update([1]);
+                    }
+                    solid_facts::runtime_resolution::RuntimeOutcome::Builtin => {
+                        hasher.update([2]);
+                    }
+                    solid_facts::runtime_resolution::RuntimeOutcome::Unknown => {
+                        hasher.update([3]);
+                    }
+                }
+            }
+        }
+        digests.insert(file.path.shared(), hasher.finalize().into());
+    }
+    digests
+}
+
 /// Where the views of one build read the per-file slices of the shared
 /// TypeFacts tables from. Each view answers only for its own path.
 #[derive(Clone, Copy)]
 pub(crate) struct ViewSources<'a> {
     pub(crate) ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
     pub(crate) symbols: &'a EntitySymbols,
-    pub(crate) entities: &'a HashMap<(&'a str, u64, u64), &'a EntityFact>,
     pub(crate) typescript: &'a TypeScriptTable,
     pub(crate) references: &'a OnceLock<ReferenceRows>,
+    /// [`resolution_digests`] of the build; `None` digests none.
+    pub(crate) resolutions: Option<&'a ResolutionDigests>,
 }
 
 /// What a contribution function may read: one file's own facts and its own
@@ -318,10 +423,7 @@ impl<'a> FileView<'a> {
     }
 
     pub(crate) fn entity_at(&self, span: Span) -> Option<&'a EntityFact> {
-        self.sources
-            .entities
-            .get(&(self.path(), u64::from(span.start), u64::from(span.end)))
-            .copied()
+        self.sources.symbols.locations.at(self.path(), span)
     }
 
     /// [`crate::indexes::SemanticLookup::resolved_callee_call`] for a callee
