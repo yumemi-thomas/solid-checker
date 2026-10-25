@@ -1117,3 +1117,28 @@ fn an_export_that_stops_or_starts_being_an_alias_moves_unedited_readers_roots() 
         "whether the export is the signal must move the answer"
     );
 }
+
+/// Final review R2, finding 4: whether the dialect models returned callbacks
+/// is a project-wide flag (some file names `createReaction`, `mapArray`,
+/// `repeat`, `lazy` or `lazyModule`) that gates early exits in per-file
+/// chunks. `R` turns `track` into a `createReaction` tracker and is the
+/// project's first file to name one; `B` is byte-identical, and its chunk
+/// that took the early exit walked nothing of `R`.
+const UNMODELLED_R: &str = "export const track = (tracking: () => void) => tracking();\n";
+const FIRST_TRACKER_R: &str = "import { createReaction } from \"solid-js\";\nexport const track = createReaction(() => {});\n";
+
+#[test]
+fn the_first_returned_callback_primitive_in_another_file_reruns_early_exits() {
+    let Some(moved) = retained_through_edits(
+        "capability-flags",
+        &[("R.ts", UNMODELLED_R), ("B.ts", TRACKED_B)],
+        &[("R.ts", FIRST_TRACKER_R), ("R.ts", UNMODELLED_R)],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        moved,
+        [true, true],
+        "whether `track` is a tracker must move `B`'s answer"
+    );
+}

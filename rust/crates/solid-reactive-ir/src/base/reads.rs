@@ -74,10 +74,16 @@ pub(crate) enum Section {
     /// The route component values (ADR 0334), whose router configurations
     /// may sit in another file than the value (ADR 0408).
     RouteComponents,
+    /// The bindings a `createContext` call initializes, in any file, and
+    /// TypeScript's references to each (`is_context_reference`).
+    ContextSymbols,
+    /// The dialect primitives the project names anywhere, which decide the
+    /// project-wide callback capability flags and their early exits.
+    ProjectPrimitives,
 }
 
 impl Section {
-    pub(crate) const ALL: [Self; 13] = [
+    pub(crate) const ALL: [Self; 15] = [
         Self::Components,
         Self::MemberTargets,
         Self::SpreadTargets,
@@ -91,6 +97,8 @@ impl Section {
         Self::ReflectiveDefinition,
         Self::ReflectivePrototypeWrite,
         Self::RouteComponents,
+        Self::ContextSymbols,
+        Self::ProjectPrimitives,
     ];
 
     const fn bit(self) -> u32 {

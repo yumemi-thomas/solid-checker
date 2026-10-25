@@ -1221,6 +1221,9 @@ impl<'a> SemanticLookup<'a> {
     /// for probing what the dialect models.
     fn project_primitives(&self) -> &HashSet<solid_dialect::Primitive> {
         self.project_primitives.get_or_init(|| {
+            // Every file's names: a reader's answer moves with any file's
+            // (final review R2, finding 4).
+            crate::base::reads::note(crate::base::reads::Section::ProjectPrimitives);
             self.symbol_names
                 .values()
                 .filter_map(|name| self.dialect.primitive(name.as_str()))
@@ -1620,6 +1623,47 @@ impl<'a> SemanticLookup<'a> {
                         .iter()
                         .map(|(path, span)| (path.as_str(), *span)),
                 );
+            }
+            Section::ContextSymbols => {
+                let mut symbols = self.context_symbols().iter().copied().collect::<Vec<_>>();
+                symbols.sort_unstable();
+                for symbol in symbols {
+                    text(&mut hasher, symbol);
+                    let mut references = self
+                        .symbols_by_id()
+                        .get(symbol)
+                        .map(|candidate| {
+                            candidate
+                                .references()
+                                .map(|reference| {
+                                    (
+                                        reference.path.as_ref(),
+                                        reference.start_byte,
+                                        reference.end_byte,
+                                    )
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                    references.sort_unstable();
+                    for (path, start, end) in references {
+                        text(&mut hasher, path);
+                        hasher.update(start.to_le_bytes());
+                        hasher.update(end.to_le_bytes());
+                    }
+                    hasher.update([0xfe]);
+                }
+            }
+            Section::ProjectPrimitives => {
+                let mut primitives = self
+                    .project_primitives()
+                    .iter()
+                    .map(|primitive| format!("{primitive:?}"))
+                    .collect::<Vec<_>>();
+                primitives.sort_unstable();
+                for primitive in primitives {
+                    text(&mut hasher, &primitive);
+                }
             }
             Section::ReflectiveDefinition => {
                 hasher.update([u8::from(
