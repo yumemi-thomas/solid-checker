@@ -664,7 +664,7 @@ fn a_set_id_fails_closed_after_a_release_and_is_minted_again() {
 }
 
 /// A source file's unexported declarations take a `Local` key, whose chain
-/// names no span (ADR 03XX-stable-locals): a statement inserted before them,
+/// names no span (ADR 0415): a statement inserted before them,
 /// at the top or mid-file, keeps every id; ids stay distinct for
 /// same-named declarations in sibling scopes and in one scope; an exported
 /// symbol keeps its `Export` id.
@@ -793,7 +793,7 @@ fn local_ids(scratch: &Scratch, path: &str, source: &str, names: &[(&str, u64)])
     ids
 }
 
-/// An id kept across an edit names the same declaration (ADR 03XX-stable-locals):
+/// An id kept across an edit names the same declaration (ADR 0415):
 /// an inserted declaration of the same kind and name takes the rank of the one
 /// after it, and every declaration it displaces takes a new id, so no id of the
 /// new program is an id of the old one.
@@ -824,7 +824,7 @@ fn an_inserted_same_named_declaration_hands_out_no_id() {
 }
 
 /// Two declarations with the same kind, name and text in one scope differ in
-/// rank, so their `Local` ids differ (ADR 03XX-stable-locals).
+/// rank, so their `Local` ids differ (ADR 0415).
 #[test]
 fn identical_declarations_in_one_scope_get_distinct_ids() {
     let source = "function f() {\n  { const y = 1; void y; }\n  { const y = 1; void y; }\n}\nexport const out = f();\n";

@@ -1,5 +1,5 @@
 //! Per-file chunks of the static prepass's file rules, which were
-//! whole-program loops over every file (ADR 03XX-late-stages).
+//! whole-program loops over every file (ADR 0413).
 //!
 //! Each pass is a function of one file's facts and of what it asks the
 //! rest of the program. A file's output is a chunk ([`FileChunks`]) reused
