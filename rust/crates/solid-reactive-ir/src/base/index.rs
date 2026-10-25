@@ -149,12 +149,20 @@ impl<K: Eq + Hash + Clone, C: PartialEq> BaseIndex<K, C> {
                         .as_ref()
                         .expect("new positions come from a contribution");
                     let previous = previous.as_ref().expect("old positions come from one");
+                    // By slot rank and value: a `ranked_values` reader of a
+                    // path held by two slots sees the rank too (final
+                    // review R2, finding 9).
                     !old_positions
                         .iter()
-                        .map(|position| &previous.entries[*position as usize].1)
-                        .eq(new_positions
-                            .iter()
-                            .map(|position| &next.entries[*position as usize].1))
+                        .map(|position| {
+                            (
+                                previous.rank_of(*position),
+                                &previous.entries[*position as usize].1,
+                            )
+                        })
+                        .eq(new_positions.iter().map(|position| {
+                            (next.rank_of(*position), &next.entries[*position as usize].1)
+                        }))
                 });
                 if changed {
                     delta.insert(key.clone());
@@ -245,7 +253,7 @@ impl<K: Eq + Hash + Clone, C: PartialEq> BaseIndex<K, C> {
         self.by_key
             .keys()
             .chain(other.by_key.keys())
-            .filter(|key| !self.values(key).eq(other.values(key)))
+            .filter(|key| !self.ranked_values(key).eq(other.ranked_values(key)))
             .cloned()
             .collect()
     }

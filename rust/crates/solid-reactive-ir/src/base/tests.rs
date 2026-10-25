@@ -332,6 +332,7 @@ fn entity_symbols(facts: &ProjectFacts) -> EntitySymbols {
     let mut symbols = EntitySymbols {
         by_path: HashMap::default(),
         exact_by_path: HashMap::default(),
+        locations: crate::indexes::EntityLocations::of(&facts.typescript),
     };
     for entity in facts.typescript.entities() {
         if entity.symbol.is_empty() {
@@ -357,7 +358,6 @@ fn check(project: &Project, retained: &mut Option<RetainedBase>) -> Option<usize
         .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
         .collect::<HashMap<_, _>>();
     let symbols = entity_symbols(&facts);
-    let entities = crate::indexes::first_entity_by_location(facts.typescript.entities());
     let references = OnceLock::new();
     let table = retained::table(retained, &facts.files);
     let views = Views {
@@ -366,9 +366,9 @@ fn check(project: &Project, retained: &mut Option<RetainedBase>) -> Option<usize
         sources: ViewSources {
             ast_indexes: &ast_indexes,
             symbols: &symbols,
-            entities: &entities,
             typescript: &facts.typescript,
             references: &references,
+            resolutions: None,
         },
         constants: BuildConstants {
             dialect: &solid_dialect::Solid2,
@@ -644,7 +644,6 @@ fn a_contribution_reads_only_its_own_file() {
             .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
             .collect::<HashMap<_, _>>();
         let symbols = entity_symbols(&facts);
-        let entities = crate::indexes::first_entity_by_location(facts.typescript.entities());
         let references = OnceLock::new();
         let table = super::FileTable::new(&facts.files);
         let views = Views {
@@ -653,9 +652,9 @@ fn a_contribution_reads_only_its_own_file() {
             sources: ViewSources {
                 ast_indexes: &ast_indexes,
                 symbols: &symbols,
-                entities: &entities,
                 typescript: &facts.typescript,
                 references: &references,
+                resolutions: None,
             },
             constants: BuildConstants {
                 dialect: &solid_dialect::Solid2,
@@ -726,7 +725,6 @@ fn memo_build(project: &Project, store: &super::memo::build::MemoStore) -> Optio
         .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
         .collect::<HashMap<_, _>>();
     let symbols = entity_symbols(&facts);
-    let entities = crate::indexes::first_entity_by_location(facts.typescript.entities());
     let references = OnceLock::new();
     let table = store.table(&super::FileTable::new(&facts.files));
     let views = Views {
@@ -735,9 +733,9 @@ fn memo_build(project: &Project, store: &super::memo::build::MemoStore) -> Optio
         sources: ViewSources {
             ast_indexes: &ast_indexes,
             symbols: &symbols,
-            entities: &entities,
             typescript: &facts.typescript,
             references: &references,
+            resolutions: None,
         },
         constants: BuildConstants {
             dialect: &solid_dialect::Solid2,
@@ -840,7 +838,6 @@ fn begin_over(
         .iter()
         .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
         .collect::<HashMap<_, _>>();
-    let entities = crate::indexes::first_entity_by_location(facts.typescript.entities());
     let references = OnceLock::new();
     let table = store.table(&super::FileTable::new(&facts.files));
     let views = Views {
@@ -849,9 +846,9 @@ fn begin_over(
         sources: ViewSources {
             ast_indexes: &ast_indexes,
             symbols,
-            entities: &entities,
             typescript: &facts.typescript,
             references: &references,
+            resolutions: None,
         },
         constants: BuildConstants {
             dialect: &solid_dialect::Solid2,
@@ -1890,9 +1887,15 @@ fn flow_answers_through_project_callees_are_reused_across_an_unrelated_edit() {
             "{table}: {stats:?}"
         );
     }
+    // A site's role reads only its own file's recorded questions (ADR
+    // 0413), so the unrelated edit leaves it verified against
+    // them, not recomputed: the answer is the same, checked above.
     let sites = table_stats(&tables, "flow_site_role");
     assert!(
-        sites.unchanged >= 1 && sites.changed == 0 && sites.fresh == 0,
+        sites.reused + sites.verified + sites.unchanged >= 1
+            && sites.changed == 0
+            && sites.fresh == 0
+            && sites.mismatches == 0,
         "{sites:?}"
     );
     // The callee's module, edited so that the function no longer hands its

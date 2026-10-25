@@ -226,6 +226,94 @@ test("a non-durable id that two entities share but a producer splits is a differ
   assert.equal(counts["value-differs"], 1);
 });
 
+// Two id schemes (`--canonical-ids`): the spelling of an id is no fact, its
+// content is. Each case below pairs an artifact that must compare equal with
+// the real difference of the same shape that must still be reported.
+const canonical = (response, evidence = []) =>
+  normalizeTranscript(transcript(response), evidence, { canonicalIds: true });
+const declared = (id, name, start, end = start + name.length) => ({
+  id,
+  declarations: [{ name, kind: "variable", location: loc(start, end) }]
+});
+const differs = (go, rust) => categories(diffTranscripts(go, rust))["value-differs"] ?? 0;
+
+test("an id only the evidence declares compares by its declaration", () => {
+  const uses = (id) => analyze(table({ entities: [{ location: loc(30, 35), symbol: id }] }));
+  const go = canonical(uses("symbol:h:aaaa"), [declared("symbol:h:aaaa", "label", 10)]);
+  const rust = canonical(uses("symbol:h:bbbb"), [declared("symbol:h:bbbb", "label", 10)]);
+  assert.equal(differs(go, rust), 0);
+  // Another declaration is another symbol.
+  const moved = canonical(uses("symbol:h:bbbb"), [declared("symbol:h:bbbb", "label", 12)]);
+  assert.equal(differs(go, moved), 1);
+});
+
+test("two ids with one declaration are told apart by their uses, not their spelling", () => {
+  // A shorthand property and its binding: the same declaration, two symbols.
+  const pair = (property, binding, uses = [property, binding]) =>
+    canonical(
+      analyze(
+        table({
+          symbols: [declared(property, "notes", 10), declared(binding, "notes", 10)],
+          entities: [
+            { location: loc(30, 35), symbol: uses[0] },
+            { location: loc(40, 45), symbol: uses[1] }
+          ]
+        })
+      )
+    );
+  // The hashes sort one way in one scheme and the other way in the other.
+  const go = pair("symbol:h:1111", "symbol:h:9999");
+  const rust = pair("symbol:h:9999", "symbol:h:1111");
+  assert.equal(differs(go, rust), 0);
+  // One symbol at both uses is a different partition.
+  const merged = pair("symbol:h:9999", "symbol:h:1111", ["symbol:h:9999", "symbol:h:9999"]);
+  assert.ok(differs(go, merged) > 0);
+});
+
+test("two ids with one declaration used in one cell are told apart by their place in it", () => {
+  // A method's call target and its declaration's symbol: one resolved call
+  // names both, so only the place inside the cell tells them apart.
+  const call = (target, symbol) =>
+    canonical(
+      analyze(
+        table({
+          entities: [
+            {
+              location: loc(4782, 4802),
+              resolvedCall: { target, declaration: { kind: "MethodDeclaration", location: loc(6296, 6306), name: "exportFile", symbol } }
+            }
+          ]
+        })
+      ),
+      [declared(target, "exportFile", 6296), declared(symbol, "exportFile", 6296)]
+    );
+  const go = call("symbol:h:1111", "symbol:h:9999");
+  assert.equal(differs(go, call("symbol:h:9999", "symbol:h:1111")), 0);
+  // One id in both places is a different partition.
+  assert.equal(differs(go, call("symbol:h:9999", "symbol:h:9999")), 1);
+});
+
+test("a symbol without declarations compares by the site that carries it", () => {
+  // A function type's call signature: no declaration row, but the resolved
+  // call names its declaration beside its id.
+  const call = (signature, start = 59) =>
+    canonical(
+      analyze(
+        table({
+          entities: [
+            {
+              location: loc(185, 189),
+              resolvedCall: { declaration: { kind: "FunctionType", location: loc(start, 66), name: "call", symbol: signature } }
+            }
+          ]
+        })
+      ),
+      [{ id: signature }]
+    );
+  assert.equal(differs(call("symbol:h:53de"), call("symbol:h:f3f5")), 0);
+  assert.equal(differs(call("symbol:h:53de"), call("symbol:h:f3f5", 60)), 1);
+});
+
 test("state tokens, source arena paths and nothing else are normalised away", () => {
   const go = normalizeTranscript(transcript(analyze(table(), { stateToken: "17" })));
   const rust = normalizeTranscript(transcript(analyze(table(), { stateToken: "abc" })));

@@ -114,16 +114,14 @@ pub(crate) fn literal_receiver_call(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     let callee = file.ast.peel_ts_sugar_span(callee);
-    lookup
-        .literal_receiver_members()
-        .contains(&(file.path.to_string(), callee))
+    lookup.literal_receiver_member_at(file.path.as_str(), callee)
 }
 
 pub(crate) fn call_withheld(file: &FileFacts, callee: Span, lookup: &SemanticLookup<'_>) -> bool {
     literal_receiver_call(file, callee, lookup)
-        && !lookup
-            .object_member_targets()
-            .contains_key(&location(file.path.shared(), callee))
+        && lookup
+            .object_member_target_at(&location(file.path.shared(), callee))
+            .is_none()
 }
 
 /// `symbol` and the symbols runtime redirects tie to it, transitively.

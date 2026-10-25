@@ -1,101 +1,6 @@
 //! Interprocedural graph discovery: summary nodes, call edges, and the assembly of the result graph.
 
-use std::cell::RefCell;
-
 use super::*;
-
-/// A question a graph chunk asks of other files through the function table:
-/// which function a symbol names, and that function's syntax. No recorded
-/// read covers these answers (`crate::base::reads`), so a kept chunk asks
-/// each again before it is reused, as the refresh rows do their callee
-/// answers (`parameter_use::CalleeRead`). A chunk whose file is unchanged
-/// and whose every question answers as it did re-traces the same
-/// contribution (trace replay).
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(crate) enum GraphCalleeRead {
-    /// Whether a callee symbol names a project function.
-    ProjectFunction { symbol: SymbolId, found: bool },
-    /// ADR 0285: whether the argument at `position` of the call at `call`
-    /// is handed to a function declaration that calls it on every
-    /// completion ([`forwarded_argument`]).
-    Forward {
-        call: Span,
-        position: usize,
-        forwarded: bool,
-    },
-}
-
-thread_local! {
-    static CALLEE_READS: RefCell<Option<Vec<GraphCalleeRead>>> = const { RefCell::new(None) };
-}
-
-fn note_callee_read(read: GraphCalleeRead) {
-    CALLEE_READS.with(|log| {
-        if let Some(log) = log.borrow_mut().as_mut() {
-            log.push(read);
-        }
-    });
-}
-
-/// Runs a graph chunk, recording the [`GraphCalleeRead`]s it makes,
-/// sorted and without duplicates.
-pub(super) fn record_graph_callee_reads<R>(f: impl FnOnce() -> R) -> (R, Vec<GraphCalleeRead>) {
-    let outer = CALLEE_READS.with(|log| log.replace(Some(Vec::new())));
-    let value = f();
-    let mut reads = CALLEE_READS
-        .with(|log| log.replace(outer))
-        .unwrap_or_default();
-    reads.sort_unstable();
-    reads.dedup();
-    (value, reads)
-}
-
-/// Whether every question a kept chunk of `file` asked answers as it did.
-pub(super) fn graph_callee_reads_hold(
-    file: &solid_facts::FileFacts,
-    reads: &[GraphCalleeRead],
-    lookup: &SemanticLookup<'_>,
-) -> bool {
-    reads.iter().all(|read| match read {
-        GraphCalleeRead::ProjectFunction { symbol, found } => {
-            lookup.function_for_symbol(symbol.as_str()).is_some() == *found
-        }
-        GraphCalleeRead::Forward {
-            call,
-            position,
-            forwarded,
-        } => file
-            .ast
-            .call_at(*call)
-            .is_some_and(|call| forwarded_answer(file, call, *position, lookup) == *forwarded),
-    })
-}
-
-/// Whether `symbol` names a project function, recorded.
-fn project_function(lookup: &SemanticLookup<'_>, symbol: &str) -> bool {
-    let found = lookup.function_for_symbol(symbol).is_some();
-    note_callee_read(GraphCalleeRead::ProjectFunction {
-        symbol: SymbolId::from(symbol),
-        found,
-    });
-    found
-}
-
-/// [`forwarded_answer`], recorded.
-fn forwarded_argument(
-    file: &solid_facts::FileFacts,
-    call: &solid_facts::ast::CallFact,
-    position: usize,
-    lookup: &SemanticLookup<'_>,
-) -> bool {
-    let forwarded = forwarded_answer(file, call, position, lookup);
-    note_callee_read(GraphCalleeRead::Forward {
-        call: call.span,
-        position,
-        forwarded,
-    });
-    forwarded
-}
 
 /// Whether the argument at `position` is handed, exactly, to a function
 /// declaration that calls it on every completion. A declaration is
@@ -124,6 +29,7 @@ pub(super) fn discover_summary_nodes(
     file: &solid_facts::FileFacts,
     project_indexes: &ProjectIndexes<'_>,
     entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
 ) -> Vec<SummaryNode> {
     let mut nodes = Vec::new();
     let typescript_file = project_indexes.typescript_file(file.path.as_str());
@@ -166,6 +72,9 @@ pub(super) fn discover_summary_nodes(
                 })
                 .or_else(|| {
                     crate::owners::own_method_name(file, function).and_then(|name| {
+                        // A declaration another file's call resolves to can
+                        // name the method (final review R3, plausible 2).
+                        lookup.note_declaration_symbol_at(file.path.as_str(), name.span);
                         project_indexes.method_symbol(file.path.as_str(), name.span)
                     })
                 });
@@ -492,7 +401,7 @@ fn discover_call_graph(
             .dispatches
             .push((owner_span, candidate_symbols.clone()));
     }
-    let project_function = project_function(lookup, symbol);
+    let project_function = lookup.function_for_symbol(symbol).is_some();
     if call.direct_callee && !ambiguous_dispatch && reads_for_owner {
         contribution
             .factory_calls
@@ -657,7 +566,7 @@ fn record_forwarded_parameter_invocations(
                             parameter.shape == solid_facts::ast::BindingShape::Identifier
                         })
                 });
-            let forwarded = aligned && forwarded_argument(file, call, position, lookup);
+            let forwarded = aligned && forwarded_answer(file, call, position, lookup);
             if forwarded
                 && !contribution
                     .invoked_parameters
