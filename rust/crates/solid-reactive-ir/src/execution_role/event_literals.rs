@@ -127,8 +127,8 @@ fn dispatch_in_census_function(
 }
 
 /// Whether `function` is a literal written directly as an argument of a
-/// reviewed test runner's registration ([`SemanticLookup::is_test_runner_registration`]):
-/// the runner invokes it, from its own scheduler. A literal behind a wrapper
+/// reviewed test runner's registration ([`SemanticLookup::test_runner_callback`]) that
+/// the runner invokes from its own scheduler, later. A literal behind a wrapper
 /// call (`it("x", wrap(fn))`) is not the argument, and a spread before it
 /// makes the position unknown.
 fn registered_test_callback(
@@ -149,7 +149,8 @@ fn registered_test_callback(
                     .iter()
                     .take(index + 1)
                     .any(|argument| argument.spread)
-                && lookup.is_test_runner_registration(file, call)
+                && lookup.test_runner_callback(file, call)
+                    == Some(crate::indexes::TestRunnerCallback::Scheduled)
         })
 }
 

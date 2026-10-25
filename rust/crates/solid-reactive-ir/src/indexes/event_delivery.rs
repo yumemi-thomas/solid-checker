@@ -336,6 +336,28 @@ impl SemanticLookup<'_> {
         (!in_class && !in_jsx).then_some(DispatchCaller::ModuleInitialization)
     }
 
+    /// The registration call whose suite body (a synchronous function literal
+    /// written directly as the argument of a reviewed runner's registration,
+    /// which the runner runs inside the call) directly contains `site`.
+    pub(crate) fn inline_suite_body_registration<'file>(
+        &self,
+        file: &'file solid_facts::FileFacts,
+        site: Span,
+    ) -> Option<&'file solid_facts::ast::CallFact> {
+        let (call, _) = file.ast.arguments_containing(site).find(|(call, index)| {
+            matches!(
+                call.arguments[*index].value,
+                solid_facts::ast::ArgumentValueKind::Function
+            ) && crate::execution_role::direct_callback_contains(
+                file,
+                call.arguments[*index].span,
+                site,
+            )
+        })?;
+        (self.test_runner_callback(file, call) == Some(TestRunnerCallback::InlineSuiteBody))
+            .then_some(call)
+    }
+
     /// The caller of a dispatch inside the function literal handed directly to
     /// a reviewed fresh-stack scheduler or to `runWithOwner(null, …)`.
     fn dispatch_callback_caller(
@@ -347,11 +369,19 @@ impl SemanticLookup<'_> {
             && let Some((call, _)) =
                 crate::execution_role::fresh_stack_callback_call(file, site, self)
         {
-            return Some(if self.is_test_runner_registration(file, call) {
-                DispatchCaller::TestRunner
-            } else {
-                DispatchCaller::FreshStack
-            });
+            return Some(
+                if self.test_runner_callback(file, call) == Some(TestRunnerCallback::Scheduled) {
+                    DispatchCaller::TestRunner
+                } else {
+                    DispatchCaller::FreshStack
+                },
+            );
+        }
+        // ADR 0396: a suite body its runner runs inside the registration call
+        // is a synchronous callback of that call, so its caller is the caller
+        // of the registration written at that position.
+        if let Some(registration) = self.inline_suite_body_registration(file, site) {
+            return self.dispatch_caller(file, registration);
         }
         let (call, index) = file.ast.arguments_containing(site).find(|(call, index)| {
             matches!(

@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-suites/variants/playwright/App.test.tsx",
+      "start": 275,
+      "end": 293,
+      "fixes": 0
+    }
+  ]
+}

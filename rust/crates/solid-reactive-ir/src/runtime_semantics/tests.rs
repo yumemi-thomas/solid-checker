@@ -719,12 +719,18 @@ fn a_test_runner_registration_is_a_reviewed_package_declaration() {
     ] {
         for name in ["test", "it", "describe", "beforeEach", "afterAll", "suite"] {
             assert!(
-                test_runner_function_declaration(path, name),
+                test_runner_function_declaration(path, name).is_some(),
                 "{path} {name}"
             );
         }
-        assert!(!test_runner_function_declaration(path, "expect"), "{path}");
-        assert!(!test_runner_function_declaration(path, "vi"), "{path}");
+        assert!(
+            test_runner_function_declaration(path, "expect").is_none(),
+            "{path}"
+        );
+        assert!(
+            test_runner_function_declaration(path, "vi").is_none(),
+            "{path}"
+        );
     }
     for path in [
         "/app/src/it.ts",
@@ -733,9 +739,67 @@ fn a_test_runner_registration_is_a_reviewed_package_declaration() {
         "/app/node_modules/@types/node/fs.d.ts",
         "/app/node_modules/@types/react/index.d.ts",
     ] {
-        assert!(!test_runner_function_declaration(path, "it"), "{path}");
+        assert!(
+            test_runner_function_declaration(path, "it").is_none(),
+            "{path}"
+        );
     }
     assert!(test_runner_modifier("only") && test_runner_modifier("each"));
     assert!(!test_runner_modifier("step") && !test_runner_modifier("call"));
     assert!(test_runner_curried_modifier("each") && !test_runner_curried_modifier("only"));
+    assert!(test_runner_suite_function("describe") && test_runner_suite_function("suite"));
+    assert!(!test_runner_suite_function("it") && !test_runner_suite_function("test"));
+    assert!(test_runner_suite_modifier("describe") && !test_runner_suite_modifier("serial"));
+}
+
+/// ADR 0396: each runner's suite-body answer is its own, read on its bytes:
+/// vitest collects the body after the file loads, jest-circus, mocha,
+/// `node:test` and playwright call it inside the registration, and `bun:test`
+/// shows no readable bytes.
+#[test]
+fn a_suite_body_is_placed_per_runner() {
+    for (path, expected) in [
+        (
+            "/app/node_modules/vitest/dist/index.d.ts",
+            SuiteBodyRun::Scheduled,
+        ),
+        (
+            "/app/node_modules/@vitest/runner/dist/index.d.ts",
+            SuiteBodyRun::Scheduled,
+        ),
+        (
+            "/app/node_modules/bun-types/test.d.ts",
+            SuiteBodyRun::Unproven,
+        ),
+        (
+            "/app/node_modules/@types/node/test.d.ts",
+            SuiteBodyRun::Inline,
+        ),
+        (
+            "/app/node_modules/@playwright/test/index.d.ts",
+            SuiteBodyRun::Inline,
+        ),
+        (
+            "/app/node_modules/playwright/types/test.d.ts",
+            SuiteBodyRun::Inline,
+        ),
+        (
+            "/app/node_modules/@jest/globals/build/index.d.ts",
+            SuiteBodyRun::Inline,
+        ),
+        (
+            "/app/node_modules/@types/jest/index.d.ts",
+            SuiteBodyRun::Inline,
+        ),
+        (
+            "/app/node_modules/@types/mocha/index.d.ts",
+            SuiteBodyRun::Inline,
+        ),
+    ] {
+        assert_eq!(
+            test_runner_function_declaration(path, "describe"),
+            Some(expected),
+            "{path}"
+        );
+    }
 }

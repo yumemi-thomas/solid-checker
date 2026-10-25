@@ -86,12 +86,16 @@ when it is written in a callback handed directly to a reviewed fresh-stack
 scheduler (`setTimeout`), at module top level, in a `runWithOwner(null, …)`
 callback (for owner and write proofs only; its enclosing strict-read window stays
 open), or in a callback handed directly to a reviewed test runner's `test`,
-`it`, `describe`, `suite` or hook (ADR 0396: `vitest` and `@vitest/runner`, `bun:test`, `node:test`,
+`it`, `describe`, `suite` or hook (ADR 0396, a suite body only where the runner
+defers it, which vitest does and jest, mocha, `node:test` and playwright do not:
+their body runs inside the registration call and takes that position's role,
+and `bun:test`'s is not placed; `vitest` and `@vitest/runner`, `bun:test`, `node:test`,
 `@playwright/test` and `playwright`, jest and mocha, resolved through their installed
 declarations, never by spelling; the callback runs from the runner's scheduler
 with no owner and no strict-read window, so the same placement gives its body
 the role of a scheduled callback for every rule; `it("x", wrap(fn))` and a
-project function named `it` are not one; an `async` callback is covered whole,
+project function named `it` are not one, nor is the data argument of a curried
+registration (`describe.each(rows)`); an `async` callback is covered whole,
 before and after its awaits, and so is a project function only such callbacks
 call, transitively, that is not handed to code the walk cannot follow, in a
 closed program: its dispatch leaves the veto as class `test-only helper`; an
@@ -101,8 +105,9 @@ use, a re-export specifier, an escaping namespace or an open program refuses; a
 call past an `await` in an async helper counts, a function literal handed to
 such a helper (`fireAndFlush(() => el.dispatchEvent(…))`) is one, and so is a
 helper a factory returns in an object a test destructures; ADR 0400). The
-premise is a reading of vitest's runtime on 5.0.0 and 4.1.11 and playwright
-1.63.0; the other runners were not read. A runner configured to wrap tests in
+premise is a reading of the runners' published bytes (vitest 5.0.0 and 4.1.11,
+playwright 1.63.0, jest-circus 30.5.2, mocha 11.8.0, Node 24.22.1's `node:test`);
+`bun:test` is native and not placed. A runner configured to wrap tests in
 a Solid root, a patched runner, and a helper also called from an event handler
 fall outside it. A dispatch written
 directly in a function literal that only events invoke (ADR 0327's census, so

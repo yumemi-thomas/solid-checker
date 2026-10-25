@@ -70,6 +70,36 @@
       "start": 1255,
       "end": 1275,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
+      "start": 1419,
+      "end": 1424,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
+      "start": 1557,
+      "end": 1562,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
+      "start": 1673,
+      "end": 1678,
+      "fixes": 0
     }
   ]
 }

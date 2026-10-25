@@ -550,6 +550,12 @@ pub(crate) fn owner_callback_edges(
         if !scheduled.is_empty() {
             return scheduled;
         }
+        // ADR 0396: a suite body the runner runs inside the registration call
+        // runs under the owner of the call's position.
+        let inline_suite = inline_suite_body_edges(file, call, lookup);
+        if !inline_suite.is_empty() {
+            return inline_suite;
+        }
         // A call that names no primitive can still be an invocation of a
         // function some primitive returned -- but only where the dialect models
         // such a function. Solid 2.0 models none, so the binding-chain walk
@@ -1000,13 +1006,48 @@ pub(crate) fn fresh_stack_scheduler_edges(
             crate::runtime_semantics::argument_behavior(resolved, callability, *index).map_or_else(
                 // ADR 0396: a reviewed test runner invokes a registered callback
                 // from its own scheduler.
-                || lookup.is_test_runner_registration(file, call),
+                || {
+                    lookup.test_runner_callback(file, call)
+                        == Some(crate::indexes::TestRunnerCallback::Scheduled)
+                },
                 crate::runtime_semantics::RuntimeArgumentBehavior::runs_on_fresh_stack,
             )
         })
         .map(|(argument, _)| OwnerCallbackEdge {
             argument,
             kind: callback_owner_edge_kind(owner),
+            source_path: file.path.to_string(),
+            source: call.span,
+        })
+        .collect()
+}
+
+/// The edges of a reviewed runner's suite registration whose body the runner
+/// runs inside the call ([`crate::indexes::TestRunnerCallback::InlineSuiteBody`]):
+/// the body is a synchronous function literal, and it inherits the owner at
+/// the call. An async body is no edge: its resumptions run elsewhere.
+fn inline_suite_body_edges(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<OwnerCallbackEdge> {
+    if lookup.test_runner_callback(file, call)
+        != Some(crate::indexes::TestRunnerCallback::InlineSuiteBody)
+    {
+        return Vec::new();
+    }
+    call.arguments
+        .iter()
+        .enumerate()
+        .filter(|(_, argument)| {
+            matches!(
+                argument.value,
+                solid_facts::ast::ArgumentValueKind::Function
+            )
+        })
+        .map(|(argument, _)| OwnerCallbackEdge {
+            argument,
+            kind: OwnerEdgeKind::Preserve,
             source_path: file.path.to_string(),
             source: call.span,
         })

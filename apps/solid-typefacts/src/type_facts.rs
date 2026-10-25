@@ -740,7 +740,8 @@ fn minimum_parameter_count(checker: &mut Checker, value: P<Type>) -> u32 {
 /// other instantiable type, a generic mapped type, a mapped type with an `as`
 /// clause, a reverse-mapped or evolving type, and a property the compiler names
 /// internally (a symbol key) each make the answer `None`; so does a type whose
-/// only constituents are nullish. Names are sorted and deduplicated.
+/// only constituents are nullish, and `{}` or any object type with no property
+/// and no signature, which admits any non-nullish value. Names are sorted and deduplicated.
 ///
 /// The answer is the declared type's, not the value's: a value typed
 /// `{ class?: string }` may hold more keys at run time (structural subtyping).
@@ -842,6 +843,19 @@ fn collect_declared_keys(
     if !checker.get_index_infos_of_type_exported(value).is_empty() {
         return None;
     }
+    // `{}` (and an empty interface or mapped type) admits any non-nullish
+    // value: with no property and no signature it declares nothing, so its
+    // empty key set would prove every spread of it handler-free.
+    if properties.is_empty()
+        && checker
+            .get_signatures_of_type_exported(value, SignatureKind::Call)
+            .is_empty()
+        && checker
+            .get_signatures_of_type_exported(value, SignatureKind::Construct)
+            .is_empty()
+    {
+        return None;
+    }
     if value.object_flags().intersects(ObjectFlags::Mapped) {
         // Resolving the members above computed the constraint. Only a
         // constraint that is a union of literal keys fixes the key set.
@@ -849,7 +863,10 @@ fn collect_declared_keys(
         // An `as` clause renames each key through a type the checker drops
         // silently when it stays deferred (a conditional on an unresolved type
         // parameter), so the key set is trusted only for a top-level alias
-        // (`Omit<T, K>`) instantiated with arguments free of type variables.
+        // instantiated with arguments free of type variables: `@solidjs/signals`'
+        // `Omit<T, K>` (`[P in keyof T as Exclude<P, K[number]>]: T[P]`). lib's
+        // `Omit<T, K>` is `Pick<T, Exclude<keyof T, K>>`, a mapped type with no
+        // `as` clause, judged by its constraint alone.
         if mapped
             .declaration
             .get()?

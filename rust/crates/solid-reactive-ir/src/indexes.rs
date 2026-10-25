@@ -31,6 +31,7 @@ mod member_values;
 mod primitive_proof;
 mod test_runner;
 pub(crate) use intrinsics::mentions_word;
+pub(crate) use test_runner::TestRunnerCallback;
 
 /// What every reflective definer spelling in the project says about the key
 /// it defines: `any` when some spelling may define any name, otherwise only

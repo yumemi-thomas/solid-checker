@@ -86,7 +86,7 @@ pub(super) struct InvocationFlow<'a, 'l, 'c> {
     pub(super) owner_mode: bool,
     /// The owner question's other census (ADR 0396): the entries that count
     /// are the function literals a reviewed test runner invokes (a
-    /// registration's callback, [`SemanticLookup::is_test_runner_registration`]),
+    /// registration's callback, [`SemanticLookup::test_runner_callback`]),
     /// not an event delivery. Meaningful only with `owner_mode`.
     pub(super) test_entries: bool,
     /// ADR 0400: the write question. A call's role is the write classifier's
@@ -381,10 +381,19 @@ pub(super) fn write_flow_role(
     let answers = lookup.write_flow_answers();
     let mut enclosing = file.ast.functions_body_containing(span).collect::<Vec<_>>();
     enclosing.sort_by_key(|function| function.span.end - function.span.start);
+    // Where the write, then each layer around it, sits in the next function
+    // out. An await in any of those functions that precedes the position
+    // suspends the run: it resumes later with no owner (ADR 0333), whatever
+    // invokes the function.
+    let mut position = span;
     for function in enclosing {
         if !runs_in_place_within(file, innermost, function, lookup) {
             return None;
         }
+        if let Some(suspended) = suspended_write_role(file, position, lookup) {
+            return Some(suspended);
+        }
+        position = function.span;
         if let Some((role, _)) = answers
             .get(&(file.path.to_string(), function.span, root_body))
             .copied()

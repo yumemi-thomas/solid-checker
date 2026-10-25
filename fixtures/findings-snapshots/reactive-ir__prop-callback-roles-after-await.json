@@ -1,0 +1,75 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/variants/after-await/App.tsx",
+      "start": 367,
+      "end": 374,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/variants/after-await/App.tsx",
+      "start": 402,
+      "end": 409,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/variants/after-await/App.tsx",
+      "start": 1018,
+      "end": 1025,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/variants/after-await/App.tsx",
+      "start": 1207,
+      "end": 1214,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/variants/after-await/App.tsx",
+      "start": 1632,
+      "end": 1639,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/variants/after-await/children.tsx",
+      "start": 112,
+      "end": 176,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/variants/after-await/children.tsx",
+      "start": 143,
+      "end": 152,
+      "fixes": 0
+    }
+  ]
+}

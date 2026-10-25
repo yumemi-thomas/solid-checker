@@ -35,7 +35,8 @@ export const FILE_BUDGETS = {
   // and for ADR 0397, 133_476 bytes against 132_700;
   // and for ADR 0396's async and test-helper extension, 135_756 bytes against 133_600.
   // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 145_000.
-  "docs/decisions.md": 145_000,
+  // And for the Opus review's fixes to ADRs 0384, 0394, 0396 and 0400: 150_000.
+  "docs/decisions.md": 150_000,
 };
 
 export const GROUP_BUDGETS = [
@@ -56,7 +57,8 @@ export const GROUP_BUDGETS = [
     // And for ADR 0397's fixture: 271_811 bytes against 271_500.
     // And for ADR 0396's async and helper variants and the vitest 4 project: 275_151 bytes.
     // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 290_000.
-    bytes: 290_000,
+    // And for the Opus review's fixes (suite bodies per runner, after-await and sync-dispatch variants): 295_000.
+    bytes: 295_000,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

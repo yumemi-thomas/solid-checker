@@ -954,10 +954,23 @@ pub(crate) fn fresh_stack_callback_call<'file, 'lookup>(
             crate::runtime_semantics::argument_behavior(resolved, callability, index)
         else {
             // ADR 0396: a callback handed directly to a reviewed test runner's
-            // registration runs from the runner's own scheduler.
-            return lookup
-                .is_test_runner_registration(file, call)
-                .then_some((call, resolved));
+            // registration runs from the runner's own scheduler, except a suite
+            // body its runner runs inside the registration call (a synchronous
+            // function: an async body's resumptions run elsewhere), which
+            // takes the role of the call's position.
+            match lookup.test_runner_callback(file, call)? {
+                crate::indexes::TestRunnerCallback::Scheduled => return Some((call, resolved)),
+                crate::indexes::TestRunnerCallback::InlineSuiteBody
+                    if matches!(
+                        call.arguments[index].value,
+                        solid_facts::ast::ArgumentValueKind::Function
+                    ) =>
+                {
+                    span = call.span;
+                    continue;
+                }
+                crate::indexes::TestRunnerCallback::InlineSuiteBody => return None,
+            }
         };
         match behavior {
             RuntimeArgumentBehavior::FreshStackCallback => {

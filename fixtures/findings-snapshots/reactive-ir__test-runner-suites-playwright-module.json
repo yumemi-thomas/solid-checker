@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/test-runner-suites/variants/playwright-module/App.test.tsx",
+      "start": 263,
+      "end": 281,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/test-runner-suites/variants/playwright-module/App.test.tsx",
+      "start": 521,
+      "end": 539,
+      "fixes": 0
+    }
+  ]
+}

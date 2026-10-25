@@ -763,7 +763,7 @@ fn event_only_entries(
 /// where the owner a callback slot gives the function is gone: legal past a
 /// dominating await, unplaced past one that may be skipped. `None` when no
 /// suspension precedes it.
-fn suspended_write_role(
+pub(super) fn suspended_write_role(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
