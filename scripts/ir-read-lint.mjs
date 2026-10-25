@@ -9,6 +9,11 @@
 //   facts.files       the project's file list
 //   files()           SemanticLookup::files(), the same list behind the lookup
 //   file_by_path      another file's facts by path
+//   typescript-table  a whole-table scan of the TypeFacts table
+//                     (`typescript.entities()`, `.symbols()`, `.files()`):
+//                     every file's rows, which a cache filling from it must
+//                     record as a section, probe or memo for its readers
+//   symbol_names-scan iterating the symbol-name table, every file's names
 //   hashmap-iteration iterating a HashMap/HashSet in non-test code, whose order
 //                     is the insertion history (so a patched map and a fresh
 //                     one can answer differently). A lexical heuristic: it
@@ -116,7 +121,14 @@ export function codeLines(text) {
 
 /** Counts of each raw-read kind in one source text. */
 export function countReads(text) {
-  const counts = { "facts.files": 0, "files()": 0, file_by_path: 0, "hashmap-iteration": 0 };
+  const counts = {
+    "facts.files": 0,
+    "files()": 0,
+    file_by_path: 0,
+    "typescript-table": 0,
+    "symbol_names-scan": 0,
+    "hashmap-iteration": 0
+  };
   for (const { kind } of readSites(text)) counts[kind] += 1;
   return counts;
 }
@@ -152,6 +164,19 @@ export function readSites(text) {
     add("file_by_path", (line.match(/\bfile_by_path\b/g) ?? []).length);
     if (iterated.some((pattern) => pattern.test(line))) add("hashmap-iteration", 1);
   });
+  // Method chains span lines (`self.facts\n.typescript\n.entities()`): the
+  // whole-table kinds match the code joined, each at the line it starts on.
+  const code = lines.join("\n");
+  const joined = (kind, pattern) => {
+    for (const found of code.matchAll(pattern)) {
+      sites.push({ line: code.slice(0, found.index).split("\n").length, kind });
+    }
+  };
+  joined("typescript-table", /\b(?:typescript|table)\s*\.\s*(?:entities|symbols|files)\s*\(\s*\)/g);
+  joined(
+    "symbol_names-scan",
+    new RegExp(`\\bsymbol_names(?:\\(\\s*\\))?\\s*\\.\\s*(?:${ITERATORS})\\s*\\(`, "g")
+  );
   return sites;
 }
 

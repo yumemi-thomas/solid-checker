@@ -21,6 +21,11 @@ test("each raw read kind is counted, comments and test modules are not", () => {
         for name in &seen {}
         let _ = by_name.keys();
         let _ = by_name.get("x");
+        let _ = facts.typescript.entities().count();
+        let _ = self.facts.typescript.symbols();
+        let _ = facts.typescript.entities_for_path("x");
+        let _ = self.symbol_names.values();
+        let _ = self.symbol_names.get("x");
     }
     #[cfg(test)]
     mod tests {
@@ -31,6 +36,8 @@ test("each raw read kind is counted, comments and test modules are not", () => {
     "facts.files": 1,
     "files()": 1,
     file_by_path: 1,
+    "typescript-table": 2,
+    "symbol_names-scan": 1,
     "hashmap-iteration": 2
   });
 });
