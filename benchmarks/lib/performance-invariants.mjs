@@ -11,11 +11,9 @@
 //   shared ubuntu-24.04 runners the same commit measured 65-106 ms for the
 //   incremental edit and 154-246 us/source for first IR across ten consecutive
 //   runs (September 2026): a 1.6x swing with no code change. No fixed ceiling
-//   can sit inside that band and still catch regressions, so on shared runners
-//   they are *reported*, and the interleaved base-versus-head race in
-//   compare-performance.mjs (whose ratios stayed within 0.98-1.04 over the same
-//   runs) is the regression gate. On a machine you control — `make
-//   verify-performance`, `scripts/verify.sh` — they are enforced.
+//   can sit inside that band and still catch regressions, so they are enforced
+//   only on a machine you control (`make verify-performance`,
+//   `scripts/verify.sh`); CI has no performance gate (ADR 0422).
 
 export const DEFAULT_CEILINGS = Object.freeze({
   // Deterministic work units of export aggregation when the corpus doubles.

@@ -35,8 +35,9 @@ export const FILE_BUDGETS = {
   // and for ADR 0418 (the file stood 166,991 bytes before its entry); and for
   // ADR 0419 (the file stood 170,124 bytes before its entry and one edit); and for
   // ADR 0420 (the file stood 173,980 bytes before its entry); and for
-  // ADR 0421 (the file stood 176,343 bytes before its entry).
-  "docs/decisions.md": 179_000,
+  // ADR 0421 (the file stood 176,343 bytes before its entry); and for ADR 0422 (the file stood
+  // 178,593 bytes before its entry, which removes the CI performance workflow).
+  "docs/decisions.md": 180_000,
 };
 
 export const GROUP_BUDGETS = [
@@ -50,7 +51,8 @@ export const GROUP_BUDGETS = [
   // protocol notes, which added 4,638); and for ADR 0420 (the group stood 646,785 bytes before
   // its entry, which added 2,363); and for ADR 0421 (the group stood 649,148 bytes before
   // its entry, which added 2,250).
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 651_800 },
+  // and for ADR 0422 (the group stood 650,999 bytes before its entry, which added about 800).
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 652_800 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),

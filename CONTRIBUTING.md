@@ -91,13 +91,11 @@ For dependency builds shared across worktrees, install `sccache` and export
 `make verify-performance` enforces repository-owned invariants over a
 deterministic corpus: structural ones (export aggregation scaling, Type Facts
 payload per source, cached-result reuse) and wall-time ceilings (fresh Reactive
-IR per source, a one-file incremental edit on 1,000 sources). The `Performance`
-workflow enforces only the structural ones, because shared runners vary too much
-for a fixed ceiling; its regression gate is `benchmarks/compare-performance.mjs`,
-which races the merge base against the head on one runner and fails past a 1.25x
-ratio. Override the ceilings with `SOLID_CHECKER_MAX_INCREMENTAL_NS` and
-`SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE` to test that the gate turns red.
-Pushes to `main` and pull requests also send wall-time benchmarks to CodSpeed.
+IR per source, a one-file incremental edit on 1,000 sources). It runs on a
+machine you control (`make verify`), not on shared runners, whose wall times
+swing too much for a fixed ceiling. Override the ceilings with
+`SOLID_CHECKER_MAX_INCREMENTAL_NS` and `SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE`
+to test that the gate turns red. There is no CI performance gate (ADR 0422).
 
 ## Continuous integration caches
 
