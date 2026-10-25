@@ -1126,6 +1126,8 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(crate) fn hands_out_by_name(&self, path: &str, function: Span) -> bool {
+        // Every file's namespace uses of the module decide it.
+        self.note_namespace_hand_outs_of(path);
         self.namespace_hand_outs
             .get()
             .is_some_and(|hand_outs| hand_outs.named(path, function))
@@ -1134,6 +1136,7 @@ impl<'a> SemanticLookup<'a> {
     /// Whether the module at `path`'s namespace escapes with no name the
     /// analysis can read (ADR 0347, amendment). Until the census is set, nothing does.
     pub(crate) fn escapes_unnamed(&self, path: &str) -> bool {
+        self.note_namespace_hand_outs_of(path);
         self.namespace_hand_outs
             .get()
             .is_some_and(|hand_outs| hand_outs.escapes_unnamed(path))

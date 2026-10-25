@@ -489,6 +489,11 @@ impl<'a> SemanticLookup<'a> {
     /// dialect's primitive-defining packages under that export's name.
     pub(crate) fn intrinsic_tag_prop(&self, file: &FileFacts, name: Span) -> Option<&'static str> {
         let component = self.entities.at(file.path.as_str(), name)?;
+        // The tag symbol's declarations, in any file (a project module
+        // augmentation among them).
+        self.note_probe_read(crate::base::memo::probes::Probe::SymbolInfo, || {
+            Self::symbol_key(component.as_str())
+        });
         let declarations = self.symbols_by_id().get(component.as_str())?.declarations();
         let packages = self.dialect.primitive_defining_packages();
         let (_, prop) = self
