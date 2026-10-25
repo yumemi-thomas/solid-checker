@@ -13,7 +13,7 @@
 //   runs (September 2026): a 1.6x swing with no code change. No fixed ceiling
 //   can sit inside that band and still catch regressions, so they are enforced
 //   only on a machine you control (`make verify-performance`,
-//   `scripts/verify.sh`); CI has no performance gate (ADR 0422).
+//   `scripts/verify.sh`). CI gates relatively on real projects instead (ADR 0423).
 
 export const DEFAULT_CEILINGS = Object.freeze({
   // Deterministic work units of export aggregation when the corpus doubles.
