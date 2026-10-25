@@ -1,4 +1,4 @@
-//! The kept attestation (ADR 03XX-keep-attestation): after an update the
+//! The kept attestation (ADR 0419): after an update the
 //! producer says replaced one file in place, the session keeps the previous
 //! generation's attested imports and asks the producer about the edited file
 //! alone; after every other kind of update it asks about every file.

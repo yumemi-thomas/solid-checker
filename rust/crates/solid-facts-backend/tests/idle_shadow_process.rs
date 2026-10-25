@@ -290,3 +290,64 @@ fn no_check_runs_when_the_inline_shadow_is_on_or_the_check_is_off() {
         assert_eq!(project.log_text(), "", "{label}");
     }
 }
+
+/// Review R1 finding 10: a package's declarations edited while the daemon
+/// is idle make the fresh build answer differently, which is the disk's
+/// doing, not reuse's. The check calls that inconclusive, and in `panic`
+/// mode the daemon lives on.
+#[test]
+fn a_package_edited_while_idle_is_inconclusive_not_a_mismatch() {
+    let Some(project) = Project::new(
+        "package-edit",
+        &[
+            ("SOLID_CHECKER_IDLE_SHADOW", "panic"),
+            ("SOLID_CHECKER_IDLE_SHADOW_DELAY_MS", "1500"),
+        ],
+    ) else {
+        return;
+    };
+    let package = project.root.join("node_modules/late-package");
+    fs::create_dir_all(&package).unwrap();
+    fs::write(
+        package.join("package.json"),
+        r#"{"name":"late-package","version":"1.0.0","types":"index.d.ts"}"#,
+    )
+    .unwrap();
+    let declarations = package.join("index.d.ts");
+    fs::write(
+        &declarations,
+        "export declare function invoke<T>(callback: () => T): T;\n\
+         export declare function readCount(): number;\n",
+    )
+    .unwrap();
+    let app = project.root.join("App.tsx");
+    let original = fs::read_to_string(&app).unwrap();
+    fs::write(
+        &app,
+        format!(
+            "{original}\nimport {{ invoke as lateInvoke, readCount as lateRead }} from \
+             \"late-package\";\nexport function Late() {{\n  const value = \
+             lateInvoke(lateRead);\n  return <div>{{value}}</div>;\n}}\n"
+        ),
+    )
+    .unwrap();
+    let before = project.check(false);
+    let served = project.check(true);
+    assert_eq!(served.stdout, before.stdout);
+    // While the check's fresh build waits: the package now hands back the
+    // project's own helpers, and `Late` reads untracked.
+    fs::write(
+        &declarations,
+        "export { invoke, readCount } from \"../../source\";\n",
+    )
+    .unwrap();
+    assert_ne!(project.check(false).stdout, before.stdout);
+    project.wait_for_log("inconclusive", 1);
+    let log = project.log_text();
+    assert!(!log.contains("differs from a fresh build"), "{log}");
+    assert!(
+        log.contains("the files the program resolved changed"),
+        "{log}"
+    );
+    assert!(!project.daemon_pids().is_empty(), "the daemon ended: {log}");
+}

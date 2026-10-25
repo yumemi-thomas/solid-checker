@@ -46,7 +46,7 @@ impl SourceTables {
 
 pub(crate) fn discover_sources(
     ctx: &StageContext<'_>,
-    source_discovery_cache: Option<&mut HashMap<SourcePath, CachedSourceDiscovery>>,
+    source_discovery_cache: Option<&mut HashMap<SourcePath, SourceDiscoveryIdentity>>,
     typescript_unchanged: bool,
     build_timings: &mut BuildTimings,
     emit_timings: bool,
@@ -61,7 +61,7 @@ pub(crate) fn discover_sources(
         |kept, _| std::mem::take(kept),
     );
     let mut tables = SourceTables::default();
-    let (unchanged_paths, chunk_reads) = merge_file_source_contributions(
+    let unchanged_paths = merge_file_source_contributions(
         ctx,
         source_discovery_cache,
         typescript_unchanged,
@@ -69,10 +69,7 @@ pub(crate) fn discover_sources(
         &mut tables,
     );
     clock.finish(build_timings, ReactiveIrStage::SourceDiscovery);
-    // The project passes below read the lookup for every file: a later
-    // stage's chunk that reads their tables records what they read
-    // ([`SourceDiscovery::shared_reads`]).
-    let (mut discovery, shared_reads) = crate::base::reads::record(|| {
+    let discovery = {
         let mut timer = PassTimer::start();
         let fresh_tables = store.check_solvers().then(|| tables.clone());
         let mut output = super::post_passes::run(
@@ -154,17 +151,12 @@ pub(crate) fn discover_sources(
             uncertain_prop_sources,
             props_reactivity,
             unchanged_paths,
-            shared_reads: crate::base::reads::Reads::default(),
         }
-    });
+    };
     store.derived().solver::<super::post_passes::KeptPasses, _>(
         super::post_passes::POST_PASSES_STATE,
         |slot, _| *slot = kept,
     );
-    // What every file's discovery and the project passes read: the tables
-    // they fill moved only if one of these reads did, or a file did.
-    discovery.shared_reads = shared_reads;
-    discovery.shared_reads.extend(&chunk_reads);
     discovery
 }
 
@@ -241,13 +233,16 @@ impl PassTimer {
     }
 }
 
+/// Every file's contribution, merged in file order, with the build's
+/// `unchanged_paths`: the files whose identity (source, TypeFacts rows and
+/// the symbols they name) is the last build's.
 fn merge_file_source_contributions(
     ctx: &StageContext<'_>,
-    source_discovery_cache: Option<&mut HashMap<SourcePath, CachedSourceDiscovery>>,
+    identities: Option<&mut HashMap<SourcePath, SourceDiscoveryIdentity>>,
     typescript_unchanged: bool,
     build_timings: &mut BuildTimings,
     tables: &mut SourceTables,
-) -> (HashSet<String>, crate::base::reads::Reads) {
+) -> HashSet<String> {
     let StageContext {
         facts,
         project_indexes,
@@ -257,124 +252,60 @@ fn merge_file_source_contributions(
         semantic_lookup,
         ..
     } = *ctx;
+    let mut aggregate = SourceDiscoveryAggregate::default();
+    for contribution in &parallel_file_results(&facts.files, |file| {
+        discover_file_sources(
+            semantic_lookup,
+            file,
+            project_indexes
+                .ast_files_by_path
+                .get(file.path.as_str())
+                .expect("project index contains every source file"),
+            entities,
+            symbol_names,
+        )
+    }) {
+        aggregate.merge(contribution);
+    }
+    aggregate.append_to(tables.merge_target());
     let mut unchanged_paths = HashSet::<String>::default();
-    let mut chunk_reads = crate::base::reads::Reads::default();
-    match source_discovery_cache {
-        None => {
-            let contributions = parallel_file_results(&facts.files, |file| {
-                discover_file_sources(
-                    semantic_lookup,
-                    file,
-                    project_indexes
-                        .ast_files_by_path
-                        .get(file.path.as_str())
-                        .expect("project index contains every source file"),
-                    entities,
-                    symbol_names,
-                )
-            });
-            let mut aggregate = SourceDiscoveryAggregate::default();
-            for contribution in &contributions {
-                aggregate.merge(contribution);
+    if let Some(identities) = identities {
+        let current_paths = facts
+            .files
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect::<HashSet<_>>();
+        identities.retain(|path, _| current_paths.contains(path.as_str()));
+        let mut identity_misses = 0;
+        for file in &facts.files {
+            let Some(cached) = identities.get(file.path.as_str()) else {
+                continue;
+            };
+            if source_discovery_identity_matches(
+                cached,
+                file.path.as_str(),
+                &file.source_hash,
+                project_indexes.resolution_digest(file.path.as_str()),
+                typescript_unchanged,
+                typescript_indexes.source_discovery_delta.as_ref(),
+            ) {
+                unchanged_paths.insert(file.path.to_string());
+            } else {
+                identity_misses += 1;
             }
-            aggregate.append_to(tables.merge_target());
         }
-        Some(cache) => {
-            let current_paths = facts
-                .files
-                .iter()
-                .map(|file| file.path.as_str())
-                .collect::<HashSet<_>>();
-            cache.retain(|path, _| current_paths.contains(path.as_str()));
-            let mut identity_misses = 0;
-            let reusable_paths = facts
-                .files
-                .iter()
-                .filter_map(|file| {
-                    cache
-                        .get(file.path.as_str())
-                        .is_some_and(|cached| {
-                            // What the file read of other files is its
-                            // proof ([`crate::base::reads`]); the caller's
-                            // own symbols are bound by the per-file delta.
-                            let identity = source_discovery_identity_matches(
-                                &cached.identity,
-                                file.path.as_str(),
-                                &file.source_hash,
-                                typescript_unchanged,
-                                typescript_indexes.source_discovery_delta.as_ref(),
-                            );
-                            identity_misses += u64::from(!identity);
-                            if identity {
-                                unchanged_paths.insert(file.path.to_string());
-                            }
-                            identity && cached.proof.holds(semantic_lookup)
-                        })
-                        .then_some(file.path.as_str())
-                })
-                .collect::<HashSet<_>>();
-            build_timings.source_discovery_identity_misses = identity_misses;
-            let recomputed = facts
-                .files
-                .iter()
-                .filter(|file| !reusable_paths.contains(file.path.as_str()))
-                .collect::<Vec<_>>();
-            let discovered = parallel_slice_results(&recomputed, |file| {
-                let (contribution, reads) = crate::base::reads::record(|| {
-                    discover_file_sources(
-                        semantic_lookup,
-                        file,
-                        project_indexes
-                            .ast_files_by_path
-                            .get(file.path.as_str())
-                            .expect("project index contains every source file"),
-                        entities,
-                        symbol_names,
-                    )
-                });
-                (
-                    source_discovery_identity(file, project_indexes),
-                    contribution,
-                    reads,
-                )
-            });
-            let mut discovered = discovered.into_iter();
-            for file in &facts.files {
-                if reusable_paths.contains(file.path.as_str()) {
-                    build_timings.source_discovery_reused_files += 1;
-                    if let Some(cached) = cache.get(file.path.as_str()) {
-                        chunk_reads.extend(&cached.proof.reads);
-                    }
-                    continue;
-                }
-                let (identity, contribution, reads) = discovered
-                    .next()
-                    .expect("recomputed source path has a fresh contribution");
-                build_timings.source_discovery_recomputed_files += 1;
-                chunk_reads.extend(&reads);
-                cache.insert(
+        build_timings.source_discovery_identity_misses = identity_misses;
+        // An unchanged file keeps the identity it was matched by.
+        for file in &facts.files {
+            if !unchanged_paths.contains(file.path.as_str()) {
+                identities.insert(
                     file.path.clone(),
-                    CachedSourceDiscovery {
-                        identity,
-                        proof: crate::base::reads::ReadProof::new(reads, semantic_lookup),
-                        contribution,
-                    },
+                    source_discovery_identity(file, project_indexes),
                 );
-            }
-            debug_assert!(discovered.next().is_none());
-            let cache = &*cache;
-            for aggregate in parallel_file_chunk_results(&facts.files, |files| {
-                let mut aggregate = SourceDiscoveryAggregate::default();
-                for file in files {
-                    if let Some(cached) = cache.get(file.path.as_str()) {
-                        aggregate.merge(&cached.contribution);
-                    }
-                }
-                aggregate
-            }) {
-                aggregate.append_to(tables.merge_target());
             }
         }
     }
-    (unchanged_paths, chunk_reads)
+    build_timings.source_discovery_unchanged_files =
+        u64::try_from(unchanged_paths.len()).unwrap_or(u64::MAX);
+    unchanged_paths
 }
