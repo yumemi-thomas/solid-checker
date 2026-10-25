@@ -1485,7 +1485,7 @@ pub enum CacheRetention {
     #[default]
     Performance,
     /// Drop the indexes that only the shadow check reads; keep every cache
-    /// an edit reuses (ADR 03XX-edit-residual).
+    /// an edit reuses (ADR 0412).
     Balanced,
     /// Keep only the current coherent program.
     Compact,

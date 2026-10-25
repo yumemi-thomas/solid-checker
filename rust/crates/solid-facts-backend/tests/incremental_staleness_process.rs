@@ -51,6 +51,7 @@ const STUB: &str = r#"declare module "solid-js" {
   export function createMemo<T>(compute: () => T): () => T;
   export function createReaction(onInvalidate: () => void): (tracking: () => void) => void;
   export function createEffect<T>(compute: () => T, apply: (value: T) => void, options?: { defer?: boolean }): void;
+  export function onSettled(callback: () => void | (() => void)): void;
 }
 
 declare namespace JSX {
@@ -520,7 +521,7 @@ fn an_argument_that_stops_being_an_accessor_in_another_file_is_not_kept_in_the_g
     assert_retained_is_fresh(&mut builder, &signal, &options, "signal again");
 }
 
-/// ADR 03XX-edit-residual: a result chunk's proof is its own reads, the
+/// ADR 0412: a result chunk's proof is its own reads, the
 /// result view's dependencies and each entry it asks of the stage's tables,
 /// not what building them read. `B` turns `count` from an opaque value (no
 /// summary node, not an accessor) into a signal getter, with `A` and `H`
@@ -1024,4 +1025,120 @@ fn a_post_pass_row_reruns_when_the_function_a_tag_names_moves() {
         );
         before = facts;
     }
+}
+
+/// Builds `files` on a per-file producer (stable Type Facts ids), then
+/// applies `edits` in order; every retained build must equal a fresh one.
+/// Returns, for each edit, whether it moved the fresh answer. `None` without
+/// a producer.
+fn retained_through_edits(
+    tag: &str,
+    files: &[(&str, &str)],
+    edits: &[(&str, &str)],
+) -> Option<Vec<bool>> {
+    let mut project = Project::scratch_per_file(tag, files)?;
+    let options = RuleOptions::default();
+    let vocabulary = solid_v2().vocabulary;
+    let fresh = |facts: &ProjectFacts| {
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap()
+            .0
+    };
+    let mut builder = IncrementalBuilder::default();
+    let mut before = project.analyze();
+    assert_retained_is_fresh(&mut builder, &before, &options, &format!("{tag} first"));
+    let mut moved = Vec::new();
+    for (index, (name, source)) in edits.iter().enumerate() {
+        let facts = project.rewrite(name, source);
+        moved.push(first_difference(&fresh(&before), &fresh(&facts)).is_some());
+        assert_retained_is_fresh(
+            &mut builder,
+            &facts,
+            &options,
+            &format!("{tag} edit {index}"),
+        );
+        before = facts;
+    }
+    Some(moved)
+}
+
+/// An `onSettled` cleanup's emission reads the callback file's entity rows
+/// (`function_cleanup_return_proof`: the call-result domain of `mk()` in
+/// `B`). Editing `C` moves `B`'s row at `mk()` from a callable to a number
+/// with `B`'s text unchanged, so a fresh build drops `A`'s three
+/// `SettledCleanup` requirements; the emission now records the callback
+/// file as read, and the retained build follows in both directions.
+const SETTLE_A: &str = "import { onSettled } from \"solid-js\";\nimport { settle } from \"./B\";\nonSettled(settle);\nonSettled(() => {\n  onSettled(settle);\n});\nexport function go() {\n  onSettled(() => {\n    onSettled(settle);\n  });\n}\n";
+const SETTLE_B: &str =
+    "import { mk } from \"./C\";\nexport function settle(): any {\n  return mk();\n}\n";
+const CLEANUP_C: &str = "export function mk(): () => void {\n  return () => {};\n}\n";
+const NUMBER_C: &str = "export function mk(): number {\n  return 1;\n}\n";
+
+#[test]
+fn a_settled_cleanup_follows_the_callback_files_rows() {
+    let Some(moved) = retained_through_edits(
+        "settled-cleanup",
+        &[("C.ts", CLEANUP_C), ("B.ts", SETTLE_B), ("A.ts", SETTLE_A)],
+        &[("C.ts", NUMBER_C), ("C.ts", CLEANUP_C)],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        moved,
+        [true, true],
+        "`mk`'s return type must move `A`'s answer"
+    );
+}
+
+/// Final review R2, finding 1: `c` reads `b`'s default export through a
+/// namespace member, so its entity row names the export's own id, and `b`
+/// flips that export between an alias of the signal getter and a function.
+/// The producer gives the two forms different ids, so `c`'s rows move and
+/// the delta names `c`; the patch's guard for an id kept across such a flip
+/// is pinned in the IR (`exact_index_patch_refuses_a_retained_id_…`). This
+/// pins the end-to-end answer in both directions.
+const ALIASED_EXPORT_B: &str =
+    "import { createSignal } from \"solid-js\";\nconst [y] = createSignal(0);\nexport default y;\n";
+const OWN_EXPORT_B: &str = "import { createSignal } from \"solid-js\";\nconst [y] = createSignal(0);\nexport default (() => 1);\nvoid y;\n";
+const NAMESPACE_READER_C: &str = "import * as ns from \"./b\";\nexport function App() {\n  const v = ns.default();\n  return <div>{v}</div>;\n}\n";
+
+#[test]
+fn an_export_that_stops_or_starts_being_an_alias_moves_unedited_readers_roots() {
+    let Some(moved) = retained_through_edits(
+        "export-alias-root",
+        &[("b.ts", ALIASED_EXPORT_B), ("c.tsx", NAMESPACE_READER_C)],
+        &[("b.ts", OWN_EXPORT_B), ("b.ts", ALIASED_EXPORT_B)],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        moved,
+        [true, true],
+        "whether the export is the signal must move the answer"
+    );
+}
+
+/// Final review R2, finding 4: whether the dialect models returned callbacks
+/// is a project-wide flag (some file names `createReaction`, `mapArray`,
+/// `repeat`, `lazy` or `lazyModule`) that gates early exits in per-file
+/// chunks. `R` turns `track` into a `createReaction` tracker and is the
+/// project's first file to name one; `B` is byte-identical, and its chunk
+/// that took the early exit walked nothing of `R`.
+const UNMODELLED_R: &str = "export const track = (tracking: () => void) => tracking();\n";
+const FIRST_TRACKER_R: &str = "import { createReaction } from \"solid-js\";\nexport const track = createReaction(() => {});\n";
+
+#[test]
+fn the_first_returned_callback_primitive_in_another_file_reruns_early_exits() {
+    let Some(moved) = retained_through_edits(
+        "capability-flags",
+        &[("R.ts", UNMODELLED_R), ("B.ts", TRACKED_B)],
+        &[("R.ts", FIRST_TRACKER_R), ("R.ts", UNMODELLED_R)],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        moved,
+        [true, true],
+        "whether `track` is a tracker must move `B`'s answer"
+    );
 }

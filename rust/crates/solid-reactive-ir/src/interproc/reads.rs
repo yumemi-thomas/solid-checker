@@ -803,7 +803,7 @@ fn discover_summary_graph_nodes<'a, 'c>(
     let mut graph_node_reused_paths = HashSet::default();
     let Some(cache) = interprocedural_graph_cache else {
         let discovered = parallel_file_results(&facts.files, |file| {
-            discover_summary_nodes(file, project_indexes, entities)
+            discover_summary_nodes(file, project_indexes, entities, lookup)
         });
         let nodes = facts
             .files
@@ -836,7 +836,7 @@ fn discover_summary_graph_nodes<'a, 'c>(
     let discovered = parallel_file_results(&facts.files, |file| {
         (!reusable_paths.contains(file.path.as_str())).then(|| {
             crate::base::reads::record_detached(|| {
-                discover_summary_nodes(file, project_indexes, entities)
+                discover_summary_nodes(file, project_indexes, entities, lookup)
             })
         })
     });

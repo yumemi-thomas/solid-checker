@@ -428,7 +428,14 @@ fn file_questions(lookup: &SemanticLookup<'_>, file: &FileFacts) -> FileQuestion
         .jsx_elements
         .iter()
         .filter_map(|element| provider_target(lookup.dialect, file, element))
-        .filter(|target| lookup.is_context_reference(file.path.as_str(), *target))
+        // Published by value (`FileQuestionsOf`): a reader is dirtied
+        // through the store, so the context-symbol section would only tie
+        // the interprocedural stage's proof to every context's references.
+        .filter(|target| {
+            crate::base::reads::suppress(|| {
+                lookup.is_context_reference(file.path.as_str(), *target)
+            })
+        })
         .collect::<Vec<_>>();
     context_targets.sort_unstable();
     context_targets.dedup();

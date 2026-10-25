@@ -281,6 +281,9 @@ impl<'a> SemanticLookup<'a> {
     /// supports `<contexts.ValueContext.Provider>` without confusing it with
     /// `<ValueContext.someObject.Provider>`.
     pub(crate) fn is_context_reference(&self, path: &str, span: Span) -> bool {
+        // The answer reads every file's `createContext` bindings and their
+        // references (final review R2, finding 2).
+        crate::base::reads::note(crate::base::reads::Section::ContextSymbols);
         // ADR 0289: under runtime redirects (ADR 0186, ADR 0284) the compiler
         // binds an import to the declaration file beside the runtime one, so
         // it lists the reference under the declaration's symbol. The entity
@@ -294,26 +297,17 @@ impl<'a> SemanticLookup<'a> {
             return true;
         }
         self.context_symbols().iter().any(|symbol| {
-            self.symbols_by_id
-                .get_or_init(|| {
-                    self.facts
-                        .typescript
-                        .symbols()
-                        .map(|candidate| (candidate.id(), candidate))
-                        .collect()
+            self.symbols_by_id().get(symbol).is_some_and(|candidate| {
+                candidate.references().any(|reference| {
+                    reference.path.as_ref() == path
+                        && reference.start_byte >= u64::from(span.start)
+                        && reference.end_byte == u64::from(span.end)
                 })
-                .get(symbol)
-                .is_some_and(|candidate| {
-                    candidate.references().any(|reference| {
-                        reference.path.as_ref() == path
-                            && reference.start_byte >= u64::from(span.start)
-                            && reference.end_byte == u64::from(span.end)
-                    })
-                })
+            })
         })
     }
 
-    fn context_symbols(&self) -> &HashSet<&'a str> {
+    pub(super) fn context_symbols(&self) -> &HashSet<&'a str> {
         self.context_symbols.get_or_init(|| {
             self.facts
                 .files
@@ -386,6 +380,18 @@ impl<'a> SemanticLookup<'a> {
         let file = self.file_by_path(path)?;
         let symbol = self.entities.value_symbol(file, callee)?;
         self.function_for_symbol(symbol)
+    }
+
+    /// Records, for the computation recording, which symbol
+    /// [`Self::method_symbol_ref`] names at `span` of `path`: an entity of the
+    /// path, or else a resolved call's declaration in any file.
+    pub(crate) fn note_declaration_symbol_at(&self, path: &str, span: Span) {
+        if let Some(id) = self.memos.table().id_of(path) {
+            self.note_probe_read(
+                crate::base::memo::probes::Probe::DeclarationSymbolAt,
+                || crate::base::memo::probes::PolledKey::FileSpan(id, span),
+            );
+        }
     }
 
     pub(super) fn method_symbol_ref(&self, path: &str, span: Span) -> Option<&'a str> {

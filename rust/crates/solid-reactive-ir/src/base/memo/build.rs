@@ -519,6 +519,18 @@ fn fingerprints(
     entities.update(parts.rows_digest);
     entities.update(parts.declarations);
     entities.update(references);
+    // The file's import resolutions (`file_table::resolution_digests`).
+    match views
+        .sources
+        .resolutions
+        .and_then(|digests| digests.get(views.table.path_of(id)))
+    {
+        Some(digest) => {
+            entities.update([1]);
+            entities.update(digest);
+        }
+        None => entities.update([0]),
+    }
     let fingerprints = FileFingerprints {
         source: source.finalize().into(),
         compiler: compiler.finalize().into(),
@@ -804,7 +816,7 @@ const POLLED_SHARDS: usize = 16;
 struct PolledShard {
     keys: IndexKeys<super::probes::PolledKey>,
     /// Read in no order: `begin` re-asks each and `end` releases by key.
-    answers: HashMap<Input, u64>,
+    answers: HashMap<Input, super::probes::AnswerFingerprint>,
 }
 
 fn polled_shard_of(key: &super::probes::PolledKey) -> usize {
@@ -1382,7 +1394,7 @@ impl MemoStore {
         &self,
         probe: super::probes::Probe,
         key: &super::probes::PolledKey,
-        fingerprint: u64,
+        fingerprint: super::probes::AnswerFingerprint,
     ) -> Input {
         let shard = polled_shard_of(key);
         let lock = &self.polled[shard];
@@ -1900,6 +1912,13 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
                 }
                 crate::base::reads::Section::ReflectiveDefinition => {
                     let _ = self.hazard(crate::base::Hazard::ReflectiveDefinitionSpelling);
+                }
+                // The section's value, polled.
+                crate::base::reads::Section::ProjectPrimitives => {
+                    let _ = self.probe(
+                        super::probes::Probe::ProjectPrimitives,
+                        super::probes::PolledKey::Unit,
+                    );
                 }
                 _ => whole = true,
             }

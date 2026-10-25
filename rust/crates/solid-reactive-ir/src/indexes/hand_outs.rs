@@ -254,6 +254,7 @@ enum Noted {
     MemberTargets(FileId),
     LiteralReceivers(FileId),
     NeverReturning(FileId),
+    NamespaceHandOuts(FileId),
 }
 
 thread_local! {
@@ -474,6 +475,23 @@ impl<'a> SemanticLookup<'a> {
             }
         }
         true
+    }
+
+    /// Records, for the computation recording, the closed program's
+    /// namespace census of the module at `path` ([`super::census::HandOuts`]:
+    /// whether it escapes unnamed, which functions it hands out by name):
+    /// what `hands_out_by_name` and `escapes_unnamed` read of every file's
+    /// namespace uses.
+    pub(crate) fn note_namespace_hand_outs_of(&self, path: &str) {
+        let Some(frame) = self.hand_out_frame() else {
+            return;
+        };
+        let Some(id) = self.memos.table().id_of(path) else {
+            return;
+        };
+        if first_in_frame(frame, Noted::NamespaceHandOuts(id)) {
+            let _ = self.memo_world().answer::<super::census::HandOuts>(&id);
+        }
     }
 
     /// Records, for the computation recording, `symbol`'s declarations and

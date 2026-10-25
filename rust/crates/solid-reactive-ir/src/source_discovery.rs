@@ -75,6 +75,7 @@ pub(crate) fn source_discovery_identity(
     SourceDiscoveryIdentity {
         source_hash: file.source_hash.clone(),
         symbols,
+        resolutions: indexes.resolution_digest(file.path.as_str()),
     }
 }
 
@@ -82,10 +83,11 @@ pub(crate) fn source_discovery_identity_matches(
     cached: &SourceDiscoveryIdentity,
     path: &str,
     source_hash: &SourceHash,
+    resolutions: Option<[u8; 32]>,
     typescript_unchanged: bool,
     typescript_delta: Option<&SourceDiscoveryTypeScriptDelta>,
 ) -> bool {
-    if &cached.source_hash != source_hash {
+    if &cached.source_hash != source_hash || cached.resolutions != resolutions {
         return false;
     }
     if typescript_unchanged {

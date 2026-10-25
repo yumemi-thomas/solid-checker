@@ -285,6 +285,7 @@ fn merge_file_source_contributions(
                 cached,
                 file.path.as_str(),
                 &file.source_hash,
+                project_indexes.resolution_digest(file.path.as_str()),
                 typescript_unchanged,
                 typescript_indexes.source_discovery_delta.as_ref(),
             ) {

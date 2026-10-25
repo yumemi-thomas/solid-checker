@@ -49,6 +49,8 @@ mod returned_uses;
 pub(crate) use identity_wrappers::{
     IdentityWrapper, WrapperAt, identity_wrapped_literal_span, identity_wrapper_candidates,
 };
+#[cfg(test)]
+pub(crate) use memo_probes::as_probe;
 pub(crate) use memo_probes::{BindingResolutionRows, probing};
 pub(crate) use returned_invocations::{INVOCATION_TABLES_FROM, InvocationTables};
 pub(crate) use returned_uses::{RETURNED_TABLES_FROM, ReturnedTables, UseKind};
@@ -573,6 +575,8 @@ pub(super) struct ProjectIndexes<'a> {
     typescript: &'a TypeScriptTable,
     pub(super) symbols_by_id: HashMap<&'a str, TypeScriptSymbol<'a>>,
     declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
+    facts: &'a ProjectFacts,
+    resolution_digests: OnceLock<crate::base::file_table::ResolutionDigests>,
 }
 
 impl<'a> ProjectIndexes<'a> {
@@ -605,7 +609,18 @@ impl<'a> ProjectIndexes<'a> {
             typescript: &facts.typescript,
             symbols_by_id,
             declaration_symbols: OnceLock::new(),
+            facts,
+            resolution_digests: OnceLock::new(),
         }
+    }
+
+    /// The digest of `path`'s import resolutions
+    /// ([`crate::base::file_table::resolution_digests`]).
+    pub(super) fn resolution_digest(&self, path: &str) -> Option<[u8; 32]> {
+        self.resolution_digests
+            .get_or_init(|| crate::base::file_table::resolution_digests(self.facts))
+            .get(path)
+            .copied()
     }
 
     pub(super) fn typescript_file(&self, path: &str) -> Option<&'a FileFact> {
@@ -851,13 +866,17 @@ pub(super) struct SemanticLookup<'a> {
     file_table: crate::base::FileTable,
     /// Each path's TypeFacts references, read by the references index.
     reference_rows: OnceLock<crate::base::file_table::ReferenceRows>,
+    /// Each path's import resolutions, digested into its Entities section.
+    resolution_digests: OnceLock<crate::base::file_table::ResolutionDigests>,
     /// L1: the base indexes, each folded on first read ([`crate::base`]).
     base: crate::base::BaseIndexes,
     file_primitives: OnceLock<Vec<crate::base::reads::Recorded<FilePrimitives>>>,
     file_named_callback_roles:
         OnceLock<Vec<crate::base::reads::Recorded<super::NamedCallbackRoles>>>,
-    project_primitives: crate::base::reads::Recorded<HashSet<solid_dialect::Primitive>>,
-    callback_capabilities: crate::base::reads::Recorded<DialectCallbackCapabilities>,
+    /// Read by every file's flags (`Section::ProjectPrimitives`, noted by
+    /// the accessors): plain caches, so a hot flag read replays nothing.
+    project_primitives: OnceLock<HashSet<solid_dialect::Primitive>>,
+    callback_capabilities: OnceLock<DialectCallbackCapabilities>,
     returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
     project_has_component_type: crate::base::reads::Recorded<bool>,
     /// Proven components, then functions whose only missing proof is an
@@ -1109,6 +1128,8 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(crate) fn hands_out_by_name(&self, path: &str, function: Span) -> bool {
+        // Every file's namespace uses of the module decide it.
+        self.note_namespace_hand_outs_of(path);
         self.namespace_hand_outs
             .get()
             .is_some_and(|hand_outs| hand_outs.named(path, function))
@@ -1117,6 +1138,7 @@ impl<'a> SemanticLookup<'a> {
     /// Whether the module at `path`'s namespace escapes with no name the
     /// analysis can read (ADR 0347, amendment). Until the census is set, nothing does.
     pub(crate) fn escapes_unnamed(&self, path: &str) -> bool {
+        self.note_namespace_hand_outs_of(path);
         self.namespace_hand_outs
             .get()
             .is_some_and(|hand_outs| hand_outs.escapes_unnamed(path))
@@ -1179,12 +1201,13 @@ impl<'a> SemanticLookup<'a> {
             bindings_by_symbol: crate::base::reads::Recorded::new(),
             bindings_by_reference: crate::base::reads::Recorded::new(),
             file_table,
+            resolution_digests: OnceLock::new(),
             reference_rows: OnceLock::new(),
             base: crate::base::BaseIndexes::default(),
             file_primitives: OnceLock::new(),
             file_named_callback_roles: OnceLock::new(),
-            project_primitives: crate::base::reads::Recorded::new(),
-            callback_capabilities: crate::base::reads::Recorded::new(),
+            project_primitives: OnceLock::new(),
+            callback_capabilities: OnceLock::new(),
             returned_callback_proof_digest: OnceLock::new(),
             project_has_component_type: crate::base::reads::Recorded::new(),
             component_functions: OnceLock::new(),
@@ -1220,6 +1243,9 @@ impl<'a> SemanticLookup<'a> {
     /// binding initializer in this project. That makes the set a sound domain
     /// for probing what the dialect models.
     fn project_primitives(&self) -> &HashSet<solid_dialect::Primitive> {
+        // Every file's names: a reader's answer moves with any file's (final
+        // review R2, finding 4).
+        crate::base::reads::note_once(crate::base::reads::Section::ProjectPrimitives);
         self.project_primitives.get_or_init(|| {
             self.symbol_names
                 .values()
@@ -1229,6 +1255,7 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(super) fn callback_capabilities(&self) -> DialectCallbackCapabilities {
+        crate::base::reads::note_once(crate::base::reads::Section::ProjectPrimitives);
         *self.callback_capabilities.get_or_init(|| {
             let mut capabilities = DialectCallbackCapabilities::default();
             for primitive in self.project_primitives() {
@@ -1621,6 +1648,47 @@ impl<'a> SemanticLookup<'a> {
                         .map(|(path, span)| (path.as_str(), *span)),
                 );
             }
+            Section::ContextSymbols => {
+                let mut symbols = self.context_symbols().iter().copied().collect::<Vec<_>>();
+                symbols.sort_unstable();
+                for symbol in symbols {
+                    text(&mut hasher, symbol);
+                    let mut references = self
+                        .symbols_by_id()
+                        .get(symbol)
+                        .map(|candidate| {
+                            candidate
+                                .references()
+                                .map(|reference| {
+                                    (
+                                        reference.path.as_ref(),
+                                        reference.start_byte,
+                                        reference.end_byte,
+                                    )
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                    references.sort_unstable();
+                    for (path, start, end) in references {
+                        text(&mut hasher, path);
+                        hasher.update(start.to_le_bytes());
+                        hasher.update(end.to_le_bytes());
+                    }
+                    hasher.update([0xfe]);
+                }
+            }
+            Section::ProjectPrimitives => {
+                let mut primitives = self
+                    .project_primitives()
+                    .iter()
+                    .map(|primitive| format!("{primitive:?}"))
+                    .collect::<Vec<_>>();
+                primitives.sort_unstable();
+                for primitive in primitives {
+                    text(&mut hasher, &primitive);
+                }
+            }
             Section::ReflectiveDefinition => {
                 hasher.update([u8::from(
                     self.hazard_present(crate::base::Hazard::ReflectiveDefinitionSpelling),
@@ -1741,6 +1809,12 @@ impl crate::base::reads::ReadAnswers for SemanticLookup<'_> {
         use crate::base::reads::MemoCheck;
         if store != self.memos.store().id() {
             return MemoCheck::Moved;
+        }
+        if !crate::interproc::accessor_provenance::memo_read_decidable(
+            self.memos.store(),
+            read.table,
+        ) {
+            return MemoCheck::Undecided;
         }
         match self.memo_world().changed_at_checked(read.table, read.query) {
             (_, true) => MemoCheck::Undecided,
@@ -2066,11 +2140,17 @@ impl<'a> SemanticLookup<'a> {
                 symbols: self.entities,
                 typescript: &self.facts.typescript,
                 references: &self.reference_rows,
+                resolutions: Some(self.resolution_digests()),
             },
             constants: crate::base::BuildConstants {
                 dialect: self.dialect,
             },
         }
+    }
+
+    fn resolution_digests(&self) -> &crate::base::file_table::ResolutionDigests {
+        self.resolution_digests
+            .get_or_init(|| crate::base::file_table::resolution_digests(self.facts))
     }
 
     fn base_views(&self) -> crate::base::Views<'_> {
@@ -2270,6 +2350,11 @@ impl<'a> SemanticLookup<'a> {
         if let Some((sites, reads)) = found {
             crate::base::reads::replay(&reads);
             return sites;
+        }
+        // Inside a probe the hand-outs note nothing, so the reads would be
+        // incomplete for later readers: not kept (final review R2, finding 7).
+        if probing() {
+            return std::sync::Arc::new(compute());
         }
         // Computed outside the lock: the computation re-enters the lookup.
         // Its reads are kept for every later reader ([`crate::base::reads`]).

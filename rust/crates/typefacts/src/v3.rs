@@ -491,7 +491,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // Protocol 84 adds the `Modules` demand `distinctBareImports` (ADR 0382); a
 // protocol-83 producer decodes with `deny_unknown_fields` and would reject it.
 // Protocol 85 adds the `Modules` demand `omitModules` and the `Update` answer's
-// `graphKept` (ADR 03XX-keep-attestation); a protocol-84 producer would reject
+// `graphKept` (ADR 0419); a protocol-84 producer would reject
 // the first, and a protocol-84 client would reject the second.
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 85;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
