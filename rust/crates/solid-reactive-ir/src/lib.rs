@@ -1354,11 +1354,10 @@ pub struct BuildTimings {
     /// 0392): reused, recomputed, and recomputed to a new answer.
     pub returned_invocation_files: [u64; 3],
     pub reused: bool,
-    pub source_discovery_reused_files: u64,
-    pub source_discovery_recomputed_files: u64,
-    /// Retained source-discovery files whose identity (source hash and Type
-    /// Facts delta) no longer matched; the rest of the recomputed retained
-    /// files read an answer that moved ([`base::reads`]).
+    /// Files whose identity (source hash and Type Facts delta) is the last
+    /// build's: the build's `unchanged_paths`.
+    pub source_discovery_unchanged_files: u64,
+    /// Retained source-discovery files whose identity no longer matched.
     pub source_discovery_identity_misses: u64,
     /// Source discovery's post-pass row sets (S7a): kept, recomputed.
     pub source_post_pass_row_sets: [u64; 2],

@@ -1031,11 +1031,7 @@ pub fn unsupported_runtime_snapshot(
     }
 }
 
-fn snapshot_of(
-    sources: &[SourceFile],
-    metrics: Metrics,
-    findings: Vec<Finding>,
-) -> Snapshot {
+fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>) -> Snapshot {
     let mut places = SourcePlacer::new(sources);
     let has_violation = findings.iter().any(|finding| finding.kind == "violation");
     let has_unresolved = findings

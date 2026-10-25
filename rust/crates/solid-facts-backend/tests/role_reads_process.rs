@@ -135,9 +135,8 @@ fn retained_is_fresh(
         build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
             .unwrap();
     eprintln!(
-        "{label}: discovery {}/{} reachability {}/{} local {}/{} graph {}/{} results {}/{} owners {}/{}",
-        timings.source_discovery_reused_files,
-        timings.source_discovery_recomputed_files,
+        "{label}: discovery unchanged {} reachability {}/{} local {}/{} graph {}/{} results {}/{} owners {}/{}",
+        timings.source_discovery_unchanged_files,
         timings.reachability_reused_files,
         timings.reachability_recomputed_files,
         timings.local_access_reused_files,

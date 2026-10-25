@@ -142,8 +142,7 @@ impl BuildTimings {
     /// [`BuildTimings`] it accumulated on its own thread.
     pub(crate) fn absorb_source_discovery(&mut self, lane: &Self) {
         self.source_discovery = lane.source_discovery;
-        self.source_discovery_reused_files = lane.source_discovery_reused_files;
-        self.source_discovery_recomputed_files = lane.source_discovery_recomputed_files;
+        self.source_discovery_unchanged_files = lane.source_discovery_unchanged_files;
         self.source_discovery_identity_misses = lane.source_discovery_identity_misses;
         self.source_post_pass_row_sets = lane.source_post_pass_row_sets;
         self.typed_accessors_and_prop_roots = lane.typed_accessors_and_prop_roots;
@@ -246,7 +245,7 @@ pub(crate) fn reuse_line(
             "runtimeScan": [timings.runtime_scan_reused_files, timings.runtime_scan_scanned_files],
             "baseIndexChangedFiles": timings.base_index_changed_files,
             "memo": [timings.memo_reused, timings.memo_computed],
-            "sourceDiscovery": [timings.source_discovery_reused_files, timings.source_discovery_recomputed_files],
+            "sourceDiscoveryUnchanged": timings.source_discovery_unchanged_files,
             "sourceDiscoveryIdentityMisses": timings.source_discovery_identity_misses,
             "sourcePostPassRowSets": timings.source_post_pass_row_sets,
             "reachability": [timings.reachability_reused_files, timings.reachability_recomputed_files],

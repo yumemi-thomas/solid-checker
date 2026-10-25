@@ -2,13 +2,13 @@
 //! setters, and dependency-source-backed facts per file, with per-file reuse.
 
 use crate::cache::{
-    CachedSourceDiscovery, CachedTypeScriptIndexes, SourceDiscoveryContribution,
-    SourceDiscoveryIdentity, SourceDiscoveryTypeScriptDelta,
+    CachedTypeScriptIndexes, SourceDiscoveryContribution, SourceDiscoveryIdentity,
+    SourceDiscoveryTypeScriptDelta,
 };
 use crate::owners::{
     binding_returns_reactive_source, computation_is_async, containing_ast_function,
 };
-use crate::pipeline::{parallel_file_chunk_results, parallel_file_results, parallel_slice_results};
+use crate::pipeline::parallel_file_results;
 use crate::{
     BuildTimings, PrimitiveName, ReactiveSourceKind, ReturnSummary, RuntimeEnvironment,
     RuntimeRendering, jsx_primitive_name, known_primitive, location,

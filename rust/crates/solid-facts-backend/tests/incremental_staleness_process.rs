@@ -339,8 +339,8 @@ const CALLER_F: &str = "import { count } from \"./S\";\nimport { ns } from \"./G
 /// reads, execution roles) reads it; the cross-file part is now in the digest. `F` is unchanged
 /// when the receiver's module flips between a mutated literal (withheld) and an
 /// opaque value, and the two builds differ (asserted), so a retained `F` would
-/// be stale. Today nothing of `F` is retained (source discovery reuses 0 files
-/// after the receiver module changes), so retained equals fresh. This pins the
+/// be stale. Today nothing of `F` is retained (no file is unchanged after the
+/// receiver module changes), so retained equals fresh. This pins the
 /// scenario so the day that gate narrows (stable ids, then the digest's
 /// removal) the shadow comparison fails here instead of in a project.
 #[test]
@@ -443,10 +443,10 @@ fn a_returned_invocation_answer_moved_by_another_file_reruns_exactly_its_readers
 fn assert_retains_only(timings: &solid_reactive_ir::BuildTimings, reused: u64) {
     for (stage, files) in [
         (
-            "source discovery",
+            "source discovery (unchanged files)",
             [
-                timings.source_discovery_reused_files,
-                timings.source_discovery_recomputed_files,
+                timings.source_discovery_unchanged_files,
+                3 - timings.source_discovery_unchanged_files,
             ],
         ),
         (
@@ -608,12 +608,13 @@ fn a_component_identity_moved_by_another_file_reruns_exactly_its_readers() {
         let timings = retained(&facts, label);
         // `U` (edited) reruns everywhere and `P` nowhere. `C` reruns where
         // its chunk read `Panel`'s identity (reachability roots, local
-        // accesses, owner seeds) and keeps the rest (discovery, graph).
+        // accesses, owner seeds) and keeps the rest (graph); discovery
+        // counts it unchanged.
         assert_eq!(
             [
                 [
-                    timings.source_discovery_reused_files,
-                    timings.source_discovery_recomputed_files,
+                    timings.source_discovery_unchanged_files,
+                    3 - timings.source_discovery_unchanged_files,
                 ],
                 [
                     timings.reachability_reused_files,
@@ -677,7 +678,7 @@ fn a_member_assignment_in_another_file_reruns_exactly_the_member_readers() {
         )
         .unwrap();
     for (stage, reused) in [
-        ("source discovery", timings.source_discovery_reused_files),
+        ("source discovery", timings.source_discovery_unchanged_files),
         ("reachability", timings.reachability_reused_files),
         ("local access", timings.local_access_reused_files),
         ("graph", timings.interprocedural_graph_reused_files),

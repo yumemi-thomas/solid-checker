@@ -74,7 +74,7 @@ struct SourceDiscoveryDomain {
 #[derive(Default)]
 pub(crate) struct IncrementalCacheState {
     ast_indexes: HashMap<SourcePath, CachedAstFileIndex>,
-    source_discovery: HashMap<SourcePath, CachedSourceDiscovery>,
+    source_discovery: HashMap<SourcePath, SourceDiscoveryIdentity>,
     interprocedural_graph: HashMap<SourcePath, CachedInterproceduralGraph>,
     interprocedural_results: CachedInterproceduralResults,
     typescript_indexes: Option<CachedTypeScriptIndexes>,
@@ -96,7 +96,7 @@ pub(crate) struct IncrementalCacheState {
 #[derive(Default)]
 pub(crate) struct BuildCaches<'a> {
     pub(crate) ast_indexes: Option<&'a mut HashMap<SourcePath, CachedAstFileIndex>>,
-    pub(crate) source_discovery: Option<&'a mut HashMap<SourcePath, CachedSourceDiscovery>>,
+    pub(crate) source_discovery: Option<&'a mut HashMap<SourcePath, SourceDiscoveryIdentity>>,
     pub(crate) interprocedural_graph:
         Option<&'a mut HashMap<SourcePath, CachedInterproceduralGraph>>,
     pub(crate) interprocedural_results: Option<&'a mut CachedInterproceduralResults>,
@@ -244,15 +244,6 @@ pub(crate) struct SourceDiscoveryContribution {
     /// (`createStore(value)` / `createOptimisticStore(value)`): no compute
     /// node exists, so the store is not a valid `refresh()` target.
     pub(crate) value_form_stores: Vec<SymbolId>,
-}
-
-pub(crate) struct CachedSourceDiscovery {
-    pub(crate) identity: SourceDiscoveryIdentity,
-    /// What the file's discovery read of the rest of the program
-    /// ([`crate::base::reads`]): a returned-source answer, a component
-    /// identity, a member target.
-    pub(crate) proof: ReadProof,
-    pub(crate) contribution: SourceDiscoveryContribution,
 }
 
 #[derive(Clone)]

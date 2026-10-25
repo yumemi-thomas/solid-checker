@@ -312,7 +312,7 @@ fn transported_member_helper_edits_match_cold_in_both_directions() {
         let cold = closed_cold(&facts, vocabulary);
         let (warm, timings) = closed_warm(&mut incremental, &facts, vocabulary);
         assert!(
-            timings.source_discovery_reused_files > 0,
+            timings.source_discovery_unchanged_files > 0,
             "exercise reuse of unchanged caller/factory facts"
         );
         assert_eq!(
