@@ -60,7 +60,7 @@ fn project(source: &str) -> ProjectFacts {
 
 /// Every listed span names its symbol exactly: these fixtures describe spans
 /// whose entity covers them, so `exact` and `get` agree.
-fn entity_symbols(spans: &[(Span, &str)]) -> EntitySymbols {
+fn entity_symbols(facts: &ProjectFacts, spans: &[(Span, &str)]) -> EntitySymbols {
     let entries: HashMap<(u64, u64), SymbolId> = spans
         .iter()
         .map(|(span, symbol)| {
@@ -73,7 +73,7 @@ fn entity_symbols(spans: &[(Span, &str)]) -> EntitySymbols {
     EntitySymbols {
         by_path: HashMap::from_iter([(PATH.to_string(), Arc::new(entries.clone()))]),
         exact_by_path: HashMap::from_iter([(PATH.to_string(), Arc::new(entries))]),
-        locations: EntityLocations::default(),
+        locations: EntityLocations::of(&facts.typescript),
     }
 }
 
@@ -84,7 +84,7 @@ fn with_lookup<T>(
     body: impl FnOnce(&SemanticLookup<'_>) -> T,
 ) -> T {
     let facts = project(source);
-    let entities = entity_symbols(spans);
+    let entities = entity_symbols(&facts, spans);
     let ast_indexes = HashMap::default();
     let symbol_names = HashMap::default();
     let dialect = solid_dialect::Solid2;
@@ -266,7 +266,7 @@ fn with_lookup_in<T>(
     body: impl FnOnce(&SemanticLookup<'_>) -> T,
 ) -> T {
     let facts = project(source);
-    let entities = entity_symbols(spans);
+    let entities = entity_symbols(&facts, spans);
     let ast_indexes = HashMap::default();
     let symbol_names = HashMap::default();
     let dialect = solid_dialect::Solid2;
@@ -370,7 +370,7 @@ fn a_receiver_closure_is_reused_until_a_use_of_the_receiver_changes() {
             .map(|id| (id.span, "object"))
             .collect::<Vec<_>>();
         let facts = project(source);
-        let entities = entity_symbols(&spans);
+        let entities = entity_symbols(&facts, &spans);
         let ast_indexes = HashMap::default();
         let symbol_names = HashMap::default();
         let dialect = solid_dialect::Solid2;
@@ -676,7 +676,7 @@ fn member_callee_path(
         .iter()
         .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
         .collect::<HashMap<_, _>>();
-    let entities = entity_symbols(spans);
+    let entities = entity_symbols(&facts, spans);
     let symbol_names = HashMap::default();
     let dialect = solid_dialect::Solid2;
     let lookup = SemanticLookup::new(
@@ -961,7 +961,7 @@ fn memo_build<T>(
     spans: &[(Span, &str)],
     body: impl FnOnce(&SemanticLookup<'_>) -> T,
 ) -> (T, Vec<(&'static str, crate::base::memo::TableStats)>) {
-    let entities = entity_symbols(spans);
+    let entities = entity_symbols(facts, spans);
     let ast_indexes = HashMap::default();
     let symbol_names = HashMap::default();
     let dialect = solid_dialect::Solid2;
