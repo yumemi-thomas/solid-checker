@@ -233,11 +233,18 @@ fn per_file_runs_never_make_the_program_checker_and_purge_every_handle() {
     let run = crate::model::SemanticDemandRun {
         path: &path,
         demands: &demands,
+        shared: None,
     };
     let (results, _) = project
         .per_file_demand_runs(&Context::new(), &[run], &[])
         .unwrap();
-    assert_eq!(results[0].entities.len(), 3);
+    let (rows, _) = results
+        .into_iter()
+        .next()
+        .unwrap()
+        .into_rows(&path, &demands)
+        .unwrap();
+    assert_eq!(rows.len(), 3);
     assert!(!project.current().unwrap().has_checker());
     assert!(
         !project.identities().holds_symbols(),
@@ -278,10 +285,12 @@ fn program_caches_never_land_in_a_file_checkers_region() {
         crate::model::SemanticDemandRun {
             path: &a_path,
             demands: &a_demands,
+            shared: None,
         },
         crate::model::SemanticDemandRun {
             path: &b_path,
             demands: &b_demands,
+            shared: None,
         },
     ];
     let (results, _) = project

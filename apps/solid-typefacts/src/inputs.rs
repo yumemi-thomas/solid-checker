@@ -5,7 +5,7 @@
 //! * `Text(path)`: the file's exact bytes;
 //! * `Exports(path)`: which declaration references of `path` the program's
 //!   modules export (the scan behind `Export` keys, ADR 0366), so a symbol's
-//!   key kind is the same;
+//!   key kind is the same (`Identities::export_digest`);
 //! * `Ambient`: every file that adds to the global scope or augments a module
 //!   (scripts, lib files, `declare global`, `declare module "m"` inside a
 //!   module, `export as namespace`), with its text, in program order;
@@ -16,9 +16,7 @@
 //! reused every other file's parse (`UpdateKind::Reused` replaces exactly the
 //! edited file); any rebuild re-reads every file and clears them all.
 
-use crate::durable::DurableRef;
 use crate::gocompat::clean;
-use crate::identity::Preserved;
 use crate::shape::has_global_or_module_augmentation;
 use sha2::{Digest as _, Sha256};
 use std::collections::HashMap;
@@ -41,7 +39,6 @@ pub struct ProgramInputs {
     by_path: Option<HashMap<String, P<SourceFile>>>,
     ambient: Option<Digest>,
     options: Option<Digest>,
-    exports: Option<HashMap<String, Digest>>,
 }
 
 fn file_input(file: P<SourceFile>) -> FileInput {
@@ -53,7 +50,7 @@ fn file_input(file: P<SourceFile>) -> FileInput {
 
 /// A script (its declarations are globals), or a module that declares
 /// `global`, augments a module, or exports a UMD global.
-fn contributes_to_global_scope(file: P<SourceFile>) -> bool {
+pub(crate) fn contributes_to_global_scope(file: P<SourceFile>) -> bool {
     if !is_external_module(file) {
         return true;
     }
@@ -78,7 +75,66 @@ impl ProgramInputs {
         self.by_path = None;
         self.ambient = None;
         self.options = None;
-        self.exports = None;
+    }
+
+    /// Computes `Text` (and whether the file is global) of every program
+    /// file not yet digested, on up to `workers` threads: what
+    /// [`ProgramInputs::text`] would compute one by one.
+    pub fn prime(&mut self, program: &Program, workers: usize) {
+        let missing: Vec<(String, P<SourceFile>)> = program
+            .source_files()
+            .iter()
+            .map(|file| (clean(file.file_name()), *file))
+            .filter(|(path, _)| !self.files.contains_key(path))
+            .collect();
+        // Below a few hundred files the threads cost more than they save.
+        let workers = workers.min(missing.len() / 256).max(1);
+        let inputs: Vec<FileInput> = if workers <= 1 {
+            missing.iter().map(|(_, file)| file_input(*file)).collect()
+        } else {
+            // Read-only: a parsed file's text and tree are frozen. The
+            // largest files go first, taken one at a time.
+            let mut order: Vec<usize> = (0..missing.len()).collect();
+            order.sort_unstable_by_key(|at| std::cmp::Reverse(missing[*at].1.text().len()));
+            let next = std::sync::atomic::AtomicUsize::new(0);
+            let (missing, order, next) = (&missing, &order, &next);
+            let done: Vec<Vec<(usize, FileInput)>> = std::thread::scope(|scope| {
+                let handles: Vec<_> = (0..workers)
+                    .map(|_| {
+                        scope.spawn(move || {
+                            let mut local = Vec::new();
+                            loop {
+                                let at = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                let Some(index) = order.get(at) else {
+                                    break;
+                                };
+                                local.push((*index, file_input(missing[*index].1)));
+                            }
+                            local
+                        })
+                    })
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|handle| {
+                        handle
+                            .join()
+                            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+                    })
+                    .collect()
+            });
+            let mut inputs: Vec<Option<FileInput>> = vec![None; missing.len()];
+            for (index, input) in done.into_iter().flatten() {
+                inputs[index] = Some(input);
+            }
+            inputs
+                .into_iter()
+                .map(|input| input.expect("every file was digested"))
+                .collect()
+        };
+        for ((path, _), input) in missing.into_iter().zip(inputs) {
+            self.files.entry(path).or_insert(input);
+        }
     }
 
     fn input(&mut self, file: P<SourceFile>) -> FileInput {
@@ -141,37 +197,5 @@ impl ProgramInputs {
         *self.options.get_or_insert_with(|| {
             Sha256::digest(format!("{:?}", *program.options()).as_bytes()).into()
         })
-    }
-
-    /// `Exports(path)`: the exported declaration references declared in
-    /// `path`, from the exports scan of the accepted program.
-    pub fn exports(&mut self, exported: &HashMap<DurableRef, Preserved>, path: &str) -> Digest {
-        let digests = self.exports.get_or_insert_with(|| {
-            let mut by_path: HashMap<&str, Vec<&DurableRef>> = HashMap::new();
-            for reference in exported.keys() {
-                by_path.entry(&reference.path).or_default().push(reference);
-            }
-            by_path
-                .into_iter()
-                .map(|(path, mut references)| {
-                    references.sort_by(|left, right| {
-                        (left.start_byte, left.end_byte, &left.name).cmp(&(
-                            right.start_byte,
-                            right.end_byte,
-                            &right.name,
-                        ))
-                    });
-                    let mut hasher = Sha256::new();
-                    for reference in references {
-                        hasher.update(reference.start_byte.to_le_bytes());
-                        hasher.update(reference.end_byte.to_le_bytes());
-                        hasher.update(reference.name.as_bytes());
-                        hasher.update([0]);
-                    }
-                    (path.to_owned(), hasher.finalize().into())
-                })
-                .collect()
-        });
-        digests.get(path).copied().unwrap_or_default()
     }
 }

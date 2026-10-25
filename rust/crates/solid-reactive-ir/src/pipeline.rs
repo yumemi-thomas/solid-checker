@@ -5,7 +5,7 @@ use crate::{HashMap, HashSet};
 use std::{cell::Cell, sync::Arc, time::Instant};
 
 use crate::boundary_defects::discover_boundary_defects;
-use crate::cache::{BuildCaches, ReusePlan, build_typescript_indexes};
+use crate::cache::{BuildCaches, build_typescript_indexes};
 use crate::hosts::ProjectHostIndex;
 use crate::identity::{SymbolId, SymbolName};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
@@ -175,6 +175,10 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) reachable_calls: &'a HashMap<Location, usize>,
     pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
     pub(crate) rule_options: &'a RuleOptions,
+    /// The files whose source and TypeFacts rows are the last build's
+    /// (source discovery's): a per-file chunk of such a file may be kept
+    /// ([`crate::late_chunks`]).
+    pub(crate) unchanged_paths: &'a HashSet<String>,
 }
 
 /// What one analysis is given about the code it cannot read: the package
@@ -292,6 +296,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         late_stages: mut late_stage_cache,
         base_check,
         memos,
+        defer_memo_end,
     } = caches;
     let emit_timings = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
     let total_started = Instant::now();
@@ -329,7 +334,9 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     let typescript_unchanged = crate::cache::typescript_unchanged(facts);
     let owned_typescript_indexes;
     let typescript_indexes = if let Some(cache) = typescript_indexes_cache {
-        let patch_timings = (!typescript_unchanged)
+        // The patch re-roots aliases without the runtime redirects the
+        // rebuild applies after TypeScript's alias closure: with any, rebuild.
+        let patch_timings = (!typescript_unchanged && facts.runtime_symbol_redirects.is_empty())
             .then(|| {
                 cache.as_mut().and_then(|cached| {
                     facts.typescript_changes.as_ref().and_then(|changes| {
@@ -406,6 +413,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         Some(store) => semantic_lookup.with_memo_store(store),
         None => semantic_lookup,
     };
+    // The memo store begins outside every recording, before the census below
+    // reads a memo (ADR 0392's ordering); its cost is `memo_begin`'s, not the
+    // census's.
+    crate::base::reads::suppress(|| {
+        let _ = semantic_lookup.memo_world();
+    });
     // ADR 0347: which exports a namespace import hands out, read once per build.
     let substage_started = Instant::now();
     let (hand_outs, hand_out_reads) = crate::base::reads::record(|| {
@@ -415,7 +428,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             &typescript_indexes.symbols_by_root,
         )
     });
-    semantic_lookup.set_namespace_hand_outs(hand_outs, hand_out_reads);
+    // A whole-program census: what it was handed of each file is no reader's
+    // own read (`indexes::hand_outs`).
+    semantic_lookup.set_namespace_hand_outs(
+        hand_outs,
+        hand_out_reads.without_tables(crate::indexes::HAND_OUT_TABLES),
+    );
     build_timings.namespace_hand_outs = substage_started.elapsed();
     let semantic_lookup = &semantic_lookup;
     if let Some((retained, mode)) = base_check {
@@ -430,8 +448,10 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     let substage_started = Instant::now();
     // The memos begin before any stage reads one (ADR 0392's ordering).
     semantic_lookup.begin_memos();
-    let mut reuse = ReusePlan::prepare(facts, late_stage_cache.as_deref_mut(), semantic_lookup);
-    build_timings.reuse_plan = substage_started.elapsed();
+    build_timings.memo_warm = substage_started.elapsed();
+    if let Some(slot) = late_stage_cache.as_deref_mut() {
+        slot.get_or_insert_with(Default::default);
+    }
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
     let mut draft = ProgramDraft {
@@ -462,7 +482,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         let sources = discover_sources(
             &source_context,
             source_discovery_cache,
-            reuse.typescript_unchanged,
+            typescript_unchanged,
             &mut timings,
             emit_timings,
         );
@@ -474,7 +494,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         entities,
         symbol_names: &symbol_names,
         lookup: semantic_lookup,
-        typescript_unchanged: reuse.typescript_unchanged,
+        typescript_unchanged,
         typescript_delta: typescript_indexes.source_discovery_delta.as_ref(),
     };
     let source_discovery = if available_analysis_workers() <= 1 {
@@ -527,20 +547,6 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     // also ran after the stage above closed; restart this function's clock so
     // the static-prepass stage measures only the prepass loops.
     clock.restart();
-    // The late aggregates' proof read memos over the resolver's derived
-    // tables, which only its pass publishes: build it now (the
-    // interprocedural stage reuses this construction) and decide.
-    if reuse.late_stages_pending {
-        crate::interproc::accessor_provenance::build_kept_resolver(
-            facts,
-            semantic_lookup,
-            &source_discovery.accessors,
-            &source_discovery.source_kinds,
-            &symbol_names,
-        );
-        reuse.settle(facts, late_stage_cache.as_deref_mut(), semantic_lookup);
-    }
-
     let analysis = AnalysisContext {
         facts,
         dialect,
@@ -562,8 +568,21 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         reachable_calls,
         symbols_by_root: &typescript_indexes.symbols_by_root,
         rule_options,
+        unchanged_paths: &source_discovery.unchanged_paths,
     };
-    static_rules::static_prepass(&analysis, &mut draft);
+    // The two after-await rules, the prepass's and the one over calls the
+    // interprocedural pass attributed, ask the same project-wide index: it is
+    // built once per build, by whichever asks first.
+    let async_computations = static_rules::SharedAsyncComputations::default();
+    static_rules::static_prepass(
+        &analysis,
+        late_stage_cache
+            .as_deref_mut()
+            .and_then(Option::as_mut)
+            .map(|cache| &mut cache.chunks),
+        &async_computations,
+        &mut draft,
+    );
     clock.finish(&mut build_timings, ReactiveIrStage::StaticPrepass);
     let factory_instances = reactive_analysis::collect_project(
         reactive_analysis::ProjectInputs {
@@ -578,13 +597,17 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             interprocedural_results: interprocedural_result_cache,
             late_stages: late_stage_cache.as_deref_mut().and_then(Option::as_mut),
         },
-        reuse,
+        typescript_unchanged,
         &mut draft,
         &mut build_timings,
         &mut clock,
     );
     let substage_started = Instant::now();
-    static_rules::reactive_read_after_await_through_calls(&analysis, &mut draft);
+    static_rules::reactive_read_after_await_through_calls(
+        &analysis,
+        &async_computations,
+        &mut draft,
+    );
     build_timings.read_after_await_through_calls = substage_started.elapsed();
     let substage_started = Instant::now();
     cleanup::collect_project(&analysis, &mut draft);
@@ -604,20 +627,11 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &analysis,
         &project_indexes,
         &source_discovery.unchanged_paths,
-        late_stage_cache.as_deref_mut().and_then(Option::as_mut),
-        reuse.late_stages_reusable,
+        late_stage_cache.and_then(Option::as_mut),
         &mut draft,
         &mut build_timings,
     );
     clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
-    // Every retained aggregate was computed in this build (or reused under a
-    // proof that still holds): bind what they read.
-    if !reuse.late_stages_reusable
-        && let Some(cache) = late_stage_cache.and_then(Option::as_mut)
-    {
-        let reads = std::mem::take(&mut cache.reads);
-        cache.proof = Some(crate::base::reads::ReadProof::new(reads, semantic_lookup));
-    }
     // Static and compatibility passes deliberately operate on source facts.
     // Apply the compiler's stronger "this code was not emitted" fact once,
     // after every producer has run.
@@ -639,7 +653,9 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &typescript_indexes.symbols_by_root,
         &mut draft.static_defects,
     );
-    if let Some(report) = semantic_lookup.end_memos() {
+    if defer_memo_end {
+        semantic_lookup.defer_end_memos();
+    } else if let Some(report) = semantic_lookup.end_memos() {
         report_memos(&report, &mut build_timings, emit_timings);
     }
     let mut program = draft.into_program(factory_instances);
@@ -794,6 +810,17 @@ fn report_memos(
             ];
         }
     }
+    emit_memo_report(report, emit_timings);
+}
+
+/// The report of a sweep a build deferred and the caller ran after it
+/// answered ([`crate::IncrementalBuilder::finish_deferred`]): printed as the
+/// build's own would have been, but with no build's timings to fill.
+pub(crate) fn report_deferred_memos(report: &crate::base::memo::build::MemoReport) {
+    emit_memo_report(report, std::env::var_os("SOLID_CHECKER_TIMINGS").is_some());
+}
+
+fn emit_memo_report(report: &crate::base::memo::build::MemoReport, emit_timings: bool) {
     let line = serde_json::json!({ "reactiveIrMemo": report });
     if emit_timings {
         eprintln!("{line}");
@@ -809,15 +836,29 @@ fn report_memos(
     }
 }
 
-pub(crate) fn available_analysis_workers() -> usize {
+/// The cores the analysis may use: the machine's, capped by
+/// `SOLID_CHECKER_IR_WORKERS` when it is set to a positive number. The cap
+/// reproduces a smaller machine's schedule (a 4-core CI runner) on a larger
+/// one; it changes timing only, never an answer.
+fn analysis_parallelism() -> usize {
+    static CAP: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
     let available = std::thread::available_parallelism().map_or(1, usize::from);
+    let cap = CAP.get_or_init(|| {
+        std::env::var("SOLID_CHECKER_IR_WORKERS")
+            .ok()
+            .and_then(|value| value.trim().parse::<usize>().ok())
+            .filter(|&cap| cap > 0)
+    });
+    cap.map_or(available, |cap| available.min(cap))
+}
+
+pub(crate) fn available_analysis_workers() -> usize {
+    let available = analysis_parallelism();
     ANALYSIS_WORKER_LIMIT.with(|limit| available.min(limit.get()))
 }
 
 pub(crate) fn analysis_worker_limit_for_lanes(lanes: usize) -> usize {
-    std::thread::available_parallelism()
-        .map_or(1, usize::from)
-        .div_ceil(lanes.max(1))
+    analysis_parallelism().div_ceil(lanes.max(1))
 }
 
 // Threads only with a second worker and 256 items; otherwise a plain map (wasm32-wasip1).

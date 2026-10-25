@@ -338,6 +338,7 @@ fn wildcard_target_requires_every_local_identity_input_to_be_distinct() {
         let entities = crate::EntitySymbols {
             by_path: HashMap::default(),
             exact_by_path: HashMap::default(),
+            locations: crate::EntityLocations::default(),
         };
         let ast_indexes = HashMap::default();
         let names = HashMap::default();

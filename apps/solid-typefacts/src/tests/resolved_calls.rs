@@ -1342,10 +1342,12 @@ export const beta = mapped.run(1);\n";
         SemanticDemandRun {
             path: &beta_path,
             demands: &beta_demands,
+            shared: None,
         },
         SemanticDemandRun {
             path: &alpha_path,
             demands: &alpha_demands,
+            shared: None,
         },
     ];
     let results = project
