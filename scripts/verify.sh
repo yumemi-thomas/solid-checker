@@ -384,6 +384,8 @@ ir_fuzz_lane() {
   lane_step ir-edit-fuzz
   SOLID_CHECKER_BIN="$checker_bin" \
     SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/ir-edit-fuzz.mjs --fixtures --steps 6
+  SOLID_CHECKER_BIN="$checker_bin" \
+    SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/ir-edit-fuzz.mjs --fixtures --family retype --steps 4
 }
 
 js_lane() {

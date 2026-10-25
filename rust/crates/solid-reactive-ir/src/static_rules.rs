@@ -23,9 +23,10 @@ mod native_promise;
 mod pre_await;
 
 /// The static-prepass stage: every prepass rule, in their pipeline order.
-pub(crate) fn static_prepass(
-    ctx: &AnalysisContext<'_>,
+pub(crate) fn static_prepass<'a>(
+    ctx: &AnalysisContext<'a>,
     mut chunks: Option<&mut crate::late_chunks::LateChunks>,
+    computations: &SharedAsyncComputations<'a>,
     draft: &mut ProgramDraft,
 ) {
     let inputs = crate::late_chunks::ChunkInputs::of(ctx);
@@ -37,7 +38,7 @@ pub(crate) fn static_prepass(
         |file| component_props_destructure(ctx, &inputs.discovery, file),
     );
     push_defects(draft, &per_file);
-    reactive_read_after_await(ctx, draft);
+    reactive_read_after_await(ctx, computations, draft);
     let per_file = crate::late_chunks::FileChunks::run(
         chunks
             .as_deref_mut()
@@ -500,8 +501,12 @@ fn binding_initializes_reactive_store(
 /// (`unconditional_awaits`), with the same precision guards — no conditional
 /// dominance, no nested closures except the separately proven synchronous
 /// Array#filter callback path.
-fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    after_await::run(ctx, draft);
+fn reactive_read_after_await<'a>(
+    ctx: &AnalysisContext<'a>,
+    computations: &SharedAsyncComputations<'a>,
+    draft: &mut ProgramDraft,
+) {
+    after_await::run(ctx, computations, draft);
 }
 
 /// SC1002 through a call: a call after the first await of a tracked async
@@ -512,8 +517,9 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
 /// prepass runs too early to see. That read runs after the await, so it is not
 /// tracked, but whether the callee reads on this call rather than on some
 /// paths is not proven: the finding is an obligation, never a violation.
-pub(crate) fn reactive_read_after_await_through_calls(
-    ctx: &AnalysisContext<'_>,
+pub(crate) fn reactive_read_after_await_through_calls<'a>(
+    ctx: &AnalysisContext<'a>,
+    computations: &SharedAsyncComputations<'a>,
     draft: &mut ProgramDraft,
 ) {
     let files_by_path: std::collections::HashMap<&str, &solid_facts::FileFacts> = ctx
@@ -536,7 +542,6 @@ pub(crate) fn reactive_read_after_await_through_calls(
     if attributed.is_empty() {
         return;
     }
-    let mut computations: Option<AsyncComputations> = None;
     let mut defects = Vec::new();
     let proven_identity = StaticDefectKind::ReactiveReadAfterAwait {
         accessor: String::new(),
@@ -568,9 +573,8 @@ pub(crate) fn reactive_read_after_await_through_calls(
             if calls.is_empty() {
                 continue;
             }
-            let index = computations
-                .get_or_insert_with(|| AsyncComputations::new(ctx, &ctx.facts.typescript));
-            let Some(analysis_context) = tracked_async_computation_context(ctx, function, index)
+            let Some(analysis_context) =
+                tracked_async_computation_context(ctx, function, computations.get(ctx))
             else {
                 continue;
             };
@@ -919,13 +923,28 @@ fn tracked_async_computation_context(
 }
 
 /// What [`tracked_async_computation_context`] asks of the whole project, built
-/// once per prepass instead of once per async function: the alias chains of
-/// async functions, and every call whose first argument resolves to a symbol,
-/// keyed by that symbol's async root.
+/// once per build ([`SharedAsyncComputations`]) instead of once per async
+/// function: the alias chains of async functions, and every call whose first
+/// argument resolves to a symbol, keyed by that symbol's async root.
 struct AsyncComputations<'t> {
     roots: AsyncSymbolRoots<'t>,
     /// `(file index, call index)` pairs in project order.
     by_argument_root: std::collections::HashMap<String, Vec<(usize, usize)>>,
+}
+
+/// One build's [`AsyncComputations`], built on first use: only a function with
+/// something to report needs it, and the prepass's reach and the rule over
+/// calls the interprocedural pass attributed both ask for it.
+#[derive(Default)]
+pub(crate) struct SharedAsyncComputations<'t>(std::cell::OnceCell<AsyncComputations<'t>>);
+
+impl<'t> SharedAsyncComputations<'t> {
+    fn get(&self, ctx: &AnalysisContext<'t>) -> &AsyncComputations<'t> {
+        self.0.get_or_init(|| {
+            let facts: &'t solid_facts::ProjectFacts = ctx.facts;
+            AsyncComputations::new(ctx, &facts.typescript)
+        })
+    }
 }
 
 impl<'t> AsyncComputations<'t> {

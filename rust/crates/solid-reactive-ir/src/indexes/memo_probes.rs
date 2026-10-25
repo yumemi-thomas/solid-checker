@@ -18,6 +18,15 @@ pub(crate) fn probing() -> bool {
     PROBING.with(std::cell::Cell::get)
 }
 
+/// Runs `f` as a probe's answer does ([`probing`] set), for tests.
+#[cfg(test)]
+pub(crate) fn as_probe<R>(f: impl FnOnce() -> R) -> R {
+    let outer = PROBING.with(|probing| probing.replace(true));
+    let value = f();
+    PROBING.with(|probing| probing.set(outer));
+    value
+}
+
 /// One file's binding resolutions ([`SemanticLookup::binding_resolution_rows`]).
 pub(crate) type BindingResolutionRows = Vec<((u64, u64), (FileId, u32, u32, SymbolId))>;
 
@@ -183,6 +192,29 @@ impl SemanticLookup<'_> {
                     ))
                 }))
             }
+            (Probe::SymbolDescriptor, PolledKey::Text(symbol)) => ProbeAnswer::Rendered(
+                self.descriptor_by_symbol(symbol)
+                    .map(|descriptor| Arc::from(format!("{descriptor:?}"))),
+            ),
+            (Probe::SymbolCallability, PolledKey::Text(symbol)) => ProbeAnswer::Rendered(
+                self.callability_by_symbol(symbol)
+                    .map(|callability| Arc::from(format!("{callability:?}"))),
+            ),
+            (Probe::ProjectPrimitives, _) => {
+                let mut names = self
+                    .project_primitives()
+                    .iter()
+                    .map(|primitive| Arc::<str>::from(format!("{primitive:?}")))
+                    .collect::<Vec<_>>();
+                names.sort_unstable();
+                ProbeAnswer::Names(names)
+            }
+            (Probe::DeclarationSymbolAt, PolledKey::FileSpan(id, span)) => ProbeAnswer::Symbols(
+                self.method_symbol_ref(path(*id), *span)
+                    .map(Arc::<str>::from)
+                    .into_iter()
+                    .collect(),
+            ),
             (Probe::DefinedReflectively, PolledKey::Text(name)) => {
                 ProbeAnswer::Flag(self.property_may_be_defined_reflectively_as(name))
             }
