@@ -611,3 +611,9 @@ packages/wasm/owned/
 !fixtures/reactive-ir/write-role-entry-census/node_modules/**
 !fixtures/reactive-ir/leaf-scope-project-callees/node_modules/
 !fixtures/reactive-ir/leaf-scope-project-callees/node_modules/**
+!fixtures/reactive-ir/store-mutators/node_modules/
+!fixtures/reactive-ir/store-mutators/node_modules/**
+!fixtures/reactive-ir/projection-writes/node_modules/
+!fixtures/reactive-ir/projection-writes/node_modules/**
+!fixtures/reactive-ir/accessor-rebinding/node_modules/
+!fixtures/reactive-ir/accessor-rebinding/node_modules/**

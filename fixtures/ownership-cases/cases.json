@@ -1729,6 +1729,184 @@
    "absent": []
   },
   "note": "`ownedWrite` is a signal option: the store setter's guard (`devGuardStoreSetterWrite`, `@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5811-5825`) has no exemption and `createStore$1` (`:5904`) never reads the option, so a store created with `ownedWrite: true` is not exempt (upstream 0.18.1 agrees, test case 8). `StoreOptions` declares no `ownedWrite` (`dist/types/store/types.d.ts:30`); the variable keeps TypeScript quiet about the key."
- }
+ },
+  {
+   "id": "no-store-mutation-outside-setter/array-mutator/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ items: [3, 1, 2] });\nexport function Mutate() {\n  store.items.push(1);\n  store.items.sort();\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "store.items.push(1)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "store.items.sort()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream eslint-plugin-solid 0.18.1's array-method shape (test case 3), adopted: a call whose callee resolves to the standard library's `Array` method on a path of a `createStore` read proxy. TypeScript accepts it on the audited rc.17 (`Store<T> = T`) and the proxy's `set` trap drops every element and `length` write outside a setter (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5690-5700`; probed for all nine mutators). Unlike upstream, which matches the method name, a project method or typed array of the same name is silent (fixtures/reactive-ir/store-mutators)."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/projection-write/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createProjection } from \"solid-js\";\nconst selected = createProjection<{ list: number[]; other?: boolean }>((draft) => {\n  draft.other = true;\n}, { list: [] });\nexport function Outside() {\n  selected.other = true;\n  selected.list.push(1);\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "selected.other"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "selected.list.push(1)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream's `mutateProjection` shape (test case 7) with the update and mutator forms: a `createProjection` result is a derived store, and a write through it outside the compute function is dropped (rc.17 `dist/dev.js:5690-5700`; probed). The write through the draft inside the compute function is a different binding and commits."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/own-setter-write/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [store, setStore] = createStore({ count: 0 });\nsetStore(() => {\n  store.count = 5;\n});\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "no-store-mutation-outside-setter"
+     }
+    ]
+   },
+   "note": "Kept divergence from eslint-plugin-solid 0.18.1 (ADR 0383): upstream's test case 6 (\"mutating the read proxy is wrong even inside the setter\") reports a write through the read proxy inside its own setter callback. On rc.17 it commits: `storeSetter` adds the store to `writeScopes` for the callback (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5847-5866`), so the `set` trap's `inDraft(target)` holds (`:4955-4957`, `:5690-5700`) and the value lands after `flush()` (probed: `count` reads 5, and a `push` of the store's array through the proxy there lands too). A write through another store's proxy inside the callback is still dropped (`scopeKey` differs) and stays a finding (fixtures/reactive-ir/store-mutators `OtherSetter`)."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/projection-compute-write/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createProjection } from \"solid-js\";\nconst selected: { list: number[]; other?: boolean } = createProjection(\n  (draft: { list: number[]; other?: boolean }) => {\n    draft.other = true;\n    selected.other = true;\n    selected.list.push(1);\n  },\n  { list: [] },\n);\nexport { selected };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "no-store-mutation-outside-setter"
+     }
+    ]
+   },
+   "note": "Kept divergence from eslint-plugin-solid 0.18.1 (ADR 0383), which resolves `selected` to its `createProjection` initializer wherever it is written. Inside the compute function the result symbol commits like the draft: `runProjectionComputed` runs the function inside `storeSetter(draft, \u2026)` (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:6675-6678`), which write-enables the family (`:5847-5866`; probed: a re-run's `selected.viaResult = 2` landed after `flush()`). The same holds for a function-form `createStore(fn, seed)`'s store (fixtures/reactive-ir/projection-writes)."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/delete-required-property/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ req: { id: 1 } });\nexport function Remove() {\n  delete store.req.id;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "span": {
+       "marker": "store.req.id"
+      },
+      "typescript": {
+       "ownership": "typescript-owned",
+       "diagnostics": [
+        {
+         "code": "TS2790",
+         "span": {
+          "marker": "store.req.id"
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream's `delete store.path` shape (test case 4) is not adopted where TypeScript speaks (ADR 0381): for a required property under strictNullChecks the published rc.17 typings give TS2790 (\"The operand of a 'delete' operator must be optional\") at the operand, and the checker is silent. The proxy does drop the delete outside a setter (`deleteProperty` trap `dist/dev.js:5760-5766`; probed). A property whose type includes `undefined` or an optional one type-checks, and no Type Fact says that at a delete operand, so it stays unreported (docs/open-work.md)."
+  }
  ]
 }

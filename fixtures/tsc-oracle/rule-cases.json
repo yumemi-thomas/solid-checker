@@ -1025,6 +1025,62 @@
       "checkerKind": "uncertifiable",
       "why": "TypeScript accepts a <p> nested in a <p>; the pinned rc.17 compiler refuses the malformed HTML, so the file has no compiler facts and the checker can only name it as unanalyzed (SC9015), never claim a defect in it.",
       "code": "export const Case = () => <p><p>nested</p></p>;\n"
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerCount": 9,
+      "why": "SC2003's in-place array arm (ADR 0383). All nine `Array.prototype` mutators on a store path type-check on the audited rc.17 (`Store<T> = T`, and a nested array is mutable on every release), while the proxy's `set` trap returns without storing outside a setter (rc.17 `dist/dev.js:5690-5700`; probed: every mutator dropped, STORE_WRITE_OUTSIDE_SETTER warned). The call must resolve to the standard library's `Array` method: the project fixture `store-mutators` pins the silent spellings.",
+      "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ items: [3, 1, 2] });\nexport function Mutators() {\n  store.items.push(1);\n  store.items.pop();\n  store.items.shift();\n  store.items.unshift(0);\n  store.items.splice(0, 1);\n  store.items.sort();\n  store.items.reverse();\n  store.items.fill(7);\n  store.items.copyWithin(0, 1);\n}\n"
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerCount": 2,
+      "why": "SC2003's projection arm (ADR 0383). A `createProjection` result is a derived store: an assignment or an in-place mutator through it outside its compute function type-checks (`Store<T> = T`) and is dropped (rc.17 `dist/dev.js:5690-5700`; probed). The finding names the projection, not a setter.",
+      "code": "import { createProjection } from \"solid-js\";\nconst selected = createProjection<{ list: number[]; other?: boolean }>((draft) => {\n  draft.other = true;\n}, { list: [] });\nexport function Outside() {\n  selected.other = true;\n  selected.list.push(1);\n}\n"
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "silent",
+      "why": "The two writes rc.17 commits (probed): through the store's own proxy inside its own setter callback (`storeSetter` adds the store to `writeScopes`, `dist/dev.js:5847-5866`, so the `set` trap's `inDraft` holds, `:4955-4957`), and through a projection's result symbol, or its draft, inside its compute function (`runProjectionComputed` runs it inside `storeSetter(draft, …)`, `:6675-6678`). Upstream eslint-plugin-solid reports both; the divergence is an ownership case. Neither is a TypeScript error, so silence here is the rule's own decision.",
+      "code": "import { createProjection, createStore } from \"solid-js\";\nconst [store, setStore] = createStore({ items: [1], n: 0 });\nconst selected: { list: number[]; other?: boolean } = createProjection(\n  (draft: { list: number[]; other?: boolean }) => {\n    draft.other = true;\n    selected.other = true;\n    selected.list.push(1);\n  },\n  { list: [] },\n);\nexport function Own() {\n  setStore(() => {\n    store.n = 1;\n    store.items.push(5);\n  });\n  return selected;\n}\n"
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "removed-because-redundant",
+      "checker": "silent",
+      "allow": [
+        2588,
+        2322,
+        2356,
+        2365
+      ],
+      "why": "SC2003's accessor-binding arm (`count = 2` on a signal accessor), removed by ADR 0383. On the audited rc.17 typings a `const` binding is TS2588 (\"Cannot assign to 'count' because it is a constant\"), and a `let` binding of `SourceAccessor<number>` assigned a number is TS2322, a function is TS2322 (the `$REFRESH` brand), `count++` is TS2356 and `count += 1` is TS2365; a memo accessor is TS2322/TS2588 the same way. What type-checks is a deliberate rebinding with another accessor or a store root assigned an object of its type, or a cast; none is a dropped write, so the arm was deleted, not demoted (fixture `accessor-rebinding`).",
+      "code": "import { createSignal, createMemo } from \"solid-js\";\nconst [fixed] = createSignal(0);\nfixed = 2;\nlet [count] = createSignal(0);\nlet [bumped] = createSignal(0);\nlet [added] = createSignal(0);\nlet [fn] = createSignal(0);\nlet memo = createMemo(() => 1);\ncount = 2;\nbumped++;\nadded += 1;\nfn = () => 5;\nmemo = 3;\nexport { fixed, count, bumped, added, fn, memo };\n"
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "removed-because-redundant",
+      "checker": "silent",
+      "allow": [
+        2790
+      ],
+      "why": "Upstream's `delete store.path` shape, not adopted (ADR 0381, 0383). The proxy drops it outside a setter (rc.17 `deleteProperty` trap `dist/dev.js:5760-5766`; probed), but for a required property under strictNullChecks `tsc` reports TS2790 (\"The operand of a 'delete' operator must be optional\"), so the write is TypeScript's. The property whose type includes `undefined` (`nick` below, or an optional one) type-checks, and no Type Fact says that at a delete operand, so the checker stays silent on both (docs/open-work.md). Not strict-only in the checker's favour: a non-strict project is silent in `tsc` too, and the checker's silence there is the fail-closed default.",
+      "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ req: { id: 1 }, user: { nick: undefined as string | undefined } });\nexport function Remove() {\n  delete store.req.id;\n  delete store.user.nick;\n}\n"
     }
   ]
 }

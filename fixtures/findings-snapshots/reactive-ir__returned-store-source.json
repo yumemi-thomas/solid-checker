@@ -150,16 +150,6 @@
       "start": 6892,
       "end": 6904,
       "fixes": 0
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/returned-store-source/hook.ts",
-      "start": 1858,
-      "end": 1863,
-      "fixes": 0
     }
   ]
 }

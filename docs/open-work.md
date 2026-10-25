@@ -25,6 +25,13 @@ Write in an owned scope (`no-write-in-pure-computation`, SC2001):
 - A setter call in a component's default parameter initializer runs in the owned component scope; the write rule places nothing there.
 - SC2001 in `render`/`hydrate` `code` off web rc.13/17: uncertifiable (ADR 0353). Signals rc.17: a typed-only or `let`-aliased setter is unclaimed: `createOptimistic`'s unguarded one shares its type.
 
+Store write outside a setter (`no-store-mutation-outside-setter`, SC2003; ADR 0383):
+
+- `delete store.path` is dropped (rc.17 `dist/dev.js:5760-5766`) but not reported: a required property is TS2790 under strictNullChecks, and a property whose type includes `undefined` or is optional type-checks, with no Type Fact at a delete operand saying which (a demand would be a producer, wire and protocol change). Pinned: tsc-oracle and ownership case `delete-required-property`. Reopen with a Type Facts "type includes undefined at this operand" demand.
+- The path proof stops at the root identifier: a mutator or assignment through an intermediate the store does not wrap (a frozen object, a `Map`) is reported although it lands. `createOptimisticStore` results are treated as stores (unprobed on rc.17; upstream ignores them).
+- A write through an accessor's member (`memo.a = 1`, the `ReactiveValue` arm) is TS2339/TS2540 uncasted on rc.17; the cast spellings remain, and the finding's "readonly proxy" claim does not describe a function object. Not audited here.
+- Type-correct rebinding (`count = otherAccessor`, `store = { … }` on a `let`) is silent: the accessor-binding arm is deleted, and the cast and same-type spellings are no proven defect.
+
 `flush` in an effect apply (`flush-in-effect-callback`, SC2008). The runtime reports these; the rule does not claim the open shapes below (ADR 0341). Positions and premises: rule page `flush-in-effect-callback`.
 
 - `createRenderEffect` re-runs and a returned cleanup report only on some runs (its first run is outside any flush); the rule cannot tell which run a call is in, so neither is claimed.

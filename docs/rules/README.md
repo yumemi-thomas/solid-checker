@@ -127,8 +127,8 @@ A rule that maps onto an eslint-plugin-solid rule takes the upstream name
 unless that name no longer describes what the checker proves, and its scope is
 a superset of upstream's ([ADR 0381](../decisions.md#adr-0381)). Shipped renames (each old name is an alias, ADR 0391): SC2001
 `no-write-in-pure-computation` (ADR 0382), SC2003
-`no-store-mutation-outside-setter` (ADR 0383; upstream's `delete`, array-method
-and extra projection shapes are not built yet), SC2004 and SC2005 together as
+`no-store-mutation-outside-setter` (ADR 0383; upstream's array-method and
+projection shapes are built, its `delete` is not: TS2790 on a required property), SC2004 and SC2005 together as
 `no-await-primitive-in-tracked-scope` (ADR 0384; one name, two codes), and SC7006
 `valid-use-server` (ADR 0385; upstream's placement checks and `clientWrappers`
 are not built yet). Decided and not yet shipped: `reactivity` as a group key over

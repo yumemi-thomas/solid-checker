@@ -684,17 +684,19 @@ pub fn direct_mutation_wording(
     store_hint: impl FnOnce(&str) -> String,
 ) -> (String, String) {
     match target {
-        DirectMutationTarget::AccessorBinding => (
-            format!(
-                "reactive accessor {name:?} is reassigned; the binding is replaced and every subscriber keeps reading the old accessor"
-            ),
-            format!("Call the setter returned beside it instead of rebinding {name}."),
-        ),
         DirectMutationTarget::Store => (
             format!(
                 "{name:?} is a reactive store and is written through directly; Solid hands out a readonly proxy, so the write is dropped and nothing re-runs"
             ),
             store_hint(name),
+        ),
+        DirectMutationTarget::Projection => (
+            format!(
+                "{name:?} is a projection, a read-only derived store; a write through it is dropped and nothing re-runs"
+            ),
+            format!(
+                "Derive the value inside the projection's compute function instead of mutating the result {name}."
+            ),
         ),
         DirectMutationTarget::Props | DirectMutationTarget::ReactiveValue => {
             let object = if target == DirectMutationTarget::Props {

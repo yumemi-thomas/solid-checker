@@ -50,8 +50,8 @@ fn catalog_prose_program() -> Program {
             position: "sample expression".into(),
         },
         StaticDefectKind::DirectMutation {
-            name: "sampleAccessor".into(),
-            target: DirectMutationTarget::AccessorBinding,
+            name: "sampleProjection".into(),
+            target: DirectMutationTarget::Projection,
         },
         StaticDefectKind::DirectMutation {
             name: "sampleStore".into(),

@@ -2,7 +2,7 @@
 
 `SC2003` · **warning** · violation
 
-A reactive variable is reassigned or mutated directly instead of through its
+A store or projection is written through its read proxy instead of through its
 setter.
 
 ## What it does
@@ -14,21 +14,67 @@ getter-backed key throws), and `omit` of it is a plain copy; only a proxy
 (`merge`, split props) drops the write. Which one the object is, is not proven
 at the write. Store writes are unaffected.
 
-Flags direct writes to reactive values — reassigning a signal accessor binding,
-or writing through a proven signal, store, or props proxy without going through
-its setter. The former name `no-direct-mutation` stays an alias, so an
-existing configuration keeps working (ADR 0383).
+Flags a write through a proven store's read proxy, or a `createProjection`
+result, without going through its setter. The former name
+`no-direct-mutation` stays an alias, so an existing configuration keeps
+working (ADR 0383). The shapes, each proven at the exact store or projection
+symbol:
 
-One store write shape is exempt in 2.0: an assignment through the original
-store proxy **lexically inside one of that store's own setter callbacks**.
-The rc.0 runtime write-enables the store for the duration of its own setter's
-draft callback, so `setStore(draft => { store.value = 7 })` commits exactly
-like a draft write (verified against the published runtime). The exemption is
-proven, not guessed: the callee must resolve to the setter destructured beside
-that exact store. Writing through *another* store's proxy inside a setter is
-still silently dropped at runtime and stays a finding, as does any write
-outside a setter. 1.x setters never unlock the proxy, so the `v1/` twin has no
-such exemption.
+- an assignment, compound assignment or update (`store.a.b = x`,
+  `store.n++`);
+- a call of one of the nine in-place `Array.prototype` methods (`push`, `pop`,
+  `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`) on a
+  path of the store. The callee must resolve through Type Facts to the
+  standard library's `Array` method, so a project method of the same name, a
+  typed array's `fill` and an unresolved receiver are silent (upstream's
+  `no-store-mutation-outside-setter` matches the method name);
+- the same writes through a `createProjection` result, reported as a
+  projection write (it has no setter to name).
+
+The runtime drops all of them outside a setter: the proxy's `set` trap
+returns `true` without storing (`@solidjs/signals@2.0.0-rc.17`
+`dist/dev.js:5690-5700`), and an in-place array method reaches it once per
+element and for `length`. Probed on rc.17: `delete`, all nine mutators, and a
+write to a projection result outside its compute function are dropped
+(STORE_WRITE_OUTSIDE_SETTER, `:5420-5455`); the trap for `delete` is
+`:5760-5766`. TypeScript accepts the mutators and projection writes on rc.17
+(`Store<T> = T`; a nested array is mutable on every release), which the
+tsc oracle checks against the published typings.
+
+Two writes are exempt because rc.17 commits them (probed, with the value read
+after `flush()`):
+
+- A write through the original store proxy **lexically inside one of that
+  store's own setter callbacks**: `storeSetter` adds the store to
+  `writeScopes` for the callback (`dist/dev.js:5847-5866`), so the trap's
+  `inDraft(target)` holds (`:4955-4957`). `setStore(draft => { store.value = 7
+  })` commits like a draft write. The exemption is proven, not guessed: the
+  callee must resolve to the setter destructured beside that exact store.
+  Writing through *another* store's proxy inside a setter is dropped (a
+  different `scopeKey`) and stays a finding, as does any write outside a
+  setter. Upstream reports the own-setter write; that divergence is pinned as
+  ownership case `no-store-mutation-outside-setter/own-setter-write/001`.
+- A write through a projection's result symbol (or a function-form
+  `createStore(fn, seed)`'s store) **lexically inside its compute function**:
+  `runProjectionComputed` runs the function inside `storeSetter(draft, …)`
+  (`dist/dev.js:6675-6678`). Ownership case `…/projection-compute-write/001`.
+
+1.x setters never unlocked the proxy; 1.x is not analyzed here (ADR 0110).
+
+Not reported, deliberately:
+
+- `delete store.path`. It is dropped, but for a required property tsc reports
+  TS2790 (strictNullChecks), and a property whose type includes `undefined` or
+  is optional type-checks with no Type Fact at a delete operand to say which.
+  Pinned in the tsc oracle and ownership case `…/delete-required-property/001`;
+  open item in `docs/open-work.md`.
+- Reassigning an accessor binding (`count = 2`, this rule's former
+  accessor-binding arm). On rc.17 a `const` binding is TS2588 and a `let`
+  assigned a number or a function is TS2322 (`count++` TS2356, `count += 1`
+  TS2365), so it is TypeScript's: tsc-oracle `removed-because-redundant`.
+  What type-checks (`count = otherAccessor`, a `let` store assigned an object
+  of its type) is a deliberate rebinding that drops no write (fixture
+  `accessor-rebinding`).
 
 A write to a store **root record's own property** is TypeScript's on the
 releases whose typings make it `readonly`, and this rule's where they do not.
@@ -84,15 +130,13 @@ the value.
 Examples of **incorrect** code for this rule:
 
 ```tsx
-const [count, setCount] = createSignal(0);
-// Reassigns the accessor binding itself.
-count = 2;
+const [items] = createStore({ list: [3, 1, 2] });
+// An in-place array method on a store path: dropped.
+items.list.sort();
 
-function Title(props) {
-  // Writes through the readonly props proxy; the write is dropped.
-  props.text = "untitled";
-  return <h1>{props.text}</h1>;
-}
+const selected = createProjection((draft) => { draft[id()] = true; }, {});
+// Derived, read-only outside its compute function: dropped.
+selected.other = true;
 
 const [profile] = createStore({ name: "Ada" });
 const [, setOther] = createStore({ n: 0 });

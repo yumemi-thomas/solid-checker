@@ -1070,8 +1070,9 @@ impl StaticDefectKind {
 pub enum DirectMutationTarget {
     Props,
     Store,
+    /// A `createProjection` result: derived, with no setter to route through.
+    Projection,
     ReactiveValue,
-    AccessorBinding,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

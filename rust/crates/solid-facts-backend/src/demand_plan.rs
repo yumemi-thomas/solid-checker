@@ -1027,7 +1027,34 @@ fn plan_call_demands(
                                     && suspension.end >= call.span.end
                             })
                 });
+        // SC2003 reports an in-place array method on a store path only when
+        // the callee resolves to the standard library's `Array` method, so an
+        // argumentless `pop()`, `shift()`, `sort()` or `reverse()` needs its
+        // declaration too (the demand states no decision: the rule resolves
+        // the receiver itself).
+        let argumentless_array_mutator = call.arguments.is_empty()
+            && !call.construct
+            && file
+                .ast
+                .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|member| {
+                    matches!(
+                        file.source_text(member.property),
+                        Some(
+                            "push"
+                                | "pop"
+                                | "shift"
+                                | "unshift"
+                                | "splice"
+                                | "sort"
+                                | "reverse"
+                                | "fill"
+                                | "copyWithin"
+                        )
+                    )
+                });
         planned.resolved_call = !call.arguments.is_empty()
+            || argumentless_array_mutator
             || argumentless_before_suspension
             || returned_callees.contains(&call.callee)
             || computed_dispatch
