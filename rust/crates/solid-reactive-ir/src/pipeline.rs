@@ -492,7 +492,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         entities,
         symbol_names: &symbol_names,
         lookup: semantic_lookup,
-        typescript_unchanged: typescript_unchanged,
+        typescript_unchanged,
         typescript_delta: typescript_indexes.source_discovery_delta.as_ref(),
     };
     let source_discovery = if available_analysis_workers() <= 1 {
