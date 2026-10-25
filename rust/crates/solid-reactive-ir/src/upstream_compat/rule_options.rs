@@ -105,6 +105,21 @@ impl RuleOptions {
         alias: impl Fn(&str) -> Option<&'static str>,
         scope: impl Fn(&str) -> Option<&'static str>,
     ) -> Result<Self, String> {
+        Self::parse_with_groups(encoded, has_rule, alias, scope, |_| None)
+    }
+
+    /// [`Self::parse_with_scoped_aliases`] where a key may also name a group
+    /// (`group` returns its members): its `enabled` sets every member, and a
+    /// member the document also names takes its own setting whatever order the
+    /// keys sort in (ADR 0386). The group is not a rule and `has_rule` is not
+    /// asked about it.
+    pub fn parse_with_groups(
+        encoded: &str,
+        has_rule: impl Fn(&str) -> bool,
+        alias: impl Fn(&str) -> Option<&'static str>,
+        scope: impl Fn(&str) -> Option<&'static str>,
+        group: impl Fn(&str) -> Option<&'static [&'static str]>,
+    ) -> Result<Self, String> {
         let document: Document = serde_json::from_str(encoded)
             .map_err(|error| format!("rule options are not a valid document: {error}"))?;
         if document.schema_version != 1 {
@@ -114,9 +129,20 @@ impl RuleOptions {
             ));
         }
         let mut options = Self::default();
-        for (configured_rule, value) in document.rules {
-            let rule = alias(&configured_rule).unwrap_or(&configured_rule);
-            if !has_rule(rule) {
+        // The map iterates by key, so a group would overwrite a member that
+        // sorts before it. Groups go first; every named member then wins.
+        let (groups, rules): (Vec<_>, Vec<_>) = document
+            .rules
+            .into_iter()
+            .partition(|(configured_rule, _)| group(configured_rule).is_some());
+        for (configured_rule, value) in groups.into_iter().chain(rules) {
+            let members = group(&configured_rule);
+            let rule = if members.is_some() {
+                &configured_rule
+            } else {
+                alias(&configured_rule).unwrap_or(&configured_rule)
+            };
+            if members.is_none() && !has_rule(rule) {
                 return Err(format!(
                     "the rule catalog has no rule named {configured_rule:?}"
                 ));
@@ -134,7 +160,11 @@ impl RuleOptions {
             } else {
                 RuleOverride::Disabled
             };
-            if let Some(code) = scope(&configured_rule) {
+            if let Some(members) = members {
+                for member in members {
+                    options.overrides.insert((*member).to_owned(), requested);
+                }
+            } else if let Some(code) = scope(&configured_rule) {
                 // Two former names of one code (`resolve-in-tracked-scope`,
                 // `resolve-in-reactive-scope`) may disagree: a disable stays.
                 let slot = options
@@ -241,6 +271,21 @@ impl RuleOptions {
 #[cfg(test)]
 mod tests {
     use super::RuleOptions;
+
+    const MEMBERS: &[&str] = &["reactive-b", "strict-a", "zeta-c"];
+
+    /// A group whose key sorts between its members, so a naive single pass over
+    /// the sorted map would let the group overwrite one and not the other.
+    fn parse_grouped(document: &str) -> RuleOptions {
+        RuleOptions::parse_with_groups(
+            document,
+            |rule| MEMBERS.contains(&rule) || rule == "outside",
+            |rule| (rule == "old-a").then_some("strict-a"),
+            |_| None,
+            |rule| (rule == "reactivity-group").then_some(MEMBERS),
+        )
+        .unwrap()
+    }
 
     fn known_rule(rule: &str) -> bool {
         matches!(
@@ -453,5 +498,61 @@ mod tests {
         )
         .unwrap();
         assert_eq!(options.client_wrappers(), ["define*"]);
+    }
+
+    #[test]
+    fn a_group_key_sets_every_member_and_a_named_member_wins_in_any_key_order() {
+        let group_off = parse_grouped(
+            r#"{ "schemaVersion": 1, "rules": { "reactivity-group": { "enabled": false } } }"#,
+        );
+        for member in MEMBERS {
+            assert!(!group_off.is_enabled(member, true, &[]), "{member}");
+        }
+        assert!(group_off.is_enabled("outside", true, &[]));
+        assert!(group_off.is_enabled("reactivity-group", true, &[]));
+
+        // `reactive-b` sorts before the group key, `strict-a` after it, and
+        // `old-a` (an alias of `strict-a`) before it: each keeps its own
+        // setting, whichever side of the group the map visits it on.
+        let member_wins = parse_grouped(
+            r#"{ "schemaVersion": 1, "rules": {
+                 "reactivity-group": { "enabled": false },
+                 "reactive-b": { "enabled": true },
+                 "strict-a": { "enabled": true } } }"#,
+        );
+        assert!(member_wins.is_enabled("reactive-b", false, &[]));
+        assert!(member_wins.is_enabled("strict-a", false, &[]));
+        assert!(!member_wins.is_enabled("zeta-c", true, &[]));
+
+        let group_on = parse_grouped(
+            r#"{ "schemaVersion": 1, "rules": {
+                 "old-a": { "enabled": false },
+                 "reactivity-group": { "enabled": true },
+                 "zeta-c": { "enabled": false } } }"#,
+        );
+        assert!(!group_on.is_enabled("strict-a", true, &[]));
+        assert!(!group_on.is_enabled("zeta-c", true, &[]));
+        assert!(group_on.is_enabled("reactive-b", false, &[]));
+    }
+
+    #[test]
+    fn a_group_key_takes_only_enabled() {
+        let error = RuleOptions::parse_with_groups(
+            r#"{ "schemaVersion": 1, "rules": { "reactivity-group": { "severity": "off" } } }"#,
+            |_| false,
+            |_| None,
+            |_| None,
+            |rule| (rule == "reactivity-group").then_some(MEMBERS),
+        )
+        .expect_err("a group takes no option beyond `enabled`");
+        assert!(error.contains("takes only `enabled`"), "{error}");
+        // Without the group table the same key is an unknown rule.
+        assert!(
+            RuleOptions::parse(
+                r#"{ "schemaVersion": 1, "rules": { "reactivity-group": {} } }"#,
+                |_| false,
+            )
+            .is_err()
+        );
     }
 }

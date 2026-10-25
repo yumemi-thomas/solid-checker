@@ -72,6 +72,8 @@ Pass a stable function reference or wrap the operation in a function. For an
 uncertain bound-handler value, use an explicit two-slot tuple or a direct
 function so the runtime representation is provable.
 
+This rule is a member of the `reactivity` group key ([ADR 0386](../decisions.md#adr-0386)): `reactivity` in `rule-options.json` or a disable comment reaches it, and `reactive-handler-frozen` alone overrides the group.
+
 ## Related
 
 - [uncalled-accessor](uncalled-accessor.md) — the inverse defect

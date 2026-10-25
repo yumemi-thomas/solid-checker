@@ -546,6 +546,58 @@ test("deprecated rule keys delegate without entering dialect presets", () => {
   }
 });
 
+test("every non-v1 RULE_ALIASES row is a deprecated ESLint key (dialect.rs is the authority)", () => {
+  const source = readFileSync(new URL("../../../rust/crates/solid-facts-backend/src/dialect.rs", import.meta.url), "utf8");
+  const table = source.slice(
+    source.indexOf("pub const RULE_ALIASES"),
+    source.indexOf("pub const CODE_SCOPED_ALIASES")
+  );
+  const rows = [...table.matchAll(/\(\s*"([^"]+)",\s*"([^"]+)"\s*,?\s*\)/g)]
+    .map(([, oldName, currentName]) => [oldName, currentName])
+    .filter(([oldName]) => !oldName.startsWith("v1/"));
+  assert.ok(rows.length >= 14, `parsed ${rows.length} rows`);
+  const keys = new Map(plugin._testing.deprecatedRuleKeys.map(([oldName, currentName]) => [oldName, currentName]));
+  for (const [oldName, currentName] of rows) {
+    assert.equal(keys.get(oldName), currentName, `deprecated key ${oldName}`);
+  }
+  assert.equal(keys.size, rows.length, "no ESLint key lacks a native alias");
+});
+
+test("every former name of an obligation in RETIRED_RULES is a retired no-op ESLint key (ADR 0398)", () => {
+  const source = readFileSync(new URL("../../../rust/crates/solid-facts-backend/src/dialect.rs", import.meta.url), "utf8");
+  const table = source.slice(
+    source.indexOf("pub const RETIRED_RULES"),
+    source.indexOf("pub const RULE_ALIASES")
+  );
+  const names = [...table.matchAll(/\(\s*"([^"]+)",\s*(?:RETIRED_AS_OBLIGATION_\w+|"[^"]*obligation and not a rule[^"]*")\s*,?\s*\)/g)]
+    .map(([, name]) => name)
+    .filter(name => !name.startsWith("v1/"));
+  assert.equal(names.length, 7, `parsed ${names.join()}`);
+  assert.deepEqual([...names].sort(), [...plugin._testing.retiredRuleKeys].sort());
+});
+
+test("the reactivity group key is valid in a config and in a disable comment, and reports nothing (ADR 0386)", () => {
+  assert.ok(plugin.rules.reactivity);
+  assert.deepEqual(plugin.rules.reactivity.create({}), {});
+  const linter = new Linter();
+  const source = "// eslint-disable-next-line solid-checker/reactivity\nconst answer = 42;\n";
+  const messages = linter.verify(
+    source,
+    [{
+      plugins: { "solid-checker": plugin },
+      linterOptions: { reportUnusedDisableDirectives: "off" },
+      settings: { solidChecker: { snapshot: { status: "certified", findings: [] } } },
+      rules: { "solid-checker/reactivity": "error", "solid-checker/no-owner-cleanup": "error" }
+    }],
+    { filename: "App.js" }
+  );
+  assert.deepEqual(messages, []);
+  // The group is not a finding's rule, so no manifest entry may take its name.
+  for (const catalog of Object.values(plugin._testing.manifests)) {
+    assert.ok(!catalog.rules.some(entry => entry.name === "reactivity"));
+  }
+});
+
 test("a former name of a merged rule reports and owns its own code only (ADR 0384)", () => {
   const merged = "no-await-primitive-in-tracked-scope";
   const findings = [
@@ -582,6 +634,9 @@ test("the keys of SC9005, SC9011 and SC9012 still load and do nothing (ADR 0398)
   for (const name of [
     "package-behavior-unavailable",
     "package-contract-incomplete",
+    "package-contract-export-missing",
+    "package-contract-missing",
+    "package-contract-callback-missing",
     "reactive-dispatch-unresolved",
     "reactive-source-uncaptured"
   ]) {

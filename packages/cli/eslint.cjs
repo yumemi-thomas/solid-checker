@@ -825,16 +825,26 @@ const DEPRECATED_RULE_KEYS = [
   ["resolve-in-reactive-scope", "no-await-primitive-in-tracked-scope", ["SC2004"]],
   ["until-in-tracked-scope", "no-await-primitive-in-tracked-scope", ["SC2005"]],
   ["server-function-module-directive", "valid-use-server"],
-  ["sync-node-received-async", "sync-computation-received-async"]
+  ["sync-node-received-async", "sync-computation-received-async"],
+  // The remaining non-`v1/` rows of `RULE_ALIASES` (`dialect.rs`), which names
+  // the authority: native accepts each, so ESLint must as well.
+  ["no-owner-effect", "missing-owner"],
+  ["no-owner-cleanup", "missing-owner"],
+  ["no-owner-boundary", "missing-owner"],
+  ["no-owner-settled-cleanup", "missing-owner"]
 ];
 
 // ADR 0398: SC9005 and SC9012 (with SC9011 merged into it) are obligations,
 // internal uncertifiable results, and no ESLint key configures one. A key a
 // config still names stays a deprecated rule that reports nothing, so an
-// existing config loads and its setting changes nothing.
+// existing config loads and its setting changes nothing. Native accepts every
+// former name (`RETIRED_RULES`, `dialect.rs`), so ESLint must as well.
 const RETIRED_RULE_KEYS = [
   "package-behavior-unavailable",
   "package-contract-incomplete",
+  "package-contract-export-missing",
+  "package-contract-missing",
+  "package-contract-callback-missing",
   "reactive-dispatch-unresolved",
   "reactive-source-uncaptured"
 ];
@@ -847,6 +857,30 @@ for (const catalog of Object.values(manifests)) {
     plugin.rules[entry.name] = reportingRule(entry, catalog);
   }
 }
+
+// ADR 0386: `reactivity` groups four member rules in `rule-options.json`, which
+// native expands. ESLint cannot report a member's finding under the group's id
+// and one rule cannot read another's severity, so the key exists here only to
+// be valid in a migrated config and in a disable comment (ESLint refuses an
+// unknown rule id in both). It reports nothing and sets nothing: severity stays
+// per member, and native applies a `reactivity` disable comment itself.
+if (Object.hasOwn(plugin.rules, "reactivity")) {
+  throw new Error("catalog rule reactivity collides with the adapter's group key");
+}
+plugin.rules.reactivity = {
+  meta: {
+    type: "problem",
+    docs: {
+      description:
+        "Accepted so a migrated `solid/reactivity` key is valid; configure the member rules, or `reactivity` in rule-options.json"
+    },
+    schema: adapterSchema,
+    messages: {}
+  },
+  create() {
+    return {};
+  }
+};
 
 for (const [oldName, currentName, codes] of DEPRECATED_RULE_KEYS) {
   const catalog = Object.values(manifests).find(candidate =>

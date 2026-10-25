@@ -1375,11 +1375,12 @@ fn discover_rule_options_with(
         let candidate = ancestor.join(".solid-checker").join("rule-options.json");
         match fs::read_to_string(&candidate) {
             Ok(encoded) => {
-                return RuleOptions::parse_with_scoped_aliases(
+                return RuleOptions::parse_with_groups(
                     &encoded,
                     &has_rule,
                     dialect::rule_alias,
                     dialect::rule_alias_code,
+                    dialect::rule_group,
                 )
                 .map_err(|error| {
                     BackendError::RuleOptions(format!("{}: {error}", candidate.display()))

@@ -258,6 +258,8 @@ explicit one-time snapshot; it does not make the prop reactive.
 - **Getter arity.** The rc.13 accessor is `read.bind(null, node)` over `function read(el)` (`dist/dev.js` `accessor`, `dist/prod/signals.js` `accessor`). `solid-js`'s client wrappers return it unchanged, and its server builds return arrows with no parameter. Probed on the dev and prod client builds: `length` 0 and `typeof` `"function"`. The walk folds `p.length` against a numeric literal (`===`, `!==`, `==`, `!=`, `<`, `<=`, `>`, `>=`), and `typeof p`, or a `p.length` that only feeds a test, is no escape, so a branch that cannot run for the arguments is proven absent. A hoisted function declaration's body runs whenever it is called, so an earlier `return` leaves it possible rather than unreachable. A binding declared in a file with a direct `eval` is refused, and a binding the module exports proves no length.
 - **Not decided.** A read through another helper hop, an array of accessors (`accessArray`), and a read after an `await` (always an obligation).
 
+This rule is a member of the `reactivity` group key ([ADR 0386](../decisions.md#adr-0386)): `reactivity` in `rule-options.json` or a disable comment reaches it, and `strict-read-untracked` alone overrides the group.
+
 ## Related
 
 - [no-destructure](no-destructure.md) — the destructuring special case

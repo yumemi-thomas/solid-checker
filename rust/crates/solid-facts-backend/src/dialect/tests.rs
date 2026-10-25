@@ -201,6 +201,44 @@ fn compatibility_registry_counts_match_the_catalog_migration() {
     );
 }
 
+/// ADR 0386: a group is a key over rules, never a rule or a former name, and
+/// each member is a real rule of the one catalog that carries the group.
+#[test]
+fn rule_groups_name_catalog_rules_and_collide_with_no_identity() {
+    assert_eq!(
+        RULE_GROUPS
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>(),
+        ["reactivity"]
+    );
+    let v2 = default_dialect();
+    for (group, members) in RULE_GROUPS {
+        assert!(!members.is_empty());
+        for member in *members {
+            assert!((v2.has_rule)(member), "{group}: {member}");
+            assert!(rule_group(member).is_none());
+        }
+        assert!(!(v2.has_rule)(group), "{group} must not also be a rule");
+        assert!(rule_alias(group).is_none() && retired_rule(group).is_none());
+    }
+    assert_eq!(
+        rule_group("reactivity"),
+        Some(
+            &[
+                "strict-read-untracked",
+                "reactive-read-after-await",
+                "uncalled-accessor",
+                "reactive-handler-frozen"
+            ][..]
+        )
+    );
+    // SC1003 keeps its own key in upstream (ADR 0386), and SC4001 has no
+    // upstream counterpart: neither belongs to the group.
+    let members = rule_group("reactivity").unwrap();
+    assert!(!members.contains(&"no-destructure") && !members.contains(&"missing-owner"));
+}
+
 #[test]
 fn every_catalog_identity_resolves_to_its_metadata() {
     for dialect in ALL {

@@ -133,6 +133,76 @@ fn a_disabled_coverage_rule_returns_its_withheld_obligations_and_an_obligation_c
     );
 }
 
+/// ADR 0386: the `reactivity` key reaches the findings of its four members
+/// through the same enablement as any member key, and a member the document
+/// names keeps its own setting.
+#[test]
+fn the_reactivity_group_key_configures_its_members() {
+    let finding = |code: &'static str, name: &'static str| {
+        solid_reactive_ir::Finding::new(
+            solid_reactive_ir::RuleMetadata {
+                code,
+                name,
+                severity: "error",
+                uncertifiable: false,
+                default_enabled: true,
+                configurable: true,
+                presets: &[],
+            },
+            "synthetic".into(),
+            typefacts::Location {
+                path: "synthetic.tsx".into(),
+                start_byte: 0,
+                end_byte: 1,
+            },
+        )
+    };
+    let retained = |rules: &str| {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-group-key-{}-{}",
+            std::process::id(),
+            rules.len()
+        ));
+        std::fs::create_dir_all(directory.join(".solid-checker")).unwrap();
+        std::fs::write(
+            directory.join(".solid-checker").join("rule-options.json"),
+            format!(r#"{{ "schemaVersion": 1, "rules": {{ {rules} }} }}"#),
+        )
+        .unwrap();
+        let options = super::discover_rule_options(&directory).unwrap();
+        std::fs::remove_dir_all(&directory).unwrap();
+        let mut findings = vec![
+            finding("SC1001", "strict-read-untracked"),
+            finding("SC1002", "reactive-read-after-await"),
+            finding("SC1003", "no-destructure"),
+            finding("SC1005", "uncalled-accessor"),
+            finding("SC1007", "reactive-handler-frozen"),
+        ];
+        retain_enabled(crate::dialect::default_dialect(), &options, &mut findings).unwrap();
+        findings
+            .iter()
+            .map(|finding| finding.id.clone())
+            .collect::<Vec<_>>()
+    };
+    // SC1003 is not a member: the group never reaches it.
+    assert_eq!(
+        retained(r#""reactivity": { "enabled": false }"#),
+        ["SC1003"]
+    );
+    assert_eq!(
+        retained(
+            r#""reactivity": { "enabled": false },
+               "reactive-handler-frozen": { "enabled": true },
+               "strict-read-untracked": { "enabled": true }"#
+        ),
+        ["SC1001", "SC1003", "SC1007"]
+    );
+    assert_eq!(
+        retained(r#""reactivity": { "enabled": true }, "uncalled-accessor": { "enabled": false }"#),
+        ["SC1001", "SC1002", "SC1003", "SC1007"]
+    );
+}
+
 /// ADR 0384: `resolve-in-tracked-scope` and `until-in-tracked-scope` disable
 /// their own code of the merged rule only; the merged name disables both.
 #[test]

@@ -64,6 +64,12 @@ wrappers. Any other key is refused.
 }
 ```
 
+The `reactivity` key (upstream's name) sets `strict-read-untracked`,
+`reactive-read-after-await`, `uncalled-accessor` and `reactive-handler-frozen`
+together; a member the same file names keeps its own setting, whatever the key
+order. In ESLint, `solid-checker/reactivity` is accepted and does nothing:
+severity stays per member.
+
 ESLint's generated `v1` and `v2` configs include every `prefer-*` rule.
 Setting one to `off` opts out. The legacy `preferences-v1` and
 `preferences-v2` configs remain available for compatibility and are now
@@ -151,9 +157,11 @@ a superset of upstream's ([ADR 0381](../decisions.md#adr-0381)). Shipped renames
 projection shapes are built, its `delete` is not: TS2790 on a required property), SC2004 and SC2005 together as
 `no-await-primitive-in-tracked-scope` (ADR 0384; one name, two codes), and SC7006
 `valid-use-server` (ADR 0385; upstream's placement checks and `clientWrappers`
-are built, its acceptance of a re-export is not, and its wrapper list matches imports exactly). Decided and not yet shipped: `reactivity` as a group key over
+are built, its acceptance of a re-export is not, and its wrapper list matches imports exactly). `reactivity` is a group key over
 SC1001, SC1002, SC1005 and SC1007 ([ADR 0386](../decisions.md#adr-0386)), each
-member still configurable alone. Inline `eslint-disable` comments have no effect
+member still configurable alone. SC1003 stays outside it: upstream's `reactivity`
+also reports destructured props, which the checker reports as
+[no-destructure](no-destructure.md). Inline `eslint-disable` comments have no effect
 until [ADR 0387](../decisions.md#adr-0387) ships.
 
 Formatting, browser-policy, CSS-policy, compatibility-policy, and analyzer

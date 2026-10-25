@@ -319,6 +319,29 @@ pub const CODE_SCOPED_ALIASES: &[(&str, &str)] = &[
     ("until-in-tracked-scope", "SC2005"),
 ];
 
+/// Group keys (ADR 0386): one name that configures several rules at once, as
+/// eslint-plugin-solid's `reactivity` does for the four defects it reports. A
+/// group is not a rule: it has no finding, no code and no ESLint severity, and
+/// an explicit setting of a member wins over the group's.
+pub const RULE_GROUPS: &[(&str, &[&str])] = &[(
+    "reactivity",
+    &[
+        "strict-read-untracked",
+        "reactive-read-after-await",
+        "uncalled-accessor",
+        "reactive-handler-frozen",
+    ],
+)];
+
+/// The member rules of a group key, if `name` is one.
+#[must_use]
+pub fn rule_group(name: &str) -> Option<&'static [&'static str]> {
+    RULE_GROUPS
+        .iter()
+        .find(|(group, _)| *group == name)
+        .map(|(_, members)| *members)
+}
+
 /// The finding code a former rule name is limited to, if it is.
 #[must_use]
 pub fn rule_alias_code(name: &str) -> Option<&'static str> {
