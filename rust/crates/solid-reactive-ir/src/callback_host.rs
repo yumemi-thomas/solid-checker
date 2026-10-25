@@ -1018,6 +1018,7 @@ mod tests {
                 std::sync::Arc::new(entries.clone()),
             )]),
             exact_by_path: HashMap::from_iter([("case.tsx".into(), std::sync::Arc::new(entries))]),
+            locations: crate::indexes::EntityLocations::default(),
         };
         let facts = ProjectFacts {
             generation,

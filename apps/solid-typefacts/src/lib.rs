@@ -12,6 +12,7 @@ pub mod args;
 pub mod backend;
 pub mod binder_key;
 pub mod closure;
+pub(crate) mod completion;
 pub mod constants;
 pub mod context;
 pub mod contributions;

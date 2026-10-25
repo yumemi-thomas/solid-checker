@@ -12,29 +12,18 @@
 use crate::backend::BackendError;
 use crate::closure::{ClosureRetention, DemandClosure, SemanticDemandStages};
 use crate::context::Context;
-use crate::contributions::prepare_retained_contribution;
+use crate::contributions::RetainedContribution;
 use crate::demands::DemandGroup;
 use crate::gocompat::{clean, quote};
-use crate::model::{SemanticDemandRun, SemanticDemandRunResult};
+use crate::model::{RunAnswer, SemanticDemandRun};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 use typefacts::producer::{EntityRows, ProducerTable, rust_owned_transport_manifest};
 use typefacts::v3::EntityDemand;
 use typefacts::{AsyncFunctionFact, FileFact, SourceDigest};
-
-/// The clean locations of the demands that asked for async facts.
-fn async_locations(demands: &[EntityDemand]) -> Vec<typefacts::Location> {
-    demands
-        .iter()
-        .filter(|demand| demand.r#async)
-        .map(|demand| {
-            let mut location = demand.location.clone();
-            location.path = clean(&location.path).into();
-            location
-        })
-        .collect()
-}
 
 /// Async facts keyed by clean path, their expression paths cleaned.
 fn async_facts_by_path(facts: Vec<AsyncFunctionFact>) -> HashMap<String, Vec<AsyncFunctionFact>> {
@@ -79,7 +68,7 @@ fn cancelled(ctx: &Context) -> Result<(), BackendError> {
 /// closure of Go's materializer).
 fn rebuild_contributions(
     groups: &mut [DemandGroup],
-    results: Vec<SemanticDemandRunResult>,
+    results: Vec<RunAnswer>,
 ) -> Result<(), BackendError> {
     if results.len() != groups.len() {
         return Err(BackendError(format!(
@@ -93,9 +82,13 @@ fn rebuild_contributions(
             .demands
             .clone()
             .unwrap_or_else(|| Arc::from(Vec::new()));
-        group.contribution = Some(
-            prepare_retained_contribution(&group.path, &demands, result).map_err(BackendError)?,
-        );
+        let (entities, durable) = result
+            .into_rows(&group.path, &demands)
+            .map_err(BackendError)?;
+        group.contribution = Some(Rc::new(RefCell::new(RetainedContribution {
+            entities: Some(entities),
+            durable,
+        })));
     }
     Ok(())
 }
@@ -137,11 +130,10 @@ impl DemandClosure {
         generation: u64,
     ) -> Result<(ProducerTable, usize, SemanticDemandStages, ClosureRetention), BackendError> {
         let mut retention = ClosureRetention::default();
-        let result = self.materialize_groups(ctx, groups, generation, &mut retention);
-        for group in groups.iter_mut() {
-            group.release_expanded();
-        }
-        let (table, stages) = result?;
+        // A compact group keeps its expansion (and its async subset) for the
+        // group's lifetime: the kept passes hold the same allocation, so an
+        // unchanged group is neither expanded nor compared again.
+        let (table, stages) = self.materialize_groups(ctx, groups, generation, &mut retention)?;
         Ok((table, 0, stages, retention))
     }
 
@@ -153,7 +145,9 @@ impl DemandClosure {
         generation: u64,
         retention: &mut ClosureRetention,
     ) -> Result<(ProducerTable, SemanticDemandStages), BackendError> {
+        let mut phases = crate::trace::Phases::new(&self.trace);
         let source_digests = self.semantic_source_digests(ctx)?;
+        phases.mark("digestsNs");
         let mut table = ProducerTable::new(generation, "semantic-demand");
         table.sources.clone_from(&source_digests);
 
@@ -164,22 +158,21 @@ impl DemandClosure {
         // group's run holds only the rows that asked for async.
         let mut stages = SemanticDemandStages::default();
         let started = Instant::now();
-        let mut async_demands: Vec<EntityDemand> = Vec::new();
-        for group in groups.iter() {
-            group
-                .append_async_demands(&mut async_demands)
-                .map_err(BackendError)?;
+        let mut locations: Vec<typefacts::Location> = Vec::new();
+        for group in groups.iter_mut() {
+            locations.extend_from_slice(group.async_locations().map_err(BackendError)?);
         }
         let mut async_by_path = HashMap::new();
         stages.async_stage = started.elapsed();
+        phases.mark("asyncNs");
 
         // Every file is resolved: the store is empty at the start of a table.
         let started = Instant::now();
         for group in groups.iter_mut() {
             group.ensure_expanded().map_err(BackendError)?;
         }
+        phases.mark("expandNs");
         if !groups.is_empty() {
-            let locations = async_locations(&async_demands);
             let demands: Vec<Arc<[EntityDemand]>> = groups
                 .iter()
                 .map(|group| {
@@ -195,14 +188,19 @@ impl DemandClosure {
                 .map(|(group, demands)| SemanticDemandRun {
                     path: &group.path,
                     demands,
+                    shared: Some(demands),
                 })
                 .collect();
+            phases.mark("prepareNs");
             let (results, facts) = self.backend.per_file_demand_runs(ctx, &runs, &locations)?;
+            phases.mark("runsNs");
             async_by_path = async_facts_by_path(facts);
             drop(runs);
             rebuild_contributions(groups, results)?;
+            phases.mark("contributionsNs");
         }
         push_file_facts(&mut table, &source_digests, &mut async_by_path, ctx)?;
+        phases.mark("filesNs");
         // Files holding an id that is not a binder-level hash are counted;
         // the timings report them.
         for group in groups.iter() {
@@ -241,6 +239,7 @@ impl DemandClosure {
         }
         table.entities = EntityRows::Runs(runs);
         stages.assembly = started.elapsed();
+        phases.mark("assemblyNs");
         self.next_table_state_id += 1;
         if self.next_table_state_id == 0 {
             self.next_table_state_id += 1;
@@ -305,9 +304,12 @@ impl DemandClosure {
         );
         // Published for this generation's readers; the next table or update
         // discards them (`discard_derived_state`), never reuses them.
+        phases.mark("manifestNs");
         self.retained.commit(groups);
         self.previous_table = None;
         self.transport_changed_paths = None;
+        phases.mark("commitNs");
+        phases.report(&self.trace, "materialize");
         Ok((table, stages))
     }
 }

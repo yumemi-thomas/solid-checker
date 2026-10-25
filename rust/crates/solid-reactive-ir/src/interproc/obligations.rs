@@ -425,22 +425,6 @@ pub(super) fn push_unresolved_callee_callback_obligations(
     }
 }
 
-/// One reference's resolution to the binding that declared it.
-///
-/// `whole` separates `const value = f()` -- where `value` *is* `f()`'s result
-/// -- from `const [value] = f()` and `const { value } = f()`, where the name
-/// is bound to one slot of that result. A consumer deriving a value's shape
-/// from the initializer must have the former; the latter needs the slot, which
-/// the AST facts cannot name exactly for a nested, defaulted, or rest element.
-pub(super) struct BoundInitializer {
-    pub(super) initializer: Span,
-    /// The compiler symbol of the pattern name this reference resolves to,
-    /// not of the binding's first name: for `const [value, setValue] = f()` a
-    /// reference to `setValue` must not inherit `value`'s discovered identity.
-    pub(super) symbol: Option<SymbolId>,
-    pub(super) whole: bool,
-}
-
 /// The parameters each function of `file` reads a property of, or coerces,
 /// directly in its own body (item A of ways-to-improve § 3.3): the proposal
 /// input from which the generator describes a non-call `callbacks` item

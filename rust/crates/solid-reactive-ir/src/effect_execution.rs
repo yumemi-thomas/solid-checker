@@ -56,8 +56,8 @@ pub(crate) type ApplyCallRows = Vec<(String, Span, usize, ApplyExecution)>;
 impl crate::base::memo::Canonical for ApplyExecution {}
 
 /// One file's answer for one of the tables below, with what it read of the
-/// rest of the program (S7g): reused while the file is unchanged and every
-/// read answers as recorded ([`crate::base::reads`]).
+/// program, the file's own facts included (S7g): reused while the file is
+/// unchanged and every read answers as recorded ([`crate::base::reads`]).
 struct Chunk<T> {
     source_hash: solid_facts::core::SourceHash,
     compiler: std::sync::Arc<solid_facts::compiler::ExecutionMap>,
@@ -111,7 +111,15 @@ fn chunked<T: Clone>(
     {
         return chunk.value.clone();
     }
-    let (value, reads) = crate::base::reads::record(compute);
+    // The chunk reads the file's own entity rows (which primitive a call
+    // names, which function a reference resolves to) as well as its source:
+    // an edit elsewhere can re-point them with this file's text unchanged
+    // (an import alias that becomes or stops being a primitive). Its reads
+    // name the file itself, as they name every file the lookup hands out.
+    let (value, reads) = crate::base::reads::record(|| {
+        lookup.note_file_read(file);
+        compute()
+    });
     chunks.insert(
         file.path.shared(),
         Chunk {

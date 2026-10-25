@@ -60,7 +60,7 @@ fn project(source: &str) -> ProjectFacts {
 
 /// Every listed span names its symbol exactly: these fixtures describe spans
 /// whose entity covers them, so `exact` and `get` agree.
-fn entity_symbols(spans: &[(Span, &str)]) -> EntitySymbols {
+fn entity_symbols(facts: &ProjectFacts, spans: &[(Span, &str)]) -> EntitySymbols {
     let entries: HashMap<(u64, u64), SymbolId> = spans
         .iter()
         .map(|(span, symbol)| {
@@ -73,6 +73,7 @@ fn entity_symbols(spans: &[(Span, &str)]) -> EntitySymbols {
     EntitySymbols {
         by_path: HashMap::from_iter([(PATH.to_string(), Arc::new(entries.clone()))]),
         exact_by_path: HashMap::from_iter([(PATH.to_string(), Arc::new(entries))]),
+        locations: EntityLocations::of(&facts.typescript),
     }
 }
 
@@ -83,7 +84,7 @@ fn with_lookup<T>(
     body: impl FnOnce(&SemanticLookup<'_>) -> T,
 ) -> T {
     let facts = project(source);
-    let entities = entity_symbols(spans);
+    let entities = entity_symbols(&facts, spans);
     let ast_indexes = HashMap::default();
     let symbol_names = HashMap::default();
     let dialect = solid_dialect::Solid2;
@@ -265,7 +266,7 @@ fn with_lookup_in<T>(
     body: impl FnOnce(&SemanticLookup<'_>) -> T,
 ) -> T {
     let facts = project(source);
-    let entities = entity_symbols(spans);
+    let entities = entity_symbols(&facts, spans);
     let ast_indexes = HashMap::default();
     let symbol_names = HashMap::default();
     let dialect = solid_dialect::Solid2;
@@ -369,7 +370,7 @@ fn a_receiver_closure_is_reused_until_a_use_of_the_receiver_changes() {
             .map(|id| (id.span, "object"))
             .collect::<Vec<_>>();
         let facts = project(source);
-        let entities = entity_symbols(&spans);
+        let entities = entity_symbols(&facts, &spans);
         let ast_indexes = HashMap::default();
         let symbol_names = HashMap::default();
         let dialect = solid_dialect::Solid2;
@@ -675,7 +676,7 @@ fn member_callee_path(
         .iter()
         .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
         .collect::<HashMap<_, _>>();
-    let entities = entity_symbols(spans);
+    let entities = entity_symbols(&facts, spans);
     let symbol_names = HashMap::default();
     let dialect = solid_dialect::Solid2;
     let lookup = SemanticLookup::new(
@@ -960,7 +961,7 @@ fn memo_build<T>(
     spans: &[(Span, &str)],
     body: impl FnOnce(&SemanticLookup<'_>) -> T,
 ) -> (T, Vec<(&'static str, crate::base::memo::TableStats)>) {
-    let entities = entity_symbols(spans);
+    let entities = entity_symbols(facts, spans);
     let ast_indexes = HashMap::default();
     let symbol_names = HashMap::default();
     let dialect = solid_dialect::Solid2;
@@ -1054,7 +1055,7 @@ fn the_any_file_vetoes_follow_what_the_project_writes() {
 }
 
 #[test]
-fn parameter_completion_and_primitive_consts_are_memo_views() {
+fn parameter_completion_calls_are_a_memo_view() {
     let source = "function run(cb) { cb(); }\nfunction maybe(cb) { if (flag) cb(); }\n";
     let spans = [
         (span_of(source, "cb", 0), "s:run-cb"),
@@ -1073,14 +1074,6 @@ fn parameter_completion_and_primitive_consts_are_memo_views() {
     });
     let run = span_of(source, "function run(cb) { cb(); }", 0);
     assert_eq!(calls, HashSet::from_iter([(PATH.to_owned(), run, 0)]));
-
-    let source = "import { a } from \"./a\";\nexport const k = 1;\nexport const m = a;\n";
-    let facts = project(source);
-    let store = crate::base::memo::build::MemoStore::new(true, true);
-    let (consts, _) = memo_build(&facts, &store, &[], |lookup| {
-        lookup.exported_primitive_consts()
-    });
-    assert_eq!(consts, vec![(PATH.to_owned(), span_of(source, "k", 0))]);
 }
 
 #[test]
@@ -1105,6 +1098,7 @@ fn project_memos_are_reused_until_the_program_moves() {
     // moved, so nothing runs.
     let mut same = project_over(source, entities());
     same.typescript_changes = Some(solid_facts::TypeScriptChanges {
+        full: false,
         unchanged: true,
         ..Default::default()
     });
@@ -1129,6 +1123,7 @@ fn project_memos_are_reused_until_the_program_moves() {
     let edited_source = source.replace("label = \"x\"", "label = \"y\"");
     let mut edited = project_over(&edited_source, entities());
     edited.typescript_changes = Some(solid_facts::TypeScriptChanges {
+        full: false,
         unchanged: true,
         ..Default::default()
     });
@@ -1152,4 +1147,105 @@ fn project_memos_are_reused_until_the_program_moves() {
     let (answer, tables) = memo_build(&flipped, &store, &[], ask);
     assert_eq!(answer, (1, true, false));
     assert_eq!(stats_of(&tables, "tuple_iteration_veto").changed, 1);
+}
+
+/// [`memo_build`] that leaves the sweep to the caller
+/// ([`SemanticLookup::defer_end_memos`]): whether the build read a memo.
+fn memo_build_deferred<T>(
+    facts: &ProjectFacts,
+    store: &crate::base::memo::build::MemoStore,
+    body: impl FnOnce(&SemanticLookup<'_>) -> T,
+) -> (T, bool) {
+    let entities = entity_symbols(facts, &[]);
+    let ast_indexes = HashMap::default();
+    let symbol_names = HashMap::default();
+    let dialect = solid_dialect::Solid2;
+    let lookup = SemanticLookup::new(
+        facts,
+        &ast_indexes,
+        &entities,
+        &symbol_names,
+        &dialect,
+        false,
+    )
+    .with_memo_store(store);
+    let value = body(&lookup);
+    (value, lookup.defer_end_memos())
+}
+
+/// A sweep a build deferred is the sweep it would have run: the same entries
+/// go, run by `finish_deferred_end` or, when the caller never asks, by the
+/// next build's begin, which reads the store only after it. Without a memo
+/// read there is nothing to defer.
+#[test]
+fn a_deferred_sweep_is_the_sweep_run_later() {
+    let source = "declare function guard(message: string): never;\nfunction f() { guard(\"x\"); work(); }\nexport const label = \"x\";\n";
+    let facts = || {
+        project_over(
+            source,
+            vec![never_returning_entity(span_of(source, "guard", 1))],
+        )
+    };
+    let both = |lookup: &SemanticLookup<'_>| {
+        (
+            lookup.never_returning_calls().len(),
+            lookup.tuple_iteration_may_be_mutated(),
+        )
+    };
+    let one = |lookup: &SemanticLookup<'_>| lookup.never_returning_calls().len();
+    // The reference: the sweep runs when the build ends.
+    let immediate = crate::base::memo::build::MemoStore::new(true, true);
+    memo_build(&facts(), &immediate, &[], both);
+    let (_, immediate_second) = memo_build(&facts(), &immediate, &[], one);
+    assert_eq!(
+        stats_of(&immediate_second, "tuple_iteration_veto").entries,
+        0,
+        "the entry the second build did not ask for is swept"
+    );
+    let (_, immediate_third) = memo_build(&facts(), &immediate, &[], both);
+
+    // The same builds, the second one's sweep deferred and run by the caller.
+    let deferred = crate::base::memo::build::MemoStore::new(true, true);
+    memo_build(&facts(), &deferred, &[], both);
+    let (_, due) = memo_build_deferred(&facts(), &deferred, one);
+    assert!(due, "the build read a memo");
+    let report = deferred
+        .finish_deferred_end()
+        .expect("the build's sweep is due");
+    assert_eq!(report.tables, immediate_second);
+    assert!(deferred.finish_deferred_end().is_none(), "it runs once");
+    let (_, third) = memo_build(&facts(), &deferred, &[], both);
+    assert_eq!(third, immediate_third);
+
+    // The caller never asks: the next build's begin runs the sweep first.
+    let lazy = crate::base::memo::build::MemoStore::new(true, true);
+    memo_build(&facts(), &lazy, &[], both);
+    let (_, due) = memo_build_deferred(&facts(), &lazy, one);
+    assert!(due);
+    let (_, third) = memo_build(&facts(), &lazy, &[], both);
+    assert_eq!(third, immediate_third);
+    assert!(lazy.finish_deferred_end().is_none(), "begin ran it");
+
+    // A build that read no memo has nothing to sweep.
+    let silent = crate::base::memo::build::MemoStore::new(true, true);
+    let (_, due) = memo_build_deferred(&facts(), &silent, |_| ());
+    assert!(!due);
+    assert!(silent.finish_deferred_end().is_none());
+}
+
+/// A whole-program hazard asked in a recording is a recorded read (its
+/// probe's answer, `hand_outs`): a chunk that asked whether the program
+/// evaluates code reruns when that answer moves.
+#[test]
+fn a_hazard_question_is_a_recorded_read() {
+    for (source, expected) in [("eval(\"1\");\n", true), ("export const k = 1;\n", false)] {
+        let facts = project(source);
+        let store = crate::base::memo::build::MemoStore::new(true, true);
+        let ((present, reads), _) = memo_build(&facts, &store, &[], |lookup| {
+            lookup.begin_memos();
+            crate::base::reads::record(|| lookup.program_has_eval())
+        });
+        assert_eq!(present, expected, "{source}");
+        assert_eq!(reads.memos().len(), 1, "{source}: the hazard's probe");
+    }
 }

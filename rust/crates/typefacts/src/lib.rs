@@ -25,7 +25,7 @@ pub mod v3;
 pub use retained_table::{FactTable, Symbol};
 pub use session::{
     AnalysisDemand, Cancellation, CloseOutcome, DemandGroup, ExchangeTimings, FrameBridge,
-    Producer, Session, SessionError, TableChanges, UpdateTimings, owned_open_envelope,
+    Producer, Session, SessionError, TableChanges, UpdateGraph, UpdateTimings, owned_open_envelope,
 };
 
 pub const MAX_MESSAGE_BYTES: usize = 64 << 20;
@@ -1639,8 +1639,8 @@ pub struct ModuleImportFact {
 }
 
 /// Selects how much of the resolved module graph one request answers. The
-/// module inventory itself is unconditional: it is the operation's reason to
-/// exist.
+/// module inventory is the operation's reason to exist and is answered unless
+/// [`Self::omit_modules`] says the caller already holds it.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ModuleGraphDemand {
     /// Ask for resolved import provenance. With no `import_paths` this covers
@@ -1656,6 +1656,11 @@ pub struct ModuleGraphDemand {
     /// each specifier is written. A generated declaration file can repeat one
     /// `import("pkg")` type tens of thousands of times.
     pub distinct_bare_imports: bool,
+    /// Answer no module inventory: [`ModuleGraph::modules`] and
+    /// [`ModuleGraph::unmapped_roots`] come back empty, and
+    /// [`ModuleGraph::module`] finds nothing. For a caller that holds the
+    /// inventory and asks only about some files' imports.
+    pub omit_modules: bool,
 }
 
 impl ModuleGraphDemand {
@@ -1702,6 +1707,13 @@ impl ModuleGraphDemand {
     #[must_use]
     pub const fn with_packages(mut self) -> Self {
         self.packages = true;
+        self
+    }
+
+    /// Answer no module inventory ([`Self::omit_modules`]).
+    #[must_use]
+    pub const fn without_modules(mut self) -> Self {
+        self.omit_modules = true;
         self
     }
 }

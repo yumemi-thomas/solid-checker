@@ -11,7 +11,9 @@
 //!   read names ([`Emission::provider`]), and
 //! - for an `onSettled` cleanup, the callback it resolves to and that file's
 //!   source hash ([`Emission::callbacks`]): the cleanup proof reads the
-//!   callback's body.
+//!   callback's body. It also reads that file's entity rows, which another
+//!   file's edit can move under an unchanged text, so the emission records
+//!   the callback file as read (`note_file_read`).
 //!
 //! The dedup of `push_owner_requirement` keys on the requirement's path, so a
 //! file's emission is the same whichever other files are emitted around it,
@@ -164,6 +166,7 @@ pub(super) fn emit_file(
             cleanup_proof = target.and_then(|target| {
                 let node = graph.node(target)?;
                 let callback_file = inputs.indexes.files_by_path.get(node.path.as_str())?;
+                lookup.note_file_read(callback_file);
                 let callback = callback_file.ast.function_at(node.span)?;
                 Some(function_cleanup_return_proof(
                     lookup,

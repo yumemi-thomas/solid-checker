@@ -58,6 +58,14 @@ pub struct FileReferences {
     spaces: Vec<(SymbolId, u8)>,
 }
 
+impl FileReferences {
+    /// The ids this file's reference spaces are keyed by: the referenced
+    /// symbol's own id, before alias canonicalization (the groups' is after).
+    pub(crate) fn space_ids(&self) -> impl Iterator<Item = &SymbolId> {
+        self.spaces.iter().map(|(id, _)| id)
+    }
+}
+
 /// How much of a table's work was reused: pass outputs kept across tables
 /// (`passes`), and `symbols` rows answered from a pass.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

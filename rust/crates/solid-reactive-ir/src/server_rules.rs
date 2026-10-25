@@ -6,6 +6,8 @@
 //! emitted only where the vocabulary or the dialect's server-function model
 //! resolves — a 1.x project never sees them.
 
+use std::sync::OnceLock;
+
 use crate::HashSet;
 
 use solid_dialect::Primitive;
@@ -16,7 +18,7 @@ use typefacts::{ConstantValueKind, EntityFact, ResolvedCallValidity};
 
 use crate::execution_role::semantic_execution_role;
 use crate::owners::{containing_ast_function, jsx_element_is_loading};
-use crate::pipeline::{AnalysisContext, ProgramDraft};
+use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_balanced_results};
 use crate::{
     ExecutionRole, RichArgumentTransport, StaticDefect, StaticDefectKind, StaticViolation, location,
 };
@@ -42,88 +44,105 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
 /// queue"). The finding is uncertifiable because a boundary that settles
 /// *before* the flush still applies its writes; source analysis cannot prove
 /// which side of that request-time race any invocation reaches.
-fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    let mut server_rendering = None;
-    let mut loading_hosts: Option<HashSet<(&str, Span)>> = None;
-    for file in &ctx.facts.files {
-        let mut allowed = None;
-        for call in &file.ast.calls {
-            let Some(kind @ (Primitive::HttpStatus | Primitive::HttpHeader)) =
-                crate::call_primitive_name_cached(
-                    ctx.semantic_lookup,
-                    file,
-                    call,
-                    ctx.entities,
-                    ctx.symbol_names,
-                    ctx.dialect,
-                )
-                .as_ref()
-                .and_then(crate::PrimitiveName::primitive)
-            else {
-                continue;
-            };
-            let server_rendering = *server_rendering.get_or_insert_with(|| {
-                crate::source_discovery::project_server_rendering(
-                    ctx.facts,
-                    &ctx.rule_options.runtime,
-                    ctx.dialect,
-                )
-            });
-            // The whole claim is about the SSR shell flush. Where an explicit
-            // rendering selector proves the application is client-only there
-            // is no shell, no committed response head, and nothing to drop —
-            // so the obligation is discharged rather than reported. An
-            // unresolved premise still reports, because a server entry in
-            // another tsconfig or package would make the drop real.
-            if server_rendering == crate::source_discovery::ServerRenderingPremise::ProvenClientOnly
-            {
-                continue;
-            }
-            // Render-time scopes only. An event handler or deferred callback
-            // is a client-time (or post-render) call and is a no-op for a
-            // different reason than the post-flush drop; unknown scopes stay
-            // silent.
-            let allowed = allowed.get_or_insert_with(|| {
-                crate::execution_role::allowed_callback_spans(file, ctx.semantic_lookup)
-            });
-            let role = semantic_execution_role(
+fn http_response_after_flush<'a>(ctx: &AnalysisContext<'a>, draft: &mut ProgramDraft) {
+    // The project-wide premises, each decided once by whichever file needs it
+    // first and then shared: most projects have no `httpStatus` call, and ask
+    // neither.
+    let server_rendering = OnceLock::new();
+    let loading_hosts: OnceLock<HashSet<(&'a str, Span)>> = OnceLock::new();
+    // Each file's findings depend on the file and those premises only, so the
+    // files run on the analysis workers and their findings join in file order.
+    for violations in parallel_balanced_results(&ctx.facts.files, |file| {
+        http_response_in_file(ctx, file, &server_rendering, &loading_hosts)
+    }) {
+        draft.static_violations.extend(violations);
+    }
+}
+
+fn http_response_in_file<'a>(
+    ctx: &AnalysisContext<'a>,
+    file: &FileFacts,
+    server_rendering: &OnceLock<crate::source_discovery::ServerRenderingPremise>,
+    loading_hosts: &OnceLock<HashSet<(&'a str, Span)>>,
+) -> Vec<StaticViolation> {
+    let mut violations = Vec::new();
+    let mut allowed = None;
+    for call in &file.ast.calls {
+        let Some(kind @ (Primitive::HttpStatus | Primitive::HttpHeader)) =
+            crate::call_primitive_name_cached(
+                ctx.semantic_lookup,
                 file,
-                call.span,
-                allowed,
+                call,
                 ctx.entities,
                 ctx.symbol_names,
-                ctx.semantic_lookup,
-            );
-            if !matches!(
-                role,
-                ExecutionRole::UntrackedRendering | ExecutionRole::TrackedJsx
-            ) {
-                continue;
-            }
-            // Loading dominance, children position only: content in the
-            // boundary's `fallback` renders *with* the shell and its writes
-            // apply, so only the children subtree is post-flush material.
-            let dominated = call_under_loading_children(ctx, file, call.span)
-                || containing_ast_function(&file.ast, call.span).is_some_and(|function| {
-                    loading_hosts
-                        .get_or_insert_with(|| loading_wrapped_components(ctx))
-                        .contains(&(file.path.as_str(), function.span))
-                });
-            if !dominated {
-                continue;
-            }
-            // Both spellings come from the dialect rather than from this
-            // module. `static_api.rs` already asks `boundary_name` for the
-            // same boundary two rules away; this one had `<Loading>` written
-            // into three strings and the two primitive names into a `match`,
-            // which is a second copy of the vocabulary and the one that goes
-            // stale. A primitive the dialect cannot name is skipped rather
-            // than given a guessed spelling.
-            let Some(name) = ctx.dialect.name_of(kind) else {
-                continue;
-            };
-            let boundary = ctx.dialect.boundary_name(solid_dialect::Boundary::Async);
-            draft.static_violations.push(StaticViolation {
+                ctx.dialect,
+            )
+            .as_ref()
+            .and_then(crate::PrimitiveName::primitive)
+        else {
+            continue;
+        };
+        let server_rendering = *server_rendering.get_or_init(|| {
+            crate::source_discovery::project_server_rendering(
+                ctx.facts,
+                &ctx.rule_options.runtime,
+                ctx.dialect,
+            )
+        });
+        // The whole claim is about the SSR shell flush. Where an explicit
+        // rendering selector proves the application is client-only there
+        // is no shell, no committed response head, and nothing to drop —
+        // so the obligation is discharged rather than reported. An
+        // unresolved premise still reports, because a server entry in
+        // another tsconfig or package would make the drop real.
+        if server_rendering == crate::source_discovery::ServerRenderingPremise::ProvenClientOnly {
+            continue;
+        }
+        // Render-time scopes only. An event handler or deferred callback
+        // is a client-time (or post-render) call and is a no-op for a
+        // different reason than the post-flush drop; unknown scopes stay
+        // silent.
+        let allowed = allowed.get_or_insert_with(|| {
+            crate::execution_role::allowed_callback_spans(file, ctx.semantic_lookup)
+        });
+        let role = semantic_execution_role(
+            file,
+            call.span,
+            allowed,
+            ctx.entities,
+            ctx.symbol_names,
+            ctx.semantic_lookup,
+        );
+        if !matches!(
+            role,
+            ExecutionRole::UntrackedRendering | ExecutionRole::TrackedJsx
+        ) {
+            continue;
+        }
+        // Loading dominance, children position only: content in the
+        // boundary's `fallback` renders *with* the shell and its writes
+        // apply, so only the children subtree is post-flush material.
+        let dominated = call_under_loading_children(ctx, file, call.span)
+            || containing_ast_function(&file.ast, call.span).is_some_and(|function| {
+                loading_hosts
+                    .get_or_init(|| loading_wrapped_components(ctx))
+                    .contains(&(file.path.as_str(), function.span))
+            });
+        if !dominated {
+            continue;
+        }
+        // Both spellings come from the dialect rather than from this
+        // module. `static_api.rs` already asks `boundary_name` for the
+        // same boundary two rules away; this one had `<Loading>` written
+        // into three strings and the two primitive names into a `match`,
+        // which is a second copy of the vocabulary and the one that goes
+        // stale. A primitive the dialect cannot name is skipped rather
+        // than given a guessed spelling.
+        let Some(name) = ctx.dialect.name_of(kind) else {
+            continue;
+        };
+        let boundary = ctx.dialect.boundary_name(solid_dialect::Boundary::Async);
+        violations.push(StaticViolation {
                 id: "SC7005".into(),
                 rule: "http-response-after-flush".into(),
                 message: if server_rendering.renders() {
@@ -145,8 +164,8 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                 fixes: vec![],
                 uncertain: true,
             });
-        }
     }
+    violations
 }
 
 /// Whether `span` sits in the *children* of a `Loading` element in the same
@@ -376,241 +395,264 @@ fn push_module_directive_finding(
 fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     // The serializer proof is a project-wide scan of every call. Only a client
     // call to a server function can consume it, and most projects have none,
-    // so resolve it on first use rather than on entry.
-    let mut serializer_proof = None;
-    for file in &ctx.facts.files {
-        // A call site inside server-side code never crosses the client
-        // transport: in-process SSR and server-to-server calls run the
-        // original function directly (RFC 10).
+    // so resolve it on first use, once, rather than on entry.
+    let serializer_proof = OnceLock::new();
+    // A file's defects depend on the file and the serializer proof only, so
+    // the files run on the analysis workers and their defects join in file
+    // order. A serializer proof that is `Enabled` ends the rule at the first
+    // file that asks for it: that file keeps what it found before asking, and
+    // the files after it (which a walk in file order never reaches) add
+    // nothing.
+    for (defects, ends_rule) in parallel_balanced_results(&ctx.facts.files, |file| {
+        rich_arguments_in_file(ctx, file, &serializer_proof)
+    }) {
+        for defect in defects {
+            draft.push_defect(defect);
+        }
+        if ends_rule {
+            return;
+        }
+    }
+}
+
+/// One file's defects of [`server_function_rich_argument`], and whether the
+/// file found the project's serializer installed, which ends the rule.
+fn rich_arguments_in_file(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    serializer_proof: &OnceLock<SerializerProof>,
+) -> (Vec<StaticDefect>, bool) {
+    let mut defects = Vec::new();
+    // A call site inside server-side code never crosses the client
+    // transport: in-process SSR and server-to-server calls run the
+    // original function directly (RFC 10).
+    if file
+        .ast
+        .module_directives
+        .iter()
+        .any(|directive| directive.value == USE_SERVER)
+    {
+        return (defects, false);
+    }
+    for call in &file.ast.calls {
+        if call.arguments.is_empty() {
+            continue;
+        }
+        let Some((declaration_file, function)) = ctx
+            .semantic_lookup
+            .function_called_at(file.path.as_str(), call.callee)
+        else {
+            // A member read off a server function (`query.keyFor(x)`) is
+            // not that function, and nothing names it by its leading token.
+            // Unless TypeScript resolves the member to a declaration, whether
+            // its call crosses the transport is unproven: uncertain, never a
+            // violation. An invalid call is TypeScript's, as elsewhere here.
+            let unresolved_member =
+                match ctx.semantic_lookup.resolved_callee_call(file, call.callee) {
+                    None => true,
+                    Some(resolved) => {
+                        resolved.validity == ResolvedCallValidity::Valid
+                            && resolved.declaration.is_none()
+                    }
+                };
+            if unresolved_member && member_of_server_function(ctx, file, call.callee) {
+                push_rich_argument_uncertainty(
+                    &mut defects,
+                    file,
+                    call.arguments[0].span,
+                    "the member of a server function is not resolved, so whether its call crosses the transport is unproven",
+                );
+            }
+            continue;
+        };
+        let server_function = function.has_directive(USE_SERVER)
+            || (declaration_file
+                .ast
+                .module_directives
+                .iter()
+                .any(|directive| directive.value == USE_SERVER)
+                && declaration_file.path != file.path);
+        if !server_function {
+            continue;
+        }
+        match ctx.semantic_lookup.resolved_callee_call(file, call.callee) {
+            Some(resolved) if resolved.validity == ResolvedCallValidity::Valid => {}
+            // Recovery and unresolved calls are TypeScript-owned. Emitting
+            // a transport finding on the same invalid call would violate
+            // the project's no-duplicate boundary.
+            Some(_) => continue,
+            None => {
+                push_rich_argument_uncertainty(
+                    &mut defects,
+                    file,
+                    call.callee,
+                    "the compiler did not return the demanded call-validity fact",
+                );
+                continue;
+            }
+        }
+        // A call whose own lexical scope is extracted to the server (an
+        // enclosing "use server" function) is a direct server-side call.
         if file
             .ast
-            .module_directives
+            .functions
             .iter()
-            .any(|directive| directive.value == USE_SERVER)
+            .any(|scope| scope.body.contains(call.span) && scope.has_directive(USE_SERVER))
         {
             continue;
         }
-        for call in &file.ast.calls {
-            if call.arguments.is_empty() {
-                continue;
-            }
-            let Some((declaration_file, function)) = ctx
-                .semantic_lookup
-                .function_called_at(file.path.as_str(), call.callee)
-            else {
-                // A member read off a server function (`query.keyFor(x)`) is
-                // not that function, and nothing names it by its leading token.
-                // Unless TypeScript resolves the member to a declaration, whether
-                // its call crosses the transport is unproven: uncertain, never a
-                // violation. An invalid call is TypeScript's, as elsewhere here.
-                let unresolved_member =
-                    match ctx.semantic_lookup.resolved_callee_call(file, call.callee) {
-                        None => true,
-                        Some(resolved) => {
-                            resolved.validity == ResolvedCallValidity::Valid
-                                && resolved.declaration.is_none()
-                        }
-                    };
-                if unresolved_member && member_of_server_function(ctx, file, call.callee) {
+        for (index, argument) in call.arguments.iter().enumerate() {
+            if argument.spread {
+                if *serializer_proof.get_or_init(|| project_rich_argument_serializer(ctx))
+                    != SerializerProof::Enabled
+                {
                     push_rich_argument_uncertainty(
-                        draft,
-                        file,
-                        call.arguments[0].span,
-                        "the member of a server function is not resolved, so whether its call crosses the transport is unproven",
-                    );
-                }
-                continue;
-            };
-            let server_function = function.has_directive(USE_SERVER)
-                || (declaration_file
-                    .ast
-                    .module_directives
-                    .iter()
-                    .any(|directive| directive.value == USE_SERVER)
-                    && declaration_file.path != file.path);
-            if !server_function {
-                continue;
-            }
-            match ctx.semantic_lookup.resolved_callee_call(file, call.callee) {
-                Some(resolved) if resolved.validity == ResolvedCallValidity::Valid => {}
-                // Recovery and unresolved calls are TypeScript-owned. Emitting
-                // a transport finding on the same invalid call would violate
-                // the project's no-duplicate boundary.
-                Some(_) => continue,
-                None => {
-                    push_rich_argument_uncertainty(
-                        draft,
-                        file,
-                        call.callee,
-                        "the compiler did not return the demanded call-validity fact",
-                    );
-                    continue;
-                }
-            }
-            // A call whose own lexical scope is extracted to the server (an
-            // enclosing "use server" function) is a direct server-side call.
-            if file
-                .ast
-                .functions
-                .iter()
-                .any(|scope| scope.body.contains(call.span) && scope.has_directive(USE_SERVER))
-            {
-                continue;
-            }
-            for (index, argument) in call.arguments.iter().enumerate() {
-                if argument.spread {
-                    if *serializer_proof
-                        .get_or_insert_with(|| project_rich_argument_serializer(ctx))
-                        != SerializerProof::Enabled
-                    {
-                        push_rich_argument_uncertainty(
-                            draft,
-                            file,
-                            argument.span,
-                            "a spread hides the runtime argument values",
-                        );
-                    }
-                    continue;
-                }
-                let proof_span = if argument.runtime_type_escape {
-                    argument.value_span.unwrap_or(argument.span)
-                } else {
-                    argument.span
-                };
-                let Some(entity) = ctx
-                    .semantic_lookup
-                    .entity_at(file.path.as_str(), proof_span)
-                else {
-                    push_rich_argument_uncertainty(
-                        draft,
+                        &mut defects,
                         file,
                         argument.span,
-                        if argument.runtime_type_escape {
-                            "the compiler did not return the demanded runtime-value facts hidden by this type assertion"
-                        } else {
-                            "the compiler did not return the demanded argument facts"
-                        },
+                        "a spread hides the runtime argument values",
                     );
+                }
+                continue;
+            }
+            let proof_span = if argument.runtime_type_escape {
+                argument.value_span.unwrap_or(argument.span)
+            } else {
+                argument.span
+            };
+            let Some(entity) = ctx
+                .semantic_lookup
+                .entity_at(file.path.as_str(), proof_span)
+            else {
+                push_rich_argument_uncertainty(
+                    &mut defects,
+                    file,
+                    argument.span,
+                    if argument.runtime_type_escape {
+                        "the compiler did not return the demanded runtime-value facts hidden by this type assertion"
+                    } else {
+                        "the compiler did not return the demanded argument facts"
+                    },
+                );
+                continue;
+            };
+            let matched = entity
+                .library_types
+                .as_deref()
+                .and_then(|types| rich_transport_member(types));
+            let Some(matched) = matched else {
+                if argument_is_proven_json_safe(argument, entity) {
                     continue;
-                };
-                let matched = entity
-                    .library_types
-                    .as_deref()
-                    .and_then(|types| rich_transport_member(types));
-                let Some(matched) = matched else {
-                    if argument_is_proven_json_safe(argument, entity) {
-                        continue;
-                    }
-                    let serializer = *serializer_proof
-                        .get_or_insert_with(|| project_rich_argument_serializer(ctx));
-                    if serializer == SerializerProof::Enabled {
-                        return;
-                    }
-                    // JSON.stringify reaches nested values, so a Date sealed
-                    // one level down is lost exactly as a top-level Date is —
-                    // and a graph closed against spreads, computed and
-                    // duplicate keys, and accessors is JSON-safe for the same
-                    // reason. A graph that proves neither falls through to the
-                    // obligation below.
-                    if serializer == SerializerProof::Disabled {
-                        match object_argument_graph_proof(ctx, file, argument, proof_span) {
-                            ObjectGraphProof::RichLeaf => {
-                                push_nested_rich_argument_violation(
-                                    draft,
-                                    file,
-                                    argument.span,
-                                    function,
-                                    declaration_file,
-                                );
-                                continue;
-                            }
-                            ObjectGraphProof::JsonSafe => continue,
-                            ObjectGraphProof::Open => {}
-                        }
-                    }
-                    if argument_is_proven_json_unsafe_primitive(entity) {
-                        if serializer == SerializerProof::Unresolved {
-                            push_rich_argument_uncertainty(
-                                draft,
-                                file,
-                                argument.span,
-                                "the argument is outside JSON's primitive domain, but the project's serializer configuration cannot be resolved exactly",
-                            );
-                        } else {
-                            push_non_json_primitive_violation(
-                                draft,
+                }
+                let serializer =
+                    *serializer_proof.get_or_init(|| project_rich_argument_serializer(ctx));
+                if serializer == SerializerProof::Enabled {
+                    return (defects, true);
+                }
+                // JSON.stringify reaches nested values, so a Date sealed
+                // one level down is lost exactly as a top-level Date is —
+                // and a graph closed against spreads, computed and
+                // duplicate keys, and accessors is JSON-safe for the same
+                // reason. A graph that proves neither falls through to the
+                // obligation below.
+                if serializer == SerializerProof::Disabled {
+                    match object_argument_graph_proof(ctx, file, argument, proof_span) {
+                        ObjectGraphProof::RichLeaf => {
+                            push_nested_rich_argument_violation(
+                                &mut defects,
                                 file,
                                 argument.span,
                                 function,
                                 declaration_file,
                             );
+                            continue;
                         }
+                        ObjectGraphProof::JsonSafe => continue,
+                        ObjectGraphProof::Open => {}
+                    }
+                }
+                if argument_is_proven_json_unsafe_primitive(entity) {
+                    if serializer == SerializerProof::Unresolved {
+                        push_rich_argument_uncertainty(
+                            &mut defects,
+                            file,
+                            argument.span,
+                            "the argument is outside JSON's primitive domain, but the project's serializer configuration cannot be resolved exactly",
+                        );
                     } else {
-                        push_rich_argument_uncertainty(
-                            draft,
+                        push_non_json_primitive_violation(
+                            &mut defects,
                             file,
                             argument.span,
-                            if serializer == SerializerProof::Unresolved {
-                                "neither the argument's JSON safety nor the project's serializer configuration can be resolved exactly"
-                            } else {
-                                "the argument's complete JSON safety cannot be proven from the available type and literal facts"
-                            },
+                            function,
+                            declaration_file,
                         );
                     }
-                    continue;
-                };
-                // The descriptor is quoted in the message so the report names the
-                // type the author wrote; the decision above never reads it. A
-                // literal argument carries no descriptor demand, so the value
-                // the author wrote stands in for it.
-                let descriptor = entity.type_descriptor.as_ref().map_or_else(
-                    || file.source_text(argument.span).unwrap_or("this argument"),
-                    |descriptor| descriptor.text.as_ref(),
-                );
-                // Natural HTTP encodings: a lone Uint8Array/ArrayBuffer
-                // argument — or one in trailing position after JSON-safe
-                // leading arguments — is sent as a body, not as JSON
-                // (probed), so those positions stay silent.
-                if matched.natural_encoding
-                    && (call.arguments.len() == 1 || index + 1 == call.arguments.len())
-                {
-                    continue;
-                }
-                match *serializer_proof.get_or_insert_with(|| project_rich_argument_serializer(ctx))
-                {
-                    SerializerProof::Enabled => return,
-                    SerializerProof::Unresolved => {
-                        push_rich_argument_uncertainty(
-                            draft,
-                            file,
-                            argument.span,
-                            "the project's server-function serializer configuration cannot be resolved exactly",
-                        );
-                        continue;
-                    }
-                    SerializerProof::Disabled => {}
-                }
-                let name = function
-                    .name
-                    .as_ref()
-                    .and_then(|name| declaration_file.source_text(name.span))
-                    .unwrap_or("this server function");
-                draft.push_defect(StaticDefect {
-                    kind: StaticDefectKind::ServerFunctionRichArgument {
-                        transport: RichArgumentTransport::ResolvedType {
-                            function: name.to_string(),
-                            descriptor: descriptor.to_string(),
-                            member: matched.member.to_string(),
+                } else {
+                    push_rich_argument_uncertainty(
+                        &mut defects,
+                        file,
+                        argument.span,
+                        if serializer == SerializerProof::Unresolved {
+                            "neither the argument's JSON safety nor the project's serializer configuration can be resolved exactly"
+                        } else {
+                            "the argument's complete JSON safety cannot be proven from the available type and literal facts"
                         },
-                    },
-                    location: location(file.path.shared(), argument.span),
-                    analysis_context: String::new(),
-                    fixes: vec![],
-                    uncertain: false,
-                });
+                    );
+                }
+                continue;
+            };
+            // The descriptor is quoted in the message so the report names the
+            // type the author wrote; the decision above never reads it. A
+            // literal argument carries no descriptor demand, so the value
+            // the author wrote stands in for it.
+            let descriptor = entity.type_descriptor.as_ref().map_or_else(
+                || file.source_text(argument.span).unwrap_or("this argument"),
+                |descriptor| descriptor.text.as_ref(),
+            );
+            // Natural HTTP encodings: a lone Uint8Array/ArrayBuffer
+            // argument — or one in trailing position after JSON-safe
+            // leading arguments — is sent as a body, not as JSON
+            // (probed), so those positions stay silent.
+            if matched.natural_encoding
+                && (call.arguments.len() == 1 || index + 1 == call.arguments.len())
+            {
+                continue;
             }
+            match *serializer_proof.get_or_init(|| project_rich_argument_serializer(ctx)) {
+                SerializerProof::Enabled => return (defects, true),
+                SerializerProof::Unresolved => {
+                    push_rich_argument_uncertainty(
+                        &mut defects,
+                        file,
+                        argument.span,
+                        "the project's server-function serializer configuration cannot be resolved exactly",
+                    );
+                    continue;
+                }
+                SerializerProof::Disabled => {}
+            }
+            let name = function
+                .name
+                .as_ref()
+                .and_then(|name| declaration_file.source_text(name.span))
+                .unwrap_or("this server function");
+            defects.push(StaticDefect {
+                kind: StaticDefectKind::ServerFunctionRichArgument {
+                    transport: RichArgumentTransport::ResolvedType {
+                        function: name.to_string(),
+                        descriptor: descriptor.to_string(),
+                        member: matched.member.to_string(),
+                    },
+                },
+                location: location(file.path.shared(), argument.span),
+                analysis_context: String::new(),
+                fixes: vec![],
+                uncertain: false,
+            });
         }
     }
+    (defects, false)
 }
 
 /// A deliberately small safe set, proved from the value and compiler type the
@@ -671,7 +713,7 @@ fn argument_is_proven_json_unsafe_primitive(entity: &EntityFact) -> bool {
 }
 
 fn push_nested_rich_argument_violation(
-    draft: &mut ProgramDraft,
+    defects: &mut Vec<StaticDefect>,
     file: &solid_facts::FileFacts,
     span: Span,
     function: &solid_facts::ast::FunctionFact,
@@ -682,7 +724,7 @@ fn push_nested_rich_argument_violation(
         .as_ref()
         .and_then(|name| declaration_file.source_text(name.span))
         .unwrap_or("this server function");
-    draft.push_defect(StaticDefect {
+    defects.push(StaticDefect {
         kind: StaticDefectKind::ServerFunctionRichArgument {
             transport: RichArgumentTransport::NestedValue {
                 function: name.to_string(),
@@ -696,7 +738,7 @@ fn push_nested_rich_argument_violation(
 }
 
 fn push_non_json_primitive_violation(
-    draft: &mut ProgramDraft,
+    defects: &mut Vec<StaticDefect>,
     file: &solid_facts::FileFacts,
     span: Span,
     function: &solid_facts::ast::FunctionFact,
@@ -707,7 +749,7 @@ fn push_non_json_primitive_violation(
         .as_ref()
         .and_then(|name| declaration_file.source_text(name.span))
         .unwrap_or("this server function");
-    draft.push_defect(StaticDefect {
+    defects.push(StaticDefect {
         kind: StaticDefectKind::ServerFunctionRichArgument {
             transport: RichArgumentTransport::NonJsonPrimitive {
                 function: name.to_string(),
@@ -757,12 +799,12 @@ fn member_of_server_function(
 }
 
 fn push_rich_argument_uncertainty(
-    draft: &mut ProgramDraft,
+    defects: &mut Vec<StaticDefect>,
     file: &solid_facts::FileFacts,
     span: Span,
     reason: &str,
 ) {
-    draft.push_defect(StaticDefect {
+    defects.push(StaticDefect {
         kind: StaticDefectKind::ServerFunctionRichArgument {
             transport: RichArgumentTransport::Unresolved {
                 reason: reason.to_string(),
@@ -829,9 +871,9 @@ struct RichMember {
 ///   literal wins.
 ///
 /// Any of them missing returns `None` and the caller keeps its obligation.
-fn object_argument_graph_proof<'a>(
-    ctx: &AnalysisContext<'a>,
-    file: &'a solid_facts::FileFacts,
+fn object_argument_graph_proof(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
     argument: &solid_facts::ast::ArgumentFact,
     argument_span: Span,
 ) -> ObjectGraphProof {
@@ -905,9 +947,9 @@ enum ObjectGraphProof {
 /// property that is there. Concluding the graph is *safe* additionally needs
 /// every property to be a plain data property: `{ get when() { return new
 /// Date(); } }` contains no literal Date anywhere and is still not JSON-safe.
-fn object_graph_proof<'a>(
-    ctx: &AnalysisContext<'a>,
-    file: &'a solid_facts::FileFacts,
+fn object_graph_proof(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
     literal: Span,
 ) -> ObjectGraphProof {
     if file

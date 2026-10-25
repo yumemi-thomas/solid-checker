@@ -2,10 +2,34 @@
 
 use super::*;
 
+/// Whether the argument at `position` is handed, exactly, to a function
+/// declaration that calls it on every completion. A declaration is
+/// initialized when its module is instantiated; a `const` callee may still
+/// be in its temporal dead zone (ADR 0218's review round 3).
+fn forwarded_answer(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    position: usize,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    crate::execution_role::project_callee_at_parameter(file, call, position, lookup).is_some_and(
+        |(callee_file, callee, exact)| {
+            exact
+                && callee.kind == solid_facts::ast::FunctionKind::Declaration
+                && lookup.parameter_called_on_every_completion(
+                    callee_file.path.as_str(),
+                    callee.span,
+                    position,
+                )
+        },
+    )
+}
+
 pub(super) fn discover_summary_nodes(
     file: &solid_facts::FileFacts,
     project_indexes: &ProjectIndexes<'_>,
     entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
 ) -> Vec<SummaryNode> {
     let mut nodes = Vec::new();
     let typescript_file = project_indexes.typescript_file(file.path.as_str());
@@ -48,6 +72,9 @@ pub(super) fn discover_summary_nodes(
                 })
                 .or_else(|| {
                     crate::owners::own_method_name(file, function).and_then(|name| {
+                        // A declaration another file's call resolves to can
+                        // name the method (final review R3, plausible 2).
+                        lookup.note_declaration_symbol_at(file.path.as_str(), name.span);
                         project_indexes.method_symbol(file.path.as_str(), name.span)
                     })
                 });
@@ -539,20 +566,7 @@ fn record_forwarded_parameter_invocations(
                             parameter.shape == solid_facts::ast::BindingShape::Identifier
                         })
                 });
-            let forwarded = aligned
-                && crate::execution_role::project_callee_at_parameter(file, call, position, lookup)
-                    .is_some_and(|(callee_file, callee, exact)| {
-                        // A declaration is initialized when its module is
-                        // instantiated; a `const` callee may still be in its
-                        // temporal dead zone (ADR 0218's review round 3).
-                        exact
-                            && callee.kind == solid_facts::ast::FunctionKind::Declaration
-                            && lookup.parameter_called_on_every_completion(
-                                callee_file.path.as_str(),
-                                callee.span,
-                                position,
-                            )
-                    });
+            let forwarded = aligned && forwarded_answer(file, call, position, lookup);
             if forwarded
                 && !contribution
                     .invoked_parameters

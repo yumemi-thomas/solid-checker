@@ -36,6 +36,12 @@ mod components;
 pub(crate) use components::unproven_component_status;
 mod compound;
 mod event_delivery;
+mod hand_outs;
+pub(crate) use hand_outs::{
+    HAND_OUT_TABLES, HAND_OUT_TABLES_END, HAND_OUT_TABLES_FROM, HandOutTables,
+};
+mod entity_locations;
+pub(crate) use entity_locations::EntityLocations;
 mod identity_wrappers;
 mod memo_probes;
 mod returned_invocations;
@@ -43,6 +49,8 @@ mod returned_uses;
 pub(crate) use identity_wrappers::{
     IdentityWrapper, WrapperAt, identity_wrapped_literal_span, identity_wrapper_candidates,
 };
+#[cfg(test)]
+pub(crate) use memo_probes::as_probe;
 pub(crate) use memo_probes::{BindingResolutionRows, probing};
 pub(crate) use returned_invocations::{INVOCATION_TABLES_FROM, InvocationTables};
 pub(crate) use returned_uses::{RETURNED_TABLES_FROM, ReturnedTables, UseKind};
@@ -64,12 +72,6 @@ pub(crate) use project_memos::{
 pub(super) struct ReflectiveDefinitionNames {
     any: bool,
     sole_keys: HashSet<String>,
-}
-
-#[derive(Default)]
-pub(super) struct BindingDeclarations<'a> {
-    initialized_by_symbol: HashMap<(&'a str, &'a SymbolId), &'a solid_facts::ast::BindingFact>,
-    by_name_span: HashMap<(&'a str, Span), &'a solid_facts::ast::BindingFact>,
 }
 
 /// Per-build cache of `returned_callback_invocation_sites` per factory call:
@@ -167,38 +169,6 @@ pub(crate) fn constant_string_key(file: &FileFacts, key: Span) -> Option<String>
 /// file after its declaration: as an assignment target or inside one (a
 /// destructuring pattern), or as a loop head (`for (x of …)`). A write of a
 /// member of it (`x.y = …`) does not rebind it.
-/// Whether some function in `file` returns a bare identifier, or a `new` of a
-/// callee spelled `Proxy` (ADR 0287): the only shapes whose callee syntax a
-/// returned-source proof (ADR 0222) reads beyond the summaries and Type Facts
-/// the caches compare. A same-file `return g(…)` forward (ADR 0287) proves
-/// nothing unless its file also holds one of these. The interprocedural
-/// result cache counts such a file as call-role syntax
-/// (`interproc::call_role_syntax`); a chunk records the proof's answers it
-/// reads instead (ADR 0392, [`crate::base::reads::Section::ReturnedSources`]).
-pub(crate) fn returns_source_root(file: &FileFacts) -> bool {
-    file.ast
-        .returns
-        .iter()
-        .chain(
-            file.ast
-                .functions
-                .iter()
-                .filter_map(|function| function.expression_return.as_ref()),
-        )
-        .filter_map(|returned| returned.argument)
-        .any(|argument| {
-            let argument = file.ast.peel_ts_sugar_span(argument);
-            file.ast.identifiers.iter().any(|identifier| {
-                identifier.span == argument
-                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
-            }) || file.ast.calls.iter().any(|call| {
-                call.construct
-                    && call.span == argument
-                    && file.source_text(file.ast.peel_ts_sugar_span(call.callee)) == Some("Proxy")
-            })
-        })
-}
-
 pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
     binding_written_by(file, declaration, false)
 }
@@ -455,6 +425,9 @@ pub(super) struct EntitySymbols {
     /// The entries of `by_path` whose symbol names the whole span
     /// (`EntityFact::symbol_covers_span`).
     pub(super) exact_by_path: HashMap<String, PathSymbols>,
+    /// The entity rows themselves, by position (`EntityLocations`): patched
+    /// beside the symbols, for the same paths.
+    pub(super) locations: EntityLocations,
 }
 
 /// One path's entity symbols by span. Shared, and changed only through
@@ -519,7 +492,8 @@ impl EntitySymbols {
     }
 }
 
-type DeclarationSymbols<'a> = HashMap<(&'a str, u64, u64), &'a str>;
+/// By path, then span.
+type DeclarationSymbols<'a> = HashMap<&'a str, HashMap<(u64, u64), &'a str>>;
 
 /// Symbols addressable by an exact declaration location.
 ///
@@ -529,28 +503,64 @@ type DeclarationSymbols<'a> = HashMap<(&'a str, u64, u64), &'a str>;
 /// preserving the direct-then-declaration order of the per-method lookup this
 /// replaces -- which rescanned every project entity twice per call.
 fn declaration_symbols(typescript: &TypeScriptTable) -> DeclarationSymbols<'_> {
-    let mut by_location = DeclarationSymbols::default();
-    for entity in typescript
-        .entities()
-        .filter(|entity| !entity.symbol.is_empty())
-    {
-        by_location
-            .entry((
-                entity.location.path.as_ref(),
-                entity.location.start_byte,
-                entity.location.end_byte,
-            ))
-            .or_insert(entity.symbol.as_ref());
+    // The table's entities are in path order: each path's run is indexed on
+    // a worker, in the run's order, so a span's first entity names it.
+    let entities = typescript.entities().collect::<Vec<_>>();
+    let mut runs = Vec::new();
+    let mut start = 0;
+    for index in 1..=entities.len() {
+        if index == entities.len() || entities[index].location.path != entities[start].location.path
+        {
+            runs.push(&entities[start..index]);
+            start = index;
+        }
     }
-    for declaration in typescript
-        .entities()
-        .filter_map(|entity| entity.resolved_call.as_deref())
-        .filter_map(|call| call.declaration.as_ref())
-        .filter(|declaration| !declaration.symbol.is_empty())
-    {
+    let indexed = crate::pipeline::parallel_slice_results(&runs, |run| {
+        let mut by_span = HashMap::<(u64, u64), &str>::default();
+        let mut declarations = Vec::new();
+        for entity in *run {
+            if !entity.symbol.is_empty() {
+                by_span
+                    .entry((entity.location.start_byte, entity.location.end_byte))
+                    .or_insert(entity.symbol.as_ref());
+            }
+            if let Some(declaration) = entity
+                .resolved_call
+                .as_deref()
+                .and_then(|call| call.declaration.as_ref())
+                .filter(|declaration| !declaration.symbol.is_empty())
+            {
+                declarations.push(declaration);
+            }
+        }
+        (run[0].location.path.as_ref(), by_span, declarations)
+    });
+    let mut by_location = DeclarationSymbols::default();
+    let mut declarations = Vec::new();
+    for (run, (path, by_span, run_declarations)) in runs.iter().zip(indexed) {
+        match by_location.entry(path) {
+            std::collections::hash_map::Entry::Vacant(vacant) => {
+                vacant.insert(by_span);
+            }
+            // A later run of a path: its spans come after the earlier run's,
+            // so the run's entities are read in the table's order.
+            std::collections::hash_map::Entry::Occupied(mut earlier) => {
+                for entity in run.iter().filter(|entity| !entity.symbol.is_empty()) {
+                    earlier
+                        .get_mut()
+                        .entry((entity.location.start_byte, entity.location.end_byte))
+                        .or_insert(entity.symbol.as_ref());
+                }
+            }
+        }
+        declarations.push(run_declarations);
+    }
+    // A declaration names a span no entity named, the first in table order.
+    for declaration in declarations.into_iter().flatten() {
         by_location
+            .entry(declaration.location.path.as_ref())
+            .or_default()
             .entry((
-                declaration.location.path.as_ref(),
                 declaration.location.start_byte,
                 declaration.location.end_byte,
             ))
@@ -565,6 +575,8 @@ pub(super) struct ProjectIndexes<'a> {
     typescript: &'a TypeScriptTable,
     pub(super) symbols_by_id: HashMap<&'a str, TypeScriptSymbol<'a>>,
     declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
+    facts: &'a ProjectFacts,
+    resolution_digests: OnceLock<crate::base::file_table::ResolutionDigests>,
 }
 
 impl<'a> ProjectIndexes<'a> {
@@ -597,7 +609,18 @@ impl<'a> ProjectIndexes<'a> {
             typescript: &facts.typescript,
             symbols_by_id,
             declaration_symbols: OnceLock::new(),
+            facts,
+            resolution_digests: OnceLock::new(),
         }
+    }
+
+    /// The digest of `path`'s import resolutions
+    /// ([`crate::base::file_table::resolution_digests`]).
+    pub(super) fn resolution_digest(&self, path: &str) -> Option<[u8; 32]> {
+        self.resolution_digests
+            .get_or_init(|| crate::base::file_table::resolution_digests(self.facts))
+            .get(path)
+            .copied()
     }
 
     pub(super) fn typescript_file(&self, path: &str) -> Option<&'a FileFact> {
@@ -615,7 +638,8 @@ impl<'a> ProjectIndexes<'a> {
     fn method_symbol_ref(&self, path: &str, span: Span) -> Option<&'a str> {
         self.declaration_symbols
             .get_or_init(|| declaration_symbols(self.typescript))
-            .get(&(path, u64::from(span.start), u64::from(span.end)))
+            .get(path)?
+            .get(&(u64::from(span.start), u64::from(span.end)))
             .copied()
     }
 
@@ -757,23 +781,6 @@ pub(super) struct ResultAccessForwarded {
     pub(super) primitive: solid_dialect::Primitive,
 }
 
-/// The entity at each exact `(path, start_byte, end_byte)`: the first in
-/// `entities`' order when several share one location.
-pub(crate) fn first_entity_by_location<'a>(
-    entities: impl Iterator<Item = &'a EntityFact>,
-) -> HashMap<(&'a str, u64, u64), &'a EntityFact> {
-    let mut map = HashMap::default();
-    for entity in entities {
-        map.entry((
-            entity.location.path.as_ref(),
-            entity.location.start_byte,
-            entity.location.end_byte,
-        ))
-        .or_insert(entity);
-    }
-    map
-}
-
 /// Lazy project-wide lookups that replace repeated whole-project scans.
 ///
 /// Every map is built at most once per build, on first use, in the exact
@@ -802,6 +809,10 @@ pub(super) struct SemanticLookup<'a> {
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
     functions_by_symbol: crate::base::reads::Recorded<HashMap<&'a str, SymbolFunction>>,
+    /// `functions_by_symbol` by bucket, for the hand-out reads (`hand_outs`).
+    function_buckets: OnceLock<Vec<hand_outs::FunctionBucket>>,
+    /// This build's hand-out reads, each asked of the store once.
+    hand_out_reads: hand_outs::HandOutReads,
     /// L2: the memo tables ([`crate::base::memo`]); ADR 0346's identity
     /// wrappers are the first.
     memos: crate::base::memo::build::LookupMemos<'a>,
@@ -823,9 +834,6 @@ pub(super) struct SemanticLookup<'a> {
     /// [`Self::property_may_be_defined_reflectively_as`], summarised once
     /// over the project so each per-name query is a set lookup.
     reflective_definition_names: crate::base::reads::Recorded<ReflectiveDefinitionNames>,
-    /// Per file path: the first binding with an initializer that declares each
-    /// symbol, and the first binding declaring a name at each span.
-    binding_declarations: crate::base::reads::Recorded<BindingDeclarations<'a>>,
     /// The invocation sites of each factory call's returned function, by
     /// file path and call span. Several passes ask the same factory call.
     returned_invocation_sites: ReturnedInvocationSites,
@@ -835,9 +843,6 @@ pub(super) struct SemanticLookup<'a> {
     intrinsics: crate::base::reads::Recorded<intrinsics::Intrinsics>,
     /// ADR 0351: each member read that names a closed object literal's function.
     closed_members: crate::base::reads::Recorded<HashMap<(&'a str, Span), Span>>,
-    entities_by_location:
-        crate::base::reads::Recorded<HashMap<(&'a str, u64, u64), &'a EntityFact>>,
-    contained_entities_by_path: crate::base::reads::Recorded<HashMap<&'a str, Vec<&'a EntityFact>>>,
     descriptors_by_symbol: crate::base::reads::Recorded<HashMap<&'a str, &'a TypeDescriptor>>,
     callability_by_symbol: crate::base::reads::Recorded<HashMap<&'a str, Callability>>,
     symbols_by_id:
@@ -861,13 +866,17 @@ pub(super) struct SemanticLookup<'a> {
     file_table: crate::base::FileTable,
     /// Each path's TypeFacts references, read by the references index.
     reference_rows: OnceLock<crate::base::file_table::ReferenceRows>,
+    /// Each path's import resolutions, digested into its Entities section.
+    resolution_digests: OnceLock<crate::base::file_table::ResolutionDigests>,
     /// L1: the base indexes, each folded on first read ([`crate::base`]).
     base: crate::base::BaseIndexes,
     file_primitives: OnceLock<Vec<crate::base::reads::Recorded<FilePrimitives>>>,
     file_named_callback_roles:
         OnceLock<Vec<crate::base::reads::Recorded<super::NamedCallbackRoles>>>,
-    project_primitives: crate::base::reads::Recorded<HashSet<solid_dialect::Primitive>>,
-    callback_capabilities: crate::base::reads::Recorded<DialectCallbackCapabilities>,
+    /// Read by every file's flags (`Section::ProjectPrimitives`, noted by
+    /// the accessors): plain caches, so a hot flag read replays nothing.
+    project_primitives: OnceLock<HashSet<solid_dialect::Primitive>>,
+    callback_capabilities: OnceLock<DialectCallbackCapabilities>,
     returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
     project_has_component_type: crate::base::reads::Recorded<bool>,
     /// Proven components, then functions whose only missing proof is an
@@ -1084,6 +1093,12 @@ impl<'a> SemanticLookup<'a> {
         self.memos.end()
     }
 
+    /// [`Self::end_memos`] without the sweep, which the caller runs later
+    /// ([`crate::base::memo::build::LookupMemos::defer_end`]).
+    pub(crate) fn defer_end_memos(&self) -> bool {
+        self.memos.defer_end()
+    }
+
     /// Records the closed program's namespace census (ADR 0347). The pipeline
     /// sets it once per build, before any owner pass reads it.
     /// `reads` are what computing it read ([`crate::base::reads`]): a reader
@@ -1113,6 +1128,8 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(crate) fn hands_out_by_name(&self, path: &str, function: Span) -> bool {
+        // Every file's namespace uses of the module decide it.
+        self.note_namespace_hand_outs_of(path);
         self.namespace_hand_outs
             .get()
             .is_some_and(|hand_outs| hand_outs.named(path, function))
@@ -1121,6 +1138,7 @@ impl<'a> SemanticLookup<'a> {
     /// Whether the module at `path`'s namespace escapes with no name the
     /// analysis can read (ADR 0347, amendment). Until the census is set, nothing does.
     pub(crate) fn escapes_unnamed(&self, path: &str) -> bool {
+        self.note_namespace_hand_outs_of(path);
         self.namespace_hand_outs
             .get()
             .is_some_and(|hand_outs| hand_outs.escapes_unnamed(path))
@@ -1155,6 +1173,8 @@ impl<'a> SemanticLookup<'a> {
             entities,
             symbol_names,
             functions_by_symbol: crate::base::reads::Recorded::new(),
+            function_buckets: OnceLock::new(),
+            hand_out_reads: hand_outs::HandOutReads::default(),
             memos: crate::base::memo::build::LookupMemos::owned(&file_table),
             invocation_flow_answers: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
@@ -1166,11 +1186,8 @@ impl<'a> SemanticLookup<'a> {
             reflective_definition_names: crate::base::reads::Recorded::new(),
             returned_invocation_sites: ReturnedInvocationSites::default(),
             invocation_answers: returned_invocations::State::default(),
-            binding_declarations: crate::base::reads::Recorded::new(),
             intrinsics: crate::base::reads::Recorded::new(),
             closed_members: crate::base::reads::Recorded::new(),
-            entities_by_location: crate::base::reads::Recorded::new(),
-            contained_entities_by_path: crate::base::reads::Recorded::new(),
             descriptors_by_symbol: crate::base::reads::Recorded::new(),
             callability_by_symbol: crate::base::reads::Recorded::new(),
             symbols_by_id: crate::base::reads::Recorded::new(),
@@ -1184,12 +1201,13 @@ impl<'a> SemanticLookup<'a> {
             bindings_by_symbol: crate::base::reads::Recorded::new(),
             bindings_by_reference: crate::base::reads::Recorded::new(),
             file_table,
+            resolution_digests: OnceLock::new(),
             reference_rows: OnceLock::new(),
             base: crate::base::BaseIndexes::default(),
             file_primitives: OnceLock::new(),
             file_named_callback_roles: OnceLock::new(),
-            project_primitives: crate::base::reads::Recorded::new(),
-            callback_capabilities: crate::base::reads::Recorded::new(),
+            project_primitives: OnceLock::new(),
+            callback_capabilities: OnceLock::new(),
             returned_callback_proof_digest: OnceLock::new(),
             project_has_component_type: crate::base::reads::Recorded::new(),
             component_functions: OnceLock::new(),
@@ -1225,6 +1243,9 @@ impl<'a> SemanticLookup<'a> {
     /// binding initializer in this project. That makes the set a sound domain
     /// for probing what the dialect models.
     fn project_primitives(&self) -> &HashSet<solid_dialect::Primitive> {
+        // Every file's names: a reader's answer moves with any file's (final
+        // review R2, finding 4).
+        crate::base::reads::note_once(crate::base::reads::Section::ProjectPrimitives);
         self.project_primitives.get_or_init(|| {
             self.symbol_names
                 .values()
@@ -1234,6 +1255,7 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(super) fn callback_capabilities(&self) -> DialectCallbackCapabilities {
+        crate::base::reads::note_once(crate::base::reads::Section::ProjectPrimitives);
         *self.callback_capabilities.get_or_init(|| {
             let mut capabilities = DialectCallbackCapabilities::default();
             for primitive in self.project_primitives() {
@@ -1615,15 +1637,57 @@ impl<'a> SemanticLookup<'a> {
                     self.hazard_present(crate::base::Hazard::SynchronousDispatch),
                 )]);
             }
-            Section::ExportedPrimitiveConsts => {
-                for (path, span) in self.exported_primitive_consts() {
-                    text(&mut hasher, &path);
-                    hasher.update(span.start.to_le_bytes());
-                    hasher.update(span.end.to_le_bytes());
-                }
-            }
             Section::ReflectivePrototypeWrite => {
                 hasher.update([u8::from(self.reflective_prototype_write_present())]);
+            }
+            Section::RouteComponents => {
+                spans(
+                    &mut hasher,
+                    self.route_component_values()
+                        .iter()
+                        .map(|(path, span)| (path.as_str(), *span)),
+                );
+            }
+            Section::ContextSymbols => {
+                let mut symbols = self.context_symbols().iter().copied().collect::<Vec<_>>();
+                symbols.sort_unstable();
+                for symbol in symbols {
+                    text(&mut hasher, symbol);
+                    let mut references = self
+                        .symbols_by_id()
+                        .get(symbol)
+                        .map(|candidate| {
+                            candidate
+                                .references()
+                                .map(|reference| {
+                                    (
+                                        reference.path.as_ref(),
+                                        reference.start_byte,
+                                        reference.end_byte,
+                                    )
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                    references.sort_unstable();
+                    for (path, start, end) in references {
+                        text(&mut hasher, path);
+                        hasher.update(start.to_le_bytes());
+                        hasher.update(end.to_le_bytes());
+                    }
+                    hasher.update([0xfe]);
+                }
+            }
+            Section::ProjectPrimitives => {
+                let mut primitives = self
+                    .project_primitives()
+                    .iter()
+                    .map(|primitive| format!("{primitive:?}"))
+                    .collect::<Vec<_>>();
+                primitives.sort_unstable();
+                for primitive in primitives {
+                    text(&mut hasher, &primitive);
+                }
             }
             Section::ReflectiveDefinition => {
                 hasher.update([u8::from(
@@ -1707,9 +1771,12 @@ impl<'a> SemanticLookup<'a> {
                         let _ = self.object_member_targets();
                     })
                 });
-                warm(&|| {
-                    let _ = self.component_functions();
-                });
+                // The components lane is the last to finish once the others
+                // are done, so it takes the whole pool, not its share of lanes.
+                let _whole_pool = crate::pipeline::AnalysisWorkerLimit::enter(
+                    crate::pipeline::analysis_worker_limit_for_lanes(1),
+                );
+                let _ = self.component_functions();
             });
         });
     }
@@ -1742,6 +1809,12 @@ impl crate::base::reads::ReadAnswers for SemanticLookup<'_> {
         use crate::base::reads::MemoCheck;
         if store != self.memos.store().id() {
             return MemoCheck::Moved;
+        }
+        if !crate::interproc::accessor_provenance::memo_read_decidable(
+            self.memos.store(),
+            read.table,
+        ) {
+            return MemoCheck::Undecided;
         }
         match self.memo_world().changed_at_checked(read.table, read.query) {
             (_, true) => MemoCheck::Undecided,
@@ -1789,6 +1862,21 @@ impl<'a> SemanticLookup<'a> {
 
     /// The position of a file in project facts, for the per-file memo tables.
     fn file_index(&self, file: &FileFacts) -> usize {
+        // A file of this build's facts names its slot by its address: the
+        // last slot of its id, found without hashing its path.
+        let files = &self.facts.files;
+        let size = std::mem::size_of::<FileFacts>();
+        let offset = (std::ptr::from_ref(file) as usize).wrapping_sub(files.as_ptr() as usize);
+        if size != 0
+            && offset.is_multiple_of(size)
+            && offset / size < files.len()
+            && let Some(last) = self
+                .file_table
+                .slots_of(self.file_table.slot_id(offset / size))
+                .last()
+        {
+            return *last;
+        }
         self.file_table
             .last_slot(file.path.as_str())
             .expect("per-file lookup for a file outside project facts")
@@ -1869,8 +1957,32 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn object_member_targets(&self) -> &crate::object_members::Targets {
         crate::base::reads::note(crate::base::reads::Section::MemberTargets);
+        self.object_member_target_map()
+    }
+
+    fn object_member_target_map(&self) -> &crate::object_members::Targets {
         self.object_members
             .get_or_init(|| crate::base::reads::suppress(|| crate::object_members::index(self)))
+    }
+
+    /// The exact object-member target of the call at `site`: a read of the
+    /// targets of `site`'s file, not of the whole map.
+    pub(crate) fn object_member_target_at(&self, site: &Location) -> Option<&(String, Span)> {
+        if !self.note_member_targets_of(site.path.as_ref()) {
+            crate::base::reads::note(crate::base::reads::Section::MemberTargets);
+        }
+        self.object_member_target_map().get(site)
+    }
+
+    /// Whether the member at `span` of the file at `path` has an exact
+    /// object-literal receiver: a read of that file's census, not the whole.
+    pub(crate) fn literal_receiver_member_at(&self, path: &str, span: Span) -> bool {
+        if !self.note_literal_receivers_of(path) {
+            crate::base::reads::note(crate::base::reads::Section::LiteralReceivers);
+        }
+        self.literal_receiver_census_map()
+            .all
+            .contains(&(path.to_owned(), span))
     }
 
     /// ADR 0358: what each spread argument of an intrinsic element supplies.
@@ -1894,6 +2006,10 @@ impl<'a> SemanticLookup<'a> {
 
     fn literal_receiver_census(&self) -> &crate::object_members::LiteralReceiverCensus {
         crate::base::reads::note(crate::base::reads::Section::LiteralReceivers);
+        self.literal_receiver_census_map()
+    }
+
+    fn literal_receiver_census_map(&self) -> &crate::object_members::LiteralReceiverCensus {
         self.literal_receiver_members.get_or_init(|| {
             crate::base::reads::suppress(|| crate::object_members::literal_receiver_members(self))
         })
@@ -1904,9 +2020,8 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         callee: Span,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
-        let (path, span) = self
-            .object_member_targets()
-            .get(&crate::location(file.path.shared(), callee))?;
+        let (path, span) =
+            self.object_member_target_at(&crate::location(file.path.shared(), callee))?;
         let file = self.file_by_path(path)?;
         Some((file, file.ast.function_at(*span)?))
     }
@@ -2023,14 +2138,19 @@ impl<'a> SemanticLookup<'a> {
             sources: crate::base::ViewSources {
                 ast_indexes: self.ast_indexes,
                 symbols: self.entities,
-                entities: self.entities_by_location(),
                 typescript: &self.facts.typescript,
                 references: &self.reference_rows,
+                resolutions: Some(self.resolution_digests()),
             },
             constants: crate::base::BuildConstants {
                 dialect: self.dialect,
             },
         }
+    }
+
+    fn resolution_digests(&self) -> &crate::base::file_table::ResolutionDigests {
+        self.resolution_digests
+            .get_or_init(|| crate::base::file_table::resolution_digests(self.facts))
     }
 
     fn base_views(&self) -> crate::base::Views<'_> {
@@ -2047,7 +2167,12 @@ impl<'a> SemanticLookup<'a> {
     }
 
     /// Whether some analyzed file has `hazard`.
+    /// Whether some file has `hazard`: a whole-program answer, recorded for
+    /// the computation recording as its probe's (`indexes::hand_outs`).
     pub(crate) fn hazard_present(&self, hazard: crate::base::Hazard) -> bool {
+        self.note_probe_read(crate::base::memo::probes::Probe::Hazard(hazard), || {
+            crate::base::memo::probes::PolledKey::Unit
+        });
         self.base
             .hazards(|| self.base_views())
             .contains_key(&hazard)
@@ -2099,9 +2224,15 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn file_by_path(&self, path: &str) -> Option<&'a FileFacts> {
         let facts: &'a ProjectFacts = self.facts;
-        self.file_table
-            .last_slot(path)
-            .map(|slot| &facts.files[slot])
+        // A hand-out (`hand_outs`): the slot a path names, and its file.
+        let slot = self.file_table.last_slot(path);
+        match slot {
+            Some(slot) => self.note_slot_read(slot),
+            None => self.note_probe_read(crate::base::memo::probes::Probe::PathFile, || {
+                Self::symbol_key(path)
+            }),
+        }
+        slot.map(|slot| &facts.files[slot])
     }
 
     /// A missing symbol is missing reference evidence, not an empty census.
@@ -2114,6 +2245,10 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(super) fn symbol_references_if_present(&self, symbol: &str) -> Option<Vec<Location>> {
+        // Every file's references of the symbol (`hand_outs`).
+        self.note_probe_read(crate::base::memo::probes::Probe::SymbolReferences, || {
+            Self::symbol_key(symbol)
+        });
         self.symbols_by_id()
             .get(symbol)
             .map(|candidate| candidate.references().cloned().collect())
@@ -2129,6 +2264,9 @@ impl<'a> SemanticLookup<'a> {
     /// ADR 0334: whether `span` in `path` is a component value of a route's
     /// options that the audited `@tanstack/solid-router` only renders.
     pub(super) fn route_component_value(&self, path: &str, span: Span) -> bool {
+        // A whole-program census: a router configuration in another file
+        // can name the value (`crate::base::reads::Section`).
+        crate::base::reads::note(crate::base::reads::Section::RouteComponents);
         self.route_component_values()
             .contains(&(path.to_string(), span))
     }
@@ -2192,59 +2330,6 @@ impl<'a> SemanticLookup<'a> {
         (!paths.is_empty()).then_some(paths)
     }
 
-    fn binding_declarations(&self) -> &BindingDeclarations<'a> {
-        self.binding_declarations.get_or_init(|| {
-            let entities = self.entities();
-            let mut declarations = BindingDeclarations::default();
-            for file in self.files() {
-                let path = file.path.as_str();
-                for binding in &file.ast.bindings {
-                    for name in &binding.names {
-                        declarations
-                            .by_name_span
-                            .entry((path, name.span))
-                            .or_insert(binding);
-                        if binding.initializer.is_some()
-                            && let Some(symbol) = entities.at(path, name.span)
-                        {
-                            declarations
-                                .initialized_by_symbol
-                                .entry((path, symbol))
-                                .or_insert(binding);
-                        }
-                    }
-                }
-            }
-            declarations
-        })
-    }
-
-    /// The first binding of `path`, in file order, that has an initializer and
-    /// a name whose entity is `symbol`.
-    pub(crate) fn initialized_binding_of_symbol(
-        &self,
-        path: &str,
-        symbol: &SymbolId,
-    ) -> Option<&'a solid_facts::ast::BindingFact> {
-        self.binding_declarations()
-            .initialized_by_symbol
-            .get(&(path, symbol))
-            .copied()
-    }
-
-    /// The first binding of `path`, in file order, with a name written at
-    /// exactly `span`.
-    pub(crate) fn binding_named_at(
-        &self,
-        path: &str,
-        span: Span,
-    ) -> Option<&'a solid_facts::ast::BindingFact> {
-        self.binding_declarations()
-            .by_name_span
-            .get(&(path, span))
-            .copied()
-    }
-
     /// The memoised result for the factory call at `span` in `path`.
     pub(crate) fn returned_invocation_sites_memo(
         &self,
@@ -2266,6 +2351,11 @@ impl<'a> SemanticLookup<'a> {
             crate::base::reads::replay(&reads);
             return sites;
         }
+        // Inside a probe the hand-outs note nothing, so the reads would be
+        // incomplete for later readers: not kept (final review R2, finding 7).
+        if probing() {
+            return std::sync::Arc::new(compute());
+        }
         // Computed outside the lock: the computation re-enters the lookup.
         // Its reads are kept for every later reader ([`crate::base::reads`]).
         let (computed, reads) = crate::base::reads::record(|| std::sync::Arc::new(compute()));
@@ -2279,6 +2369,10 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(super) fn symbol_references(&self, symbol: &str) -> Vec<Location> {
+        // Every file's references of the symbol (`hand_outs`).
+        self.note_probe_read(crate::base::memo::probes::Probe::SymbolReferences, || {
+            Self::symbol_key(symbol)
+        });
         self.symbols_by_id()
             .get(symbol)
             .map(|candidate| candidate.references().cloned().collect())
@@ -2299,13 +2393,19 @@ impl<'a> SemanticLookup<'a> {
         &self,
         symbol: &str,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::ClassFact)> {
+        // A hand-out (`hand_outs`): the answer, and the file it names.
+        self.note_probe_read(crate::base::memo::probes::Probe::ClassFor, || {
+            Self::symbol_key(symbol)
+        });
         let [declaration] = self.symbols_by_id().get(symbol)?.declarations() else {
             return None;
         };
         if &*declaration.kind != "class" {
             return None;
         }
-        let file = &self.facts.files[self.first_file_index(&declaration.location.path)?];
+        let slot = self.first_file_index(&declaration.location.path)?;
+        self.note_slot_read(slot);
+        let file = &self.facts.files[slot];
         let (Ok(start), Ok(end)) = (
             u32::try_from(declaration.location.start_byte),
             u32::try_from(declaration.location.end_byte),
