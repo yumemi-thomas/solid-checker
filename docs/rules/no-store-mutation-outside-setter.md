@@ -33,11 +33,11 @@ symbol:
 
 The runtime drops all of them outside a setter: the proxy's `set` trap
 returns `true` without storing (`@solidjs/signals@2.0.0-rc.17`
-`dist/dev.js:5690-5700`), and an in-place array method reaches it once per
+`dist/dev.js:5691-5700`), and an in-place array method reaches it once per
 element and for `length`. Probed on rc.17: `delete`, all nine mutators, and a
 write to a projection result outside its compute function are dropped
 (STORE_WRITE_OUTSIDE_SETTER, `:5420-5455`); the trap for `delete` is
-`:5760-5766`. TypeScript accepts the mutators and projection writes on rc.17
+`:5761-5767`. TypeScript accepts the mutators and projection writes on rc.17
 (`Store<T> = T`; a nested array is mutable on every release), which the
 tsc oracle checks against the published typings.
 

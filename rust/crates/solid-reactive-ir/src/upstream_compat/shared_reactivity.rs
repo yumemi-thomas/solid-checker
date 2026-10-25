@@ -1361,7 +1361,7 @@ const ARRAY_MUTATORS: [&str; 9] = [
 /// = T` from `@solidjs/signals` rc.7, and a nested array is mutable on every
 /// release), and the runtime drops it: every element write and the `length`
 /// write reach the proxy's `set` trap, which returns `true` without storing
-/// (rc.17 `dist/dev.js:5690-5700`, ADR 0383).
+/// (rc.17 `dist/dev.js:5691-5700`, ADR 0383).
 fn no_store_mutator_call(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,

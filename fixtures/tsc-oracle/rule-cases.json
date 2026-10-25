@@ -1033,7 +1033,7 @@
       "expect": "silent",
       "checker": "reports",
       "checkerCount": 9,
-      "why": "SC2003's in-place array arm (ADR 0383). All nine `Array.prototype` mutators on a store path type-check on the audited rc.17 (`Store<T> = T`, and a nested array is mutable on every release), while the proxy's `set` trap returns without storing outside a setter (rc.17 `dist/dev.js:5690-5700`; probed: every mutator dropped, STORE_WRITE_OUTSIDE_SETTER warned). The call must resolve to the standard library's `Array` method: the project fixture `store-mutators` pins the silent spellings.",
+      "why": "SC2003's in-place array arm (ADR 0383). All nine `Array.prototype` mutators on a store path type-check on the audited rc.17 (`Store<T> = T`, and a nested array is mutable on every release), while the proxy's `set` trap returns without storing outside a setter (rc.17 `dist/dev.js:5691-5700`; probed: every mutator dropped, STORE_WRITE_OUTSIDE_SETTER warned). The call must resolve to the standard library's `Array` method: the project fixture `store-mutators` pins the silent spellings.",
       "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ items: [3, 1, 2] });\nexport function Mutators() {\n  store.items.push(1);\n  store.items.pop();\n  store.items.shift();\n  store.items.unshift(0);\n  store.items.splice(0, 1);\n  store.items.sort();\n  store.items.reverse();\n  store.items.fill(7);\n  store.items.copyWithin(0, 1);\n}\n"
     },
     {
@@ -1043,7 +1043,7 @@
       "expect": "silent",
       "checker": "reports",
       "checkerCount": 2,
-      "why": "SC2003's projection arm (ADR 0383). A `createProjection` result is a derived store: an assignment or an in-place mutator through it outside its compute function type-checks (`Store<T> = T`) and is dropped (rc.17 `dist/dev.js:5690-5700`; probed). The finding names the projection, not a setter.",
+      "why": "SC2003's projection arm (ADR 0383). A `createProjection` result is a derived store: an assignment or an in-place mutator through it outside its compute function type-checks (`Store<T> = T`) and is dropped (rc.17 `dist/dev.js:5691-5700`; probed). The finding names the projection, not a setter.",
       "code": "import { createProjection } from \"solid-js\";\nconst selected = createProjection<{ list: number[]; other?: boolean }>((draft) => {\n  draft.other = true;\n}, { list: [] });\nexport function Outside() {\n  selected.other = true;\n  selected.list.push(1);\n}\n"
     },
     {
@@ -1079,7 +1079,7 @@
       "allow": [
         2790
       ],
-      "why": "Upstream's `delete store.path` shape, not adopted (ADR 0381, 0383). The proxy drops it outside a setter (rc.17 `deleteProperty` trap `dist/dev.js:5760-5766`; probed), but for a required property under strictNullChecks `tsc` reports TS2790 (\"The operand of a 'delete' operator must be optional\"), so the write is TypeScript's. The property whose type includes `undefined` (`nick` below, or an optional one) type-checks, and no Type Fact says that at a delete operand, so the checker stays silent on both (docs/open-work.md). Not strict-only in the checker's favour: a non-strict project is silent in `tsc` too, and the checker's silence there is the fail-closed default.",
+      "why": "Upstream's `delete store.path` shape, not adopted (ADR 0381, 0383). The proxy drops it outside a setter (rc.17 `deleteProperty` trap `dist/dev.js:5761-5767`; probed), but for a required property under strictNullChecks `tsc` reports TS2790 (\"The operand of a 'delete' operator must be optional\"), so the write is TypeScript's. The property whose type includes `undefined` (`nick` below, or an optional one) type-checks, and no Type Fact says that at a delete operand, so the checker stays silent on both (docs/open-work.md). Not strict-only in the checker's favour: a non-strict project is silent in `tsc` too, and the checker's silence there is the fail-closed default.",
       "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ req: { id: 1 }, user: { nick: undefined as string | undefined } });\nexport function Remove() {\n  delete store.req.id;\n  delete store.user.nick;\n}\n"
     },
     {

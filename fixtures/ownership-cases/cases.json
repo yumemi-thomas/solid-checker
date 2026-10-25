@@ -1779,7 +1779,7 @@
     ],
     "absent": []
    },
-   "note": "Upstream eslint-plugin-solid 0.18.1's array-method shape (test case 3), adopted: a call whose callee resolves to the standard library's `Array` method on a path of a `createStore` read proxy. TypeScript accepts it on the audited rc.17 (`Store<T> = T`) and the proxy's `set` trap drops every element and `length` write outside a setter (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5690-5700`; probed for all nine mutators). Unlike upstream, which matches the method name, a project method or typed array of the same name is silent (fixtures/reactive-ir/store-mutators)."
+   "note": "Upstream eslint-plugin-solid 0.18.1's array-method shape (test case 3), adopted: a call whose callee resolves to the standard library's `Array` method on a path of a `createStore` read proxy. TypeScript accepts it on the audited rc.17 (`Store<T> = T`) and the proxy's `set` trap drops every element and `length` write outside a setter (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5691-5700`; probed for all nine mutators). Unlike upstream, which matches the method name, a project method or typed array of the same name is silent (fixtures/reactive-ir/store-mutators)."
   },
   {
    "id": "no-store-mutation-outside-setter/projection-write/001",
@@ -1829,7 +1829,7 @@
     ],
     "absent": []
    },
-   "note": "Upstream's `mutateProjection` shape (test case 7) with the update and mutator forms: a `createProjection` result is a derived store, and a write through it outside the compute function is dropped (rc.17 `dist/dev.js:5690-5700`; probed). The write through the draft inside the compute function is a different binding and commits."
+   "note": "Upstream's `mutateProjection` shape (test case 7) with the update and mutator forms: a `createProjection` result is a derived store, and a write through it outside the compute function is dropped (rc.17 `dist/dev.js:5691-5700`; probed). The write through the draft inside the compute function is a different binding and commits."
   },
   {
    "id": "no-store-mutation-outside-setter/own-setter-write/001",
@@ -1850,7 +1850,7 @@
      }
     ]
    },
-   "note": "Kept divergence from eslint-plugin-solid 0.18.1 (ADR 0383): upstream's test case 6 (\"mutating the read proxy is wrong even inside the setter\") reports a write through the read proxy inside its own setter callback. On rc.17 it commits: `storeSetter` adds the store to `writeScopes` for the callback (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5847-5866`), so the `set` trap's `inDraft(target)` holds (`:4955-4957`, `:5690-5700`) and the value lands after `flush()` (probed: `count` reads 5, and a `push` of the store's array through the proxy there lands too). A write through another store's proxy inside the callback is still dropped (`scopeKey` differs) and stays a finding (fixtures/reactive-ir/store-mutators `OtherSetter`)."
+   "note": "Kept divergence from eslint-plugin-solid 0.18.1 (ADR 0383): upstream's test case 6 (\"mutating the read proxy is wrong even inside the setter\") reports a write through the read proxy inside its own setter callback. On rc.17 it commits: `storeSetter` adds the store to `writeScopes` for the callback (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5847-5866`), so the `set` trap's `inDraft(target)` holds (`:4955-4957`, `:5691-5700`) and the value lands after `flush()` (probed: `count` reads 5, and a `push` of the store's array through the proxy there lands too). A write through another store's proxy inside the callback is still dropped (`scopeKey` differs) and stays a finding (fixtures/reactive-ir/store-mutators `OtherSetter`)."
   },
   {
    "id": "no-store-mutation-outside-setter/projection-compute-write/001",
@@ -1907,7 +1907,7 @@
     ],
     "absent": []
    },
-   "note": "Upstream's `delete store.path` shape (test case 4) is not adopted where TypeScript speaks (ADR 0381): for a required property under strictNullChecks the published rc.17 typings give TS2790 (\"The operand of a 'delete' operator must be optional\") at the operand, and the checker is silent. The proxy does drop the delete outside a setter (`deleteProperty` trap `dist/dev.js:5760-5766`; probed). A property whose type includes `undefined` or an optional one type-checks, and no Type Fact says that at a delete operand, so it stays unreported (docs/open-work.md)."
+   "note": "Upstream's `delete store.path` shape (test case 4) is not adopted where TypeScript speaks (ADR 0381): for a required property under strictNullChecks the published rc.17 typings give TS2790 (\"The operand of a 'delete' operator must be optional\") at the operand, and the checker is silent. The proxy does drop the delete outside a setter (`deleteProperty` trap `dist/dev.js:5761-5767`; probed). A property whose type includes `undefined` or an optional one type-checks, and no Type Fact says that at a delete operand, so it stays unreported (docs/open-work.md)."
   },
   {
    "id": "valid-use-server/placement/001",
