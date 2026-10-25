@@ -5,7 +5,7 @@
 //! part of its key. `IncrementalBuilder` compares its answer with a fresh
 //! build here explicitly (shadow mode off), so these tests do not depend on
 //! `SOLID_CHECKER_IR_SHADOW`. Each case names the reuse path it exercises
-//! (`docs/` and the IR's `ReusePlan`): the study that found them is
+//! (`docs/decisions.md`): the study that found them is
 //! tsrs-plan/p5-ir-incremental-study.md section 2.5.
 
 use std::{env, fs, path::PathBuf, sync::Arc};
@@ -50,7 +50,8 @@ const STUB: &str = r#"declare module "solid-js" {
   export function createSignal<T>(value: T): [() => T, (value: T) => void];
   export function createMemo<T>(compute: () => T): () => T;
   export function createReaction(onInvalidate: () => void): (tracking: () => void) => void;
-  export function createEffect<T>(compute: () => T, apply: (value: T) => void): void;
+  export function createEffect<T>(compute: () => T, apply: (value: T) => void, options?: { defer?: boolean }): void;
+  export function onSettled(callback: () => void | (() => void)): void;
 }
 
 declare namespace JSX {
@@ -236,9 +237,9 @@ fn options_rendering(rendering: Option<RuntimeRendering>) -> RuleOptions {
 }
 
 /// 2.5, first path: `RuleOptions` are in the retained program's identity but
-/// not in the cache domain or `ReusePlan`'s late-stage gate. A generation that
-/// changes only trivia keeps the TypeScript table, so the late stages' cached
-/// aggregates are offered for reuse under different rendering options.
+/// not in the cache domain. A generation that changes only trivia keeps the
+/// TypeScript table, so the late stages' kept chunks are offered for reuse
+/// under different rendering options.
 #[test]
 fn changing_rule_options_between_generations_never_reuses_a_stale_late_stage() {
     let Some(mut project) = Project::open("ssr-client-boundary", &["App.tsx"]) else {
@@ -262,7 +263,7 @@ fn changing_rule_options_between_generations_never_reuses_a_stale_late_stage() {
 
 /// 2.5, second path: `runtime_symbol_redirects` are generation-request facts
 /// outside the retained TypeScript snapshot. The index rebuild honours them
-/// (a non-empty map forces it) but `ReusePlan` decided "TypeScript unchanged"
+/// (a non-empty map forces it) but the build decided "TypeScript unchanged"
 /// from the snapshot delta alone, so source discovery, reachability and the
 /// late stages were offered results computed under the other redirects.
 /// The redirected pairs are every ordered pair of the project's own symbols;
@@ -339,8 +340,8 @@ const CALLER_F: &str = "import { count } from \"./S\";\nimport { ns } from \"./G
 /// reads, execution roles) reads it; the cross-file part is now in the digest. `F` is unchanged
 /// when the receiver's module flips between a mutated literal (withheld) and an
 /// opaque value, and the two builds differ (asserted), so a retained `F` would
-/// be stale. Today nothing of `F` is retained (source discovery reuses 0 files
-/// after the receiver module changes), so retained equals fresh. This pins the
+/// be stale. Today nothing of `F` is retained (no file is unchanged after the
+/// receiver module changes), so retained equals fresh. This pins the
 /// scenario so the day that gate narrows (stable ids, then the digest's
 /// removal) the shadow comparison fails here instead of in a project.
 #[test]
@@ -443,10 +444,10 @@ fn a_returned_invocation_answer_moved_by_another_file_reruns_exactly_its_readers
 fn assert_retains_only(timings: &solid_reactive_ir::BuildTimings, reused: u64) {
     for (stage, files) in [
         (
-            "source discovery",
+            "source discovery (unchanged files)",
             [
-                timings.source_discovery_reused_files,
-                timings.source_discovery_recomputed_files,
+                timings.source_discovery_unchanged_files,
+                3 - timings.source_discovery_unchanged_files,
             ],
         ),
         (
@@ -520,7 +521,7 @@ fn an_argument_that_stops_being_an_accessor_in_another_file_is_not_kept_in_the_g
     assert_retained_is_fresh(&mut builder, &signal, &options, "signal again");
 }
 
-/// ADR 03XX-edit-residual: a result chunk's proof is its own reads, the
+/// ADR 0412: a result chunk's proof is its own reads, the
 /// result view's dependencies and each entry it asks of the stage's tables,
 /// not what building them read. `B` turns `count` from an opaque value (no
 /// summary node, not an accessor) into a signal getter, with `A` and `H`
@@ -608,12 +609,13 @@ fn a_component_identity_moved_by_another_file_reruns_exactly_its_readers() {
         let timings = retained(&facts, label);
         // `U` (edited) reruns everywhere and `P` nowhere. `C` reruns where
         // its chunk read `Panel`'s identity (reachability roots, local
-        // accesses, owner seeds) and keeps the rest (discovery, graph).
+        // accesses, owner seeds) and keeps the rest (graph); discovery
+        // counts it unchanged.
         assert_eq!(
             [
                 [
-                    timings.source_discovery_reused_files,
-                    timings.source_discovery_recomputed_files,
+                    timings.source_discovery_unchanged_files,
+                    3 - timings.source_discovery_unchanged_files,
                 ],
                 [
                     timings.reachability_reused_files,
@@ -677,7 +679,7 @@ fn a_member_assignment_in_another_file_reruns_exactly_the_member_readers() {
         )
         .unwrap();
     for (stage, reused) in [
-        ("source discovery", timings.source_discovery_reused_files),
+        ("source discovery", timings.source_discovery_unchanged_files),
         ("reachability", timings.reachability_reused_files),
         ("local access", timings.local_access_reused_files),
         ("graph", timings.interprocedural_graph_reused_files),
@@ -687,8 +689,8 @@ fn a_member_assignment_in_another_file_reruns_exactly_the_member_readers() {
     }
 }
 
-/// The late stages are reused across an edit whose AST tables keep their
-/// shape (`late_stage_inputs_match`), but a caller's argument values
+/// A kept chunk can be reused across an edit whose AST tables keep their
+/// shape, but a caller's argument values
 /// (ADR 0280, 0338) are decided by re-parsing the callee's source
 /// (`parameter_value_uses`, `argument_site_standings`). `G` flips a test of
 /// its parameter's `length` with a same-length edit; `F`, which hands `G` a
@@ -911,4 +913,232 @@ fn kept_post_passes_follow_mid_chain_veto_and_mid_order_file_edits() {
     // a.tsx's rows and typed sources are kept; z.tsx's three row sets and
     // a.tsx's components recompute.
     assert_eq!((kept, recomputed), (2, 4), "row sets kept and recomputed");
+}
+
+/// ADR 0405: an effect-apply chunk is one file's deferred apply calls and the
+/// callbacks it supplies. Whether `A`'s `run(...)` is `createEffect` is
+/// answered by `A`'s own entity rows, which `B` decides: `B` flips `run`
+/// between a plain function and a re-export of `createEffect`, with `A`
+/// byte-identical. With `defer: true` and a constant compute the apply never
+/// runs, so its read and write are withheld only while `run` is the
+/// primitive. The chunk was keyed on `A`'s source, compiler map and its reads
+/// of other files only, so the scan that found no apply call in `A` was kept
+/// when `run` became `createEffect`, and the retained build kept the read the
+/// fresh one withholds. A chunk now records a read of its own file's facts.
+const ALIAS_B: &str = "export { createEffect as run } from \"solid-js\";\n";
+const FUNCTION_B: &str = "export function run<T>(compute: () => T, apply: (value: T) => void, options?: { defer?: boolean }): void {\n  apply(compute());\n}\n";
+const DEFERRED_A: &str = "import { createSignal } from \"solid-js\";\nimport { run } from \"./B\";\nconst [count, setCount] = createSignal(0);\nexport function watch() {\n  run(() => 0, (value) => setCount(count() + value), { defer: true });\n}\n";
+
+#[test]
+fn an_alias_that_stops_or_starts_naming_an_apply_primitive_in_another_file_is_not_kept() {
+    let Some(mut project) = Project::scratch_per_file(
+        "effect-apply-alias",
+        &[("B.ts", FUNCTION_B), ("A.ts", DEFERRED_A)],
+    ) else {
+        return;
+    };
+    let options = RuleOptions::default();
+    let vocabulary = solid_v2().vocabulary;
+    let fresh = |facts: &ProjectFacts| {
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap()
+            .0
+    };
+    let mut builder = IncrementalBuilder::default();
+    let first = project.analyze();
+    assert_retained_is_fresh(&mut builder, &first, &options, "function");
+    let alias = project.rewrite("B.ts", ALIAS_B);
+    assert!(
+        first_difference(&fresh(&first), &fresh(&alias)).is_some(),
+        "whether `run` is `createEffect` must change `A`'s answer"
+    );
+    assert_retained_is_fresh(&mut builder, &alias, &options, "alias");
+    let function = project.rewrite("B.ts", FUNCTION_B);
+    assert_retained_is_fresh(&mut builder, &function, &options, "function again");
+}
+
+/// ADR 0403, 0408: a post-pass row that names a function another file holds
+/// (pass 10's render targets, `trace::render_target`) asks
+/// `function_for_symbol`, which hands the row's proof the symbol's bucket of
+/// answers and the function's file; no `trace::Dep` records the answer
+/// again. (`binding_at_reference` likewise hands out the asking file's
+/// binding rows, every answer `resolution_in` reads besides that file's
+/// own AST, and the binding's file.) `C` turns `Panel` from a parenthesized
+/// function expression into an arrow with a same-length edit, so the
+/// declaration `A`'s rows name keeps its span and `A` is byte-identical and
+/// unchanged, while the function `Panel` names moves. `A`'s render row
+/// reruns (without the proof's reads it was kept: 3 row sets, not 2), and
+/// the retained build equals a fresh one.
+const RENDERS_A: &str =
+    "import { Panel } from \"./C\";\nexport function App() {\n  return <Panel x={1} />;\n}\n";
+const FUNCTION_PANEL_C: &str = "import { createEffect } from \"solid-js\";\nexport const Panel = (function (props: { x: number }) {\n  createEffect(() => props.x, () => {});\n  return <div />;\n});\n";
+const ARROW_PANEL_C: &str = "import { createEffect } from \"solid-js\";\nexport const Panel = (/****/(props: { x: number }) => {\n  createEffect(() => props.x, () => {});\n  return <div />;\n});\n";
+
+#[test]
+fn a_post_pass_row_reruns_when_the_function_a_tag_names_moves() {
+    assert_eq!(FUNCTION_PANEL_C.len(), ARROW_PANEL_C.len());
+    let Some(mut project) = Project::scratch_per_file(
+        "render-target",
+        &[("C.tsx", FUNCTION_PANEL_C), ("A.tsx", RENDERS_A)],
+    ) else {
+        return;
+    };
+    let options = RuleOptions::default();
+    let vocabulary = solid_v2().vocabulary;
+    let fresh = |facts: &ProjectFacts| {
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap()
+            .0
+    };
+    let mut builder = IncrementalBuilder::default();
+    let mut before = project.analyze();
+    assert_retained_is_fresh(&mut builder, &before, &options, "function");
+    for (label, source) in [
+        ("arrow", ARROW_PANEL_C),
+        ("function again", FUNCTION_PANEL_C),
+    ] {
+        let facts = project.rewrite("C.tsx", source);
+        assert!(
+            first_difference(&fresh(&before), &fresh(&facts)).is_some(),
+            "{label}: which function `Panel` names must change the program"
+        );
+        builder.set_shadow_mode(ShadowMode::Off);
+        let (retained, timings) = builder
+            .build_with_analysis_inputs_shared(
+                &facts,
+                vocabulary,
+                AnalysisInputs::empty(),
+                &options,
+            )
+            .unwrap();
+        if let Some(difference) = first_difference(&retained, &fresh(&facts)) {
+            panic!("{label}: {difference}");
+        }
+        assert_eq!(
+            timings.source_discovery_unchanged_files, 1,
+            "{label}: `A` is unchanged"
+        );
+        assert_eq!(
+            timings.source_post_pass_row_sets,
+            [2, 4],
+            "{label}: `C`'s three row sets and `A`'s render row rerun"
+        );
+        before = facts;
+    }
+}
+
+/// Builds `files` on a per-file producer (stable Type Facts ids), then
+/// applies `edits` in order; every retained build must equal a fresh one.
+/// Returns, for each edit, whether it moved the fresh answer. `None` without
+/// a producer.
+fn retained_through_edits(
+    tag: &str,
+    files: &[(&str, &str)],
+    edits: &[(&str, &str)],
+) -> Option<Vec<bool>> {
+    let mut project = Project::scratch_per_file(tag, files)?;
+    let options = RuleOptions::default();
+    let vocabulary = solid_v2().vocabulary;
+    let fresh = |facts: &ProjectFacts| {
+        build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)
+            .unwrap()
+            .0
+    };
+    let mut builder = IncrementalBuilder::default();
+    let mut before = project.analyze();
+    assert_retained_is_fresh(&mut builder, &before, &options, &format!("{tag} first"));
+    let mut moved = Vec::new();
+    for (index, (name, source)) in edits.iter().enumerate() {
+        let facts = project.rewrite(name, source);
+        moved.push(first_difference(&fresh(&before), &fresh(&facts)).is_some());
+        assert_retained_is_fresh(
+            &mut builder,
+            &facts,
+            &options,
+            &format!("{tag} edit {index}"),
+        );
+        before = facts;
+    }
+    Some(moved)
+}
+
+/// An `onSettled` cleanup's emission reads the callback file's entity rows
+/// (`function_cleanup_return_proof`: the call-result domain of `mk()` in
+/// `B`). Editing `C` moves `B`'s row at `mk()` from a callable to a number
+/// with `B`'s text unchanged, so a fresh build drops `A`'s three
+/// `SettledCleanup` requirements; the emission now records the callback
+/// file as read, and the retained build follows in both directions.
+const SETTLE_A: &str = "import { onSettled } from \"solid-js\";\nimport { settle } from \"./B\";\nonSettled(settle);\nonSettled(() => {\n  onSettled(settle);\n});\nexport function go() {\n  onSettled(() => {\n    onSettled(settle);\n  });\n}\n";
+const SETTLE_B: &str =
+    "import { mk } from \"./C\";\nexport function settle(): any {\n  return mk();\n}\n";
+const CLEANUP_C: &str = "export function mk(): () => void {\n  return () => {};\n}\n";
+const NUMBER_C: &str = "export function mk(): number {\n  return 1;\n}\n";
+
+#[test]
+fn a_settled_cleanup_follows_the_callback_files_rows() {
+    let Some(moved) = retained_through_edits(
+        "settled-cleanup",
+        &[("C.ts", CLEANUP_C), ("B.ts", SETTLE_B), ("A.ts", SETTLE_A)],
+        &[("C.ts", NUMBER_C), ("C.ts", CLEANUP_C)],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        moved,
+        [true, true],
+        "`mk`'s return type must move `A`'s answer"
+    );
+}
+
+/// Final review R2, finding 1: `c` reads `b`'s default export through a
+/// namespace member, so its entity row names the export's own id, and `b`
+/// flips that export between an alias of the signal getter and a function.
+/// The producer gives the two forms different ids, so `c`'s rows move and
+/// the delta names `c`; the patch's guard for an id kept across such a flip
+/// is pinned in the IR (`exact_index_patch_refuses_a_retained_id_…`). This
+/// pins the end-to-end answer in both directions.
+const ALIASED_EXPORT_B: &str =
+    "import { createSignal } from \"solid-js\";\nconst [y] = createSignal(0);\nexport default y;\n";
+const OWN_EXPORT_B: &str = "import { createSignal } from \"solid-js\";\nconst [y] = createSignal(0);\nexport default (() => 1);\nvoid y;\n";
+const NAMESPACE_READER_C: &str = "import * as ns from \"./b\";\nexport function App() {\n  const v = ns.default();\n  return <div>{v}</div>;\n}\n";
+
+#[test]
+fn an_export_that_stops_or_starts_being_an_alias_moves_unedited_readers_roots() {
+    let Some(moved) = retained_through_edits(
+        "export-alias-root",
+        &[("b.ts", ALIASED_EXPORT_B), ("c.tsx", NAMESPACE_READER_C)],
+        &[("b.ts", OWN_EXPORT_B), ("b.ts", ALIASED_EXPORT_B)],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        moved,
+        [true, true],
+        "whether the export is the signal must move the answer"
+    );
+}
+
+/// Final review R2, finding 4: whether the dialect models returned callbacks
+/// is a project-wide flag (some file names `createReaction`, `mapArray`,
+/// `repeat`, `lazy` or `lazyModule`) that gates early exits in per-file
+/// chunks. `R` turns `track` into a `createReaction` tracker and is the
+/// project's first file to name one; `B` is byte-identical, and its chunk
+/// that took the early exit walked nothing of `R`.
+const UNMODELLED_R: &str = "export const track = (tracking: () => void) => tracking();\n";
+const FIRST_TRACKER_R: &str = "import { createReaction } from \"solid-js\";\nexport const track = createReaction(() => {});\n";
+
+#[test]
+fn the_first_returned_callback_primitive_in_another_file_reruns_early_exits() {
+    let Some(moved) = retained_through_edits(
+        "capability-flags",
+        &[("R.ts", UNMODELLED_R), ("B.ts", TRACKED_B)],
+        &[("R.ts", FIRST_TRACKER_R), ("R.ts", UNMODELLED_R)],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        moved,
+        [true, true],
+        "whether `track` is a tracker must move `B`'s answer"
+    );
 }

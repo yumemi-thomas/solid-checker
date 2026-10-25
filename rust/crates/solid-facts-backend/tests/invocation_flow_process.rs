@@ -1041,6 +1041,26 @@ fn an_edit_that_adds_a_bare_import_is_witnessed() {
         std::path::Path::new("../../../packages/two"),
     );
     agree("the nearer copy relinked to the body package", true);
+    // A relink in the same request as an edit that keeps the file's module
+    // lines: the daemon checks its resolution witness while the producer
+    // applies the edit, and the stale witness abandons that session for a
+    // fresh one.
+    relink(&directory.join("src/node_modules/@ws/lib"), one);
+    write(
+        &directory.join("src/App.tsx"),
+        &format!("{WS_APP}\nconst extra = 1;\n"),
+    );
+    agree("relinked back beside an edit", false);
+    // One that changes them: the witness is checked before the edit is sent.
+    relink(
+        &directory.join("src/node_modules/@ws/lib"),
+        std::path::Path::new("../../../packages/two"),
+    );
+    write(
+        &directory.join("src/App.tsx"),
+        &format!("{WS_APP}\nimport type {{}} from \"@ws/lib\";\n"),
+    );
+    agree("relinked beside an edit of an import", true);
     fs::remove_dir_all(&directory).unwrap();
     let _ = fs::remove_dir_all(&sockets);
 }
