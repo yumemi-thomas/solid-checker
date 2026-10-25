@@ -1089,3 +1089,31 @@ fn a_settled_cleanup_follows_the_callback_files_rows() {
         "`mk`'s return type must move `A`'s answer"
     );
 }
+
+/// Final review R2, finding 1: `c` reads `b`'s default export through a
+/// namespace member, so its entity row names the export's own id, and `b`
+/// flips that export between an alias of the signal getter and a function.
+/// The producer gives the two forms different ids, so `c`'s rows move and
+/// the delta names `c`; the patch's guard for an id kept across such a flip
+/// is pinned in the IR (`exact_index_patch_refuses_a_retained_id_…`). This
+/// pins the end-to-end answer in both directions.
+const ALIASED_EXPORT_B: &str =
+    "import { createSignal } from \"solid-js\";\nconst [y] = createSignal(0);\nexport default y;\n";
+const OWN_EXPORT_B: &str = "import { createSignal } from \"solid-js\";\nconst [y] = createSignal(0);\nexport default (() => 1);\nvoid y;\n";
+const NAMESPACE_READER_C: &str = "import * as ns from \"./b\";\nexport function App() {\n  const v = ns.default();\n  return <div>{v}</div>;\n}\n";
+
+#[test]
+fn an_export_that_stops_or_starts_being_an_alias_moves_unedited_readers_roots() {
+    let Some(moved) = retained_through_edits(
+        "export-alias-root",
+        &[("b.ts", ALIASED_EXPORT_B), ("c.tsx", NAMESPACE_READER_C)],
+        &[("b.ts", OWN_EXPORT_B), ("b.ts", ALIASED_EXPORT_B)],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        moved,
+        [true, true],
+        "whether the export is the signal must move the answer"
+    );
+}
