@@ -1380,11 +1380,8 @@ pub struct BuildTimings {
     pub reachability_reused: bool,
     pub reachability_reused_files: u64,
     pub reachability_recomputed_files: u64,
-    pub local_accesses_reused: bool,
     pub local_access_reused_files: u64,
     pub local_access_recomputed_files: u64,
-    pub interprocedural_reused: bool,
-    pub owner_fixed_point_reused: bool,
     pub owner_reused_files: u64,
     pub owner_recomputed_files: u64,
     pub indexes_and_reachability: Duration,
@@ -1394,11 +1391,9 @@ pub struct BuildTimings {
     pub entity_symbols: Duration,
     pub symbol_name_indexes: Duration,
     pub boundary_defects: Duration,
-    /// The namespace hand-out census (ADR 0347) and the late stages' reuse
-    /// gate (`ReusePlan::prepare`), both in the indexes-and-reachability
-    /// stage.
+    /// The namespace hand-out census (ADR 0347), in the
+    /// indexes-and-reachability stage.
     pub namespace_hand_outs: Duration,
-    pub reuse_plan: Duration,
     pub reachability: Duration,
     pub source_discovery: Duration,
     pub typed_accessors_and_prop_roots: Duration,

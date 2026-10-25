@@ -5,7 +5,7 @@
 //! part of its key. `IncrementalBuilder` compares its answer with a fresh
 //! build here explicitly (shadow mode off), so these tests do not depend on
 //! `SOLID_CHECKER_IR_SHADOW`. Each case names the reuse path it exercises
-//! (`docs/` and the IR's `ReusePlan`): the study that found them is
+//! (`docs/decisions.md`): the study that found them is
 //! tsrs-plan/p5-ir-incremental-study.md section 2.5.
 
 use std::{env, fs, path::PathBuf, sync::Arc};
@@ -236,9 +236,9 @@ fn options_rendering(rendering: Option<RuntimeRendering>) -> RuleOptions {
 }
 
 /// 2.5, first path: `RuleOptions` are in the retained program's identity but
-/// not in the cache domain or `ReusePlan`'s late-stage gate. A generation that
-/// changes only trivia keeps the TypeScript table, so the late stages' cached
-/// aggregates are offered for reuse under different rendering options.
+/// not in the cache domain. A generation that changes only trivia keeps the
+/// TypeScript table, so the late stages' kept chunks are offered for reuse
+/// under different rendering options.
 #[test]
 fn changing_rule_options_between_generations_never_reuses_a_stale_late_stage() {
     let Some(mut project) = Project::open("ssr-client-boundary", &["App.tsx"]) else {
@@ -262,7 +262,7 @@ fn changing_rule_options_between_generations_never_reuses_a_stale_late_stage() {
 
 /// 2.5, second path: `runtime_symbol_redirects` are generation-request facts
 /// outside the retained TypeScript snapshot. The index rebuild honours them
-/// (a non-empty map forces it) but `ReusePlan` decided "TypeScript unchanged"
+/// (a non-empty map forces it) but the build decided "TypeScript unchanged"
 /// from the snapshot delta alone, so source discovery, reachability and the
 /// late stages were offered results computed under the other redirects.
 /// The redirected pairs are every ordered pair of the project's own symbols;
@@ -688,8 +688,8 @@ fn a_member_assignment_in_another_file_reruns_exactly_the_member_readers() {
     }
 }
 
-/// The late stages are reused across an edit whose AST tables keep their
-/// shape (`late_stage_inputs_match`), but a caller's argument values
+/// A kept chunk can be reused across an edit whose AST tables keep their
+/// shape, but a caller's argument values
 /// (ADR 0280, 0338) are decided by re-parsing the callee's source
 /// (`parameter_value_uses`, `argument_site_standings`). `G` flips a test of
 /// its parameter's `length` with a same-length edit; `F`, which hands `G` a

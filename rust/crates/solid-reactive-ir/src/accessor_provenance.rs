@@ -380,19 +380,6 @@ impl crate::base::fixpoint::Lattice for ClosedUses {
 
 impl crate::base::memo::Canonical for ClosedUses {}
 
-/// Builds this build's resolver ahead of the interprocedural stage, which
-/// then reuses it ([`Resolver::new_kept`]): the late stages' reuse check
-/// needs the derived tables its construction publishes.
-pub(crate) fn build_kept_resolver(
-    facts: &ProjectFacts,
-    lookup: &SemanticLookup<'_>,
-    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
-    source_kinds: &HashMap<SymbolId, crate::ReactiveSourceKind>,
-    names: &HashMap<SymbolId, SymbolId>,
-) {
-    Resolver::new_kept(facts, lookup, accessors, source_kinds, names);
-}
-
 /// Each handoff binding's joined use census ([`Resolver::new`]), published
 /// for memo readers: the resolver's origins and object contexts.
 struct HandoffUses;

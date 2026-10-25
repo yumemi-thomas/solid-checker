@@ -231,12 +231,6 @@ pub(crate) fn binding_returns_reactive_source(
         && binding.call_initializer == Some(call.span)
 }
 
-pub(crate) fn returned_arrow_function(ast: &solid_facts::ast::AstFacts, span: Span) -> bool {
-    ast.functions_within(span)
-        .max_by_key(|function| function.span.end - function.span.start)
-        .is_some_and(|function| function.kind == solid_facts::ast::FunctionKind::Arrow)
-}
-
 /// Whether a reactive read at `span` happens outside the synchronous extent
 /// of the function that lexically contains it — so calling that function does
 /// not perform the read, and the read must not enter its caller-visible

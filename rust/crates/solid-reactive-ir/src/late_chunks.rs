@@ -13,8 +13,8 @@
 //! other files, so a moved entry reruns only the chunks that asked it.
 //!
 //! A path held by two slots is computed for each and kept for none; a
-//! one-shot build keeps nothing. A pass that runs inside a recording (the
-//! late aggregates') hands its chunks' reads to it, reused or not.
+//! one-shot build keeps nothing. A pass that runs inside a recording hands
+//! its chunks' reads to it, reused or not.
 
 use std::cell::RefCell;
 use std::hash::{Hash, Hasher};

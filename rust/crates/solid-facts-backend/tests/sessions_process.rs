@@ -1174,9 +1174,6 @@ fn incremental_reactive_ir_matches_fresh_after_an_edit() {
     assert!(!timings.reused);
     assert!(timings.typescript_indexes_reused);
     assert!(!timings.reachability_reused);
-    assert!(!timings.local_accesses_reused);
-    assert!(!timings.interprocedural_reused);
-    assert!(!timings.owner_fixed_point_reused);
     assert_eq!(
         timings.reachability_reused_files + timings.reachability_recomputed_files,
         u64::try_from(edited.files.len()).unwrap()
@@ -1697,11 +1694,10 @@ fn compiler_option_only_edit_invalidates_cached_ownership() {
     );
 
     let fresh = solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
-    let (retained, timings) = incremental
+    let (retained, _) = incremental
         .build(&edited, dialect::default_dialect().vocabulary)
         .unwrap();
     assert_eq!(retained, fresh);
-    assert!(!timings.owner_fixed_point_reused);
 }
 
 #[test]
@@ -1839,19 +1835,17 @@ fn incremental_reactive_ir_reuses_semantic_indexes_for_same_shape_body_edit() {
     assert_eq!(retained, fresh);
     assert!(timings.typescript_indexes_reused);
     assert!(timings.reachability_reused);
-    assert!(timings.local_accesses_reused);
+    // The edited file's chunks rerun; every other file's are kept.
     assert_eq!(
-        timings.local_access_reused_files,
+        timings.local_access_reused_files + 1,
         u64::try_from(edited.files.len()).unwrap()
     );
-    assert_eq!(timings.local_access_recomputed_files, 0);
-    assert!(timings.interprocedural_reused);
-    assert!(timings.owner_fixed_point_reused);
+    assert_eq!(timings.local_access_recomputed_files, 1);
     assert_eq!(
-        timings.owner_reused_files,
+        timings.owner_reused_files + 1,
         u64::try_from(edited.files.len()).unwrap()
     );
-    assert_eq!(timings.owner_recomputed_files, 0);
+    assert_eq!(timings.owner_recomputed_files, 1);
 }
 
 #[test]

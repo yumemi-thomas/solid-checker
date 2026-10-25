@@ -5,7 +5,7 @@ use crate::{HashMap, HashSet};
 use std::{cell::Cell, sync::Arc, time::Instant};
 
 use crate::boundary_defects::discover_boundary_defects;
-use crate::cache::{BuildCaches, ReusePlan, build_typescript_indexes};
+use crate::cache::{BuildCaches, build_typescript_indexes};
 use crate::hosts::ProjectHostIndex;
 use crate::identity::{SymbolId, SymbolName};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
@@ -447,9 +447,9 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     // The memos begin before any stage reads one (ADR 0392's ordering).
     semantic_lookup.begin_memos();
     build_timings.memo_warm = substage_started.elapsed();
-    let substage_started = Instant::now();
-    let mut reuse = ReusePlan::prepare(facts, late_stage_cache.as_deref_mut(), semantic_lookup);
-    build_timings.reuse_plan = substage_started.elapsed();
+    if let Some(slot) = late_stage_cache.as_deref_mut() {
+        slot.get_or_insert_with(Default::default);
+    }
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
     let mut draft = ProgramDraft {
@@ -480,7 +480,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         let sources = discover_sources(
             &source_context,
             source_discovery_cache,
-            reuse.typescript_unchanged,
+            typescript_unchanged,
             &mut timings,
             emit_timings,
         );
@@ -492,7 +492,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         entities,
         symbol_names: &symbol_names,
         lookup: semantic_lookup,
-        typescript_unchanged: reuse.typescript_unchanged,
+        typescript_unchanged: typescript_unchanged,
         typescript_delta: typescript_indexes.source_discovery_delta.as_ref(),
     };
     let source_discovery = if available_analysis_workers() <= 1 {
@@ -545,20 +545,6 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     // also ran after the stage above closed; restart this function's clock so
     // the static-prepass stage measures only the prepass loops.
     clock.restart();
-    // The late aggregates' proof read memos over the resolver's derived
-    // tables, which only its pass publishes: build it now (the
-    // interprocedural stage reuses this construction) and decide.
-    if reuse.late_stages_pending {
-        crate::interproc::accessor_provenance::build_kept_resolver(
-            facts,
-            semantic_lookup,
-            &source_discovery.accessors,
-            &source_discovery.source_kinds,
-            &symbol_names,
-        );
-        reuse.settle(facts, late_stage_cache.as_deref_mut(), semantic_lookup);
-    }
-
     let analysis = AnalysisContext {
         facts,
         dialect,
@@ -609,7 +595,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             interprocedural_results: interprocedural_result_cache,
             late_stages: late_stage_cache.as_deref_mut().and_then(Option::as_mut),
         },
-        reuse,
+        typescript_unchanged,
         &mut draft,
         &mut build_timings,
         &mut clock,
@@ -639,24 +625,11 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &analysis,
         &project_indexes,
         &source_discovery.unchanged_paths,
-        late_stage_cache.as_deref_mut().and_then(Option::as_mut),
-        reuse.late_stages_reusable,
+        late_stage_cache.and_then(Option::as_mut),
         &mut draft,
         &mut build_timings,
     );
     clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
-    // Every retained aggregate was computed in this build (or reused under a
-    // proof that still holds): bind what they read.
-    if !reuse.late_stages_reusable
-        && let Some(cache) = late_stage_cache.and_then(Option::as_mut)
-    {
-        // What a chunk was handed is decided by what the late-stage reuse
-        // compares itself: the Type Facts table and every file's facts
-        // (`cache::late_stage_inputs_match`, `indexes::hand_outs`).
-        let reads =
-            std::mem::take(&mut cache.reads).without_tables(crate::indexes::HAND_OUT_TABLES);
-        cache.proof = Some(crate::base::reads::ReadProof::new(reads, semantic_lookup));
-    }
     // Static and compatibility passes deliberately operate on source facts.
     // Apply the compiler's stronger "this code was not emitted" fact once,
     // after every producer has run.

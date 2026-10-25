@@ -4,8 +4,8 @@ use super::{
     OWNER_CONTEXT_PROVEN_UNOWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind, OwnerNode,
     binding_returns_reactive_source, callback_owner_edge_kind, compiler_owner_context,
     compose_owner_edge, owner_edge_context, possible_await_continuation_context,
-    propagate_owner_contexts, providing_region_chain, returned_arrow_function, root_owned_at,
-    seed_contexts, seed_unnamed_hand_outs, settle_eager_owners,
+    propagate_owner_contexts, providing_region_chain, root_owned_at, seed_contexts,
+    seed_unnamed_hand_outs, settle_eager_owners,
 };
 use solid_facts::ast;
 use solid_facts::compiler::{
@@ -13,23 +13,6 @@ use solid_facts::compiler::{
 };
 use solid_facts::core::SourceHash;
 use solid_facts::core::Span;
-
-fn returned_arrow(source: &str) -> bool {
-    let source = format!("function outer() {{ return {source}; }}");
-    let facts = ast::extract("test.tsx", &source).unwrap();
-    facts
-        .returns
-        .first()
-        .and_then(|returned| returned.argument)
-        .is_some_and(|argument| returned_arrow_function(&facts, argument))
-}
-
-#[test]
-fn returned_arrow_identity_comes_from_ast_facts() {
-    assert!(returned_arrow("(a = (0)) /* run */ => a"));
-    assert!(returned_arrow("async => async"));
-    assert!(!returned_arrow("function () { return 1; }"));
-}
 
 fn binding_accepts(source: &str) -> bool {
     let facts = ast::extract("test.tsx", source).unwrap();

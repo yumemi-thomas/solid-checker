@@ -1204,63 +1204,6 @@ pub(super) fn served_this_build(store: &crate::base::memo::build::MemoStore) -> 
         .solver::<ResolverState, _>(RESOLVER_STATE, |state, _| state.served == Some(revision))
 }
 
-/// The resolver one build constructed ([`built_this_build`]): its store
-/// revision, the identity of its inputs, its tables and what building it read.
-struct Built {
-    revision: crate::base::memo::Revision,
-    inputs: [usize; 4],
-    tables: Tables,
-    reads: crate::base::reads::Reads,
-}
-
-/// The kept slot of [`Built`].
-const RESOLVER_BUILT: SolverId = SolverId(241);
-
-fn built_inputs(resolver: &Resolver<'_, '_>) -> [usize; 4] {
-    [
-        std::ptr::from_ref(resolver.facts) as usize,
-        std::ptr::from_ref(resolver.accessors) as usize,
-        std::ptr::from_ref(resolver.source_kinds) as usize,
-        std::ptr::from_ref(resolver.names) as usize,
-    ]
-}
-
-/// The resolver this build already constructed over the same inputs, with
-/// `resolver`'s functions; its construction's reads are replayed to the
-/// caller's recording. Construction publishes the derived tables, which a
-/// build does once.
-pub(super) fn built_this_build<'a, 'facts: 'a>(
-    resolver: Resolver<'a, 'facts>,
-) -> Option<Resolver<'a, 'facts>> {
-    let store = resolver.lookup.memo_store();
-    let revision = store.revision();
-    let inputs = built_inputs(&resolver);
-    let found = store
-        .derived()
-        .solver::<Option<Built>, _>(RESOLVER_BUILT, |kept, _| {
-            kept.as_ref()
-                .filter(|built| built.revision == revision && built.inputs == inputs)
-                .map(|built| (built.tables.clone(), built.reads.clone()))
-        })?;
-    let (tables, reads) = found;
-    crate::base::reads::replay(&reads);
-    Some(tables.into_resolver(resolver))
-}
-
-/// Keeps what this build constructed, for [`built_this_build`].
-pub(super) fn keep_built(resolver: &Resolver<'_, '_>, reads: crate::base::reads::Reads) {
-    let store = resolver.lookup.memo_store();
-    let built = Built {
-        revision: store.revision(),
-        inputs: built_inputs(resolver),
-        tables: Tables::of(resolver),
-        reads,
-    };
-    store
-        .derived()
-        .solver::<Option<Built>, _>(RESOLVER_BUILT, |kept, _| *kept = Some(built));
-}
-
 /// The tables a memo build found.
 #[derive(Clone)]
 struct Tables {
@@ -1276,20 +1219,6 @@ struct Tables {
 }
 
 impl Tables {
-    fn of(resolver: &Resolver<'_, '_>) -> Self {
-        Self {
-            binding_locations: Arc::clone(&resolver.binding_locations),
-            declarations: Arc::clone(&resolver.declarations),
-            parameter_inputs: resolver.parameter_inputs.clone(),
-            uses: Arc::clone(&resolver.uses),
-            providers: resolver.providers.clone(),
-            unkeyed_provider: resolver.unkeyed_provider,
-            source_origins: resolver.source_origins.clone(),
-            runtime_source_origins: resolver.runtime_source_origins.clone(),
-            blocked_contexts: resolver.blocked_contexts.clone(),
-        }
-    }
-
     fn into_resolver<'a, 'facts: 'a>(self, resolver: Resolver<'a, 'facts>) -> Resolver<'a, 'facts> {
         Resolver {
             binding_locations: self.binding_locations,

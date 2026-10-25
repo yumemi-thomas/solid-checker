@@ -358,11 +358,8 @@ pub(crate) fn find_missing_owners_incremental(
     Vec<OwnerRequirement>,
     SettledGateDecisions,
     OwnerIncrementalTimings,
-    crate::base::reads::Reads,
 ) {
     let entities = lookup.entities();
-    // What the reused fragments read: the retained requirements read it too.
-    let mut fragment_reads = crate::base::reads::Reads::default();
     let mut timings = OwnerIncrementalTimings::default();
     let total_started = Instant::now();
     // The files of the build, each path once: a path listed twice is the
@@ -391,7 +388,6 @@ pub(crate) fn find_missing_owners_incremental(
         }
     }
     let mut recomputed = Vec::new();
-    let mut reused_proofs = Vec::new();
     for (file, pid) in files.iter().zip(&order) {
         if unchanged_paths.contains(file.path.as_str())
             && let Some(entry) = graph.file(*pid)
@@ -401,13 +397,11 @@ pub(crate) fn find_missing_owners_incremental(
                 || same_compiler_semantics(&entry.fragment.compiler, &file.compiler))
         {
             timings.reused_files += 1;
-            reused_proofs.push(&entry.fragment.proof.reads);
             continue;
         }
         recomputed.push(*file);
         timings.recomputed_files += 1;
     }
-    fragment_reads.extend_all(reused_proofs);
     let discovered = parallel_slice_results(&recomputed, |file| {
         // What the fragment read of other files is its proof.
         let (mut discovered, reads) = crate::base::reads::record(|| {
@@ -497,6 +491,5 @@ pub(crate) fn find_missing_owners_incremental(
             context_census,
             ..timings
         },
-        fragment_reads,
     )
 }

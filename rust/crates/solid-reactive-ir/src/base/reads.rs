@@ -203,28 +203,6 @@ impl Reads {
         reads
     }
 
-    /// Adds every set of `others`' reads. Runs are shared by pointer
-    /// ([`Self::extend`]) and bounded once at the end, so adding a thousand
-    /// small sets merges their runs once, not once per set.
-    pub(crate) fn extend_all<'a>(&mut self, others: impl IntoIterator<Item = &'a Self>) {
-        for other in others {
-            self.sections |= other.sections;
-            for run in &other.runs {
-                self.add_run(run);
-            }
-            self.tail.extend_from_slice(&other.tail);
-        }
-        if self.tail.len() > TAIL_MAX {
-            let mut tail = std::mem::take(&mut self.tail);
-            cost::timed(cost::EXTEND, tail.len(), || {
-                tail.sort_unstable();
-                tail.dedup();
-            });
-            self.runs.push(Arc::from(tail));
-        }
-        self.bound_runs();
-    }
-
     /// These reads without the answers of the tables in `tables`: what a
     /// reader keeps of another computation's reads when it compares those
     /// tables' inputs itself (`indexes::hand_outs`).
@@ -714,7 +692,7 @@ pub(crate) enum Verdict {
     Holds,
     Moved(String),
     /// Every read decided so far holds; these need a pass that has not run
-    /// yet in this build. Checked again once it has ([`ReadProof::recheck`]).
+    /// yet in this build.
     Undecided(Vec<MemoRead>),
 }
 
@@ -802,21 +780,6 @@ impl ReadProof {
             Verdict::Holds
         } else {
             Verdict::Undecided(undecided)
-        }
-    }
-
-    /// Checks again the reads a [`Verdict::Undecided`] named, once their
-    /// pass has run: whether each answers as recorded.
-    pub(crate) fn recheck(&self, undecided: &[MemoRead], answers: &dyn ReadAnswers) -> bool {
-        match undecided
-            .iter()
-            .find(|read| answers.memo_check(self.store, **read) != MemoCheck::Same)
-        {
-            None => true,
-            Some(read) => {
-                report_miss(&format!("memo {}", answers.describe_memo(*read)));
-                false
-            }
         }
     }
 }
@@ -959,11 +922,10 @@ mod tests {
     }
 
     /// A proof checked before a pass publishes what some of its memos read
-    /// is undecided, not moved, while every decided read holds; checked again
-    /// once the pass has run, it holds exactly when those reads answer as
-    /// recorded. A decided read that moved wins over an undecided one.
+    /// is undecided, not moved, while every decided read holds, and reruns
+    /// its chunk. A decided read that moved wins over an undecided one.
     #[test]
-    fn a_proof_is_undecided_until_its_pass_runs_then_exact() {
+    fn a_proof_is_undecided_until_its_pass_runs() {
         let ((), reads) = record(|| {
             note_memo(read(1));
             note_memo(read(2));
@@ -978,15 +940,7 @@ mod tests {
         };
         assert_eq!(pending, [read(2)]);
         assert!(!proof.holds(&answers), "an undecided read reruns the chunk");
-        answers.undecided.borrow_mut().clear();
-        assert!(proof.recheck(&pending, &answers));
-        answers.revisions.insert(2, 5);
-        assert!(
-            !proof.recheck(&pending, &answers),
-            "it moved once published"
-        );
         answers.revisions.insert(1, 7);
-        answers.undecided.borrow_mut().insert(2);
         assert!(matches!(proof.verdict(&answers), Verdict::Moved(_)));
     }
 }
