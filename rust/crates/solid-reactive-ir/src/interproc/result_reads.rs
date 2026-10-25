@@ -4,8 +4,11 @@ use super::*;
 
 pub(crate) struct InterproceduralResultReadContext<'a, 'b> {
     pub(crate) result: InterproceduralResultView<'a>,
-    pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
-    pub(crate) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    /// Recorded per entry asked (`transport_reads`), as are the transport
+    /// tables and the resolver's answers below: a result chunk's proof names
+    /// each entry it read of the stage's tables.
+    pub(crate) source_kinds: super::transport_reads::SourceKindsRead<'a>,
+    pub(crate) accessors: super::transport_reads::AccessorsRead<'a>,
     pub(crate) entities: &'a EntitySymbols,
     pub(crate) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) lookup: &'a SemanticLookup<'b>,
@@ -665,8 +668,7 @@ fn call_summary(
         match transported {
             accessor_provenance::Callable::Accessor(symbol) => (
                 label,
-                provenance
-                    .read(symbol, file, call.span)
+                super::transport_reads::transported_read(provenance, symbol, file, call.span)
                     .into_iter()
                     .collect(),
                 None,
@@ -1787,12 +1789,12 @@ pub(super) fn captured_body_read_runs_during_call(
 /// sources need a separate provenance proof; declaration spelling is not one.
 pub(super) fn source_has_runtime_witness(
     symbol: &SymbolId,
-    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+    accessors: &impl AccessorTable,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    let Some((_, declaration)) = accessors.get(symbol) else {
+    let Some((_, declaration)) = accessors.accessor(symbol) else {
         return false;
     };
     let Some(file) = lookup.file_by_path(declaration.path.as_ref()) else {
@@ -2169,43 +2171,6 @@ pub(super) fn getter_line(lookup: &SemanticLookup<'_>, site: &Location) -> usize
         .unwrap_or(0)
 }
 
-pub(super) fn call_role_syntax(file: &solid_facts::FileFacts) -> bool {
-    crate::indexes::returns_source_root(file)
-        // Nested literal receivers require a project-wide eval veto. Adding
-        // or removing it must refresh unchanged callers in both directions.
-        || file.ast.module_hazards.iter().any(|hazard| {
-            hazard.kind == solid_facts::ast::ModuleHazardKind::Eval
-        })
-        || !file.ast.object_get_shapes.is_empty()
-        // Provider multiplicity and returned literal identities are project
-        // syntax inputs, even when their read summaries stay byte-identical.
-        || !file.ast.jsx_elements.is_empty()
-        || file.ast.returns.iter().any(|returned| returned.value == solid_facts::ast::ReturnValueKind::Function)
-        || file.ast.functions.iter().any(|function| {
-            function.r#async
-                || function.expression_return.is_some()
-                || function
-                    .parameters
-                    .iter()
-                    .any(|parameter| parameter.initializer.is_some())
-                || (function.kind == solid_facts::ast::FunctionKind::Declaration
-                    && function
-                        .name
-                        .as_ref()
-                        .is_some_and(|name| crate::indexes::binding_written(file, name.span)))
-        })
-        || file.ast.bindings.iter().any(|binding| {
-            !binding.immutable
-                && binding.initializer.is_some_and(|initializer| {
-                    let initializer = file.ast.peel_ts_sugar_span(initializer);
-                    file.ast
-                        .functions
-                        .iter()
-                        .any(|function| function.span == initializer)
-                })
-        })
-}
-
 /// ADR 0204: every project function a call of `function` enters
 /// directly, `function` excluded: through a plain call written in its own body
 /// (not in a nested function, not in a default parameter, not in JSX) whose
@@ -2357,7 +2322,7 @@ fn argument_proven_not_a_getter(
     file: &solid_facts::FileFacts,
     argument: &solid_facts::ast::ArgumentFact,
     entities: &EntitySymbols,
-    source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
+    source_kinds: &super::transport_reads::SourceKindsRead<'_>,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     if argument.spread {

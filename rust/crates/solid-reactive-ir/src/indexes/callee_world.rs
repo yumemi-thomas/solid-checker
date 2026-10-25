@@ -268,13 +268,10 @@ pub(crate) fn class_instance_is_exact_in<'a, W: CalleeWorld<'a> + ?Sized>(
     })
 }
 
-/// [`SemanticLookup::namespace_member_function`]: a static member of an
-/// actual namespace import names its exported value.
-pub(crate) fn namespace_member_function_in<'a, W: CalleeWorld<'a> + ?Sized>(
-    world: &W,
-    file: &FileFacts,
-    callee: Span,
-) -> Option<(&'a FileFacts, &'a FunctionFact)> {
+/// The property of a static member of an actual namespace import (`ns.name`,
+/// not computed): where every namespace-member answer starts, whichever world
+/// then answers the property's symbol and the function it names.
+pub(crate) fn namespace_member_property(file: &FileFacts, callee: Span) -> Option<Span> {
     let callee = file.ast.peel_ts_sugar_span(callee);
     if file.ast.computed_members.binary_search(&callee).is_ok() {
         return None;
@@ -290,13 +287,44 @@ pub(crate) fn namespace_member_function_in<'a, W: CalleeWorld<'a> + ?Sized>(
                     && binding.local.span == declaration
             })
     });
-    if !namespace {
-        return None;
-    }
-    let symbol = world.entity_symbol_at(file, member.property)?;
-    world
-        .function_for_symbol(symbol.as_str())
-        .filter(|(target_file, function)| {
-            function.method_name.is_none() && function_value_is_current_in(target_file, function)
-        })
+    namespace.then_some(member.property)
+}
+
+/// Whether the function a namespace member's symbol names is its exported
+/// value: a function, not a method, whose binding is current.
+pub(crate) fn namespace_member_value_is_current(
+    target_file: &FileFacts,
+    function: &FunctionFact,
+) -> bool {
+    function.method_name.is_none() && function_value_is_current_in(target_file, function)
+}
+
+/// [`SemanticLookup::namespace_member_function`]: a static member of an
+/// actual namespace import names its exported value. `symbol_at` answers the
+/// entity symbol at a span of `file`, `function_for` the project function a
+/// symbol names; each world supplies its own.
+pub(crate) fn namespace_member_function_with<'a>(
+    file: &FileFacts,
+    callee: Span,
+    symbol_at: impl FnOnce(Span) -> Option<&'a SymbolId>,
+    function_for: impl FnOnce(&str) -> Option<(&'a FileFacts, &'a FunctionFact)>,
+) -> Option<(&'a FileFacts, &'a FunctionFact)> {
+    let property = namespace_member_property(file, callee)?;
+    let symbol = symbol_at(property)?;
+    function_for(symbol.as_str())
+        .filter(|(target_file, function)| namespace_member_value_is_current(target_file, function))
+}
+
+/// [`SemanticLookup::namespace_member_function`] over a callee world.
+pub(crate) fn namespace_member_function_in<'a, W: CalleeWorld<'a> + ?Sized>(
+    world: &W,
+    file: &FileFacts,
+    callee: Span,
+) -> Option<(&'a FileFacts, &'a FunctionFact)> {
+    namespace_member_function_with(
+        file,
+        callee,
+        |property| world.entity_symbol_at(file, property),
+        |symbol| world.function_for_symbol(symbol),
+    )
 }

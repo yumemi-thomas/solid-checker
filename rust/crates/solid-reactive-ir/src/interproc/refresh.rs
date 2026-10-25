@@ -16,9 +16,8 @@
 //! its own facts, its nodes and graph-recorded invocations, and what it reads
 //! of the rest of the program. They are kept per file between builds, with
 //! that file's reads ([`crate::base::reads`], as the graph's chunks keep
-//! theirs) and every callee answer they read ([`CalleeRead`], which no
-//! recorded read covers), and reused while the file is unchanged, its nodes
-//! and invocations are the same and every read answers as it did. Two
+//! theirs), and reused while the file is unchanged, its nodes and invocations
+//! are the same and every read answers as it did. Two
 //! questions are asked again in every build: whether a callback consumer
 //! proves a site tracked or fresh ([`Exclusion::Consumer`]: a consumer in any
 //! other file can change it, so a kept answer is never proof), and where each
@@ -68,7 +67,6 @@ struct KeptFile {
     compiler: Arc<solid_facts::compiler::ExecutionMap>,
     rows: Arc<FileRows>,
     proof: ReadProof,
-    callees: Vec<CalleeRead>,
 }
 
 type Forwarded = RoundReplay<
@@ -306,10 +304,8 @@ fn kept_refresh(
             crate::base::reads::replay(&kept.proof.reads);
             return Outcome::Kept;
         }
-        let ((rows, callees), reads) = crate::base::reads::record(|| {
-            record_callee_reads(|| {
-                file_rows(context, file, owners, nodes, nodes_by_path, members_in)
-            })
+        let (rows, reads) = crate::base::reads::record(|| {
+            file_rows(context, file, owners, nodes, nodes_by_path, members_in)
         });
         Outcome::Computed(KeptFile {
             owners: owners
@@ -323,7 +319,6 @@ fn kept_refresh(
             compiler: file.compiler.clone(),
             rows: Arc::new(rows),
             proof: ReadProof::new(reads, *lookup),
-            callees,
         })
     });
     let current = jobs
@@ -445,11 +440,6 @@ fn reusable(
         && (Arc::ptr_eq(&kept.compiler, &file.compiler)
             || same_compiler_semantics(&kept.compiler, &file.compiler))
         && kept.proof.holds(lookup)
-        && kept.callees.iter().all(|read| {
-            file.ast
-                .call_at(read.call)
-                .is_some_and(|call| callee_answer(file, call, read.index, lookup) == read.answer)
-        })
 }
 
 /// The three parts fresh over every slot: part 1 for every file, then part 2

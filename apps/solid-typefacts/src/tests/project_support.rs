@@ -147,7 +147,11 @@ pub(crate) fn entities(
     path: &str,
     demands: &[EntityDemand],
 ) -> Vec<EntityFact> {
-    let run = SemanticDemandRun { path, demands };
+    let run = SemanticDemandRun {
+        path,
+        demands,
+        shared: None,
+    };
     let mut results = project
         .semantic_demand_runs(&Context::new(), &[run])
         .unwrap();

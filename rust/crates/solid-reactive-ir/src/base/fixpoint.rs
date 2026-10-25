@@ -3,9 +3,10 @@
 //!
 //! The memo framework ([`super::memo`]) memoizes context-free answers whose
 //! reads form a DAG. A project pass that folds every file's rows, or iterates
-//! to a fixed point, is neither. Four kinds of computation cover those
+//! to a fixed point, is neither. Three kinds of computation cover those
 //! passes, and each has a solver here whose nodes, edges and per-node values
-//! survive between builds:
+//! survive between builds (a fourth, the K4 ordered fold, had no user and
+//! was removed in the 2026-10-25 audit):
 //!
 //! - **K1, keyed fold** ([`KeyedFold`]): a per-key fold over per-file rows in
 //!   path order (first wins, last wins, union, ...). A changed file refolds
@@ -16,9 +17,6 @@
 //! - **K3, round replay** ([`RoundReplay`]): a bounded or non-monotone Jacobi
 //!   loop. Each node keeps its per-round values; the cone's trajectories are
 //!   recomputed against the stored ones (lemma 4′ below).
-//! - **K4, ordered fold** ([`OrderedFold`]): a sequential pass whose items read
-//!   keys that earlier items wrote. Dirty items replay in position order
-//!   (lemma 4″ below).
 //!
 //! **Node keys.** A node is named by a key that survives the build: a
 //! [`NodeKey`] (file and item ordinal, or file and span until S8) or any
@@ -27,8 +25,7 @@
 //! allocation history, so no solver lets it reach an answer. Order comes only
 //! from keys: K1 folds in the files' current path rank ([`FileOrder`]), never
 //! by [`FileId`] (an added file gets the next id but sorts at its path); K3
-//! steps see a node's predecessors in the order its definition lists them;
-//! K4 positions are totally ordered keys.
+//! steps see a node's predecessors in the order its definition lists them.
 //!
 //! **Seeds and the kept graph.** A node is defined by its direct value (or
 //! input) and its ordered predecessor list; an update names the definitions
@@ -44,7 +41,7 @@
 //! [`super::memo::Store::begin`].
 //!
 //! **Fresh-solve fallbacks** (study lemma 6). A cone above a quarter of the
-//! nodes is solved fresh (same result, cheaper). So is a K1 or K4 whose
+//! nodes is solved fresh (same result, cheaper). So is a K1 whose
 //! surviving files changed relative order, a K3 whose last build stopped at
 //! its round cap, and every solver of a poisoned or new store.
 //!
@@ -60,27 +57,14 @@
 //! cone or outside. That holds only if the last build converged: a loop
 //! stopped by its cap has no final values to extend, which is recorded and
 //! forces a fresh solve. Property: `lemma_4_prime_*` in the tests.
-//!
-//! **Lemma 4″ (ordered fold).** Items run in a total order; each reads keys
-//! (each read recorded with the value it saw) and writes keys, and a read sees
-//! the last earlier write. An item whose input is unchanged and none of whose
-//! read keys had a changed write at an earlier position sees the same values,
-//! so by trace replay (study lemma 2) it performs the same reads and writes.
-//! The incremental solve pops dirty items from a queue in position order; a
-//! changed write dirties the key's readers up to its next writer, and a
-//! dirtied item whose reads still see their recorded values is skipped. By
-//! induction on position, every item's trace, hence the final state, equals
-//! the fresh one. Property: `lemma_4_double_prime_*` in the tests.
 
-// K1, K3 and K4 have no pass yet (S7a, S7c and S7e port onto them): their
+// K1 and K3 had no pass when written (S7a and S7c port onto them): their
 // property tests are their only users until then.
 #[cfg_attr(not(test), allow(dead_code))]
 mod fold;
 mod graph;
 mod kept;
 mod monotone;
-#[cfg_attr(not(test), allow(dead_code))]
-mod ordered;
 #[cfg_attr(not(test), allow(dead_code))]
 mod rounds;
 #[cfg(test)]
@@ -99,8 +83,6 @@ pub(crate) use fold::KeyedFold;
 pub(crate) use graph::Change;
 pub(crate) use graph::Definition;
 pub(crate) use monotone::{Lattice, Monotone};
-#[cfg_attr(not(test), allow(unused_imports))]
-pub(crate) use ordered::{OrderedFold, Tracer};
 #[cfg_attr(not(test), allow(unused_imports))]
 pub(crate) use rounds::{RoundReplay, Step};
 
@@ -253,7 +235,7 @@ pub(crate) struct Solved<K> {
     /// Keys whose output differs from the last build's (added, removed or
     /// changed), each once.
     pub(crate) changed: Vec<K>,
-    /// Nodes (K1: keys; K4: items) recomputed.
+    /// Nodes (K1: keys) recomputed.
     pub(crate) recomputed: usize,
     /// Solved from scratch ([`fresh_cone`], or a fallback).
     pub(crate) fresh: bool,
@@ -355,10 +337,6 @@ impl<K: Clone + Eq + Hash, V: Clone + Eq> Published<K, V> {
 
     pub(crate) fn id(&self, key: &K) -> Option<u32> {
         self.ids.get(key).copied()
-    }
-
-    pub(crate) fn key(&self, id: u32) -> Option<&K> {
-        self.keys.get(&id)
     }
 
     /// Forgets an interned id no reader records any more.

@@ -130,6 +130,28 @@ fn resolver_build(
     project: &Project,
     store: &super::super::memo::build::MemoStore,
 ) -> Option<(Vec<String>, Stats)> {
+    with_resolver_lookup(project, store, |facts, lookup, accessors| {
+        let tables =
+            crate::interproc::accessor_provenance::resolver_tables(facts, lookup, accessors);
+        let stats = lookup
+            .end_memos()
+            .map(|report| report.tables)
+            .unwrap_or_default();
+        (tables, stats)
+    })
+}
+
+/// Runs `f` on the fixture's facts, a lookup over `store`, and an accessor
+/// per binding a `createMemo` call initializes.
+fn with_resolver_lookup<R>(
+    project: &Project,
+    store: &super::super::memo::build::MemoStore,
+    f: impl FnOnce(
+        &ProjectFacts,
+        &crate::indexes::SemanticLookup<'_>,
+        &HashMap<SymbolId, (SymbolId, typefacts::Location)>,
+    ) -> R,
+) -> Option<R> {
     let facts = with_identifier_calls(facts(project)?, project);
     let ast_indexes = facts
         .files
@@ -188,13 +210,7 @@ fn resolver_build(
             }
         }
     }
-    let tables =
-        crate::interproc::accessor_provenance::resolver_tables(&facts, &lookup, &accessors);
-    let stats = lookup
-        .end_memos()
-        .map(|report| report.tables)
-        .unwrap_or_default();
-    Some((tables, stats))
+    Some(f(&facts, &lookup, &accessors))
 }
 
 /// One fixture edit the resolver's seeds name: a mid-chain handoff removed
@@ -369,4 +385,41 @@ fn a_body_edit_reuses_the_other_modules_stages() {
             "{table}: {found:?}"
         );
     }
+}
+
+/// A proof that read the resolver's memos is undecided until this build's
+/// memo construction serves: those memos read derived tables, and one clean
+/// by its stamp would answer before the pass that may move its keys
+/// publishes (final review R2, finding 6a). Once served, it holds.
+#[test]
+fn a_proof_of_resolver_reads_is_undecided_until_the_resolver_serves() {
+    use crate::base::reads::{ReadProof, Verdict};
+    let store = super::super::memo::build::MemoStore::new(false, true);
+    let project = resolver_project();
+    let proof = with_resolver_lookup(&project, &store, |facts, lookup, accessors| {
+        let (_, reads) = crate::base::reads::record(|| {
+            crate::interproc::accessor_provenance::resolver_tables(facts, lookup, accessors)
+        });
+        assert!(
+            reads.memos().iter().any(|read| {
+                crate::interproc::accessor_provenance::RESOLVER_TABLES.contains(&read.table.0)
+            }),
+            "the construction answers resolver memos"
+        );
+        let proof = ReadProof::new(reads, lookup);
+        lookup.end_memos();
+        proof
+    })
+    .unwrap();
+    with_resolver_lookup(&project, &store, |facts, lookup, accessors| {
+        lookup.begin_memos();
+        assert!(
+            matches!(proof.verdict(lookup), Verdict::Undecided(_)),
+            "checked before the resolver's passes publish"
+        );
+        let _ = crate::interproc::accessor_provenance::resolver_tables(facts, lookup, accessors);
+        assert_eq!(proof.verdict(lookup), Verdict::Holds, "after they publish");
+        lookup.end_memos();
+    })
+    .unwrap();
 }

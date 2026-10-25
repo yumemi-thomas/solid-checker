@@ -358,15 +358,14 @@ pub(super) fn classify_parameter_use(
                 .iter()
                 .take(index + 1)
                 .any(|argument| argument.spread)
-            && callee_at_parameter(file, call, index, lookup).is_some_and(
-                |(callee_file, callee, exact)| {
+            && crate::execution_role::project_callee_at_parameter(file, call, index, lookup)
+                .is_some_and(|(callee_file, callee, exact)| {
                     exact
                         && callee.parameters.get(index).is_some_and(|parameter| {
                             parameter.shape == solid_facts::ast::BindingShape::Identifier
                         })
                         && !callee_file.path.as_str().is_empty()
-                },
-            );
+                });
         // An audited standard-library call that only reads or copies the
         // value invokes nothing on it. (For any other callee `ValueOnly`
         // says only that the argument itself is not called; its members
@@ -668,7 +667,8 @@ pub(super) fn forward_edges(
             }) else {
                 continue;
             };
-            let Some((callee_file, callee, exact)) = callee_at_parameter(file, call, index, lookup)
+            let Some((callee_file, callee, exact)) =
+                crate::execution_role::project_callee_at_parameter(file, call, index, lookup)
             else {
                 continue;
             };
@@ -692,94 +692,6 @@ pub(super) fn forward_edges(
         }
     }
     edges
-}
-
-/// What the refresh reads of a callee in another file: its path and span,
-/// whether the argument maps exactly, and its parameter's shape at the
-/// argument's index. The lookup's function table and the callee's syntax
-/// are not recorded reads (`crate::base::reads`), so a file's kept rows hold
-/// every answer they read, asked again before they are reused
-/// (`interproc::refresh`).
-pub(super) type CalleeAnswer = Option<(String, Span, bool, Option<solid_facts::ast::BindingShape>)>;
-
-/// A [`CalleeAnswer`] at a call of the file whose rows are computing:
-/// the call and the argument's index.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct CalleeRead {
-    pub(super) call: Span,
-    pub(super) index: usize,
-    pub(super) answer: CalleeAnswer,
-}
-
-thread_local! {
-    static CALLEE_READS: std::cell::RefCell<Option<Vec<CalleeRead>>> =
-        const { std::cell::RefCell::new(None) };
-}
-
-/// Runs `f`, recording the [`CalleeRead`]s it makes.
-pub(super) fn record_callee_reads<R>(f: impl FnOnce() -> R) -> (R, Vec<CalleeRead>) {
-    let outer = CALLEE_READS.with(|log| log.replace(Some(Vec::new())));
-    let value = f();
-    let reads = CALLEE_READS
-        .with(|log| log.replace(outer))
-        .unwrap_or_default();
-    (value, reads)
-}
-
-/// The answer of `project_callee_at_parameter` as [`CalleeAnswer`] holds it.
-pub(super) fn callee_answer(
-    file: &solid_facts::FileFacts,
-    call: &solid_facts::ast::CallFact,
-    index: usize,
-    lookup: &SemanticLookup<'_>,
-) -> CalleeAnswer {
-    crate::execution_role::project_callee_at_parameter(file, call, index, lookup).map(
-        |(callee_file, callee, exact)| {
-            (
-                callee_file.path.to_string(),
-                callee.span,
-                exact,
-                callee
-                    .parameters
-                    .get(index)
-                    .map(|parameter| parameter.shape),
-            )
-        },
-    )
-}
-
-/// `project_callee_at_parameter`, recorded ([`record_callee_reads`]).
-fn callee_at_parameter<'a>(
-    file: &solid_facts::FileFacts,
-    call: &solid_facts::ast::CallFact,
-    index: usize,
-    lookup: &SemanticLookup<'a>,
-) -> Option<(
-    &'a solid_facts::FileFacts,
-    &'a solid_facts::ast::FunctionFact,
-    bool,
-)> {
-    let found = crate::execution_role::project_callee_at_parameter(file, call, index, lookup);
-    CALLEE_READS.with(|log| {
-        if let Some(log) = log.borrow_mut().as_mut() {
-            log.push(CalleeRead {
-                call: call.span,
-                index,
-                answer: found.map(|(callee_file, callee, exact)| {
-                    (
-                        callee_file.path.to_string(),
-                        callee.span,
-                        exact,
-                        callee
-                            .parameters
-                            .get(index)
-                            .map(|parameter| parameter.shape),
-                    )
-                }),
-            });
-        }
-    });
-    found
 }
 
 /// A [`ForwardEdge`] as the forwarding loop reads it: its exclusion decided.

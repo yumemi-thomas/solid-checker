@@ -497,6 +497,15 @@ impl FactTable {
             .map_or(&[], |entry| entry.entities.as_ref())
     }
 
+    /// [`Self::entities_for_path`] as the shared slice the table holds, for a
+    /// holder that keeps a path's rows across tables the way the table does:
+    /// a path a delta leaves alone shares the same rows with every table
+    /// made from this one.
+    #[must_use]
+    pub fn entities_shared_for_path(&self, path: &str) -> Option<&Arc<[EntityFact]>> {
+        self.paths.get(path).map(|entry| &entry.entities)
+    }
+
     #[must_use]
     pub fn file(&self, path: &str) -> Option<&FileFact> {
         self.paths.get(path).and_then(|entry| entry.file.as_ref())
@@ -521,6 +530,74 @@ impl FactTable {
 
     pub fn symbols(&self) -> impl ExactSizeIterator<Item = Symbol<'_>> {
         self.symbols.iter().map(|inner| Symbol { inner })
+    }
+
+    /// The ids of the symbols whose alias target or declarations differ
+    /// between `previous` and this table, added and removed ones included,
+    /// in id order. Only the index leaves the two tables do not share are
+    /// compared (a leaf both hold is the same rows), so the cost follows
+    /// what changed between them, whatever sequence of updates led from one
+    /// to the other.
+    #[must_use]
+    pub fn symbols_with_moved_declarations(&self, previous: &FactTable) -> Vec<Arc<str>> {
+        let held = previous
+            .symbols
+            .leaves
+            .iter()
+            .map(|leaf| leaf.as_ptr())
+            .collect::<std::collections::HashSet<_>>();
+        let shared = self
+            .symbols
+            .leaves
+            .iter()
+            .map(|leaf| leaf.as_ptr())
+            .filter(|leaf| held.contains(leaf))
+            .collect::<std::collections::HashSet<_>>();
+        fn unshared<'t>(
+            index: &'t PackedIndex<StoredSymbol>,
+            shared: &std::collections::HashSet<*const StoredSymbol>,
+        ) -> Vec<&'t StoredSymbol> {
+            index
+                .leaves
+                .iter()
+                .filter(|leaf| !shared.contains(&leaf.as_ptr()))
+                .flat_map(|leaf| leaf.iter())
+                .collect()
+        }
+        let (before, after) = (
+            unshared(&previous.symbols, &shared),
+            unshared(&self.symbols, &shared),
+        );
+        let same = |left: &StoredSymbol, right: &StoredSymbol| {
+            (Arc::ptr_eq(&left.alias_target, &right.alias_target)
+                || left.alias_target == right.alias_target)
+                && (Arc::ptr_eq(&left.declarations, &right.declarations)
+                    || left.declarations == right.declarations)
+        };
+        let mut moved = Vec::new();
+        let (mut before, mut after) = (before.into_iter().peekable(), after.into_iter().peekable());
+        loop {
+            match (before.peek(), after.peek()) {
+                (None, None) => break,
+                (Some(left), Some(right)) if left.id == right.id => {
+                    if !same(left, right) {
+                        moved.push(Arc::clone(&right.id));
+                    }
+                    before.next();
+                    after.next();
+                }
+                (Some(left), right) if right.is_none_or(|right| left.id < right.id) => {
+                    moved.push(Arc::clone(&left.id));
+                    before.next();
+                }
+                (_, right) => {
+                    let right = right.expect("a row remains on the right");
+                    moved.push(Arc::clone(&right.id));
+                    after.next();
+                }
+            }
+        }
+        moved
     }
 
     #[must_use]
@@ -901,3 +978,80 @@ impl PartialEq for FactTable {
 }
 
 impl Eq for FactTable {}
+
+#[cfg(test)]
+mod moved_symbol_tests {
+    use super::*;
+
+    fn symbol(id: &str, target: &str, start: u64) -> SymbolFact {
+        SymbolFact {
+            id: id.into(),
+            references: Arc::from([]),
+            alias_target: target.into(),
+            declarations: vec![Declaration {
+                kind: "variable".into(),
+                name: id.into(),
+                location: Location {
+                    path: "/p/a.ts".into(),
+                    start_byte: start,
+                    end_byte: start + 1,
+                },
+            }]
+            .into(),
+        }
+    }
+
+    fn table(symbols: Vec<SymbolFact>) -> FactTable {
+        FactTable::from_parts(2, 1, "p", vec![], vec![], symbols, vec![])
+    }
+
+    /// The moved symbols are found from the leaves two tables do not share,
+    /// and are the ones a full comparison by id finds: a moved declaration,
+    /// a new alias target, an added and a removed symbol. A row whose
+    /// references alone changed did not move.
+    #[test]
+    fn moved_declarations_come_from_unshared_leaves_and_match_a_full_comparison() {
+        let before = table(
+            (0..500)
+                .map(|index| symbol(&format!("s{index:04}"), "", index))
+                .collect(),
+        );
+        let mut after = before.clone();
+        let edits = [
+            ("s0100", Some(symbol("s0100", "", 9_999))),
+            ("s0150", Some(symbol("s0150", "s0001", 150))),
+            ("s0200", None),
+            ("s0300x", Some(symbol("s0300x", "", 1))),
+            ("s0400", {
+                let mut referenced = symbol("s0400", "", 400);
+                referenced.references = vec![Location {
+                    path: "/p/b.ts".into(),
+                    start_byte: 3,
+                    end_byte: 4,
+                }]
+                .into();
+                Some(referenced)
+            }),
+        ];
+        for (id, replacement) in edits {
+            after.symbols = after
+                .symbols
+                .updated(id, replacement.map(StoredSymbol::from_fact));
+        }
+        let moved = ["s0100", "s0150", "s0200", "s0300x"].map(Arc::<str>::from);
+        assert_eq!(after.symbols_with_moved_declarations(&before), moved);
+        assert!(
+            after.symbols.leaves.iter().any(|leaf| before
+                .symbols
+                .leaves
+                .iter()
+                .any(|kept| Arc::ptr_eq(kept, leaf))),
+            "a sparse edit shares the leaves it did not touch"
+        );
+        // A table rebuilt whole shares no leaf, and answers the same.
+        let rebuilt = table(after.symbols.iter().map(StoredSymbol::to_fact).collect());
+        assert_eq!(rebuilt.symbols_with_moved_declarations(&before), moved);
+        assert!(before.symbols_with_moved_declarations(&before).is_empty());
+        assert!(rebuilt.symbols_with_moved_declarations(&after).is_empty());
+    }
+}

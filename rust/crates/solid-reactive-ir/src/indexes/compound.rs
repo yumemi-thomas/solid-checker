@@ -152,7 +152,8 @@ impl SemanticLookup<'_> {
             file.ast.peel_ts_sugar_span(property.value),
         ) && self.function_is_component(file, function)
             && !self
-                .escaped_component_functions()
+                .component_statuses_of(file.path.as_str())
+                .1
                 .contains(&(file.path.as_str(), function.span))
     }
 
