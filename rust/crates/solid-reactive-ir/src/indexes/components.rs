@@ -38,21 +38,52 @@ impl<'a> SemanticLookup<'a> {
             })
             .or_else(|| {
                 let symbol = self.entities.at(path, span)?;
-                self.descriptors_by_symbol
-                    .get_or_init(|| {
-                        self.facts
-                            .typescript
-                            .entities()
-                            .filter_map(|entity| {
-                                (!entity.symbol.is_empty())
-                                    .then_some(entity.symbol.as_ref())
-                                    .zip(entity.type_descriptor.as_deref())
-                            })
-                            .collect()
-                    })
-                    .get(symbol.as_str())
-                    .copied()
+                // Another file's entity may answer, or stop answering: the
+                // answer is recorded per symbol (final review R2, finding 3).
+                self.note_probe_read(crate::base::memo::probes::Probe::SymbolDescriptor, || {
+                    Self::symbol_key(symbol.as_str())
+                });
+                self.descriptor_by_symbol(symbol.as_str())
             })
+    }
+
+    /// The type descriptor of the last entity, in table order, that names
+    /// `symbol` and carries one, in any file. Unrecorded: a reader notes
+    /// [`crate::base::memo::probes::Probe::SymbolDescriptor`].
+    pub(super) fn descriptor_by_symbol(&self, symbol: &str) -> Option<&'a TypeDescriptor> {
+        self.descriptors_by_symbol
+            .get_or_init(|| {
+                self.facts
+                    .typescript
+                    .entities()
+                    .filter_map(|entity| {
+                        (!entity.symbol.is_empty())
+                            .then_some(entity.symbol.as_ref())
+                            .zip(entity.type_descriptor.as_deref())
+                    })
+                    .collect()
+            })
+            .get(symbol)
+            .copied()
+    }
+
+    /// [`Self::descriptor_by_symbol`] for callability; a reader notes
+    /// [`crate::base::memo::probes::Probe::SymbolCallability`].
+    pub(super) fn callability_by_symbol(&self, symbol: &str) -> Option<Callability> {
+        self.callability_by_symbol
+            .get_or_init(|| {
+                self.facts
+                    .typescript
+                    .entities()
+                    .filter_map(|entity| {
+                        (!entity.symbol.is_empty())
+                            .then_some(entity.symbol.as_ref())
+                            .zip(entity.callability)
+                    })
+                    .collect()
+            })
+            .get(symbol)
+            .copied()
     }
 
     /// Whether a function is proven to be a Solid component by a JSX call
@@ -62,7 +93,8 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         function: &solid_facts::ast::FunctionFact,
     ) -> bool {
-        self.component_functions()
+        self.component_statuses_of(file.path.as_str())
+            .0
             .contains(&(file.path.as_str(), function.span))
     }
 
@@ -78,7 +110,8 @@ impl<'a> SemanticLookup<'a> {
             return ComponentStatus::Proven;
         }
         if self
-            .possible_component_functions()
+            .component_statuses_of(file.path.as_str())
+            .2
             .contains(&(file.path.as_str(), function.span))
         {
             return ComponentStatus::Uncertain;
@@ -121,6 +154,21 @@ impl<'a> SemanticLookup<'a> {
     /// function per span.
     fn component_statuses(&self) -> &ComponentSets<'a> {
         crate::base::reads::note(crate::base::reads::Section::Components);
+        self.component_sets()
+    }
+
+    /// The three sets, read only at keys whose path is `path`: the reader
+    /// records that path's part of the census
+    /// ([`super::census::ComponentSpansOf`]), or the whole census when the
+    /// build holds no such path.
+    pub(super) fn component_statuses_of(&self, path: &str) -> &ComponentSets<'a> {
+        if !self.note_component_spans(path) {
+            crate::base::reads::note(crate::base::reads::Section::Components);
+        }
+        self.component_sets()
+    }
+
+    fn component_sets(&self) -> &ComponentSets<'a> {
         self.component_functions
             .get_or_init(|| crate::base::reads::suppress(|| self.component_statuses_uncached()))
     }
@@ -244,7 +292,8 @@ impl<'a> SemanticLookup<'a> {
                                 // component however this body is entered.
                                 || (self.jsx_call_site_loading(path, inner.span).any
                                     && !self
-                                        .escaped_component_functions()
+                                        .component_statuses_of(path)
+                                        .1
                                         .contains(&(*path, inner.span)))
                         })
                         .map(|inner| crate::location(*path, inner.span))
@@ -272,20 +321,11 @@ impl<'a> SemanticLookup<'a> {
             })
             .or_else(|| {
                 let symbol = self.entities.at(path, span)?;
-                self.callability_by_symbol
-                    .get_or_init(|| {
-                        self.facts
-                            .typescript
-                            .entities()
-                            .filter_map(|entity| {
-                                (!entity.symbol.is_empty())
-                                    .then_some(entity.symbol.as_ref())
-                                    .zip(entity.callability)
-                            })
-                            .collect()
-                    })
-                    .get(symbol.as_str())
-                    .copied()
+                // As in `smallest_contained_descriptor`.
+                self.note_probe_read(crate::base::memo::probes::Probe::SymbolCallability, || {
+                    Self::symbol_key(symbol.as_str())
+                });
+                self.callability_by_symbol(symbol.as_str())
             })
     }
 
@@ -449,6 +489,11 @@ impl<'a> SemanticLookup<'a> {
     /// dialect's primitive-defining packages under that export's name.
     pub(crate) fn intrinsic_tag_prop(&self, file: &FileFacts, name: Span) -> Option<&'static str> {
         let component = self.entities.at(file.path.as_str(), name)?;
+        // The tag symbol's declarations, in any file (a project module
+        // augmentation among them).
+        self.note_probe_read(crate::base::memo::probes::Probe::SymbolInfo, || {
+            Self::symbol_key(component.as_str())
+        });
         let declarations = self.symbols_by_id().get(component.as_str())?.declarations();
         let packages = self.dialect.primitive_defining_packages();
         let (_, prop) = self
@@ -481,112 +526,98 @@ impl<'a> SemanticLookup<'a> {
         span: Span,
         predicate: impl Fn(&EntityFact) -> bool,
     ) -> Option<&'a EntityFact> {
-        let start = u64::from(span.start);
-        let end = u64::from(span.end);
-        let entities = self.contained_entities_by_path().get(path)?;
-        let first = entities.partition_point(|entity| entity.location.start_byte < start);
-        let last = entities.partition_point(|entity| entity.location.start_byte <= end);
-        entities[first..last]
-            .iter()
-            .enumerate()
-            .filter_map(|(index, entity)| {
-                (entity.location.end_byte <= end && predicate(entity)).then_some((index, *entity))
-            })
-            .min_by_key(|(index, entity)| {
-                (
-                    entity.location.end_byte - entity.location.start_byte,
-                    *index,
-                )
-            })
-            .map(|(_, entity)| entity)
-    }
-
-    fn contained_entities_by_path(&self) -> &HashMap<&'a str, Vec<&'a EntityFact>> {
-        self.contained_entities_by_path.get_or_init(|| {
-            let mut by_path = HashMap::<&str, Vec<&EntityFact>>::default();
-            for entity in self.facts.typescript.entities() {
-                by_path
-                    .entry(entity.location.path.as_ref())
-                    .or_default()
-                    .push(entity);
-            }
-            for entities in by_path.values_mut() {
-                entities.sort_by_key(|entity| entity.location.start_byte);
-            }
-            by_path
-        })
+        self.entities
+            .locations
+            .smallest_contained(path, span, predicate)
     }
 
     pub(super) fn functions_by_symbol(&self) -> &HashMap<&'a str, SymbolFunction> {
         self.functions_by_symbol.get_or_init(|| {
+            // Each file's named functions, then its function-valued bindings,
+            // read on several workers; the first in file order names a symbol.
+            let slots = self.facts.files.iter().enumerate().collect::<Vec<_>>();
+            let named = crate::pipeline::parallel_slice_results(&slots, |&(file_index, file)| {
+                self.file_symbol_functions(file_index, file)
+            });
             let mut map = HashMap::default();
-            for (file_index, file) in self.facts.files.iter().enumerate() {
-                for (function_index, function) in file.ast.functions.iter().enumerate() {
-                    let own_method = crate::owners::own_method_name(file, function);
-                    let Some(name) = function.name.as_ref().or(own_method) else {
-                        continue;
-                    };
-                    let Some(symbol) = self
-                        .entities
-                        .at(file.path.as_str(), name.span)
-                        .map(SymbolId::as_str)
-                        .or_else(|| {
-                            own_method.and_then(|method| {
-                                self.method_symbol_ref(file.path.as_str(), method.span)
-                            })
-                        })
-                    else {
-                        continue;
-                    };
-                    map.entry(symbol).or_insert(SymbolFunction::Resolved {
-                        file: file_index,
-                        function: function_index,
-                    });
-                }
-                for binding in &file.ast.bindings {
-                    if !binding.initializer_function && binding.call_initializer.is_none() {
-                        continue;
-                    }
-                    if binding.call_initializer.is_some()
-                        && (binding.shape != solid_facts::ast::BindingShape::Identifier
-                            || binding.names.len() != 1)
-                    {
-                        // A call result may name a wrapped function only when
-                        // one identifier owns the whole result. Tuple/object
-                        // bindings name slots, not closures nested in the
-                        // call's arguments (`createSignal(() => value)`).
-                        continue;
-                    }
-                    let mut outcome = None;
-                    for name in &binding.names {
-                        let Some(symbol) = self.entities.at(file.path.as_str(), name.span) else {
-                            continue;
-                        };
-                        if map.contains_key(symbol.as_str()) {
-                            continue;
-                        }
-                        let outcome = *outcome.get_or_insert_with(|| match binding.initializer {
-                            None => Some(SymbolFunction::Aborted),
-                            Some(initializer) => file
-                                .ast
-                                .functions
-                                .iter()
-                                .enumerate()
-                                .filter(|(_, function)| initializer.contains(function.span))
-                                .max_by_key(|(_, function)| function.span.end - function.span.start)
-                                .map(|(function_index, _)| SymbolFunction::Resolved {
-                                    file: file_index,
-                                    function: function_index,
-                                }),
-                        });
-                        if let Some(outcome) = outcome {
-                            map.insert(symbol.as_str(), outcome);
-                        }
-                    }
-                }
+            for (symbol, function) in named.into_iter().flatten() {
+                map.entry(symbol).or_insert(function);
             }
             map
         })
+    }
+
+    /// One file's candidates for [`Self::functions_by_symbol`], in the order
+    /// the first of a symbol wins.
+    fn file_symbol_functions(
+        &self,
+        file_index: usize,
+        file: &'a FileFacts,
+    ) -> Vec<(&'a str, SymbolFunction)> {
+        let path = file.path.as_str();
+        let mut named = Vec::new();
+        for (function_index, function) in file.ast.functions.iter().enumerate() {
+            let own_method = || crate::owners::own_method_name(file, function);
+            let Some(name) = function.name.as_ref().or_else(own_method) else {
+                continue;
+            };
+            let Some(symbol) = self
+                .entities
+                .at(path, name.span)
+                .map(SymbolId::as_str)
+                .or_else(|| {
+                    own_method().and_then(|method| self.method_symbol_ref(path, method.span))
+                })
+            else {
+                continue;
+            };
+            named.push((
+                symbol,
+                SymbolFunction::Resolved {
+                    file: file_index,
+                    function: function_index,
+                },
+            ));
+        }
+        for binding in &file.ast.bindings {
+            if !binding.initializer_function && binding.call_initializer.is_none() {
+                continue;
+            }
+            if binding.call_initializer.is_some()
+                && (binding.shape != solid_facts::ast::BindingShape::Identifier
+                    || binding.names.len() != 1)
+            {
+                // A call result may name a wrapped function only when
+                // one identifier owns the whole result. Tuple/object
+                // bindings name slots, not closures nested in the
+                // call's arguments (`createSignal(() => value)`).
+                continue;
+            }
+            let mut outcome = None;
+            for name in &binding.names {
+                let Some(symbol) = self.entities.at(path, name.span) else {
+                    continue;
+                };
+                let outcome = *outcome.get_or_insert_with(|| match binding.initializer {
+                    None => Some(SymbolFunction::Aborted),
+                    Some(initializer) => file
+                        .ast
+                        .functions
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, function)| initializer.contains(function.span))
+                        .max_by_key(|(_, function)| function.span.end - function.span.start)
+                        .map(|(function_index, _)| SymbolFunction::Resolved {
+                            file: file_index,
+                            function: function_index,
+                        }),
+                });
+                if let Some(outcome) = outcome {
+                    named.push((symbol.as_str(), outcome));
+                }
+            }
+        }
+        named
     }
 
     /// ADR 0331: the functions a tag renders through an exact alias only:
@@ -642,11 +673,6 @@ impl<'a> SemanticLookup<'a> {
             }
         }
         None
-    }
-
-    pub(crate) fn entities_by_location(&self) -> &HashMap<(&'a str, u64, u64), &'a EntityFact> {
-        self.entities_by_location
-            .get_or_init(|| super::first_entity_by_location(self.facts.typescript.entities()))
     }
 }
 

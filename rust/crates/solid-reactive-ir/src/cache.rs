@@ -2,13 +2,10 @@
 //! per-file contributions, fingerprints, and reuse checks.
 
 use crate::indexes::CachedAstFileIndex;
-use crate::owners::{
-    SettledGateDecisions, binding_returns_reactive_source, returned_arrow_function,
-};
 use crate::pipeline::available_analysis_workers;
 use crate::{
-    ActionInvocation, AsyncRead, CacheRetention, CallbackSummary, FunctionNode, OwnerRequirement,
-    Program, ReactiveRead, ReactiveSourceKind, ReactiveWrite, RuleOptions, StaticDefect,
+    ActionInvocation, AsyncRead, CacheRetention, CallbackSummary, FunctionNode, Program,
+    ReactiveRead, ReactiveSourceKind, ReactiveWrite, RuleOptions, StaticDefect,
     UnresolvedCallbackObligation,
 };
 
@@ -18,10 +15,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::base::reads::{ReadAnswers, ReadProof};
+use crate::base::reads::ReadProof;
 use crate::identity::{SymbolId, SymbolInterner, SymbolName};
 use crate::indexes::EntitySymbols;
-use crate::interproc::{InterproceduralResult, SummaryNode, SummaryRead};
+use crate::interproc::{SummaryNode, SummaryRead};
 use crate::reachability::ReachabilityTopology;
 use crate::symbols::{
     alias_roots_and_source_declarations, entity_symbols, source_discovery_symbol_semantics,
@@ -74,7 +71,7 @@ struct SourceDiscoveryDomain {
 #[derive(Default)]
 pub(crate) struct IncrementalCacheState {
     ast_indexes: HashMap<SourcePath, CachedAstFileIndex>,
-    source_discovery: HashMap<SourcePath, CachedSourceDiscovery>,
+    source_discovery: HashMap<SourcePath, SourceDiscoveryIdentity>,
     interprocedural_graph: HashMap<SourcePath, CachedInterproceduralGraph>,
     interprocedural_results: CachedInterproceduralResults,
     typescript_indexes: Option<CachedTypeScriptIndexes>,
@@ -86,13 +83,17 @@ pub(crate) struct IncrementalCacheState {
     /// L2: memo answers with their recorded reads ([`crate::base::memo`]),
     /// reused across builds until a read changes.
     memos: Option<crate::base::memo::build::MemoStore>,
+    /// Whether a build leaves its memo sweep to
+    /// [`IncrementalCacheState::finish_deferred_end`] (a daemon sweeps after
+    /// it has answered).
+    defer_memo_end: bool,
     domain: Option<SourceDiscoveryDomain>,
 }
 
 #[derive(Default)]
 pub(crate) struct BuildCaches<'a> {
     pub(crate) ast_indexes: Option<&'a mut HashMap<SourcePath, CachedAstFileIndex>>,
-    pub(crate) source_discovery: Option<&'a mut HashMap<SourcePath, CachedSourceDiscovery>>,
+    pub(crate) source_discovery: Option<&'a mut HashMap<SourcePath, SourceDiscoveryIdentity>>,
     pub(crate) interprocedural_graph:
         Option<&'a mut HashMap<SourcePath, CachedInterproceduralGraph>>,
     pub(crate) interprocedural_results: Option<&'a mut CachedInterproceduralResults>,
@@ -107,6 +108,8 @@ pub(crate) struct BuildCaches<'a> {
     )>,
     /// The retained memo store; `None` gives the build a store of its own.
     pub(crate) memos: Option<&'a crate::base::memo::build::MemoStore>,
+    /// Leave the memo store's end-of-build sweep to the caller.
+    pub(crate) defer_memo_end: bool,
 }
 
 impl IncrementalCacheState {
@@ -152,6 +155,22 @@ impl IncrementalCacheState {
                 self.memos
                     .get_or_insert_with(crate::base::memo::build::MemoStore::from_env),
             ),
+            defer_memo_end: self.defer_memo_end,
+        }
+    }
+
+    pub(crate) fn set_defer_memo_end(&mut self, defer: bool) {
+        self.defer_memo_end = defer;
+    }
+
+    /// Runs the memo sweep a build deferred, if one is due.
+    pub(crate) fn finish_deferred_end(&self) {
+        if let Some(report) = self
+            .memos
+            .as_ref()
+            .and_then(crate::base::memo::build::MemoStore::finish_deferred_end)
+        {
+            crate::pipeline::report_deferred_memos(&report);
         }
     }
 
@@ -164,12 +183,13 @@ impl IncrementalCacheState {
         if retention == CacheRetention::Performance {
             return;
         }
-        self.interprocedural_graph.clear();
-        self.interprocedural_results = CachedInterproceduralResults::default();
-        // Reachability stays (ADR 0397): its per-file chunks are small,
-        // and rebuilding them recomputed every file after each idle period.
+        // The interprocedural graph and result chunks stay (ADR
+        // 0412): rebuilding them cost about 95 ms of every
+        // app-game edit for about 50 MB, as do reachability's (ADR 0397).
         self.base_indexes = None;
         if retention == CacheRetention::Compact {
+            self.interprocedural_graph.clear();
+            self.interprocedural_results = CachedInterproceduralResults::default();
             self.reachability = None;
             // Memo answers are small next to what they save; only the
             // compact policy, which keeps no index at all, drops them.
@@ -201,6 +221,9 @@ impl IncrementalCacheState {
 pub(crate) struct SourceDiscoveryIdentity {
     pub(crate) source_hash: SourceHash,
     pub(crate) symbols: Vec<SymbolId>,
+    /// The file's import resolutions, digested: neither is a TypeFacts row,
+    /// and either can move with the file's text and rows unchanged.
+    pub(crate) resolutions: Option<[u8; 32]>,
 }
 
 #[derive(Clone, Default)]
@@ -221,15 +244,6 @@ pub(crate) struct SourceDiscoveryContribution {
     /// (`createStore(value)` / `createOptimisticStore(value)`): no compute
     /// node exists, so the store is not a valid `refresh()` target.
     pub(crate) value_form_stores: Vec<SymbolId>,
-}
-
-pub(crate) struct CachedSourceDiscovery {
-    pub(crate) identity: SourceDiscoveryIdentity,
-    /// What the file's discovery read of the rest of the program
-    /// ([`crate::base::reads`]): a returned-source answer, a component
-    /// identity, a member target.
-    pub(crate) proof: ReadProof,
-    pub(crate) contribution: SourceDiscoveryContribution,
 }
 
 #[derive(Clone)]
@@ -310,9 +324,6 @@ pub(crate) struct CachedInterproceduralGraph {
     /// The accessor entries the contribution embeds, by symbol
     /// (`interproc::transport_reads`): another file's discovery can move one.
     pub(crate) accessor_reads: crate::interproc::TransportReads,
-    /// What the contribution asked of other files through the function
-    /// table (`interproc::GraphCalleeRead`), asked again before reuse.
-    pub(crate) callee_reads: Vec<crate::interproc::GraphCalleeRead>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -552,30 +563,6 @@ pub(crate) struct CachedReachabilityFile {
     pub(crate) topology: ReachabilityTopology,
 }
 
-pub(crate) type LateStageSourceFingerprint = [u8; 32];
-
-#[derive(Clone)]
-pub(crate) struct LateStageFileInput {
-    pub(crate) source_hash: SourceHash,
-    pub(crate) ast: Arc<solid_facts::ast::AstFacts>,
-    pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
-    pub(crate) source_fingerprint: LateStageSourceFingerprint,
-    /// The text, for the syntax a stage parses again
-    /// ([`same_reparsed_syntax`]); shared with the facts.
-    pub(crate) source: Arc<str>,
-}
-
-/// Whether two texts of one file answer the same where the interprocedural
-/// stage parses the source again: the accessor transport's `this` uses (a
-/// literal receiver's escape census) and array literal slots, which the
-/// compared AST facts do not hold. A same-shape edit that adds `this` to a
-/// method must not reuse the stage. Parsed only for a file whose text moved.
-fn same_reparsed_syntax(path: &str, previous: &str, current: &str) -> bool {
-    let path = std::path::Path::new(path);
-    solid_facts::ast::receiver_and_array_syntax(path, previous)
-        == solid_facts::ast::receiver_and_array_syntax(path, current)
-}
-
 #[derive(Clone, Default)]
 pub(crate) struct LocalAccessResult {
     pub(crate) reads: Vec<Arc<ReactiveRead>>,
@@ -589,12 +576,8 @@ pub(crate) struct LocalAccessResult {
 
 pub(crate) struct LocalAccessBuild {
     pub(crate) result: LocalAccessResult,
-    pub(crate) reused: bool,
     pub(crate) reused_files: u64,
     pub(crate) recomputed_files: u64,
-    /// What the aggregate read of the rest of the program: every file's
-    /// reads, and source discovery's project passes'.
-    pub(crate) reads: crate::base::reads::Reads,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -709,7 +692,6 @@ impl LocalAccessSources {
 
 #[derive(Default)]
 pub(crate) struct CachedLocalAccesses {
-    pub(crate) aggregate: Option<LocalAccessResult>,
     /// The tables as of the last build that checked the files.
     pub(crate) sources: Option<LocalAccessSources>,
     pub(crate) files: HashMap<SourcePath, CachedLocalAccessFile>,
@@ -733,36 +715,19 @@ pub(crate) struct CachedLocalAccesses {
 /// `path -> byte range -> source symbol`.
 pub(crate) type SourceReferenceLocations = HashMap<String, HashMap<(u64, u64), SymbolId>>;
 
+/// The late stages' per-file state: their chunks and the owner graph.
+#[derive(Default)]
 pub(crate) struct CachedLateStages {
-    pub(crate) inputs: HashMap<SourcePath, LateStageFileInput>,
-    /// What the retained aggregates (local accesses, the interprocedural
-    /// result, missing owners, the compatibility reference map) read of the
-    /// rest of the program, set once a build computed all of them
-    /// ([`Self::reads`]); `None` until then.
-    pub(crate) proof: Option<ReadProof>,
-    /// This build's reads of the aggregates, gathered while they compute.
-    pub(crate) reads: crate::base::reads::Reads,
-    /// The proof's reads a pass not yet run in this build must decide
-    /// ([`ReusePlan::settle`]).
-    pub(crate) undecided: Vec<crate::base::reads::MemoRead>,
     pub(crate) local_accesses: CachedLocalAccesses,
-    pub(crate) interprocedural: Option<InterproceduralResult>,
-    pub(crate) missing_owners: Option<Vec<OwnerRequirement>>,
-    /// The call-site gate decisions the owner fixed point resolved for
-    /// call-site-gated leaf owners, cached beside `missing_owners` under the
-    /// same reuse condition: the leaf-operation table is rebuilt every run
-    /// and must be re-gated even when the graph itself is reused.
-    pub(crate) settled_gates: Option<SettledGateDecisions>,
     pub(crate) owners: crate::owners::OwnerState,
-    /// The upstream-compat surface's location-keyed reference map. Retained
-    /// under the same condition as `interprocedural`, because both are
-    /// functions of the TypeScript table and the proven source set.
-    pub(crate) compat_reference_locations: Option<SourceReferenceLocations>,
+    /// The chunked passes' per-file outputs, each with its own proof
+    /// ([`crate::late_chunks`]).
+    pub(crate) chunks: crate::late_chunks::LateChunks,
 }
 
 /// Whether two analyses of one path's source hold the same AST facts, every
 /// table compared, the source hash aside: what the whole-stage reuse of
-/// reachability and the late stages asks of a file whose bytes moved. The
+/// reachability asks of a file whose bytes moved. The
 /// stages read many more tables than calls, bindings and functions (the
 /// role machine reads assignments, logical and conditional expressions,
 /// object properties, classes, through another file too), so a table left
@@ -821,137 +786,6 @@ fn same_compiler_model_semantics(
         && previous.generated_operations == current.generated_operations
 }
 
-pub(crate) fn late_stage_source_fingerprint(
-    file: &solid_facts::FileFacts,
-) -> LateStageSourceFingerprint {
-    fn optional_bool(hasher: &mut Sha256, value: Option<bool>) {
-        hasher.update([match value {
-            None => 0,
-            Some(false) => 1,
-            Some(true) => 2,
-        }]);
-    }
-
-    let mut hasher = Sha256::new();
-    hasher.update(
-        u64::try_from(file.ast.calls.len())
-            .unwrap_or(u64::MAX)
-            .to_le_bytes(),
-    );
-    for call in &file.ast.calls {
-        let callee = usize::try_from(call.callee.start)
-            .ok()
-            .zip(usize::try_from(call.callee.end).ok())
-            .and_then(|(start, end)| file.source.get(start..end));
-        optional_bool(&mut hasher, callee.map(|_| false));
-        if let Some(callee) = callee {
-            hasher.update(
-                u64::try_from(callee.len())
-                    .unwrap_or(u64::MAX)
-                    .to_le_bytes(),
-            );
-            hasher.update(callee.as_bytes());
-        }
-    }
-    hasher.update(
-        u64::try_from(file.ast.bindings.len())
-            .unwrap_or(u64::MAX)
-            .to_le_bytes(),
-    );
-    for binding in &file.ast.bindings {
-        let shape = binding.call_initializer.and_then(|initializer| {
-            file.ast
-                .call_at(initializer)
-                .map(|call| binding_returns_reactive_source(binding, call))
-        });
-        optional_bool(&mut hasher, shape);
-    }
-    let returned_functions = file.ast.returns.iter().filter_map(|returned| {
-        (returned.value == solid_facts::ast::ReturnValueKind::Function)
-            .then_some(returned.argument)
-            .flatten()
-    });
-    for argument in returned_functions {
-        hasher.update([u8::from(returned_arrow_function(&file.ast, argument))]);
-    }
-    hasher.finalize().into()
-}
-
-pub(crate) fn late_stage_inputs_match(cache: &CachedLateStages, facts: &ProjectFacts) -> bool {
-    cache.inputs.len() == facts.files.len()
-        && facts.files.iter().all(|file| {
-            cache
-                .inputs
-                .get(file.path.as_str())
-                .is_some_and(|previous| {
-                    (Arc::ptr_eq(&previous.compiler, &file.compiler)
-                        || same_compiler_semantics(&previous.compiler, &file.compiler))
-                        && (previous.source_hash == file.source_hash
-                            || same_reachability_ast(&previous.ast, &file.ast)
-                                && previous.source_fingerprint
-                                    == late_stage_source_fingerprint(file)
-                                && same_reparsed_syntax(
-                                    file.path.as_str(),
-                                    &previous.source,
-                                    &file.source,
-                                ))
-                })
-        })
-}
-
-pub(crate) fn current_late_stage_inputs(
-    facts: &ProjectFacts,
-) -> HashMap<SourcePath, LateStageFileInput> {
-    facts
-        .files
-        .iter()
-        .map(|file| {
-            (
-                file.path.clone(),
-                LateStageFileInput {
-                    source_hash: file.source_hash.clone(),
-                    ast: file.ast.clone(),
-                    compiler: file.compiler.clone(),
-                    source_fingerprint: late_stage_source_fingerprint(file),
-                    source: Arc::clone(&file.source),
-                },
-            )
-        })
-        .collect()
-}
-
-pub(crate) fn refresh_late_stage_inputs(
-    inputs: &mut HashMap<SourcePath, LateStageFileInput>,
-    facts: &ProjectFacts,
-) {
-    let current_paths = facts
-        .files
-        .iter()
-        .map(|file| file.path.as_str())
-        .collect::<HashSet<_>>();
-    inputs.retain(|path, _| current_paths.contains(path.as_str()));
-    for file in &facts.files {
-        let unchanged = inputs.get(file.path.as_str()).is_some_and(|input| {
-            input.source_hash == file.source_hash
-                && (Arc::ptr_eq(&input.compiler, &file.compiler)
-                    || same_compiler_semantics(&input.compiler, &file.compiler))
-        });
-        if unchanged {
-            continue;
-        }
-        inputs.insert(
-            file.path.clone(),
-            LateStageFileInput {
-                source_hash: file.source_hash.clone(),
-                ast: file.ast.clone(),
-                compiler: file.compiler.clone(),
-                source_fingerprint: late_stage_source_fingerprint(file),
-                source: Arc::clone(&file.source),
-            },
-        );
-    }
-}
-
 /// Whether the TypeScript table is the previous generation's, so that every
 /// index and stage keyed on it may be reused.
 ///
@@ -967,136 +801,4 @@ pub(crate) fn typescript_unchanged(facts: &ProjectFacts) -> bool {
         .as_ref()
         .is_some_and(|changes| changes.unchanged)
         && facts.runtime_symbol_redirects.is_empty()
-}
-
-/// One build's cross-generation reuse decisions.
-///
-/// The decision and the late-stage cache transition happen together, before
-/// any stage borrows an individual cache slot. Stages consume this value
-/// instead of re-deriving whether the TypeScript table or aggregate inputs
-/// are reusable.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct ReusePlan {
-    pub(crate) typescript_unchanged: bool,
-    pub(crate) late_stages_reusable: bool,
-    /// The late aggregates' proof holds so far, but for memo reads that need
-    /// a derived table a pass publishes later in this build (the resolver's):
-    /// [`Self::settle`] decides once it has run. Until then nothing is
-    /// reusable and the cache is untouched.
-    pub(crate) late_stages_pending: bool,
-}
-
-impl ReusePlan {
-    pub(crate) fn prepare(
-        facts: &ProjectFacts,
-        late_stages: Option<&mut Option<CachedLateStages>>,
-        answers: &dyn ReadAnswers,
-    ) -> Self {
-        let typescript_unchanged = typescript_unchanged(facts);
-        let mut undecided = Vec::new();
-        let verdict = if typescript_unchanged {
-            late_stages
-                .as_deref()
-                .and_then(Option::as_ref)
-                .filter(|cache| late_stage_inputs_match(cache, facts))
-                .and_then(|cache| cache.proof.as_ref())
-                .map(|proof| proof.verdict(answers))
-        } else {
-            None
-        };
-        let late_stages_reusable = match verdict {
-            Some(crate::base::reads::Verdict::Holds) => true,
-            Some(crate::base::reads::Verdict::Undecided(reads)) => {
-                undecided = reads;
-                false
-            }
-            Some(crate::base::reads::Verdict::Moved(miss)) => {
-                if std::env::var_os("SOLID_CHECKER_IR_READ_MISSES")
-                    .is_some_and(|value| value != "0")
-                {
-                    eprintln!("{}", serde_json::json!({ "irReadMiss": miss }));
-                }
-                false
-            }
-            None => false,
-        };
-        let late_stages_pending = !undecided.is_empty();
-        if let Some(slot) = late_stages {
-            if late_stages_pending {
-                if let Some(retained) = slot.as_mut() {
-                    retained.undecided = undecided;
-                }
-            } else {
-                settle_late_stages(slot, facts, late_stages_reusable);
-            }
-        }
-        Self {
-            typescript_unchanged,
-            late_stages_reusable,
-            late_stages_pending,
-        }
-    }
-
-    /// Decides a pending reuse ([`Self::late_stages_pending`]) once the pass
-    /// that publishes what its undecided reads need has run in this build.
-    pub(crate) fn settle(
-        &mut self,
-        facts: &ProjectFacts,
-        late_stages: Option<&mut Option<CachedLateStages>>,
-        answers: &dyn ReadAnswers,
-    ) {
-        if !self.late_stages_pending {
-            return;
-        }
-        self.late_stages_pending = false;
-        let Some(slot) = late_stages else {
-            return;
-        };
-        let reusable = slot.as_mut().is_some_and(|cache| {
-            let undecided = std::mem::take(&mut cache.undecided);
-            cache
-                .proof
-                .as_ref()
-                .is_some_and(|proof| proof.recheck(&undecided, answers))
-        });
-        self.late_stages_reusable = reusable;
-        settle_late_stages(slot, facts, reusable);
-    }
-}
-
-/// The late-stage cache transition of a decided reuse.
-fn settle_late_stages(slot: &mut Option<CachedLateStages>, facts: &ProjectFacts, reusable: bool) {
-    if reusable {
-        if let Some(retained) = slot.as_mut() {
-            for file in &facts.files {
-                if let Some(input) = retained.inputs.get_mut(file.path.as_str()) {
-                    input.source_hash.clone_from(&file.source_hash);
-                    input.source = Arc::clone(&file.source);
-                }
-            }
-        }
-    } else if let Some(retained) = slot.as_mut() {
-        refresh_late_stage_inputs(&mut retained.inputs, facts);
-        retained.proof = None;
-        retained.reads = crate::base::reads::Reads::default();
-        retained.undecided = Vec::new();
-        retained.local_accesses.aggregate = None;
-        retained.interprocedural = None;
-        retained.missing_owners = None;
-        retained.settled_gates = None;
-        retained.compat_reference_locations = None;
-    } else {
-        *slot = Some(CachedLateStages {
-            inputs: current_late_stage_inputs(facts),
-            proof: None,
-            reads: crate::base::reads::Reads::default(),
-            undecided: Vec::new(),
-            local_accesses: CachedLocalAccesses::default(),
-            interprocedural: None,
-            missing_owners: None,
-            settled_gates: None,
-            owners: crate::owners::OwnerState::default(),
-            compat_reference_locations: None,
-        });
-    }
 }

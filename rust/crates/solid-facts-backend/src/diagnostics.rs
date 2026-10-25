@@ -154,9 +154,6 @@ pub struct DiagnosticSession {
     dialect: &'static Dialect,
     builder: IncrementalBuilder,
     retained: Option<RetainedDiagnostic>,
-    /// Line starts of the sources findings were placed in, kept while the
-    /// source text is the same allocation.
-    lines: LineStarts,
 }
 
 impl Default for DiagnosticSession {
@@ -215,7 +212,6 @@ impl DiagnosticSession {
             dialect,
             builder: IncrementalBuilder::default(),
             retained: None,
-            lines: LineStarts::default(),
         }
     }
 
@@ -524,7 +520,7 @@ impl DiagnosticSession {
             }
         }
         let metrics = analysis_metrics(facts, &program);
-        let mut snapshot = snapshot_of(sources, metrics, findings, &mut self.lines);
+        let mut snapshot = snapshot_of(sources, metrics, findings);
         // A disabled coverage rule hides its obligations, not the gap they
         // name: the analysis is still incomplete there, so it cannot certify.
         if snapshot.status == "certified" && !withheld_coverage.is_empty() {
@@ -570,6 +566,19 @@ impl DiagnosticSession {
     /// preserving the current diagnostic and coherent program.
     pub fn retain_for_idle(&mut self, retention: CacheRetention) {
         self.builder.retain_for_idle(retention);
+    }
+
+    /// Whether an analysis leaves the memo store's end-of-build sweep to
+    /// [`Self::finish_deferred`] ([`IncrementalBuilder::defer_memo_end`]): for
+    /// a caller that has its answer written before it sweeps.
+    pub fn defer_memo_end(&mut self, defer: bool) {
+        self.builder.defer_memo_end(defer);
+    }
+
+    /// Runs the sweep the last analysis deferred, if one is due. The next
+    /// analysis runs a pending one itself, first.
+    pub fn finish_deferred(&mut self) {
+        self.builder.finish_deferred();
     }
 }
 
@@ -1022,13 +1031,8 @@ pub fn unsupported_runtime_snapshot(
     }
 }
 
-fn snapshot_of(
-    sources: &[SourceFile],
-    metrics: Metrics,
-    findings: Vec<Finding>,
-    lines: &mut LineStarts,
-) -> Snapshot {
-    let mut places = SourcePlacer::new(sources, lines);
+fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>) -> Snapshot {
+    let mut places = SourcePlacer::new(sources);
     let has_violation = findings.iter().any(|finding| finding.kind == "violation");
     let has_unresolved = findings
         .iter()
@@ -1141,52 +1145,30 @@ pub fn analysis_metrics(facts: &ProjectFacts, program: &Program) -> Metrics {
     }
 }
 
-/// Line starts per source path, kept for as long as the source text is the
-/// same allocation (an unedited file keeps its `Arc`), so placing a finding
-/// costs a binary search rather than a scan of the file.
-#[derive(Default)]
-pub(crate) struct LineStarts {
-    by_path: std::collections::HashMap<Arc<str>, KeptLines>,
-}
-
-/// A source's text, and the line starts computed from that very allocation.
-type KeptLines = (Arc<str>, Arc<[u32]>);
-
-impl LineStarts {
-    fn of(&mut self, source: &SourceFile) -> Arc<[u32]> {
-        if let Some((text, starts)) = self.by_path.get(source.path.as_str())
-            && Arc::ptr_eq(text, &source.source)
-        {
-            return Arc::clone(starts);
-        }
-        let mut starts = vec![0_u32];
-        starts.extend(
-            source
-                .source
-                .bytes()
-                .enumerate()
-                .filter(|(_, byte)| *byte == b'\n')
-                .map(|(index, _)| u32::try_from(index + 1).unwrap_or(u32::MAX)),
-        );
-        let starts: Arc<[u32]> = starts.into();
-        self.by_path.insert(
-            Arc::from(source.path.as_str()),
-            (Arc::clone(&source.source), Arc::clone(&starts)),
-        );
-        starts
-    }
+/// The start of each line of `source`: offset 0, then each byte after a
+/// newline.
+fn line_starts(source: &SourceFile) -> Arc<[u32]> {
+    let mut starts = vec![0_u32];
+    starts.extend(
+        source
+            .source
+            .bytes()
+            .enumerate()
+            .filter(|(_, byte)| *byte == b'\n')
+            .map(|(index, _)| u32::try_from(index + 1).unwrap_or(u32::MAX)),
+    );
+    starts.into()
 }
 
 /// [`source_location`] over one generation's sources: the same answers, with
 /// the path lookup and the line scan done once rather than per location.
 struct SourcePlacer<'a> {
     sources: std::collections::HashMap<&'a str, &'a SourceFile>,
-    lines: &'a mut LineStarts,
     starts: std::collections::HashMap<&'a str, Arc<[u32]>>,
 }
 
 impl<'a> SourcePlacer<'a> {
-    fn new(sources: &'a [SourceFile], lines: &'a mut LineStarts) -> Self {
+    fn new(sources: &'a [SourceFile]) -> Self {
         let mut by_path = std::collections::HashMap::with_capacity(sources.len());
         for source in sources {
             // `source_location` took the first source of a path.
@@ -1194,7 +1176,6 @@ impl<'a> SourcePlacer<'a> {
         }
         Self {
             sources: by_path,
-            lines,
             starts: std::collections::HashMap::new(),
         }
     }
@@ -1206,7 +1187,7 @@ impl<'a> SourcePlacer<'a> {
                 let starts = match self.starts.get(source.path.as_str()) {
                     Some(starts) => Arc::clone(starts),
                     None => {
-                        let starts = self.lines.of(source);
+                        let starts = line_starts(source);
                         self.starts
                             .insert(source.path.as_str(), Arc::clone(&starts));
                         starts

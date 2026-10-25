@@ -149,9 +149,10 @@ impl<'a> SemanticLookup<'a> {
         depth: usize,
     ) -> bool {
         use solid_facts::ast::{BindingShape, ExportKind, ImportKind};
-        // Another file's constant: the answer is one of the set
-        // [`Self::exported_primitive_consts`] holds, which the section binds.
-        crate::base::reads::note(crate::base::reads::Section::ExportedPrimitiveConsts);
+        // Another file's constant: `binding_file` is the answer of
+        // `binding_at_reference`, a recorded hand-out (`indexes::hand_outs`): the
+        // asking file's binding rows and every section of `binding_file`, all
+        // this reads of it.
         let value = file.ast.peel_ts_sugar_span(value);
         let Some(declaration) = file.ast.reference_declaration(value) else {
             return false;
@@ -216,70 +217,6 @@ impl<'a> SemanticLookup<'a> {
             && binding.initializer.is_some_and(|initializer| {
                 self.proven_primitive(binding_file, initializer, depth.saturating_sub(1))
             })
-    }
-
-    /// ADR 0325: the imported-constant answers the cross-file proofs read,
-    /// as `(path, declaration span)` of every exported module-level `const`
-    /// of one identifier whose initializer is proven primitive: the set
-    /// [`Self::imported_const_is_primitive`] can accept. Empty when no file
-    /// imports a binding by name.
-    pub(super) fn exported_primitive_consts(&self) -> Vec<(String, Span)> {
-        self.whole_program_answer::<super::project_memos::ExportedPrimitiveConsts>()
-    }
-
-    /// [`Self::exported_primitive_consts`]'s computation (the memo's).
-    pub(super) fn compute_exported_primitive_consts(&self) -> Vec<(String, Span)> {
-        use solid_facts::ast::{BindingShape, ImportKind};
-        if !self.files().iter().any(|file| {
-            file.ast.imports.iter().any(|import| {
-                import
-                    .bindings
-                    .iter()
-                    .any(|binding| binding.kind == ImportKind::Named)
-            })
-        }) {
-            return Vec::new();
-        }
-        let mut found = Vec::new();
-        for file in self.files() {
-            if !crate::execution_role::file_is_module(file) || file_names_commonjs_exports(file) {
-                continue;
-            }
-            for binding in &file.ast.bindings {
-                let [name] = binding.names.as_slice() else {
-                    continue;
-                };
-                if !binding.immutable
-                    || binding.shape != BindingShape::Identifier
-                    || file
-                        .ast
-                        .functions
-                        .iter()
-                        .any(|function| function.span.contains(binding.declaration))
-                    || !file.ast.exports.iter().any(|export| {
-                        export.module.is_none()
-                            && (export
-                                .declarations
-                                .iter()
-                                .any(|specifier| specifier.local.span == name.span)
-                                || export.specifiers.iter().any(|specifier| {
-                                    file.ast.reference_declaration(specifier.local.span)
-                                        == Some(name.span)
-                                }))
-                    })
-                {
-                    continue;
-                }
-                if binding
-                    .initializer
-                    .is_some_and(|initializer| self.proven_primitive(file, initializer, 6))
-                {
-                    found.push((file.path.to_string(), name.span));
-                }
-            }
-        }
-        found.sort_unstable();
-        found
     }
 
     /// ADR 0211: what the origin of the value at `value` proves about the

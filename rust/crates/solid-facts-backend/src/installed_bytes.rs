@@ -9,9 +9,10 @@
 //! manifests announce a replacement at all. The IR compares; it reads no disk.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     fs,
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
 use sha2::{Digest, Sha256};
@@ -113,36 +114,105 @@ fn package_install_roots(facts: &ProjectFacts, package: &str) -> Vec<PathBuf> {
 pub fn package_instance_evidence(
     facts: &ProjectFacts,
 ) -> solid_reactive_ir::PackageInstanceEvidence {
-    let mut by_directory: std::collections::HashMap<PathBuf, Option<String>> =
-        std::collections::HashMap::new();
+    solid_reactive_ir::PackageInstanceEvidence {
+        solid_js_by_file: solid_js_by_file(
+            facts.files.iter().map(|file| file.path.as_str()),
+            &mut Disk,
+        ),
+    }
+}
+
+/// The two file-system questions the instance lookup asks, so a test can
+/// count them.
+trait InstanceFs {
+    fn canonicalize(&mut self, path: &Path) -> std::io::Result<PathBuf>;
+    fn is_file(&mut self, path: &Path) -> bool;
+}
+
+struct Disk;
+
+impl InstanceFs for Disk {
+    fn canonicalize(&mut self, path: &Path) -> std::io::Result<PathBuf> {
+        fs::canonicalize(path)
+    }
+
+    fn is_file(&mut self, path: &Path) -> bool {
+        path.is_file()
+    }
+}
+
+/// The `solid-js` real directory of each of `paths` that has one, by path.
+///
+/// A project's files share a few hundred directories, so one request asks the
+/// file system once per directory, not once per file: a raw directory is
+/// canonicalized once (a failure too, which falls back to the raw directory),
+/// and a directory's nearest install is looked up once, so the `node_modules`
+/// of an ancestor that many directories share is probed once. Both maps die
+/// with the call. Nothing is kept for the next request, which asks the file
+/// system again.
+fn solid_js_by_file<'a>(
+    paths: impl Iterator<Item = &'a str>,
+    disk: &mut impl InstanceFs,
+) -> BTreeMap<String, String> {
+    let mut by_raw: HashMap<&'a Path, Option<Rc<str>>> = HashMap::new();
+    let mut nearest: HashMap<PathBuf, Option<Rc<str>>> = HashMap::new();
     let mut solid_js_by_file = BTreeMap::new();
-    for file in &facts.files {
-        let Some(directory) = Path::new(file.path.as_str()).parent() else {
+    for path in paths {
+        let Some(directory) = Path::new(path).parent() else {
             continue;
         };
-        // Node resolves from the file's real directory: a file reached
-        // through a symlinked workspace package sees the workspace's own
-        // `node_modules`, not the linking project's.
-        let directory = fs::canonicalize(directory).unwrap_or_else(|_| directory.to_path_buf());
-        let resolved = by_directory
-            .entry(directory.clone())
-            .or_insert_with(|| {
-                directory.ancestors().find_map(|ancestor| {
-                    let package = ancestor.join("node_modules").join("solid-js");
-                    package.join("package.json").is_file().then(|| {
-                        fs::canonicalize(&package)
-                            .unwrap_or(package)
-                            .to_string_lossy()
-                            .into_owned()
-                    })
-                })
-            })
-            .clone();
+        let resolved = match by_raw.get(directory) {
+            Some(resolved) => resolved.clone(),
+            None => {
+                // Node resolves from the file's real directory: a file reached
+                // through a symlinked workspace package sees the workspace's
+                // own `node_modules`, not the linking project's.
+                let real = disk
+                    .canonicalize(directory)
+                    .unwrap_or_else(|_| directory.to_path_buf());
+                let resolved = nearest_solid_js(&real, &mut nearest, disk);
+                by_raw.insert(directory, resolved.clone());
+                resolved
+            }
+        };
         if let Some(resolved) = resolved {
-            solid_js_by_file.insert(file.path.to_string(), resolved);
+            solid_js_by_file.insert(path.to_owned(), resolved.to_string());
         }
     }
-    solid_reactive_ir::PackageInstanceEvidence { solid_js_by_file }
+    solid_js_by_file
+}
+
+/// The real directory of the nearest `node_modules/solid-js` that holds a
+/// `package.json`, from `directory` up. `known` holds the answer for every
+/// directory a lookup of this request already passed through, so a walk ends
+/// at the first one it knows (its answer is the same, being the answer for
+/// the directory above it). The directories are probed nearest first, each
+/// at most once.
+fn nearest_solid_js(
+    directory: &Path,
+    known: &mut HashMap<PathBuf, Option<Rc<str>>>,
+    disk: &mut impl InstanceFs,
+) -> Option<Rc<str>> {
+    let mut passed = Vec::new();
+    let mut answer = None;
+    for ancestor in directory.ancestors() {
+        if let Some(hit) = known.get(ancestor) {
+            answer = hit.clone();
+            break;
+        }
+        let package = ancestor.join("node_modules").join("solid-js");
+        if disk.is_file(&package.join("package.json")) {
+            let real = disk.canonicalize(&package).unwrap_or(package);
+            answer = Some(Rc::from(real.to_string_lossy()));
+            known.insert(ancestor.to_path_buf(), answer.clone());
+            break;
+        }
+        passed.push(ancestor);
+    }
+    for ancestor in passed {
+        known.insert(ancestor.to_path_buf(), answer.clone());
+    }
+    answer
 }
 
 /// The router evidence for `project`'s analysis of `facts`.
@@ -388,6 +458,8 @@ fn plain_registry_spec(spec: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
     use super::*;
 
     fn fixture(name: &str) -> PathBuf {
@@ -524,6 +596,390 @@ mod tests {
             "",
         ] {
             assert!(!plain_registry_spec(other), "{other}");
+        }
+    }
+
+    /// A temporary project tree. `install` writes the `solid-js` that Node
+    /// would find, and gives its real directory.
+    struct Tree {
+        root: PathBuf,
+    }
+
+    impl Tree {
+        fn new(tag: &str) -> Self {
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let root = std::env::temp_dir().join(format!(
+                "solid-checker-instances-{}-{}-{tag}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            let _ = fs::remove_dir_all(&root);
+            fs::create_dir_all(&root).unwrap();
+            Self { root }
+        }
+
+        fn path(&self, relative: &str) -> PathBuf {
+            let mut path = self.root.clone();
+            path.extend(relative.split('/').filter(|part| !part.is_empty()));
+            path
+        }
+
+        fn dir(&self, relative: &str) -> PathBuf {
+            let path = self.path(relative);
+            fs::create_dir_all(&path).unwrap();
+            path
+        }
+
+        fn install(&self, directory: &str) -> String {
+            let package = self.dir(&format!("{directory}/node_modules/solid-js"));
+            fs::write(package.join("package.json"), "{}").unwrap();
+            fs::canonicalize(package)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        }
+
+        /// The path of a file in `relative`'s directory; the file itself is
+        /// never written, only the directories it names matter.
+        fn file(&self, relative: &str) -> String {
+            self.path(relative).to_string_lossy().into_owned()
+        }
+    }
+
+    impl Drop for Tree {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    /// The disk, writing down what it is asked. `refuse` names a directory
+    /// whose canonicalization fails.
+    #[derive(Default)]
+    struct Counting {
+        canonicalized: Vec<PathBuf>,
+        probed: Vec<PathBuf>,
+        refuse: Option<PathBuf>,
+    }
+
+    impl InstanceFs for Counting {
+        fn canonicalize(&mut self, path: &Path) -> std::io::Result<PathBuf> {
+            self.canonicalized.push(path.to_path_buf());
+            if self.refuse.as_deref() == Some(path) {
+                return Err(std::io::ErrorKind::PermissionDenied.into());
+            }
+            fs::canonicalize(path)
+        }
+
+        fn is_file(&mut self, path: &Path) -> bool {
+            self.probed.push(path.to_path_buf());
+            path.is_file()
+        }
+    }
+
+    impl Counting {
+        fn asked_once(&self) {
+            for (what, asked) in [
+                ("canonicalized", &self.canonicalized),
+                ("probed", &self.probed),
+            ] {
+                let mut sorted = asked.clone();
+                sorted.sort();
+                sorted.dedup();
+                assert_eq!(sorted.len(), asked.len(), "{what} twice: {asked:?}");
+            }
+        }
+    }
+
+    fn lookup(files: &[String], disk: &mut Counting) -> BTreeMap<String, String> {
+        solid_js_by_file(files.iter().map(String::as_str), disk)
+    }
+
+    /// The lookup as it was before a request shared its answers: every file
+    /// canonicalizes its directory, and a directory's install is found by
+    /// walking up from it.
+    fn per_file(files: &[String]) -> BTreeMap<String, String> {
+        let mut by_directory: HashMap<PathBuf, Option<String>> = HashMap::new();
+        let mut found = BTreeMap::new();
+        for file in files {
+            let Some(directory) = Path::new(file).parent() else {
+                continue;
+            };
+            let directory = fs::canonicalize(directory).unwrap_or_else(|_| directory.to_path_buf());
+            let resolved = by_directory
+                .entry(directory.clone())
+                .or_insert_with(|| {
+                    directory.ancestors().find_map(|ancestor| {
+                        let package = ancestor.join("node_modules").join("solid-js");
+                        package.join("package.json").is_file().then(|| {
+                            fs::canonicalize(&package)
+                                .unwrap_or(package)
+                                .to_string_lossy()
+                                .into_owned()
+                        })
+                    })
+                })
+                .clone();
+            if let Some(resolved) = resolved {
+                found.insert(file.clone(), resolved);
+            }
+        }
+        found
+    }
+
+    /// Files of one directory cost one canonicalization and one probe of each
+    /// directory up to the install, however many there are.
+    #[test]
+    fn files_that_share_a_directory_ask_the_file_system_once() {
+        let tree = Tree::new("shared-parent");
+        let install = tree.install("");
+        tree.dir("src");
+        let files = ["a.ts", "b.ts", "c.ts", "d.ts"]
+            .map(|name| tree.file(&format!("src/{name}")))
+            .to_vec();
+        let mut disk = Counting::default();
+        let found = lookup(&files, &mut disk);
+        assert_eq!(found.len(), 4);
+        assert!(found.values().all(|resolved| *resolved == install));
+        assert_eq!(found, per_file(&files));
+        // `src` itself, then the install found at the root.
+        assert_eq!(disk.canonicalized.len(), 2, "{:?}", disk.canonicalized);
+        assert_eq!(disk.probed.len(), 2, "{:?}", disk.probed);
+        disk.asked_once();
+    }
+
+    /// Sibling directories under one install probe the directories they share
+    /// once: the second walk ends at the first directory the first passed.
+    #[test]
+    fn directories_below_one_install_probe_their_shared_ancestors_once() {
+        let tree = Tree::new("shared-ancestors");
+        let install = tree.install("");
+        for directory in ["a/x", "a/y", "b"] {
+            tree.dir(directory);
+        }
+        let files = ["a/x/f.ts", "a/y/f.ts", "a/x/g.ts", "b/f.ts"]
+            .map(|file| tree.file(file))
+            .to_vec();
+        let mut disk = Counting::default();
+        let found = lookup(&files, &mut disk);
+        assert!(found.values().all(|resolved| *resolved == install));
+        assert_eq!(found, per_file(&files));
+        // Three directories and the install; a/x, a and the root, then a/y,
+        // then b.
+        assert_eq!(disk.canonicalized.len(), 4, "{:?}", disk.canonicalized);
+        assert_eq!(disk.probed.len(), 5, "{:?}", disk.probed);
+        disk.asked_once();
+    }
+
+    /// The nearest install wins, a file with none above it has no entry, and
+    /// an install nearer than the root's is found only from below it.
+    #[test]
+    fn a_nested_install_serves_only_the_directories_below_it() {
+        let tree = Tree::new("nested");
+        let root = tree.install("");
+        let nested = tree.install("packages/a");
+        assert_ne!(root, nested);
+        tree.dir("packages/a/src/deep");
+        tree.dir("packages/b/src");
+        tree.dir("src");
+        let files = [
+            "packages/a/src/deep/x.ts",
+            "packages/a/src/y.ts",
+            "packages/a/z.ts",
+            "packages/b/src/w.ts",
+            "src/v.ts",
+            "u.ts",
+        ]
+        .map(|file| tree.file(file))
+        .to_vec();
+        let mut disk = Counting::default();
+        let found = lookup(&files, &mut disk);
+        for (file, expected) in [
+            ("packages/a/src/deep/x.ts", &nested),
+            ("packages/a/src/y.ts", &nested),
+            ("packages/a/z.ts", &nested),
+            ("packages/b/src/w.ts", &root),
+            ("src/v.ts", &root),
+            ("u.ts", &root),
+        ] {
+            assert_eq!(found.get(&tree.file(file)), Some(expected), "{file}");
+        }
+        assert_eq!(found, per_file(&files));
+        disk.asked_once();
+
+        let bare = Tree::new("bare");
+        bare.dir("src");
+        let files = vec![bare.file("src/a.ts")];
+        assert_eq!(lookup(&files, &mut Counting::default()), BTreeMap::new());
+        assert_eq!(per_file(&files), BTreeMap::new());
+    }
+
+    /// A file reached through a symlinked workspace package resolves from the
+    /// workspace's real directory, whichever path names it, and the linking
+    /// project's own install does not serve it.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_workspace_resolves_from_its_real_directory() {
+        let tree = Tree::new("symlinked-workspace");
+        let app = tree.install("app");
+        let workspace = tree.install("ws");
+        assert_ne!(app, workspace);
+        tree.dir("app/src");
+        tree.dir("ws/src");
+        std::os::unix::fs::symlink("../../ws", tree.path("app/node_modules/ws")).unwrap();
+        let files = [
+            "app/src/main.ts",
+            "app/node_modules/ws/src/a.ts",
+            "ws/src/a.ts",
+        ]
+        .map(|file| tree.file(file))
+        .to_vec();
+        let mut disk = Counting::default();
+        let found = lookup(&files, &mut disk);
+        assert_eq!(found[&files[0]], app);
+        assert_eq!(found[&files[1]], workspace);
+        assert_eq!(found[&files[2]], workspace);
+        assert_eq!(found, per_file(&files));
+        // Three raw directories, the two installs; the link and the real path
+        // name one directory, which is probed once.
+        assert_eq!(disk.canonicalized.len(), 5, "{:?}", disk.canonicalized);
+        assert_eq!(disk.probed.len(), 4, "{:?}", disk.probed);
+        disk.asked_once();
+    }
+
+    /// A directory that cannot be canonicalized is looked up as written, as it
+    /// was per file, and the failure is asked once however many files it holds.
+    #[test]
+    fn a_directory_that_cannot_be_canonicalized_is_looked_up_as_written_once() {
+        let tree = Tree::new("failed-canonicalize");
+        let install = tree.install("");
+        let present = tree.dir("src");
+        let files = [
+            "src/a.ts",
+            "src/b.ts",
+            "ghost/src/a.ts",
+            "ghost/src/b.ts",
+            "ghost/c.ts",
+        ]
+        .map(|file| tree.file(file))
+        .to_vec();
+        // `ghost` is no directory: canonicalizing it fails by itself. `src`
+        // exists and is made to fail.
+        let mut disk = Counting {
+            refuse: Some(present.clone()),
+            ..Counting::default()
+        };
+        let found = lookup(&files, &mut disk);
+        assert_eq!(found.len(), files.len());
+        assert!(found.values().all(|resolved| *resolved == install));
+        assert_eq!(found, per_file(&files));
+        for directory in [present, tree.path("ghost/src"), tree.path("ghost")] {
+            let asked = disk
+                .canonicalized
+                .iter()
+                .filter(|asked| **asked == directory)
+                .count();
+            assert_eq!(asked, 1, "{directory:?}");
+        }
+        // The refused directory is walked from its written path: its own
+        // `node_modules` is probed under the unresolved root.
+        assert!(
+            disk.probed
+                .contains(&tree.path("src/node_modules/solid-js/package.json")),
+            "{:?}",
+            disk.probed
+        );
+        disk.asked_once();
+    }
+
+    /// The answers die with the call: an install that appears between two
+    /// requests is seen by the second.
+    #[test]
+    fn nothing_is_kept_for_the_next_request() {
+        let tree = Tree::new("request-local");
+        let root = tree.install("");
+        tree.dir("packages/a/src");
+        let files = vec![
+            tree.file("packages/a/src/x.ts"),
+            tree.file("packages/a/y.ts"),
+        ];
+        let before = lookup(&files, &mut Counting::default());
+        assert!(before.values().all(|resolved| *resolved == root));
+        let nearer = tree.install("packages/a");
+        let after = lookup(&files, &mut Counting::default());
+        assert!(after.values().all(|resolved| *resolved == nearer));
+        assert_eq!(after, per_file(&files));
+        fs::remove_dir_all(tree.path("packages/a/node_modules")).unwrap();
+        let removed = lookup(&files, &mut Counting::default());
+        assert_eq!(removed, before);
+    }
+
+    /// Over generated trees (installs at any depth, directories that do not
+    /// exist, symlinks to other directories) the shared lookup answers what
+    /// the per-file lookup did.
+    #[test]
+    fn the_shared_lookup_answers_what_the_per_file_lookup_did() {
+        for seed in 1..=40_u64 {
+            let mut state = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+            let mut next = move |bound: u64| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                state % bound
+            };
+            let tree = Tree::new(&format!("generated-{seed}"));
+            let mut directories = vec![String::new()];
+            let mut at = 0;
+            while at < directories.len() && directories.len() < 40 {
+                let parent = directories[at].clone();
+                at += 1;
+                let depth = parent.matches('/').count() + usize::from(!parent.is_empty());
+                if depth >= 4 {
+                    continue;
+                }
+                for child in 0..(1 + next(3)) {
+                    let name = if parent.is_empty() {
+                        format!("d{child}")
+                    } else {
+                        format!("{parent}/d{child}")
+                    };
+                    // One in six is never created: its files name a directory
+                    // that is not there.
+                    if next(6) != 0 {
+                        tree.dir(&name);
+                    }
+                    if next(4) == 0 {
+                        tree.install(&name);
+                    }
+                    directories.push(name);
+                }
+            }
+            if next(2) == 0 {
+                tree.install("");
+            }
+            #[cfg(unix)]
+            for link in 0..3 {
+                let target = tree.path(&directories[next(directories.len() as u64) as usize]);
+                let from = tree.path(&format!("link{link}"));
+                if target.is_dir() {
+                    let _ = std::os::unix::fs::symlink(&target, &from);
+                    directories.push(format!("link{link}"));
+                }
+            }
+            let mut files = Vec::new();
+            for directory in &directories {
+                for file in 0..next(3) {
+                    files.push(tree.file(&format!("{directory}/f{file}.ts")));
+                }
+                // Below a link, and below a directory that may not exist.
+                if next(3) == 0 {
+                    files.push(tree.file(&format!("{directory}/sub/g.ts")));
+                }
+            }
+            assert_eq!(
+                lookup(&files, &mut Counting::default()),
+                per_file(&files),
+                "seed {seed}"
+            );
         }
     }
 }

@@ -7,6 +7,8 @@ mod process_support;
 
 #[path = "accessor_provenance_process.rs"]
 mod accessor_provenance_process;
+#[path = "attestation_kept_process.rs"]
+mod attestation_kept_process;
 
 #[path = "bookkeeping_process.rs"]
 mod bookkeeping_process;

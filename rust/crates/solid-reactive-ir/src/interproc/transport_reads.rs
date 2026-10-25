@@ -31,6 +31,11 @@ pub(crate) enum TransportKey {
     /// Source discovery's accessor entry of a symbol (the graph embeds its
     /// display label).
     Accessor(SymbolId),
+    /// Source discovery's source kind of a symbol.
+    SourceKind(SymbolId),
+    /// The resolver's transported read of an accessor symbol: its display
+    /// and declaration ([`accessor_provenance::Resolver::read`]).
+    TransportedRead(SymbolId),
 }
 
 /// A result chunk's transport reads, sorted, each with its answer.
@@ -156,6 +161,102 @@ fn accessor_answer(entry: Option<&(SymbolId, Location)>) -> u64 {
     hasher.finish()
 }
 
+fn source_kind_answer(kind: Option<&ReactiveSourceKind>) -> u64 {
+    match kind {
+        None => 0,
+        Some(ReactiveSourceKind::Accessor) => 1,
+        Some(ReactiveSourceKind::Store) => 2,
+    }
+}
+
+/// Source discovery's accessor table as a result chunk reads it: each
+/// entry asked is recorded with its answer, so the chunk reruns when an
+/// entry it asked about moves, appearing and vanishing included.
+#[derive(Clone, Copy)]
+pub(crate) struct AccessorsRead<'a>(pub(super) &'a HashMap<SymbolId, (SymbolId, Location)>);
+
+impl<'a> AccessorsRead<'a> {
+    pub(crate) fn get<Q: AsRef<str> + ?Sized>(
+        &self,
+        symbol: &Q,
+    ) -> Option<&'a (SymbolId, Location)> {
+        let entry = self.0.get(symbol.as_ref());
+        note(
+            TransportKey::Accessor(SymbolId::from(symbol.as_ref())),
+            accessor_answer(entry),
+        );
+        entry
+    }
+}
+
+impl AccessorTable for AccessorsRead<'_> {
+    fn accessor(&self, symbol: &str) -> Option<&(SymbolId, Location)> {
+        self.get(symbol)
+    }
+}
+
+/// An accessor table a helper shared with unrecorded readers asks:
+/// [`AccessorsRead`] in a result chunk, the plain table elsewhere.
+pub(crate) trait AccessorTable {
+    fn accessor(&self, symbol: &str) -> Option<&(SymbolId, Location)>;
+}
+
+impl AccessorTable for HashMap<SymbolId, (SymbolId, Location)> {
+    fn accessor(&self, symbol: &str) -> Option<&(SymbolId, Location)> {
+        self.get(symbol)
+    }
+}
+
+/// Source discovery's source kinds as a result chunk reads them, each
+/// asked entry recorded ([`AccessorsRead`]).
+#[derive(Clone, Copy)]
+pub(crate) struct SourceKindsRead<'a>(pub(super) &'a HashMap<SymbolId, ReactiveSourceKind>);
+
+/// A source-kind table a helper shared with unrecorded readers asks
+/// ([`AccessorTable`]).
+pub(crate) trait SourceKindTable {
+    fn source_kind(&self, symbol: &str) -> Option<&ReactiveSourceKind>;
+}
+
+impl SourceKindTable for HashMap<SymbolId, ReactiveSourceKind> {
+    fn source_kind(&self, symbol: &str) -> Option<&ReactiveSourceKind> {
+        self.get(symbol)
+    }
+}
+
+impl SourceKindTable for SourceKindsRead<'_> {
+    fn source_kind(&self, symbol: &str) -> Option<&ReactiveSourceKind> {
+        self.get(symbol)
+    }
+}
+
+impl<'a> SourceKindsRead<'a> {
+    pub(crate) fn get<Q: AsRef<str> + ?Sized>(&self, symbol: &Q) -> Option<&'a ReactiveSourceKind> {
+        let kind = self.0.get(symbol.as_ref());
+        note(
+            TransportKey::SourceKind(SymbolId::from(symbol.as_ref())),
+            source_kind_answer(kind),
+        );
+        kind
+    }
+}
+
+/// [`accessor_provenance::Resolver::read`], recorded by what it reads of the
+/// resolver ([`accessor_provenance::Resolver::read_entry`]): the rest of the
+/// read is the call site's own.
+pub(super) fn transported_read(
+    provenance: &accessor_provenance::Resolver<'_, '_>,
+    symbol: &SymbolId,
+    file: &solid_facts::FileFacts,
+    span: Span,
+) -> Option<SummaryRead> {
+    note(
+        TransportKey::TransportedRead(symbol.clone()),
+        accessor_answer(provenance.read_entry(symbol)),
+    );
+    provenance.read(symbol, file, span)
+}
+
 /// Source discovery's accessor entry of `symbol`, recorded.
 pub(super) fn accessor<'m>(
     accessors: &'m HashMap<SymbolId, (SymbolId, Location)>,
@@ -190,6 +291,14 @@ pub(super) trait TransportTables {
     fn source_origin(&self, symbol: &SymbolId) -> bool;
     fn runtime_source_origin(&self, symbol: &SymbolId) -> bool;
     fn accessor(&self, symbol: &SymbolId) -> Option<&(SymbolId, Location)>;
+    /// The source kind of `symbol`; `None` by default (graph chunks ask none).
+    fn source_kind(&self, _symbol: &SymbolId) -> Option<&ReactiveSourceKind> {
+        None
+    }
+    /// The answer of [`TransportKey::TransportedRead`] at `symbol`.
+    fn transported_read(&self, _symbol: &SymbolId) -> u64 {
+        accessor_answer(None)
+    }
 }
 
 impl TransportTables for InterproceduralResultReadContext<'_, '_> {
@@ -212,7 +321,13 @@ impl TransportTables for InterproceduralResultReadContext<'_, '_> {
         self.provenance.has_runtime_source_origin(symbol)
     }
     fn accessor(&self, symbol: &SymbolId) -> Option<&(SymbolId, Location)> {
-        self.accessors.get(symbol)
+        self.accessors.0.get(symbol)
+    }
+    fn source_kind(&self, symbol: &SymbolId) -> Option<&ReactiveSourceKind> {
+        self.source_kinds.0.get(symbol)
+    }
+    fn transported_read(&self, symbol: &SymbolId) -> u64 {
+        accessor_answer(self.provenance.read_entry(symbol))
     }
 }
 
@@ -235,6 +350,8 @@ pub(super) fn hold(reads: &TransportReads, tables: &dyn TransportTables) -> bool
                 u64::from(tables.runtime_source_origin(symbol))
             }
             TransportKey::Accessor(symbol) => accessor_answer(tables.accessor(symbol)),
+            TransportKey::SourceKind(symbol) => source_kind_answer(tables.source_kind(symbol)),
+            TransportKey::TransportedRead(symbol) => tables.transported_read(symbol),
         };
         current == *answer
     })
@@ -249,6 +366,7 @@ mod tests {
         calls: HashMap<Location, accessor_provenance::Callable>,
         unavailable: HashSet<Location>,
         accessors: HashMap<SymbolId, (SymbolId, Location)>,
+        kinds: HashMap<SymbolId, ReactiveSourceKind>,
     }
 
     impl TransportTables for Tables {
@@ -273,6 +391,62 @@ mod tests {
         fn accessor(&self, symbol: &SymbolId) -> Option<&(SymbolId, Location)> {
             self.accessors.get(symbol)
         }
+        fn source_kind(&self, symbol: &SymbolId) -> Option<&ReactiveSourceKind> {
+            self.kinds.get(symbol)
+        }
+    }
+
+    /// A result chunk's reads of source discovery's tables are recorded per
+    /// entry asked: an entry it never asked about moves nothing; one it asked
+    /// about moves it when it appears, vanishes or changes kind.
+    #[test]
+    fn a_result_chunk_reruns_exactly_when_a_source_entry_it_asked_about_moves() {
+        let mut tables = Tables::default();
+        tables
+            .kinds
+            .insert(SymbolId::from("count"), ReactiveSourceKind::Accessor);
+        let ((), reads) = record(|| {
+            let kinds = SourceKindsRead(&tables.kinds);
+            let accessors = AccessorsRead(&tables.accessors);
+            assert_eq!(kinds.get("count"), Some(&ReactiveSourceKind::Accessor));
+            assert_eq!(kinds.get("store"), None);
+            assert!(accessors.get("count").is_none());
+        });
+        assert_eq!(reads.len(), 3);
+        assert!(hold(&reads, &tables));
+        tables
+            .kinds
+            .insert(SymbolId::from("other"), ReactiveSourceKind::Store);
+        tables.accessors.insert(
+            SymbolId::from("other"),
+            (SymbolId::from("other"), at("S.ts", 0)),
+        );
+        assert!(hold(&reads, &tables), "entries it never asked about");
+        let mut appears = Tables {
+            kinds: tables.kinds.clone(),
+            ..Tables::default()
+        };
+        appears
+            .kinds
+            .insert(SymbolId::from("store"), ReactiveSourceKind::Store);
+        assert!(!hold(&reads, &appears));
+        let mut changes = Tables {
+            kinds: tables.kinds.clone(),
+            ..Tables::default()
+        };
+        changes
+            .kinds
+            .insert(SymbolId::from("count"), ReactiveSourceKind::Store);
+        assert!(!hold(&reads, &changes));
+        let mut accessor = Tables {
+            kinds: tables.kinds.clone(),
+            ..Tables::default()
+        };
+        accessor.accessors.insert(
+            SymbolId::from("count"),
+            (SymbolId::from("count"), at("S.ts", 0)),
+        );
+        assert!(!hold(&reads, &accessor));
     }
 
     fn at(path: &str, start: u64) -> Location {

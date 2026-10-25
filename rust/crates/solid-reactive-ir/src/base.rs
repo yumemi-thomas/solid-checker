@@ -86,8 +86,8 @@ impl<'a> Views<'a> {
     /// Every file's contribution, folded.
     pub(crate) fn fold<K, C>(&self, contribute: Contribute<K, C>) -> BaseIndex<K, C>
     where
-        K: Eq + std::hash::Hash + Clone + Send,
-        C: PartialEq + Send,
+        K: Eq + std::hash::Hash + Clone + Send + Sync,
+        C: PartialEq + Send + Sync,
     {
         let slots = (0..self.files.len()).collect::<Vec<_>>();
         let mut per_slot = crate::pipeline::parallel_slice_results(&slots, |slot| {
