@@ -39,6 +39,8 @@ pub struct FakeBackend {
     /// Applies `update`'s changes to the program's files. Go's double does not:
     /// its `Update` reports an empty affected set and leaves the sources.
     pub apply_updates: bool,
+    /// What `update` reports of the module graph (`UpdateOutcome::graph_kept`).
+    pub graph_kept: bool,
     /// Calls `semantic_demand_runs` and `references_batch` have seen.
     pub semantic_calls: Arc<Mutex<u32>>,
     pub reference_calls: Arc<Mutex<u32>>,
@@ -129,6 +131,7 @@ impl FakeBackend {
             released: Arc::default(),
             fail_update: false,
             apply_updates: false,
+            graph_kept: false,
             semantic_calls: Arc::default(),
             reference_calls: Arc::default(),
             reference_requests: Arc::default(),
@@ -210,6 +213,7 @@ impl ClosureBackend for FakeBackend {
         }
         Ok(UpdateOutcome {
             affected: changes.iter().map(|change| change.path.clone()).collect(),
+            graph_kept: self.graph_kept,
         })
     }
 

@@ -77,7 +77,10 @@ impl<'a> SemanticLookup<'a> {
         path: &str,
         span: Span,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::BindingFact, SymbolId)> {
+        // A hand-out (`hand_outs`): the answer, and the file it names.
+        self.note_binding_at(path);
         let resolution = self.binding_resolution_at(path, span)?;
+        self.note_slot_read(resolution.file);
         let file = &self.facts.files[resolution.file];
         Some((
             file,
@@ -96,22 +99,6 @@ impl<'a> SemanticLookup<'a> {
     ) -> Option<&BindingResolution> {
         let references = self.bindings_by_reference().get(path)?;
         self.resolution_in(references, self.file_by_path(path), span)
-    }
-
-    /// The symbol [`Self::binding_at_reference`] names at each of `spans` of
-    /// `path`, finding the path's resolutions once.
-    pub(crate) fn binding_symbols_at(&self, path: &str, spans: &[Span]) -> Vec<Option<SymbolId>> {
-        let Some(references) = self.bindings_by_reference().get(path) else {
-            return vec![None; spans.len()];
-        };
-        let file = self.file_by_path(path);
-        spans
-            .iter()
-            .map(|span| {
-                self.resolution_in(references, file, *span)
-                    .map(|resolution| resolution.symbol.clone())
-            })
-            .collect()
     }
 
     fn resolution_in<'t>(
@@ -142,45 +129,100 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn bindings_by_reference(&self) -> &BindingsByReference {
         self.bindings_by_reference.get_or_init(|| {
-            let symbols = self.symbols_by_id.get_or_init(|| {
-                self.facts
-                    .typescript
-                    .symbols()
-                    .map(|candidate| (candidate.id(), candidate))
-                    .collect()
-            });
-            let mut by_path = HashMap::<String, HashMap<(u64, u64), BindingResolution>>::default();
-            let mut by_symbol = HashMap::<SymbolId, BindingResolution>::default();
-            for (file_index, file) in self.facts.files.iter().enumerate() {
+            let symbols = self.symbols_by_id();
+            // Each file's binding names, and the spans each resolves, read on
+            // several workers in the order the table is written: a key's
+            // first writer in that order is its resolution.
+            let slots = self.facts.files.iter().enumerate().collect::<Vec<_>>();
+            let names = crate::pipeline::parallel_slice_results(&slots, |&(_, file)| {
+                let path = file.path.as_str();
+                let mut names = Vec::new();
+                let mut spans = Vec::new();
                 for (binding_index, binding) in file.ast.bindings.iter().enumerate() {
                     for name in &binding.names {
-                        let Some(symbol) = self.entities.at(file.path.as_str(), name.span) else {
+                        let Some(symbol) = self.entities.at(path, name.span) else {
                             continue;
                         };
-                        let resolution = BindingResolution {
-                            file: file_index,
-                            binding: binding_index,
-                            symbol: symbol.clone(),
-                        };
-                        by_symbol
-                            .entry(symbol.clone())
-                            .or_insert_with(|| resolution.clone());
-                        by_path
-                            .entry(file.path.to_string())
-                            .or_default()
-                            .entry((u64::from(name.span.start), u64::from(name.span.end)))
-                            .or_insert_with(|| resolution.clone());
+                        let name_index = names.len();
+                        names.push((binding_index, symbol));
+                        spans.push((
+                            name_index,
+                            path,
+                            (u64::from(name.span.start), u64::from(name.span.end)),
+                        ));
                         if let Some(candidate) = symbols.get(symbol.as_str()) {
-                            for reference in candidate.references() {
-                                by_path
-                                    .entry(reference.path.to_string())
-                                    .or_default()
-                                    .entry((reference.start_byte, reference.end_byte))
-                                    .or_insert_with(|| resolution.clone());
-                            }
+                            spans.extend(candidate.references().map(|reference| {
+                                (
+                                    name_index,
+                                    reference.path.as_ref(),
+                                    (reference.start_byte, reference.end_byte),
+                                )
+                            }));
                         }
                     }
                 }
+                (names, spans)
+            });
+            let mut by_symbol = HashMap::<&SymbolId, BindingResolution>::default();
+            for (file_index, (names, _)) in names.iter().enumerate() {
+                for (binding_index, symbol) in names {
+                    by_symbol
+                        .entry(symbol)
+                        .or_insert_with(|| BindingResolution {
+                            file: file_index,
+                            binding: *binding_index,
+                            symbol: (*symbol).clone(),
+                        });
+                }
+            }
+            // The paths are split among shards, each written on a worker in
+            // the same order.
+            const SHARDS: usize = 64;
+            let shard_of = |path: &str| {
+                use std::hash::BuildHasher;
+                (rustc_hash::FxBuildHasher.hash_one(path) >> 58) as usize % SHARDS
+            };
+            let mut shards = vec![Vec::new(); SHARDS];
+            for (file_index, (_, spans)) in names.iter().enumerate() {
+                let mut last: Option<(&str, usize)> = None;
+                for &(name_index, path, span) in spans {
+                    let shard = match last {
+                        Some((previous, shard)) if std::ptr::eq(previous, path) => shard,
+                        _ => {
+                            let shard = shard_of(path);
+                            last = Some((path, shard));
+                            shard
+                        }
+                    };
+                    shards[shard].push((file_index, name_index, path, span));
+                }
+            }
+            let shards = crate::pipeline::parallel_balanced_results(&shards, |spans| {
+                let mut by_path =
+                    HashMap::<&str, HashMap<(u64, u64), BindingResolution>>::default();
+                for &(file_index, name_index, path, span) in spans {
+                    by_path
+                        .entry(path)
+                        .or_default()
+                        .entry(span)
+                        .or_insert_with(|| {
+                            let (binding, symbol) = names[file_index].0[name_index];
+                            BindingResolution {
+                                file: file_index,
+                                binding,
+                                symbol: symbol.clone(),
+                            }
+                        });
+                }
+                by_path
+            });
+            let mut by_path = BindingsByReference::default();
+            for shard in shards {
+                by_path.extend(
+                    shard
+                        .into_iter()
+                        .map(|(path, references)| (path.to_owned(), references)),
+                );
             }
             // The symbol-reference table proves aliases even when no entity
             // was demanded at a use. Conversely, exact entity facts can exist
@@ -193,17 +235,36 @@ impl<'a> SemanticLookup<'a> {
             // proofs withhold findings through them; a consumer needing value
             // identity must first require an exact identifier span (accessor
             // provenance's `exact_identifier`).
-            for (path, entities) in &self.entities.by_path {
-                for ((start, end), symbol) in entities {
+            //
+            // Each key of a path is written at most once here, so the paths
+            // are independent: each is completed on a worker.
+            let paths = self
+                .entities
+                .by_path
+                .iter()
+                .map(|(path, entities)| {
+                    (
+                        path.as_str(),
+                        std::sync::Mutex::new(by_path.remove(path.as_str()).unwrap_or_default()),
+                        entities,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let by_symbol = &by_symbol;
+            crate::pipeline::parallel_slice_results(&paths, |(_, references, entities)| {
+                let mut references = references.lock().expect("one worker per path");
+                for ((start, end), symbol) in entities.iter() {
                     if let Some(resolution) = by_symbol.get(symbol) {
-                        by_path
-                            .entry(path.clone())
-                            .or_default()
+                        references
                             .entry((*start, *end))
                             .or_insert_with(|| resolution.clone());
                     }
                 }
-            }
+            });
+            by_path.extend(paths.into_iter().filter_map(|(path, references, _)| {
+                let references = references.into_inner().expect("one worker per path");
+                (!references.is_empty()).then(|| (path.to_owned(), references))
+            }));
             by_path
         })
     }
@@ -220,6 +281,9 @@ impl<'a> SemanticLookup<'a> {
     /// supports `<contexts.ValueContext.Provider>` without confusing it with
     /// `<ValueContext.someObject.Provider>`.
     pub(crate) fn is_context_reference(&self, path: &str, span: Span) -> bool {
+        // The answer reads every file's `createContext` bindings and their
+        // references (final review R2, finding 2).
+        crate::base::reads::note(crate::base::reads::Section::ContextSymbols);
         // ADR 0289: under runtime redirects (ADR 0186, ADR 0284) the compiler
         // binds an import to the declaration file beside the runtime one, so
         // it lists the reference under the declaration's symbol. The entity
@@ -233,26 +297,17 @@ impl<'a> SemanticLookup<'a> {
             return true;
         }
         self.context_symbols().iter().any(|symbol| {
-            self.symbols_by_id
-                .get_or_init(|| {
-                    self.facts
-                        .typescript
-                        .symbols()
-                        .map(|candidate| (candidate.id(), candidate))
-                        .collect()
+            self.symbols_by_id().get(symbol).is_some_and(|candidate| {
+                candidate.references().any(|reference| {
+                    reference.path.as_ref() == path
+                        && reference.start_byte >= u64::from(span.start)
+                        && reference.end_byte == u64::from(span.end)
                 })
-                .get(symbol)
-                .is_some_and(|candidate| {
-                    candidate.references().any(|reference| {
-                        reference.path.as_ref() == path
-                            && reference.start_byte >= u64::from(span.start)
-                            && reference.end_byte == u64::from(span.end)
-                    })
-                })
+            })
         })
     }
 
-    fn context_symbols(&self) -> &HashSet<&'a str> {
+    pub(super) fn context_symbols(&self) -> &HashSet<&'a str> {
         self.context_symbols.get_or_init(|| {
             self.facts
                 .files
@@ -327,10 +382,23 @@ impl<'a> SemanticLookup<'a> {
         self.function_for_symbol(symbol)
     }
 
+    /// Records, for the computation recording, which symbol
+    /// [`Self::method_symbol_ref`] names at `span` of `path`: an entity of the
+    /// path, or else a resolved call's declaration in any file.
+    pub(crate) fn note_declaration_symbol_at(&self, path: &str, span: Span) {
+        if let Some(id) = self.memos.table().id_of(path) {
+            self.note_probe_read(
+                crate::base::memo::probes::Probe::DeclarationSymbolAt,
+                || crate::base::memo::probes::PolledKey::FileSpan(id, span),
+            );
+        }
+    }
+
     pub(super) fn method_symbol_ref(&self, path: &str, span: Span) -> Option<&'a str> {
         self.declaration_symbols
             .get_or_init(|| declaration_symbols(&self.facts.typescript))
-            .get(&(path, u64::from(span.start), u64::from(span.end)))
+            .get(path)?
+            .get(&(u64::from(span.start), u64::from(span.end)))
             .copied()
     }
 
@@ -345,53 +413,15 @@ impl<'a> SemanticLookup<'a> {
         super::callee_world::namespace_member_function_in(self, file, callee)
     }
 
-    /// The exported value a static member of a namespace import names: what
-    /// [`Self::namespace_member_function`] reads of `file` alone. Must agree
-    /// with `callee_world::namespace_member_function_in`, which that method
-    /// delegates to (S7a's kept discovery rows read the two halves apart).
-    pub(crate) fn namespace_member_symbol(
-        &self,
-        file: &FileFacts,
-        callee: Span,
-    ) -> Option<&'a SymbolId> {
-        let callee = file.ast.peel_ts_sugar_span(callee);
-        if file.ast.computed_members.binary_search(&callee).is_ok() {
-            return None;
-        }
-        let member = file.ast.member_at(callee)?;
-        let receiver = file.ast.peel_ts_sugar_span(member.object);
-        let declaration = file.ast.reference_declaration(receiver)?;
-        let namespace = file.ast.imports.iter().any(|import| {
-            !import.type_only
-                && import.bindings.iter().any(|binding| {
-                    !binding.type_only
-                        && binding.kind == solid_facts::ast::ImportKind::Namespace
-                        && binding.local.span == declaration
-                })
-        });
-        if !namespace {
-            return None;
-        }
-        self.entities.at(file.path.as_str(), member.property)
-    }
-
-    /// [`Self::namespace_member_function`]'s answer from the member
-    /// symbol's function: what it reads of the function's file.
-    pub(crate) fn namespace_member_target(
-        &self,
-        found: Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)>,
-    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
-        found.filter(|(target_file, function)| {
-            function.method_name.is_none() && self.function_value_is_current(target_file, function)
-        })
-    }
-
     pub(crate) fn function_for_symbol(
         &self,
         symbol: &str,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+        // A hand-out (`hand_outs`): the answer, and the file it names.
+        self.note_function_for_symbol(symbol);
         match self.functions_by_symbol().get(symbol)? {
             SymbolFunction::Resolved { file, function } => {
+                self.note_slot_read(*file);
                 let file = &self.facts.files[*file];
                 Some((file, &file.ast.functions[*function]))
             }
@@ -400,9 +430,7 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(crate) fn entity_at(&self, path: &str, span: Span) -> Option<&'a EntityFact> {
-        self.entities_by_location()
-            .get(&(path, u64::from(span.start), u64::from(span.end)))
-            .copied()
+        self.entities.locations.at(path, span)
     }
 
     pub(crate) fn typescript_file(&self, path: &str) -> Option<&'a FileFact> {
@@ -481,6 +509,9 @@ impl<'a> SemanticLookup<'a> {
         if member_property.is_none()
             && let Some(symbol) = self.entities.value_symbol(file, callee)
         {
+            // Whether a binding naming the symbol can replace its identity:
+            // those bindings are its declarations' (`hand_outs`).
+            self.note_symbol_declarations(symbol.as_str());
             if !self.direct_value_aliases().contains(symbol) {
                 return vec![symbol.clone()];
             }

@@ -79,9 +79,17 @@ where
         for slot in &applied.allocated {
             self.values[*slot as usize] = V::bottom();
         }
-        let cone = self.graph.cone(&applied.seeds);
-        let fresh = force_fresh || fresh_cone(cone.len(), self.graph.index.len());
-        let cone = if fresh { self.graph.slots() } else { cone };
+        // The cone holds the seeds, so seeds enough for a fresh solve need no
+        // cone walk (every slot is a seed in a first build).
+        let nodes = self.graph.index.len();
+        let mut fresh = force_fresh || fresh_cone(applied.seeds.len(), nodes);
+        let cone = if fresh {
+            self.graph.slots()
+        } else {
+            let cone = self.graph.cone(&applied.seeds);
+            fresh = fresh_cone(cone.len(), nodes);
+            if fresh { self.graph.slots() } else { cone }
+        };
         let before = cone
             .iter()
             .map(|slot| {
@@ -120,16 +128,20 @@ where
     }
 
     fn solve(&mut self, cone: &BTreeSet<Slot>, transfer: &impl Fn(&E, &V) -> V) {
+        // Membership by slot: the cone and the queue as flags over the
+        // values' slots, in the order the sets gave.
+        let mut in_cone = vec![false; self.values.len()];
         for slot in cone {
             self.values[*slot as usize] = self.direct(*slot);
+            in_cone[*slot as usize] = true;
         }
-        let mut queued = cone.clone();
+        let mut queued = in_cone.clone();
         let mut queue = cone
             .iter()
             .copied()
             .collect::<std::collections::VecDeque<_>>();
         while let Some(slot) = queue.pop_front() {
-            queued.remove(&slot);
+            queued[slot as usize] = false;
             let Some((direct, preds)) = self.graph.definition(slot) else {
                 continue;
             };
@@ -142,7 +154,9 @@ where
             }
             self.values[slot as usize] = next;
             for reader in self.graph.readers(slot) {
-                if cone.contains(reader) && queued.insert(*reader) {
+                let reader_index = *reader as usize;
+                if in_cone[reader_index] && !queued[reader_index] {
+                    queued[reader_index] = true;
                     queue.push_back(*reader);
                 }
             }

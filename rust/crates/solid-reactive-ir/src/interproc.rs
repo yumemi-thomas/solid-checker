@@ -9,10 +9,7 @@
 use crate::{HashMap, HashSet};
 use std::{
     collections::BTreeMap,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -79,7 +76,7 @@ pub(crate) use result_view::*;
 mod result_reads;
 mod transport_reads;
 pub(crate) use result_reads::*;
-pub(crate) use transport_reads::TransportReads;
+pub(crate) use transport_reads::{AccessorTable, SourceKindTable, TransportReads};
 mod node_index;
 mod reads;
 mod refresh;
@@ -455,10 +452,6 @@ impl FunctionBoundary for SummaryNode {
 
 #[derive(Clone)]
 pub(super) struct InterproceduralResult {
-    /// What the reused graph and result chunks read when they ran
-    /// ([`crate::base::reads`]): with the build's own reads, what the
-    /// retained result read.
-    pub(super) reused_reads: crate::base::reads::Reads,
     pub(super) reads: Arc<[ReactiveRead]>,
     pub(super) source_call_targets: Arc<HashMap<Location, accessor_provenance::Callable>>,
     pub(super) dispatch_obligations: Arc<[StaticDefect]>,
@@ -492,6 +485,7 @@ pub(super) struct InterproceduralTimings {
     pub(super) result_reads: Duration,
     pub(super) export_summaries: Duration,
     pub(super) export_work: u64,
+    pub(super) fixed_points: crate::InterproceduralFixedPointTimings,
     pub(super) graph_reused_files: u64,
     pub(super) graph_recomputed_files: u64,
     pub(super) result_reused_files: u64,

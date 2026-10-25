@@ -104,6 +104,18 @@ export const CHECKS = {
     ],
     env: { SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS) },
   },
+  "backend-staleness": {
+    why:
+      "a slice that breaks the cached-answer digest, the resolution witness, the kept attestation or pass " +
+      "reuse answers a retained edit from stale state; these process tests compare such edits with fresh runs",
+    command: [
+      "cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-facts-backend",
+      "--test", "backend_process", "--",
+      "incremental_staleness_process::", "attestation_kept_process::", "daemon_residue_process::",
+      "idle_shadow_process::",
+    ],
+    env: { SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS) },
+  },
   "dialects-process": {
     command: [
       "cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-facts-backend",
@@ -135,7 +147,10 @@ export const CHECKS = {
     why:
       "the retained daemon's answer must equal a fresh one after random edits (and shadow mode must stay " +
       "silent); this is the seconds-long fixture budget, on a copy of each fixture",
-    command: ["bun", "scripts/ir-edit-fuzz.mjs", "--fixtures", "--steps", "6"],
+    commands: [
+      ["bun", "scripts/ir-edit-fuzz.mjs", "--fixtures", "--steps", "6"],
+      ["bun", "scripts/ir-edit-fuzz.mjs", "--fixtures", "--family", "retype", "--steps", "4"],
+    ],
     env: {
       SOLID_CHECKER_BIN: join(ROOT, DEBUG_CHECKER),
       SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
@@ -250,7 +265,7 @@ export const ROWS = [
   {
     prefix: "rust/crates/solid-facts-backend/",
     owner: "solid-facts-backend process/diagnostics",
-    checks: ["backend-process", "coverage"],
+    checks: ["backend-process", "backend-staleness", "coverage", "ir-edit-fuzz"],
   },
   // No `rust/crates/solid-dialect/` row, deliberately. The crate owns the
   // shared `Dialect` interface that `solid-reactive-ir` and the dialect crate
@@ -279,7 +294,7 @@ export const ROWS = [
   {
     prefix: "apps/solid-typefacts/",
     owner: "the Type Facts producer (separate workspace; the default producer)",
-    checks: ["typefacts", "coverage", "ownership-gate", "wasm-parity"],
+    checks: ["typefacts", "backend-staleness", "coverage", "ownership-gate", "ir-edit-fuzz", "wasm-parity"],
   },
   {
     prefix: "apps/solid-typefacts/tests/",
@@ -386,7 +401,9 @@ export function planFor(paths) {
     ...(needsChecker ? ["build-debug"] : []),
     // Before the process tests: it rebuilds with the harness pins recomputed,
     // and everything after it should run against that binary.
-    ...["facts-lib", "ir-lib", "backend-process", "dialects-process"].filter((id) => selected.has(id)),
+    ...["facts-lib", "ir-lib", "backend-process", "backend-staleness", "dialects-process"].filter((id) =>
+      selected.has(id)
+    ),
     ...["coverage", "ownership-gate"].filter((id) => selected.has(id)),
     ...["ir-read-lint", "ir-tools-test", "ir-edit-fuzz"].filter((id) => selected.has(id)),
     // Separate workspace; its tests drive the producer built above.
@@ -592,6 +609,7 @@ export const LANES = {
   "facts-lib": "rust",
   "ir-lib": "rust",
   "backend-process": "rust",
+  "backend-staleness": "rust",
   "dialects-process": "rust",
   "differential-harness": "rust",
   typefacts: "typefacts",

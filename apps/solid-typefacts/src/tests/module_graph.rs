@@ -19,6 +19,7 @@ fn imports(imports: bool, packages: bool) -> ModuleGraphRequest {
         import_paths: Vec::new(),
         packages,
         distinct_bare_imports: false,
+        omit_modules: false,
     }
 }
 
@@ -206,6 +207,7 @@ fn module_graph_reports_relative_import_resolution() {
             import_paths: vec![scratch.path("index.ts")],
             packages: true,
             distinct_bare_imports: false,
+            omit_modules: false,
         },
     );
     assert_eq!(inventory.imports.len(), 1);
@@ -256,6 +258,7 @@ fn distinct_bare_imports_keep_one_row_per_resolution() {
             import_paths: Vec::new(),
             packages: false,
             distinct_bare_imports: true,
+            omit_modules: false,
         },
     );
     let of = |inventory: &ModuleInventory| {
@@ -586,6 +589,7 @@ fn unknown_import_paths_are_reported_rather_than_dropped() {
             import_paths: vec![scratch.path("index.ts"), missing.clone(), missing.clone()],
             packages: false,
             distinct_bare_imports: false,
+            omit_modules: false,
         },
     );
     assert!(inventory.imports.is_empty(), "{:?}", inventory.imports);
@@ -635,4 +639,58 @@ fn a_cancelled_request_and_a_closed_project_fail_instead_of_answering() {
         .unwrap_err();
     assert_eq!(error.0, crate::project::ERR_CLOSED);
     assert_eq!(project.close().unwrap_err().0, crate::project::ERR_CLOSED);
+}
+
+/// `omitModules`: the answer carries no inventory (no modules, no unmapped
+/// roots), and the import rows of the requested files are the ones the full
+/// answer holds.
+#[test]
+fn omit_modules_answers_the_requested_imports_alone() {
+    let scratch = Scratch::new(&[
+        ("tsconfig.json", BUNDLER_CONFIG),
+        (
+            "index.ts",
+            "import { helper } from \"./nested/helper\";\nexport const value = helper();\n",
+        ),
+        (
+            "nested/helper.ts",
+            "export function helper() { return 1; }\n",
+        ),
+        (
+            "other.ts",
+            "import { value } from \"./index\";\nexport const again = value;\n",
+        ),
+    ]);
+    let mut project = scratch.open();
+    let demand = |omit_modules| ModuleGraphRequest {
+        imports: true,
+        import_paths: vec![scratch.path("index.ts")],
+        packages: true,
+        distinct_bare_imports: false,
+        omit_modules,
+    };
+    let full = graph(&mut project, &demand(false));
+    let narrow = graph(&mut project, &demand(true));
+    assert!(!full.modules.is_empty());
+    assert!(narrow.modules.is_empty(), "{:?}", narrow.modules);
+    assert!(narrow.unmapped_roots.is_empty());
+    assert_eq!(narrow.imports, full.imports);
+    assert_eq!(narrow.unknown_import_paths, full.unknown_import_paths);
+    // A path the program does not hold is still reported, never dropped.
+    let missing = graph(
+        &mut project,
+        &ModuleGraphRequest {
+            import_paths: vec![scratch.path("missing.ts")],
+            ..demand(true)
+        },
+    );
+    assert!(missing.modules.is_empty());
+    assert_eq!(
+        missing
+            .unknown_import_paths
+            .iter()
+            .map(|path| path.to_string())
+            .collect::<Vec<_>>(),
+        [scratch.path("missing.ts")]
+    );
 }

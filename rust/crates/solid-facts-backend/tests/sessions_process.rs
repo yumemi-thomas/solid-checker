@@ -413,6 +413,13 @@ fn routed_callback_consumer_edits_refresh_retained_dispatch_contexts() {
     ] {
         fs::copy(fixture.join(name), directory.join(name)).unwrap();
     }
+    // Every other file reads the consumer it calls, so its graph chunk reruns
+    // on a consumer edit (ADR 0408); this one reads nothing of it.
+    fs::write(
+        directory.join("unrelated.ts"),
+        "export function unrelated() {\n  return 1;\n}\n",
+    )
+    .unwrap();
     let stub = directory.join("node_modules/solid-js");
     fs::create_dir_all(&stub).unwrap();
     fs::copy(
@@ -578,7 +585,7 @@ fn returned_anonymous_member_caller_edit_matches_cold_analysis() {
         .unwrap();
     assert_eq!(
         timings.interprocedural_graph_reused_files,
-        timings.source_discovery_reused_files
+        timings.source_discovery_unchanged_files
     );
     assert!(!retained.static_defects.iter().any(|defect| {
         defect.location.path.as_ref() == caller
@@ -1078,7 +1085,7 @@ fn joins_real_oxc_compiler_and_tsgo_facts() {
         incremental_program, program,
         "initial incremental fragments must match the fresh builder"
     );
-    assert_eq!(incremental_timings.source_discovery_recomputed_files, 2);
+    assert_eq!(incremental_timings.source_discovery_unchanged_files, 0);
     let findings = selected.solve(&program);
     assert_eq!(findings.len(), 1, "findings = {findings:#?}");
     // Catalog-relative name: unprefixed in 2.0, `v1/`-prefixed in a
@@ -1167,9 +1174,6 @@ fn incremental_reactive_ir_matches_fresh_after_an_edit() {
     assert!(!timings.reused);
     assert!(timings.typescript_indexes_reused);
     assert!(!timings.reachability_reused);
-    assert!(!timings.local_accesses_reused);
-    assert!(!timings.interprocedural_reused);
-    assert!(!timings.owner_fixed_point_reused);
     assert_eq!(
         timings.reachability_reused_files + timings.reachability_recomputed_files,
         u64::try_from(edited.files.len()).unwrap()
@@ -1182,16 +1186,12 @@ fn incremental_reactive_ir_matches_fresh_after_an_edit() {
         timings.owner_reused_files + timings.owner_recomputed_files,
         u64::try_from(edited.files.len()).unwrap()
     );
-    assert_eq!(
-        timings.source_discovery_reused_files + timings.source_discovery_recomputed_files,
-        u64::try_from(edited.files.len()).unwrap()
-    );
-    // A graph chunk is reused only where source discovery's is, and only
+    // A graph chunk is reused only for an unchanged file, and only
     // while what it read still answers as it did (ADR 0397): the prefix
     // edit moves the edited file's component keys, which the project passes
     // whose tables the graph reads have read.
     assert!(
-        timings.interprocedural_graph_reused_files <= timings.source_discovery_reused_files,
+        timings.interprocedural_graph_reused_files <= timings.source_discovery_unchanged_files,
         "{timings:?}"
     );
     assert_eq!(
@@ -1694,11 +1694,10 @@ fn compiler_option_only_edit_invalidates_cached_ownership() {
     );
 
     let fresh = solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
-    let (retained, timings) = incremental
+    let (retained, _) = incremental
         .build(&edited, dialect::default_dialect().vocabulary)
         .unwrap();
     assert_eq!(retained, fresh);
-    assert!(!timings.owner_fixed_point_reused);
 }
 
 #[test]
@@ -1836,19 +1835,17 @@ fn incremental_reactive_ir_reuses_semantic_indexes_for_same_shape_body_edit() {
     assert_eq!(retained, fresh);
     assert!(timings.typescript_indexes_reused);
     assert!(timings.reachability_reused);
-    assert!(timings.local_accesses_reused);
+    // The edited file's chunks rerun; every other file's are kept.
     assert_eq!(
-        timings.local_access_reused_files,
+        timings.local_access_reused_files + 1,
         u64::try_from(edited.files.len()).unwrap()
     );
-    assert_eq!(timings.local_access_recomputed_files, 0);
-    assert!(timings.interprocedural_reused);
-    assert!(timings.owner_fixed_point_reused);
+    assert_eq!(timings.local_access_recomputed_files, 1);
     assert_eq!(
-        timings.owner_reused_files,
+        timings.owner_reused_files + 1,
         u64::try_from(edited.files.len()).unwrap()
     );
-    assert_eq!(timings.owner_recomputed_files, 0);
+    assert_eq!(timings.owner_recomputed_files, 1);
 }
 
 #[test]

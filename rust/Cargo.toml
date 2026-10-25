@@ -33,6 +33,7 @@ unsafe_code = "deny"
 
 [workspace.dependencies]
 rustc-hash = "2.1.3"
+parking_lot = "0.12"
 # Solid 2 compiler facts come from the semantic-only fork of the compiler now
 # owned by solidjs/solid. This exact fork commit is based on upstream `next` at
 # `5b1b7776` (published rc.17) and adds only trace models, output-neutral

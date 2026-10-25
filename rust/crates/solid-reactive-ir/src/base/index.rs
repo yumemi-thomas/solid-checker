@@ -94,8 +94,10 @@ fn positions_by_key<K: Eq + Hash + Clone, C>(
     grouped
 }
 
-impl<K: Eq + Hash + Clone, C: PartialEq> BaseIndex<K, C> {
-    /// The index of `contributions` (any order; one per file).
+impl<K: Eq + Hash + Clone + Send + Sync, C: PartialEq + Sync> BaseIndex<K, C> {
+    /// The index of `contributions` (any order; one per file). Each file's
+    /// entries are grouped by key on the analysis workers; the postings are
+    /// then joined in file order.
     pub(crate) fn fold(
         contributions: impl IntoIterator<Item = (FileId, FileContribution<K, C>)>,
     ) -> Self {
@@ -103,15 +105,20 @@ impl<K: Eq + Hash + Clone, C: PartialEq> BaseIndex<K, C> {
         by_file.retain(|_, contribution| !contribution.entries.is_empty());
         let mut files = by_file.keys().copied().collect::<Vec<_>>();
         files.sort_unstable();
+        let grouped = crate::pipeline::parallel_slice_results(&files, |file| {
+            positions_by_key(&by_file[file])
+        });
         let mut by_key = HashMap::<K, Vec<Posting>>::default();
-        for file in files {
-            for (key, positions) in positions_by_key(&by_file[&file]) {
+        for (file, grouped) in files.into_iter().zip(grouped) {
+            for (key, positions) in grouped {
                 by_key.entry(key).or_default().push((file, positions));
             }
         }
         Self { by_file, by_key }
     }
+}
 
+impl<K: Eq + Hash + Clone, C: PartialEq> BaseIndex<K, C> {
     /// Replaces the contribution of each listed file (`None`: the file is
     /// gone; a file listed twice takes the last) and returns the keys whose
     /// values changed: exactly the keys `k` for which [`Self::values`]
@@ -142,12 +149,20 @@ impl<K: Eq + Hash + Clone, C: PartialEq> BaseIndex<K, C> {
                         .as_ref()
                         .expect("new positions come from a contribution");
                     let previous = previous.as_ref().expect("old positions come from one");
+                    // By slot rank and value: a `ranked_values` reader of a
+                    // path held by two slots sees the rank too (final
+                    // review R2, finding 9).
                     !old_positions
                         .iter()
-                        .map(|position| &previous.entries[*position as usize].1)
-                        .eq(new_positions
-                            .iter()
-                            .map(|position| &next.entries[*position as usize].1))
+                        .map(|position| {
+                            (
+                                previous.rank_of(*position),
+                                &previous.entries[*position as usize].1,
+                            )
+                        })
+                        .eq(new_positions.iter().map(|position| {
+                            (next.rank_of(*position), &next.entries[*position as usize].1)
+                        }))
                 });
                 if changed {
                     delta.insert(key.clone());
@@ -238,7 +253,7 @@ impl<K: Eq + Hash + Clone, C: PartialEq> BaseIndex<K, C> {
         self.by_key
             .keys()
             .chain(other.by_key.keys())
-            .filter(|key| !self.values(key).eq(other.values(key)))
+            .filter(|key| !self.ranked_values(key).eq(other.ranked_values(key)))
             .cloned()
             .collect()
     }

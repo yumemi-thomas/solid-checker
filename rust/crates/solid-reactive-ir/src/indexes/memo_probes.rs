@@ -18,6 +18,15 @@ pub(crate) fn probing() -> bool {
     PROBING.with(std::cell::Cell::get)
 }
 
+/// Runs `f` as a probe's answer does ([`probing`] set), for tests.
+#[cfg(test)]
+pub(crate) fn as_probe<R>(f: impl FnOnce() -> R) -> R {
+    let outer = PROBING.with(|probing| probing.replace(true));
+    let value = f();
+    PROBING.with(|probing| probing.set(outer));
+    value
+}
+
 /// One file's binding resolutions ([`SemanticLookup::binding_resolution_rows`]).
 pub(crate) type BindingResolutionRows = Vec<((u64, u64), (FileId, u32, u32, SymbolId))>;
 
@@ -25,11 +34,6 @@ impl SemanticLookup<'_> {
     /// The slot of `(id, rank)` in the build's files, by the memo table.
     fn memo_slot(&self, id: FileId, rank: u32) -> Option<usize> {
         self.memos.table().slots_of(id).get(rank as usize).copied()
-    }
-
-    /// A file of the lookup's own table as the memo table names it.
-    fn memo_id(&self, id: FileId) -> Option<FileId> {
-        self.memos.table().id_of(self.file_table.path_of(id))
     }
 
     pub(crate) fn memo_slot_of(&self, slot: usize) -> (FileId, u32) {
@@ -188,41 +192,31 @@ impl SemanticLookup<'_> {
                     ))
                 }))
             }
+            (Probe::SymbolDescriptor, PolledKey::Text(symbol)) => ProbeAnswer::Rendered(
+                self.descriptor_by_symbol(symbol)
+                    .map(|descriptor| Arc::from(format!("{descriptor:?}"))),
+            ),
+            (Probe::SymbolCallability, PolledKey::Text(symbol)) => ProbeAnswer::Rendered(
+                self.callability_by_symbol(symbol)
+                    .map(|callability| Arc::from(format!("{callability:?}"))),
+            ),
+            (Probe::ProjectPrimitives, _) => {
+                let mut names = self
+                    .project_primitives()
+                    .iter()
+                    .map(|primitive| Arc::<str>::from(format!("{primitive:?}")))
+                    .collect::<Vec<_>>();
+                names.sort_unstable();
+                ProbeAnswer::Names(names)
+            }
+            (Probe::DeclarationSymbolAt, PolledKey::FileSpan(id, span)) => ProbeAnswer::Symbols(
+                self.method_symbol_ref(path(*id), *span)
+                    .map(Arc::<str>::from)
+                    .into_iter()
+                    .collect(),
+            ),
             (Probe::DefinedReflectively, PolledKey::Text(name)) => {
                 ProbeAnswer::Flag(self.property_may_be_defined_reflectively_as(name))
-            }
-            (Probe::GlobalWritten, PolledKey::Text(name)) => {
-                ProbeAnswer::Flag(global_identifier_written(self.facts, name))
-            }
-            (Probe::SymbolUses, PolledKey::Text(symbol)) => {
-                let index = self.base.symbol_uses(|| self.base_views());
-                let mut uses = index
-                    .ranked_values(symbol)
-                    .filter_map(|(file, rank, value)| {
-                        Some((
-                            self.memo_id(file)?,
-                            u32::try_from(rank).expect("fewer than 2^32 slots of one path"),
-                            *value,
-                        ))
-                    })
-                    .collect::<Vec<_>>();
-                uses.sort_unstable();
-                ProbeAnswer::Uses(uses)
-            }
-            (Probe::Spellings, PolledKey::Text(name)) => {
-                let index = self.base.spellings(|| self.base_views());
-                let mut spellings = index
-                    .ranked_values(name)
-                    .filter_map(|(file, rank, value)| {
-                        Some((
-                            self.memo_id(file)?,
-                            u32::try_from(rank).expect("fewer than 2^32 slots of one path"),
-                            *value,
-                        ))
-                    })
-                    .collect::<Vec<_>>();
-                spellings.sort_unstable();
-                ProbeAnswer::Spellings(spellings)
             }
             (Probe::AssignedNames, _) => {
                 let members = self.base_members();
