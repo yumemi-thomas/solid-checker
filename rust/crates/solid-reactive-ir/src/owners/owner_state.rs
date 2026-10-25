@@ -2,49 +2,26 @@
 //!
 //! The graph keeps what the owner analysis derives from the files' fragments
 //! ([`CachedOwnerFile`]) between builds, keyed by stable node ids (an interned
-//! path and the function's span), and re-solves only what a build changed:
+//! path and the function's span), and re-resolves only what a build changed:
 //!
 //! - **Patching.** A recomputed fragment whose content equals the kept one
 //!   changes nothing downstream. Otherwise its nodes, symbol winners and
 //!   resolved edges are patched: its own edges are resolved again, and every
 //!   file's edges only when the fragment's *shape* (its nodes' spans, symbols
 //!   and generator flags, all that edge resolution reads of another file)
-//!   moved. Targets whose incoming edges changed are the seeds.
-//! - **Cones.** The context bits flow on two kept K2 solvers
-//!   ([`Monotone`]): phase 1 over the direct contexts, phase 3 over the same
-//!   graph with the eager calls the zero contexts settle. Each re-solves the
-//!   forward cone of the seeds; phase 2 (the settle, which tests
-//!   `contexts == 0`) is recomputed pointwise on the nodes it can have moved.
-//!   The solvers' value changes are the nodes whose context moved, which is
-//!   what the per-file emission ([`super::owner_emission`]) is dirtied by.
-//! - **Fresh solve.** The dense worklist the analysis always ran
-//!   ([`propagate_owner_contexts`]) is still the answer wherever the cone
-//!   would not be exact or is not wanted: a one-shot build (nothing is
-//!   kept), an unnamed namespace escape (the `through_unnamed` reachability
-//!   passes of ADR 0347's amendment), and any `createTrackedEffect` edge
-//!   ([`OwnerEdgeKind::Leaf`]). The transfer functions are monotone, so the
-//!   least fixed point is the worklist's answer in every order, except for two
-//!   kinds: [`OwnerEdgeKind::MayResumeUnowned`] adds the unowned and resume
-//!   bits only while its source is not proven unowned, so a source that
-//!   *becomes* proven after the edge fired leaves the resume bit behind. That
-//!   bit is unobservable (a proven source already carries every bit it is
-//!   read for: [`OWNER_CONTEXT_LEAVES_REGION`] holds the proof bit too), and
-//!   verify mode compares with it masked. The solver's transfer adds the
-//!   unowned and resume bits for a proven source too (`transfer`): the
-//!   exact function is not monotone, and a cone over a cycle through it
-//!   oscillated in the property test. The tracked-effect transfer
-//!   ([`tracked_leaf_body_context`]) is not monotone in an observable bit, so
-//!   a graph holding such an edge solves fresh in the worklist's order.
+//!   moved.
+//! - **Solve.** The context bits are solved with the dense worklist the
+//!   analysis always ran ([`propagate_owner_contexts`]) over the patched
+//!   graph, in the build's file order; the nodes whose context moved are what
+//!   the per-file emission ([`super::owner_emission`]) is dirtied by. (Kept
+//!   cone solves on K2 solvers were removed: saved under 5 ms in the
+//!   2026-10-25 audit.)
 //!
 //! Paths are interned once ([`PathId`]); an id is never reused.
 
 use std::collections::BTreeSet;
 
 use super::*;
-use crate::base::fixpoint::{Definition, Lattice, Monotone};
-
-/// A definition change for a solver: `None` undefines the node.
-type Changes = Vec<(NodeId, Option<Definition<NodeId, Bits, OwnerEdgeKind>>)>;
 
 /// Dense nodes, their contexts and their resolved outgoing edges.
 pub(super) type DenseView = (Vec<OwnerNode>, Vec<u8>, Vec<Vec<(usize, OwnerEdgeKind)>>);
@@ -57,39 +34,6 @@ pub(super) type PathId = u32;
 pub(super) struct NodeId {
     pub(super) path: PathId,
     pub(super) span: Span,
-}
-
-/// Owner context bits, joined by union.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(super) struct Bits(pub(super) u8);
-
-impl Lattice for Bits {
-    fn bottom() -> Self {
-        Self(0)
-    }
-
-    fn join(&mut self, other: &Self) {
-        self.0 |= other.0;
-    }
-}
-
-/// What an edge of kind `kind` carries out of a source holding `source`.
-/// A source with no bit has not been reached, so it carries nothing: the
-/// worklist never visits it (and `Owned` and the other constant kinds would
-/// otherwise reach their targets from nowhere).
-fn transfer(kind: &OwnerEdgeKind, source: &Bits) -> Bits {
-    if source.0 == 0 {
-        return Bits(0);
-    }
-    // `MayResumeUnowned` drops its unowned and resume bits for a proven
-    // source, which is not monotone: a cone solve over a cycle through it can
-    // oscillate. The solver adds them for a proven source too; that source
-    // already holds the unowned bit, and the resume bit beside the proof is
-    // unobservable (module docs).
-    if *kind == OwnerEdgeKind::MayResumeUnowned {
-        return Bits(source.0 | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_MAY_RESUME_UNOWNED);
-    }
-    Bits(owner_edge_context(*kind, source.0))
 }
 
 /// An edge as resolved against the current nodes.
@@ -128,14 +72,6 @@ pub(super) struct GraphFile {
     resolved: Vec<Option<Resolved>>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct Incoming {
-    source: Option<NodeId>,
-    kind: OwnerEdgeKind,
-    /// The edge: its file and index in the fragment.
-    from: (PathId, u32),
-}
-
 #[derive(Clone, Debug)]
 struct SymbolEntry {
     /// The file's path, the sort key: facts list files by path.
@@ -168,22 +104,13 @@ pub(crate) struct OwnerGraph {
     files: HashMap<PathId, GraphFile>,
     /// Every node with its symbol, in (path, index) order: the last wins.
     symbols: HashMap<SymbolId, Vec<SymbolEntry>>,
-    incoming: HashMap<NodeId, Vec<Incoming>>,
-    outgoing: HashMap<NodeId, Vec<(NodeId, OwnerEdgeKind)>>,
     namespace_nodes: BTreeSet<NodeId>,
-    /// Resolved edges of kind [`OwnerEdgeKind::Leaf`].
-    leaf_edges: usize,
     /// The namespace hand-outs of the last build.
     named: HashSet<NodeId>,
     candidates: HashSet<NodeId>,
     /// The final context of every node.
     contexts: HashMap<NodeId, u8>,
-    phase1: Monotone<NodeId, Bits, OwnerEdgeKind>,
-    phase3: Monotone<NodeId, Bits, OwnerEdgeKind>,
-    solvers_valid: bool,
     // Accumulators of the build under way.
-    touched: BTreeSet<NodeId>,
-    removed: BTreeSet<NodeId>,
     changed_files: BTreeSet<PathId>,
     structural: bool,
 }
@@ -305,8 +232,6 @@ impl OwnerGraph {
                 path: id,
                 span: node.span,
             };
-            self.removed.remove(&node_id);
-            self.touched.insert(node_id);
             if let Some(symbol) = &node.symbol {
                 let entries = self.symbols.entry(symbol.clone()).or_default();
                 let entry = SymbolEntry {
@@ -372,7 +297,7 @@ impl OwnerGraph {
         let Some(file) = self.files.get_mut(&path) else {
             return;
         };
-        let resolved = std::mem::take(&mut file.resolved);
+        file.resolved.clear();
         let nodes = file
             .fragment
             .nodes
@@ -390,11 +315,6 @@ impl OwnerGraph {
             })
             .collect::<Vec<_>>();
         let name = Arc::clone(&file.path);
-        for (index, resolved) in resolved.into_iter().enumerate() {
-            if let Some(resolved) = resolved {
-                self.unindex(path, index, &resolved);
-            }
-        }
         for (index, node, symbol) in nodes {
             if let Some(symbol) = symbol
                 && let Some(entries) = self.symbols.get_mut(&symbol)
@@ -405,58 +325,7 @@ impl OwnerGraph {
                 }
             }
             self.namespace_nodes.remove(&node);
-            self.removed.insert(node);
-            self.touched.remove(&node);
         }
-    }
-
-    fn index(&mut self, path: PathId, edge: usize, resolved: &Resolved) {
-        let from = (path, u32::try_from(edge).expect("fewer than 2^32 edges"));
-        self.incoming
-            .entry(resolved.target)
-            .or_default()
-            .push(Incoming {
-                source: resolved.source,
-                kind: resolved.kind,
-                from,
-            });
-        if let Some(source) = resolved.source {
-            self.outgoing
-                .entry(source)
-                .or_default()
-                .push((resolved.target, resolved.kind));
-        }
-        if resolved.kind == OwnerEdgeKind::Leaf {
-            self.leaf_edges += 1;
-        }
-        self.touched.insert(resolved.target);
-    }
-
-    fn unindex(&mut self, path: PathId, edge: usize, resolved: &Resolved) {
-        let from = (path, u32::try_from(edge).expect("fewer than 2^32 edges"));
-        if let Some(list) = self.incoming.get_mut(&resolved.target) {
-            list.retain(|incoming| incoming.from != from);
-            if list.is_empty() {
-                self.incoming.remove(&resolved.target);
-            }
-        }
-        if let Some(source) = resolved.source
-            && let Some(list) = self.outgoing.get_mut(&source)
-        {
-            if let Some(at) = list
-                .iter()
-                .position(|(target, kind)| *target == resolved.target && *kind == resolved.kind)
-            {
-                list.swap_remove(at);
-            }
-            if list.is_empty() {
-                self.outgoing.remove(&source);
-            }
-        }
-        if resolved.kind == OwnerEdgeKind::Leaf {
-            self.leaf_edges -= 1;
-        }
-        self.touched.insert(resolved.target);
     }
 
     fn resolve_edge(&self, path: PathId, edge: &InternedEdge) -> Option<Resolved> {
@@ -491,30 +360,10 @@ impl OwnerGraph {
             .iter()
             .map(|edge| self.resolve_edge(path, edge))
             .collect::<Vec<_>>();
-        let previous = std::mem::take(
-            &mut self
-                .files
-                .get_mut(&path)
-                .expect("the file is held")
-                .resolved,
-        );
-        let mut kept = Vec::with_capacity(next.len());
-        for (index, next) in next.into_iter().enumerate() {
-            let previous = previous.get(index).copied().flatten();
-            if previous != next {
-                if let Some(previous) = previous {
-                    self.unindex(path, index, &previous);
-                }
-                if let Some(next) = &next {
-                    self.index(path, index, next);
-                }
-            }
-            kept.push(next);
-        }
         self.files
             .get_mut(&path)
             .expect("the file is held")
-            .resolved = kept;
+            .resolved = next;
     }
 
     /// Re-resolves what the build's patches can have moved.
@@ -529,82 +378,12 @@ impl OwnerGraph {
         }
     }
 
-    // ---- definitions -------------------------------------------------
-
-    /// The direct bits of a node: its seed, a named hand-out, and the edges
-    /// with no source function.
-    fn direct(&self, id: NodeId) -> u8 {
-        let Some(node) = self.node(id) else { return 0 };
-        let mut bits = node.seed_context;
-        if self.named.contains(&id) {
-            bits |= OWNER_CONTEXT_UNOWNED;
-        }
-        for incoming in self.incoming.get(&id).into_iter().flatten() {
-            if incoming.source.is_none() {
-                bits |= owner_edge_context(
-                    incoming.kind,
-                    OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
-                );
-            }
-        }
-        if self.candidates.contains(&id) {
-            bits |= OWNER_CONTEXT_UNOWNED;
-        }
-        bits
-    }
-
-    fn predecessors(&self, id: NodeId) -> Vec<(NodeId, OwnerEdgeKind)> {
-        let mut preds = self
-            .incoming
-            .get(&id)
-            .into_iter()
-            .flatten()
-            .filter_map(|incoming| incoming.source.map(|source| (source, incoming.kind)))
-            .collect::<Vec<_>>();
-        preds.sort_unstable_by_key(|(source, kind)| (*source, *kind as u8));
-        preds.dedup();
-        preds
-    }
-
-    fn definition(&self, id: NodeId, extra: u8) -> Option<Definition<NodeId, Bits, OwnerEdgeKind>> {
-        self.node(id)?;
-        Some(Definition {
-            input: Bits(self.direct(id) | extra),
-            preds: self.predecessors(id),
-        })
-    }
-
-    /// The bit the eager calls of an unreached source give `id` (the settle).
-    fn eager(&self, id: NodeId) -> u8 {
-        let reached = |source: NodeId| self.phase1.value(&source).is_some_and(|value| value.0 != 0);
-        let eager = self
-            .incoming
-            .get(&id)
-            .into_iter()
-            .flatten()
-            .filter(|incoming| incoming.kind == OwnerEdgeKind::EagerCall)
-            .filter_map(|incoming| incoming.source)
-            .any(|source| !reached(source));
-        if eager {
-            owner_edge_context(OwnerEdgeKind::MayBeUnowned, 0)
-        } else {
-            0
-        }
-    }
-
     // ---- the build ---------------------------------------------------
 
     /// Brings the graph and its contexts up to the fragments the build
     /// stored, then reports what moved. `order` lists the paths of the
-    /// build's files (path order, each once); `retain` says the state will be
-    /// used again, which makes the kept solvers worth keeping.
-    pub(super) fn settle(
-        &mut self,
-        order: &[PathId],
-        hand_outs: &HandOuts<'_>,
-        retain: bool,
-        verify: bool,
-    ) -> Moved {
+    /// build's files (path order, each once).
+    pub(super) fn settle(&mut self, order: &[PathId], hand_outs: &HandOuts<'_>) -> Moved {
         self.resolve();
         // Hand-outs: the census answers for the namespace candidates only.
         let mut named = HashSet::default();
@@ -617,106 +396,14 @@ impl OwnerGraph {
                 candidates.insert(*id);
             }
         }
-        for id in self
-            .named
-            .symmetric_difference(&named)
-            .chain(self.candidates.symmetric_difference(&candidates))
-            .copied()
-            .collect::<Vec<_>>()
-        {
-            self.touched.insert(id);
-        }
         self.named = named;
         self.candidates = candidates;
 
         let moved_files = std::mem::take(&mut self.changed_files);
-        let touched = std::mem::take(&mut self.touched);
-        let removed = std::mem::take(&mut self.removed);
         self.structural = false;
-        let cones = retain && self.candidates.is_empty() && self.leaf_edges == 0;
-        let mut moved = if cones {
-            self.solve_cones(&touched, &removed)
-        } else {
-            self.solvers_valid = false;
-            self.solve_fresh(order, &removed)
-        };
-        if verify && cones {
-            self.verify(order, &mut moved);
-        }
+        let mut moved = self.solve_fresh(order);
         moved.files = moved_files;
         moved
-    }
-
-    fn definitions(&self, ids: impl IntoIterator<Item = NodeId>, phase3: bool) -> Changes {
-        ids.into_iter()
-            .map(|id| {
-                let extra = if phase3 { self.eager(id) } else { 0 };
-                (id, self.definition(id, extra))
-            })
-            .collect()
-    }
-
-    fn solve_cones(&mut self, touched: &BTreeSet<NodeId>, removed: &BTreeSet<NodeId>) -> Moved {
-        let fresh = !self.solvers_valid;
-        let (changes1, all) = if fresh {
-            self.phase1 = Monotone::default();
-            self.phase3 = Monotone::default();
-            let all = self
-                .files
-                .iter()
-                .flat_map(|(path, file)| {
-                    file.fragment.nodes.iter().map(|node| NodeId {
-                        path: *path,
-                        span: node.span,
-                    })
-                })
-                .collect::<BTreeSet<_>>();
-            (self.definitions(all.iter().copied(), false), Some(all))
-        } else {
-            let mut changes = self.definitions(touched.iter().copied(), false);
-            changes.extend(removed.iter().map(|id| (*id, None)));
-            (changes, None)
-        };
-        let solved1 = self.phase1.update(changes1, &transfer);
-        // Phase 2, pointwise: the targets whose eager sources may have moved
-        // in or out of zero.
-        let mut affected = all.unwrap_or_else(|| touched.clone());
-        for key in solved1.changed.iter().chain(touched.iter()) {
-            for (target, kind) in self.outgoing.get(key).into_iter().flatten() {
-                if *kind == OwnerEdgeKind::EagerCall {
-                    affected.insert(*target);
-                }
-            }
-        }
-        let mut changes3 = self.definitions(affected.iter().copied(), true);
-        changes3.extend(removed.iter().map(|id| (*id, None)));
-        let solved3 = self.phase3.update(changes3, &transfer);
-        self.solvers_valid = true;
-        let mut contexts = Vec::new();
-        if fresh {
-            self.contexts.clear();
-        }
-        for key in solved3.changed {
-            match self.phase3.value(&key) {
-                Some(bits) => {
-                    if self.contexts.insert(key, bits.0) != Some(bits.0) {
-                        contexts.push(key);
-                    }
-                }
-                None => {
-                    if self.contexts.remove(&key).is_some() {
-                        contexts.push(key);
-                    }
-                }
-            }
-        }
-        if fresh {
-            contexts = self.contexts.keys().copied().collect();
-        }
-        Moved {
-            contexts,
-            files: BTreeSet::new(),
-        }
     }
 
     /// The dense worklist, in the order of the build's files.
@@ -780,7 +467,7 @@ impl OwnerGraph {
         (nodes, contexts)
     }
 
-    fn solve_fresh(&mut self, order: &[PathId], removed: &BTreeSet<NodeId>) -> Moved {
+    fn solve_fresh(&mut self, order: &[PathId]) -> Moved {
         let (nodes, contexts) = self.dense(order);
         let mut next = HashMap::<NodeId, u8>::default();
         next.reserve(nodes.len());
@@ -791,12 +478,6 @@ impl OwnerGraph {
             }
             next.insert(*id, *context);
         }
-        moved.extend(
-            removed
-                .iter()
-                .filter(|id| self.contexts.contains_key(id) && !next.contains_key(id))
-                .copied(),
-        );
         // A node a removed file held and the dense order no longer lists.
         moved.extend(
             self.contexts
@@ -811,71 +492,6 @@ impl OwnerGraph {
             contexts: moved,
             files: BTreeSet::new(),
         }
-    }
-
-    /// Verify mode: the kept solve against the worklist, by node. The
-    /// resume bit a proven source leaves behind is masked (see the module
-    /// docs); a difference names the first node, and the worklist's answer
-    /// replaces the kept one.
-    fn verify(&mut self, order: &[PathId], moved: &mut Moved) {
-        let (nodes, contexts) = self.dense(order);
-        let mask = |context: u8| {
-            if context & OWNER_CONTEXT_PROVEN_UNOWNED != 0 {
-                context & !OWNER_CONTEXT_MAY_RESUME_UNOWNED
-            } else {
-                context
-            }
-        };
-        let expected = nodes
-            .iter()
-            .zip(&contexts)
-            .map(|(id, context)| (*id, *context))
-            .collect::<HashMap<_, _>>();
-        let mut differing = expected
-            .iter()
-            .filter(|(id, context)| {
-                self.contexts
-                    .get(id)
-                    .is_none_or(|kept| mask(*kept) != mask(**context))
-            })
-            .map(|(id, context)| (*id, Some(*context)))
-            .chain(
-                self.contexts
-                    .keys()
-                    .filter(|id| !expected.contains_key(id))
-                    .map(|id| (*id, None)),
-            )
-            .collect::<Vec<_>>();
-        differing.sort_unstable();
-        let Some((first, expected_context)) = differing.first().copied() else {
-            return;
-        };
-        let message = format!(
-            "IR owner verify mismatch: node {}:{:?} holds {:?}, the worklist gives {:?} ({} nodes differ)",
-            self.path_name(first.path),
-            first.span,
-            self.contexts.get(&first),
-            expected_context,
-            differing.len()
-        );
-        eprintln!("{message}");
-        if crate::shadow::ShadowMode::from_env() == crate::shadow::ShadowMode::Panic {
-            panic!("{message}");
-        }
-        self.solvers_valid = false;
-        for (id, context) in differing {
-            match context {
-                Some(context) => {
-                    self.contexts.insert(id, context);
-                }
-                None => {
-                    self.contexts.remove(&id);
-                }
-            }
-            moved.contexts.push(id);
-        }
-        moved.contexts.sort_unstable();
-        moved.contexts.dedup();
     }
 
     /// Dense nodes, contexts and edges in the build's file order, for the
@@ -915,12 +531,6 @@ impl OwnerGraph {
             }
         }
         (nodes, contexts, outgoing)
-    }
-
-    /// Whether the kept solvers answered the last build.
-    #[cfg(test)]
-    pub(super) fn solvers_kept(&self) -> bool {
-        self.solvers_valid
     }
 
     /// Debug summary for tests: `(path, span) -> context`, sorted.

@@ -392,6 +392,16 @@ impl TypeFactsSession {
         Ok(())
     }
 
+    /// [`Self::update`] with `work` running while the producer applies it
+    /// ([`typefacts::Session::update_during`]); the work's value.
+    pub fn update_during<T>(
+        &mut self,
+        changes: Vec<typefacts::v3::FileChange>,
+        work: impl FnOnce() -> T,
+    ) -> Result<T, BackendError> {
+        Ok(self.session.update_during(changes, work)?)
+    }
+
     #[must_use]
     pub fn generation(&self) -> u64 {
         self.session.generation()
@@ -498,6 +508,17 @@ pub struct NativeIncrementalSession {
 /// An edited path's previous source and program digest, restored when the
 /// edit never lands.
 type DisplacedSource = (String, Option<SourceFile>, Option<SourceHash>);
+
+/// What [`NativeIncrementalSession::edit_during`] made of an edit.
+pub enum Edited<T> {
+    /// The edit's facts, with what the caller's overlapping work made: `None`
+    /// when the update was sent again after a producer failure, which the
+    /// work does not overlap.
+    Facts(Arc<ProjectFacts>, Option<T>),
+    /// The caller's work said not to analyze: the update has landed and no
+    /// facts were built. What the work made.
+    Abandoned(T),
+}
 
 /// A step every generation's joined facts pass through before their import
 /// identities are attested, with the session's own Type Facts program (ADR
@@ -861,20 +882,45 @@ impl NativeIncrementalSession {
     }
 
     /// One edit exchange: the update that advances the generation always
-    /// lands, and only the analyze half is cancellable. Local preparation
-    /// (Oxc parse, native compiler facts, demand assembly) overlaps the
-    /// update round trip; the analyze request is sent once the service has
-    /// acknowledged the new generation. A transport failure restarts the
-    /// service, replays local state, and retries exactly the half that
-    /// failed.
+    /// lands, and only the analyze half is cancellable. The analyze request
+    /// is sent once the service has acknowledged the new generation. A
+    /// transport failure restarts the service, replays local state, and
+    /// retries exactly the half that failed.
     pub fn edit(
         &mut self,
         changes: Vec<SourceChange>,
         cancelled: Option<&std::sync::atomic::AtomicBool>,
     ) -> Result<Arc<ProjectFacts>, BackendError> {
+        match self.edit_during(changes, cancelled, || (), |()| false)? {
+            Edited::Facts(facts, _) => Ok(facts),
+            Edited::Abandoned(()) => Err(BackendError::Cancelled),
+        }
+    }
+
+    /// [`Self::edit`] with work of the caller's overlapping the update round
+    /// trip: `during` runs once the update is written and before it is
+    /// awaited, so the edit pays `max(update, during)` rather than their sum
+    /// (`typefacts::Session::update_during`). It cannot touch the session. If
+    /// `abandon` says no to what it made, the edit stops once the update has
+    /// landed, before any analysis is asked for ([`Edited::Abandoned`]): the
+    /// caller's work found the session not worth answering from. `during`
+    /// runs on the first attempt only, so a producer failure that restarts
+    /// the exchange may return facts with no result of its work: the caller
+    /// then does that work after the fact.
+    pub fn edit_during<T, D, A>(
+        &mut self,
+        changes: Vec<SourceChange>,
+        cancelled: Option<&std::sync::atomic::AtomicBool>,
+        during: D,
+        abandon: A,
+    ) -> Result<Edited<T>, BackendError>
+    where
+        D: FnOnce() -> T,
+        A: Fn(&T) -> bool,
+    {
         check_cancelled(cancelled)?;
         if changes.is_empty() {
-            return self.analyze_with_recovery(cancelled);
+            return Ok(Edited::Facts(self.analyze_with_recovery(cancelled)?, None));
         }
         let next_generation = self
             .generation
@@ -920,12 +966,17 @@ impl NativeIncrementalSession {
         }
         let mut update_landed = false;
         let mut attempt = 0_u32;
+        let mut during = Some(during);
+        let mut overlapped = None;
         loop {
             let result = self.edit_attempt(
                 next_generation,
                 &wire_changes,
                 &mut update_landed,
                 cancelled,
+                &mut during,
+                &mut overlapped,
+                &abandon,
             );
             if update_landed {
                 self.generation = next_generation;
@@ -952,14 +1003,19 @@ impl NativeIncrementalSession {
                     }
                     return Err(error);
                 }
-                Ok(facts) => {
+                Ok(None) => {
+                    return Ok(Edited::Abandoned(
+                        overlapped.expect("an abandoned edit has what made it abandoned"),
+                    ));
+                }
+                Ok(Some(facts)) => {
                     let edited = wire_changes
                         .iter()
                         .map(|change| change.path.clone())
                         .collect::<Vec<_>>();
                     let facts = Arc::new(self.attested(facts, Some(&edited))?);
                     self.last_facts = Some(Arc::clone(&facts));
-                    return Ok(facts);
+                    return Ok(Edited::Facts(facts, overlapped));
                 }
             }
         }
@@ -971,20 +1027,39 @@ impl NativeIncrementalSession {
     /// the build never reached the semantic stage. A written update is
     /// always awaited: the service applies it regardless, so returning
     /// without committing the generation would desynchronize the session.
-    fn edit_attempt(
+    /// `None`: the overlapping work said to abandon the edit once the update
+    /// landed.
+    #[allow(clippy::too_many_arguments)]
+    fn edit_attempt<T, D, A>(
         &mut self,
         next_generation: u64,
         wire_changes: &[typefacts::v3::FileChange],
         update_landed: &mut bool,
         cancelled: Option<&std::sync::atomic::AtomicBool>,
-    ) -> Result<ProjectFacts, BackendError> {
+        during: &mut Option<D>,
+        overlapped: &mut Option<T>,
+        abandon: &A,
+    ) -> Result<Option<ProjectFacts>, BackendError>
+    where
+        D: FnOnce() -> T,
+        A: Fn(&T) -> bool,
+    {
         // The session applies the overlay and advances its own generation.
         // `Session` owns transport recovery, so a failure here is already
         // past its internal restart-and-replay.
         if !*update_landed {
-            self.typescript.update(wire_changes.to_vec())?;
+            let work = during.take();
+            let made = self
+                .typescript
+                .update_during(wire_changes.to_vec(), move || work.map(|work| work()))?;
             *update_landed = true;
+            if let Some(made) = made {
+                *overlapped = Some(made);
+            }
             check_cancelled(cancelled)?;
+            if overlapped.as_ref().is_some_and(abandon) {
+                return Ok(None);
+            }
         }
         let mut sources = self.sources.values().cloned().collect::<Vec<_>>();
         sources.sort_by(|left, right| left.path.cmp(&right.path));
@@ -1014,7 +1089,7 @@ impl NativeIncrementalSession {
         );
         result.map(|(facts, timings)| {
             self.last_build_timings = timings;
-            facts
+            Some(facts)
         })
     }
 
@@ -1149,14 +1224,30 @@ impl NativeIncrementalSession {
             self.last_import_identity = ImportIdentityMeasurement::default();
             return Ok(facts);
         }
+        // The attestation's exchanges can restart the producer themselves
+        // (review R1 finding 5): rows from two processes, or a kept index
+        // stamped with the new one's epoch, would then pass for the running
+        // program's. So a moved epoch asks again, in full, of the producer
+        // now running, and an epoch that moves again fails the request.
+        let epoch = self.typescript.restart_epoch();
         let kept = match edited {
             Some(edited) => self.kept_attestation(&facts, &scope, edited)?,
             None => None,
         };
-        let (index, measurement) = match kept {
+        let (mut index, mut measurement) = match kept {
             Some(kept) => kept,
             None => attest_import_identities(&mut self.typescript, &scope)?,
         };
+        if self.typescript.restart_epoch() != epoch {
+            let epoch = self.typescript.restart_epoch();
+            (index, measurement) = attest_import_identities(&mut self.typescript, &scope)?;
+            if self.typescript.restart_epoch() != epoch {
+                self.attested_epoch = None;
+                return Err(BackendError::Process(
+                    "the Type Facts producer restarted twice while attesting imports".into(),
+                ));
+            }
+        }
         self.attested_epoch = Some(self.typescript.restart_epoch());
         self.last_import_identity = measurement;
         facts.resolved_imports = Some(index);
@@ -1233,6 +1324,13 @@ impl NativeIncrementalSession {
     #[must_use]
     pub const fn last_import_identity(&self) -> ImportIdentityMeasurement {
         self.last_import_identity
+    }
+
+    /// The text the session holds for `path`: before an edit, the text the
+    /// edit replaces.
+    #[must_use]
+    pub fn source_text(&self, path: &str) -> Option<&str> {
+        self.sources.get(path).map(|source| &*source.source)
     }
 
     #[must_use]

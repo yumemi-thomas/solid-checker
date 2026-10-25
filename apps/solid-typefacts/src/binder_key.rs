@@ -117,7 +117,7 @@ impl Combination {
 pub enum Key {
     Decl(DurableRef),
     /// A source file's unexported declaration, by its [`LocalChains`] chain:
-    /// no span, so an edit before it keeps its id (ADR 03XX-stable-locals).
+    /// no span, so an edit before it keeps its id (ADR 0415).
     Local {
         path: String,
         chain: Chain,
@@ -428,7 +428,7 @@ fn minimum_declaration(root: P<Symbol>, reference: &DurableRef) -> Option<P<Node
 }
 
 /// A declaration's shift-stable position or chain in its file, as a hash
-/// (ADR 03XX-stable-locals).
+/// (ADR 0415).
 pub type Chain = [u8; 32];
 
 /// Shift-stable names for the declarations of source files, memoized for
