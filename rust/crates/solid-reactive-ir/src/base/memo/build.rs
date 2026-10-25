@@ -816,7 +816,7 @@ const POLLED_SHARDS: usize = 16;
 struct PolledShard {
     keys: IndexKeys<super::probes::PolledKey>,
     /// Read in no order: `begin` re-asks each and `end` releases by key.
-    answers: HashMap<Input, u64>,
+    answers: HashMap<Input, super::probes::AnswerFingerprint>,
 }
 
 fn polled_shard_of(key: &super::probes::PolledKey) -> usize {
@@ -1394,7 +1394,7 @@ impl MemoStore {
         &self,
         probe: super::probes::Probe,
         key: &super::probes::PolledKey,
-        fingerprint: u64,
+        fingerprint: super::probes::AnswerFingerprint,
     ) -> Input {
         let shard = polled_shard_of(key);
         let lock = &self.polled[shard];
