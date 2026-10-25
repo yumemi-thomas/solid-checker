@@ -74,10 +74,16 @@ pub(crate) enum Section {
     /// The route component values (ADR 0334), whose router configurations
     /// may sit in another file than the value (ADR 0408).
     RouteComponents,
+    /// The bindings a `createContext` call initializes, in any file, and
+    /// TypeScript's references to each (`is_context_reference`).
+    ContextSymbols,
+    /// The dialect primitives the project names anywhere, which decide the
+    /// project-wide callback capability flags and their early exits.
+    ProjectPrimitives,
 }
 
 impl Section {
-    pub(crate) const ALL: [Self; 13] = [
+    pub(crate) const ALL: [Self; 15] = [
         Self::Components,
         Self::MemberTargets,
         Self::SpreadTargets,
@@ -91,6 +97,8 @@ impl Section {
         Self::ReflectiveDefinition,
         Self::ReflectivePrototypeWrite,
         Self::RouteComponents,
+        Self::ContextSymbols,
+        Self::ProjectPrimitives,
     ];
 
     const fn bit(self) -> u32 {
@@ -201,28 +209,6 @@ impl Reads {
         };
         reads.bound_runs();
         reads
-    }
-
-    /// Adds every set of `others`' reads. Runs are shared by pointer
-    /// ([`Self::extend`]) and bounded once at the end, so adding a thousand
-    /// small sets merges their runs once, not once per set.
-    pub(crate) fn extend_all<'a>(&mut self, others: impl IntoIterator<Item = &'a Self>) {
-        for other in others {
-            self.sections |= other.sections;
-            for run in &other.runs {
-                self.add_run(run);
-            }
-            self.tail.extend_from_slice(&other.tail);
-        }
-        if self.tail.len() > TAIL_MAX {
-            let mut tail = std::mem::take(&mut self.tail);
-            cost::timed(cost::EXTEND, tail.len(), || {
-                tail.sort_unstable();
-                tail.dedup();
-            });
-            self.runs.push(Arc::from(tail));
-        }
-        self.bound_runs();
     }
 
     /// These reads without the answers of the tables in `tables`: what a
@@ -431,6 +417,11 @@ thread_local! {
     static DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// How many frames this thread has opened ([`Frame::serial`]).
     static OPENED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// The innermost open frame's serial, 0 outside every recording.
+    static CURRENT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Each section's frame of its last [`note_once`].
+    static NOTED_IN: [std::cell::Cell<u64>; Section::ALL.len()] =
+        const { [const { std::cell::Cell::new(0) }; Section::ALL.len()] };
 }
 
 /// Whether some computation on this thread is recording.
@@ -465,6 +456,19 @@ pub(crate) fn note(section: Section) {
             frame.sections |= section.bit();
         }
     });
+}
+
+/// [`note`] for a section read on a hot path: noted once per frame. A
+/// frame's serial is never reused on a thread, and the frame a skipped note
+/// would reach already holds the section.
+pub(crate) fn note_once(section: Section) {
+    if !recording() {
+        return;
+    }
+    let current = CURRENT.with(std::cell::Cell::get);
+    if NOTED_IN.with(|noted| noted[section as usize].replace(current)) != current {
+        note(section);
+    }
 }
 
 /// Records that the current computation read a memo answer.
@@ -507,8 +511,11 @@ fn replay_shared(reads: &Arc<Reads>) {
     });
 }
 
-/// Pops the frame [`push`] opened, even on unwind.
-struct FrameGuard;
+/// Pops the frame [`push`] opened, even on unwind, and makes the frame it
+/// covered the current one again.
+struct FrameGuard {
+    previous: u64,
+}
 
 impl Drop for FrameGuard {
     fn drop(&mut self) {
@@ -516,6 +523,7 @@ impl Drop for FrameGuard {
             frames.borrow_mut().pop();
         });
         DEPTH.with(|depth| depth.set(depth.get() - 1));
+        CURRENT.with(|current| current.set(self.previous));
     }
 }
 
@@ -531,7 +539,9 @@ fn push() -> FrameGuard {
         });
     });
     DEPTH.with(|depth| depth.set(depth.get() + 1));
-    FrameGuard
+    FrameGuard {
+        previous: CURRENT.with(|current| current.replace(serial)),
+    }
 }
 
 fn take_top() -> Frame {
@@ -618,8 +628,18 @@ pub(crate) fn suppress<R>(f: impl FnOnce() -> R) -> R {
 
 /// A per-build cache that replays the reads its initialization made to
 /// every reader (see the module docs): `OnceLock`'s interface.
+///
+/// A probe's answer ([`crate::indexes::probing`]) makes no memo or hand-out
+/// note: the whole-program answers are asked directly and the hand-outs
+/// return early. A cache first filled inside one would keep that incomplete
+/// read set and replay it to every later reader of the build (final review
+/// R2, finding 7). So a fill made while probing goes to a cell only probes
+/// read, and the cache readers replay is filled outside every probe.
 pub(crate) struct Recorded<T> {
     cell: OnceLock<(T, Arc<Reads>)>,
+    /// The value as a probe computed it, for probes asked before the cache
+    /// is filled.
+    probed: OnceLock<T>,
 }
 
 impl<T> Default for Recorded<T> {
@@ -632,10 +652,21 @@ impl<T> Recorded<T> {
     pub(crate) const fn new() -> Self {
         Self {
             cell: OnceLock::new(),
+            probed: OnceLock::new(),
         }
     }
 
     pub(crate) fn get_or_init(&self, f: impl FnOnce() -> T) -> &T {
+        if self.cell.get().is_none() && crate::indexes::probing() {
+            return self.probed.get_or_init(|| {
+                let guard = push();
+                let value = f();
+                let reads = take_top().finish();
+                drop(guard);
+                replay(&reads);
+                value
+            });
+        }
         let (value, reads) = self.cell.get_or_init(|| {
             let guard = push();
             let value = f();
@@ -714,7 +745,7 @@ pub(crate) enum Verdict {
     Holds,
     Moved(String),
     /// Every read decided so far holds; these need a pass that has not run
-    /// yet in this build. Checked again once it has ([`ReadProof::recheck`]).
+    /// yet in this build.
     Undecided(Vec<MemoRead>),
 }
 
@@ -804,21 +835,6 @@ impl ReadProof {
             Verdict::Undecided(undecided)
         }
     }
-
-    /// Checks again the reads a [`Verdict::Undecided`] named, once their
-    /// pass has run: whether each answers as recorded.
-    pub(crate) fn recheck(&self, undecided: &[MemoRead], answers: &dyn ReadAnswers) -> bool {
-        match undecided
-            .iter()
-            .find(|read| answers.memo_check(self.store, **read) != MemoCheck::Same)
-        {
-            None => true,
-            Some(read) => {
-                report_miss(&format!("memo {}", answers.describe_memo(*read)));
-                false
-            }
-        }
-    }
 }
 
 fn report_miss(miss: &str) {
@@ -857,6 +873,32 @@ mod tests {
         assert_eq!(first, second);
         assert!(second.reads_section(Section::Components));
         assert_eq!(second.memos(), &[read(3)]);
+    }
+
+    /// A probe that asks a cache first does not fill what later readers
+    /// replay: inside a probe the memo note is not made (the whole-program
+    /// answer is asked directly), so a fill there would hand every later
+    /// reader a read set without it (final review R2, finding 7).
+    #[test]
+    fn a_cache_first_asked_by_a_probe_replays_the_full_reads_later() {
+        let cache = Recorded::<u32>::new();
+        let init = || {
+            if !crate::indexes::probing() {
+                note_memo(read(3));
+            }
+            note(Section::Components);
+            7
+        };
+        let probed = crate::indexes::as_probe(|| *cache.get_or_init(init));
+        assert_eq!(probed, 7);
+        let ((), later) = record(|| {
+            assert_eq!(*cache.get_or_init(init), 7);
+        });
+        assert_eq!(later.memos(), &[read(3)], "the memo note a probe skips");
+        assert!(later.reads_section(Section::Components));
+        // Once filled, a probe reads the full cache.
+        let again = crate::indexes::as_probe(|| *cache.get_or_init(|| unreachable!()));
+        assert_eq!(again, 7);
     }
 
     #[test]
@@ -959,11 +1001,10 @@ mod tests {
     }
 
     /// A proof checked before a pass publishes what some of its memos read
-    /// is undecided, not moved, while every decided read holds; checked again
-    /// once the pass has run, it holds exactly when those reads answer as
-    /// recorded. A decided read that moved wins over an undecided one.
+    /// is undecided, not moved, while every decided read holds, and reruns
+    /// its chunk. A decided read that moved wins over an undecided one.
     #[test]
-    fn a_proof_is_undecided_until_its_pass_runs_then_exact() {
+    fn a_proof_is_undecided_until_its_pass_runs() {
         let ((), reads) = record(|| {
             note_memo(read(1));
             note_memo(read(2));
@@ -978,15 +1019,7 @@ mod tests {
         };
         assert_eq!(pending, [read(2)]);
         assert!(!proof.holds(&answers), "an undecided read reruns the chunk");
-        answers.undecided.borrow_mut().clear();
-        assert!(proof.recheck(&pending, &answers));
-        answers.revisions.insert(2, 5);
-        assert!(
-            !proof.recheck(&pending, &answers),
-            "it moved once published"
-        );
         answers.revisions.insert(1, 7);
-        answers.undecided.borrow_mut().insert(2);
         assert!(matches!(proof.verdict(&answers), Verdict::Moved(_)));
     }
 }

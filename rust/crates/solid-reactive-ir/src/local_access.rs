@@ -506,17 +506,11 @@ pub(crate) fn argument_proves_non_reactive(
 }
 
 pub(crate) struct LocalAccessReuse<'a> {
-    pub(crate) aggregate_reusable: bool,
     pub(crate) typescript_unchanged: bool,
     pub(crate) source_discovery_delta: Option<&'a SourceDiscoveryTypeScriptDelta>,
     /// The files whose own facts are the last build's
     /// ([`crate::source_discovery::SourceDiscovery::unchanged_paths`]).
     pub(crate) unchanged_paths: &'a HashSet<String>,
-    pub(crate) global_async_context_unchanged: bool,
-    /// What source discovery read ([`crate::base::reads`]): part of the
-    /// aggregate's proof, which reads its tables whole. A file's chunk reads
-    /// them by symbol, and compares those symbols' states instead.
-    pub(crate) shared_reads: &'a crate::base::reads::Reads,
 }
 
 impl LocalAccessContext<'_, '_> {
@@ -526,30 +520,13 @@ impl LocalAccessContext<'_, '_> {
         reuse: LocalAccessReuse<'_>,
     ) -> LocalAccessBuild {
         let LocalAccessReuse {
-            aggregate_reusable,
             typescript_unchanged,
             source_discovery_delta,
             unchanged_paths,
-            global_async_context_unchanged,
-            shared_reads,
         } = reuse;
-        if aggregate_reusable
-            && let Some(cached) = cache.as_deref().and_then(|cache| cache.aggregate.as_ref())
-        {
-            return LocalAccessBuild {
-                result: cached.clone(),
-                reused: true,
-                reused_files: u64::try_from(self.facts.files.len()).unwrap_or(u64::MAX),
-                recomputed_files: 0,
-                reads: crate::base::reads::Reads::default(),
-            };
-        }
-
         let mut result = LocalAccessResult::default();
         let mut reused_files = 0;
         let mut recomputed_files = 0;
-        // The aggregate's reads: every file's, reused or recomputed.
-        let mut aggregate_reads = shared_reads.clone();
         if let Some(cache) = cache {
             let exact_typescript_delta = typescript_unchanged || source_discovery_delta.is_some();
             // The symbols whose source-discovery entries moved since the
@@ -600,11 +577,9 @@ impl LocalAccessContext<'_, '_> {
                         cached,
                         unchanged_paths.contains(file.path.as_str()),
                         &changed_dependencies,
-                        global_async_context_unchanged,
                     )
                 {
                     reused_files += 1;
-                    aggregate_reads.extend(&cached.proof.reads);
                     continue;
                 }
                 recompute.push(file);
@@ -624,7 +599,6 @@ impl LocalAccessContext<'_, '_> {
             for (file, ((contribution, dependencies, call_multiplicities), reads)) in
                 recompute.into_iter().zip(fresh)
             {
-                aggregate_reads.extend(&reads);
                 cache.files.insert(
                     file.path.clone(),
                     CachedLocalAccessFile {
@@ -678,7 +652,6 @@ impl LocalAccessContext<'_, '_> {
             }) {
                 append_local_access_result_owned(&mut result, partial);
             }
-            cache.aggregate = Some(result.clone());
             cache.sources = Some(sources);
         } else {
             for contribution in
@@ -690,10 +663,8 @@ impl LocalAccessContext<'_, '_> {
         }
         LocalAccessBuild {
             result,
-            reused: false,
             reused_files,
             recomputed_files,
-            reads: aggregate_reads,
         }
     }
 
@@ -825,14 +796,15 @@ impl LocalAccessContext<'_, '_> {
         cached: &CachedLocalAccessFile,
         unchanged_path: bool,
         changed_dependencies: &HashSet<SymbolId>,
-        global_async_context_unchanged: bool,
     ) -> bool {
         unchanged_path
             && cached.source_hash == file.source_hash
             && cached.proof.holds(self.lookup)
             && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                 || same_compiler_semantics(&cached.compiler, &file.compiler))
-            && (global_async_context_unchanged || cached.contribution.async_reads.is_empty())
+            // A file's async reads depend on the whole program's async
+            // context, which no chunk proof covers.
+            && cached.contribution.async_reads.is_empty()
             && cached.dependencies.is_disjoint(changed_dependencies)
             && cached
                 .call_multiplicities

@@ -142,8 +142,7 @@ impl BuildTimings {
     /// [`BuildTimings`] it accumulated on its own thread.
     pub(crate) fn absorb_source_discovery(&mut self, lane: &Self) {
         self.source_discovery = lane.source_discovery;
-        self.source_discovery_reused_files = lane.source_discovery_reused_files;
-        self.source_discovery_recomputed_files = lane.source_discovery_recomputed_files;
+        self.source_discovery_unchanged_files = lane.source_discovery_unchanged_files;
         self.source_discovery_identity_misses = lane.source_discovery_identity_misses;
         self.source_post_pass_row_sets = lane.source_post_pass_row_sets;
         self.typed_accessors_and_prop_roots = lane.typed_accessors_and_prop_roots;
@@ -246,7 +245,7 @@ pub(crate) fn reuse_line(
             "runtimeScan": [timings.runtime_scan_reused_files, timings.runtime_scan_scanned_files],
             "baseIndexChangedFiles": timings.base_index_changed_files,
             "memo": [timings.memo_reused, timings.memo_computed],
-            "sourceDiscovery": [timings.source_discovery_reused_files, timings.source_discovery_recomputed_files],
+            "sourceDiscoveryUnchanged": timings.source_discovery_unchanged_files,
             "sourceDiscoveryIdentityMisses": timings.source_discovery_identity_misses,
             "sourcePostPassRowSets": timings.source_post_pass_row_sets,
             "reachability": [timings.reachability_reused_files, timings.reachability_recomputed_files],
@@ -254,7 +253,6 @@ pub(crate) fn reuse_line(
             "interprocGraph": [timings.interprocedural_graph_reused_files, timings.interprocedural_graph_recomputed_files],
             "interprocResults": [timings.interprocedural_result_reused_files, timings.interprocedural_result_recomputed_files],
             "owners": [timings.owner_reused_files, timings.owner_recomputed_files],
-            "lateStages": [timings.local_accesses_reused, timings.interprocedural_reused, timings.owner_fixed_point_reused],
             "substagesMs": {
                 "cacheLookup": ms(timings.cache_lookup),
                 "projectIndexes": ms(timings.project_indexes),
@@ -262,7 +260,6 @@ pub(crate) fn reuse_line(
                 "symbolNames": ms(timings.symbol_name_indexes),
                 "boundaryDefects": ms(timings.boundary_defects),
                 "namespaceHandOuts": ms(timings.namespace_hand_outs),
-                "reusePlan": ms(timings.reuse_plan),
                 "upstreamCompat": ms(timings.upstream_compat),
                 "readAfterAwaitThroughCalls": ms(timings.read_after_await_through_calls),
                 "leafOperations": ms(timings.leaf_operations),
