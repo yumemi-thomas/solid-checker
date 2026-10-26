@@ -4,8 +4,13 @@
 // tests this file.
 
 export const EDIT_KINDS = ["code", "mid", "body", "import"];
-// Head over base, the median of per-repetition ratios.
+// Head over base, the median of per-repetition ratios, where both answered the
+// same.
 export const RATIO_LIMIT = 1.25;
+// The same ratio where the answers differ (ADR 0451): a change that moves
+// findings may do more work, so the bound is looser, and it is the one the
+// merged stack's 2.0 to 2.7x on app-game would have failed.
+export const DIFFERING_RATIO_LIMIT = 1.5;
 // Absolute head ceilings in ms, keyed "project:kind" with "*" as the default.
 // Reported, not enforced, until calibrated from runner measurements.
 export const CEILINGS = { "app-game:code": 1000, "*": 2500 };
@@ -106,11 +111,15 @@ export function ceilingFor(project, kind, ceilings = CEILINGS) {
 
 /**
  * One line per (project, kind) from timed rows `{project, kind, rep, arm: "base"|"head", ms, hash, retained}`.
- * A pair is one repetition's base and head. The ratio is gated only on rows
- * whose answers agree and whose base answered from its retained daemon; a head
- * answer that did not come from its retained daemon fails the row outright.
+ * A pair is one repetition's base and head. The ratio is gated, at `ratioLimit`
+ * where the answers agree and at `differingRatioLimit` where they differ, only
+ * on rows whose base answered from its retained daemon; a head answer that did
+ * not come from its retained daemon fails the row outright.
  */
-export function summarize(rows, { ratioLimit = RATIO_LIMIT, ceilings = CEILINGS, enforceCeilings = false } = {}) {
+export function summarize(
+  rows,
+  { ratioLimit = RATIO_LIMIT, differingRatioLimit = DIFFERING_RATIO_LIMIT, ceilings = CEILINGS, enforceCeilings = false } = {},
+) {
   const groups = new Map();
   for (const row of rows) {
     const key = `${row.project}\0${row.kind}`;
@@ -141,11 +150,12 @@ export function summarize(rows, { ratioLimit = RATIO_LIMIT, ceilings = CEILINGS,
       notes.push("head answered without its retained daemon");
       fails = true;
     }
-    const ratioGated = answersEqual && baseRetained;
-    if (!answersEqual) notes.push("answers differ; ratio not gated");
+    const ratioGated = baseRetained;
+    const limit = answersEqual ? ratioLimit : differingRatioLimit;
+    if (!answersEqual) notes.push(`answers differ; ratio gated at ${differingRatioLimit}`);
     if (!baseRetained) notes.push("base answered without its retained daemon; ratio not gated");
-    if (ratioGated && ratio > ratioLimit) {
-      notes.push(`ratio above ${ratioLimit}`);
+    if (ratioGated && ratio > limit) {
+      notes.push(`ratio above ${limit}`);
       fails = true;
     }
     if (head > ceiling) {
@@ -159,9 +169,9 @@ export function summarize(rows, { ratioLimit = RATIO_LIMIT, ceilings = CEILINGS,
 
 const fixed = (value, digits) => (Number.isFinite(value) ? value.toFixed(digits) : "-");
 
-export function markdownTable(lines, { ratioLimit = RATIO_LIMIT } = {}) {
+export function markdownTable(lines, { ratioLimit = RATIO_LIMIT, differingRatioLimit = DIFFERING_RATIO_LIMIT } = {}) {
   const out = [
-    `Paired median ratio head/base gate: ${ratioLimit}. CLI wall time, retained daemon, full report.`,
+    `Paired median ratio head/base gate: ${ratioLimit}, ${differingRatioLimit} where the answers differ. CLI wall time, retained daemon, full report.`,
     "",
     "| project | edit | n | base ms | head ms | head/base | head slower | sign p | answers equal | ceiling ms | verdict |",
     "|---|---|---|---|---|---|---|---|---|---|---|",
