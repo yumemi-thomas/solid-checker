@@ -184,7 +184,8 @@ published typings and must not be something `tsc` reports. Record the source
 `make repro-budget` and `make coverage`, read every new snapshot, then
 `make coverage-update`. Adding a package to the set's `node_modules` means
 copying published bytes and listing them, with version and integrity, in
-`packages.json`.
+`packages.json`; run `make repro-registry` (network) after adding or changing
+one, to check the record against the registry.
 
 ## Releases
 
