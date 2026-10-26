@@ -150,8 +150,12 @@ Solid 2 repositories, then discard them:
 2. Sweep it, and once more with `--program-boundary closed` for the
    open-program counterfactual:
    `node scripts/corpus-sweep.mjs --manifest <m> --apps-root <apps> --out sweep.json`.
+   For the dispatch veto's share (ADR 0405), sweep once more with a scratch
+   build in its own worktree whose `withholds_owner_proofs` and
+   `withholds_read_proofs` (`indexes/event_delivery.rs`) return `false`
+   (`--checker <that build>`), and never commit it.
 3. Uncertifiable results: group them by cause,
-   `node scripts/uncertifiable-causes.mjs --report sweep.json --closed-report closed.json --cases fixtures/uncertifiable-repro/cases.json`.
+   `node scripts/uncertifiable-causes.mjs --report sweep.json --closed-report closed.json --noveto-report noveto.json --cases fixtures/uncertifiable-repro/cases.json`.
    A cause a case stands for updates that case's `weight`; a new cause
    becomes a case, folded into an existing file when its mechanism is the
    same; one that cannot be reproduced faithfully (a package beyond the

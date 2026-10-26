@@ -3,7 +3,7 @@
 // reproduction that stands for it (fixtures/uncertifiable-repro, ADR 0404).
 //
 //   node scripts/uncertifiable-causes.mjs --report <sweep.json>
-//     [--closed-report <sweep.json>] [--cases fixtures/uncertifiable-repro/cases.json]
+//     [--closed-report <sweep.json>] [--noveto-report <sweep.json>] [--cases fixtures/uncertifiable-repro/cases.json]
 //     [--json <classified.json>] [--samples <n>] [--cause <id>]
 //
 // The checker's JSON does not name why a result is uncertifiable (an SC2001
@@ -16,6 +16,12 @@
 // a second sweep of the same corpus with `--program-boundary closed`
 // (scripts/corpus-sweep.mjs): a result it no longer holds is attributed to
 // the open program boundary (ADR 0402), whatever else is true of it.
+// `--noveto-report` is a sweep by a scratch build whose dispatch sites
+// withhold nothing (`withholds_owner_proofs` and `withholds_read_proofs` in
+// indexes/event_delivery.rs answer false; never committed): in a project with
+// unexcluded sites, a result it no longer holds is attributed to the dispatch
+// veto (ADR 0356) and one it still holds to its other cause. Without it the
+// veto is read from the site's shape, which over-attributes.
 //
 // A cause is a heuristic label for grouping and for picking what to
 // reproduce, never evidence about the code: the checker's result is what a
@@ -805,19 +811,24 @@ const key = (row, finding) =>
   `${row.app}|${row.project}|${finding.id}|${finding.primaryLocation.path}|${finding.primaryLocation.startByte}|${finding.analysisContext}`;
 
 /** Classifies every uncertifiable result of a sweep report. */
-export function classifyReport(report, closedReport = null) {
-  const closed = new Map();
-  const closedApps = new Set();
-  const closedPremises = new Map();
-  for (const row of closedReport?.results ?? []) {
-    closedApps.add(`${row.app}|${row.project}`);
-    closedPremises.set(`${row.app}|${row.project}`, row.premises ?? []);
-    for (const finding of row.findings) {
-      if (finding.kind !== "uncertifiable") continue;
-      const k = key(row, finding);
-      closed.set(k, (closed.get(k) ?? 0) + 1);
+export function classifyReport(report, closedReport = null, noVetoReport = null) {
+  const counts = (other) => {
+    const held = new Map();
+    const rows = new Set();
+    const premises = new Map();
+    for (const row of other?.results ?? []) {
+      rows.add(`${row.app}|${row.project}`);
+      premises.set(`${row.app}|${row.project}`, row.premises ?? []);
+      for (const finding of row.findings) {
+        if (finding.kind !== "uncertifiable") continue;
+        const k = key(row, finding);
+        held.set(k, (held.get(k) ?? 0) + 1);
+      }
     }
-  }
+    return { held, rows, premises };
+  };
+  const { held: closed, rows: closedApps, premises: closedPremises } = counts(closedReport);
+  const { held: unvetoed, rows: unvetoedApps } = counts(noVetoReport);
   const classified = [];
   for (const row of report.results) {
     const findings = row.findings.filter((finding) => finding.kind === "uncertifiable");
@@ -843,7 +854,20 @@ export function classifyReport(report, closedReport = null) {
       } else {
         if (closed.get(k) > 0) closed.set(k, closed.get(k) - 1);
         const file = project.file(location.path);
-        entry.cause = file ? classify(project, finding, file, { vetoed }, entry) : `${finding.id}/file-not-in-program`;
+        const appKey = `${row.app}|${row.project}`;
+        if (!file) entry.cause = `${finding.id}/file-not-in-program`;
+        else if (vetoed && unvetoedApps.has(appKey)) {
+          // With a sweep whose build ignores the veto, the veto holds exactly
+          // the results that sweep no longer has; any other is read with no
+          // veto, whatever its site looks like.
+          if (unvetoed.get(k) > 0) {
+            unvetoed.set(k, unvetoed.get(k) - 1);
+            entry.cause = classify(project, finding, file, { vetoed: null }, entry);
+          } else {
+            classify(project, finding, file, { vetoed: null }, entry);
+            entry.cause = [finding.id, entry.family, entry.context, `dispatch-veto:${vetoed}`].filter((part) => part !== "").join("/");
+          }
+        } else entry.cause = classify(project, finding, file, { vetoed }, entry);
       }
       classified.push(entry);
     }
@@ -1026,6 +1050,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const options = {
     report: null,
     "closed-report": null,
+    "noveto-report": null,
     repro: null,
     cases: null,
     checker: join(repo, "rust/target/release/solid-checker-rust"),
@@ -1047,7 +1072,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const closed = options.repro
     ? sweepSet(resolve(options.repro), resolve(options.checker), resolve(options.typefacts), "closed")
     : options["closed-report"] ? read(options["closed-report"]) : null;
-  const classified = classifyReport(report, closed);
+  const classified = classifyReport(report, closed, !options.repro && options["noveto-report"] ? read(options["noveto-report"]) : null);
   const { covered, perCase } = printGroups(classified, table.cases, Number(options.samples), options.cause);
   const problems = [];
   if (options.repro) problems.push(...caseProblems(table.cases, classified, report));

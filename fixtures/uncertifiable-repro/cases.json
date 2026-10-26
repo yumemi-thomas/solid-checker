@@ -3,9 +3,9 @@
  "note": "The reproduction set's one table (ADR 0404). A case is one cause or shape of a kind: uncertifiable (it stands for `causes`, keys of scripts/uncertifiable-causes.mjs, and `weight` is how many results of the rc.17 corpus sweep it stands for), violation or clean (from the pre-release run). `expect` is what its files produce today; `source` is the corpus site it was reduced from. `notReproduced` is the long tail of the same sweep.",
  "corpus": {
   "manifest": "scripts/corpus/rc17-manifest.json",
-  "sweep": "release checker at f405f2cff (the spread fix), browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui)",
+  "sweep": "release checker at f405f2cff (the spread fix), browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui); veto attribution from a veto-off sweep (ADR 0405)",
   "results": 6717,
-  "reproduced": 6542
+  "reproduced": 6429
  },
  "cases": [
   {
@@ -33,7 +33,7 @@
     "line": 80,
     "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
    },
-   "weight": 309,
+   "weight": 302,
    "status": "uncertifiable"
   },
   {
@@ -62,7 +62,7 @@
     "line": 1750,
     "commit": "2e4e7b875e371e45c5ffa4ee39715d57cf2049a5"
    },
-   "weight": 342,
+   "weight": 339,
    "status": "uncertifiable"
   },
   {
@@ -89,7 +89,7 @@
     "line": 15,
     "commit": "3064fed238a043da90041f8eb86b357e253330bf"
    },
-   "weight": 339,
+   "weight": 318,
    "status": "uncertifiable"
   },
   {
@@ -116,7 +116,7 @@
     "line": 23,
     "commit": "992d406ed4a9eca3a57973ec7d13ec4b0ccbd00e"
    },
-   "weight": 152,
+   "weight": 130,
    "status": "uncertifiable"
   },
   {
@@ -172,7 +172,7 @@
     "line": 383,
     "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
    },
-   "weight": 124,
+   "weight": 112,
    "status": "uncertifiable"
   },
   {
@@ -405,15 +405,13 @@
    "kind": "uncertifiable",
    "project": "veto-event-target",
    "files": [
-    "src/tile-cache.ts",
+    "src/dispatch-sites.ts",
     "src/viewer.tsx"
    ],
    "causes": [
     "SC1001/callback-to-unproven-consumer/dispatch-veto:event-target+helper",
     "SC1001/unplaced-read/condition/dispatch-veto:event-target+helper",
-    "SC1001/unplaced-read/dispatch-veto:event-target",
     "SC1001/unplaced-read/dispatch-veto:event-target+helper",
-    "SC2001/unplaced-write/dispatch-veto:event-target",
     "SC2001/unplaced-write/dispatch-veto:event-target+helper"
    ],
    "expect": [
@@ -421,13 +419,13 @@
      "rule": "SC2001",
      "family": "unplaced-write",
      "context": "",
-     "cause": "SC2001/unplaced-write/dispatch-veto:event-target"
+     "cause": "SC2001/unplaced-write/dispatch-veto:event-target+helper"
     },
     {
      "rule": "SC1001",
      "family": "unplaced-read",
      "context": "",
-     "cause": "SC1001/unplaced-read/dispatch-veto:event-target"
+     "cause": "SC1001/unplaced-read/dispatch-veto:event-target+helper"
     }
    ],
    "source": {
@@ -436,7 +434,7 @@
     "line": 72,
     "commit": "3064fed238a043da90041f8eb86b357e253330bf"
    },
-   "weight": 462,
+   "weight": 501,
    "status": "uncertifiable"
   },
   {
@@ -471,7 +469,7 @@
     "line": 72,
     "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
    },
-   "weight": 258,
+   "weight": 224,
    "status": "uncertifiable"
   },
   {
@@ -535,7 +533,7 @@
     "line": 122,
     "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
    },
-   "weight": 237,
+   "weight": 204,
    "status": "uncertifiable"
   },
   {
@@ -573,7 +571,7 @@
     "line": 32,
     "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
    },
-   "weight": 176,
+   "weight": 166,
    "status": "uncertifiable"
   },
   {
@@ -733,7 +731,7 @@
     "line": 87,
     "commit": "f24e272713513d7721133159a53ea960c756df13"
    },
-   "weight": 51,
+   "weight": 48,
    "status": "uncertifiable"
   },
   {
@@ -760,7 +758,7 @@
     "line": 81,
     "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
    },
-   "weight": 32,
+   "weight": 33,
    "status": "uncertifiable"
   },
   {
@@ -1566,7 +1564,7 @@
     "line": 41,
     "commit": "3064fed238a043da90041f8eb86b357e253330bf"
    },
-   "weight": 59,
+   "weight": 58,
    "status": "uncertifiable"
   },
   {
@@ -1896,7 +1894,7 @@
     "line": 60,
     "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
    },
-   "weight": 69,
+   "weight": 67,
    "status": "uncertifiable"
   },
   {
@@ -1930,7 +1928,7 @@
     "line": 79,
     "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
    },
-   "weight": 45,
+   "weight": 63,
    "status": "uncertifiable"
   },
   {
@@ -1957,7 +1955,7 @@
     "line": 111,
     "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
    },
-   "weight": 21,
+   "weight": 25,
    "status": "uncertifiable"
   },
   {
@@ -1985,7 +1983,7 @@
     "line": 108,
     "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
    },
-   "weight": 116,
+   "weight": 111,
    "status": "uncertifiable"
   },
   {
@@ -2012,7 +2010,7 @@
     "line": 32,
     "commit": "27e760dc6b155a98b24d83b4d7d75eadb5dcba86"
    },
-   "weight": 19,
+   "weight": 15,
    "status": "uncertifiable"
   },
   {
@@ -2117,7 +2115,7 @@
      "rule": "SC1001",
      "family": "unplaced-read",
      "context": "",
-     "cause": "SC1001/unplaced-read/dispatch-veto:event-target"
+     "cause": "SC1001/unplaced-read/dispatch-veto:event-target+helper"
     }
    ],
    "source": {
@@ -2126,7 +2124,7 @@
     "line": 153,
     "commit": "3064fed238a043da90041f8eb86b357e253330bf"
    },
-   "weight": 16,
+   "weight": 17,
    "status": "uncertifiable"
   },
   {
@@ -2295,7 +2293,7 @@
     "line": 225,
     "commit": "992d406ed4a9eca3a57973ec7d13ec4b0ccbd00e"
    },
-   "weight": 28,
+   "weight": 27,
    "status": "uncertifiable"
   },
   {
@@ -2324,7 +2322,7 @@
     "line": 163,
     "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
    },
-   "weight": 20,
+   "weight": 13,
    "status": "uncertifiable"
   },
   {
@@ -2438,7 +2436,7 @@
     "line": 187,
     "commit": "f3340174fb2daba2eba220640731844b8a33d232"
    },
-   "weight": 133,
+   "weight": 106,
    "status": "uncertifiable"
   },
   {
@@ -2546,7 +2544,7 @@
     "line": 41,
     "commit": "3064fed238a043da90041f8eb86b357e253330bf"
    },
-   "weight": 17,
+   "weight": 16,
    "status": "uncertifiable"
   },
   {
@@ -3156,7 +3154,7 @@
     "line": 234,
     "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
    },
-   "weight": 228,
+   "weight": 216,
    "status": "uncertifiable"
   },
   {
@@ -3246,7 +3244,7 @@
     "line": 77,
     "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
    },
-   "weight": 51,
+   "weight": 54,
    "status": "uncertifiable"
   },
   {
@@ -3593,7 +3591,7 @@
     "line": 44,
     "commit": "3f91389394c1711f5c8380ea3cca89f076e5a534"
    },
-   "weight": 3,
+   "weight": 25,
    "status": "uncertifiable"
   },
   {
@@ -3674,7 +3672,7 @@
     "line": 199,
     "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
    },
-   "weight": 14,
+   "weight": 13,
    "status": "uncertifiable"
   },
   {
@@ -3870,7 +3868,7 @@
     "line": 257,
     "commit": "3064fed238a043da90041f8eb86b357e253330bf"
    },
-   "weight": 5,
+   "weight": 4,
    "status": "uncertifiable"
   },
   {
@@ -4032,7 +4030,7 @@
     "line": 91,
     "commit": "992d406ed4a9eca3a57973ec7d13ec4b0ccbd00e"
    },
-   "weight": 4,
+   "weight": 10,
    "status": "uncertifiable"
   },
   {
@@ -4065,6 +4063,26 @@
  ],
  "notReproduced": [
   {
+   "cause": "SC1001/unplaced-read/intrinsic-handler",
+   "weight": 40,
+   "why": "handlers that stay uncertifiable with no veto in the closed run; the donegeon LoginRoute.tsx reduction did not finish"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/dispatch-veto:event-target+helper",
+   "weight": 34,
+   "why": "an SC9012 result the dispatch veto holds (it clears in the veto-off sweep); no case reproduces an SC9012 under the veto"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:event-target+helper",
+   "weight": 31,
+   "why": "an SC9012 result the dispatch veto holds (it clears in the veto-off sweep); no case reproduces an SC9012 under the veto"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:project-callback",
+   "weight": 18,
+   "why": "an SC9012 result the dispatch veto holds (it clears in the veto-off sweep); no case reproduces an SC9012 under the veto"
+  },
+  {
    "cause": "SC1001/unplaced-read/unresolved-callback",
    "weight": 13,
    "why": "a corpus-checkout artifact: inferay imports @contracts from build/presentation/contracts, which its checkout lacks, so those types are any"
@@ -4075,19 +4093,14 @@
    "why": "a read in a factory's returned closure; adding one to write-in-factory-member gave no result"
   },
   {
-   "cause": "SC1001/unplaced-read/component-prop>view+forwarded:view+forwarded:passed-to-project",
-   "weight": 12,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+   "cause": "SC1001/unplaced-read/component-prop>view:placed",
+   "weight": 11,
+   "why": "attributed elsewhere until the veto-off sweep showed the veto does not hold it; not yet reduced"
   },
   {
    "cause": "SC2001/unplaced-write/dispatch-veto:test-file",
-   "weight": 10,
+   "weight": 11,
    "why": "a ninth project: each veto site kind needs its own project, all eight are used, and the story kind (51 results) took the eighth"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>forwarded:component-prop",
-   "weight": 6,
-   "why": "the child forwards the callback to a router Link from a package (ai-memory-ui); not reproduced"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/object-member:argument-of:project",
@@ -4100,9 +4113,14 @@
    "why": "a ninth project: each veto site kind needs its own project, all eight are used, and the story kind (51 results) took the eighth"
   },
   {
-   "cause": "SC2001/unplaced-write/via-callers:package-callback",
-   "weight": 5,
-   "why": "a helper called only from onSettled certifies; the corpus's other gap was not found"
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:component-prop",
+   "weight": 6,
+   "why": "the child forwards the callback to a router Link from a package (ai-memory-ui); not reproduced"
+  },
+  {
+   "cause": "SC2001/unplaced-write/intrinsic-handler",
+   "weight": 6,
+   "why": "a handler that stays uncertifiable in the veto-off sweep, for a cause the classifier does not name"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop>deep-chain",
@@ -4110,14 +4128,9 @@
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC1001/unplaced-read/condition/lib-dom-callback",
-   "weight": 4,
-   "why": "the read variant of a reproduced cause; the same read added to its case file gave no result"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:mixed",
-   "weight": 4,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+   "cause": "SC2001/unplaced-write/via-callers:package-callback",
+   "weight": 5,
+   "why": "a helper called only from onSettled certifies; the corpus's other gap was not found"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>object-member:context-or-prop-value",
@@ -4125,7 +4138,7 @@
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:component-prop>deep-chain",
+   "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:mixed",
    "weight": 4,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
@@ -4135,7 +4148,7 @@
    "why": "not attempted: the condition variant of read-in-package-callback"
   },
   {
-   "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:package-callback",
+   "cause": "SC1001/unplaced-read/component-prop>forwarded:deep-chain",
    "weight": 3,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
@@ -4150,12 +4163,7 @@
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC1001/unplaced-read/component-prop>forwarded:deep-chain",
-   "weight": 3,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>passed-to-project",
+   "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:package-callback",
    "weight": 3,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
@@ -4165,62 +4173,7 @@
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>view+forwarded:other:ObjectLiteralExpression",
-   "weight": 2,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>forwarded:listener-callback",
-   "weight": 2,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:project-function-argument",
-   "weight": 2,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:prop-unused",
-   "weight": 2,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
-  },
-  {
-   "cause": "SC2001/unplaced-write/via-callers:component-prop>forwarded:deep-chain",
-   "weight": 2,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
-  },
-  {
-   "cause": "SC1001/unplaced-read/component-prop>view+forwarded:view+forwarded:view+forwarded:passed-to-project",
-   "weight": 2,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>view:passed-to-project",
-   "weight": 2,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>object-member",
-   "weight": 2,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/unresolved-callback",
-   "weight": 2,
-   "why": "a corpus-checkout artifact: inferay imports @contracts from build/presentation/contracts, which its checkout lacks, so those types are any"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>forwarded:PrefixUnaryExpression",
-   "weight": 2,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
-  },
-  {
-   "cause": "SC2001/unplaced-write/object-member:JsxSpreadAttribute",
-   "weight": 2,
-   "why": "not attempted: one or two results"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/component-prop>other:jsx-child",
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:component-prop>deep-chain",
    "weight": 2,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
@@ -4230,9 +4183,9 @@
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC1001/unplaced-read/intrinsic-handler",
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>other:jsx-child",
    "weight": 2,
-   "why": "handlers that stay uncertifiable with no veto in the closed run; the donegeon LoginRoute.tsx reduction did not finish"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>component-not-a-function",
@@ -4240,44 +4193,54 @@
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
+   "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>view+forwarded:other:ObjectLiteralExpression",
+   "weight": 2,
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/unresolved-callback",
+   "weight": 2,
+   "why": "a corpus-checkout artifact: inferay imports @contracts from build/presentation/contracts, which its checkout lacks, so those types are any"
+  },
+  {
+   "cause": "SC1001/unplaced-read/condition/intrinsic-handler",
+   "weight": 2,
+   "why": "handlers that stay uncertifiable with no veto in the closed run; the donegeon LoginRoute.tsx reduction did not finish"
+  },
+  {
    "cause": "SC2001/unplaced-write/component-prop>component-prop>component-not-a-function",
    "weight": 2,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC2001/unplaced-write/component-prop>view:object-member:context-or-prop-value",
-   "weight": 1,
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:listener-callback",
+   "weight": 2,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC2001/unplaced-write/via-callers:component-prop>component-prop>view:placed",
-   "weight": 1,
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:PrefixUnaryExpression",
+   "weight": 2,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>view+forwarded:view+forwarded:project-function-argument",
-   "weight": 1,
+   "cause": "SC2001/unplaced-write/component-prop>object-member",
+   "weight": 2,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC1001/unplaced-read/lib-dom-callback",
-   "weight": 1,
-   "why": "the read variant of a reproduced cause; the same read added to its case file gave no result"
-  },
-  {
-   "cause": "SC1001/unplaced-read/condition/component-prop>view+forwarded:view+forwarded:view+forwarded:passed-to-project",
-   "weight": 1,
+   "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:project-function-argument",
+   "weight": 2,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC2001/unplaced-write/component-prop>forwarded:mixed",
-   "weight": 1,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+   "cause": "SC2001/unplaced-write/object-member:JsxSpreadAttribute",
+   "weight": 2,
+   "why": "not attempted: one or two results"
   },
   {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/escaped-component:BindingElement-reference",
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop>component-not-a-function",
    "weight": 1,
-   "why": "the escaped-component mechanism with another reference form (reproduced in scratch by swapping the reference line); one result, not kept as a file"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:PrefixUnaryExpression",
@@ -4285,7 +4248,7 @@
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC2001/unplaced-write/component-prop>forwarded:component-prop>object-member:argument-of:project",
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>object-member",
    "weight": 1,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
@@ -4295,22 +4258,12 @@
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/unresolved",
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>placed",
    "weight": 1,
-   "why": "the member resolves only through a project .d.ts intersection; a mapped type and an index signature gave project-type instead"
+   "why": "attributed elsewhere until the veto-off sweep showed the veto does not hold it; not yet reduced"
   },
   {
-   "cause": "SC9005/package-source-unavailable",
-   "weight": 1,
-   "why": "needs @rigelbuild/solid-markdown 3.0.0-rc.0 and its unified/remark dependency tree analyzed as source"
-  },
-  {
-   "cause": "SC1001/unplaced-read/via-callers:package-callback",
-   "weight": 1,
-   "why": "a helper called only from onSettled certifies; the corpus's other gap was not found"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>component-prop>prop-unused",
+   "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>placed",
    "weight": 1,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
@@ -4320,14 +4273,9 @@
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC1001/callback-to-unproven-consumer/via-callers:package-callback",
+   "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>view+forwarded:view+forwarded:project-function-argument",
    "weight": 1,
-   "why": "a helper called only from onSettled certifies; the corpus's other gap was not found"
-  },
-  {
-   "cause": "SC1001/unplaced-read/condition/intrinsic-handler",
-   "weight": 1,
-   "why": "handlers that stay uncertifiable with no veto in the closed run; the donegeon LoginRoute.tsx reduction did not finish"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:package",
@@ -4335,24 +4283,19 @@
    "why": "not attempted: one or two results"
   },
   {
-   "cause": "SC2001/unplaced-write/component-prop>forwarded:passed-to-package",
+   "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:unresolved",
    "weight": 1,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+   "why": "a corpus-checkout artifact: inferay imports @contracts from build/presentation/contracts, which its checkout lacks, so those types are any"
   },
   {
-   "cause": "SC2001/unplaced-write/component-prop>forwarded:after-await",
+   "cause": "SC1001/callback-to-unproven-consumer/other:jsx-child",
    "weight": 1,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+   "why": "not attempted: one or two results"
   },
   {
-   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/escaped-component:argument-reference",
+   "cause": "SC1001/callback-to-unproven-consumer/via-callers:package-callback",
    "weight": 1,
-   "why": "the escaped-component mechanism with another reference form (reproduced in scratch by swapping the reference line); one result, not kept as a file"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>view+forwarded:spread-into-package-component",
-   "weight": 1,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+   "why": "a helper called only from onSettled certifies; the corpus's other gap was not found"
   },
   {
    "cause": "SC1001/direct-read/other:JsxSelfClosingElement",
@@ -4360,9 +4303,14 @@
    "why": "not attempted: one or two results"
   },
   {
-   "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop>component-not-a-function",
+   "cause": "SC1001/unplaced-read/lib-dom-callback",
    "weight": 1,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+   "why": "the read variant of a reproduced cause; the same read added to its case file gave no result"
+  },
+  {
+   "cause": "SC1001/unplaced-read/via-callers:package-callback",
+   "weight": 1,
+   "why": "a helper called only from onSettled certifies; the corpus's other gap was not found"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>component-prop>component-prop>component-not-a-function",
@@ -4375,11 +4323,6 @@
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC2001/unplaced-write/component-prop>package-component-prop",
-   "weight": 1,
-   "why": "a package component reached through an unresolved viviana-ui-web workspace link"
-  },
-  {
    "cause": "SC2001/unplaced-write/component-prop>component-prop>forwarded:deep-chain",
    "weight": 1,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
@@ -4390,29 +4333,74 @@
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
+   "cause": "SC2001/unplaced-write/component-prop>component-prop>prop-unused",
+   "weight": 1,
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:after-await",
+   "weight": 1,
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:component-prop>object-member:argument-of:project",
+   "weight": 1,
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:mixed",
+   "weight": 1,
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:passed-to-package",
+   "weight": 1,
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>package-component-prop",
+   "weight": 1,
+   "why": "a package component reached through an unresolved viviana-ui-web workspace link"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>view:object-member:context-or-prop-value",
+   "weight": 1,
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>view+forwarded:spread-into-package-component",
+   "weight": 1,
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+  },
+  {
    "cause": "SC2001/unplaced-write/via-callers:component-prop>component-prop>placed",
    "weight": 1,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>placed",
+   "cause": "SC2001/unplaced-write/via-callers:component-prop>component-prop>view:placed",
    "weight": 1,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
-   "cause": "SC1001/callback-to-unproven-consumer/component-prop>object-member",
+   "cause": "SC2001/unplaced-write/via-callers:component-prop>view+forwarded:view+forwarded:placed",
    "weight": 1,
-   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+   "why": "attributed elsewhere until the veto-off sweep showed the veto does not hold it; not yet reduced"
   },
   {
-   "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:unresolved",
+   "cause": "SC9005/package-source-unavailable",
    "weight": 1,
-   "why": "a corpus-checkout artifact: inferay imports @contracts from build/presentation/contracts, which its checkout lacks, so those types are any"
+   "why": "needs @rigelbuild/solid-markdown 3.0.0-rc.0 and its unified/remark dependency tree analyzed as source"
   },
   {
-   "cause": "SC1001/callback-to-unproven-consumer/other:jsx-child",
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/unresolved",
    "weight": 1,
-   "why": "not attempted: one or two results"
+   "why": "the member resolves only through a project .d.ts intersection; a mapped type and an index signature gave project-type instead"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/escaped-component:argument-reference",
+   "weight": 1,
+   "why": "the escaped-component mechanism with another reference form (reproduced in scratch by swapping the reference line); one result, not kept as a file"
   }
  ]
 }
