@@ -117,6 +117,24 @@ impl Project {
             .collect();
         self.session.edit(changes, None).unwrap()
     }
+
+    /// Deletes the source `name`.
+    fn remove(&mut self, name: &str) -> Arc<ProjectFacts> {
+        self.version += 1;
+        let path = self.root.join(name);
+        fs::remove_file(&path).unwrap();
+        self.session
+            .edit(
+                vec![SourceChange {
+                    path: path.to_string_lossy().into_owned(),
+                    version: self.version,
+                    source: None,
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap()
+    }
 }
 
 /// The retained builder's answer for `facts`, which must equal a fresh
@@ -185,6 +203,13 @@ fn steps_follow(tag: &str, files: &[(&str, &str)], steps: &[Step<'_>]) {
     let Some(mut project) = Project::scratch(tag, files) else {
         return;
     };
+    // A verify-reused mismatch only panics in shadow mode `panic`
+    // (`.cargo/config.toml`); any other mode logs and serves the fresh answer.
+    assert_eq!(
+        env::var("SOLID_CHECKER_IR_SHADOW").as_deref(),
+        Ok("panic"),
+        "{tag}: run with SOLID_CHECKER_IR_SHADOW=panic"
+    );
     let mut builder = IncrementalBuilder::default();
     // Every reused memo answer is recomputed and compared with the kept one:
     // a reader of the veto that reuses a stale answer names its table.
@@ -409,4 +434,68 @@ fn changing_a_receivers_type_in_another_file_moves_the_veto() {
             },
         ],
     );
+}
+
+/// The hazard itself: with no dispatch call anywhere the veto is not asked and
+/// a reader records the hazard's probe alone. The first site, and the removal
+/// of the file holding the last one, flip that probe, so every reader reruns
+/// and equals a fresh build.
+#[test]
+fn the_first_dispatch_site_and_the_removal_of_the_last_move_the_readers() {
+    let files = [
+        ("App.tsx", APP),
+        ("handle.ts", HANDLE),
+        ("state.ts", STATE),
+        ("other.ts", OTHER),
+    ];
+    let Some(mut project) = Project::scratch("hazard", &files) else {
+        return;
+    };
+    assert_eq!(
+        env::var("SOLID_CHECKER_IR_SHADOW").as_deref(),
+        Ok("panic"),
+        "run with SOLID_CHECKER_IR_SHADOW=panic"
+    );
+    let mut builder = IncrementalBuilder::default();
+    builder.verify_reused_memos(true);
+    let first = project.analyze();
+    let (_, opened) = retained_is_fresh(&mut builder, &first, "hazard: first");
+    assert!(opened.flow_site_role_answers[1] > 0, "{opened:?}");
+    assert_eq!(
+        opened.dispatch_veto_answers,
+        [0, 0, 0],
+        "no hazard, no veto"
+    );
+
+    let touch = |project: &mut Project, builder: &mut IncrementalBuilder, label: &str, n: u32| {
+        let touched = format!("{HANDLE}// touch {n}\n");
+        let facts = project.edit(&[("handle.ts", &touched)]);
+        retained_is_fresh(builder, &facts, &format!("{label}, then a touch"));
+    };
+
+    let facts = project.edit(&[("click.ts", ELEMENT_SITE)]);
+    let (_, added) = retained_is_fresh(&mut builder, &facts, "hazard: the first site");
+    assert!(
+        added.flow_site_role_answers[1] > 0,
+        "readers rerun: {added:?}"
+    );
+    assert!(
+        added.dispatch_veto_answers[1] > 0,
+        "the veto is asked: {added:?}"
+    );
+    touch(&mut project, &mut builder, "hazard: the first site", 1);
+
+    let facts = project.remove("click.ts");
+    let (_, removed) =
+        retained_is_fresh(&mut builder, &facts, "hazard: the last site's file removed");
+    assert!(
+        removed.flow_site_role_answers[1] > 0,
+        "readers rerun: {removed:?}"
+    );
+    assert_eq!(
+        removed.dispatch_veto_answers,
+        [0, 0, 0],
+        "no hazard, no veto"
+    );
+    touch(&mut project, &mut builder, "hazard: removed", 2);
 }

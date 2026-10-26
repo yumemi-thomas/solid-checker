@@ -82,8 +82,22 @@ pub(crate) fn dispatch_in_test_only_function<'a>(
         return false;
     }
     let world = LookupFlow { lookup };
+    // The literal at this span in any slot of the path: the answer for a path
+    // is the union over its slots, as the whole-program census was.
     dispatch_in_census_function(file, call, |function| {
-        literal_test_invoked(&world, file, function)
+        lookup
+            .files()
+            .iter()
+            .filter(|slot| slot.path == file.path)
+            .filter_map(|slot| {
+                let literal = slot
+                    .ast
+                    .functions
+                    .iter()
+                    .find(|literal| literal.span == function.span)?;
+                Some((slot, literal))
+            })
+            .any(|(slot, literal)| literal_test_invoked(&world, slot, literal))
     })
 }
 
