@@ -3,7 +3,7 @@
  "note": "The reproduction set's one table (ADR 0446). A case is one cause or shape of a kind: uncertifiable (it stands for `causes`, keys of scripts/uncertifiable-causes.mjs, and `weight` is how many results of the rc.17 corpus sweep it stands for), violation or clean (from the pre-release run). `expect` is what its files produce today; `source` is the corpus site it was reduced from. `notReproduced` is the long tail of the same sweep.",
  "corpus": {
   "manifest": "scripts/corpus/rc17-manifest.json",
-  "sweep": "release checker at f405f2cff (the spread fix), browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui); veto attribution from a veto-off sweep (ADR 0447)",
+  "sweep": "release checker at 5d54b30ff (origin/main merged in; its findings, messages and labels equal those of f405f2cff, the spread fix), browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui); veto attribution from a veto-off sweep (ADR 0447)",
   "results": 6717,
   "reproduced": 4814
  },
