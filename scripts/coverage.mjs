@@ -110,7 +110,39 @@ function fixtureProjects() {
       }
     }
   }
+  found.push(...reproProjects());
   return found.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
+ * The uncertifiable reproduction set (ADR 0404): projects at any depth
+ * (a workspace member sits under its workspace), one snapshot each, whose
+ * id joins the path with `-`. They read the set's shared node_modules and,
+ * for a workspace member, its sibling manifests, all above the project
+ * directory, so the whole set is part of each unit's key (`trees`).
+ */
+function reproProjects() {
+  const base = join(root, "fixtures", "uncertifiable-repro");
+  if (!existsSync(base)) return [];
+  const found = [];
+  const walk = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+      const path = join(directory, entry.name);
+      const tsconfig = join(path, "tsconfig.json");
+      if (existsSync(tsconfig)) {
+        found.push({
+          id: `uncertifiable-repro/${relative(base, path).split("/").join("-")}`,
+          directory: path,
+          tsconfig,
+          trees: [base]
+        });
+      }
+      walk(path);
+    }
+  };
+  walk(base);
+  return found;
 }
 
 // Dialect stubs decide which catalog each fixture is checked under, so an
@@ -397,6 +429,7 @@ const unitParts = (project) => () => [
   `project:${project.id}`,
   `wording:${KEEPS_WORDING.has(project.id)}`,
   hashTree(project.directory),
+  ...(project.trees ?? []).map((tree) => hashTree(tree)),
   hashTree(join(root, "fixtures/reactive-ir/node_modules/@solidjs/vite-plugin")),
   ancestorChainDigest(project.directory, "node_modules/solid-js/package.json"),
   // The installation review reads two more manifests the same way

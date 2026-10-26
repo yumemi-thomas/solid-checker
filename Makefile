@@ -16,7 +16,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify
+.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify
 
 build: build-rust
 
@@ -211,6 +211,18 @@ coverage: build-checker-debug
 coverage-update: build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/coverage.mjs --update
+
+# The uncertifiable reproduction set (ADR 0404): every case still produces its
+# expected results with the cause the classifier reads, and the set stays in
+# its budget. The corpus side (scripts/uncertifiable-causes.mjs --report) needs
+# a sweep and runs by hand; CONTRIBUTING.md, "Adding a repo to the reproduction set".
+repro-causes: build-checker-debug
+	$(BUN) scripts/uncertifiable-causes.mjs --repro fixtures/uncertifiable-repro \
+	  --cases fixtures/uncertifiable-repro/cases.json \
+	  --checker "$(CURDIR)/rust/target/debug/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts"
+
+repro-budget:
+	$(BUN) scripts/repro-budget.mjs
 
 verify-performance: build-typefacts
 	cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-checker-session-bench

@@ -6,6 +6,7 @@
 //     [--apps-root ../solid-checker-rc17-corpus/apps]
 //     [--checker rust/target/release/solid-checker-rust]
 //     [--typefacts bin/solid-typefacts] [--jobs 4] [--order-from <report.json>]
+//     [--apps <app,app>] [--program-boundary <open|closed>]
 //     --out <report.json>
 //
 // `--order-from` takes an earlier report and starts the projects that took
@@ -16,6 +17,11 @@
 // The manifest must name each app's repository and commit (`apps`); a corpus
 // that cannot be rebuilt at its commits is refused, since its sweeps compare
 // with nothing.
+//
+// `--apps` sweeps only the named apps. `--program-boundary` passes the
+// assertion to every project, so a second sweep with `closed` measures how
+// many results the open-program premise holds (ADR 0402; see
+// scripts/uncertifiable-causes.mjs `--closed-report`).
 //
 // Use the release binary: a debug build inflates certification about 19x.
 // Prefix the run with ~/.local/bin/sc-heavy when other agents share the
@@ -38,6 +44,8 @@ const options = {
   jobs: "4",
   timeout: "900",
   "order-from": null,
+  apps: null,
+  "program-boundary": null,
   out: null,
 };
 const argv = process.argv.slice(2);
@@ -59,7 +67,8 @@ const typefacts = resolve(options.typefacts);
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 assertManifestProvenance(manifest, manifestPath);
 const configuration = manifest.configuration;
-const rows = manifest.projects.map((row) => ({
+const selectedApps = options.apps ? new Set(options.apps.split(",")) : null;
+const rows = manifest.projects.filter((row) => !selectedApps || selectedApps.has(row.app)).map((row) => ({
   app: row.app,
   root: join(appsRoot, row.root),
   project: row.project,
@@ -87,6 +96,7 @@ function run(row) {
     "--runtime-target", configuration.runtimeTarget,
     "--runtime-build", configuration.runtimeBuild,
     "--rendering", configuration.rendering,
+    ...(options["program-boundary"] ? ["--program-boundary", options["program-boundary"]] : []),
   ];
   const started = performance.now();
   return new Promise((done) => {
@@ -114,6 +124,9 @@ function run(row) {
         signal,
         wallMs,
         analysisStatus: payload?.status ?? null,
+        // The project-wide premises (dispatch-veto sites, program boundary)
+        // that the cause classifier (scripts/uncertifiable-causes.mjs) reads.
+        premises: payload?.premises ?? [],
         findings: payload?.findings ?? [],
         metrics: payload?.metrics ?? null,
         parseError,
@@ -154,7 +167,11 @@ const summary = {
   producer: typefacts,
   producerSha256: sha256(typefacts),
   manifestSha256: sha256(manifestPath),
-  configuration: { ...configuration, daemon: false },
+  configuration: {
+    ...configuration,
+    daemon: false,
+    ...(options["program-boundary"] ? { programBoundary: options["program-boundary"] } : {}),
+  },
   projectCount: results.length,
   findingCount: results.reduce((total, result) => total + result.findings.length, 0),
   findingKinds: kinds,

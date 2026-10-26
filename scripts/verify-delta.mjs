@@ -125,6 +125,23 @@ export const CHECKS = {
       SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
     },
   },
+  // ADR 0404: the reproduction set's budget, and each case's cause.
+  "repro-budget": {
+    commands: [
+      ["bun", "scripts/repro-budget.mjs"],
+      [
+        "bun", "packages/cli/node_modules/vitest/vitest.mjs", "run",
+        "--config", "packages/cli/vitest.config.mjs", "scripts/repro-budget.test.mjs",
+      ],
+    ],
+  },
+  "repro-causes": {
+    command: [
+      "bun", "scripts/uncertifiable-causes.mjs", "--repro", "fixtures/uncertifiable-repro",
+      "--cases", "fixtures/uncertifiable-repro/cases.json",
+      "--checker", join(ROOT, DEBUG_CHECKER), "--typefacts", join(ROOT, TYPEFACTS),
+    ],
+  },
   "bun-test-cli": { command: ["bun", "run", "--cwd", "packages/cli", "test"] },
   "bun-test-wasm": { command: ["bun", "run", "--cwd", "packages/wasm", "test"] },
   "wasm-parity": {
@@ -249,6 +266,21 @@ export const ROWS = [
     owner: "fixtures or expected findings",
     checks: ["coverage", "ownership-gate"],
   },
+  {
+    prefix: "fixtures/uncertifiable-repro/",
+    owner: "the uncertifiable reproduction set (ADR 0404)",
+    checks: ["coverage", "ownership-gate", "repro-budget", "repro-causes"],
+  },
+  ...["scripts/repro-budget.mjs", "scripts/repro-budget.test.mjs"].map((prefix) => ({
+    prefix,
+    owner: "the reproduction set's budget gate",
+    checks: ["repro-budget"],
+  })),
+  {
+    prefix: "scripts/uncertifiable-causes.mjs",
+    owner: "the uncertifiable-cause classifier (reproduction set self-check)",
+    checks: ["repro-causes"],
+  },
   // The producer is the default (ADR 0365): a source change can move any fact,
   // so it also selects the fixture gates and the WASM parity gate that runs the
   // same code as a reactor. Its tests and testdata only feed its own tests.
@@ -339,7 +371,7 @@ export function planFor(paths) {
   }
   // Prerequisite, not a row: a gate that runs the checker must run *this*
   // source's checker.
-  const needsChecker = ["coverage", "ownership-gate"].some((check) => selected.has(check));
+  const needsChecker = ["coverage", "ownership-gate", "repro-causes"].some((check) => selected.has(check));
   const ordered = [
     // In every plan, mapped or empty: the producer is gitignored, so no change
     // set can report that it needs rebuilding. The stamp check is ~10ms when it
@@ -350,7 +382,7 @@ export function planFor(paths) {
     // Before the process tests: it rebuilds with the harness pins recomputed,
     // and everything after it should run against that binary.
     ...["facts-lib", "ir-lib", "backend-process", "dialects-process"].filter((id) => selected.has(id)),
-    ...["coverage", "ownership-gate"].filter((id) => selected.has(id)),
+    ...["coverage", "ownership-gate", "repro-causes", "repro-budget"].filter((id) => selected.has(id)),
     // Separate workspace; its tests drive the producer built above.
     ...["typefacts"].filter((id) => selected.has(id)),
     ...["differential-harness"].filter((id) => selected.has(id)),
@@ -559,6 +591,8 @@ export const LANES = {
   typefacts: "typefacts",
   coverage: "gates",
   "ownership-gate": "gates",
+  "repro-causes": "gates",
+  "repro-budget": "gates",
   // The CLI launcher falls back to `make build-rust` when it finds no
   // checker, so the suite queues with the other `rust/target` users.
   "bun-test-cli": "rust",

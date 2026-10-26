@@ -1,0 +1,3772 @@
+{
+ "schemaVersion": 1,
+ "note": "The reproduction set's one table (ADR 0404). A case is one cause or shape of a kind: uncertifiable (it stands for `causes`, keys of scripts/uncertifiable-causes.mjs, and `weight` is how many results of the rc.17 corpus sweep it stands for), violation or clean (from the pre-release run). `expect` is what its files produce today; `source` is the corpus site it was reduced from. `notReproduced` is the long tail of the same sweep.",
+ "corpus": {
+  "manifest": "scripts/corpus/rc17-manifest.json",
+  "sweep": "release checker at 11f04f5fe, browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui)",
+  "results": 6760,
+  "reproduced": 6333
+ },
+ "cases": [
+  {
+   "id": "write-after-await",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/after-await.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/after-await",
+    "SC2001/unplaced-write/via-callers:after-await"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/after-await"
+    }
+   ],
+   "source": {
+    "app": "donegeon-client",
+    "path": "web/apps/client/src/routes/OnboardingRoute.tsx",
+    "line": 80,
+    "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
+   },
+   "weight": 307,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-factory-member",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/factory-store.ts",
+    "src/factory-member.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/object-member:factory-result",
+    "SC2001/unplaced-write/via-callers:object-member:factory-result"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/object-member:factory-result"
+    }
+   ],
+   "source": {
+    "app": "compass-ui",
+    "path": "apps/ui/src/store.ts",
+    "line": 1750,
+    "commit": "2e4e7b875e371e45c5ffa4ee39715d57cf2049a5"
+   },
+   "weight": 342,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "param-use-object",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/param-use-object.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "parameter-use-unmodeled",
+     "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/solid-dnd-playground/src/demos/SensorDemo.tsx",
+    "line": 15,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 339,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "param-use-primitive",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/param-use-primitive.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "parameter-use-unmodeled",
+     "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument"
+    }
+   ],
+   "source": {
+    "app": "error-menu-web",
+    "path": "web/src/components/ProjectReporting.tsx",
+    "line": 23,
+    "commit": "992d406ed4a9eca3a57973ec7d13ec4b0ccbd00e"
+   },
+   "weight": 152,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "withheld-object-member",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/withheld-store.ts",
+    "src/withheld-member.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/withheld-object-member"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "withheld-object-member",
+     "cause": "SC9012/runtime-target-unselected/withheld-object-member"
+    }
+   ],
+   "source": {
+    "app": "probus-hk",
+    "path": "src/components/TabBar.tsx",
+    "line": 437,
+    "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
+   },
+   "weight": 104,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "param-member-lib",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/param-member-dom.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/lib-dom",
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/lib-es"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/lib-dom"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/components/markdown.tsx",
+    "line": 383,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 124,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "param-member-path",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/param-member-path.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-path-unresolved"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-path-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-path-unresolved"
+    },
+    {
+     "rule": "SC1001",
+     "family": "direct-read-callers-unenumerable",
+     "context": "",
+     "cause": "SC1001/direct-read-callers-unenumerable/props-escape:exported-unrendered"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/dnd-playground/src/App.tsx",
+    "line": 109,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 95,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "exported-member-dispatch",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/exported-dispatch.ts"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/exported-parameter-member-dispatch"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "exported-parameter-member-dispatch",
+     "cause": "SC9012/parameter-member-call/exported-parameter-member-dispatch/unknown"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/ogl/core/transform.ts",
+    "line": 107,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 130,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "handler-member",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/handler-member.tsx"
+   ],
+   "causes": [
+    "SC4001/handler-unresolved/handler-member-unresolved"
+   ],
+   "expect": [
+    {
+     "rule": "SC4001",
+     "family": "handler-unresolved",
+     "context": "handler-member-unresolved",
+     "cause": "SC4001/handler-unresolved/handler-member-unresolved/props-member"
+    }
+   ],
+   "source": {
+    "app": "every-deck-of-cards",
+    "path": "src/explorer/ExplorerFeed.tsx",
+    "line": 30,
+    "commit": "27e760dc6b155a98b24d83b4d7d75eadb5dcba86"
+   },
+   "weight": 190,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "handler-spread-rest",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/handler-spread-rest.tsx"
+   ],
+   "causes": [
+    "SC4001/handler-unresolved/handler-spread-unresolved/inline-omit",
+    "SC4001/handler-unresolved/handler-spread-unresolved/named-rest"
+   ],
+   "expect": [
+    {
+     "rule": "SC4001",
+     "family": "handler-unresolved",
+     "context": "handler-spread-unresolved",
+     "cause": "SC4001/handler-unresolved/handler-spread-unresolved/named-rest"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/components/badge.tsx",
+    "line": 37,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 179,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "handler-spread-props",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/handler-spread-props.tsx"
+   ],
+   "causes": [
+    "SC4001/handler-unresolved/handler-spread-unresolved/props"
+   ],
+   "expect": [
+    {
+     "rule": "SC4001",
+     "family": "handler-unresolved",
+     "context": "handler-spread-unresolved",
+     "cause": "SC4001/handler-unresolved/handler-spread-unresolved/props"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/solidjs-patterns/src/pages/markdown-components.tsx",
+    "line": 9,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 62,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "exported-lazy-route",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/exported-lazy-route.tsx",
+    "src/routes.tsx"
+   ],
+   "causes": [
+    "SC4001/exported-function-callers"
+   ],
+   "expect": [
+    {
+     "rule": "SC4001",
+     "family": "exported-function-callers",
+     "context": "",
+     "cause": "SC4001/exported-function-callers"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/night-defense/src/StartMenuScene.tsx",
+    "line": 89,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 55,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "open-program-boundary",
+   "kind": "uncertifiable",
+   "project": "open-program/packages/ui",
+   "files": [
+    "src/select.tsx",
+    "src/select.test.tsx"
+   ],
+   "causes": [
+    "SC1001/open-program-boundary",
+    "SC2001/open-program-boundary",
+    "SC4001/open-program-boundary",
+    "SC9012/open-program-boundary"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "condition",
+     "cause": "SC1001/open-program-boundary"
+    },
+    {
+     "rule": "SC4001",
+     "family": "exported-function-callers",
+     "context": "",
+     "cause": "SC4001/open-program-boundary"
+    },
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "exported-parameter-member-dispatch",
+     "cause": "SC9012/open-program-boundary"
+    },
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/open-program-boundary"
+    },
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/open-program-boundary"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/kernel/src/components/Select.tsx",
+    "line": 205,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 693,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "veto-event-target",
+   "kind": "uncertifiable",
+   "project": "veto-event-target",
+   "files": [
+    "src/tile-cache.ts",
+    "src/viewer.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/dispatch-veto:event-target+helper",
+    "SC1001/unplaced-read/condition/dispatch-veto:event-target+helper",
+    "SC1001/unplaced-read/dispatch-veto:event-target",
+    "SC1001/unplaced-read/dispatch-veto:event-target+helper",
+    "SC2001/unplaced-write/dispatch-veto:event-target",
+    "SC2001/unplaced-write/dispatch-veto:event-target+helper"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/dispatch-veto:event-target"
+    },
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/unplaced-read/dispatch-veto:event-target"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/abr-viewer/src/App.tsx",
+    "line": 72,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 465,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "veto-listener-wrapper",
+   "kind": "uncertifiable",
+   "project": "veto-listener-wrapper",
+   "files": [
+    "src/keyboard.tsx"
+   ],
+   "causes": [
+    "SC1001/unplaced-read/condition/dispatch-veto:project-callback",
+    "SC1001/unplaced-read/dispatch-veto:project-callback",
+    "SC2001/unplaced-write/dispatch-veto:project-callback"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/dispatch-veto:project-callback"
+    },
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "condition",
+     "cause": "SC1001/unplaced-read/condition/dispatch-veto:project-callback"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/app/components/CommandPalette/index.tsx",
+    "line": 72,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 258,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-window-listener",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/window-listener.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/listener-callback",
+    "SC2001/unplaced-write/via-callers:listener-callback"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/listener-callback"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/components/shell-search.tsx",
+    "line": 31,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 72,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "callback-in-options-object",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/options-object.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/object-member:argument-of:project",
+    "SC1001/unplaced-read/object-member:argument-of:project",
+    "SC2001/unplaced-write/object-member:argument-of:project",
+    "SC2001/unplaced-write/via-callers:object-member:argument-of:project"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project"
+    },
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/object-member:argument-of:project"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/components/workspace-cascader.tsx",
+    "line": 122,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 238,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "callback-to-project-function",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/callback-to-project-fn.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/project-function-argument",
+    "SC1001/unplaced-read/project-function-argument",
+    "SC2001/unplaced-write/project-function-argument",
+    "SC2001/unplaced-write/via-callers:project-function-argument"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/project-function-argument"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/skills/components/SkillProposalCard/index.tsx",
+    "line": 32,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 172,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "leaf-destructured-accessor",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/leaf-destructured.tsx"
+   ],
+   "causes": [
+    "SC9012/leaf-callback-body/project-destructured-binding",
+    "SC9012/leaf-callback-body/project-destructured-call-result",
+    "SC9012/leaf-callback-body/project-parameter",
+    "SC9012/leaf-callback-body/project-parameter-member"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/project-destructured-binding"
+    },
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/member-not-in-callee"
+    }
+   ],
+   "source": {
+    "app": "donegeon-client",
+    "path": "web/apps/client/src/page/BoardControllerDeckEffects.tsx",
+    "line": 153,
+    "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
+   },
+   "weight": 102,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "reads-in-handler-factory-options",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/handler-factory-options.tsx"
+   ],
+   "causes": [
+    "SC1001/unplaced-read/component-body",
+    "SC1001/unplaced-read/condition/component-body",
+    "SC1001/unplaced-read/via-callers:component-body"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/unplaced-read/component-body"
+    },
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "condition",
+     "cause": "SC1001/unplaced-read/condition/component-body"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/kernel/src/components/Dialog.tsx",
+    "line": 101,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 69,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "callback-in-options-thunk",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/options-thunk.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/object-member:options-thunk:project",
+    "SC2001/unplaced-write/object-member:options-thunk:project"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/object-member:options-thunk:project"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/screens/activity.tsx",
+    "line": 67,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 48,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "getter-in-options-object",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/getter-in-options.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/condition/other:ObjectLiteralExpression",
+    "SC1001/callback-to-unproven-consumer/other:ObjectLiteralExpression",
+    "SC1001/unplaced-read/other:ObjectLiteralExpression",
+    "SC2001/unplaced-write/other:ObjectLiteralExpression"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/other:ObjectLiteralExpression"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/components/workspace-cascader.tsx",
+    "line": 120,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 42,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-local-object",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/local-object.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/condition/object-member:local-object",
+    "SC1001/callback-to-unproven-consumer/object-member:local-object",
+    "SC1001/unplaced-read/condition/object-member:local-object",
+    "SC1001/unplaced-read/object-member:local-object",
+    "SC2001/unplaced-write/object-member:local-object"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/object-member:local-object"
+    }
+   ],
+   "source": {
+    "app": "expenses-app",
+    "path": "src/lib/convex.ts",
+    "line": 87,
+    "commit": "f24e272713513d7721133159a53ea960c756df13"
+   },
+   "weight": 53,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "param-default",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/param-default.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/parameter-default-unresolved"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "parameter-default-unresolved",
+     "cause": "SC9012/runtime-target-unselected/parameter-default-unresolved"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/app/components/AppHeader/index.tsx",
+    "line": 81,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 32,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "leaf-dom-member",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/leaf-dom.tsx"
+   ],
+   "causes": [
+    "SC9012/leaf-callback-body/lib-dom-function",
+    "SC9012/leaf-callback-body/lib-dom-member"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/lib-dom-member"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/components/confirm-dialog.tsx",
+    "line": 22,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 34,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "returned-callable",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/returned-callable.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/returned-callable-outside-source-universe"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "returned-callable-outside-source-universe",
+     "cause": "SC9012/runtime-target-unselected/returned-callable-outside-source-universe"
+    }
+   ],
+   "source": {
+    "app": "jar-hell-web",
+    "path": "web/src/components/Autocomplete.tsx",
+    "line": 64,
+    "commit": "5e0d76c55e4b23909bcdcc8b6cbcf60b6cd7e06f"
+   },
+   "weight": 43,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "leaf-project-function",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/leaf-project-function.tsx",
+    "src/leaf-fn-api.ts"
+   ],
+   "causes": [
+    "SC9012/leaf-callback-body/project-function"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/project-function"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/components/user-menu.tsx",
+    "line": 95,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 74,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "leaf-project-member",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/leaf-project-member.tsx"
+   ],
+   "causes": [
+    "SC9012/leaf-callback-body/project-member"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/project-member"
+    }
+   ],
+   "source": {
+    "app": "donegeon-client",
+    "path": "web/apps/client/src/page/BoardStorePage.tsx",
+    "line": 236,
+    "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
+   },
+   "weight": 103,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "leaf-member-of-parameter",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/leaf-project-member-of-parameter.tsx"
+   ],
+   "causes": [
+    "SC9012/leaf-callback-body/project-member-of-parameter"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/project-member-of-parameter"
+    }
+   ],
+   "source": {
+    "app": "donegeon-client",
+    "path": "web/apps/client/src/page/BoardControllerSummary.tsx",
+    "line": 317,
+    "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
+   },
+   "weight": 49,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "leaf-hook-result",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/leaf-project-call-result.tsx"
+   ],
+   "causes": [
+    "SC9012/leaf-callback-body/project-call-result"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/project-call-result"
+    }
+   ],
+   "source": {
+    "app": "donegeon-client",
+    "path": "web/apps/client/src/page/BoardControllerCore.tsx",
+    "line": 311,
+    "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
+   },
+   "weight": 12,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "leaf-callee-no-declaration",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/leaf-callee-no-declaration.tsx"
+   ],
+   "causes": [
+    "SC9012/leaf-callback-body/project-binding",
+    "SC9012/leaf-callback-body/project-destructured",
+    "SC9012/leaf-callback-body/unresolved"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/unresolved"
+    },
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/project-binding"
+    },
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/project-destructured"
+    }
+   ],
+   "source": {
+    "app": "solid-groove",
+    "path": "src/components/AppErrorFallback.tsx",
+    "line": 40,
+    "commit": "f3340174fb2daba2eba220640731844b8a33d232"
+   },
+   "weight": 6,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "leaf-generic-props-member",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/leaf-member-unresolved.tsx"
+   ],
+   "causes": [
+    "SC9012/leaf-callback-body/member-unresolved"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/member-unresolved"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/ui-components-examples/solid-props-proxy/Props.tsx",
+    "line": 12,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 1,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "props-exported-unrendered",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/props-exported-unrendered.tsx"
+   ],
+   "causes": [
+    "SC1001/direct-read-callers-unenumerable/props-escape:exported-unrendered",
+    "SC1001/direct-read-callers-unenumerable/props-escape:non-jsx-reference:PropertyAccessExpression"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read-callers-unenumerable",
+     "context": "",
+     "cause": "SC1001/direct-read-callers-unenumerable/props-escape:exported-unrendered"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/components/sidebar.tsx",
+    "line": 51,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 25,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "props-spread-caller",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/props-spread-caller.tsx"
+   ],
+   "causes": [
+    "SC1001/direct-read-callers-unenumerable/props-escape:spread-caller"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read-callers-unenumerable",
+     "context": "",
+     "cause": "SC1001/direct-read-callers-unenumerable/props-escape:spread-caller"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/solid-dnd-playground/src/components/SortableItem.tsx",
+    "line": 45,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 21,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "props-route-table",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/props-object-member.tsx"
+   ],
+   "causes": [
+    "SC1001/direct-read-callers-unenumerable/props-escape:non-jsx-reference:object-member"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read-callers-unenumerable",
+     "context": "",
+     "cause": "SC1001/direct-read-callers-unenumerable/props-escape:non-jsx-reference:object-member"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/shell/src/chrome/NavItem.tsx",
+    "line": 74,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 15,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "props-object-assign",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/props-object-assign.tsx"
+   ],
+   "causes": [
+    "SC1001/direct-read-callers-unenumerable/props-escape:non-jsx-reference:argument"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read-callers-unenumerable",
+     "context": "",
+     "cause": "SC1001/direct-read-callers-unenumerable/props-escape:non-jsx-reference:argument"
+    }
+   ],
+   "source": {
+    "app": "skyjtx-website",
+    "path": "apps/skyjt-website/src/components/Tabs/Tabs.tsx",
+    "line": 70,
+    "commit": "11dc4e0b0c72b6ce1e25bb53db203b52b99b9d11"
+   },
+   "weight": 1,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "props-no-jsx-component",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/props-not-in-component.tsx"
+   ],
+   "causes": [
+    "SC1001/direct-read-callers-unenumerable/props-escape:not-in-component"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read-callers-unenumerable",
+     "context": "",
+     "cause": "SC1001/direct-read-callers-unenumerable/props-escape:not-in-component"
+    }
+   ],
+   "source": {
+    "app": "probus-hk",
+    "path": "src/components/AlertWatcher.tsx",
+    "line": 84,
+    "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
+   },
+   "weight": 14,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "props-forwarded-from-exported",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/props-other-forwarded.tsx"
+   ],
+   "causes": [
+    "SC1001/direct-read-callers-unenumerable/props-escape:other"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read-callers-unenumerable",
+     "context": "",
+     "cause": "SC1001/direct-read-callers-unenumerable/props-escape:other"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/browser-atlas/src/tree-view/TreeView.tsx",
+    "line": 184,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 13,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "props-in-errored-fallback",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/props-other.tsx"
+   ],
+   "causes": [
+    "SC1001/direct-read-callers-unenumerable/props-escape:other"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read-callers-unenumerable",
+     "context": "",
+     "cause": "SC1001/direct-read-callers-unenumerable/props-escape:other"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/solid-dnd-playground/src/App.tsx",
+    "line": 40,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 0,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "props-condition-spread-caller",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/props-condition-spread-caller.tsx"
+   ],
+   "causes": [
+    "SC1001/direct-read-callers-unenumerable/condition/props-escape:spread-caller"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read-callers-unenumerable",
+     "context": "condition",
+     "cause": "SC1001/direct-read-callers-unenumerable/condition/props-escape:spread-caller"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/kernel/src/components/VirtualizedTable.tsx",
+    "line": 514,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 12,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "props-condition-render-prop",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/props-condition-render-prop.tsx"
+   ],
+   "causes": [
+    "SC1001/direct-read-callers-unenumerable/condition/props-escape:other"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read-callers-unenumerable",
+     "context": "condition",
+     "cause": "SC1001/direct-read-callers-unenumerable/condition/props-escape:other"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-clusters/src/BrokerDetail.tsx",
+    "line": 166,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 12,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "props-condition-module-table",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/props-condition-not-in-component.tsx"
+   ],
+   "causes": [
+    "SC1001/direct-read-callers-unenumerable/condition/props-escape:not-in-component"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read-callers-unenumerable",
+     "context": "condition",
+     "cause": "SC1001/direct-read-callers-unenumerable/condition/props-escape:not-in-component"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-consumers/src/GroupDetail.tsx",
+    "line": 368,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 4,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "handler-frozen",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/handler-frozen.tsx"
+   ],
+   "causes": [
+    "SC1007/handler-frozen"
+   ],
+   "expect": [
+    {
+     "rule": "SC1007",
+     "family": "handler-frozen",
+     "context": "",
+     "cause": "SC1007/handler-frozen"
+    },
+    {
+     "rule": "SC4001",
+     "family": "handler-unresolved",
+     "context": "handler-member-unresolved",
+     "cause": "SC4001/handler-unresolved/handler-member-unresolved/props-member"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/workspace/components/WorkspaceDockHandle/index.tsx",
+    "line": 19,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 18,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "conditional-return",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/conditional-return.tsx"
+   ],
+   "causes": [
+    "SC1004/conditional-return"
+   ],
+   "expect": [
+    {
+     "rule": "SC1004",
+     "family": "conditional-return",
+     "context": "",
+     "cause": "SC1004/conditional-return"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/screens/users.tsx",
+    "line": 471,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 5,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "destructured-props",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/destructured-props.tsx"
+   ],
+   "causes": [
+    "SC1003/destructured-props"
+   ],
+   "expect": [
+    {
+     "rule": "SC1003",
+     "family": "destructured-props",
+     "context": "",
+     "cause": "SC1003/destructured-props"
+    }
+   ],
+   "source": {
+    "app": "solid-groove",
+    "path": "src/library/LibraryFacets.tsx",
+    "line": 35,
+    "commit": "f3340174fb2daba2eba220640731844b8a33d232"
+   },
+   "weight": 7,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "apply-unresolved",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/apply-unresolved.tsx"
+   ],
+   "causes": [
+    "SC1001/apply-unresolved"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "apply-unresolved",
+     "context": "",
+     "cause": "SC1001/apply-unresolved/package-callback"
+    }
+   ],
+   "source": {
+    "app": "compass-ui",
+    "path": "apps/ui/src/components/Bridge.tsx",
+    "line": 379,
+    "commit": "2e4e7b875e371e45c5ffa4ee39715d57cf2049a5"
+   },
+   "weight": 1,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "props-write",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/props-write.tsx"
+   ],
+   "causes": [
+    "SC2003/props-write"
+   ],
+   "expect": [
+    {
+     "rule": "SC2003",
+     "family": "props-write",
+     "context": "",
+     "cause": "SC2003/props-write"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/solid-virtual/examples/shared/Item.tsx",
+    "line": 68,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 1,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "unrooted-read",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/unrooted-read.tsx"
+   ],
+   "causes": [
+    "SC5003/unrooted-read"
+   ],
+   "expect": [
+    {
+     "rule": "SC5003",
+     "family": "unrooted-read",
+     "context": "",
+     "cause": "SC5003/unrooted-read"
+    }
+   ],
+   "source": {
+    "app": "oscartbeaumont-website",
+    "path": "src/routes/addy/index.tsx",
+    "line": 101,
+    "commit": "60823453a7e5e3aaa52179746d26abb46c7ff373"
+   },
+   "weight": 3,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "effect-argument-shape",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/effect-argument-shape.tsx"
+   ],
+   "causes": [
+    "SC7001/missing-effect-function"
+   ],
+   "expect": [
+    {
+     "rule": "SC7001",
+     "family": "missing-effect-function",
+     "context": "effect-argument-shape-uncertain",
+     "cause": "SC7001/missing-effect-function/effect-argument-shape-uncertain"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/gpu-text-rendering/src/features/scene/FrameLoop.tsx",
+    "line": 41,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 2,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "server-function-argument",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/server-function-argument.tsx"
+   ],
+   "causes": [
+    "SC7007/server-function-argument"
+   ],
+   "expect": [
+    {
+     "rule": "SC7007",
+     "family": "server-function-argument",
+     "context": "server-function-rich-argument-unresolved",
+     "cause": "SC7007/server-function-argument/server-function-rich-argument-unresolved"
+    }
+   ],
+   "source": {
+    "app": "skyjtx-website",
+    "path": "apps/skyjt-website/src/routes/(main)/user/[id].tsx",
+    "line": 52,
+    "commit": "11dc4e0b0c72b6ce1e25bb53db203b52b99b9d11"
+   },
+   "weight": 2,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "compiler-refused",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/attr-namespace.tsx"
+   ],
+   "causes": [
+    "SC9015/compiler-refused"
+   ],
+   "expect": [
+    {
+     "rule": "SC9015",
+     "family": "compiler-refused",
+     "context": "compiler-facts",
+     "cause": "SC9015/compiler-refused/compiler-facts"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/sequence-editor/panel-resize-handle.tsx",
+    "line": 1,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 1,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "unplaced-action",
+   "kind": "uncertifiable",
+   "project": "veto-listener-wrapper",
+   "files": [
+    "src/unplaced-action.tsx"
+   ],
+   "causes": [
+    "SC2002/unplaced-action"
+   ],
+   "expect": [
+    {
+     "rule": "SC2002",
+     "family": "unplaced-action",
+     "context": "",
+     "cause": "SC2002/unplaced-action"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/settings/components/Settings/InstructionsEditor.tsx",
+    "line": 45,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 1,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-package-callback",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/package-callback.ts"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/package-callback"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/package-callback"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/card-stack/src/primitives/createFreeDrag.ts",
+    "line": 41,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 59,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-object-for-package",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/argument-of-package.ts"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/object-member:argument-of:package"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/object-member:argument-of:package"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/repository/components/graph/components/CommitGraph/useCommitGraphState.tsx",
+    "line": 85,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 42,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-memo-options",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/options-thunk-package.ts"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/object-member:options-thunk:package"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/object-member:options-thunk:package"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/explorer/components/FileSearch/index.tsx",
+    "line": 78,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 3,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "read-in-store-member",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/store-member-read.ts"
+   ],
+   "causes": [
+    "SC1001/unplaced-read/object-member:argument-of:package"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/unplaced-read/object-member:argument-of:package"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/solid-three/core/store.ts",
+    "line": 322,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 2,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "read-after-await-in-apply",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/effect-direct-read.tsx"
+   ],
+   "causes": [
+    "SC1001/direct-read/package-callback"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read",
+     "context": "",
+     "cause": "SC1001/direct-read/package-callback"
+    }
+   ],
+   "source": {
+    "app": "error-menu-web",
+    "path": "web/src/pages/ProjectPage.tsx",
+    "line": 96,
+    "commit": "992d406ed4a9eca3a57973ec7d13ec4b0ccbd00e"
+   },
+   "weight": 6,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "leaf-package-function",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/leaf-onsettled-new.tsx"
+   ],
+   "causes": [
+    "SC9012/leaf-callback-body/package-function"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/package-function"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/paint/webgl-whiteboard/index.tsx",
+    "line": 17,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 44,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "leaf-package-helper",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/pkg-leaf-package-function.ts"
+   ],
+   "causes": [
+    "SC9012/leaf-callback-body/package-function"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/package-function"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/solid-dnd/src/primitives/createDetectLayout.ts",
+    "line": 12,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 0,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "leaf-package-member",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/pkg-leaf-package-member.ts"
+   ],
+   "causes": [
+    "SC9012/leaf-callback-body/package-member"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/package-member"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/typegpu-examples/1.1-webgpu-fundamentals/index.tsx",
+    "line": 81,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 136,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "read-in-package-callback",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/pkg-memo-package-callback.tsx"
+   ],
+   "causes": [
+    "SC1001/unplaced-read/package-callback"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/unplaced-read/package-callback"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/typegpu-examples/3-webgpu-uniforms/index.tsx",
+    "line": 159,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 38,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "callback-to-package",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/pkg-callback-to-package.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/package-callback"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/package-callback"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/paint/ui-example/components/navigation-popup.tsx",
+    "line": 38,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 13,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "dependency-source-getter",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/pkg-dependency-getter.tsx"
+   ],
+   "causes": [
+    "SC9012/dependency-source-getter"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "dependency-source-getter",
+     "context": "dependency-source-getter",
+     "cause": "SC9012/dependency-source-getter/dependency-source-getter"
+    }
+   ],
+   "source": {
+    "app": "compass-ui",
+    "path": "apps/ui/src/App.tsx",
+    "line": 56,
+    "commit": "2e4e7b875e371e45c5ffa4ee39715d57cf2049a5"
+   },
+   "weight": 7,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-in-copied-dom-props",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-in-copied-dom-props.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/component-prop>prop-unused",
+    "SC2001/unplaced-write/component-prop>listener-callback",
+    "SC2001/unplaced-write/component-prop>prop-unused",
+    "SC2001/unplaced-write/via-callers:component-prop>prop-unused"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>listener-callback"
+    },
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/via-callers:component-prop>prop-unused"
+    },
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>prop-unused"
+    },
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:lib-es"
+    },
+    {
+     "rule": "SC4001",
+     "family": "handler-unresolved",
+     "context": "handler-spread-unresolved",
+     "cause": "SC4001/handler-unresolved/handler-spread-unresolved/named-rest"
+    },
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/component-prop>prop-unused"
+    }
+   ],
+   "source": {
+    "app": "donegeon-client",
+    "path": "web/apps/client/src/components/AppShell.tsx",
+    "line": 60,
+    "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
+   },
+   "weight": 69,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-in-merged-nested-helper",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/prop-merged-nested-helper.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/component-prop>view:placed",
+    "SC2001/unplaced-write/component-prop>view:placed"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/component-prop>view:placed"
+    },
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>view:placed"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/shell/src/pages/SettingsPage.tsx",
+    "line": 79,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 45,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-forwarded-omit-rest",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-forwarded-omit-rest.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:placed"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:placed"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/screens/access.tsx",
+    "line": 111,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 21,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "param-member-forwarded",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/param-member-handler-prop.tsx",
+    "src/param-member-forwarded.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/member-not-in-callee"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/member-not-in-callee"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/kernel/src/components/RecordRow.tsx",
+    "line": 108,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 116,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "param-member-factory-method",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/param-member-factory-method.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/callee-unresolved"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/callee-unresolved"
+    }
+   ],
+   "source": {
+    "app": "every-deck-of-cards",
+    "path": "src/presentation/debugger/AlgorithmWalkthrough.tsx",
+    "line": 32,
+    "commit": "27e760dc6b155a98b24d83b4d7d75eadb5dcba86"
+   },
+   "weight": 19,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "param-member-package-type",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/param-member-package-type.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/package-type"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/package-type"
+    }
+   ],
+   "source": {
+    "app": "probus-hk",
+    "path": "src/components/ExploreMap.tsx",
+    "line": 519,
+    "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
+   },
+   "weight": 35,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "computed-call-target",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/computed-call.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/computed-call-target-unresolved"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "computed-call-target-unresolved",
+     "cause": "SC9012/runtime-target-unselected/computed-call-target-unresolved"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/math-examples/m2x3/demo-angle-visualization.tsx",
+    "line": 19,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 17,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "param-default-forwarded",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/param-default-forwarded.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-default-unresolved"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-default-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-default-unresolved"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-messages/src/MessagesRoute.tsx",
+    "line": 611,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 6,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "handler-call-argument",
+   "kind": "uncertifiable",
+   "project": "veto-event-target",
+   "files": [
+    "src/handler-call-argument.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/parameter-call-argument-unproven"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "parameter-call-argument-unproven",
+     "cause": "SC9012/runtime-target-unselected/parameter-call-argument-unproven"
+    },
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/unplaced-read/dispatch-veto:event-target"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/browser-atlas/src/explorer/ExplorerTreeRow.tsx",
+    "line": 153,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 16,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "exported-subclass-override",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/exported-subclass-override.ts"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/exported-parameter-member-dispatch"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "exported-parameter-member-dispatch",
+     "cause": "SC9012/runtime-target-unselected/exported-parameter-member-dispatch/unknown"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/spector/backend/commands/scissor.ts",
+    "line": 10,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 4,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "type-only-source",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/type-only-source.tsx"
+   ],
+   "causes": [
+    "SC9012/type-only-source"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "type-only-source",
+     "context": "type-only-source",
+     "cause": "SC9012/type-only-source/type-only-source"
+    },
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/other:ObjectLiteralExpression"
+    }
+   ],
+   "source": {
+    "app": "hoxxes-briefing",
+    "path": "apps/web/src/pages/briefing/ui/board/BriefingPage.tsx",
+    "line": 106,
+    "commit": "36ab210625350c03d136bbfe4a71d4908e7650fa"
+   },
+   "weight": 5,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "primitive-value",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/primitive-value.ts"
+   ],
+   "causes": [
+    "SC9012/primitive-value"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "primitive-value",
+     "context": "primitive-value",
+     "cause": "SC9012/primitive-value/primitive-value"
+    }
+   ],
+   "source": {
+    "app": "probus-hk",
+    "path": "src/lib/tanstack/table.tsx",
+    "line": 115,
+    "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
+   },
+   "weight": 2,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "primitive-result-method",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/primitive-result-method.tsx"
+   ],
+   "causes": [
+    "SC9012/primitive-result-method"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "primitive-result-method",
+     "context": "primitive-result-method",
+     "cause": "SC9012/primitive-result-method/primitive-result-method"
+    }
+   ],
+   "source": {
+    "app": "solid-groove",
+    "path": "src/editor/StepEditor.tsx",
+    "line": 82,
+    "commit": "f3340174fb2daba2eba220640731844b8a33d232"
+   },
+   "weight": 2,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "package-callee",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/package-callee.ts"
+   ],
+   "causes": [
+    "SC9012/package-callee"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "package-callee",
+     "context": "package-callee",
+     "cause": "SC9012/package-callee/package-callee"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/math-examples/img-onload-test/createRootMapPool.ts",
+    "line": 50,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 2,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "escaped-route-object-use",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/escaped-object-member-use.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/parameter-default-unresolved/escaped-component:object-member-reference",
+    "SC9012/runtime-target-unselected/parameter-use-unmodeled/escaped-component:object-member-reference"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "parameter-use-unmodeled",
+     "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/escaped-component:object-member-reference"
+    }
+   ],
+   "source": {
+    "app": "error-menu-web",
+    "path": "web/src/pages/OrganizationPage.tsx",
+    "line": 225,
+    "commit": "992d406ed4a9eca3a57973ec7d13ec4b0ccbd00e"
+   },
+   "weight": 28,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "escaped-spread-use",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/escaped-spread-use.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/parameter-call-argument-unproven/escaped-component:spread-caller",
+    "SC9012/runtime-target-unselected/parameter-default-unresolved/escaped-component:spread-caller",
+    "SC9012/runtime-target-unselected/parameter-use-unmodeled/escaped-component:spread-caller"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "parameter-use-unmodeled",
+     "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/escaped-component:spread-caller"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-ksql/src/KsqlRoute.tsx",
+    "line": 163,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 20,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "escaped-route-object-target",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/escaped-object-member-target.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/escaped-component:object-member-reference",
+    "SC9012/parameter-member-call/parameter-member-targets-diverge/escaped-component:object-member-reference"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/escaped-component:object-member-reference"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/kernel/src/components/RecordRow.tsx",
+    "line": 108,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 20,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "escaped-spread-target",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/escaped-spread-target.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/escaped-component:spread-caller"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/escaped-component:spread-caller"
+    }
+   ],
+   "source": {
+    "app": "every-deck-of-cards",
+    "path": "src/ArrangePage.tsx",
+    "line": 29,
+    "commit": "27e760dc6b155a98b24d83b4d7d75eadb5dcba86"
+   },
+   "weight": 13,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "escaped-lazy-member",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/escaped-lazy-page.tsx",
+    "src/escaped-lazy-routes.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/escaped-component:PropertyAccessExpression-reference",
+    "SC9012/parameter-member-call/parameter-member-targets-diverge/escaped-component:PropertyAccessExpression-reference",
+    "SC9012/runtime-target-unselected/parameter-call-argument-unproven/escaped-component:PropertyAccessExpression-reference",
+    "SC9012/runtime-target-unselected/parameter-use-unmodeled/escaped-component:PropertyAccessExpression-reference"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/escaped-component:PropertyAccessExpression-reference"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/abr-viewer/src/App.tsx",
+    "line": 39,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 14,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-mixed-entries",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/w-mixed-callers.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/via-callers:mixed",
+    "SC2001/unplaced-write/via-callers:object-member:array-element"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/via-callers:mixed"
+    }
+   ],
+   "source": {
+    "app": "solid-groove",
+    "path": "src/editor/EditorView.tsx",
+    "line": 187,
+    "commit": "f3340174fb2daba2eba220640731844b8a33d232"
+   },
+   "weight": 134,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-context-value",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/w-context-value.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/object-member:context-or-prop-value"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/object-member:context-or-prop-value"
+    }
+   ],
+   "source": {
+    "app": "error-menu-web",
+    "path": "web/src/app/account.tsx",
+    "line": 25,
+    "commit": "992d406ed4a9eca3a57973ec7d13ec4b0ccbd00e"
+   },
+   "weight": 22,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-returned-array",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/w-array-actions.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/object-member:array-element"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/object-member:array-element"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/browser-atlas/src/App.tsx",
+    "line": 1222,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 4,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-pushed-object",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/w-push-actions.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/object-member:argument-of:lib-es"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/object-member:argument-of:lib-es"
+    }
+   ],
+   "source": {
+    "app": "compass-ui",
+    "path": "apps/ui/src/components/Bridge.tsx",
+    "line": 321,
+    "commit": "2e4e7b875e371e45c5ffa4ee39715d57cf2049a5"
+   },
+   "weight": 2,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-view-transition",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/w-view-transition.ts"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/lib-dom-callback"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/lib-dom-callback"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/folder-tabs/src/createScreenRoute.ts",
+    "line": 41,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 17,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-returned-closure",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/w-returned-closure.ts"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/returned-closure"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/returned-closure"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/browser-atlas/src/persistent-tree/createPersistentTreeUndoHistory.ts",
+    "line": 45,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 7,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-exported-object",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/w-exported-store.ts"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/object-member:exported-object"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/object-member:exported-object"
+    }
+   ],
+   "source": {
+    "app": "probus-hk",
+    "path": "src/stores/sheets.ts",
+    "line": 54,
+    "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
+   },
+   "weight": 2,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-assigned-handler",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/w-socket-handler.ts"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/other:assigned"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/other:assigned"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/conversation/hooks/useSpeechToText.tsx",
+    "line": 185,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 6,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-returned-tuple",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/w-tuple-setter.ts"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/other:array-element"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/other:array-element"
+    }
+   ],
+   "source": {
+    "app": "hoxxes-briefing",
+    "path": "apps/web/src/shared/lib/create-local-storage.ts",
+    "line": 30,
+    "commit": "36ab210625350c03d136bbfe4a71d4908e7650fa"
+   },
+   "weight": 6,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "refresh-in-factory-member",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/w-refresh-method.ts"
+   ],
+   "causes": [
+    "SC2001/unplaced-call"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-call",
+     "context": "",
+     "cause": "SC2001/unplaced-call/object-member:factory-result"
+    }
+   ],
+   "source": {
+    "app": "hoxxes-briefing",
+    "path": "apps/web/src/shared/lib/create-cached-query.ts",
+    "line": 128,
+    "commit": "36ab210625350c03d136bbfe4a71d4908e7650fa"
+   },
+   "weight": 3,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-unreferenced-function",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/w-unreferenced-writer.ts"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/unreferenced-function"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/unreferenced-function"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/lib/history.ts",
+    "line": 34,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 1,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-promise-executor",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/w-promise-executor.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/other:new-argument"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/other:new-argument"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/browser-atlas/src/App.tsx",
+    "line": 293,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 1,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "write-in-class-options",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/w-class-options.ts"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/object-member:new-argument"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/object-member:new-argument"
+    }
+   ],
+   "source": {
+    "app": "solid-groove",
+    "path": "src/library/useLibraryBrowser.ts",
+    "line": 153,
+    "commit": "f3340174fb2daba2eba220640731844b8a33d232"
+   },
+   "weight": 3,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "read-in-parameter-default",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/r-default-parameter.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/via-callers:mixed"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/via-callers:mixed"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/screens/scope-overview.tsx",
+    "line": 57,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 4,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "read-in-context-value",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/r-context-state.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/component-prop>object-member:context-or-prop-value",
+    "SC1001/callback-to-unproven-consumer/object-member:context-or-prop-value"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/object-member:context-or-prop-value"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/components/ui/popover.tsx",
+    "line": 40,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 17,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "read-in-returned-array",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/r-array-actions.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/object-member:array-element"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/object-member:array-element"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/browser-atlas/src/App.tsx",
+    "line": 1317,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 27,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "read-in-pushed-object",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/r-push-actions.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/condition/object-member:argument-of:lib-es",
+    "SC1001/callback-to-unproven-consumer/object-member:argument-of:lib-es"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:lib-es"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/browser-atlas/src/App.tsx",
+    "line": 2391,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 15,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-read-in-pushed-object",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/r-push-prop-reads.tsx"
+   ],
+   "causes": [
+    "SC1001/unplaced-read/condition/object-member:argument-of:lib-es",
+    "SC1001/unplaced-read/object-member:argument-of:lib-es"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/unplaced-read/object-member:argument-of:lib-es"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/repository/components/graph/components/CommitGraph/RowContextMenu.tsx",
+    "line": 30,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 11,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "read-in-exported-object",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/r-exported-store.ts"
+   ],
+   "causes": [
+    "SC1001/unplaced-read/object-member:exported-object"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/unplaced-read/object-member:exported-object"
+    }
+   ],
+   "source": {
+    "app": "probus-hk",
+    "path": "src/stores/sheets.ts",
+    "line": 60,
+    "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
+   },
+   "weight": 7,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "read-after-await",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/r-after-await-prop.tsx"
+   ],
+   "causes": [
+    "SC1001/unplaced-read/after-await"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/unplaced-read/after-await"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/math-examples/learn-solidjs-utils/transient-component-demo.tsx",
+    "line": 211,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 2,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "read-after-await-condition",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/r-after-await-condition.tsx"
+   ],
+   "causes": [
+    "SC1001/unplaced-read/condition/after-await"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "condition",
+     "cause": "SC1001/unplaced-read/condition/after-await"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/browser-atlas/src/App.tsx",
+    "line": 803,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 1,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "callback-after-await",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/r-after-await-callback.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/after-await"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/after-await"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-topics/src/TopicsRoute.tsx",
+    "line": 536,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 2,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "read-in-class-options",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/r-new-options.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/object-member:new-argument"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/object-member:new-argument"
+    }
+   ],
+   "source": {
+    "app": "solid-groove",
+    "path": "src/editor/EditorView.tsx",
+    "line": 208,
+    "commit": "f3340174fb2daba2eba220640731844b8a33d232"
+   },
+   "weight": 1,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "props-forwarded-into-exported",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/props-forwarded-into-exported.tsx"
+   ],
+   "causes": [
+    "SC1001/direct-read-callers-unenumerable/condition/props-escape:exported-with-tag-callers",
+    "SC1001/direct-read-callers-unenumerable/props-escape:exported-with-tag-callers"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read-callers-unenumerable",
+     "context": "",
+     "cause": "SC1001/direct-read-callers-unenumerable/props-escape:exported-with-tag-callers"
+    },
+    {
+     "rule": "SC1001",
+     "family": "direct-read-callers-unenumerable",
+     "context": "condition",
+     "cause": "SC1001/direct-read-callers-unenumerable/condition/props-escape:exported-with-tag-callers"
+    }
+   ],
+   "source": {
+    "app": "expenses-app",
+    "path": "src/components/AddExpenseForm.tsx",
+    "line": 50,
+    "commit": "f24e272713513d7721133159a53ea960c756df13"
+   },
+   "weight": 76,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "read-in-hook-listener",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/read-in-hook-listener.tsx"
+   ],
+   "causes": [
+    "SC1001/direct-read/component-body"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read",
+     "context": "",
+     "cause": "SC1001/direct-read/component-body"
+    }
+   ],
+   "source": {
+    "app": "probus-hk",
+    "path": "src/routes/Starred.tsx",
+    "line": 359,
+    "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
+   },
+   "weight": 57,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "reads-in-refused-file",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/compiler-refused-reads.tsx"
+   ],
+   "causes": [
+    "SC1001/unplaced-read/other:jsx-child"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/unplaced-read/other:jsx-child"
+    },
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/unplaced-read/component-body"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/math-examples/camera-projection-svg/cube.tsx",
+    "line": 35,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 19,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "param-member-mutation-client",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/param-member-mutation-client.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-schemas/src/SchemasRoute.tsx",
+    "line": 234,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 228,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "param-member-query-client",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/param-member-query-client.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-clusters/src/BrokersScreen.tsx",
+    "line": 73,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 0,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "param-member-scene",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/param-member-scene.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/math-examples/camera-projection-webgl2/sphere.component.tsx",
+    "line": 17,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 0,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "veto-story",
+   "kind": "uncertifiable",
+   "project": "veto-story",
+   "files": [
+    "src/carousel.stories.tsx",
+    "src/carousel.tsx"
+   ],
+   "causes": [
+    "SC1001/unplaced-read/condition/dispatch-veto:story",
+    "SC1001/unplaced-read/dispatch-veto:story",
+    "SC2001/unplaced-write/dispatch-veto:story"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/unplaced-read/dispatch-veto:story"
+    },
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/dispatch-veto:story"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/kernel/src/components/Avatar.tsx",
+    "line": 77,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 51,
+   "status": "uncertifiable"
+  }
+ ],
+ "notReproduced": [
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge",
+   "weight": 35,
+   "why": "not reproduced"
+  },
+  {
+   "cause": "SC2001/unplaced-write/package-component-prop",
+   "weight": 30,
+   "why": "not reproduced"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/package-component-prop",
+   "weight": 18,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>mixed",
+   "weight": 16,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>package-callback",
+   "weight": 15,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>component-prop>deep-chain",
+   "weight": 14,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/unplaced-read/unresolved-callback",
+   "weight": 13,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/object-member:factory-result",
+   "weight": 12,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/unplaced-read/component-prop>view+forwarded:view+forwarded:passed-to-project",
+   "weight": 12,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>package-component-prop",
+   "weight": 12,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC4001/unowned-primitive",
+   "weight": 11,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/via-callers:package-component-prop",
+   "weight": 10,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/dispatch-veto:test-file",
+   "weight": 10,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>view:returned",
+   "weight": 9,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>component-prop",
+   "weight": 9,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:component-prop",
+   "weight": 6,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:prop-unused",
+   "weight": 6,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/condition/object-member:argument-of:project",
+   "weight": 6,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>view:prop-unused",
+   "weight": 6,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/unplaced-read/dispatch-veto:test-file",
+   "weight": 6,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:deep-chain",
+   "weight": 5,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/via-callers:package-callback",
+   "weight": 5,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>mixed",
+   "weight": 5,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop>deep-chain",
+   "weight": 5,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop>PropertyAccessExpression",
+   "weight": 5,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>JsxSpreadAttribute",
+   "weight": 5,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/unplaced-read/condition/lib-dom-callback",
+   "weight": 4,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:mixed",
+   "weight": 4,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>object-member:context-or-prop-value",
+   "weight": 4,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:placed",
+   "weight": 4,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>view:component-prop",
+   "weight": 4,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>JsxSpreadAttribute",
+   "weight": 4,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:component-prop>deep-chain",
+   "weight": 4,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/condition/package-callback",
+   "weight": 3,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:package-callback",
+   "weight": 3,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>component-not-a-function",
+   "weight": 3,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:component-prop>deep-chain",
+   "weight": 3,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>view:package-callback",
+   "weight": 3,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>placed",
+   "weight": 3,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>returned",
+   "weight": 3,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/unplaced-read/condition/project-function-argument",
+   "weight": 3,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/unplaced-read/component-prop>forwarded:deep-chain",
+   "weight": 3,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>PropertyAccessExpression",
+   "weight": 3,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>passed-to-project",
+   "weight": 3,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>after-await",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>view+forwarded:other:ObjectLiteralExpression",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:listener-callback",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:project-function-argument",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:prop-unused",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/via-callers:component-prop>forwarded:deep-chain",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/unplaced-read/component-prop>view+forwarded:view+forwarded:view+forwarded:passed-to-project",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>view:passed-to-project",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>package-callback",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>object-member",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>IfStatement",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/unresolved-callback",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:PrefixUnaryExpression",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/object-member:JsxSpreadAttribute",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>other:jsx-child",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:JsxSpreadAttribute",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/unplaced-read/intrinsic-handler",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>component-not-a-function",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>component-prop>component-not-a-function",
+   "weight": 2,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>view:TypeOfExpression",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>view:object-member:context-or-prop-value",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/via-callers:component-prop>component-prop>view:placed",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>view+forwarded:view+forwarded:project-function-argument",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/unplaced-read/lib-dom-callback",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/unplaced-read/condition/component-prop>view+forwarded:view+forwarded:view+forwarded:passed-to-project",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:mixed",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/escaped-component:BindingElement-reference",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:PrefixUnaryExpression",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:component-prop>object-member:argument-of:project",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>object-member:argument-of:project",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/unresolved",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC9005/package-source-unavailable",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/unplaced-read/via-callers:package-callback",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:deep-chain",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>component-prop>prop-unused",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>prop-unused",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/via-callers:package-callback",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/unplaced-read/condition/intrinsic-handler",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:package",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>after-await",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/condition/project-function-argument",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:passed-to-package",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>forwarded:after-await",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/escaped-component:argument-reference",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>returned",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>view:component-prop",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>view+forwarded:spread-into-package-component",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/direct-read/other:JsxSelfClosingElement",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop>component-not-a-function",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>component-prop>component-prop>component-not-a-function",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>component-prop>forwarded:component-prop>component-not-a-function",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>package-component-prop",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>component-prop>forwarded:deep-chain",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>component-prop>object-member:argument-of:project",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/component-prop>object-member:factory-result",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC2001/unplaced-write/via-callers:component-prop>component-prop>placed",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>placed",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>object-member",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:unresolved",
+   "weight": 1,
+   "why": "under 20 results"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/other:jsx-child",
+   "weight": 1,
+   "why": "under 20 results"
+  }
+ ]
+}

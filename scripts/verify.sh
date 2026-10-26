@@ -348,6 +348,11 @@ gates_lane() {
   lane_step coverage
   SOLID_CHECKER_BIN="$checker_bin" \
     SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/coverage.mjs
+  # ADR 0404: each reproduction still reads as the cause it stands for.
+  lane_step repro-causes
+  bun scripts/uncertifiable-causes.mjs --repro fixtures/uncertifiable-repro \
+    --cases fixtures/uncertifiable-repro/cases.json \
+    --checker "$checker_bin" --typefacts "$PWD/bin/solid-typefacts" >/dev/null
   lane_step ownership-gate
   SOLID_CHECKER_BIN="$checker_bin" \
     SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/ownership-gate.mjs \
@@ -417,6 +422,7 @@ jq empty fixtures/tsc-oracle/*.json
 jq empty fixtures/obligation-cases/*.json
 bun scripts/dialect-manifests.mjs validate
 bun scripts/doc-budget.mjs
+bun scripts/repro-budget.mjs
 
 step ""
 summarize

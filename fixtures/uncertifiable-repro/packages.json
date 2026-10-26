@@ -1,0 +1,219 @@
+{
+ "note": "The published bytes of the reproduction set's one node_modules (ADR 0404): for each package its version and the registry tarball's integrity, and the files copied from it unchanged with their sha256. Only the files TypeScript 7.1 reads for the set's projects (--listFilesOnly) and the JavaScript the checker reads under the browser and development conditions (each file shown needed by removing it: a missing one turns its package into SC9005) are copied. vitest is the declaration subset fixtures/reactive-ir/test-runner-vitest pins; vite-plugin-solid is its manifest only, whose presence, as in every corpus app, makes the checker analyze package source (ADR 0297). scripts/repro-budget.mjs holds node_modules to exactly this list.",
+ "packages": [
+  {
+   "name": "solid-js",
+   "version": "2.0.0-rc.17",
+   "integrity": "sha512-ym3x2kzC+vzgD9VNqhqExn3qWzkrpJco3vane0wTFHCVPS9HBXI3GgSp+ieZ1h72zcb2z27PXFSbMsi8Ot+Hxw==",
+   "files": {
+    "dist/attribution.js": "3e9a2c2384c8407dc0a7dcbe5f8e10ae9210943a634f7055158d00b82ee4c46a",
+    "dist/internal.js": "01886f648e2c367a915d4a84a478b3c9091163371b742deba04726cd04b74a01",
+    "dist/solid.dev.js": "f502f11c8d49ca24ec1eb4d17868344363a89ca082605109a301e483dc54b41e",
+    "package.json": "d864221b8464d2675843182131aa85c5f964e80ec8b21245a3779d18cb393035",
+    "types/client/component.d.ts": "02ee59f4a7b90192a227bef9cb477c13635badb85b57f9bf0f4a0db7bcc65eef",
+    "types/client/core.d.ts": "ecc6ffc313dfc3474e133e8051d6f683735dcef8085c7fb3aab245a73a3022db",
+    "types/client/dynamic.d.ts": "2f1d7dd7addcedaa846a6ffac6839a1d2c3c20e8a168ff508fb8a5a5b7c37a82",
+    "types/client/flow.d.ts": "29a7d87a4bbd68966449db4be07d8ddc0c9b4b0a6749b89a014a2862935a96ad",
+    "types/client/hydration.d.ts": "7da2505497d72c77b2dc97da9b2b6144b2b2509be87a76721e53197ee89bbd9b",
+    "types/index.d.ts": "6be2f3d8ae64695fe69a929ebc411448d68a3f2754ff1862b8024c837b8fcf3b",
+    "types/internal.d.ts": "c525f4a7eff6520c2e414082699fba88ea7554beb8a83b79973e4a898b11309b",
+    "types/recovery.d.ts": "a6e1cfddf1a479eb371949828fd97227f7b656120e50cdf240f8badd6b44ce75",
+    "types/server/observe.d.ts": "2c8cac4c3db3855b3ce7d4957f14eed98daa1dbca547d3800f6474373655838a",
+    "types/server/shared.d.ts": "b5ab55247b4803d051e363d4c2a34549e495b023c4a52933fdca6442bcce993f",
+    "types/server/signals.d.ts": "d2f19cf887e80950222e8b786e8e512dbbac88a58621bb8899a39ba7833a2d4a",
+    "types/types.d.ts": "f089b3993cd5a7a6ad626cb06eb9b5cdc3b8540d652fc9431c61e398f33354ec"
+   }
+  },
+  {
+   "name": "@solidjs/signals",
+   "version": "2.0.0-rc.17",
+   "integrity": "sha512-GXXWBlJsiZeBCTw3a941Y/HVBYfwupCfctPnwNjFJV+u3tZnRe/SL+NeStI1247zfxlvkH4p9PWzdZK/yX1I1Q==",
+   "files": {
+    "dist/dev-shared.js": "93e01d4ef6ba1ec02daeeb6c378ff8f7baa2ca6ccfc1eff8a2f8f3c767ed0572",
+    "dist/dev.attribution.js": "bba0c14b36d1abf6f3c37f8026a66c24d61de0d9f9f21ccbe30127bf76f49648",
+    "dist/dev.js": "abcac2f1313d46539839daea1d5662f7b309ed4a0e9961dead4e595372f4d334",
+    "dist/types/affects.d.ts": "490a205b0e68ae5118254a4037244c4d01e251908eaf2b9333ba629082ab5089",
+    "dist/types/attribution.d.ts": "856842015d6e96c5afdb486d840dc87db79092abfa852df3e3ed4c7d2b80419a",
+    "dist/types/boundaries.d.ts": "58abd43f6ba60d6786e4507765af555aa778e5405c8f25f7186a93d460ae6294",
+    "dist/types/core/action.d.ts": "0040d1541ef6f44dec2e60d9cafa9fef2fadd3fa6a57d8f725d0d31daef8563c",
+    "dist/types/core/async.d.ts": "b8f7d3626d5c11e084d4b991174598dcf219f67152fc2b0cd1f51e27c3543337",
+    "dist/types/core/attribution-costs.d.ts": "c0e2e2353419004e34c904401628c17ae36fa1be5894c18556ee095680c15006",
+    "dist/types/core/attribution-feedback.d.ts": "0e4fac8a5967448eb309e05857e1aa11581f0d7971fc17bcf5d6e996d3b27176",
+    "dist/types/core/attribution-hooks.d.ts": "84dd1b20807bae3f8dd78eb30abada4d13737e04d3afd99161fe83e66c9de760",
+    "dist/types/core/attribution-queries.d.ts": "81842e1ddce03a1046c09fb723aee13e7f9e3d09669dc9149625615729867d6f",
+    "dist/types/core/attribution.d.ts": "466e14abb291974cc3a039564a01b5c07120c90623aa5f14cc2a35650aff9522",
+    "dist/types/core/constants.d.ts": "88b8093d22639a2fdb9c1a9b7eabc25708b810aab265d03b2dbd983277aaa566",
+    "dist/types/core/context.d.ts": "b089b1845d1635bae075723ab25650c27abc5af8b2d75853254f3cf6a79db66d",
+    "dist/types/core/core.d.ts": "b3bf4332768ec9e9622fadc34d2c76f218a6333a895c0093afd48a32ada68440",
+    "dist/types/core/dev.d.ts": "c7e203d73218859fc320a6397646591b96e1308bf078c4ae693f7ce87405d244",
+    "dist/types/core/effect.d.ts": "ea85331b7061e4fbbe03310816e79f668979d12612de6883f2189adb1c6c1fd5",
+    "dist/types/core/error-hooks.d.ts": "f84270144a849dec5d92a1eff2d274566735385dff53bc0ba3a2b577d56dc336",
+    "dist/types/core/error.d.ts": "7dc0705c73a1a2863566b6984e7b945acc2c861344fe217e00ad13bfbb3c7c2c",
+    "dist/types/core/external.d.ts": "5abe50b1a0572ee39efd0e0fe1b6034761720d8aac4ed85a077dc8f15ab3e2fd",
+    "dist/types/core/heap.d.ts": "79c527775e017d05eeac381d3aebde28d5510d7dadefaeef929c842bbc8a8a9f",
+    "dist/types/core/identities.d.ts": "9fc7b3aad5fa586112b48f4afad8be2cb9b8980c7b03cb4189fbfc29c24f38df",
+    "dist/types/core/index.d.ts": "ab213ff163a92b32a3403c50ca2ceaa098c8f7cf70cd3d2daf3edf2114b86457",
+    "dist/types/core/owner.d.ts": "964cc22c5cb0a7eae60186417a9ab6d486a88c4b55571afbd5abbda0ade7fbf6",
+    "dist/types/core/scheduler.d.ts": "3f300d895eaa80ac4b810ee73842c955533fce5f4bc9eb51cba10a341924a4b0",
+    "dist/types/core/types.d.ts": "93c4ae07a1b04c6cee6b92b979d1d238c4496015a073ae055b3a93837e9e62c9",
+    "dist/types/core/verdict.d.ts": "6c9656b799712be94aa75765363fc7a33cef190ced556cc4b47f605e1a95ba7a",
+    "dist/types/deferred.d.ts": "26c42dd047a6dc5870f7f750e210b4802b30b0bbabbf45800982f91a49eed5be",
+    "dist/types/flatten.d.ts": "b727c1cfcc13a667591f387cbf4a4f3f33d023b19549089e06c0e84dddf705ce",
+    "dist/types/index.d.ts": "00c797c51969112a01233471ee5cdb43cd4ac30fa56596e321691a923df707ac",
+    "dist/types/map.d.ts": "7baf71ca129adac3846d7935cabec2d5ab4af35c4370e51f4ccfe707bc2ba3e8",
+    "dist/types/reveal.d.ts": "11b98e06a78ffa7b66fc421fa60aae55c785783c0addb1fd954d1beb008b4203",
+    "dist/types/signals.d.ts": "de70bcaf977c07c56a8d25e82ec3733fc3843cec18deb7b265fe86e3f5344484",
+    "dist/types/store/edges.d.ts": "3f41c8ad29e550b4db1534b1728977fbb6c267047680ee80e527fd0812962e91",
+    "dist/types/store/index.d.ts": "a52839f542bcea6e227fa49f1619a82a86e7809670466caf0ce6b490362a701d",
+    "dist/types/store/optimistic.d.ts": "1747b5f4e865d929c7a6f0722abf8a6be595b94704eaf4824914c65275c3073c",
+    "dist/types/store/projection.d.ts": "af912e7389fe37d5bab40a6ad743f672ac93087ceba63ea5ee80ed421f55cfe7",
+    "dist/types/store/store.d.ts": "8998554e6c36e8cc9965a0798dde65e5a2714ad8ba4271db529188222d39b163",
+    "dist/types/store/storePath.d.ts": "8595400e15c42f43c5c0cb9f0dc72269cd18bcf42e1b420468545d947652793f",
+    "dist/types/store/target.d.ts": "2d3ea43d2d985a6bc0e7198dd323bf72f26889c25b9aad1626661327336ea7dd",
+    "dist/types/store/types.d.ts": "c2e73d17728b651d61b28e426b5a898f91c56f5e95c4a427dc0aa7777df1d68c",
+    "dist/types/store/utils.d.ts": "34c8295e1052f61852502c69a33e4260750b070497fb481424211df229dfa0f2",
+    "package.json": "a4b18bdda0a8ff3231b3b33726eeb698cc839ecc7a091d28644f3439ae6b8787"
+   }
+  },
+  {
+   "name": "@solidjs/web",
+   "version": "2.0.0-rc.17",
+   "integrity": "sha512-cJ+8GzVYWBi+/glbgWt6cVgRTxvVa4TG+rShaEuQnPHjUZQTsHh8hvR89KVdFB+5XQJnAajWDNpxz7LkD4MkDg==",
+   "files": {
+    "dist/web.dev.js": "837328f0c09b595d521073aaeac234fec79b21a45d20d32b9d40b0b1aefd98f5",
+    "dist/web.js": "f398c23facad2a742624ebb572b1947b8734da313ede3b15639b35c8bd7f884d",
+    "package.json": "841853934a3880e15fbd72365a242dd7ce144be0fdc926a80cf0a9bd362c4dfc",
+    "types/client.d.ts": "ca67cbf0d2956213d343471ba246b1d1488146a6588225f30c5e476574eb19bb",
+    "types/constants.d.ts": "916f6065adb3dd9609961ab26e978a669e640c4937b638cee4ad0af59c4aa347",
+    "types/cookies.d.ts": "aaaad8abe76b4660eaa8466d6bb1dcf5a6fe5c90418e54da61259dcd601d19ae",
+    "types/index.d.ts": "8041186ce5131e525333ff4ef84bdaac1ee5032f71508f8568a31e5a79d391ae",
+    "types/jsx-properties.d.ts": "601a0c4aee4b0f3a1583970f55a045694e561d745adde7b31222437411106f25",
+    "types/jsx.d.ts": "aec3d65b5ef4c887a7bb73fe1c2ab194bc0505a7a73c4f74552119458289ea88",
+    "types/observe.d.ts": "a9ae1c2853581991c151bcab9ef0759d3a1ee433611ab87818c88983c4b29295",
+    "types/render.d.ts": "3b59e8ec8f913ae433801ab12ae9d25a7e8758493188a87fbbb187350fa763f0",
+    "types/response.d.ts": "15cee168c8949765785d17f02458463789bfe9a761b01f8d15bfd90c3c113ec1",
+    "types/serializer-decode.d.ts": "f71ea7204500f5c1224ebcdba49b305a141c5b31b04882c3486c9d6778c7b5b3",
+    "types/server-functions/registry.d.ts": "89c48704d8519e564a29bc410d2c2f85bb24f3c8aa8a7987213826bfca9752ba",
+    "types/server-functions/shared.d.ts": "461aa39b0be4f370ca4e5c4faa4893ff13c291d89f64f27053e408fa13f67f37",
+    "types/server-mock.d.ts": "3f9c01e369e5f43224cee133859d14e049abeb40735a7952e503948f310b7788",
+    "types/server.d.ts": "3703005c762bfce8556596e69a6ce9e4e8de7dbd13f15f3e51b263026aa61a4d",
+    "types/trace.d.ts": "76f6b18d1122fddf68a95dfc01de5b2edb66c6c311a3942e7ccf7e4a0e0fa79e"
+   }
+  },
+  {
+   "name": "csstype",
+   "version": "3.2.3",
+   "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+   "files": {
+    "index.d.ts": "ac51dd7d31333793807a6abaa5ae168512b6131bd41d9c5b98477fc3b7800f9f",
+    "package.json": "c818b74a9bc1556488b7ec2a65399224738f6619228f9a6491c5c02ca91f849e"
+   }
+  },
+  {
+   "name": "seroval",
+   "version": "1.6.7",
+   "integrity": "sha512-AeDcLh0yO2SFm9W71essgnSzLV9DI8ZH0x0knXn2DMnUZj728mpLbxjlbB6IqKCmqh8JA3cEqRyGoNkt584JcQ==",
+   "files": {
+    "dist/index.d.ts": "0e711d1e93154172802aae448613148d75a166ea58428bbcad805b49a52a5b8f",
+    "package.json": "6b7b51a1fba413858e11a8a9fdf7974bfca210915ba667294b0736ed8023064d"
+   }
+  },
+  {
+   "name": "seroval-plugins",
+   "version": "1.6.7",
+   "integrity": "sha512-4Nk35ttD3DTDJW4hgw5StsVAPeU6qnDFnULAouw6tQ7oLTV/ICXrWpsXo2EE52eSP2joUMazbVf52mFEcADqRw==",
+   "files": {
+    "package.json": "496521ed07b5b2fd0ca29a663f3d890249e15b7f5cd7a22a010a5b075405d2a8"
+   }
+  },
+  {
+   "name": "@solid-primitives/utils",
+   "version": "7.0.0-next.4",
+   "integrity": "sha512-9KyRe6eu4hdhxxGOyS9vAa2s/T8FZ1sMJtk3UuV3W1Gi0f4if+o1n7S1M6l/MMjn8+m3+I3VB1KzFa9gNDkDsg==",
+   "files": {
+    "dist/immutable/array.js": "1da7f949ed2069b00c64ede51ece184a091dce8785d837ddaa9f78198889970b",
+    "dist/immutable/copy.js": "714234b170a7f36c75a35f2bbd7e25057fee9eadae9fc0264868a081a01b26a7",
+    "dist/immutable/index.js": "17770f2b1915ea7a883edffeddf79ebd7ab7fefe316cfa56634eeeea79b06d97",
+    "dist/immutable/number.js": "370e216699255dd9fba3c4e215afe5335b389ac608b44b03ca9acab697213355",
+    "dist/immutable/object.js": "a2dbceb3d3b5a090375c1120edbb8e32797ed71a49a86bacd55daa69cdbea71f",
+    "dist/immutable/update.js": "d6eb0f2bc58b3ce9fb655fd1a0a023195424adbc0f5e597a2531e6616b91618c",
+    "dist/index.d.ts": "c464f6ae1e837bbfc3103b2c59cc920de983e147e676329893308bc962165193",
+    "dist/index.js": "59dd297c1ff4a90620cd3f27aa9b0a650404e8178513d6501af5ec1c3f8370f8",
+    "dist/types.d.ts": "0fd2aeeaa012dac436b3bc4e0b3248667094de1f947a6f79fcadc9ff0640bf53",
+    "package.json": "f72b16817e60816623cea5d22869fd641ec3bdb07728bb4b0cc4a511ecc8af0b"
+   }
+  },
+  {
+   "name": "@solidjs/router",
+   "version": "2.0.0-next.41",
+   "integrity": "sha512-wCnhq37p4dpTYuy2Zz8nlf9Si/t4cMXUiMY0r7MxzHSH2c4jUiSrA8LkSdif6swwAIT/dOP7Pbv4hM1qY5ZOuA==",
+   "files": {
+    "dist/claims.js": "6ded4e42d962af0d891a8e09d30c5e133692c52c7563312f8307d9eba915f5e9",
+    "dist/data/action.d.ts": "063826f2ac677fec148de3c58cc39c31e34e65ae3cf5d44bd287b3559d8a2bf7",
+    "dist/data/action.js": "4150afdd4f9e3b8c47a23ed7042e4ba682e9d9fbd04ee53a7f728bd120d9105b",
+    "dist/data/deprecated.d.ts": "48226f9d3d48c5392e984c07e8d2d4de65837e056e99c4ad3a3e71db43bfb1bf",
+    "dist/data/deprecated.js": "1b41a3c14fe4dedf4e673fa946c5550d703295371511793d4a8b487c8bd7619f",
+    "dist/data/events.js": "f6343dedd1e057d30ce3a6e29cb8f4a4e35ecec861f271da94881e7956ee1fa1",
+    "dist/data/index.d.ts": "aac01ceae6b583604ff44c0e423614b004c4f7be55e28952e3b23516c0388a73",
+    "dist/data/index.js": "505975c1c079c9e41b8b06e3ea81a2e41685309591490d7d5dce31a8f6b5e633",
+    "dist/data/liveQuery.d.ts": "797e06d98ad8010a7c536e7231389a2a2569f090fa7a0040cc36d20f788648b9",
+    "dist/data/liveQuery.js": "3634ab65ef05d0ad65b183198f71eb08a7939bb856dc28cf320e183004c6372d",
+    "dist/data/query.d.ts": "840fca5c0839f219ca00634dbe1c6cf1c52ae2ffa6ca82d957769fc813a933b4",
+    "dist/data/query.js": "b3dade1f0335bc4e656b445a51b7cdce77e0b68567c7279fa5728ee72a74ab32",
+    "dist/data/serverForms.js": "cd104d273b6e5c5b5a325f30d2bd82953913fe7bc5eb173dd2e6809e11ec12ef",
+    "dist/index.d.ts": "c2e5f61413319f6e15fad9f348c8398ecd0c5698a708cf392b465e0a5dbb1b7d",
+    "dist/index.jsx": "a0045a4b2f758ed8a62d1c4453df1df6da44cf53d1770c075026dad60bbdfbda",
+    "dist/lifecycle.d.ts": "24821936c3906ef1b4c5602b2c79d19d28ca82840b209c2b48344c2bfb4ed891",
+    "dist/lifecycle.js": "16bea0e6e385e3258f26c89d2da5857853c54babd634680d95bcf570ee49bfeb",
+    "dist/paths.d.ts": "f3bbf422041fbc6ae3f8283449f7afa384dbd04cb9ebb54bf5d95d71afb14d55",
+    "dist/paths.js": "5b9790fc85298d5f0f2fbe417bfd2342dbf6c1f538e8bc9a28f5fd912b6d2ac9",
+    "dist/pending.d.ts": "6cc49ae7aa1c8712897eb5a585b88776d79ea99e4d4e1fb139ac38970a826de1",
+    "dist/pending.js": "0ee128003c42558372e700383053a189af2001d88bfc96c3e1a8adace2af5b6f",
+    "dist/preload.d.ts": "53cef340bc57ae2a89988286af2701bcf1b4568a91e163b2fc651af945266a8e",
+    "dist/preload.js": "9a55dd96832ed6600983689ef3023a8edea0f90d772eb63ae1a63fbbc89640b9",
+    "dist/preloadRoute.d.ts": "d0c45fd0535c9ef13d49c40603518a156a1604346119b5fe819225b49366b3d3",
+    "dist/preloadRoute.js": "62836fa85ee96fd8e9550a5c44c69bae2cdffc73da3c7699ec3569537c01b5f4",
+    "dist/routers/components.jsx": "ab4dc02bfaa85d7609e3b40e9948590e87b1b7def853f172aff1faa83fd3c91c",
+    "dist/routers/factory.d.ts": "e5ecc5c88da55fed62f3294f6feb4bf94035018fce05e46769bd143295f3fcc7",
+    "dist/routers/factory.jsx": "1593ab373ccdabc33154b503994d593b4ff8ad9cb1c20b95836696a385a7fe58",
+    "dist/routers/history.d.ts": "df3b62f2ecdbfbbd27c70e6cc99c380cf4e39dfee71aed7ad435b6e21057d95f",
+    "dist/routers/history.js": "4899ee78946fa014e1a5237ec664f07b0b55aab6b44958615da848aa3596a2d0",
+    "dist/routers/index.d.ts": "ebf9185af7a0c6bee4b751cc88b42c9bde7769ea85d0fc7541935069ad4ae1d2",
+    "dist/routers/index.js": "c571a094182e9b1151e7916fd013de39152a3d0ee33b40a5fb9f1f3c1cb87040",
+    "dist/routers/scrollRestoration.js": "f804fa9eeb957f3e6308f8232987cd1dd6fc29a09c38e06da28b3dfc8400af5a",
+    "dist/routing.d.ts": "581ca68d003784152a6faa1abcb66cce8390933850c73e58ecb3a9835398ccbd",
+    "dist/routing.js": "a07c96fa09302cb79b9a78814e06c38bb727daf16b8a9b10caca7e536c6f2042",
+    "dist/serverRouteComponent.d.ts": "c2a0d14b25e4b076e625a109c5756273d3ba2383f03b7b3a968df8181f27bd1d",
+    "dist/serverRouteComponent.js": "8bc5b2701aeb8ec6b39e2fdef7ee5f5c18a85fb29de60a6c3265ed7f44da87c4",
+    "dist/serverRouteShared.js": "b446197fc5787cf3557f527c9d2b8d100c5a715f51815a1efb9d623b4641693e",
+    "dist/types.d.ts": "2708eb033a108cb37e4d28431805732319b5efd9b8422bdda3e7ff15c045c568",
+    "dist/utils.d.ts": "cb85374cbe361c672b3fd2951d6a69e1c55e93ea92d339ddf6ac56cd0e8b08a7",
+    "dist/utils.js": "7ae7026628ba1776e295d0562064cac37dd58620397b787dafab47d32f919db0",
+    "package.json": "23f38996a65bc79b6990652e76c01fc9f6f73ed780e793534a61a25b925d5d1e"
+   }
+  },
+  {
+   "name": "vite-plugin-solid",
+   "version": "3.0.0-next.27",
+   "integrity": "sha512-bDzjIIplkSDH73BiGP9pbPR3ZnjeUA18SAYugLhqDCy4u0bl3qdrETstxrXuo2vHXLB0VD9rvOr0iesZBBul4Q==",
+   "files": {
+    "package.json": "ade63204a86072fde517f08efac52babb53ad26fdc6d43eda8a37f77c8638297"
+   }
+  },
+  {
+   "name": "vitest",
+   "version": "5.0.5",
+   "integrity": "sha512-cPODOMF8YnkiiYtDdHo6n4wWmBrOBBbOIYH2d33M4l3CdNn72h+qMmO6uXffUN6A5AZFXNND/d+krS9mgkXRfg==",
+   "files": {
+    "dist/chunks/browser.d.FGQ9_rK6.d.ts": "022c64ffd21008457427d9ba910c81a653775ad7c36d890f7a4b75151034a959",
+    "dist/chunks/config.d.QBNYCgFU.d.ts": "cdcced99c921c651feb245ac08300520a49e5c8aba0d980d8b7ad61312db735b",
+    "dist/chunks/evaluatedModules.d.BxJ5omdx.d.ts": "b413fbc6658fe2774f8bf9a15cf4c53e586fc38a2d5256b3b9647da242c14389",
+    "dist/chunks/rpc.d.Cft1biqy.d.ts": "dc1ba9578b49d66ae26927b6ce62e3796e295f87d78d092645afe416a1382818",
+    "dist/chunks/task-utils.d.PFh2BV6Q.d.ts": "0bb393b3ff2115443530b3b97f9711074050888968cb2dfc3840664f2791401b",
+    "dist/chunks/worker.d.BH-r1bPu.d.ts": "b2c3155317bd1541fd548729c1b1226155fc9cbf493cab2ce69dfaef77bc6ce6",
+    "dist/index.d.ts": "e7f7f7f328f7cc0a9ce1e16d72180967d0f09bfe79c10401b0e9ddfb9b84f3d4",
+    "package.json": "d00333f3a13ed44fedc77184c8675bae45246534f06684d94cff5e4f8a9f7c10"
+   }
+  }
+ ]
+}

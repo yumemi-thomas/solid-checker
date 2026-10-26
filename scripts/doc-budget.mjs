@@ -43,7 +43,8 @@ export const FILE_BUDGETS = {
   // And for ADR 0401: 154_913 bytes against 153_000: 156_000.
   // And for ADRs 0386-0387's suppression comments: 156_435 bytes against 156_000: 157_000.
   // And for ADRs 0402-0403 (workspace program boundary, census with no entry): 160_120 bytes against 157_000: 161_000.
-  "docs/decisions.md": 161_000,
+  // And for ADR 0404 (the reproduction set and the pre-release run): 162_517 bytes against 161_000: 163_500.
+  "docs/decisions.md": 163_500,
 };
 
 export const GROUP_BUDGETS = [
@@ -54,7 +55,8 @@ export const GROUP_BUDGETS = [
   // And for ADRs 0398-0401 and their rule pages: 650_087 bytes against 650_000: 656_000.
   // And for ADRs 0386-0387 (suppression section, SC9016's page): 658_058 bytes against 656_000: 660_000.
   // And for ADRs 0402-0403 (decisions, open work, fixture READMEs): 662_349 bytes against 660_000: 664_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 664_000 },
+  // And for ADR 0404 (the reproduction set and the pre-release run): 665_446 bytes against 664_000: 667_000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 667_000 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),

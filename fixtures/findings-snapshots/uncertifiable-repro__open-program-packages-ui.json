@@ -1,0 +1,65 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/select.tsx",
+      "start": 516,
+      "end": 526,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/select.tsx",
+      "start": 546,
+      "end": 555,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/select.tsx",
+      "start": 626,
+      "end": 718,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/select.tsx",
+      "start": 916,
+      "end": 930,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/select.tsx",
+      "start": 959,
+      "end": 975,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/select.tsx",
+      "start": 968,
+      "end": 974,
+      "fixes": 0
+    }
+  ]
+}
