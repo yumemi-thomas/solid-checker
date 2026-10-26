@@ -10127,6 +10127,554 @@
    "verifiedWeight": 0
   },
   {
+   "id": "read-in-component-body",
+   "kind": "violation",
+   "project": "sc1001",
+   "files": [
+    "src/read-in-component-body.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/math-examples/rapier-2d-physics-engine/index.tsx",
+    "line": 40,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 20,
+   "status": "violation"
+  },
+  {
+   "id": "read-in-effect-apply",
+   "kind": "violation",
+   "project": "sc1001",
+   "files": [
+    "src/read-in-effect-apply.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "probus-hk",
+    "path": "src/routes/Plan.tsx",
+    "line": 528,
+    "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
+   },
+   "weight": 23,
+   "status": "violation"
+  },
+  {
+   "id": "read-in-effect-apply-helper",
+   "kind": "violation",
+   "project": "sc1001",
+   "files": [
+    "src/read-in-effect-apply-helper.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "probus-hk",
+    "path": "src/routes/Plan.tsx",
+    "line": 526,
+    "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
+   },
+   "weight": 15,
+   "status": "violation"
+  },
+  {
+   "id": "read-in-show-child",
+   "kind": "violation",
+   "project": "sc1001",
+   "files": [
+    "src/read-in-show-child.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/screens/access.tsx",
+    "line": 233,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 18,
+   "status": "violation"
+  },
+  {
+   "id": "read-in-for-map",
+   "kind": "violation",
+   "project": "sc1001",
+   "files": [
+    "src/read-in-for-map.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/screens/graph.tsx",
+    "line": 269,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 5,
+   "status": "violation"
+  },
+  {
+   "id": "read-in-handler-bind",
+   "kind": "violation",
+   "project": "sc1001",
+   "files": [
+    "src/read-in-handler-bind.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/workspace/components/InlineDirectoryPicker/DirectoryResult.tsx",
+    "line": 31,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 3,
+   "status": "violation"
+  },
+  {
+   "id": "prop-as-signal-initial",
+   "kind": "violation",
+   "project": "sc1001",
+   "files": [
+    "src/prop-as-signal-initial.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "direct-read",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/browser-atlas/src/App.tsx",
+    "line": 2802,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 5,
+   "status": "violation"
+  },
+  {
+   "id": "primitive-in-ref-callback",
+   "kind": "violation",
+   "project": "sc4001",
+   "files": [
+    "src/primitive-in-ref-callback.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC4001",
+     "family": "unowned-primitive",
+     "context": ""
+    },
+    {
+     "rule": "SC6001",
+     "family": "reactive primitive createEffect registers a computation in a directive applicati",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "probus-hk",
+    "path": "src/routes/Search.tsx",
+    "line": 586,
+    "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
+   },
+   "weight": 6,
+   "status": "violation"
+  },
+  {
+   "id": "cleanup-in-effect-apply",
+   "kind": "violation",
+   "project": "sc4001",
+   "files": [
+    "src/cleanup-in-effect-apply.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC4001",
+     "family": "unowned-primitive",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "error-menu-web",
+    "path": "web/src/components/ChangeList.tsx",
+    "line": 97,
+    "commit": "992d406ed4a9eca3a57973ec7d13ec4b0ccbd00e"
+   },
+   "weight": 2,
+   "status": "violation"
+  },
+  {
+   "id": "cleanup-after-await",
+   "kind": "violation",
+   "project": "sc4001",
+   "files": [
+    "src/cleanup-after-await.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC4001",
+     "family": "unowned-primitive",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/webgpu-examples/rotating-cube-2/rotating-cube-2.tsx",
+    "line": 303,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 1,
+   "status": "violation"
+  },
+  {
+   "id": "factory-at-module-scope",
+   "kind": "violation",
+   "project": "sc4001",
+   "files": [
+    "src/factory-at-module-scope.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC4001",
+     "family": "unowned-primitive",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-messages/src/session.ts",
+    "line": 749,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 1,
+   "status": "violation"
+  },
+  {
+   "id": "cleanup-in-on-settled",
+   "kind": "violation",
+   "project": "other-rules",
+   "files": [
+    "src/cleanup-in-on-settled.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC3001",
+     "family": "onCleanup is called inside onSettled",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "viviana-ui-web",
+    "path": "apps/web/src/components/Header.tsx",
+    "line": 26,
+    "commit": "b005c00acb61c07b60612430753d3a2400182bbd"
+   },
+   "weight": 2,
+   "status": "violation"
+  },
+  {
+   "id": "return-branches-on-prop",
+   "kind": "violation",
+   "project": "other-rules",
+   "files": [
+    "src/return-branches-on-prop.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC1004",
+     "family": "conditional-return",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/spector/solid/spector-result-view.tsx",
+    "line": 796,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 2,
+   "status": "violation"
+  },
+  {
+   "id": "array-map-in-jsx",
+   "kind": "violation",
+   "project": "other-rules",
+   "files": [
+    "src/array-map-in-jsx.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC8014",
+     "family": "Use Solid's _ component for efficiently rendering lists. Array#map causes DOM el",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/piecs-examles/performance/performance.tsx",
+    "line": 32,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 2,
+   "status": "violation"
+  },
+  {
+   "id": "and-in-jsx",
+   "kind": "violation",
+   "project": "other-rules",
+   "files": [
+    "src/and-in-jsx.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC8015",
+     "family": "Use Solid's _ component for conditionally showing content.",
+     "context": ""
+    },
+    {
+     "rule": "SC8015",
+     "family": "Use Solid's _ component for conditionally showing content with a fallback.",
+     "context": ""
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/conversation/components/ChatMessageList/UserMessage.tsx",
+    "line": 22,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 25,
+   "status": "violation"
+  },
+  {
+   "id": "attr-namespace-data",
+   "kind": "violation",
+   "project": "other-rules",
+   "files": [
+    "src/attr-namespace-data.tsx"
+   ],
+   "expect": [
+    {
+     "rule": "SC9015",
+     "family": "compiler-refusal",
+     "context": "compiler-refusal"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/math-examples/camera-projection-svg/cube.tsx",
+    "line": 50,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 2,
+   "status": "violation"
+  },
+  {
+   "id": "clean-read-in-jsx",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-read-in-jsx.tsx"
+   ],
+   "expect": [],
+   "source": {
+    "app": "compass-ui",
+    "path": "apps/ui/src/components/BacklogView.tsx",
+    "line": 65,
+    "commit": "2e4e7b875e371e45c5ffa4ee39715d57cf2049a5"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-read-in-effect-compute",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-read-in-effect-compute.tsx"
+   ],
+   "expect": [],
+   "source": {
+    "app": "helge-dev",
+    "path": "src/components/NavBar.tsx",
+    "line": 15,
+    "commit": "81f6cf1657563e775744119c785cffc265d6dea2"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-keyed-show-child",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-keyed-show-child.tsx"
+   ],
+   "expect": [],
+   "source": {
+    "app": "compass-ui",
+    "path": "apps/ui/src/components/CoachTip.tsx",
+    "line": 58,
+    "commit": "2e4e7b875e371e45c5ffa4ee39715d57cf2049a5"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-for-item-in-jsx",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-for-item-in-jsx.tsx"
+   ],
+   "expect": [],
+   "source": {
+    "app": "probus-hk",
+    "path": "src/routes/Notices.tsx",
+    "line": 153,
+    "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-handler-write",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-handler-write.tsx"
+   ],
+   "expect": [],
+   "source": {
+    "app": "jar-hell-web",
+    "path": "web/src/components/package/BadgesDialog.tsx",
+    "line": 70,
+    "commit": "5e0d76c55e4b23909bcdcc8b6cbcf60b6cd7e06f"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-untracked-initial",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-untracked-initial.tsx"
+   ],
+   "expect": [],
+   "source": {
+    "app": "spookysoftware-www",
+    "path": "domains/www/src/terminal.tsx",
+    "line": 20,
+    "commit": "64c67b0c539c96624adcfa3f8a1a69d72e6e1937"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-primitive-in-component-body",
+   "kind": "clean",
+   "project": "sc4001",
+   "files": [
+    "src/clean-primitive-in-component-body.tsx"
+   ],
+   "expect": [],
+   "source": {
+    "app": "every-deck-of-cards",
+    "path": "src/Layout.tsx",
+    "line": 12,
+    "commit": "27e760dc6b155a98b24d83b4d7d75eadb5dcba86"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-effect-returns-cleanup",
+   "kind": "clean",
+   "project": "sc4001",
+   "files": [
+    "src/clean-effect-returns-cleanup.tsx"
+   ],
+   "expect": [],
+   "source": {
+    "app": "helge-dev",
+    "path": "src/components/NavBar.tsx",
+    "line": 25,
+    "commit": "81f6cf1657563e775744119c785cffc265d6dea2"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-settled-returns-cleanup",
+   "kind": "clean",
+   "project": "other-rules",
+   "files": [
+    "src/clean-settled-returns-cleanup.tsx"
+   ],
+   "expect": [],
+   "source": {
+    "app": "spookysoftware-www",
+    "path": "domains/www/src/terminal.tsx",
+    "line": 23,
+    "commit": "64c67b0c539c96624adcfa3f8a1a69d72e6e1937"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-show-fallback",
+   "kind": "clean",
+   "project": "other-rules",
+   "files": [
+    "src/clean-show-fallback.tsx"
+   ],
+   "expect": [],
+   "source": {
+    "app": "compass-ui",
+    "path": "apps/ui/src/components/MessageStream.tsx",
+    "line": 54,
+    "commit": "2e4e7b875e371e45c5ffa4ee39715d57cf2049a5"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
    "id": "write-factory-assigned",
    "kind": "uncertifiable",
    "project": "sc2001",

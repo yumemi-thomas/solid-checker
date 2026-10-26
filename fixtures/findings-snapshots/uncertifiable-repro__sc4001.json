@@ -12,6 +12,26 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/cleanup-after-await.tsx",
+      "start": 355,
+      "end": 364,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/cleanup-in-effect-apply.tsx",
+      "start": 480,
+      "end": 489,
+      "fixes": 0
+    },
+    {
       "rule": "compiler-refused-source",
       "code": "SC9015",
       "kind": "violation",
@@ -99,6 +119,16 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/exported-lazy-route.tsx",
       "start": 456,
       "end": 475,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/factory-at-module-scope.tsx",
+      "start": 312,
+      "end": 321,
       "fixes": 0
     },
     {
@@ -289,6 +319,36 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-raf.tsx",
       "start": 625,
       "end": 664,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/primitive-in-ref-callback.tsx",
+      "start": 449,
+      "end": 461,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/primitive-in-ref-callback.tsx",
+      "start": 449,
+      "end": 461,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/primitive-in-ref-callback.tsx",
+      "start": 624,
+      "end": 633,
       "fixes": 0
     },
     {

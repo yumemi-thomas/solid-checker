@@ -1,0 +1,85 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/other-rules/src/and-in-jsx.tsx",
+      "start": 442,
+      "end": 467,
+      "fixes": 0
+    },
+    {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/other-rules/src/and-in-jsx.tsx",
+      "start": 476,
+      "end": 519,
+      "fixes": 1
+    },
+    {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/other-rules/src/and-in-jsx.tsx",
+      "start": 528,
+      "end": 564,
+      "fixes": 0
+    },
+    {
+      "rule": "prefer-for",
+      "code": "SC8014",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/other-rules/src/array-map-in-jsx.tsx",
+      "start": 392,
+      "end": 460,
+      "fixes": 1
+    },
+    {
+      "rule": "compiler-refused-source",
+      "code": "SC9015",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/other-rules/src/attr-namespace-data.tsx",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/other-rules/src/attr-namespace-data.tsx",
+      "start": 293,
+      "end": 296,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/other-rules/src/cleanup-in-on-settled.tsx",
+      "start": 479,
+      "end": 488,
+      "fixes": 1
+    },
+    {
+      "rule": "components-return-once",
+      "code": "SC1004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/other-rules/src/return-branches-on-prop.tsx",
+      "start": 351,
+      "end": 386,
+      "fixes": 0
+    }
+  ]
+}

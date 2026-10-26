@@ -23,8 +23,12 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const SET = "fixtures/uncertifiable-repro";
 
 export const BUDGETS = {
-  /** Projects (directories holding a tsconfig.json). */
-  projects: 8,
+  /**
+   * Projects (directories holding a tsconfig.json). Raised from 8 to 9 for
+   * `other-rules`, the one shared project of the violation and clean cases of
+   * rules with no project of their own (SC1004, SC3001, SC8014, SC8015, SC9015).
+   */
+  projects: 9,
   /** Source files of one case: one, or two when the cause is cross-file. */
   filesPerCase: 2,
   /** Lines of one source file. */
