@@ -3,9 +3,9 @@
  "note": "The reproduction set's one table (ADR 0404). A case is one cause or shape of a kind: uncertifiable (it stands for `causes`, keys of scripts/uncertifiable-causes.mjs, and `weight` is how many results of the rc.17 corpus sweep it stands for), violation or clean (from the pre-release run). `expect` is what its files produce today; `source` is the corpus site it was reduced from. `notReproduced` is the long tail of the same sweep.",
  "corpus": {
   "manifest": "scripts/corpus/rc17-manifest.json",
-  "sweep": "release checker at 11f04f5fe, browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui)",
-  "results": 6760,
-  "reproduced": 6583
+  "sweep": "release checker at f405f2cff (the spread fix), browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui)",
+  "results": 6717,
+  "reproduced": 6542
  },
  "cases": [
   {
@@ -33,7 +33,7 @@
     "line": 80,
     "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
    },
-   "weight": 307,
+   "weight": 309,
    "status": "uncertifiable"
   },
   {
@@ -397,7 +397,7 @@
     "line": 205,
     "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
    },
-   "weight": 693,
+   "weight": 692,
    "status": "uncertifiable"
   },
   {
@@ -436,7 +436,7 @@
     "line": 72,
     "commit": "3064fed238a043da90041f8eb86b357e253330bf"
    },
-   "weight": 465,
+   "weight": 462,
    "status": "uncertifiable"
   },
   {
@@ -535,7 +535,7 @@
     "line": 122,
     "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
    },
-   "weight": 238,
+   "weight": 237,
    "status": "uncertifiable"
   },
   {
@@ -644,7 +644,7 @@
     "line": 101,
     "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
    },
-   "weight": 69,
+   "weight": 39,
    "status": "uncertifiable"
   },
   {
@@ -733,7 +733,7 @@
     "line": 87,
     "commit": "f24e272713513d7721133159a53ea960c756df13"
    },
-   "weight": 53,
+   "weight": 51,
    "status": "uncertifiable"
   },
   {
@@ -2438,7 +2438,7 @@
     "line": 187,
     "commit": "f3340174fb2daba2eba220640731844b8a33d232"
    },
-   "weight": 134,
+   "weight": 133,
    "status": "uncertifiable"
   },
   {
@@ -2954,7 +2954,7 @@
     "line": 211,
     "commit": "3064fed238a043da90041f8eb86b357e253330bf"
    },
-   "weight": 2,
+   "weight": 4,
    "status": "uncertifiable"
   },
   {
@@ -3069,7 +3069,7 @@
     "line": 50,
     "commit": "f24e272713513d7721133159a53ea960c756df13"
    },
-   "weight": 76,
+   "weight": 75,
    "status": "uncertifiable"
   },
   {
@@ -3512,7 +3512,7 @@
     "line": 455,
     "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
    },
-   "weight": 16,
+   "weight": 10,
    "status": "uncertifiable"
   },
   {

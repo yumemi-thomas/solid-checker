@@ -316,7 +316,7 @@ function objectFate(project, object) {
 }
 
 /** Whether `site` runs after a possible suspension of `fn`. */
-function afterSuspension(fn, site) {
+export function afterSuspension(fn, site) {
   if (!fn || !hasModifier(fn, ts.SyntaxKind.AsyncKeyword)) return false;
   let found = false;
   const visit = (node) => {
@@ -326,6 +326,29 @@ function afterSuspension(fn, site) {
     ts.forEachChild(node, visit);
   };
   visit(fn.body ?? fn);
+  if (found) return true;
+  // A loop that may suspend anywhere in its body has suspended before the
+  // site's second pass, even when the await is written after the site (the
+  // back edge). A for-initializer and a for-of/in expression run once.
+  for (let child = site, node = site.parent; node && node !== fn; child = node, node = node.parent) {
+    if (isFunction(node)) return false;
+    if (!ts.isIterationStatement(node, false) || !suspends(node)) continue;
+    const once = ts.isForStatement(node) ? node.initializer : ts.isForInStatement(node) || ts.isForOfStatement(node) ? node.expression : undefined;
+    if (child !== once) return true;
+  }
+  return false;
+}
+
+/** Whether `node` holds an await (or is a `for await`) outside nested functions. */
+function suspends(node) {
+  if (ts.isForOfStatement(node) && node.awaitModifier) return true;
+  let found = false;
+  const visit = (child) => {
+    if (found || isFunction(child)) return;
+    if (ts.isAwaitExpression(child) || (ts.isForOfStatement(child) && child.awaitModifier)) found = true;
+    else ts.forEachChild(child, visit);
+  };
+  ts.forEachChild(node, visit);
   return found;
 }
 
