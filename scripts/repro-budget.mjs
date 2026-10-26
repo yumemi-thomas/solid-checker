@@ -27,8 +27,11 @@ export const BUDGETS = {
    * Projects (directories holding a tsconfig.json). Raised from 8 to 9 for
    * `other-rules`, the one shared project of the violation and clean cases of
    * rules with no project of their own (SC1004, SC3001, SC8014, SC8015, SC9015).
+   * Raised from 9 to 10 for `veto-test-file`, the test-file kind of the dispatch
+   * veto (ADR 0356): each veto site kind needs its own project, since one
+   * unexcluded site holds every handler proof of its project (ADR 0446).
    */
-  projects: 9,
+  projects: 10,
   /** Source files of one case: one, or two when the cause is cross-file. */
   filesPerCase: 2,
   /** Lines of one source file. */

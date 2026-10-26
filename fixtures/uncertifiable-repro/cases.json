@@ -5,7 +5,7 @@
   "manifest": "scripts/corpus/rc17-manifest.json",
   "sweep": "release checker at 5d54b30ff (origin/main merged in; its findings, messages and labels equal those of f405f2cff, the spread fix), browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui); veto attribution from a veto-off sweep (ADR 0447)",
   "results": 6717,
-  "reproduced": 4814
+  "reproduced": 4831
  },
  "cases": [
   {
@@ -8428,6 +8428,92 @@
    "verifiedWeight": 47
   },
   {
+   "id": "veto-test-file",
+   "kind": "uncertifiable",
+   "project": "veto-test-file",
+   "files": [
+    "src/carousel.test.tsx",
+    "src/carousel.tsx"
+   ],
+   "causes": [
+    "SC1001/unplaced-read/dispatch-veto:test-file",
+    "SC2001/unplaced-write/dispatch-veto:test-file"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/dispatch-veto:test-file"
+    },
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/unplaced-read/dispatch-veto:test-file"
+    }
+   ],
+   "source": {
+    "app": "skyjtx-website",
+    "path": "apps/skyjt-website/src/components/Carousel/Carousel.tsx",
+    "line": 54,
+    "commit": "11dc4e0b0c72b6ce1e25bb53db203b52b99b9d11"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 17,
+   "sites": 17,
+   "verification": {
+    "samples": [
+     {
+      "app": "skyjtx-website",
+      "path": "apps/skyjt-website/src/components/Tabs/Tabs.tsx",
+      "line": 174,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "dispatch-veto:test-file",
+      "note": "onClick={() => ctx.setValue(props.value)} on an intrinsic button: a prop read in a direct intrinsic handler, the case's read-in-handler position. The about.test.tsx dispatch (createRoot inside it, :68) withholds the project's handler proofs and the veto-off sweep clears this result."
+     },
+     {
+      "app": "skyjtx-website",
+      "path": "apps/skyjt-website/src/components/NavigationBar/NavigationBar.tsx",
+      "line": 68,
+      "rule": "SC2001",
+      "verdict": "same",
+      "mechanism": "dispatch-veto:test-file",
+      "note": "onClick={() => setIsExpanded(false)} on an intrinsic div: a signal write directly in an intrinsic handler, the case's `Last` button. Cleared by the veto-off sweep."
+     },
+     {
+      "app": "skyjtx-website",
+      "path": "apps/skyjt-website/src/components/NavigationBar/NavigationBar.tsx",
+      "line": 30,
+      "rule": "SC2001",
+      "verdict": "same",
+      "mechanism": "dispatch-veto:test-file",
+      "note": "setIsSettingsOpen(true) in handleOpenSettings, handed as onOpenSettings to NavigationAction, whose intrinsic button calls props.onOpenSettings() (NavigationAction.tsx:19): the case's `reset` handed to Reset. Cleared by the veto-off sweep."
+     },
+     {
+      "app": "skyjtx-website",
+      "path": "apps/skyjt-website/src/components/Carousel/Carousel.tsx",
+      "line": 154,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "dispatch-veto:test-file",
+      "note": "onClick={() => goTo(currentPage() + 1)} on an intrinsic button: the case's own read in a handler. Cleared by the veto-off sweep."
+     },
+     {
+      "app": "skyjtx-website",
+      "path": "apps/skyjt-website/tests/components/AnimationIntegration.test.tsx",
+      "line": 20,
+      "rule": "SC2001",
+      "verdict": "same",
+      "mechanism": "dispatch-veto:test-file",
+      "note": "setIsOpen(!isOpen()) in onClick of an intrinsic button of a component defined in an `it` callback and rendered: a signal write directly in an intrinsic handler, as NavigationBar.tsx:68, here in a test file that dispatches nothing itself (the veto comes from about.test.tsx of the same project). Cleared by the veto-off sweep."
+     }
+    ]
+   },
+   "verifiedWeight": 17
+  },
+  {
    "id": "param-member-targets-diverge",
    "kind": "uncertifiable",
    "project": "sc9012",
@@ -14041,11 +14127,6 @@
    "why": "attributed elsewhere until the veto-off sweep showed the veto does not hold it; not yet reduced"
   },
   {
-   "cause": "SC2001/unplaced-write/dispatch-veto:test-file",
-   "weight": 11,
-   "why": "a ninth project: each veto site kind needs its own project, all eight are used, and the story kind (51 results) took the eighth"
-  },
-  {
    "cause": "SC9012/runtime-target-unselected/computed-call-target-unresolved/destructured",
    "weight": 11,
    "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
@@ -14339,11 +14420,6 @@
    "cause": "SC1001/open-program-boundary/unplaced-read/project-function-argument/callee-destructured-binding",
    "weight": 6,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC1001/unplaced-read/dispatch-veto:test-file",
-   "weight": 6,
-   "why": "a ninth project: each veto site kind needs its own project, all eight are used, and the story kind (51 results) took the eighth"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:component-prop",
