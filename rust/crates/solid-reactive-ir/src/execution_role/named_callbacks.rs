@@ -33,6 +33,8 @@ pub(super) struct NamedCallbackRole {
     /// compiler facts and the returned-adapter classifiers.
     pub(super) admitted: bool,
     pub(super) untracked_callback: bool,
+    /// The function is a map function: untracked in no window (ADR 0401).
+    pub(super) untracked_unwindowed: bool,
     pub(super) effect_apply: bool,
     /// Which effect primitive names this function at its apply position, for
     /// the read-context wording only.
@@ -300,7 +302,10 @@ pub(crate) fn named_callback_roles(
                 let function = index.functions[*candidate];
                 let entry = roles.entry(function);
                 entry.admitted |= admits;
-                entry.untracked_callback |= proven && untracked;
+                let unwindowed =
+                    dialect.callback_runs_untracked_without_window(primitive, argument_index);
+                entry.untracked_callback |= proven && untracked && !unwindowed;
+                entry.untracked_unwindowed |= proven && untracked && unwindowed;
                 entry.effect_apply |= effect_apply;
                 if effect_apply {
                     entry.effect_apply_primitive = entry.effect_apply_primitive.with(primitive);
@@ -436,6 +441,9 @@ pub(crate) fn named_callback_execution_role(
     }
     if role.untracked_callback {
         return Some(ExecutionRole::UntrackedCallback);
+    }
+    if role.untracked_unwindowed {
+        return Some(ExecutionRole::UntrackedUnwindowed);
     }
     if role.effect_apply {
         return Some(ExecutionRole::EffectApply);

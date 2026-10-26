@@ -78,6 +78,36 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   (`fireAndFlush(() => el.dispatchEvent(...))`) places the literal where the
   helper's call runs it; the same helper also called from a component body
   keeps the veto, and the literal's read is SC1001 there.
+- **A map function runs untracked, and may run unwarned.** The map function of
+  `mapArray(list, map)` and `repeat(count, map)` runs under `runWithOwner`, which
+  sets `tracking = false`, so a read written directly in it (`item => item + tag()`)
+  subscribes nothing and goes stale. Only a call that passes `name` opens a
+  strict-read window around it; unnamed, Solid raises nothing, and the finding's
+  hint says so instead of promising the dev warning (ADR 0401). JSX the map
+  function returns tracks its own expressions, `untrack(() => tag())` is the
+  explicit snapshot, and a function it only returns runs when its caller does.
+  The list or count thunk is a tracked computation. The index accessor of a
+  default `mapArray` is not a source here, so `index()` is not reported
+  (`fixtures/reactive-ir/mapper-untracked-reads`).
+- **A context provider reads `value` once.** In Solid 2 the context itself is the
+  provider (`<Ctx value={count()}>`); its function reads `value` under the
+  `<provider>` window and keeps a snapshot, so a child's `useContext` never sees
+  a later write. A read written directly in `value` is a violation when the tag
+  resolves to the exact `createContext` binding (also one imported from another
+  file); a function value is stored, not run, and stays unplaced. A prop in
+  `value` follows its component's callers like any prop read
+  (`fixtures/reactive-ir/provider-value-untracked`).
+- **`runWithOwner` clears tracking inside a computation.** It sets `tracking =
+  false` around its callback and keeps the window the call had, so in an effect
+  or memo compute, or a JSX expression, a read in the callback subscribes nothing
+  and raises nothing: reported, with the no-warning hint. In a component body it
+  reports as the body does. Not reported: a callback that only creates a
+  primitive (its own compute tracks), `untrack` around the call or the read, JSX
+  the callback writes, a call after an await the compute reaches (that is
+  [reactive-read-after-await](reactive-read-after-await.md)'s, also through an
+  immediately invoked function), and a call `tsc` rejects. `createRoot` is
+  `runWithOwner(createOwner(), …)` but was not probed in a computation, so it
+  keeps its role (`fixtures/reactive-ir/run-with-owner-in-computation`).
 - **A read an await may precede is uncertifiable.** Past an unconditional
   `await` the window is closed and the read is silent. Past a conditional
   (`if (c) await p`, `x ??= await p`, `f?.(await p)`, a labelled `break`), a

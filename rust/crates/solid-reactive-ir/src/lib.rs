@@ -167,6 +167,13 @@ pub enum ExecutionRole {
     TrackedJsx,
     DeferredCallback,
     UntrackedCallback,
+    /// Untracked like [`Self::UntrackedCallback`], but in no strict-read window:
+    /// the code runs with tracking off where the runtime raises no warning
+    /// unless an option of the call opens one (ADR 0401: a `mapArray` or
+    /// `repeat` map function, and a `runWithOwner` callback inside a tracked
+    /// computation). The read is as stale as any other, and the finding must not
+    /// promise a development warning.
+    UntrackedUnwindowed,
     EffectApply,
     EventCallback,
     DirectiveApply,
@@ -411,6 +418,7 @@ impl ExecutionRole {
             Self::ModuleInitialization
                 | Self::UntrackedRendering
                 | Self::UntrackedCallback
+                | Self::UntrackedUnwindowed
                 | Self::EffectApply
         )
     }
@@ -1697,7 +1705,9 @@ fn callback_execution_word(execution: ExecutionRole) -> Option<&'static str> {
         ExecutionRole::DiscardedRendering => None,
         ExecutionRole::ModuleInitialization => Some("inline"),
         ExecutionRole::TrackedJsx => Some("tracked"),
-        ExecutionRole::DeferredCallback | ExecutionRole::UntrackedCallback => Some("deferred"),
+        ExecutionRole::DeferredCallback
+        | ExecutionRole::UntrackedCallback
+        | ExecutionRole::UntrackedUnwindowed => Some("deferred"),
         ExecutionRole::EffectApply
         | ExecutionRole::EventCallback
         | ExecutionRole::DirectiveApply

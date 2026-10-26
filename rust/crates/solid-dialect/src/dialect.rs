@@ -1375,7 +1375,8 @@ pub trait Dialect: Sync {
             execution,
             owner: self.callback_owner_at(primitive, argument, argument_count),
             tracks_reads: execution == Some(Execution::Tracked)
-                && !self.runs_callback_deferred(primitive),
+                && !self.runs_callback_deferred(primitive)
+                && !self.callback_runs_untracked_without_window(primitive, argument),
             requires_return_invocation: self
                 .callback_requires_return_invocation(primitive, argument),
             stores_as_value: self.stores_function_argument_as_value(primitive, argument),
@@ -1456,6 +1457,33 @@ pub trait Dialect: Sync {
         argument_count: usize,
     ) -> bool {
         let _ = (primitive, argument, argument_count);
+        false
+    }
+
+    /// Whether the callback at `argument` runs with tracking off and opens no
+    /// strict-read window of its own (ADR 0401): a reactive read in it
+    /// subscribes nothing and, unless the call passes an option that opens one
+    /// ([`Self::callback_may_open_strict_window`]), raises nothing either, so
+    /// the stale value is not pointed out at run time.
+    fn callback_runs_untracked_without_window(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// Whether the callback at `argument` clears tracking but keeps the strict
+    /// -read window of the call that runs it (ADR 0401, `runWithOwner`). In a
+    /// tracked computation such a call has no window, so the callback's read
+    /// is untracked and unwarned.
+    fn callback_clears_tracking_in_calling_window(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        let _ = (primitive, argument);
         false
     }
 

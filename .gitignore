@@ -621,3 +621,9 @@ packages/wasm/owned/
 !fixtures/reactive-ir/projection-writes/node_modules/**
 !fixtures/reactive-ir/accessor-rebinding/node_modules/
 !fixtures/reactive-ir/accessor-rebinding/node_modules/**
+!fixtures/reactive-ir/mapper-untracked-reads/node_modules/
+!fixtures/reactive-ir/mapper-untracked-reads/node_modules/**
+!fixtures/reactive-ir/provider-value-untracked/node_modules/
+!fixtures/reactive-ir/provider-value-untracked/node_modules/**
+!fixtures/reactive-ir/run-with-owner-in-computation/node_modules/
+!fixtures/reactive-ir/run-with-owner-in-computation/node_modules/**

@@ -2,6 +2,105 @@
 
 use super::*;
 
+/// Whether the function written around `span` is, as a whole argument, the
+/// callback of a primitive slot that creates its own tracked computation (an
+/// effect or memo compute): `span` is in that computation's own body, not in a
+/// wrapper such as `untrack` between it and the computation.
+fn directly_in_tracked_compute(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+) -> bool {
+    let Some(function) = containing_ast_function(&file.ast, span) else {
+        return false;
+    };
+    file.ast
+        .arguments_containing(function.span)
+        .any(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                && crate::call_primitive_name_cached(
+                    lookup,
+                    file,
+                    call,
+                    entities,
+                    symbol_names,
+                    lookup.dialect,
+                )
+                .as_ref()
+                .and_then(PrimitiveName::primitive)
+                .is_some_and(|primitive| {
+                    callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                        && lookup
+                            .dialect
+                            .callback_semantics_at(primitive, index, call.arguments.len())
+                            .tracks_reads
+                })
+        })
+}
+
+/// Whether a compiler-tracked JSX region that lies inside `argument` holds
+/// `span`: the callback wrote JSX, and that JSX tracks its own expressions.
+fn tracked_region_within(file: &solid_facts::FileFacts, argument: Span, span: Span) -> bool {
+    file.compiler.tracked_regions.iter().any(|region| {
+        region.span.contains(span) && argument.contains(region.span) && region.span != argument
+    })
+}
+
+/// ADR 0401: the role of a callback that clears tracking where its call is in a
+/// tracked scope (`runWithOwner`): untracked with no window, unless the call
+/// itself runs after an await its async function reaches. Past one the code runs
+/// from a promise continuation, outside every tracking scope and strict-read
+/// window, which is `reactive-read-after-await`'s and not this rule's; where an
+/// await only may precede it, the role is unknown (ADR 0354).
+pub(crate) fn unwindowed_role_at_call(
+    file: &solid_facts::FileFacts,
+    call: Span,
+    lookup: &SemanticLookup<'_>,
+) -> ExecutionRole {
+    // A call `tsc` rejects is `tsc`'s subject (invariant 1): code inside its
+    // arguments is claimed by no one here. A one-argument `createEffect` is
+    // TS2554 and its compute would otherwise still read as tracked.
+    if file.ast.arguments_containing(call).any(|(enclosing, _)| {
+        lookup
+            .resolved_callee_call(file, enclosing.callee)
+            .is_some_and(|resolved| resolved.validity != typefacts::ResolvedCallValidity::Valid)
+    }) {
+        return ExecutionRole::Unreported;
+    }
+    // A function literal invoked in place runs where its call is written, so
+    // the awaits that precede that call count too (ADR 0340's reach).
+    let mut at = call;
+    let mut suspended = false;
+    for _ in 0..8 {
+        if follows_unconditional_await(file, at)
+            || follows_dominating_await(file, at)
+            || follows_try_head_await(file, at, lookup)
+        {
+            return ExecutionRole::Unreported;
+        }
+        suspended |= follows_any_suspension(file, at) || may_follow_own_await(file, at);
+        let Some(function) = containing_ast_function(&file.ast, at) else {
+            break;
+        };
+        let Some(invocation) = file
+            .ast
+            .calls
+            .iter()
+            .find(|invocation| file.ast.peel_ts_sugar_span(invocation.callee) == function.span)
+        else {
+            break;
+        };
+        at = invocation.span;
+    }
+    if suspended {
+        ExecutionRole::Unknown
+    } else {
+        ExecutionRole::UntrackedUnwindowed
+    }
+}
+
 pub(super) fn semantic_role_before_awaits(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -99,29 +198,45 @@ pub(super) fn semantic_role_before_awaits(
     // a write directly in a created root is `CreatedRoot`'s question, decided
     // before this function is asked.
     if !classifying.contains(&write_classification_marker())
-        && let Some(call) = file
-            .ast
-            .arguments_containing(span)
-            .find_map(|(call, index)| {
-                crate::call_primitive_name_cached(
-                    lookup,
-                    file,
-                    call,
-                    entities,
-                    symbol_names,
-                    dialect,
-                )
-                .as_ref()
-                .and_then(PrimitiveName::primitive)
-                .filter(|primitive| {
-                    dialect.callback_inherits_calling_window(*primitive, index)
-                        && callback_execution_at_call(file, call, *primitive, index, lookup)
-                            .is_some()
-                        && direct_callback_contains(file, call.arguments[index].span, span)
+        && let Some((call, clears_tracking)) =
+            file.ast
+                .arguments_containing(span)
+                .find_map(|(call, index)| {
+                    crate::call_primitive_name_cached(
+                        lookup,
+                        file,
+                        call,
+                        entities,
+                        symbol_names,
+                        dialect,
+                    )
+                    .as_ref()
+                    .and_then(PrimitiveName::primitive)
+                    .filter(|primitive| {
+                        dialect.callback_inherits_calling_window(*primitive, index)
+                            && callback_execution_at_call(file, call, *primitive, index, lookup)
+                                .is_some()
+                            && direct_callback_contains(file, call.arguments[index].span, span)
+                    })
+                    .map(|primitive| {
+                        (
+                            call,
+                            dialect
+                                .callback_clears_tracking_in_calling_window(primitive, index)
+                                // JSX the callback writes tracks its own
+                                // expressions, as it did before ADR 0401: the
+                                // silent deferred role, whatever the call is.
+                                .then(|| {
+                                    tracked_region_within(file, call.arguments[index].span, span)
+                                }),
+                        )
+                    })
                 })
-                .map(|_| call)
-            })
     {
+        if clears_tracking == Some(true) {
+            return ExecutionRole::DeferredCallback;
+        }
+        let clears_tracking = clears_tracking.is_some();
         let at_call = semantic_execution_role_within(
             file,
             call.callee,
@@ -131,9 +246,50 @@ pub(super) fn semantic_role_before_awaits(
             lookup,
             classifying,
         );
+        // The `allowed` deferred spans (an enclosing `createRoot` callback, an
+        // `untrack`) outrank a tracked computation written inside them, which
+        // answers `DeferredCallback` for the whole span. A clearing call
+        // directly in such a computation is in its tracked scope all the same:
+        // ask again without them, and keep the answer only if it is that
+        // computation. Any other answer there (a call directly in an `untrack`
+        // callback) stays the silent deferred role.
+        let at_call = if clears_tracking
+            && at_call == ExecutionRole::DeferredCallback
+            && !allowed.is_empty()
+            && directly_in_tracked_compute(file, call.callee, lookup, entities, symbol_names)
+            && semantic_execution_role_within(
+                file,
+                call.callee,
+                &[],
+                entities,
+                symbol_names,
+                lookup,
+                classifying,
+            ) == ExecutionRole::TrackedJsx
+        {
+            ExecutionRole::TrackedJsx
+        } else {
+            at_call
+        };
         return match at_call {
-            // The listener is cleared: the read subscribes nothing of the
-            // computation the call sits in, and no window is open there.
+            // The listener is cleared and no window is open there. For a call
+            // that clears tracking and leaves the window as it found it
+            // (`runWithOwner`, ADR 0401) the read is stale and unwarned: it is
+            // reported. For one the engine does not model that way
+            // (`createRoot`) it stays the silent deferred role.
+            ExecutionRole::TrackedJsx if clears_tracking => {
+                // A call `tsc` rejects is its subject, not this rule's.
+                if lookup
+                    .resolved_callee_call(file, call.callee)
+                    .is_some_and(|resolved| {
+                        resolved.validity == typefacts::ResolvedCallValidity::Valid
+                    })
+                {
+                    unwindowed_role_at_call(file, call.callee, lookup)
+                } else {
+                    ExecutionRole::Unreported
+                }
+            }
             ExecutionRole::TrackedJsx => ExecutionRole::DeferredCallback,
             // One-shot module evaluation is no component window, and the
             // role before this ADR was the silent deferred one.
@@ -149,9 +305,30 @@ pub(super) fn semantic_role_before_awaits(
                 callback_execution_at_call(file, call, primitive, index, lookup).is_some()
                     && dialect.reports_untracked_reads_at(primitive, index, call.arguments.len())
                     && direct_callback_contains(file, call.arguments[index].span, span)
+                    // JSX the map function returns tracks its own expressions.
+                    && !(dialect.callback_runs_untracked_without_window(primitive, index)
+                        && tracked_region_within(file, call.arguments[index].span, span))
             })
     }) {
-        return ExecutionRole::UntrackedCallback;
+        // A map function runs untracked in no window of its own (ADR 0401); the
+        // other reporting slots (an apply, a render entry) run in one.
+        return if file.ast.arguments_containing(span).any(|(call, index)| {
+            crate::call_primitive_name_cached(lookup, file, call, entities, symbol_names, dialect)
+                .as_ref()
+                .and_then(PrimitiveName::primitive)
+                .is_some_and(|primitive| {
+                    dialect.callback_runs_untracked_without_window(primitive, index)
+                        && direct_callback_contains(file, call.arguments[index].span, span)
+                })
+                // A call `tsc` rejects is its subject, not this rule's.
+                && lookup.resolved_callee_call(file, call.callee).is_some_and(|resolved| {
+                    resolved.validity == typefacts::ResolvedCallValidity::Valid
+                })
+        }) {
+            ExecutionRole::UntrackedUnwindowed
+        } else {
+            ExecutionRole::UntrackedCallback
+        };
     }
     if let Some(role) = forwarded_tracked_compute_role(file, span, lookup) {
         return role;

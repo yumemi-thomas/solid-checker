@@ -2382,6 +2382,326 @@
     "absent": []
    },
    "note": "Upstream's `nonFunctionExport` (test cases 8-9): every export of a module-level directive file is registered as a server function, and `registerServerReference` throws at module evaluation for anything else (`@solidjs/web@2.0.0-rc.17` `server-functions/dist/server.js:1567-1571`), so the server fails at boot. The set is upstream's: a literal, template literal, array or object; identifiers, calls and functions are not reported (a call or alias whose value is not shown to be a function is an uncertifiable result)."
+  },
+  {
+   "id": "strict-read-untracked/run-with-owner-in-compute/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createEffect, createRoot, createSignal, getOwner, runWithOwner } from \"solid-js\";\n\nconst [signal] = createSignal(0);\n\nexport const dispose = createRoot((dispose) => {\n  const owner = getOwner();\n  createEffect(\n    () => runWithOwner(owner, () => console.log(signal())),\n    () => {},\n  );\n  return dispose;\n});\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "signal()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream badUnnamedDerivedSignal case 32 in its two-argument form (the exact one-argument form is `run-with-owner-in-compute/one-argument-effect/003`). `runWithOwner` sets `tracking = false` around its callback and leaves the strict-read window as the call had it (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:5776-5785`), and an effect compute has no window, so the read subscribes nothing and raises nothing: probed on rc.17, one run, `observers(signal)` empty, no diagnostic, and a write does not re-run it (`scripts/probes/rc17-untracked-reads/3-unnamed-derived.mjs`, 3d). The finding says so and does not promise the dev warning (ADR 0401)."
+  },
+  {
+   "id": "strict-read-untracked/run-with-owner-in-compute/component/002",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createEffect, createSignal, getOwner, runWithOwner } from \"solid-js\";\n\nfunction Component() {\n  const owner = getOwner();\n  const [signal] = createSignal(0);\n  createEffect(\n    () => runWithOwner(owner, () => console.log(signal())),\n    () => {},\n  );\n  return null;\n}\n\nexport const view = <Component />;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "signal()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream badUnnamedDerivedSignal case 33, the same shape inside a component, in its two-argument form: untracked and unwarned on rc.17 (probe 3e). The component is rendered at module scope so the effect has an owner and no missing-owner obligation joins the case."
+  },
+  {
+   "id": "strict-read-untracked/run-with-owner-in-compute/one-argument-effect/003",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createEffect, createSignal, getOwner, runWithOwner } from \"solid-js\";\n\nconst owner = getOwner();\nconst [signal] = createSignal(0);\ncreateEffect(() => runWithOwner(owner, () => console.log(signal())));\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "span": {
+       "textRange": [
+        140,
+        152
+       ]
+      },
+      "typescript": {
+       "ownership": "typescript-owned",
+       "diagnostics": [
+        {
+         "code": "TS2554",
+         "span": {
+          "textRange": [
+           140,
+           152
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "absent": [
+     {
+      "rule": "strict-read-untracked"
+     }
+    ]
+   },
+   "note": "Upstream's exact badUnnamedDerivedSignal case 32 passes one argument. The published rc.17 types require two (TS2554), and the runtime throws MISSING_EFFECT_FN before the compute ever runs (probe 3d, `dist/dev.js:2504-2517`), so no read happens and TypeScript owns the call. The checker stays silent beside it: its strict-read and missing-effect-function findings both require a type-valid call."
+  },
+  {
+   "id": "strict-read-untracked/mapper/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal, mapArray } from \"solid-js\";\n\nconst [list] = createSignal([1, 2]);\nconst [tag] = createSignal(\"a\");\n\nexport function Rows() {\n  const rows = mapArray(list, (item) => `${item}${tag()}`);\n  return <div>{rows()}</div>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "tag()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream untrackedReactive cases 40-41 (a read in a `mapArray` map function). rc.17 runs the map function under `runWithOwner` (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:3347`, `3362-3377`, `3406`), which sets `tracking = false`, so the read is stale; the strict-read window opens only when the call passes `name` (`dist/dev.js:3093-3102`), so without it the runtime is silent. Probed (`scripts/probes/rc17-untracked-reads/1-mapper-window.mjs`, A and D): the mapper run count and output do not change after the write and `observers(tag)` is empty. The index accessor read of case 41 (`i()`) is not a source here (docs/open-work.md)."
+  },
+  {
+   "id": "strict-read-untracked/mapper/jsx-tracks/002",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal, mapArray } from \"solid-js\";\n\nconst [list] = createSignal([1, 2]);\nconst [tag] = createSignal(\"a\");\n\nexport function Rows() {\n  const rows = mapArray(list, (item) => <b>{item}{tag()}</b>);\n  return <div>{rows()}</div>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [],
+    "silent": true
+   },
+   "note": "The control for `mapper/001`: JSX the map function returns is compiled to its own tracked expressions, so the read in `{tag()}` subscribes the row's render effect and updates."
+  },
+  {
+   "id": "strict-read-untracked/context-provider-value/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createContext, createSignal } from \"solid-js\";\n\nconst Theme = createContext<number>();\nconst [count] = createSignal(1);\n\nexport function Provided() {\n  return <Theme value={count()}><span /></Theme>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "count()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream providerValue case 31, in Solid 2's provider form (`<Ctx value>`; the `Context.Provider` of cases 28 and 30 is gone in 2.0). The provider reads `props.value` once, under `observedComponent`'s strict-read window labelled `<provider>` (`solid-js@2.0.0-rc.17` `dist/solid.dev.js:9-16`, `48-49`, `65`) and stores the result as the context snapshot (`@solidjs/signals` `dist/dev.js:1834-1844`); `useContext` subscribes to nothing. Probe 2: one read at creation with STRICT_READ_UNTRACKED for `<provider>`, then after `setCount(2)` the child's memo never re-ran and the getter was not called again."
+  },
+  {
+   "id": "strict-read-untracked/unnamed-derived/effect-compute-returns-function/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createEffect, createRoot, createSignal } from \"solid-js\";\n\nconst [count] = createSignal(1);\n\nexport const dispose = createRoot((dispose) => {\n  createEffect(\n    () => () => count(),\n    (read) => {\n      void read;\n    },\n  );\n  return dispose;\n});\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [],
+    "silent": true
+   },
+   "note": "Kept divergence: eslint-plugin-solid 0.18.1's `badUnnamedDerivedSignal` flags an anonymous function that reads a signal and is not handed to a tracked scope. On rc.17 an effect compute that returns such an arrow is legal: the compute reads nothing itself (the arrow is returned, not called), the effect has no dependency to lose, and calling the received function later reads whatever its caller reads (probe 3a: no diagnostic, one run, `observers(count)` empty because nothing reads). The shape that is a defect, calling the received function inside the apply, is not built (docs/open-work.md)."
+  },
+  {
+   "id": "strict-read-untracked/unnamed-derived/memo-returns-function/002",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createMemo, createSignal } from \"solid-js\";\n\nconst [count] = createSignal(1);\n\nexport function Reader() {\n  const getter = createMemo(() => () => count());\n  return <p>{getter()()}</p>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [],
+    "silent": true
+   },
+   "note": "Kept divergence from `badUnnamedDerivedSignal`: a memo whose value is a function is legal. The memo reads nothing and runs once; the function it returns is called by a consumer, here JSX, where the call is a tracked read (probe 3b: memo runs 1 to 1, the tracked consumer re-ran and saw the new value, no diagnostic)."
+  },
+  {
+   "id": "strict-read-untracked/unnamed-derived/props-condition/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal } from \"solid-js\";\n\nfunction Card(props: { big: boolean; size: number }) {\n  const style = props.big ? () => ({ fontSize: props.size }) : undefined;\n  return <div style={style && style()} />;\n}\n\nexport function App() {\n  const [big] = createSignal(true);\n  const [size] = createSignal(10);\n  return <Card big={big()} size={size()} />;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "props.big"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "props.size"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream case 34 (untrackedReactive plus badUnnamedDerivedSignal). Only the first holds on rc.17: the condition `props.big` is read once while the component body runs, so a later `setBig(false)` never changes `style` (probe 3f: warned `big` read directly in `<Card>`, style stayed `{fontSize: 12}`), and the finding is a violation here because the visible call site passes `big()`. The arrow itself is legal, since `style()` is a tracked read in JSX and `props.size` updated (probe 3f), so there is no violation for it: the checker records only an internal uncertifiable result at `props.size`, because it does not prove the stored arrow is invoked. Upstream's `style && style()` form is kept verbatim."
+  },
+  {
+   "id": "strict-read-untracked/unnamed-derived/dynamic-unresolved-package/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal } from \"solid-js\";\n\n// Not Solid's `dynamic`: an unanalyzed stand-in for a package that exports one.\ndeclare function dynamic(source: () => unknown): (props: object) => unknown;\ndeclare function test(value: number): () => unknown;\n\nexport function Component() {\n  const [count] = createSignal(0);\n  const Test = dynamic(() => test(count()));\n  return <Test />;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "count()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream case 35 (`a dynamic not imported from Solid is not a tracked scope`). Undecided on rc.17: nothing here describes a `dynamic` that is not Solid's, so whether it runs the arrow in a tracking scope is unknown, and the checker neither reports it as a violation nor certifies it: the read is an internal uncertifiable result (a callback handed to a consumer not proven to invoke it). Solid's own `dynamic` is legal (probe 3g: the source re-ran, the output changed, `observers` held the computed)."
   }
  ]
 }

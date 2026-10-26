@@ -418,6 +418,7 @@ const fn unnamed_read_context(execution: crate::ExecutionRole) -> &'static str {
         crate::ExecutionRole::ModuleInitialization => "module scope",
         crate::ExecutionRole::EffectApply => "effect apply callback",
         crate::ExecutionRole::Unknown => "code the analysis cannot place",
+        crate::ExecutionRole::UntrackedUnwindowed => "a callback that runs with tracking off",
         _ => "rendering function",
     }
 }

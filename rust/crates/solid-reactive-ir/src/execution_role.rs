@@ -100,7 +100,10 @@ fn callback_runs_outside_tracking(
         // Inline means the callback inherits the caller's Listener. Only
         // primitives such as untrack/createRoot/runWithOwner that explicitly
         // clear Listener belong to the outside-tracking set.
-        Some(Execution::Inline) => dialect.runs_callback_deferred(primitive),
+        Some(Execution::Inline) => {
+            dialect.runs_callback_deferred(primitive)
+                || dialect.callback_runs_untracked_without_window(primitive, argument)
+        }
     }
 }
 

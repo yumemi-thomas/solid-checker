@@ -52,8 +52,16 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
 const STRICT_READ_UNTRACKED_WARNS: &str = "Solid warns STRICT_READ_UNTRACKED here in dev.";
 const STRICT_READ_UNTRACKED_MAY_WARN: &str = "If this read executes untracked in dev, Solid warns STRICT_READ_UNTRACKED for it; this finding does not establish that it does, so confirm the read's actual execution and tracking status before relying on that warning.";
 
-fn strict_read_hint(kind: &str, uncertifiable: bool) -> String {
-    let warning = if uncertifiable {
+/// ADR 0401: the read is untracked in no strict-read window (a `mapArray` or
+/// `repeat` map function, a `runWithOwner` callback inside a tracked
+/// computation), so no warning is promised, and none is denied: a map function
+/// opens a window when the call passes `name`.
+const STRICT_READ_UNWINDOWED: &str = "No strict-read window is open for this read (a map function opens one only when the call passes a `name`), so Solid's development warning does not point out the stale value.";
+
+fn strict_read_hint(kind: &str, uncertifiable: bool, unwindowed: bool) -> String {
+    let warning = if unwindowed {
+        STRICT_READ_UNWINDOWED
+    } else if uncertifiable {
         STRICT_READ_UNTRACKED_MAY_WARN
     } else {
         STRICT_READ_UNTRACKED_WARNS
@@ -94,7 +102,11 @@ impl CatalogWording for Catalog {
                 FindingWording::new(
                     Rule::StrictReadUntracked.metadata(),
                     message,
-                    strict_read_hint(&read.kind, uncertifiable),
+                    strict_read_hint(
+                        &read.kind,
+                        uncertifiable,
+                        read.execution == ExecutionRole::UntrackedUnwindowed,
+                    ),
                 )
                 .with_evidence(strict_read_evidence(read))
             }
@@ -515,6 +527,7 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
             | ExecutionRole::TrackedJsx
             | ExecutionRole::DeferredCallback
             | ExecutionRole::UntrackedCallback
+            | ExecutionRole::UntrackedUnwindowed
             | ExecutionRole::EffectApply
             | ExecutionRole::EventCallback
             | ExecutionRole::DirectiveApply
@@ -874,7 +887,7 @@ mod strict_read_hint_tests {
 
     #[test]
     fn component_props_hint_does_not_present_untrack_as_a_reactivity_fix() {
-        let hint = strict_read_hint("component-props", false);
+        let hint = strict_read_hint("component-props", false, false);
         assert!(hint.contains("read props.<name> directly in JSX"));
         assert!(hint.contains("Do not use untrack() to make a prop reactive"));
     }
@@ -882,16 +895,30 @@ mod strict_read_hint_tests {
     #[test]
     fn violation_hint_asserts_solid_warns_unconditionally() {
         for kind in ["component-props", "signal"] {
-            let hint = strict_read_hint(kind, false);
+            let hint = strict_read_hint(kind, false, false);
             assert!(hint.contains("Solid warns STRICT_READ_UNTRACKED here in dev"));
             assert!(!hint.contains("If this read executes untracked"));
         }
     }
 
     #[test]
+    fn an_unwindowed_read_promises_no_warning() {
+        for kind in ["component-props", "signal"] {
+            for uncertifiable in [false, true] {
+                let hint = strict_read_hint(kind, uncertifiable, true);
+                assert!(
+                    !hint.contains("Solid warns STRICT_READ_UNTRACKED"),
+                    "{hint}"
+                );
+                assert!(hint.contains("No strict-read window is open"), "{hint}");
+            }
+        }
+    }
+
+    #[test]
     fn uncertifiable_hint_never_asserts_that_solid_will_warn() {
         for kind in ["component-props", "signal"] {
-            let hint = strict_read_hint(kind, true);
+            let hint = strict_read_hint(kind, true, false);
             assert!(!hint.contains("Solid warns STRICT_READ_UNTRACKED here in dev"));
             assert!(hint.contains("If this read executes untracked in dev, Solid warns"));
             assert!(hint.contains("this finding does not establish that it does"));

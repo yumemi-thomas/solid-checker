@@ -318,6 +318,30 @@
       "checkerKind": "violation"
     },
     {
+      "rule": "strict-read-untracked",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "ADR 0401: a read in a `mapArray` map function. TypeScript has nothing to say about it (the call is well typed against the published rc.17 `map.d.ts` signature); rc.17 runs the mapper under `runWithOwner`, so the read is untracked and, without `name`, unwarned. The claim is the runtime's, not a type's.",
+      "code": "import { createSignal, mapArray } from \"solid-js\";\nconst [list] = createSignal([1, 2]);\nconst [tag] = createSignal(\"a\");\nexport function Rows() {\n  const rows = mapArray(list, (item) => `${item}${tag()}`);\n  return <div>{rows()}</div>;\n}\n"
+    },
+    {
+      "rule": "strict-read-untracked",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "ADR 0401: a read in a context provider's `value`. `<Ctx value={count()}>` type-checks against `createContext`'s `Context<T>` (a `FlowComponent` taking `value: T`); the provider reads `value` once and stores the snapshot, so a later write never reaches a child. The claim is the provider's runtime behavior, which no type expresses.",
+      "code": "import { createContext, createSignal } from \"solid-js\";\nconst Theme = createContext<number>();\nconst [count] = createSignal(1);\nexport function Provided() {\n  return <Theme value={count()}><span /></Theme>;\n}\n"
+    },
+    {
+      "rule": "strict-read-untracked",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "ADR 0401: a read in a `runWithOwner` callback inside a memo compute. `runWithOwner<T>(owner: Owner | null, fn: () => T): T` accepts it; at run time it sets `tracking = false` around `fn`, so the compute subscribes to nothing and the read is stale with no dev warning. The claim is the runtime's.",
+      "code": "import { createMemo, createSignal, getOwner, runWithOwner } from \"solid-js\";\nconst [signal] = createSignal(0);\nexport function Derived() {\n  const owner = getOwner();\n  const value = createMemo(() => runWithOwner(owner, () => signal()));\n  return <span>{value()}</span>;\n}\n"
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "dialect": "v2",
       "expect": "silent",

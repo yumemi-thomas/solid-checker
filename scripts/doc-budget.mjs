@@ -26,7 +26,8 @@ export const FILE_BUDGETS = {
   // And for ADR 0397's leaf obligations: 27_971 bytes against 27_500.
   // And for ADR 0396's async and test-helper limits: 28_418 bytes against 28_000.
   // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 32_000.
-  "docs/open-work.md": 32_000,
+  // And for ADR 0401's untracked-read misses: 32_541 bytes against 32_000: 33_000.
+  "docs/open-work.md": 33_000,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for the
   // catalog review's ADRs 0381-0392, 4 bytes under 115_600; and for ADR 0393,
@@ -38,7 +39,8 @@ export const FILE_BUDGETS = {
   // And for the Opus review's fixes to ADRs 0384, 0394, 0396 and 0400: 150_000.
   // And for ADR 0399: the file stood at 150_325 bytes against 150_000: 151_000.
   // And for ADR 0398: 152_282 bytes against 151_000: 153_000.
-  "docs/decisions.md": 153_000,
+  // And for ADR 0401: 154_913 bytes against 153_000: 156_000.
+  "docs/decisions.md": 156_000,
 };
 
 export const GROUP_BUDGETS = [
@@ -46,7 +48,8 @@ export const GROUP_BUDGETS = [
   // And for ADR 0397 and its two rule pages: 607_028 bytes against 605_000.
   // And for ADR 0396's extension (decisions, open work, two rule pages): 610_122 bytes.
   // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 650_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 650_000 },
+  // And for ADRs 0398-0401 and their rule pages: 650_087 bytes against 650_000: 656_000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 656_000 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),

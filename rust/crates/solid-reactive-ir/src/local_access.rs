@@ -946,6 +946,21 @@ impl LocalAccessContext<'_, '_> {
                         self.symbol_names,
                         self.lookup,
                     ) {
+                        // ADR 0401: `runWithOwner` clears tracking in a window
+                        // the tracked call does not have.
+                        ExecutionRole::TrackedJsx
+                            if dialect
+                                .callback_clears_tracking_in_calling_window(primitive, index) =>
+                        {
+                            match crate::execution_role::unwindowed_role_at_call(
+                                file,
+                                call.callee,
+                                self.lookup,
+                            ) {
+                                ExecutionRole::Unknown | ExecutionRole::Unreported => None,
+                                role => Some(role),
+                            }
+                        }
                         ExecutionRole::TrackedJsx => Some(ExecutionRole::DeferredCallback),
                         ExecutionRole::ModuleInitialization
                         | ExecutionRole::Unknown
@@ -967,6 +982,8 @@ impl LocalAccessContext<'_, '_> {
                     return Some(
                         if dialect.apply_callback_argument(primitive) == Some(index) {
                             ExecutionRole::EffectApply
+                        } else if dialect.callback_runs_untracked_without_window(primitive, index) {
+                            ExecutionRole::UntrackedUnwindowed
                         } else {
                             ExecutionRole::UntrackedCallback
                         },
@@ -1751,7 +1768,9 @@ impl LocalAccessContext<'_, '_> {
                 ).is_none()
                 && !matches!(
                     execution,
-                    ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback
+                    ExecutionRole::EffectApply
+                        | ExecutionRole::UntrackedCallback
+                        | ExecutionRole::UntrackedUnwindowed
                 );
         if helper.is_none() && gate_refuses {
             return;

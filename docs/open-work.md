@@ -60,6 +60,8 @@ Missing owner (`missing-owner`, SC4001):
 - `missing-owner` (SC4001), recall lost: `onSettled(wrap(() => …))` (`solid2-precision`, `WrappedSettledCleanup`): a bodiless `wrap` is no identity wrapper (ADR 0346), so the cleanup in its literal goes unreported.
 - rc.17, unclaimed: `PRIMITIVE_IN_EFFECT_CALLBACK`; `lazyModule` loader reads/writes; an `onHydrationEnd` write drained by `hydrate` in a root.
 
+Untracked reads rc.17 leaves silent (SC1001, ADR 0401), not built: the index accessor of a default `mapArray` (`(item, i) => i()`, upstream case 41) is not a source, and `indexArray` was not probed (case 42); a read through a helper a map function calls follows the helper's callers (an obligation at most); a function a compute returns that the effect's apply calls (`createEffect(() => () => v(), fn => fn())`, probe 3a-2) is a stale read on rc.17 but needs the compute's return to flow into the apply parameter, which no summary models, so it is silent; `createRoot` inside a computation was not probed; a context provider reached through a package (kobalte, router) is not an exact `createContext` binding, so its `value` is unplaced.
+
 Possible owner suspension (ADR 0357): skippable-await cleanups retain SC4001 obligations. Call-argument-specific take/skip proofs are unimplemented; callback delivery outside the model remains open.
 
 Missing provider (`missing-context-provider`, SC4002, ADR 0352): a context is claimed only when no provider exists in the program. Not claimed: a reader above no provider when another provider exists (needs the closed component tree), open programs, escaped contexts, package contexts (kobalte, router, query), `createContext` through an alias.

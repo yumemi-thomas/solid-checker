@@ -655,6 +655,7 @@ fn resolve_scope_unplaced(
         role,
         ExecutionRole::UntrackedRendering
             | ExecutionRole::UntrackedCallback
+            | ExecutionRole::UntrackedUnwindowed
             | ExecutionRole::EffectApply
             | ExecutionRole::EventCallback
             | ExecutionRole::DirectiveApply

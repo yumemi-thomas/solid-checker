@@ -327,6 +327,37 @@ fn only_synchronous_owner_swappers_inherit_the_calling_window() {
 /// may run — RFC 03 tells authors to prefer a literal or key function),
 /// and — for `Show`/`Match`, whose `keyed` is boolean-only — any
 /// expression form at all.
+/// ADR 0401: only the map function of `mapArray` and `repeat` is untracked
+/// without a window of its own, and only `runWithOwner` clears tracking in the
+/// window of its call. `createRoot` shares the code read but not a probe, and
+/// the list and count thunks stay tracked computations.
+#[test]
+fn only_map_functions_and_runwithowner_are_untracked_reads_the_runtime_leaves_silent() {
+    let two = Solid2::CONSERVATIVE;
+    for primitive in [Primitive::MapArray, Primitive::RepeatMap] {
+        assert!(two.callback_runs_untracked_without_window(primitive, 1));
+        assert!(!two.callback_runs_untracked_without_window(primitive, 0));
+        assert!(two.reports_untracked_reads_at(primitive, 1, 2));
+        assert!(
+            !two.callback_semantics_at(primitive, 1, 2).tracks_reads,
+            "{primitive:?}: the map function subscribes nothing"
+        );
+        assert!(!two.callback_clears_tracking_in_calling_window(primitive, 1));
+    }
+    assert!(two.callback_clears_tracking_in_calling_window(Primitive::RunWithOwner, 1));
+    assert!(!two.callback_clears_tracking_in_calling_window(Primitive::RunWithOwner, 0));
+    assert!(!two.callback_runs_untracked_without_window(Primitive::RunWithOwner, 1));
+    for primitive in [
+        Primitive::CreateRoot,
+        Primitive::Untrack,
+        Primitive::CreateMemo,
+        Primitive::CreateEffect,
+    ] {
+        assert!(!two.callback_runs_untracked_without_window(primitive, 0));
+        assert!(!two.callback_clears_tracking_in_calling_window(primitive, 0));
+    }
+}
+
 #[test]
 fn keyed_forms_claim_only_proven_callback_shapes() {
     use crate::KeyForm;

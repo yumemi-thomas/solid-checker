@@ -330,6 +330,7 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                     | crate::ExecutionRole::EventCallback
                     | crate::ExecutionRole::DeferredCallback
                     | crate::ExecutionRole::UntrackedCallback
+                    | crate::ExecutionRole::UntrackedUnwindowed
                     | crate::ExecutionRole::EffectApply
                     | crate::ExecutionRole::DirectiveApply
             ) {
