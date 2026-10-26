@@ -325,12 +325,27 @@ pub(crate) fn project_callee_at_parameter<'a>(
     &'a solid_facts::ast::FunctionFact,
     bool,
 )> {
+    project_callee_in(lookup, file, call, index)
+}
+
+/// [`project_callee_at_parameter`] over a callee world: the lookup, or a
+/// memo computation whose every answer is a recorded read.
+pub(crate) fn project_callee_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
+    world: &W,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+) -> Option<(
+    &'a solid_facts::FileFacts,
+    &'a solid_facts::ast::FunctionFact,
+    bool,
+)> {
     // A local method declaration cannot bypass ADR 0299's receiver escape
     // and initialization census when deciding callback timing either.
-    if crate::object_members::call_withheld(file, call.callee, lookup) {
+    if world.call_withheld(file, call.callee) {
         return None;
     }
-    if let Some((file, function)) = lookup.object_member_function(file, call.callee) {
+    if let Some((file, function)) = world.object_member_function(file, call.callee) {
         return Some((
             file,
             function,
@@ -341,11 +356,10 @@ pub(crate) fn project_callee_at_parameter<'a>(
                 .any(|argument| argument.spread),
         ));
     }
-    let declared = lookup
+    let declared = world
         .callee_symbol(file, call.callee)
-        .and_then(|symbol| lookup.function_for_symbol(symbol));
-    let (callee_file, callee) =
-        declared.or_else(|| lookup.function_called_at(file.path.as_str(), call.callee))?;
+        .and_then(|symbol| world.function_for_symbol(symbol));
+    let (callee_file, callee) = declared.or_else(|| world.function_called_at(file, call.callee))?;
     // A member callee resolves to its own declaration above. Reaching a
     // function only through the entity at the whole member span names the
     // receiver's root instead: `f` in `f.call(thisArg, …)`.
@@ -361,8 +375,9 @@ pub(crate) fn project_callee_at_parameter<'a>(
             .binary_search(&callee_span)
             .is_ok();
     let exact = !(member && declared.is_none())
-        && (!member || member_runs_declared_method(file, callee_span, callee_file, callee, lookup))
-        && lookup.function_value_is_current(callee_file, callee)
+        && (!member
+            || member_runs_declared_method_in(world, file, callee_span, callee_file, callee))
+        && crate::indexes::function_value_is_current_in(callee_file, callee)
         && !call
             .arguments
             .iter()
@@ -384,14 +399,25 @@ pub(super) fn member_runs_declared_method(
     method: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
+    member_runs_declared_method_in(lookup, file, callee, method_file, method)
+}
+
+/// [`member_runs_declared_method`] over a callee world.
+pub(super) fn member_runs_declared_method_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
+    world: &W,
+    file: &solid_facts::FileFacts,
+    callee: Span,
+    method_file: &solid_facts::FileFacts,
+    method: &solid_facts::ast::FunctionFact,
+) -> bool {
+    use crate::indexes::callee_world;
     // A module namespace member: the namespace object is frozen, and the
     // export binding's own currency is checked by the caller.
-    if lookup
-        .namespace_member_function(file, callee)
-        .is_some_and(|(namespace_file, function)| {
+    if callee_world::namespace_member_function_in(world, file, callee).is_some_and(
+        |(namespace_file, function)| {
             namespace_file.path == method_file.path && function.span == method.span
-        })
-    {
+        },
+    ) {
         return true;
     }
     let Some(member) = file.ast.member_at(callee) else {
@@ -402,13 +428,11 @@ pub(super) fn member_runs_declared_method(
     };
     // ADR 0314: a fresh object literal's chain holds only `Object.prototype`.
     // A class instance's is checked with its class below.
-    if lookup.member_may_be_reassigned_on_builtin(name) {
+    if callee_world::member_may_be_reassigned_on_builtin_in(world, name) {
         return false;
     }
     let receiver = file.ast.peel_ts_sugar_span(member.object);
-    let Some((binding_file, binding, _)) =
-        lookup.binding_at_reference(file.path.as_str(), receiver)
-    else {
+    let Some((binding_file, binding)) = world.binding_at_reference(file, receiver) else {
         return false;
     };
     if !binding.immutable || binding.shape != solid_facts::ast::BindingShape::Identifier {
@@ -459,9 +483,9 @@ pub(super) fn member_runs_declared_method(
     else {
         return false;
     };
-    let Some((class_file, class)) = lookup
+    let Some((class_file, class)) = world
         .callee_symbol(binding_file, construction.callee)
-        .and_then(|symbol| lookup.class_for_symbol(symbol))
+        .and_then(|symbol| world.class_for_symbol(symbol))
     else {
         return false;
     };
@@ -486,8 +510,8 @@ pub(super) fn member_runs_declared_method(
     class_file.path == method_file.path
         && class.span.contains(method.span)
         && !class_exposed
-        && lookup.class_instance_is_exact(class_file, class, name, 4)
-        && !lookup.member_may_be_reassigned_on_class(name, class_file, class)
+        && callee_world::class_instance_is_exact_in(world, class_file, class, name, 4)
+        && !callee_world::member_may_be_reassigned_on_class_in(world, name, class_file, class)
 }
 
 /// ADR 0280: how the calls of `function`'s parameter `index` stand on
@@ -825,6 +849,9 @@ pub(super) fn role_at_returned_invocations(
                         .iter()
                         .find(|candidate| candidate.path.as_str() == site.path)
                         .map(|use_file| {
+                            // The site's file, handed out by path
+                            // (`indexes::hand_outs`).
+                            lookup.note_file_read(use_file);
                             classifying.insert(key.clone());
                             let role = semantic_execution_role_within(
                                 use_file,

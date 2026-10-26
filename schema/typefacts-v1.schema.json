@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$comment": "Handshake protocol 84 adds the declaredKeys demand (compact bit 19) and, in Wire table schema v23, the entity field it answers: the property names the demanded expression's type declares, present only when that set is provably complete (ADR 0436). Handshake protocol 83 adds the modules answer's unmappedRoots (ADR 0368). Handshake protocol 82 adds moduleFact.root, a file's position among the configuration's root files (ADR 0368). Handshake protocol 81 carries Wire table schema v22, which keeps the rows of v21 under a new number so a v21 table from another build is refused. Handshake protocol 80 carries Wire table schema v21: an entity's symbol may be flagged symbolCoversSpan, which says it names the whole demanded span. A symbol without the flag names a token inside the span (the callee of a call, the object of a member) and does not describe its value. Handshake protocol 78 removes the certification reads `invocations` and `export-values`, their request fields (`invocationDemands`, `exportValueDemands`, `hostConstants`) and response fields (transcripts and envelopes), and every definition only they used. Handshake protocol 77 (ADR 0172) adds exhaustive fresh literal return structures and body-end reachability. Absent facts remain open. Handshake protocol 40 binds original parameter roots at exact opening-prefix reads. Protocol 39 adds affirmative unwritten parameter bindings for whole-slot identity, not concrete shape. Protocol 38 spells complete union premises and binds each constituent identity. Protocol 37 permits an exact anonymous local callable census only when its compiler symbol independently declares that node. Protocol 36 added localLiteralResult. Consumers still bind runtime identity and execution separately.",
+  "$comment": "Handshake protocol 86 adds the declaredKeys demand (compact bit 19) and, in Wire table schema v23, the entity field it answers: the property names the demanded expression's type declares, present only when that set is provably complete (ADR 0436). Handshake protocol 85 adds the modules demand omitModules (no module inventory in the answer) and the update answer's graphKept (the update replaced its changed file in place, so the module graph is the previous one but for that file's own positions). Handshake protocol 84 adds the modules demand distinctBareImports, the resolution a retained daemon witnesses. Handshake protocol 83 adds the modules answer's unmappedRoots (ADR 0368). Handshake protocol 82 adds moduleFact.root, a file's position among the configuration's root files (ADR 0368). Handshake protocol 81 carries Wire table schema v22, which keeps the rows of v21 under a new number so a v21 table from another build is refused. Handshake protocol 80 carries Wire table schema v21: an entity's symbol may be flagged symbolCoversSpan, which says it names the whole demanded span. A symbol without the flag names a token inside the span (the callee of a call, the object of a member) and does not describe its value. Handshake protocol 78 removes the certification reads `invocations` and `export-values`, their request fields (`invocationDemands`, `exportValueDemands`, `hostConstants`) and response fields (transcripts and envelopes), and every definition only they used. Handshake protocol 77 (ADR 0172) adds exhaustive fresh literal return structures and body-end reachability. Absent facts remain open. Handshake protocol 40 binds original parameter roots at exact opening-prefix reads. Protocol 39 adds affirmative unwritten parameter bindings for whole-slot identity, not concrete shape. Protocol 38 spells complete union premises and binds each constituent identity. Protocol 37 permits an exact anonymous local callable census only when its compiler symbol independently declares that node. Protocol 36 added localLiteralResult. Consumers still bind runtime identity and execution separately.",
   "$id": "https://solid-checker.dev/schema/typefacts-v1.schema.json",
   "title": "TypeFactsSchema v1 (latest semantic vocabulary)",
   "description": "Length-prefixed deterministic-CBOR request and response frames exchanged with solid-typefacts. Field names are the CBOR map keys. Optional fields are omitted, never null. The current handshake protocol and Wire table schema are the constants in apps/solid-typefacts/internal/typefacts/protocolv3.go; the per-protocol changelog this description once carried lives in the git history of this file.",
@@ -76,11 +76,13 @@
     "moduleInventoryDemand": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Selects how much of the resolved module graph one modules operation answers. The module inventory itself is unconditional. Imports with no importPaths covers every file the program included.",
+      "description": "Selects how much of the resolved module graph one modules operation answers. The module inventory is unconditional unless omitModules is set, which answers no modules and no unmappedRoots (only the requested imports and unknownImportPaths). Imports with no importPaths covers every file the program included. distinctBareImports keeps only imports whose text starts with neither . nor /, one row per importing file, text, resolvedPath, includedPath and symlinkPath (the first occurrence): what resolution read, not where each specifier is written.",
       "properties": {
         "imports": { "type": "boolean" },
         "importPaths": { "type": "array", "maxItems": 1000000, "items": { "type": "string", "minLength": 1 } },
-        "packages": { "type": "boolean" }
+        "packages": { "type": "boolean" },
+        "distinctBareImports": { "type": "boolean" },
+        "omitModules": { "type": "boolean" }
       }
     },
     "projectReferenceMapping": {
@@ -256,6 +258,10 @@
         "referenceChangesExact": { "type": "boolean" },
         "stateToken": { "type": "string" },
         "affected": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } },
+        "graphKept": {
+          "type": "boolean",
+          "description": "An update answer only. True when the producer replaced the one changed file in place and rebuilt nothing: every other file's text, every file's module resolution and the program's file set are exactly the previous generation's, and only the changed file's own import positions can differ. Absent otherwise."
+        },
         "sources": {
           "type": "array",
           "maxItems": 1000000,

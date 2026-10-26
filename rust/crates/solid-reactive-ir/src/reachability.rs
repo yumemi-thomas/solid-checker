@@ -444,7 +444,7 @@ fn discover_reachability_file(
     let topology = reachability_topology(&functions, &roots, &edges, &callback_edges);
     CachedReachabilityFile {
         identity: source_discovery_identity(file, indexes),
-        cross_file_proofs: lookup.cross_file_proof_digest(),
+        proof: crate::base::reads::ReadProof::default(),
         compiler: file.compiler.clone(),
         functions,
         roots,
@@ -601,9 +601,10 @@ pub(super) fn reachable_call_multiplicity_incremental(
                     &cached.identity,
                     file.path.as_str(),
                     &file.source_hash,
+                    indexes.resolution_digest(file.path.as_str()),
                     typescript_unchanged,
                     typescript_delta,
-                ) && cached.cross_file_proofs == lookup.cross_file_proof_digest()
+                ) && cached.proof.holds(lookup)
                     && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                         || same_compiler_semantics(&cached.compiler, &file.compiler))
             });
@@ -616,10 +617,12 @@ pub(super) fn reachable_call_multiplicity_incremental(
         recomputed.push(file);
     }
     for (path, discovered) in parallel_slice_results(&recomputed, |file| {
-        (
-            file.path.clone(),
-            discover_reachability_file(file, indexes, entities, symbol_names, lookup),
-        )
+        // What the file's roots and edges read of other files is its proof.
+        let (mut discovered, reads) = crate::base::reads::record(|| {
+            discover_reachability_file(file, indexes, entities, symbol_names, lookup)
+        });
+        discovered.proof = crate::base::reads::ReadProof::new(reads, lookup);
+        (file.path.clone(), discovered)
     }) {
         topology_unchanged &= cache.get(path.as_str()).is_some_and(|previous| {
             effective_reachability_topology(&previous.topology, function_symbols)

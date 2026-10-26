@@ -563,3 +563,51 @@ fn dispatch_premises_name_what_each_site_withholds_or_why_it_is_excluded() {
         "synchronous dispatch (ADR 0435) at src/a.ts:7 excluded: caller scheduled callback"
     );
 }
+
+#[test]
+fn the_line_index_places_every_offset_where_the_scan_does() {
+    use crate::SourceFile;
+
+    use super::{SourcePlacer, source_location};
+    let texts = [
+        "",
+        "one",
+        "a\nb\r\nc\n",
+        "\n\n\nx",
+        "caf\u{e9} \u{1f600} \n\u{1f600}\u{1f600}x\ny",
+        "no newline \u{2028} here",
+    ];
+    let sources = texts
+        .iter()
+        .enumerate()
+        .map(|(index, text)| SourceFile {
+            path: format!("/p/{index}.ts"),
+            source: (*text).into(),
+            compiler_options: Default::default(),
+        })
+        .collect::<Vec<_>>();
+    let mut placer = SourcePlacer::new(&sources);
+    for (index, text) in texts.iter().enumerate() {
+        for offset in 0..=text.len() + 2 {
+            let location = typefacts::Location {
+                path: format!("/p/{index}.ts").into(),
+                start_byte: offset as u64,
+                end_byte: offset as u64,
+            };
+            let placed = placer.place(&location);
+            let scanned = source_location(&location, &sources);
+            assert_eq!(
+                (placed.line, placed.column),
+                (scanned.line, scanned.column),
+                "{text:?} at {offset}"
+            );
+        }
+    }
+    let unknown = typefacts::Location {
+        path: "/p/missing.ts".into(),
+        start_byte: 3,
+        end_byte: 4,
+    };
+    let placed = placer.place(&unknown);
+    assert_eq!((placed.line, placed.column), (1, 1));
+}

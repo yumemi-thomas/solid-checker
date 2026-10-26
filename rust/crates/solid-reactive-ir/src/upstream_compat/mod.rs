@@ -29,7 +29,6 @@ mod syntax;
 
 use crate::{HashMap, HashSet};
 
-use crate::cache::SourceReferenceLocations;
 use crate::indexes::SemanticLookup;
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
 use crate::{EntitySymbols, Fix, ReactiveSourceKind, StaticViolation, SymbolId, location};
@@ -700,18 +699,7 @@ struct FileDiagnostics {
 /// ESLint-era groups are gated inside [`check_file`], next to the catalogs'
 /// version table it mirrors.
 ///
-/// The location-keyed reference map is a pure function of the TypeScript
-/// table and the proven accessor set, and `reusable` is exactly the
-/// condition under which both are unchanged (the same gate the
-/// interprocedural results are reused behind). The retained map moves
-/// through the compat context and back into its slot rather than being
-/// cloned: the context owns the field, and the rules only ever read it.
-pub(crate) fn check_project(
-    ctx: &AnalysisContext<'_>,
-    mut reference_slot: Option<&mut Option<SourceReferenceLocations>>,
-    reusable: bool,
-    draft: &mut ProgramDraft,
-) {
+pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     let (prefer_for_name, prefer_show_name) = ("prefer-for", "prefer-show");
     let prefer_for_enabled = ctx
         .rule_options
@@ -724,14 +712,6 @@ pub(crate) fn check_project(
     } else {
         ReactiveReadIndex::default()
     };
-    let retained = reference_slot.as_deref_mut().and_then(|slot| {
-        if reusable {
-            slot.take()
-        } else {
-            *slot = None;
-            None
-        }
-    });
     let mut context = UpstreamCompatContext {
         dialect: ctx.dialect,
         lookup: ctx.semantic_lookup,
@@ -743,13 +723,11 @@ pub(crate) fn check_project(
         uncertain_prop_sources: ctx.uncertain_prop_sources,
         props_reactivity: ctx.props_reactivity,
         reactive_reads,
-        source_reference_index: retained.unwrap_or_else(|| {
-            crate::symbols::source_reference_locations(
-                &ctx.facts.typescript,
-                ctx.symbols_by_root,
-                ctx.accessors.keys(),
-            )
-        }),
+        source_reference_index: crate::symbols::source_reference_locations(
+            &ctx.facts.typescript,
+            ctx.symbols_by_root,
+            ctx.accessors.keys(),
+        ),
         prefer_for_enabled,
         prefer_show_enabled,
         forwarded_uncaptured: shared_reactivity::ForwardedUncaptured::default(),
@@ -759,9 +737,6 @@ pub(crate) fn check_project(
     for diagnostics in parallel_file_results(&ctx.facts.files, |file| check_file(file, &context)) {
         draft.static_violations.extend(diagnostics.violations);
         draft.static_defects.extend(diagnostics.defects);
-    }
-    if let Some(slot) = reference_slot {
-        *slot = Some(context.source_reference_index);
     }
 }
 

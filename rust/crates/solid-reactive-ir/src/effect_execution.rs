@@ -48,28 +48,173 @@ pub(crate) fn at_call(
 
 pub(crate) type ApplyCalls<'a> = HashMap<(&'a str, Span, usize), ApplyExecution>;
 
-pub(crate) fn calls<'a>(lookup: &SemanticLookup<'a>) -> ApplyCalls<'a> {
-    let mut result = ApplyCalls::default();
-    for file in lookup.files() {
-        for call in &file.ast.calls {
-            let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
-                continue;
-            };
-            for argument in 0..call.arguments.len() {
-                if lookup
-                    .dialect
-                    .effect_apply_defer_options(primitive, argument)
-                    .is_some()
-                {
-                    result.insert(
-                        (file.path.as_str(), call.span, argument),
-                        prove_at_call(file, call, primitive, argument, lookup),
-                    );
+/// Every apply argument with its execution, `(path, call, argument,
+/// execution)` sorted: the [`EffectApplyCalls`](crate::indexes::EffectApplyCalls)
+/// memo's answer.
+pub(crate) type ApplyCallRows = Vec<(String, Span, usize, ApplyExecution)>;
+
+impl crate::base::memo::Canonical for ApplyExecution {}
+
+/// One file's answer for one of the tables below, with what it read of the
+/// program, the file's own facts included (S7g): reused while the file is
+/// unchanged and every read answers as recorded ([`crate::base::reads`]).
+struct Chunk<T> {
+    source_hash: solid_facts::core::SourceHash,
+    compiler: std::sync::Arc<solid_facts::compiler::ExecutionMap>,
+    proof: crate::base::reads::ReadProof,
+    value: T,
+}
+
+type Chunks<T> = HashMap<std::sync::Arc<str>, Chunk<T>>;
+
+/// The calls of a file whose primitive has an apply with a defer option.
+type DeferCalls = Vec<(usize, Primitive)>;
+
+#[derive(Default)]
+struct DeferScans(Chunks<DeferCalls>);
+
+/// What one file contributes to the apply regions: the callbacks its calls
+/// supply (a call's callee, its arguments and their literal members) with
+/// each site's execution, and the callbacks its other references and exports
+/// can escape to.
+#[derive(Clone, Default)]
+struct RegionSites {
+    supplied: Vec<((String, Span), ApplyExecution)>,
+    escaped: Vec<(String, Span)>,
+}
+
+#[derive(Default)]
+struct RegionChunks(Chunks<RegionSites>);
+
+const DEFER_SCANS: crate::base::memo::derived::SolverId = crate::base::memo::derived::SolverId(448);
+const REGION_CHUNKS: crate::base::memo::derived::SolverId =
+    crate::base::memo::derived::SolverId(449);
+
+/// `file`'s chunk in `chunks`, computed when absent or no longer valid. Kept
+/// only for a retained build whose paths are unique (a path held by two slots
+/// is answered fresh).
+fn chunked<T: Clone>(
+    chunks: &mut Chunks<T>,
+    file: &FileFacts,
+    lookup: &SemanticLookup<'_>,
+    kept: bool,
+    compute: impl FnOnce() -> T,
+) -> T {
+    if !kept {
+        return compute();
+    }
+    if let Some(chunk) = chunks.get(file.path.as_str())
+        && chunk.source_hash == file.source_hash
+        && (std::sync::Arc::ptr_eq(&chunk.compiler, &file.compiler)
+            || crate::cache::same_compiler_semantics(&chunk.compiler, &file.compiler))
+        && chunk.proof.holds(lookup)
+    {
+        return chunk.value.clone();
+    }
+    // The chunk reads the file's own entity rows (which primitive a call
+    // names, which function a reference resolves to) as well as its source:
+    // an edit elsewhere can re-point them with this file's text unchanged
+    // (an import alias that becomes or stops being a primitive). Its reads
+    // name the file itself, as they name every file the lookup hands out.
+    let (value, reads) = crate::base::reads::record(|| {
+        lookup.note_file_read(file);
+        compute()
+    });
+    chunks.insert(
+        file.path.shared(),
+        Chunk {
+            source_hash: file.source_hash.clone(),
+            compiler: std::sync::Arc::clone(&file.compiler),
+            proof: crate::base::reads::ReadProof::new(reads, lookup),
+            value: value.clone(),
+        },
+    );
+    value
+}
+
+/// Whether the build's files have distinct paths.
+fn unique_paths(lookup: &SemanticLookup<'_>) -> bool {
+    let mut seen = HashSet::default();
+    lookup
+        .files()
+        .iter()
+        .all(|file| seen.insert(file.path.as_str()))
+}
+
+pub(crate) fn calls(lookup: &SemanticLookup<'_>) -> ApplyCallRows {
+    let unique = unique_paths(lookup);
+    lookup.with_kept_state::<DeferScans, _>(DEFER_SCANS, |scans, kept| {
+        let kept = kept && unique;
+        let mut result = ApplyCallRows::default();
+        for file in lookup.files() {
+            let candidates = chunked(&mut scans.0, file, lookup, kept, || {
+                file.ast
+                    .calls
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, call)| {
+                        let primitive = lookup.primitive_at_call(file, call.span)?;
+                        (0..call.arguments.len())
+                            .any(|argument| {
+                                lookup
+                                    .dialect
+                                    .effect_apply_defer_options(primitive, argument)
+                                    .is_some()
+                            })
+                            .then_some((index, primitive))
+                    })
+                    .collect()
+            });
+            for (index, primitive) in candidates {
+                let Some(call) = file.ast.calls.get(index) else {
+                    continue;
+                };
+                for argument in 0..call.arguments.len() {
+                    if lookup
+                        .dialect
+                        .effect_apply_defer_options(primitive, argument)
+                        .is_some()
+                    {
+                        result.push((
+                            file.path.to_string(),
+                            call.span,
+                            argument,
+                            prove_at_call(file, call, primitive, argument, lookup),
+                        ));
+                    }
                 }
             }
         }
+        if kept {
+            let current = lookup
+                .files()
+                .iter()
+                .map(|file| file.path.as_str())
+                .collect::<HashSet<_>>();
+            scans.0.retain(|path, _| current.contains(&**path));
+        }
+        finish_calls(result)
+    })
+}
+
+fn finish_calls(result: ApplyCallRows) -> ApplyCallRows {
+    // A path held by two slots keeps the later slot's proof, as the map did.
+    let mut last = HashMap::<(String, Span, usize), usize>::default();
+    for (index, (path, span, argument, _)) in result.iter().enumerate() {
+        last.insert((path.clone(), *span, *argument), index);
     }
-    result
+    let mut kept = result
+        .iter()
+        .enumerate()
+        .filter(|(index, (path, span, argument, _))| {
+            last.get(&(path.clone(), *span, *argument)) == Some(index)
+        })
+        .map(|(_, row)| row.clone())
+        .collect::<Vec<_>>();
+    kept.sort_unstable_by(|left, right| {
+        (&left.0, left.1, left.2).cmp(&(&right.0, right.1, right.2))
+    });
+    kept
 }
 
 fn prove_at_call(
@@ -291,94 +436,132 @@ pub(crate) fn at_span(file: &FileFacts, span: Span, lookup: &SemanticLookup<'_>)
 
 pub(crate) type ApplyRegions = HashMap<String, Vec<(Span, ApplyExecution)>>;
 
-pub(crate) fn regions(lookup: &SemanticLookup<'_>) -> ApplyRegions {
-    let mut targets: HashMap<(String, Span), Vec<ApplyExecution>> = HashMap::default();
-    let mut uses = HashSet::default();
-    for file in lookup.files() {
-        for call in &file.ast.calls {
-            if let Some((definition, function)) = callback(file, call.callee, lookup) {
-                targets
-                    .entry((definition.path.to_string(), function.span))
-                    .or_default()
-                    .push(ApplyExecution::Proven);
-                uses.insert((file.path.as_str(), file.ast.peel_ts_sugar_span(call.callee)));
+/// Each path's not-proven regions, sorted by path then span: the
+/// [`EffectApplyRegions`](crate::indexes::EffectApplyRegions) memo's answer.
+pub(crate) type ApplyRegionRows = Vec<(String, Vec<(Span, ApplyExecution)>)>;
+
+pub(crate) fn regions(lookup: &SemanticLookup<'_>) -> ApplyRegionRows {
+    let unique = unique_paths(lookup);
+    lookup.with_kept_state::<RegionChunks, _>(REGION_CHUNKS, |chunks, kept| {
+        let kept = kept && unique;
+        let mut targets: HashMap<(String, Span), Vec<ApplyExecution>> = HashMap::default();
+        let mut escaped = Vec::new();
+        for file in lookup.files() {
+            let sites = chunked(&mut chunks.0, file, lookup, kept, || {
+                file_region_sites(file, lookup)
+            });
+            for (target, execution) in sites.supplied {
+                targets.entry(target).or_default().push(execution);
             }
-            for (index, argument) in call.arguments.iter().enumerate() {
-                let values = std::iter::once(argument.span)
-                    .chain(argument.literal_members.iter().map(|member| member.value));
-                for value in values {
-                    let Some((definition, function)) = callback(file, value, lookup) else {
-                        continue;
-                    };
-                    let execution = lookup.primitive_at_call(file, call.span).map_or(
-                        ApplyExecution::Proven,
-                        |primitive| {
-                            let execution = at_call(file, call, primitive, index, lookup);
-                            // The error arm can be queued by a settled compute
-                            // error even when initial success apply is skipped.
-                            // Do not turn absence of a dependency into absence
-                            // of that separate trigger.
-                            let error = argument.literal_members.iter().any(|member| {
-                                member.value == value
-                                    && lookup.dialect.browser_callback_member_trigger(
-                                        primitive,
-                                        index,
-                                        call.arguments.len(),
-                                        member.key.as_str(),
-                                    ) == Some(
-                                        solid_dialect::BrowserCallbackTrigger::ComputationError,
-                                    )
-                            });
-                            if error && execution != ApplyExecution::Proven {
-                                let inert = call.arguments.first().is_some_and(|compute| {
-                                    crate::callback_host::inert_callback(file, compute.span, lookup)
-                                });
-                                if inert {
-                                    ApplyExecution::Absent
-                                } else {
-                                    ApplyExecution::Unknown
-                                }
-                            } else {
-                                execution
-                            }
-                        },
-                    );
-                    targets
-                        .entry((definition.path.to_string(), function.span))
-                        .or_default()
-                        .push(execution);
-                    uses.insert((file.path.as_str(), file.ast.peel_ts_sugar_span(value)));
-                }
-            }
+            escaped.extend(sites.escaped);
         }
-    }
-    // An escape/export is another possible invocation. A dead supplying site
-    // cannot suppress the body of a reusable named callback globally.
-    for file in lookup.files() {
-        for reference in &file.ast.identifiers {
-            if reference.role != solid_facts::ast::IdentifierRole::Reference
-                || uses.contains(&(file.path.as_str(), reference.span))
-            {
-                continue;
-            }
-            if let Some((definition, function)) = callback(file, reference.span, lookup)
-                && let Some(sites) = targets.get_mut(&(definition.path.to_string(), function.span))
-            {
+        // An escape/export is another possible invocation. A dead supplying
+        // site cannot suppress the body of a reusable named callback
+        // globally; and a callback no site supplies has no region.
+        for target in escaped {
+            if let Some(sites) = targets.get_mut(&target) {
                 sites.push(ApplyExecution::Unknown);
             }
         }
-        for export in &file.ast.exports {
-            for specifier in export.specifiers.iter().chain(&export.declarations) {
-                if let Some((definition, function)) = callback(file, specifier.local.span, lookup)
-                    && let Some(sites) =
-                        targets.get_mut(&(definition.path.to_string(), function.span))
-                {
-                    sites.push(ApplyExecution::Unknown);
-                }
+        if kept {
+            let current = lookup
+                .files()
+                .iter()
+                .map(|file| file.path.as_str())
+                .collect::<HashSet<_>>();
+            chunks.0.retain(|path, _| current.contains(&**path));
+        }
+        fold_regions(targets)
+    })
+}
+
+/// What `file` supplies and may escape to, from its own calls, references and
+/// exports (the callbacks resolve through the lookup, which records its reads).
+fn file_region_sites(file: &FileFacts, lookup: &SemanticLookup<'_>) -> RegionSites {
+    let mut sites = RegionSites::default();
+    let mut uses = HashSet::default();
+    for call in &file.ast.calls {
+        if let Some((definition, function)) = callback(file, call.callee, lookup) {
+            sites.supplied.push((
+                (definition.path.to_string(), function.span),
+                ApplyExecution::Proven,
+            ));
+            uses.insert(file.ast.peel_ts_sugar_span(call.callee));
+        }
+        for (index, argument) in call.arguments.iter().enumerate() {
+            let values = std::iter::once(argument.span)
+                .chain(argument.literal_members.iter().map(|member| member.value));
+            for value in values {
+                let Some((definition, function)) = callback(file, value, lookup) else {
+                    continue;
+                };
+                let execution = lookup.primitive_at_call(file, call.span).map_or(
+                    ApplyExecution::Proven,
+                    |primitive| {
+                        let execution = at_call(file, call, primitive, index, lookup);
+                        // The error arm can be queued by a settled compute
+                        // error even when initial success apply is skipped.
+                        // Do not turn absence of a dependency into absence
+                        // of that separate trigger.
+                        let error = argument.literal_members.iter().any(|member| {
+                            member.value == value
+                                && lookup.dialect.browser_callback_member_trigger(
+                                    primitive,
+                                    index,
+                                    call.arguments.len(),
+                                    member.key.as_str(),
+                                ) == Some(
+                                    solid_dialect::BrowserCallbackTrigger::ComputationError,
+                                )
+                        });
+                        if error && execution != ApplyExecution::Proven {
+                            let inert = call.arguments.first().is_some_and(|compute| {
+                                crate::callback_host::inert_callback(file, compute.span, lookup)
+                            });
+                            if inert {
+                                ApplyExecution::Absent
+                            } else {
+                                ApplyExecution::Unknown
+                            }
+                        } else {
+                            execution
+                        }
+                    },
+                );
+                sites
+                    .supplied
+                    .push(((definition.path.to_string(), function.span), execution));
+                uses.insert(file.ast.peel_ts_sugar_span(value));
             }
         }
     }
+    for reference in &file.ast.identifiers {
+        if reference.role != solid_facts::ast::IdentifierRole::Reference
+            || uses.contains(&reference.span)
+        {
+            continue;
+        }
+        if let Some((definition, function)) = callback(file, reference.span, lookup) {
+            sites
+                .escaped
+                .push((definition.path.to_string(), function.span));
+        }
+    }
+    for export in &file.ast.exports {
+        for specifier in export.specifiers.iter().chain(&export.declarations) {
+            if let Some((definition, function)) = callback(file, specifier.local.span, lookup) {
+                sites
+                    .escaped
+                    .push((definition.path.to_string(), function.span));
+            }
+        }
+    }
+    sites
+}
+
+fn fold_regions(targets: HashMap<(String, Span), Vec<ApplyExecution>>) -> ApplyRegionRows {
     let mut result = ApplyRegions::default();
+    // `targets` iterates in insertion history: the answer is sorted below.
     for ((path, span), sites) in targets {
         let execution = if sites.contains(&ApplyExecution::Proven) {
             ApplyExecution::Proven
@@ -391,7 +574,15 @@ pub(crate) fn regions(lookup: &SemanticLookup<'_>) -> ApplyRegions {
             result.entry(path).or_default().push((span, execution));
         }
     }
-    result
+    let mut rows = result
+        .into_iter()
+        .map(|(path, mut regions)| {
+            regions.sort_unstable_by_key(|(span, _)| *span);
+            (path, regions)
+        })
+        .collect::<Vec<_>>();
+    rows.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+    rows
 }
 
 /// Every diagnostic producer shares the same invocation premise, including

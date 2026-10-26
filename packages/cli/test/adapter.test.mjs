@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -1039,6 +1040,48 @@ function flagValue(args, flag) {
   const index = args.indexOf(flag);
   return index === -1 ? undefined : args[index + 1];
 }
+
+test("the native checker is asked for the linted file's findings only; a custom command is not", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-only-file-"));
+  const project = join(root, "tsconfig.json");
+  writeFileSync(project, "{}\n");
+  const calls = join(root, "calls.txt");
+  const native = join(root, "native.sh");
+  writeFileSync(
+    native,
+    `#!/bin/sh\nprintf '%s\\n' "$*" >> ${JSON.stringify(calls)}\nprintf '{"status":"certified","findings":[]}'\n`
+  );
+  chmodSync(native, 0o755);
+  mkdirSync(join(root, "custom"));
+  const custom = recordingAnalyzer(join(root, "custom"));
+  const context = (settings, name) => ({
+    filename: join(root, name),
+    physicalFilename: join(root, name),
+    settings: { solidChecker: { project, ...settings } },
+    options: []
+  });
+  const previous = process.env.SOLID_CHECKER_BIN;
+  plugin._testing.snapshotCache.clear();
+  try {
+    process.env.SOLID_CHECKER_BIN = native;
+    plugin._testing.loadSnapshot(context({}, "App.tsx"));
+    plugin._testing.loadSnapshot(context({}, "Other.tsx"));
+    const lines = readFileSync(calls, "utf8").trim().split("\n");
+    assert.equal(lines.length, 2, "one native run per linted file");
+    assert.ok(lines[0].includes(`--only-file ${join(root, "App.tsx")}`), lines[0]);
+    assert.match(lines[1], /--only-file \S*Other\.tsx/);
+    // The file is part of what an analysis is for.
+    assert.ok(lines[0] !== lines[1]);
+    delete process.env.SOLID_CHECKER_BIN;
+    plugin._testing.loadSnapshot(context({ command: custom.command, commandArgs: custom.commandArgs }, "App.tsx"));
+    assert.ok(!custom.invocations()[0].includes("--only-file"), "a custom command never hears of it");
+  } finally {
+    if (previous === undefined) delete process.env.SOLID_CHECKER_BIN;
+    else process.env.SOLID_CHECKER_BIN = previous;
+    plugin._testing.snapshotCache.clear();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("settings retired with package-contract consumption are refused, not ignored", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-retired-"));

@@ -3,6 +3,8 @@
 #[cfg(unix)]
 mod daemon_cache;
 #[cfg(unix)]
+mod daemon_digests;
+#[cfg(unix)]
 mod daemon_resolution;
 #[cfg(unix)]
 mod idle_memory;
@@ -69,6 +71,11 @@ struct Request {
     /// `--runtime-target browser` and `--dependency-source`.
     #[serde(default)]
     window_realm: bool,
+    /// ADR 0400: with `--format json`, answer only the findings that
+    /// can matter to this file (`json_output::FindingIndex::only_file`); the
+    /// report is otherwise the full one. An editor lints one file at a time.
+    #[serde(default)]
+    only_file: Option<String>,
     #[serde(default)]
     help: bool,
     #[serde(default)]
@@ -163,15 +170,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         }
         let snapshot =
             solid_facts_backend::unsupported_runtime_snapshot(&installed, &manifest, refusal);
-        let emission = snapshot_emission::emit(
-            dialect,
-            &request.format,
-            &request.project_id,
-            &snapshot,
-            request.certify,
-            request.internal,
-            started.elapsed(),
-        )?;
+        let emission = render(dialect, &request, &snapshot, started)?;
         io::stdout().write_all(&emission.output)?;
         return Ok(emission.exit_code);
     }
@@ -199,6 +198,30 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         return Err("--serve requires a Unix platform".into());
     }
     run_ordinary_check(&request, dialect, implicit_dependency_sources, started)
+}
+
+/// The answer for `request` to print: the report in its format, narrowed to
+/// one file's findings when `--only-file` names one.
+fn render(
+    dialect: &'static solid_facts_backend::dialect::Dialect,
+    request: &Request,
+    snapshot: &solid_facts_backend::Snapshot,
+    started: Instant,
+) -> Result<snapshot_emission::Emission, Box<dyn std::error::Error>> {
+    match (request.only_file.as_deref(), request.format.as_str()) {
+        (Some(file), "json") => {
+            snapshot_emission::emit_only_file(snapshot, file, request.certify, request.internal)
+        }
+        _ => snapshot_emission::emit(
+            dialect,
+            &request.format,
+            &request.project_id,
+            snapshot,
+            request.certify,
+            request.internal,
+            started.elapsed(),
+        ),
+    }
 }
 
 fn check_options(
@@ -241,15 +264,7 @@ fn run_ordinary_check(
         &mut sessions,
         &mut |line| eprintln!("{line}"),
     )?;
-    let emission = snapshot_emission::emit(
-        dialect,
-        &request.format,
-        &request.project_id,
-        &outcome.analysis.snapshot,
-        request.certify,
-        request.internal,
-        started.elapsed(),
-    )?;
+    let emission = render(dialect, request, &outcome.analysis.snapshot, started)?;
     io::stdout().write_all(&emission.output)?;
     if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {
         let at = |elapsed: std::time::Duration| (prelude + elapsed).as_nanos();
@@ -424,6 +439,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut dependency_sources = Vec::new();
     let mut runtime = RuntimeEnvironment::default();
     let mut window_realm = false;
+    let mut only_file = None;
     let mut help = false;
     let mut serve = false;
     let mut args = arguments.into_iter();
@@ -454,6 +470,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         }
         if let Some(value) = argument.strip_prefix("--format=") {
             format = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--only-file=") {
+            only_file = Some(value.to_owned());
             continue;
         }
         if let Some(value) = argument.strip_prefix("--runtime-target=") {
@@ -516,6 +536,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
                 host_suppressions.push(args.next().ok_or("--host-suppresses needs a rule name")?)
             }
             "--format" => format = args.next().ok_or("--format needs a value")?,
+            "--only-file" => only_file = Some(args.next().ok_or("--only-file needs a path")?),
             "--certify" => certify = true,
             "--internal" => internal = true,
             "--feedback-facts" => feedback_facts = true,
@@ -607,6 +628,9 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     if window_realm && runtime.target != Some(RuntimeTarget::Browser) {
         return Err("--runtime-realm window needs --runtime-target browser".into());
     }
+    if only_file.is_some() && format != "json" {
+        return Err("--only-file needs --format json".into());
+    }
     let project = if help {
         project
     } else {
@@ -635,6 +659,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         runtime_resolution,
         dependency_sources,
         window_realm,
+        only_file,
         help,
         serve,
         // Both spellings, merged. `--conditions` takes a comma-separated list
@@ -712,6 +737,9 @@ fn print_help() {
                                 analysis-coverage gaps grouped by cause; full: every\n\
                                 finding in place; text; json (default: default)\n\
            --dialect <ID>               Solid dialect (default: detect from solid-js; fallback: solid-v2)\n\
+           --only-file <PATH>           With --format json, only the findings that can matter
+                                        to this file (an absolute path); the rest of the
+                                        report is unchanged
            --certify                    Exit 1 on a violation or a project notice\n\
            --internal                   Maintainer view: also show uncertifiable findings,\n\
                                         and --certify fails unless fully certified\n\

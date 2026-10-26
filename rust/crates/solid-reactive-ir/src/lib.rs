@@ -33,11 +33,14 @@
 //! | `package_boundary`, `boundary_defects`, `router_params` | Package-source boundary obligations and the router-parameters premise. |
 //! | `findings`, `projection` | The finding model and its projection onto dialect rule catalogs. |
 //! | `upstream_compat` | Retained eslint-plugin-solid 0.14.5 heuristics (see AGENTS.md before editing). |
+//! | `base` | L0/L1 of the incremental IR: interned file ids, per-file views and item tables, base indexes folded from per-file contributions with exact updates. |
+//! | `shadow` | Shadow mode: a retained build is compared with a fresh one (`SOLID_CHECKER_IR_SHADOW`). |
 //! | `development_feedback`, `timings` | Executed-feedback models and the stage-timing contract. |
 #![forbid(unsafe_code)]
 
 mod argument_values;
 mod attribution;
+mod base;
 mod boundary_defects;
 mod cache;
 mod callback_return;
@@ -55,6 +58,7 @@ mod findings;
 mod identity;
 mod indexes;
 mod interproc;
+mod late_chunks;
 mod literal_member_slots;
 mod local_access;
 mod name_matcher;
@@ -76,6 +80,7 @@ pub mod route_components;
 pub mod router_params;
 mod runtime_configuration;
 mod runtime_semantics;
+pub mod shadow;
 pub use runtime_configuration::RuntimeConfigurationPremise;
 mod object_members;
 mod server_rules;
@@ -122,7 +127,7 @@ pub use projection::{
     suppress_findings_owned_by_enabled_rules,
 };
 
-use cache::{BuildIdentity, IncrementalCacheState, RetainedBuild};
+use cache::{BuildCaches, BuildIdentity, IncrementalCacheState, RetainedBuild};
 use pipeline::build_with_analysis_inputs_measured_incremental;
 
 use std::{
@@ -136,7 +141,7 @@ use execution_role::{
     named_callback_roles, semantic_execution_role,
 };
 use identity::{SymbolId, SymbolInterner, SymbolName, symbol_id, symbol_name};
-use indexes::{EntitySymbols, ProjectIndexes, SemanticLookup};
+use indexes::{EntityLocations, EntitySymbols, ProjectIndexes, SemanticLookup};
 use interproc::{SummaryNode, SummaryRead, SummaryReads};
 use serde::{Deserialize, Serialize};
 use solid_dialect::{Dialect, Primitive};
@@ -1359,31 +1364,83 @@ pub struct UnresolvedCallbackObligation {
     pub message: String,
 }
 
+/// The interprocedural stage's fixed points and obligation passes, each
+/// timed on its own (`fixedPointsMs` in the reuse line).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct InterproceduralFixedPointTimings {
+    /// Transported-call seeds and extra source-origin tags.
+    pub transported: Duration,
+    pub callback_forwarding: Duration,
+    pub returned: Duration,
+    /// Call propagation's first run.
+    pub calls: Duration,
+    /// The dispatch gate and the second run.
+    pub dispatch: Duration,
+    pub returned_functions: Duration,
+    /// Factory copies and the third run.
+    pub factory: Duration,
+    pub parameter_member_obligations: Duration,
+    pub shorthand_obligations: Duration,
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct BuildTimings {
     pub total: Duration,
     pub cache_lookup: Duration,
+    /// Shadow mode ([`shadow`]): the fresh rebuild plus the comparison, which
+    /// `total` includes. Zero when shadow mode is off.
+    pub shadow: Duration,
+    /// Shadow mode: applying the changed files' contributions to the
+    /// retained base indexes ([`base`]). Zero otherwise.
+    pub base_index_update: Duration,
+    /// Shadow mode: how many files' views changed since the retained base.
+    pub base_index_changed_files: u64,
+    /// L2 memos ([`base::memo`]): finding the changed inputs and marking
+    /// their readers, before the build's first memo read.
+    pub memo_begin: Duration,
+    /// The project-wide answers most stages read, warmed concurrently once
+    /// the memos have begun (`SemanticLookup::begin_memos`).
+    pub memo_warm: Duration,
+    /// Memo answers reused from an earlier build (clean, or maybe-dirty and
+    /// verified), each key counted once per build.
+    pub memo_reused: u64,
+    /// Memo answers computed in this build (new keys and recomputations).
+    pub memo_computed: u64,
+    /// Files whose memo inputs (source, compiler map, TypeFacts rows,
+    /// slots) moved since the memo store's last build.
+    pub memo_changed_files: u64,
+    /// The returned-invocation memo's files (one answer per file, ADR
+    /// 0392): reused, recomputed, and recomputed to a new answer.
+    pub returned_invocation_files: [u64; 3],
     pub reused: bool,
-    pub source_discovery_reused_files: u64,
-    pub source_discovery_recomputed_files: u64,
+    /// Files whose identity (source hash and Type Facts delta) is the last
+    /// build's: the build's `unchanged_paths`.
+    pub source_discovery_unchanged_files: u64,
+    /// Retained source-discovery files whose identity no longer matched.
+    pub source_discovery_identity_misses: u64,
+    /// Source discovery's post-pass row sets (S7a): kept, recomputed.
+    pub source_post_pass_row_sets: [u64; 2],
     pub interprocedural_graph_reused_files: u64,
     pub interprocedural_graph_recomputed_files: u64,
     pub interprocedural_result_reused_files: u64,
     pub interprocedural_result_recomputed_files: u64,
-    /// Deterministic work units of export aggregation (node visits per
-    /// discovery round, leaf evaluations, exported properties examined): a
-    /// count, so unlike the phase's wall time it does not depend on the
-    /// machine. See `StructuredReturnDiscovery::work`.
+    /// Deterministic work units of export aggregation (exported functions
+    /// and returned properties examined): a count, so unlike the phase's
+    /// wall time it does not depend on the machine.
     pub interprocedural_export_work: u64,
     pub typescript_indexes_reused: bool,
+    /// The retained TypeScript indexes were patched from the Type Facts
+    /// delta (a subset of `typescript_indexes_reused`).
+    pub typescript_indexes_patched: bool,
+    /// The runtime-configuration scan ([`runtime_configuration`]): files whose
+    /// scan the Type Facts delta proved unchanged, and files scanned.
+    pub runtime_scan_reused_files: u64,
+    pub runtime_scan_scanned_files: u64,
     pub reachability_reused: bool,
     pub reachability_reused_files: u64,
     pub reachability_recomputed_files: u64,
-    pub local_accesses_reused: bool,
     pub local_access_reused_files: u64,
     pub local_access_recomputed_files: u64,
-    pub interprocedural_reused: bool,
-    pub owner_fixed_point_reused: bool,
     pub owner_reused_files: u64,
     pub owner_recomputed_files: u64,
     pub indexes_and_reachability: Duration,
@@ -1393,6 +1450,9 @@ pub struct BuildTimings {
     pub entity_symbols: Duration,
     pub symbol_name_indexes: Duration,
     pub boundary_defects: Duration,
+    /// The namespace hand-out census (ADR 0347), in the
+    /// indexes-and-reachability stage.
+    pub namespace_hand_outs: Duration,
     pub reachability: Duration,
     pub source_discovery: Duration,
     pub typed_accessors_and_prop_roots: Duration,
@@ -1402,6 +1462,15 @@ pub struct BuildTimings {
     pub local_reads_and_writes: Duration,
     pub interprocedural_summaries: Duration,
     pub interprocedural_graph: Duration,
+    /// Inside `interprocedural_graph`: summary-node discovery, the
+    /// accessor-provenance resolver, call transport, the per-file graph
+    /// merge and the member-invocation refresh.
+    pub interprocedural_graph_nodes: Duration,
+    pub interprocedural_node_index: Duration,
+    pub interprocedural_resolver: Duration,
+    pub interprocedural_transport: Duration,
+    pub interprocedural_merge: Duration,
+    pub interprocedural_refresh: Duration,
     pub interprocedural_direct_summaries: Duration,
     pub interprocedural_direct_index: Duration,
     pub interprocedural_direct_references: Duration,
@@ -1413,7 +1482,20 @@ pub struct BuildTimings {
     pub interprocedural_results_and_exports: Duration,
     pub interprocedural_result_reads: Duration,
     pub interprocedural_export_summaries: Duration,
+    /// Each interprocedural fixed point's own time (S7e).
+    pub interprocedural_fixed_points: InterproceduralFixedPointTimings,
     pub leaf_and_cleanup: Duration,
+    /// Inside `leaf_and_cleanup` (with the compatibility pass and the
+    /// read-table passes after the interprocedural merge): the attributed
+    /// after-await reads and the leaf-owner operations.
+    pub read_after_await_through_calls: Duration,
+    pub leaf_operations: Duration,
+    /// Inside `static_api`: the per-file API checks and the server rules.
+    pub static_api_files: Duration,
+    pub server_rules: Duration,
+    /// Inside `local_and_interprocedural`'s caller (reported under
+    /// `leaf_and_cleanup` by the stage clock): the compatibility pass.
+    pub upstream_compat: Duration,
     pub static_api: Duration,
     pub directives: Duration,
     pub owner_fixed_point: Duration,
@@ -1421,6 +1503,8 @@ pub struct BuildTimings {
     pub owner_graph_assembly: Duration,
     pub owner_propagation: Duration,
     pub owner_requirement_emission: Duration,
+    /// Inside `owner_requirement_emission`: the provider census (ADR 0352).
+    pub owner_context_census: Duration,
     pub final_ordering: Duration,
 }
 
@@ -1444,6 +1528,8 @@ pub struct IncrementalBuilder {
     /// Each file's part of that scan, reused across generations where the
     /// Type Facts delta proves it unchanged.
     runtime_configuration_scan: runtime_configuration::ScanCache,
+    /// `None` reads `SOLID_CHECKER_IR_SHADOW` at the first build.
+    shadow: Option<shadow::ShadowMode>,
 }
 
 /// How much derived cross-generation state an idle retained session keeps.
@@ -1457,7 +1543,8 @@ pub enum CacheRetention {
     /// Keep every incremental index for the lowest edit latency.
     #[default]
     Performance,
-    /// Drop the largest low-cost-to-rebuild indexes.
+    /// Drop the indexes that only the shadow check reads; keep every cache
+    /// an edit reuses (ADR 0412).
     Balanced,
     /// Keep only the current coherent program.
     Compact,
@@ -1505,6 +1592,7 @@ impl IncrementalBuilder {
             facts.project_id.clone(),
             facts.generation.get(),
         );
+        let mut runtime_scan_counts = (0, 0);
         let premise = match &self.runtime_configuration {
             Some((key, premise)) if *key == premise_key => premise.clone(),
             _ => {
@@ -1513,6 +1601,7 @@ impl IncrementalBuilder {
                     dialect,
                     &mut self.runtime_configuration_scan,
                 );
+                runtime_scan_counts = self.runtime_configuration_scan.last_counts;
                 self.runtime_configuration = Some((premise_key, premise.clone()));
                 premise
             }
@@ -1525,11 +1614,15 @@ impl IncrementalBuilder {
             boundary_fingerprints: inputs.cache_fingerprints(),
             rule_options: rule_options.clone(),
         };
-        if self.caches.ensure_domain(
+        // A domain change drops every cache, so that build is fresh already.
+        let domain_reset = self.caches.ensure_domain(
             identity.dialect,
             &identity.project_id,
             &identity.boundary_fingerprints,
-        ) {
+            &identity.rule_options,
+            &facts.runtime_symbol_redirects,
+        );
+        if domain_reset {
             self.retained = None;
         }
         let cache_lookup = lookup_started.elapsed();
@@ -1546,14 +1639,41 @@ impl IncrementalBuilder {
                 },
             ));
         }
+        let shadow_mode = *self.shadow.get_or_insert_with(shadow::ShadowMode::from_env);
         let (program, mut timings) = build_with_analysis_inputs_measured_incremental(
             facts,
             dialect,
             inputs,
             rule_options,
-            self.caches.for_build(),
+            self.caches.for_build(shadow_mode),
             identity.runtime_configuration.clone(),
         )?;
+        let mut shadow_elapsed = Duration::ZERO;
+        let program = if shadow_mode != shadow::ShadowMode::Off && !domain_reset {
+            let shadow_started = Instant::now();
+            let (fresh, _) = build_with_analysis_inputs_measured_incremental(
+                facts,
+                dialect,
+                inputs,
+                rule_options,
+                BuildCaches::default(),
+                runtime_configuration::scan(facts, dialect),
+            )?;
+            let program = if let Some(mismatch) = shadow::first_difference(&program, &fresh) {
+                shadow::report(shadow_mode, &mismatch);
+                // Fail closed: serve the fresh answer and distrust every
+                // retained cache until the next build rebuilds them.
+                self.caches.clear();
+                self.runtime_configuration = None;
+                fresh
+            } else {
+                program
+            };
+            shadow_elapsed = shadow_started.elapsed();
+            program
+        } else {
+            program
+        };
         let program = Arc::new(program);
         self.retained = Some(RetainedBuild {
             identity,
@@ -1561,7 +1681,36 @@ impl IncrementalBuilder {
         });
         timings.total = total_started.elapsed();
         timings.cache_lookup = cache_lookup;
+        timings.shadow = shadow_elapsed;
+        (
+            timings.runtime_scan_reused_files,
+            timings.runtime_scan_scanned_files,
+        ) = runtime_scan_counts;
+        if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {
+            eprintln!("{}", timings::reuse_line(facts, &timings, domain_reset));
+        }
+        timings::append_delta_line(facts, domain_reset);
         Ok((program, timings))
+    }
+
+    /// Overrides `SOLID_CHECKER_IR_SHADOW` for this builder.
+    pub fn set_shadow_mode(&mut self, mode: shadow::ShadowMode) {
+        self.shadow = Some(mode);
+    }
+
+    /// Whether a build leaves the memo store's end-of-build sweep (the
+    /// entries it did not reach, dropped with their edges) to
+    /// [`Self::finish_deferred`]. The answer a build makes does not depend on
+    /// the sweep, and nothing reads the store until the next build begins,
+    /// which runs a pending sweep first; so a caller that answers before it
+    /// calls `finish_deferred` pays for the sweep off its critical path.
+    pub fn defer_memo_end(&mut self, defer: bool) {
+        self.caches.set_defer_memo_end(defer);
+    }
+
+    /// Runs the memo sweep the last build deferred, if one is due.
+    pub fn finish_deferred(&mut self) {
+        self.caches.finish_deferred_end();
     }
 
     pub fn clear(&mut self) {
@@ -1572,8 +1721,10 @@ impl IncrementalBuilder {
 
     /// Applies the idle-memory policy without invalidating the current result.
     ///
-    /// `Balanced` targets the three cache families that profiling found to
-    /// account for most retained bytes per millisecond of recomputation.
+    /// `Balanced` releases the retained base indexes, which only shadow mode
+    /// reads, and keeps every cache an edit reuses: the interprocedural graph
+    /// and result chunks cost about 95 ms of an app-game edit to rebuild for
+    /// about 50 MB.
     /// `Compact` releases every derived index while preserving the current
     /// generation and its source-discovery domain identity.
     pub fn retain_for_idle(&mut self, retention: CacheRetention) {
@@ -1638,10 +1789,10 @@ fn propagate_returned_summary_deltas(summaries: &mut [SummaryReads], edges: &[(u
         let mut changed = false;
         for (edge_index, (owner, target)) in edges.iter().copied().enumerate() {
             let start = propagated_lengths[edge_index];
-            let propagated = summaries[target].ordered[start..].to_vec();
-            propagated_lengths[edge_index] = summaries[target].len();
-            for read in propagated {
-                changed |= summaries[owner].push_unique(read);
+            let propagated = summaries[target].log_since(start).to_vec();
+            propagated_lengths[edge_index] = summaries[target].log_len();
+            for (hops, read) in propagated {
+                changed |= summaries[owner].insert(read, hops + 1);
             }
         }
         if !changed {
@@ -1660,7 +1811,7 @@ fn propagate_summary_deltas(
     let mut queued = summaries
         .iter()
         .zip(propagated_lengths.iter())
-        .map(|(summary, propagated)| summary.len() > *propagated)
+        .map(|(summary, propagated)| summary.log_len() > *propagated)
         .collect::<Vec<_>>();
     let mut worklist = queued
         .iter()
@@ -1670,19 +1821,19 @@ fn propagate_summary_deltas(
     while let Some(target) = worklist.pop_front() {
         queued[target] = false;
         let start = propagated_lengths[target];
-        let propagated = summaries[target].ordered[start..].to_vec();
-        propagated_lengths[target] = summaries[target].len();
+        let propagated = summaries[target].log_since(start).to_vec();
+        propagated_lengths[target] = summaries[target].log_len();
         for owner in reverse_edges[target].iter().copied() {
             let transported = transported_edges.contains(&(owner, target));
             let mut changed = false;
-            for read in &propagated {
+            for (hops, read) in &propagated {
                 let mut read = read.clone();
                 read.transported |= transported;
                 // ADR 0276: past this edge the row's own completion standing
                 // is a hop below the caller, and the edge's is the caller's.
                 read.conditional |= read.local;
                 read.local = !guaranteed_edges.contains(&(owner, target));
-                changed |= summaries[owner].push_unique(read);
+                changed |= summaries[owner].insert(read, hops + 1);
             }
             if changed && !queued[owner] {
                 queued[owner] = true;

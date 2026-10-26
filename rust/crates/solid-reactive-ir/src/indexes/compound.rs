@@ -42,24 +42,19 @@
 //! function is proven only if all its other references are accounted too. A
 //! member nothing renders stays unaccounted.
 
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+
+use super::census::{
+    AssignBuiltinCalls, CallPrimitives, ObjectAssignPatched, ProgramMemberTag, PrototypeWriteVeto,
+};
 use super::*;
+use crate::base::FileId;
+use crate::base::memo::build::{BuildSchema, BuildTables, Input, Section};
+use crate::base::memo::{Ctx, Cycle, Memo, Table, TableId};
 use solid_facts::ast::{
     BindingFact, FunctionKind, ObjectGetShapeFact, ObjectPropertyFact, RuntimeValueKind,
 };
-
-type Accounted<'a> = HashSet<(&'a str, Span)>;
-
-pub(super) struct State<'a> {
-    values: OnceLock<Accounted<'a>>,
-}
-
-impl Default for State<'_> {
-    fn default() -> Self {
-        Self {
-            values: OnceLock::new(),
-        }
-    }
-}
 
 /// One member of a holder's literal tree.
 enum Member {
@@ -129,15 +124,17 @@ impl<'f> FileLiterals<'f> {
     }
 }
 
-impl<'a> SemanticLookup<'a> {
+impl SemanticLookup<'_> {
     /// Whether `span` in `path` is a function value (an identifier naming it,
     /// or the anonymous function itself) that a qualifying compound holder
-    /// stores and some JSX tag renders.
+    /// stores and some JSX tag renders ([`CompoundValuesIn`]).
     pub(crate) fn compound_value(&self, path: &str, span: Span) -> bool {
-        self.compound
-            .values
-            .get_or_init(|| self.compound_values())
-            .contains(&(path, span))
+        self.memos.table().id_of(path).is_some_and(|id| {
+            self.memo_world()
+                .answer::<CompoundValuesIn>(&id)
+                .binary_search(&span)
+                .is_ok()
+        })
     }
 
     /// Whether `property` holding `function` is a member a JSX member tag
@@ -155,331 +152,417 @@ impl<'a> SemanticLookup<'a> {
             file.ast.peel_ts_sugar_span(property.value),
         ) && self.function_is_component(file, function)
             && !self
-                .escaped_component_functions()
+                .component_statuses_of(file.path.as_str())
+                .1
                 .contains(&(file.path.as_str(), function.span))
     }
 
-    fn compound_values(&self) -> Accounted<'a> {
-        let mut accounted = Accounted::default();
-        // A member tag somewhere is the only way a holder renders anything.
-        if !self.facts.files.iter().any(|file| {
+    /// Whether some analyzed file holds a JSX member tag (`<Split.Panel>`):
+    /// the only way a holder renders anything.
+    pub(super) fn program_has_member_tag(&self) -> bool {
+        self.files().iter().any(|file| {
             file.ast
                 .jsx_elements
                 .iter()
-                .any(|e| e.member_object.is_some())
-        }) {
-            return accounted;
-        }
-        // A direct `eval` can replace a member of any holder in scope with no
-        // reference to it.
-        if self.facts.files.iter().any(|file| {
-            file.ast
-                .module_hazards
-                .iter()
-                .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
-        }) {
-            return accounted;
-        }
-        let mut tags = HashMap::<&'a str, HashMap<Span, Vec<String>>>::default();
-        let mut vetoed = None;
-        let mut patched = None;
-        for file in &self.facts.files {
-            let mut literals = None;
-            for binding in &file.ast.bindings {
-                if !candidate(file, binding) {
-                    continue;
-                }
-                // Another module can render the holder's tags while this
-                // module is still initializing, through an import cycle: the
-                // holder is then uninitialized and the tag throws before any
-                // member runs. An unresolved load counts as a cycle.
-                let census = self.module_census();
-                if census.is_cyclic(file.path.as_str()) || census.has_unknown_load() {
-                    continue;
-                }
-                let literals = literals.get_or_insert_with(|| FileLiterals::of(file));
-                let Some(holder) = self.holder(file, literals, binding) else {
-                    continue;
-                };
-                if matches!(holder.target, Target::Function(_))
-                    && *patched.get_or_insert_with(|| self.object_assign_may_be_patched())
-                {
-                    continue;
-                }
-                if *vetoed.get_or_insert_with(|| {
-                    crate::interproc::accessor_provenance::reflective_prototype_write(self)
-                }) {
-                    return Accounted::default();
-                }
-                self.census_holder(file, binding, &holder, &mut tags, &mut accounted);
-            }
-        }
-        accounted
-    }
-
-    /// The holder `binding` declares, when its initializer has the shape.
-    fn holder(
-        &self,
-        file: &FileFacts,
-        literals: &FileLiterals<'_>,
-        binding: &BindingFact,
-    ) -> Option<Holder> {
-        let ast = &file.ast;
-        let initializer = ast.peel_ts_sugar_span(binding.initializer?);
-        // A function that runs before the holder's statement reaches its
-        // values uninitialized (`const Sub` below it) and throws, and a
-        // function-local holder is built by such a call.
-        if !module_top_level(file, binding.declaration) {
-            return None;
-        }
-        // Module code that runs before the holder's statement may render a
-        // tag that names it, which throws before the member runs.
-        if self.runs_code_before(file, binding.declaration.start) {
-            return None;
-        }
-        if binding.initializer_value_kind == RuntimeValueKind::Object {
-            let members = self.literal_tree(file, literals, initializer, 0)?;
-            return members_initialized(file, &members, initializer.start).then_some(Holder {
-                target: Target::Object,
-                members,
-            });
-        }
-        let call = ast.call_at(initializer)?;
-        if file.source_text(call.callee) != Some("Object.assign")
-            || call.arguments.len() < 2
-            || call.arguments.iter().any(|argument| argument.spread)
-            || crate::interproc::accessor_provenance::mutation_builtin(file, call, self)
-                != Some("assign")
-        {
-            return None;
-        }
-        let first = ast.peel_ts_sugar_span(call.arguments[0].span);
-        let is_function = |function: &solid_facts::ast::FunctionFact| {
-            function.span == first
-                && function.name.is_none()
-                && function.method_name.is_none()
-                && matches!(
-                    function.kind,
-                    FunctionKind::Arrow | FunctionKind::Expression
-                )
-        };
-        // `Object.assign` writes with [[Set]]: a class's static accessor, an
-        // object's setter or a Proxy trap would receive each member and may
-        // call it, and a getter may answer another value. Only a function
-        // that exactly resolves, in this file, to a function declaration or
-        // a `const` bound to an arrow or function expression takes the
-        // members as plain data properties.
-        let function_target = ast.functions.iter().any(is_function)
-            || ast.reference_declaration(first).is_some_and(|declaration| {
-                ast.functions.iter().any(|function| {
-                    function.kind == FunctionKind::Declaration
-                        && function
-                            .name
-                            .as_ref()
-                            .is_some_and(|name| name.span == declaration)
-                }) || ast.bindings.iter().any(|candidate| {
-                    candidate.immutable
-                        && candidate.shape == solid_facts::ast::BindingShape::Identifier
-                        && candidate.initializer_function
-                        && candidate.names.len() == 1
-                        && candidate.names[0].span == declaration
-                })
-            });
-        if !function_target || !initialized_before(file, first, initializer.start) {
-            return None;
-        }
-        let mut members: Vec<(String, Member)> = Vec::new();
-        for argument in &call.arguments[1..] {
-            let tree =
-                self.literal_tree(file, literals, ast.peel_ts_sugar_span(argument.span), 0)?;
-            if !members_initialized(file, &tree, initializer.start) {
-                return None;
-            }
-            for (key, member) in tree {
-                // A function's own `name`, `length` and (for a constructor)
-                // `prototype` are non-writable, `arguments` and `caller` are
-                // poisoned on some functions: `Object.assign` throws and
-                // nothing renders.
-                if matches!(
-                    key.as_str(),
-                    "name" | "length" | "prototype" | "arguments" | "caller"
-                ) {
-                    return None;
-                }
-                // The later literal wins at runtime; a repeated key is not
-                // followed.
-                if members.iter().any(|(existing, _)| *existing == key) {
-                    return None;
-                }
-                members.push((key, member));
-            }
-        }
-        Some(Holder {
-            target: Target::Function(first),
-            members,
+                .any(|element| element.member_object.is_some())
         })
     }
 
-    /// The member tree of the closed, getter-free literal at `literal`.
-    fn literal_tree(
-        &self,
-        file: &FileFacts,
-        literals: &FileLiterals<'_>,
-        literal: Span,
-        depth: u32,
-    ) -> Option<Vec<(String, Member)>> {
-        let ast = &file.ast;
-        let shape = literals.shapes.get(&literal).filter(|shape| shape.closed)?;
-        if depth > 8
-            || shape
-                .properties
-                .iter()
-                .any(|property| property.getter.is_some())
-        {
-            return None;
-        }
-        let own = literals.own(literal);
-        if own.len() != shape.properties.len() {
-            return None;
-        }
-        let mut members = Vec::with_capacity(own.len());
-        for property in own {
-            if !property.data || property.method || property.computed {
-                return None;
-            }
-            let key = file.source_text(property.key)?;
-            if !plain_identifier(key) {
-                return None;
-            }
-            let value = ast.peel_ts_sugar_span(property.value);
-            let member = if ast
-                .identifiers
-                .binary_search_by_key(&value, |id| id.span)
-                .is_ok()
-            {
-                Member::Value(value)
-            } else if let Some(function) = ast.function_at(value) {
-                if function.name.is_some()
-                    || function.method_name.is_some()
-                    || !matches!(
-                        function.kind,
-                        FunctionKind::Arrow | FunctionKind::Expression
-                    )
-                {
-                    return None;
-                }
-                Member::Value(value)
-            } else if literals.shapes.contains_key(&value) {
-                Member::Namespace(self.literal_tree(file, literals, value, depth + 1)?)
-            } else if property.value_kind.is_proven_noncallable()
-                && property.value_kind != RuntimeValueKind::Object
-            {
-                Member::Data
-            } else {
-                return None;
-            };
-            members.push((key.to_owned(), member));
-        }
-        Some(members)
+    /// The `Object.assign` calls of `file` the standard library's own
+    /// `Object.assign` answers ([`crate::interproc::accessor_provenance::mutation_builtin`]),
+    /// by span, sorted.
+    pub(super) fn assign_builtin_calls(&self, file: &FileFacts) -> Vec<Span> {
+        let mut calls = file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| {
+                file.source_text(call.callee) == Some("Object.assign")
+                    && crate::interproc::accessor_provenance::mutation_builtin(file, call, self)
+                        == Some("assign")
+            })
+            .map(|call| call.span)
+            .collect::<Vec<_>>();
+        calls.sort_unstable();
+        calls.dedup();
+        calls
+    }
+}
+
+/// The function values one file's compound holders store that some JSX tag
+/// renders, sorted (ADR 0342; see the module docs for what qualifies).
+///
+/// Its reads: its own file, the program-wide gates (a member tag, the `eval`
+/// hazard probe, the `Object.assign` and prototype-write vetoes), the
+/// module census's cycle and unknown-load probes, its `Object.assign` calls and primitives, and for
+/// each holder the references of its binding (and of an `Object.assign`
+/// target) with the tags of the files holding them. A file with no holder
+/// reads the gates only.
+pub(crate) struct CompoundValuesIn;
+
+impl Memo<BuildSchema> for CompoundValuesIn {
+    type Key = FileId;
+    type Value = Arc<Vec<Span>>;
+    const NAME: &'static str = "compound_values";
+    const ID: TableId = Self::TABLE;
+
+    fn table(tables: &BuildTables) -> &Table<BuildSchema, Self> {
+        Self::of(tables)
     }
 
-    /// Accounts for the member values of `holder` that some tag renders,
-    /// when every reference to its binding qualifies.
-    fn census_holder(
-        &self,
-        file: &'a FileFacts,
-        binding: &BindingFact,
-        holder: &Holder,
-        tags: &mut HashMap<&'a str, HashMap<Span, Vec<String>>>,
-        accounted: &mut Accounted<'a>,
-    ) {
-        let Some(name) = binding.names.first() else {
-            return;
+    fn compute(ctx: &Ctx<'_, '_, BuildSchema>, id: &FileId) -> Result<Arc<Vec<Span>>, Cycle> {
+        // A member tag somewhere is the only way a holder renders anything.
+        // A direct `eval` can replace a member of any holder in scope with no
+        // reference to it.
+        if !ctx.memo::<ProgramMemberTag>(&())? || ctx.hazard(crate::base::Hazard::Eval) {
+            return Ok(Arc::default());
+        }
+        let Some(read) = ctx.file(*id, 0) else {
+            return Ok(Arc::default());
         };
-        let Some(references) = self.references_at(file, name.span) else {
-            return;
-        };
-        let mut rendered = HashSet::<Span>::default();
-        let mut plain_rendered = false;
-        for (user, span) in references {
-            if reference_is_declaration_or_module_surface(user, span) {
+        let file = read.facts();
+        let mut accounted = Vec::new();
+        let mut literals = None;
+        let mut tags = BTreeMap::new();
+        for binding in &file.ast.bindings {
+            if !candidate(file, binding) {
                 continue;
             }
-            let Some(keys) = tags
-                .entry(user.path.as_str())
-                .or_insert_with(|| tag_names(user))
-                .get(&span)
-            else {
-                return;
+            // Another module can render the holder's tags while this module
+            // is still initializing, through an import cycle: the holder is
+            // then uninitialized and the tag throws before any member runs.
+            // An unresolved load counts as a cycle (module census probes).
+            if ctx.cyclic(*id) || ctx.unknown_load() {
+                continue;
+            }
+            let literals = literals.get_or_insert_with(|| FileLiterals::of(file));
+            let Some(holder) = holder(ctx, *id, file, literals, binding)? else {
+                continue;
             };
-            if keys.is_empty() {
-                if !matches!(holder.target, Target::Function(_)) {
-                    return;
-                }
-                plain_rendered = true;
+            if matches!(holder.target, Target::Function(_))
+                && ctx.memo::<ObjectAssignPatched>(&())?
+            {
                 continue;
             }
-            let mut members = &holder.members;
-            for (index, key) in keys.iter().enumerate() {
-                let Some((_, member)) = members.iter().find(|(candidate, _)| candidate == key)
-                else {
-                    return;
-                };
-                match (member, index + 1 == keys.len()) {
-                    (Member::Namespace(inner), false) => members = inner,
-                    (Member::Value(value), true) => {
-                        rendered.insert(*value);
-                    }
-                    _ => return,
+            // The veto is program-wide: with it, no holder anywhere renders.
+            if ctx.memo::<PrototypeWriteVeto>(&())? {
+                return Ok(Arc::default());
+            }
+            census_holder(ctx, &read, binding, &holder, &mut tags, &mut accounted)?;
+        }
+        accounted.sort_unstable();
+        accounted.dedup();
+        Ok(Arc::new(accounted))
+    }
+
+    fn on_cycle(_: &FileId) -> Arc<Vec<Span>> {
+        Arc::default()
+    }
+
+    fn implied(id: &FileId) -> Vec<Input> {
+        vec![Input::File(*id, Section::Source)]
+    }
+}
+
+/// The holder `binding` declares, when its initializer has the shape.
+fn holder(
+    ctx: &Ctx<'_, '_, BuildSchema>,
+    id: FileId,
+    file: &FileFacts,
+    literals: &FileLiterals<'_>,
+    binding: &BindingFact,
+) -> Result<Option<Holder>, Cycle> {
+    let ast = &file.ast;
+    let Some(initializer) = binding.initializer.map(|span| ast.peel_ts_sugar_span(span)) else {
+        return Ok(None);
+    };
+    // A function that runs before the holder's statement reaches its values
+    // uninitialized (`const Sub` below it) and throws, and a function-local
+    // holder is built by such a call.
+    if !module_top_level(file, binding.declaration) {
+        return Ok(None);
+    }
+    // Module code that runs before the holder's statement may render a tag
+    // that names it, which throws before the member runs.
+    if runs_code_before(ctx, id, file, binding.declaration.start)? {
+        return Ok(None);
+    }
+    if binding.initializer_value_kind == RuntimeValueKind::Object {
+        let Some(members) = literal_tree(file, literals, initializer, 0) else {
+            return Ok(None);
+        };
+        return Ok(
+            members_initialized(file, &members, initializer.start).then_some(Holder {
+                target: Target::Object,
+                members,
+            }),
+        );
+    }
+    let Some(call) = ast.call_at(initializer) else {
+        return Ok(None);
+    };
+    if file.source_text(call.callee) != Some("Object.assign")
+        || call.arguments.len() < 2
+        || call.arguments.iter().any(|argument| argument.spread)
+        || ctx
+            .memo::<AssignBuiltinCalls>(&id)?
+            .binary_search(&call.span)
+            .is_err()
+    {
+        return Ok(None);
+    }
+    let first = ast.peel_ts_sugar_span(call.arguments[0].span);
+    let is_function = |function: &solid_facts::ast::FunctionFact| {
+        function.span == first
+            && function.name.is_none()
+            && function.method_name.is_none()
+            && matches!(
+                function.kind,
+                FunctionKind::Arrow | FunctionKind::Expression
+            )
+    };
+    // `Object.assign` writes with [[Set]]: a class's static accessor, an
+    // object's setter or a Proxy trap would receive each member and may call
+    // it, and a getter may answer another value. Only a function that
+    // exactly resolves, in this file, to a function declaration or a `const`
+    // bound to an arrow or function expression takes the members as plain
+    // data properties.
+    let function_target = ast.functions.iter().any(is_function)
+        || ast.reference_declaration(first).is_some_and(|declaration| {
+            ast.functions.iter().any(|function| {
+                function.kind == FunctionKind::Declaration
+                    && function
+                        .name
+                        .as_ref()
+                        .is_some_and(|name| name.span == declaration)
+            }) || ast.bindings.iter().any(|candidate| {
+                candidate.immutable
+                    && candidate.shape == solid_facts::ast::BindingShape::Identifier
+                    && candidate.initializer_function
+                    && candidate.names.len() == 1
+                    && candidate.names[0].span == declaration
+            })
+        });
+    if !function_target || !initialized_before(file, first, initializer.start) {
+        return Ok(None);
+    }
+    let mut members: Vec<(String, Member)> = Vec::new();
+    for argument in &call.arguments[1..] {
+        let Some(tree) = literal_tree(file, literals, ast.peel_ts_sugar_span(argument.span), 0)
+        else {
+            return Ok(None);
+        };
+        if !members_initialized(file, &tree, initializer.start) {
+            return Ok(None);
+        }
+        for (key, member) in tree {
+            // A function's own `name`, `length` and (for a constructor)
+            // `prototype` are non-writable, `arguments` and `caller` are
+            // poisoned on some functions: `Object.assign` throws and nothing
+            // renders.
+            if matches!(
+                key.as_str(),
+                "name" | "length" | "prototype" | "arguments" | "caller"
+            ) {
+                return Ok(None);
+            }
+            // The later literal wins at runtime; a repeated key is not
+            // followed.
+            if members.iter().any(|(existing, _)| *existing == key) {
+                return Ok(None);
+            }
+            members.push((key, member));
+        }
+    }
+    Ok(Some(Holder {
+        target: Target::Function(first),
+        members,
+    }))
+}
+
+/// The member tree of the closed, getter-free literal at `literal`.
+fn literal_tree(
+    file: &FileFacts,
+    literals: &FileLiterals<'_>,
+    literal: Span,
+    depth: u32,
+) -> Option<Vec<(String, Member)>> {
+    let ast = &file.ast;
+    let shape = literals.shapes.get(&literal).filter(|shape| shape.closed)?;
+    if depth > 8
+        || shape
+            .properties
+            .iter()
+            .any(|property| property.getter.is_some())
+    {
+        return None;
+    }
+    let own = literals.own(literal);
+    if own.len() != shape.properties.len() {
+        return None;
+    }
+    let mut members = Vec::with_capacity(own.len());
+    for property in own {
+        if !property.data || property.method || property.computed {
+            return None;
+        }
+        let key = file.source_text(property.key)?;
+        if !plain_identifier(key) {
+            return None;
+        }
+        let value = ast.peel_ts_sugar_span(property.value);
+        let member = if ast
+            .identifiers
+            .binary_search_by_key(&value, |id| id.span)
+            .is_ok()
+        {
+            Member::Value(value)
+        } else if let Some(function) = ast.function_at(value) {
+            if function.name.is_some()
+                || function.method_name.is_some()
+                || !matches!(
+                    function.kind,
+                    FunctionKind::Arrow | FunctionKind::Expression
+                )
+            {
+                return None;
+            }
+            Member::Value(value)
+        } else if literals.shapes.contains_key(&value) {
+            Member::Namespace(literal_tree(file, literals, value, depth + 1)?)
+        } else if property.value_kind.is_proven_noncallable()
+            && property.value_kind != RuntimeValueKind::Object
+        {
+            Member::Data
+        } else {
+            return None;
+        };
+        members.push((key.to_owned(), member));
+    }
+    Some(members)
+}
+
+/// Each file's tag names ([`tag_names`]), read once per census.
+type FileTags = BTreeMap<FileId, HashMap<Span, Vec<String>>>;
+
+/// The tag names of `id`, read through `ctx`.
+fn tags_of<'t>(
+    ctx: &Ctx<'_, '_, BuildSchema>,
+    tags: &'t mut FileTags,
+    id: FileId,
+) -> &'t HashMap<Span, Vec<String>> {
+    tags.entry(id).or_insert_with(|| {
+        ctx.file(id, 0)
+            .map(|read| tag_names(read.facts()))
+            .unwrap_or_default()
+    })
+}
+
+/// Accounts for the member values of `holder` that some tag renders, when
+/// every reference to its binding qualifies.
+fn census_holder(
+    ctx: &Ctx<'_, '_, BuildSchema>,
+    read: &crate::base::memo::build::FileRead<'_, '_, '_>,
+    binding: &BindingFact,
+    holder: &Holder,
+    tags: &mut FileTags,
+    accounted: &mut Vec<Span>,
+) -> Result<(), Cycle> {
+    let Some(name) = binding.names.first() else {
+        return Ok(());
+    };
+    let Some(references) = references_at(ctx, read, name.span)? else {
+        return Ok(());
+    };
+    let mut rendered = BTreeSet::<Span>::new();
+    let mut plain_rendered = false;
+    for (user, span) in references {
+        let Some(user_read) = ctx.file(user, 0) else {
+            return Ok(());
+        };
+        if reference_is_declaration_or_module_surface(user_read.facts(), span) {
+            continue;
+        }
+        let Some(keys) = tags_of(ctx, tags, user).get(&span) else {
+            return Ok(());
+        };
+        if keys.is_empty() {
+            if !matches!(holder.target, Target::Function(_)) {
+                return Ok(());
+            }
+            plain_rendered = true;
+            continue;
+        }
+        let mut members = &holder.members;
+        for (index, key) in keys.iter().enumerate() {
+            let Some((_, member)) = members.iter().find(|(candidate, _)| candidate == key) else {
+                return Ok(());
+            };
+            match (member, index + 1 == keys.len()) {
+                (Member::Namespace(inner), false) => members = inner,
+                (Member::Value(value), true) => {
+                    rendered.insert(*value);
                 }
+                _ => return Ok(()),
             }
         }
-        if let Target::Function(target) = holder.target {
-            // The target function is the holder's own value: a reference to
-            // it that is no tag, this argument or its surface would reach
-            // every member without naming the holder. An anonymous function
-            // has no other reference.
-            let sealed = file.ast.function_at(target).is_some()
-                || self.references_at(file, target).is_some_and(|uses| {
-                    uses.into_iter().all(|(user, span)| {
-                        span == target
-                            || reference_is_declaration_or_module_surface(user, span)
-                            || tags
-                                .entry(user.path.as_str())
-                                .or_insert_with(|| tag_names(user))
+    }
+    if let Target::Function(target) = holder.target {
+        // The target function is the holder's own value: a reference to it
+        // that is no tag, this argument or its surface would reach every
+        // member without naming the holder. An anonymous function has no
+        // other reference.
+        let file = read.facts();
+        let sealed = if file.ast.function_at(target).is_some() {
+            true
+        } else {
+            match references_at(ctx, read, target)? {
+                None => false,
+                Some(uses) => {
+                    let mut sealed = true;
+                    for (user, span) in uses {
+                        let Some(user_read) = ctx.file(user, 0) else {
+                            sealed = false;
+                            break;
+                        };
+                        if span == target
+                            || reference_is_declaration_or_module_surface(user_read.facts(), span)
+                            || tags_of(ctx, tags, user)
                                 .get(&span)
                                 .is_some_and(Vec::is_empty)
-                    })
-                });
-            if !sealed {
-                return;
+                        {
+                            continue;
+                        }
+                        sealed = false;
+                        break;
+                    }
+                    sealed
+                }
             }
-            if plain_rendered {
-                accounted.insert((file.path.as_str(), target));
-            }
+        };
+        if !sealed {
+            return Ok(());
         }
-        for value in rendered {
-            accounted.insert((file.path.as_str(), value));
+        if plain_rendered {
+            accounted.push(target);
         }
     }
+    accounted.extend(rendered);
+    Ok(())
+}
 
-    /// The Type Facts references of the symbol at `span` as analyzed files
-    /// and spans, `None` when any evidence is missing.
-    fn references_at(&self, file: &FileFacts, span: Span) -> Option<Vec<(&'a FileFacts, Span)>> {
-        let symbol = self.entities.at(file.path.as_str(), span)?;
-        self.symbol_references_if_present(symbol.as_str())?
-            .iter()
-            .map(|reference| {
-                Some((
-                    self.file_by_path(reference.path.as_ref())?,
-                    Span::new(
-                        u32::try_from(reference.start_byte).ok()?,
-                        u32::try_from(reference.end_byte).ok()?,
-                    ),
-                ))
-            })
-            .collect()
-    }
+/// The Type Facts references of the symbol at `span` as analyzed files and
+/// spans, `None` when any evidence is missing.
+fn references_at(
+    ctx: &Ctx<'_, '_, BuildSchema>,
+    read: &crate::base::memo::build::FileRead<'_, '_, '_>,
+    span: Span,
+) -> Result<Option<Vec<(FileId, Span)>>, Cycle> {
+    let Some(symbol) = read.symbol_at(span) else {
+        return Ok(None);
+    };
+    Ok(super::census::symbol_references(ctx, &symbol.shared())?
+        .and_then(|references| references.into_iter().collect::<Option<Vec<_>>>()))
 }
 
 /// Whether `span` is written at module top level: inside no function, class
@@ -561,7 +644,7 @@ impl SemanticLookup<'_> {
     /// `Reflect.set(globalThis.Object, …)`) whose target is the global object
     /// or `Object`. A local `Object` that shadows the global is refused where
     /// the call resolves (`mutation_builtin`).
-    fn object_assign_may_be_patched(&self) -> bool {
+    pub(super) fn object_assign_may_be_patched(&self) -> bool {
         let assigned = self.assigned_members();
         if assigned.global
             || assigned.hosts.iter().any(|(_, dom)| !dom)
@@ -741,60 +824,6 @@ impl SemanticLookup<'_> {
         }
         self.may_be_object(file, initializer, unresolved, depth - 1)
     }
-
-    /// Whether module top-level code written before `before` can run user
-    /// code or render: a call, `new`, a JSX element or a tagged template
-    /// outside every function (a function body runs only when it is called).
-    /// A call to a primitive of the dialect that is given nothing but data
-    /// literals (`createSignal(0)`) runs no user code and does not count.
-    fn runs_code_before(&self, file: &FileFacts, before: u32) -> bool {
-        let ast = &file.ast;
-        let top_level = |span: Span| {
-            span.start < before
-                && !ast
-                    .functions
-                    .iter()
-                    .any(|function| function.span.contains(span) && function.span != span)
-        };
-        ast.calls
-            .iter()
-            .any(|call| top_level(call.span) && !self.call_runs_no_user_code(file, call))
-            || ast
-                .jsx_elements
-                .iter()
-                .any(|element| top_level(element.span))
-            || ast
-                .tagged_templates
-                .iter()
-                .any(|template| top_level(template.span))
-    }
-
-    fn call_runs_no_user_code(&self, file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
-        if call.construct
-            || call.arguments.iter().any(|argument| {
-                argument.spread
-                    || !matches!(
-                        argument.runtime_value_kind,
-                        RuntimeValueKind::Primitive
-                            | RuntimeValueKind::Nullish
-                            | RuntimeValueKind::Object
-                            | RuntimeValueKind::Array
-                    )
-            })
-        {
-            return false;
-        }
-        crate::call_primitive_name_cached(
-            self,
-            file,
-            call,
-            self.entities(),
-            self.symbol_names(),
-            self.dialect,
-        )
-        .and_then(|name| name.primitive())
-        .is_some_and(|primitive| !self.dialect.mounts_component_tree(primitive))
-    }
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -851,4 +880,71 @@ fn plain_identifier(text: &str) -> bool {
         .next()
         .is_some_and(|first| first.is_ascii_alphabetic() || first == '_' || first == '$')
         && characters.all(|rest| rest.is_ascii_alphanumeric() || rest == '_' || rest == '$')
+}
+
+/// Whether module top-level code written before `before` can run user code
+/// or render: a call, `new`, a JSX element or a tagged template outside every
+/// function (a function body runs only when it is called). A call to a
+/// primitive of the dialect that is given nothing but data literals
+/// (`createSignal(0)`) runs no user code and does not count.
+fn runs_code_before(
+    ctx: &Ctx<'_, '_, BuildSchema>,
+    id: FileId,
+    file: &FileFacts,
+    before: u32,
+) -> Result<bool, Cycle> {
+    let ast = &file.ast;
+    let top_level = |span: Span| {
+        span.start < before
+            && !ast
+                .functions
+                .iter()
+                .any(|function| function.span.contains(span) && function.span != span)
+    };
+    if ast
+        .jsx_elements
+        .iter()
+        .any(|element| top_level(element.span))
+        || ast
+            .tagged_templates
+            .iter()
+            .any(|template| top_level(template.span))
+    {
+        return Ok(true);
+    }
+    let mut primitives = None;
+    for call in ast.calls.iter().filter(|call| top_level(call.span)) {
+        let primitives = match &primitives {
+            Some(primitives) => primitives,
+            None => primitives.insert(ctx.memo::<CallPrimitives>(&id)?),
+        };
+        if !call_runs_no_user_code(ctx, primitives, call) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn call_runs_no_user_code(
+    ctx: &Ctx<'_, '_, BuildSchema>,
+    primitives: &BTreeMap<Span, solid_dialect::Primitive>,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    if call.construct
+        || call.arguments.iter().any(|argument| {
+            argument.spread
+                || !matches!(
+                    argument.runtime_value_kind,
+                    RuntimeValueKind::Primitive
+                        | RuntimeValueKind::Nullish
+                        | RuntimeValueKind::Object
+                        | RuntimeValueKind::Array
+                )
+        })
+    {
+        return false;
+    }
+    primitives
+        .get(&call.span)
+        .is_some_and(|primitive| !ctx.dialect().mounts_component_tree(*primitive))
 }

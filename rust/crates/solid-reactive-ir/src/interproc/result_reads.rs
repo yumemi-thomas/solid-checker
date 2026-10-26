@@ -4,8 +4,11 @@ use super::*;
 
 pub(crate) struct InterproceduralResultReadContext<'a, 'b> {
     pub(crate) result: InterproceduralResultView<'a>,
-    pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
-    pub(crate) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    /// Recorded per entry asked (`transport_reads`), as are the transport
+    /// tables and the resolver's answers below: a result chunk's proof names
+    /// each entry it read of the stage's tables.
+    pub(crate) source_kinds: super::transport_reads::SourceKindsRead<'a>,
+    pub(crate) accessors: super::transport_reads::AccessorsRead<'a>,
     pub(crate) entities: &'a EntitySymbols,
     pub(crate) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) lookup: &'a SemanticLookup<'b>,
@@ -444,7 +447,7 @@ fn call_result_reads(
                 summary_attributed: !direct,
                 transported: read.transported
                     || transported.is_some()
-                    || provenance.has_source_origin(&read.symbol),
+                    || super::transport_reads::source_origin(provenance, &read.symbol),
             });
         }
     }
@@ -506,7 +509,7 @@ fn resolve_call_target<'b>(
     let dependencies = &mut out.dependencies;
     let obligations_before = dispatch_obligations.len();
     let callee = location(file.path.shared(), call.callee);
-    let transported = transported_calls.get(&callee);
+    let transported = super::transport_reads::call(transported_calls, &callee);
     let label = call
         .static_callee(&file.source)
         .map(str::to_owned)
@@ -514,7 +517,7 @@ fn resolve_call_target<'b>(
     let valid_call = lookup
         .resolved_callee_call(file, call.callee)
         .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Valid);
-    if unavailable_calls.contains(&callee)
+    if super::transport_reads::unavailable(unavailable_calls, &callee)
         && !lookup
             .resolved_callee_call(file, call.callee)
             .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Recovery)
@@ -665,8 +668,7 @@ fn call_summary(
         match transported {
             accessor_provenance::Callable::Accessor(symbol) => (
                 label,
-                provenance
-                    .read(symbol, file, call.span)
+                super::transport_reads::transported_read(provenance, symbol, file, call.span)
                     .into_iter()
                     .collect(),
                 None,
@@ -1478,20 +1480,17 @@ impl<'s, 'a, 'b, 'c> DirectReadProof<'s, 'a, 'b, 'c> {
         let array_entry = matches!(
             transported,
             Some(accessor_provenance::Callable::ArrayMembers(_))
-        ) || (!array_member_bodies.is_empty()
+        ) || (super::transport_reads::array_bodies_present(array_member_bodies)
             && direct_callee.is_some_and(|(callee_file, callee)| {
-                array_member_bodies.contains(&(callee_file.path.to_string(), callee.span))
-                    || entered
-                        .get_or_init(|| {
-                            directly_entered_functions(
-                                callee_file,
-                                callee,
-                                lookup,
-                                transported_calls,
-                            )
-                        })
-                        .iter()
-                        .any(|key| array_member_bodies.contains(key))
+                super::transport_reads::array_body(
+                    array_member_bodies,
+                    &(callee_file.path.to_string(), callee.span),
+                ) || entered
+                    .get_or_init(|| {
+                        directly_entered_functions(callee_file, callee, lookup, transported_calls)
+                    })
+                    .iter()
+                    .any(|key| super::transport_reads::array_body(array_member_bodies, key))
             }));
         Self {
             scope,
@@ -1534,8 +1533,8 @@ impl<'s, 'a, 'b, 'c> DirectReadProof<'s, 'a, 'b, 'c> {
             return false;
         }
         let proven_origin = || {
-            provenance.has_runtime_source_origin(&read.symbol)
-                || provenance.has_source_origin(&read.symbol)
+            super::transport_reads::runtime_source_origin(provenance, &read.symbol)
+                || super::transport_reads::source_origin(provenance, &read.symbol)
         };
         if array_entry && !proven_origin() {
             return false;
@@ -1670,7 +1669,7 @@ impl<'s, 'a, 'b, 'c> DirectReadProof<'s, 'a, 'b, 'c> {
                 entities,
                 symbol_names,
                 lookup,
-            ) || provenance.has_source_origin(&read.symbol))
+            ) || super::transport_reads::source_origin(provenance, &read.symbol))
                 && (source_kinds.get(&read.symbol) != Some(&ReactiveSourceKind::Store)
                     || store_get_has_strict_witness(
                         owner_file,
@@ -1790,12 +1789,12 @@ pub(super) fn captured_body_read_runs_during_call(
 /// sources need a separate provenance proof; declaration spelling is not one.
 pub(super) fn source_has_runtime_witness(
     symbol: &SymbolId,
-    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+    accessors: &impl AccessorTable,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    let Some((_, declaration)) = accessors.get(symbol) else {
+    let Some((_, declaration)) = accessors.accessor(symbol) else {
         return false;
     };
     let Some(file) = lookup.file_by_path(declaration.path.as_ref()) else {
@@ -2172,43 +2171,6 @@ pub(super) fn getter_line(lookup: &SemanticLookup<'_>, site: &Location) -> usize
         .unwrap_or(0)
 }
 
-pub(super) fn call_role_syntax(file: &solid_facts::FileFacts) -> bool {
-    crate::indexes::returns_source_root(file)
-        // Nested literal receivers require a project-wide eval veto. Adding
-        // or removing it must refresh unchanged callers in both directions.
-        || file.ast.module_hazards.iter().any(|hazard| {
-            hazard.kind == solid_facts::ast::ModuleHazardKind::Eval
-        })
-        || !file.ast.object_get_shapes.is_empty()
-        // Provider multiplicity and returned literal identities are project
-        // syntax inputs, even when their read summaries stay byte-identical.
-        || !file.ast.jsx_elements.is_empty()
-        || file.ast.returns.iter().any(|returned| returned.value == solid_facts::ast::ReturnValueKind::Function)
-        || file.ast.functions.iter().any(|function| {
-            function.r#async
-                || function.expression_return.is_some()
-                || function
-                    .parameters
-                    .iter()
-                    .any(|parameter| parameter.initializer.is_some())
-                || (function.kind == solid_facts::ast::FunctionKind::Declaration
-                    && function
-                        .name
-                        .as_ref()
-                        .is_some_and(|name| crate::indexes::binding_written(file, name.span)))
-        })
-        || file.ast.bindings.iter().any(|binding| {
-            !binding.immutable
-                && binding.initializer.is_some_and(|initializer| {
-                    let initializer = file.ast.peel_ts_sugar_span(initializer);
-                    file.ast
-                        .functions
-                        .iter()
-                        .any(|function| function.span == initializer)
-                })
-        })
-}
-
 /// ADR 0204: every project function a call of `function` enters
 /// directly, `function` excluded: through a plain call written in its own body
 /// (not in a nested function, not in a default parameter, not in JSX) whose
@@ -2254,7 +2216,10 @@ pub(super) fn enter_directly_called(
     for call in &file.ast.calls {
         // A plain call: a method call dispatches on its receiver, which a
         // subclass can override.
-        let transported = transported_calls.get(&location(file.path.shared(), call.callee));
+        let transported = super::transport_reads::call(
+            transported_calls,
+            &location(file.path.shared(), call.callee),
+        );
         if (!call.direct_callee && transported.is_none())
             || !body_site_runs_during_call(file, function, call.span)
             || file.ast.any_jsx_containing(call.span)
@@ -2357,7 +2322,7 @@ fn argument_proven_not_a_getter(
     file: &solid_facts::FileFacts,
     argument: &solid_facts::ast::ArgumentFact,
     entities: &EntitySymbols,
-    source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
+    source_kinds: &super::transport_reads::SourceKindsRead<'_>,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     if argument.spread {

@@ -74,14 +74,41 @@
 //!    While suspended the lease cannot be dereferenced (it panics), and the
 //!    borrow checker already forbids any `&mut Checker` derived from it from
 //!    living across the call.
+//! 8. **A file checker is the thread's checker while it is installed**
+//!    (per-file checkers, the producer's only mode).
+//!    [`Generation::file_checker`] creates a fresh checker in a [`Region`] of
+//!    its own and installs it in a thread-local; the program's pool hands it
+//!    out, under invariant 7's exclusivity, to every acquisition on that
+//!    thread for that program until the [`FileChecker`] is dropped, which
+//!    frees the checker, then its region. Other threads, and other programs'
+//!    pools, never see it, so each worker thread can run a file checker of its
+//!    own over one program (tsrs arenas are thread-local; the region is
+//!    created, entered and freed on the installing thread). File checkers do
+//!    not nest (panic). A lease still out when the file checker drops makes it
+//!    leak its checker instead of freeing it, and a generation with a live
+//!    file checker leaks instead of freeing its program. What the checker made
+//!    lives in its region, so invariant 1 applies to it at the drop: callers
+//!    purge every handle the pass made (`Identities::purge_scope_pointers`)
+//!    before or at the drop. The pass pool (`passes::run_works`) shares
+//!    `&Generation` with scoped worker threads that do nothing but this: each
+//!    installs file checkers of its own and calls no program entry point
+//!    without one installed (the slot's checker is never acquired off the
+//!    building thread). The program's lazily filled caches are primed first
+//!    ([`Generation::prime_caches`]); everything else a checker reads in the
+//!    program (files, binder symbols and tables, nodes) is frozen after
+//!    binding, and a file's own lazies are `OnceLock`s or locked and
+//!    allocated in the file's region (tsrs runs concurrent checkers over one
+//!    program the same way).
 //!
-//! Violations of 2 and 3 degrade to a leak. Violations of 1 and 6 cannot be
+//! Violations of 2, 3 and 8 degrade to a leak. Violations of 1 and 6 cannot be
 //! detected here; the S3 suite runs under `TSRS_ARENA_POISON=1` so a read of
 //! freed arena memory is poisoned instead of silently stale.
 #![allow(unsafe_code)]
 
+use std::cell::{Cell, RefCell};
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::ThreadId;
 use tsrs_ast::SourceFile;
@@ -148,6 +175,127 @@ struct CheckerSlot {
     held: Mutex<Option<Held>>,
     /// Outstanding [`CheckerHandle`]s handed out by `get_checker`.
     leases: AtomicUsize,
+    /// Live [`FileChecker`]s over this program, on any thread. A generation
+    /// with one is leaked instead of freed (the file checker reads the
+    /// program until it is dropped).
+    file_checkers: AtomicUsize,
+    /// Where the program's lazily filled caches are allocated (the include
+    /// processor's diagnostics, filled by the first `get_semantic_diagnostics`
+    /// in whatever region is current, and kept for the program's life). Primed
+    /// before the first checker of either kind, so they land in neither the
+    /// slot checker's region (freed by `release_checker`) nor a file
+    /// checker's (freed after its pass). Freed with the slot, after the
+    /// program.
+    caches: Region,
+    caches_primed: AtomicBool,
+}
+
+/// The file checker installed on this thread (module invariant 8): the
+/// checker the pool hands out instead of the slot's while it is installed.
+struct Installed {
+    /// The address of the program it checks: only that program's pool hands
+    /// it out.
+    program: usize,
+    checker: NonNull<Checker>,
+    /// A handle on the checker's region, entered for every lease.
+    region: Region,
+    /// Outstanding leases of this checker (0 or 1: acquisition is exclusive).
+    leases: Rc<Cell<usize>>,
+}
+
+thread_local! {
+    static FILE_CHECKER: RefCell<Option<Installed>> = const { RefCell::new(None) };
+}
+
+/// A lease on the file checker installed on this thread for `program`, or
+/// `None` when none is (module invariant 8).
+fn file_checker_lease(program: &'static Program) -> Option<CheckerHandle> {
+    FILE_CHECKER.with(|cell| {
+        let cell = cell.borrow();
+        let installed = cell.as_ref()?;
+        if installed.program != std::ptr::from_ref(program).addr() {
+            return None;
+        }
+        // Module invariant 7, for the file checker: a second handle would be a
+        // second `&mut Checker` to it.
+        assert!(
+            installed.leases.get() == 0,
+            "a tsrs entry point acquired the file checker while a lease was held \
+             (unsafe_boundary invariant 7)"
+        );
+        let scope = installed.region.enter();
+        installed.leases.set(1);
+        let leases = Rc::clone(&installed.leases);
+        // SAFETY: `from_raw` needs the checker to stay alive and untouched by
+        // anyone else until the release closure runs. The `FileChecker` that
+        // installed it owns it and frees it only when the lease count is 0
+        // (otherwise it leaks it); it is reachable only through this
+        // thread-local, on this thread, and the assertion above makes the
+        // lease exclusive. The closure restores the count after the region
+        // scope ends.
+        Some(unsafe {
+            CheckerHandle::from_raw(installed.checker, move || {
+                drop(scope);
+                leases.set(0);
+            })
+        })
+    })
+}
+
+/// Checkers leaked instead of freed (a file checker's lease left out, or an
+/// escaped region of a file or slot checker), process-wide: a measurement and
+/// a canary, expected to stay 0.
+static ESCAPED_FILE_CHECKERS: AtomicUsize = AtomicUsize::new(0);
+
+/// How many file checkers were leaked instead of freed (see
+/// [`ESCAPED_FILE_CHECKERS`]).
+#[must_use]
+pub fn leaked_file_checkers() -> usize {
+    ESCAPED_FILE_CHECKERS.load(Ordering::SeqCst)
+}
+
+/// A fresh checker of one's own over a generation's program, in a [`Region`]
+/// of its own, installed as the calling thread's current checker until it is
+/// dropped (module invariant 8). Every checker acquisition for that program on
+/// this thread ([`Generation::with_checker`],
+/// [`Generation::semantic_diagnostics`], a suspended
+/// [`CheckerLease::semantic_diagnostics`]) then gets this checker instead of
+/// the program's single one. Dropping it frees the checker, then its region.
+///
+/// Everything the checker made (derived symbols, types, signatures, and the
+/// lazily resolved merged symbols) lives in that region: a handle to any of
+/// it must not be kept past the drop (module invariant 1). The program's own
+/// arena (AST, binder symbols, files) is untouched and stays valid.
+pub struct FileChecker {
+    slot: Arc<CheckerSlot>,
+    /// `None` once dropped.
+    held: Option<Box<Held>>,
+    /// Not `Send`: the installation is this thread's.
+    _thread: std::marker::PhantomData<*const ()>,
+}
+
+impl Drop for FileChecker {
+    fn drop(&mut self) {
+        let installed = FILE_CHECKER.with(|cell| cell.borrow_mut().take());
+        let leased = installed
+            .as_ref()
+            .is_some_and(|installed| installed.leases.get() != 0);
+        drop(installed);
+        let held = self.held.take();
+        let escaped = held.as_ref().is_some_and(|held| held._region.escaped());
+        if leased || escaped {
+            // A lease outlived the scope (module invariant 2), or tsrs stored
+            // an object of the region in a structure that outlives it (a
+            // program-level cache filled lazily: `Region::escaped`): freeing
+            // would free memory a live reference points at. Leak it instead.
+            ESCAPED_FILE_CHECKERS.fetch_add(1, Ordering::SeqCst);
+            std::mem::forget(held);
+        } else {
+            // Field order: the checker, then its region.
+            drop(held);
+        }
+        self.slot.file_checkers.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 /// Field order is drop order: the checker goes before the region it lives in.
@@ -162,7 +310,19 @@ impl CheckerSlot {
             program,
             held: Mutex::new(None),
             leases: AtomicUsize::new(0),
+            file_checkers: AtomicUsize::new(0),
+            caches: Region::new(64 << 10),
+            caches_primed: AtomicBool::new(false),
         })
+    }
+
+    /// Fills the program's lazily filled caches in [`CheckerSlot::caches`],
+    /// once, before any checker is made. Acquires no checker.
+    fn prime_caches(&self) {
+        if !self.caches_primed.swap(true, Ordering::SeqCst) {
+            let _scope = self.caches.enter();
+            let _ = self.program.get_program_diagnostics();
+        }
     }
 
     fn outstanding(&self) -> usize {
@@ -180,7 +340,15 @@ impl CheckerSlot {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take();
-        drop(held);
+        if held.as_ref().is_some_and(|held| held._region.escaped()) {
+            // tsrs stored an object of the checker's region in a structure
+            // that outlives it (`Region::escaped`): leak it, as a file
+            // checker's (`ESCAPED_FILE_CHECKERS` counts both).
+            ESCAPED_FILE_CHECKERS.fetch_add(1, Ordering::SeqCst);
+            std::mem::forget(held);
+        } else {
+            drop(held);
+        }
         true
     }
 }
@@ -194,6 +362,11 @@ struct SlotPool(Arc<CheckerSlot>);
 impl CheckerPool for SlotPool {
     fn get_checker(&self, _ctx: &Context, _file: Option<P<SourceFile>>) -> CheckerHandle {
         let slot = &self.0;
+        // Module invariant 8: a file checker installed on this thread for
+        // this program is the checker while it is installed.
+        if let Some(handle) = file_checker_lease(slot.program) {
+            return handle;
+        }
         // Module invariant 7: exclusive acquisition. A second handle would be a
         // second `&mut Checker` to the one checker.
         assert!(
@@ -201,6 +374,7 @@ impl CheckerPool for SlotPool {
             "a tsrs entry point acquired the checker while a lease was held \
              (unsafe_boundary invariant 7)"
         );
+        slot.prime_caches();
         let mut guard = slot
             .held
             .lock()
@@ -343,7 +517,7 @@ fn options_for(
     regions: &Arc<ProgramRegions>,
     factory: &CreateCheckerPool,
 ) -> ProgramOptions {
-    // tsrs's canonical checker history (ADR 0367): the caches typescript-go
+    // tsrs's canonical checker history: the caches typescript-go
     // keys by what the checker saw first (`undefinedProperties`, keyed by name
     // across the program, orders the properties of a normalized object-literal
     // union by the first literal that mentioned the name) are a function of the
@@ -368,6 +542,15 @@ fn options_for(
     options.regions = Some(Arc::clone(regions));
     // One checker reports diagnostics (S4 reads them for call validity).
     options.canonical_diagnostics = false;
+    // Per-file checkers (instant-edits P3): an edit of a file with a JSX
+    // runtime import (every `.tsx` under `jsx: preserve` + `jsxImportSource`)
+    // or under `importHelpers` reuses the program when the file needs the same
+    // synthetic imports, instead of Go's full rebuild, as tsrs's watch mode
+    // does. The kept synthetic import nodes' parent is the full build's
+    // version of the file; the chain keeps every file of its full build alive
+    // until the chain is freed (`FileRegions` base, `sweep_dead_files`), which
+    // is the condition the option states.
+    options.reuse_synthetic_imports = true;
     options
 }
 
@@ -464,6 +647,68 @@ impl Generation {
     pub fn with_checker<R>(&self, f: impl FnOnce(&mut CheckerLease) -> R) -> R {
         let mut lease = CheckerLease::acquire(self.program);
         f(&mut lease)
+    }
+
+    /// Installs a fresh checker of its own as this thread's checker for this
+    /// program until the returned [`FileChecker`] is dropped (module invariant
+    /// 8; per-file checkers). The program's single checker is neither created
+    /// nor touched while it is installed.
+    ///
+    /// # Panics
+    ///
+    /// If a file checker is already installed on this thread: they do not
+    /// nest (a nested one would make the outer one's handles unreachable
+    /// mid-pass).
+    #[must_use]
+    pub fn file_checker(&self) -> FileChecker {
+        let nested = FILE_CHECKER.with(|cell| cell.borrow().is_some());
+        assert!(
+            !nested,
+            "file checkers do not nest (unsafe_boundary invariant 8)"
+        );
+        self.slot.prime_caches();
+        let region = Region::new(1 << 20);
+        let checker = {
+            let _scope = region.enter();
+            PooledChecker::new(tsrs_checker::new_checker(self.program))
+        };
+        let mut held = Box::new(Held {
+            checker,
+            _region: region.clone(),
+        });
+        let pointer = held.checker.as_non_null();
+        self.slot.file_checkers.fetch_add(1, Ordering::SeqCst);
+        FILE_CHECKER.with(|cell| {
+            *cell.borrow_mut() = Some(Installed {
+                program: std::ptr::from_ref(self.program).addr(),
+                checker: pointer,
+                region,
+                leases: Rc::new(Cell::new(0)),
+            });
+        });
+        FileChecker {
+            slot: Arc::clone(&self.slot),
+            held: Some(held),
+            _thread: std::marker::PhantomData,
+        }
+    }
+
+    /// Fills the program's lazily filled caches now, on this thread, if no
+    /// checker did yet (per-file pass workers: before any worker starts, so
+    /// no worker's checker region receives them; see [`CheckerSlot::caches`]).
+    pub fn prime_caches(&self) {
+        self.slot.prime_caches();
+    }
+
+    /// Whether a file checker for this program is installed on this thread.
+    #[must_use]
+    pub fn in_file_checker(&self) -> bool {
+        let program = std::ptr::from_ref(self.program).addr();
+        FILE_CHECKER.with(|cell| {
+            cell.borrow()
+                .as_ref()
+                .is_some_and(|installed| installed.program == program)
+        })
     }
 
     /// The semantic diagnostics of `file` with no lease held (module
@@ -602,10 +847,14 @@ impl Generation {
 
 impl Drop for Generation {
     fn drop(&mut self) {
-        if std::thread::current().id() != self.thread || self.slot.outstanding() != 0 {
-            // Module invariants 2 and 3: freeing here could free memory a live
-            // reference or another thread's arena still uses. Leak instead,
-            // and keep the checker slot alive forever.
+        if std::thread::current().id() != self.thread
+            || self.slot.outstanding() != 0
+            || self.slot.file_checkers.load(Ordering::SeqCst) != 0
+        {
+            // Module invariants 2, 3 and 8: freeing here could free memory a
+            // live reference, a live file checker or another thread's arena
+            // still uses. Leak instead, and keep the checker slot alive
+            // forever.
             std::mem::forget(Arc::clone(&self.slot));
             std::mem::forget(Arc::clone(&self.regions));
             std::mem::forget(Arc::clone(&self.files));

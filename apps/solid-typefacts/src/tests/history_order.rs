@@ -1,9 +1,11 @@
 //! A table's facts do not depend on the order demands, batches and files are
-//! asked in, nor on what the checker computed before (ADR 0367, STABLE-IDS
-//! 14.3): check-first, location-pure descriptors and tsrs's canonical history.
-//! The program's root order is held fixed: global merge order is a program
-//! input (mechanism 5), not checker history. Counter ids are compared by
-//! first appearance in table order (`Renamer`); declaration-hash ids exactly.
+//! asked in, nor on what any checker computed before (STABLE-IDS 14.3, ADR
+//! 0398): each file is checked first by a checker of its own, descriptors
+//! are location-pure and tsrs runs its canonical history. The program's root
+//! order is held fixed: global merge order is a program input (mechanism 5),
+//! not checker history. Ids are compared through `Renamer` by first
+//! appearance in table order (every id is a hash: the renaming is a
+//! bijection on them).
 
 use super::project_support::Scratch;
 use super::randomized_incremental::{Renamer, describe};
@@ -205,8 +207,8 @@ fn facts_do_not_depend_on_earlier_tables_or_their_file_order() {
 }
 
 /// Demand order inside one batch: the runs and the demands of each run in
-/// reverse and shuffled orders, answered after the check-first pass a table
-/// makes, give the canonical batch's facts at every location.
+/// reverse and shuffled orders, each file answered in its own pass after its
+/// own check, give the path-ordered batch's facts at every location.
 #[test]
 fn facts_do_not_depend_on_demand_order_inside_a_batch() {
     let ctx = Context::new();
@@ -218,19 +220,20 @@ fn facts_do_not_depend_on_demand_order_inside_a_batch() {
         .collect();
     let answer = |runs: &[(String, Vec<EntityDemand>)]| -> String {
         let mut project = open(&scratch.config());
-        let mut sorted: Vec<&str> = runs.iter().map(|(path, _)| path.as_str()).collect();
-        sorted.sort_unstable();
-        project.check_demanded_files(&ctx, &sorted).unwrap();
         let results = project
             .semantic_demand_runs(
                 &ctx,
                 &runs
                     .iter()
-                    .map(|(path, demands)| SemanticDemandRun { path, demands })
+                    .map(|(path, demands)| SemanticDemandRun {
+                        path,
+                        demands,
+                        shared: None,
+                    })
                     .collect::<Vec<_>>(),
             )
             .unwrap();
-        // Back to canonical order before counters are renamed.
+        // Back to path order before ids are renamed.
         let mut by_location: BTreeMap<(String, u64, u64), String> = BTreeMap::new();
         for result in results {
             for entity in result.entities {

@@ -40,16 +40,25 @@ fn only_positive_exact_alias_resolution_identifies_configuration() {
     let dialect = solid_dialect::Solid2;
     let original = table("/p/node_modules/solid-js/types/index.d.ts", 2531, 2534);
     assert_eq!(
-        configuration_api(&original, "alias", &dialect, &[]),
+        configuration_api(&original, "alias", &dialect, &[], &mut Vec::new()),
         Some(RuntimeConfigurationApi::DevelopmentHooks)
     );
-    assert_eq!(configuration_api(&original, "missing", &dialect, &[]), None);
+    assert_eq!(
+        configuration_api(&original, "missing", &dialect, &[], &mut Vec::new()),
+        None
+    );
     for path in [
         "/p/src/index.d.ts",
         "/p/node_modules/ordinary/types/index.d.ts",
     ] {
         assert_eq!(
-            configuration_api(&table(path, 2531, 2534), "alias", &dialect, &[]),
+            configuration_api(
+                &table(path, 2531, 2534),
+                "alias",
+                &dialect,
+                &[],
+                &mut Vec::new()
+            ),
             None
         );
     }
@@ -58,7 +67,7 @@ fn only_positive_exact_alias_resolution_identifies_configuration() {
         encoded["symbols"][1]["aliasTarget"] = target.into();
         let cyclic_or_missing: TypeScriptTable = serde_json::from_value(encoded).unwrap();
         assert_eq!(
-            configuration_api(&cyclic_or_missing, "alias", &dialect, &[]),
+            configuration_api(&cyclic_or_missing, "alias", &dialect, &[], &mut Vec::new()),
             None
         );
     }
@@ -69,20 +78,24 @@ fn only_positive_exact_alias_resolution_identifies_configuration() {
         .unwrap()
         .push(extra);
     let merged: TypeScriptTable = serde_json::from_value(encoded).unwrap();
-    assert_eq!(configuration_api(&merged, "alias", &dialect, &[]), None);
+    assert_eq!(
+        configuration_api(&merged, "alias", &dialect, &[], &mut Vec::new()),
+        None
+    );
     let roots = [("/p/node_modules/alias".into(), "solid-js".into())];
     assert_eq!(
         configuration_api(
             &table("/p/node_modules/alias/types/index.d.ts", 2531, 2534),
             "alias",
             &dialect,
-            &roots
+            &roots,
+            &mut Vec::new()
         ),
         Some(RuntimeConfigurationApi::DevelopmentHooks)
     );
     let roots = [("/p/node_modules/solid-js".into(), "ordinary".into())];
     assert_eq!(
-        configuration_api(&original, "alias", &dialect, &roots),
+        configuration_api(&original, "alias", &dialect, &roots, &mut Vec::new()),
         None
     );
 }
@@ -338,4 +351,51 @@ fn a_retained_scan_answers_as_a_full_scan_and_withdraws_on_any_input_change() {
     let mut moved = facts;
     moved.typescript = table("/p/src/local.d.ts", 7472, 7484);
     assert!(scan_retained(&at_generation(moved, 2), dialect, &mut cache).permits_proof());
+}
+
+/// The table of `facts` with `edit` applied to its encoded symbols.
+fn with_symbols(
+    mut facts: ProjectFacts,
+    edit: impl FnOnce(&mut Vec<serde_json::Value>),
+) -> ProjectFacts {
+    let mut encoded = serde_json::to_value(&facts.typescript).unwrap();
+    let mut symbols = encoded["symbols"].as_array().cloned().unwrap_or_default();
+    edit(&mut symbols);
+    encoded["symbols"] = serde_json::Value::Array(symbols);
+    facts.typescript = serde_json::from_value(encoded).unwrap();
+    facts
+}
+
+/// A kept identity is asked again only when a row its alias chain read
+/// moved: a symbol no chain read moves nothing, and a moved chain member
+/// rescans exactly the files that asked, with the full scan's answer.
+#[test]
+fn a_kept_identity_is_asked_again_only_when_its_chain_moved() {
+    let dialect = &solid_dialect::Solid2;
+    let veto = "import { sharedConfig as host } from 'solid-js/internal'; host.load = () => 1;";
+    let facts = hydration_project(veto);
+    let mut cache = ScanCache::default();
+    let first = scan_retained(&at_generation(facts.clone(), 1), dialect, &mut cache);
+    assert!(!first.permits_proof());
+    assert_eq!(cache.last_counts, (0, 1));
+    // A symbol nothing asked about appears: the file is kept.
+    let unrelated = with_symbols(facts.clone(), |symbols| {
+        symbols.push(serde_json::json!({ "id": "unrelated" }));
+    });
+    let kept = scan_retained(&at_generation(unrelated.clone(), 2), dialect, &mut cache);
+    assert_eq!(kept, first);
+    assert_eq!(cache.last_counts, (1, 0));
+    // The alias's target, a row its chain read, now declares elsewhere: the
+    // file is rescanned and agrees with a full scan.
+    let moved = with_symbols(unrelated, |symbols| {
+        for symbol in symbols.iter_mut() {
+            if symbol["id"] == "export" {
+                symbol["declarations"][0]["location"]["path"] = "/p/src/local.d.ts".into();
+            }
+        }
+    });
+    let rescanned = scan_retained(&at_generation(moved.clone(), 3), dialect, &mut cache);
+    assert_eq!(cache.last_counts, (0, 1));
+    assert_eq!(rescanned, scan(&moved, dialect));
+    assert!(rescanned.permits_proof());
 }

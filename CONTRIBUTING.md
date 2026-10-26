@@ -97,13 +97,21 @@ For dependency builds shared across worktrees, install `sccache` and export
 `make verify-performance` enforces repository-owned invariants over a
 deterministic corpus: structural ones (export aggregation scaling, Type Facts
 payload per source, cached-result reuse) and wall-time ceilings (fresh Reactive
-IR per source, a one-file incremental edit on 1,000 sources). The `Performance`
-workflow enforces only the structural ones, because shared runners vary too much
-for a fixed ceiling; its regression gate is `benchmarks/compare-performance.mjs`,
-which races the merge base against the head on one runner and fails past a 1.25x
-ratio. Override the ceilings with `SOLID_CHECKER_MAX_INCREMENTAL_NS` and
-`SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE` to test that the gate turns red.
-Pushes to `main` and pull requests also send wall-time benchmarks to CodSpeed.
+IR per source, a one-file incremental edit on 1,000 sources). It runs on a
+machine you control (`make verify`), not on shared runners, whose wall times
+swing too much for a fixed ceiling. Override the ceilings with
+`SOLID_CHECKER_MAX_INCREMENTAL_NS` and `SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE`
+to test that the gate turns red.
+
+CI's gate is `.github/workflows/real-projects.yml` (ADR 0423): CLI wall time
+with the retained daemon, full report, after one edit on three real Solid 2
+projects (`benchmarks/real-projects/manifest.json`), merge base and head
+interleaved on one runner. A pull request fails when the paired median
+head/base ratio of any project and edit kind exceeds 1.25, or when a head
+answer did not come from its retained daemon. Differing answers are reported,
+not gated. Reproduce locally with `bun benchmarks/real-projects-prepare.mjs
+--root DIR`, then `bun benchmarks/real-projects.mjs --base A --head B --root
+DIR`, where `A` and `B` each hold `solid-checker-rust` and `solid-typefacts`.
 
 ## Continuous integration caches
 
@@ -115,8 +123,9 @@ saves only on `main` (`save-if`), release workflows never save, and jobs that
 consume another job's dependency build name its `shared-key` with
 `save-if: false`. Jobs that compile the same thing share one entry; the release
 native build shares the CI release key, keyed on the runner image because
-linux-x64 ships from 22.04 on purpose. The `Performance` workflow caches
-benchmark binaries under the commit sha, never a measurement.
+linux-x64 ships from 22.04 on purpose. The real-project workflow caches each
+main commit's checker and producer under its sha, and the prepared projects,
+never a measurement.
 
 ## Semantic changes
 

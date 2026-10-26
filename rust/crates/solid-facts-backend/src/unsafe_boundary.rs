@@ -36,6 +36,44 @@ pub(crate) fn reclaim_allocator_pages() {
     }
 }
 
+/// Lowers the calling thread to background priority, so work it starts
+/// (including threads and child processes it spawns) yields the CPU to a
+/// request being served.
+#[cfg(target_os = "macos")]
+pub(crate) fn lower_thread_priority() {
+    use std::ffi::c_int;
+
+    unsafe extern "C" {
+        fn pthread_set_qos_class_self_np(qos_class: u32, relative_priority: c_int) -> c_int;
+    }
+
+    // SAFETY: affects only the calling thread's scheduling class; 0x09 is
+    // QOS_CLASS_BACKGROUND and a zero relative priority is the class default.
+    // A failure leaves the priority unchanged, which is safe.
+    unsafe {
+        pthread_set_qos_class_self_np(0x09, 0);
+    }
+}
+
+/// Lowers the calling thread to the lowest niceness.
+#[cfg(target_os = "linux")]
+pub(crate) fn lower_thread_priority() {
+    use std::ffi::c_int;
+
+    unsafe extern "C" {
+        fn setpriority(which: c_int, who: u32, priority: c_int) -> c_int;
+    }
+
+    // SAFETY: on Linux, `who == 0` with PRIO_PROCESS (0) names the calling
+    // thread, so the niceness applies to it alone. A failure changes nothing.
+    unsafe {
+        setpriority(0, 0, 19);
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub(crate) fn lower_thread_priority() {}
+
 /// The running executable's mapped Mach-O load commands and their count.
 ///
 /// This reads the loaded image, not its replaceable pathname, so a rebuild at

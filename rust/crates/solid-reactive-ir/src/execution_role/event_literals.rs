@@ -28,46 +28,40 @@ pub(crate) fn test_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(Str
 
 fn invoked_literals(lookup: &SemanticLookup<'_>, test_entries: bool) -> HashSet<(String, Span)> {
     let mut literals = HashSet::default();
-    if !lookup.program_closed
-        || lookup.files().iter().any(|file| {
-            file.ast
-                .module_hazards
-                .iter()
-                .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
-        })
-    {
+    if !lookup.program_closed || lookup.program_has_eval() {
         return literals;
     }
-    for file in lookup.files() {
-        for literal in &file.ast.functions {
-            if literal.generator
-                || lookup.function_component_status(file, literal) != ComponentStatus::No
-            {
-                continue;
+    if test_entries {
+        // The test census is the lookup's own whole-program computation (not a
+        // memo): its only reader is the dispatch veto, whose section binds
+        // its value ([`crate::base::reads::Section::SynchronousDispatch`]).
+        let world = LookupFlow { lookup };
+        for file in lookup.files() {
+            for literal in &file.ast.functions {
+                if literal_test_invoked(&world, file, literal) {
+                    literals.insert((file.path.to_string(), literal.span));
+                }
             }
-            let mut classifying = HashSet::default();
-            let mut flow = InvocationFlow {
-                lookup,
-                classifying: &mut classifying,
-                budget: FLOW_BUDGET,
-                seen: HashSet::default(),
-                frames: Vec::new(),
-                props_stack: Vec::new(),
-                owner_mode: true,
-                test_entries,
-                write_root_body: None,
-                touched: HashSet::default(),
-            };
-            // The role a satisfied entry reports: the owner walk's event
-            // marker, or (test entries) the role a registered callback has.
-            let entry = if test_entries {
-                ExecutionRole::DeferredCallback
-            } else {
-                ExecutionRole::EventCallback
-            };
-            if flow.function_role(file, literal) == Some(Some(entry)) {
-                literals.insert((file.path.to_string(), literal.span));
-            }
+        }
+        return literals;
+    }
+    let files = super::flow_memos::file_keys(lookup);
+    // Each file's census is a memo, each literal's computed from an empty
+    // context ([`super::flow_memos::EventInvokedLiterals`]). In parallel only
+    // once the flow answers exist and this thread is not computing one, as
+    // before.
+    let world = lookup.memo_world();
+    let answer = |(id, _): &(crate::base::FileId, String)| {
+        world.answer::<super::flow_memos::EventInvokedLiterals>(id)
+    };
+    let invoked = if lookup.invocation_flow_answers_ready() && !computing_flow_answers() {
+        crate::pipeline::parallel_balanced_results(&files, answer)
+    } else {
+        files.iter().map(answer).collect()
+    };
+    for ((_, path), invoked) in files.into_iter().zip(invoked) {
+        for span in invoked.iter() {
+            literals.insert((path.clone(), *span));
         }
     }
     literals
@@ -165,7 +159,60 @@ pub(super) fn clear_write_site_roles() {
     WRITE_SITE_ROLES.with(|cache| cache.borrow_mut().clear());
 }
 
-impl<'a> InvocationFlow<'a, '_, '_> {
+/// Whether every invocation of the function literal runs through event
+/// delivery ([`event_invoked_literals`]), from an empty context.
+pub(super) fn literal_event_invoked<'a, W: FlowWorld<'a>>(
+    world: &W,
+    file: &'a solid_facts::FileFacts,
+    literal: &'a solid_facts::ast::FunctionFact,
+) -> bool {
+    if literal.generator || world.component_status(file, literal) != ComponentStatus::No {
+        return false;
+    }
+    let mut classifying = HashSet::default();
+    let mut flow = InvocationFlow {
+        world,
+        classifying: &mut classifying,
+        budget: FLOW_BUDGET,
+        seen: HashSet::default(),
+        frames: Vec::new(),
+        props_stack: Vec::new(),
+        owner_mode: true,
+        test_entries: false,
+        write_root_body: None,
+        touched: HashSet::default(),
+    };
+    flow.function_role(file, literal) == Some(Some(ExecutionRole::EventCallback))
+}
+
+/// Whether every invocation of the function literal is a call written in a
+/// reviewed test runner's callback ([`test_invoked_literals`]), from an empty
+/// context.
+fn literal_test_invoked<'a, W: FlowWorld<'a>>(
+    world: &W,
+    file: &'a solid_facts::FileFacts,
+    literal: &'a solid_facts::ast::FunctionFact,
+) -> bool {
+    if literal.generator || world.component_status(file, literal) != ComponentStatus::No {
+        return false;
+    }
+    let mut classifying = HashSet::default();
+    let mut flow = InvocationFlow {
+        world,
+        classifying: &mut classifying,
+        budget: FLOW_BUDGET,
+        seen: HashSet::default(),
+        frames: Vec::new(),
+        props_stack: Vec::new(),
+        owner_mode: true,
+        test_entries: true,
+        write_root_body: None,
+        touched: HashSet::default(),
+    };
+    flow.function_role(file, literal) == Some(Some(ExecutionRole::DeferredCallback))
+}
+
+impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
     /// The one safe role of every invocation of `function`; `Some(None)`
     /// when the (complete) census finds no invocation at all.
     pub(super) fn function_role(
@@ -225,37 +272,29 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         call: Span,
         frames: Vec<FlowFrame<'a>>,
     ) -> Option<Option<ExecutionRole>> {
-        let callee = file.ast.call_at(call)?.callee;
+        // The call must be one the facts hold (the site role reads its
+        // callee).
+        file.ast.call_at(call)?;
         if self.owner_mode {
             return self.owner_site_role(file, call, frames);
         }
         if let Some(root_body) = self.write_root_body {
-            return self.write_site_role(file, call, callee, frames, root_body);
+            return self.write_site_role(
+                file,
+                call,
+                file.ast.call_at(call)?.callee,
+                frames,
+                root_body,
+            );
         }
-        let here = semantic_execution_role_within(
-            file,
-            callee,
-            &[],
-            self.lookup.entities(),
-            self.lookup.symbol_names(),
-            self.lookup,
-            self.classifying,
-        );
-        // ADR 0320: a role read off a named function's callback references
-        // ignores its direct calls (`press()` beside `onClick={press}`); the
-        // walk below asks for every invocation of that function instead.
-        if flow_safe_role(here)
-            && named_callbacks_within_component(file, call, self.lookup)
-                .into_iter()
-                .all(|function| named_callback_invocations_hold(file, function, self.lookup, false))
-        {
+        if let Some(here) = self.world.site_role(file, call, self.classifying) {
             return Some(Some(here));
         }
         let owner = containing_ast_function(&file.ast, call)?;
         if !owner.body.contains(call)
             || (owner.r#async && may_follow_suspension(file, call))
             || owner.generator
-            || self.lookup.function_component_status(file, owner) != ComponentStatus::No
+            || self.world.component_status(file, owner) != ComponentStatus::No
         {
             return None;
         }
@@ -292,7 +331,10 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 // owner, which a synchronous dispatch of the program's own
                 // may make the dispatcher's (ADR 0356).
                 Invocation::Role(ExecutionRole::EventCallback)
-                    if self.lookup.synchronous_event_dispatch_present() =>
+                    if self
+                        .world
+                        .lookup()
+                        .is_none_or(SemanticLookup::synchronous_event_dispatch_present) =>
                 {
                     unplaced = true;
                     continue;
@@ -352,7 +394,8 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         frames: Vec<FlowFrame<'a>>,
         root_body: RootBodyGuard,
     ) -> Option<Option<ExecutionRole>> {
-        let lookup = self.lookup;
+        // The write question runs over the lookup only ([`LookupFlow`]).
+        let lookup = self.world.lookup()?;
         self.touched.insert(file.path.as_str());
         // The classifier's answer at a call depends on where the call is
         // written, not on the activation the walk found it in; the table
@@ -427,7 +470,11 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         // window (the runner's stack, then no owner at any resumption, ADR
         // 0333), so a call written in it is a satisfied entry past an await
         // as well; an event handler's census refuses past one.
-        let registered = self.test_entries && registered_test_callback(file, owner, self.lookup);
+        let registered = self.test_entries
+            && self
+                .world
+                .lookup()
+                .is_some_and(|lookup| registered_test_callback(file, owner, lookup));
         // ADR 0442: in the test census an async helper's call past a
         // suspension is a satisfied entry as a registered callback's is: the
         // resumption runs with no owner and no window (ADR 0333) whoever
@@ -436,7 +483,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         if !owner.body.contains(call)
             || (owner.r#async && may_follow_suspension(file, call) && !self.test_entries)
             || owner.generator
-            || self.lookup.function_component_status(file, owner) != ComponentStatus::No
+            || self.world.component_status(file, owner) != ComponentStatus::No
         {
             return None;
         }
@@ -599,49 +646,9 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         function: &'a solid_facts::ast::FunctionFact,
         out: &mut Vec<Invocation<'a>>,
     ) -> Option<()> {
-        let lookup = self.lookup;
-        let path = file.path.as_str();
-        let name = function.name.as_ref()?;
-        if !lookup.program_closed
-            || lookup.escapes_unnamed(path)
-            || lookup.hands_out_by_name(path, function.span)
-        {
-            return None;
-        }
-        let symbol = lookup.entities().at(path, name.span)?;
-        let references = lookup.symbol_references_if_present(symbol.as_str())?;
-        let accounted: HashSet<(&str, u32, u32)> = lookup
-            .function_call_site_references(path, function.span)
-            .into_iter()
-            .map(|(caller, callee)| (caller.path.as_str(), callee.start, callee.end))
-            .collect();
-        for reference in &references {
-            if reference.path.as_ref() == path {
-                continue;
-            }
-            let (Ok(start), Ok(end)) = (
-                u32::try_from(reference.start_byte),
-                u32::try_from(reference.end_byte),
-            ) else {
-                return None;
-            };
-            if !accounted.contains(&(reference.path.as_ref(), start, end)) {
-                return None;
-            }
-        }
-        for (caller_file, callee) in lookup.function_call_sites(path, function.span) {
-            if caller_file.path == file.path {
-                continue;
-            }
-            let call = caller_file.ast.calls.iter().find(|call| {
-                !call.construct && caller_file.ast.peel_ts_sugar_span(call.callee) == callee
-            })?;
+        for (caller_file, call) in self.world.exported_call_sites(file, function)? {
             self.touched.insert(caller_file.path.as_str());
-            out.push(Invocation::Call(
-                caller_file,
-                call.span,
-                self.frames.clone(),
-            ));
+            out.push(Invocation::Call(caller_file, call, self.frames.clone()));
         }
         Some(())
     }
@@ -703,7 +710,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 // `this`, which must be a function that cannot use it.
                 Some(_) => {
                     if called {
-                        origin_member_ignores_receiver(&origin, key, self.lookup, 6).then_some(())
+                        origin_member_ignores_receiver(&origin, key, self.world, 6).then_some(())
                     } else {
                         Some(())
                     }
@@ -731,25 +738,19 @@ impl<'a> InvocationFlow<'a, '_, '_> {
             // `createMemo(options.key)`). A container holding it, an apply
             // slot, a slot that stores the function or runs it on result
             // access, and every unmodelled slot refuse.
-            if let Some(primitive) = self.lookup.primitive_at_call(file, call.span) {
+            if self.world.primitive_at_call(file, call.span).is_some() {
                 if !path.is_empty() || self.owner_mode || self.write_root_body.is_some() {
                     return None;
                 }
                 // A callback that runs synchronously in the call's own window
                 // (`createRoot`, `runWithOwner`) runs wherever the call does:
                 // its invocation is the call.
-                if self
-                    .lookup
-                    .dialect
-                    .callback_inherits_calling_window(primitive, index)
-                    && callback_execution_at_call(file, call, primitive, index, self.lookup)
-                        .is_some()
-                {
+                let (inherits, role) = self.world.primitive_slot(file, call, index);
+                if inherits {
                     out.push(Invocation::Call(file, call.span, self.frames.clone()));
                     return Some(());
                 }
-                let role = primitive_callback_slot_role(file, call, index, self.lookup)?;
-                out.push(Invocation::Role(role));
+                out.push(Invocation::Role(role?));
                 return Some(());
             }
             // ADR 0442: a reviewed scheduler's callback (`setTimeout(fn)`) is
@@ -757,9 +758,9 @@ impl<'a> InvocationFlow<'a, '_, '_> {
             // scheduled role, wherever the call was written. The selected
             // standard-library declaration says so, never the spelling.
             if self.write_root_body.is_some() && path.is_empty() {
-                let resolved = self.lookup.resolved_callee_call(file, call.callee);
-                let callability = self
-                    .lookup
+                let lookup = self.world.lookup()?;
+                let resolved = lookup.resolved_callee_call(file, call.callee);
+                let callability = lookup
                     .entity_at(file.path.as_str(), call.arguments[index].span)
                     .and_then(|entity| entity.callability);
                 if resolved.is_some_and(|resolved| {
@@ -776,14 +777,11 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                     return Some(());
                 }
             }
-            let (callee_file, callee, exact) =
-                project_callee_at_parameter(file, call, index, self.lookup)?;
-            if !exact
-                || self.lookup.function_component_status(callee_file, callee) != ComponentStatus::No
-            {
+            let (callee_file, callee, exact) = self.world.project_callee(file, call, index)?;
+            if !exact || self.world.component_status(callee_file, callee) != ComponentStatus::No {
                 return None;
             }
-            let callee_file = self.lookup.file_by_path(callee_file.path.as_str())?;
+            let callee_file = self.world.canonical(callee_file)?;
             self.frames
                 .push((callee_file.path.to_string(), callee.span, file, call.span));
             let result = self.parameter_uses(callee_file, callee, index, path, origin, out);
@@ -803,7 +801,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 let name = file.source_text(attribute.name)?;
                 if intrinsic_element(file, element) {
                     return (path.is_empty()
-                        && self.lookup.dialect.compiler_lowers_event_attribute(name))
+                        && self.world.dialect().compiler_lowers_event_attribute(name))
                     .then(|| {
                         out.push(Invocation::Role(ExecutionRole::EventCallback));
                     });
@@ -826,7 +824,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 if intrinsic_element(file, element) {
                     return match path.as_slice() {
                         [] => Some(()),
-                        [key] if self.lookup.dialect.spread_key_is_event(key) == Some(true) => {
+                        [key] if self.world.dialect().spread_key_is_event(key) == Some(true) => {
                             out.push(Invocation::Role(ExecutionRole::EventCallback));
                             Some(())
                         }
@@ -1151,9 +1149,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         enclosing: FlowOrigin<'a>,
         out: &mut Vec<Invocation<'a>>,
     ) -> Option<()> {
-        let (component_file, component) = self
-            .lookup
-            .function_called_at(file.path.as_str(), element.name.span)?;
+        let (component_file, component) = self.world.function_called_at(file, element.name.span)?;
         if component.r#async || component.generator {
             return None;
         }
@@ -1183,15 +1179,15 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         let tag = file.ast.peel_ts_sugar_span(element.name.span);
         let member_tag = file.ast.members.iter().any(|member| member.span == tag)
             || file.ast.computed_members.binary_search(&tag).is_ok();
-        if !self
-            .lookup
-            .function_value_is_current(component_file, component)
+        if !crate::indexes::function_value_is_current_in(component_file, component)
             || (member_tag
-                && !member_runs_declared_method(file, tag, component_file, component, self.lookup))
+                && !self
+                    .world
+                    .member_runs_declared_method(file, tag, component_file, component))
         {
             return None;
         }
-        let component_file = self.lookup.file_by_path(component_file.path.as_str())?;
+        let component_file = self.world.canonical(component_file)?;
         self.touched.insert(component_file.path.as_str());
         // A component rendering itself through this element again, holding
         // the value under the same member path (a tree of branches): the
@@ -1261,13 +1257,12 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                         .ast
                         .reference_declaration(file.ast.peel_ts_sugar_span(member.object))
                         == Some(writer_props)
-            }) || value_ignores_receiver(file, value, &FlowOrigin::Unknown, self.lookup, 6)
+            }) || value_ignores_receiver(file, value, &FlowOrigin::Unknown, self.world, 6)
         };
         // Members the rendered component calls on its props: each must be
         // forwarded, given a value that ignores `this`, or undefined.
-        let Some((component_file, component)) = self
-            .lookup
-            .function_called_at(file.path.as_str(), element.name.span)
+        let Some((component_file, component)) =
+            self.world.function_called_at(file, element.name.span)
         else {
             return false;
         };
@@ -1312,11 +1307,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                     }
                     _ => false,
                 },
-                None => {
-                    !self.lookup.member_may_be_reassigned_on_builtin(key)
-                        && !self.lookup.member_may_be_reassigned_on_builtin("__proto__")
-                        && !self.lookup.property_may_be_defined_reflectively_as(key)
-                }
+                None => self.world.absent_member_inert(key),
             }
         })
     }

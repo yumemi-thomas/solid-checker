@@ -104,6 +104,18 @@ export const CHECKS = {
     ],
     env: { SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS) },
   },
+  "backend-staleness": {
+    why:
+      "a slice that breaks the cached-answer digest, the resolution witness, the kept attestation or pass " +
+      "reuse answers a retained edit from stale state; these process tests compare such edits with fresh runs",
+    command: [
+      "cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-facts-backend",
+      "--test", "backend_process", "--",
+      "incremental_staleness_process::", "attestation_kept_process::", "daemon_residue_process::",
+      "idle_shadow_process::",
+    ],
+    env: { SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS) },
+  },
   "dialects-process": {
     command: [
       "cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-facts-backend",
@@ -140,6 +152,33 @@ export const CHECKS = {
       "bun", "scripts/uncertifiable-causes.mjs", "--repro", "fixtures/uncertifiable-repro",
       "--cases", "fixtures/uncertifiable-repro/cases.json",
       "--checker", join(ROOT, DEBUG_CHECKER), "--typefacts", join(ROOT, TYPEFACTS),
+    ],
+  },
+  "ir-read-lint": {
+    why:
+      "a new raw cross-file read in the Reactive IR is a read an incremental build cannot see; " +
+      "the lint ratchets the allow-listed sites down (scripts/ir-read-lint.mjs)",
+    command: ["bun", "scripts/ir-read-lint.mjs"],
+  },
+  "ir-edit-fuzz": {
+    why:
+      "the retained daemon's answer must equal a fresh one after random edits (and shadow mode must stay " +
+      "silent); this is the seconds-long fixture budget, on a copy of each fixture",
+    commands: [
+      ["bun", "scripts/ir-edit-fuzz.mjs", "--fixtures", "--steps", "6"],
+      ["bun", "scripts/ir-edit-fuzz.mjs", "--fixtures", "--family", "retype", "--steps", "4"],
+    ],
+    env: {
+      SOLID_CHECKER_BIN: join(ROOT, DEBUG_CHECKER),
+      SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
+    },
+  },
+  "ir-tools-test": {
+    why: "the lint and the harness are scripts with their own unit tests",
+    command: [
+      "bun", "packages/cli/node_modules/vitest/vitest.mjs", "run",
+      "--config", "packages/cli/vitest.config.mjs",
+      "scripts/ir-read-lint.test.mjs", "scripts/ir-edit-fuzz.test.mjs",
     ],
   },
   "bun-test-cli": { command: ["bun", "run", "--cwd", "packages/cli", "test"] },
@@ -238,12 +277,12 @@ export const ROWS = [
   {
     prefix: "rust/crates/solid-reactive-ir/",
     owner: "solid-reactive-ir (IR, indexes, source summaries, interprocedural, rules engine)",
-    checks: ["ir-lib", "coverage", "wasm-compile"],
+    checks: ["ir-lib", "coverage", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"],
   },
   {
     prefix: "rust/crates/solid-facts-backend/",
     owner: "solid-facts-backend process/diagnostics",
-    checks: ["backend-process", "coverage"],
+    checks: ["backend-process", "backend-staleness", "coverage", "ir-edit-fuzz"],
   },
   // No `rust/crates/solid-dialect/` row, deliberately. The crate owns the
   // shared `Dialect` interface that `solid-reactive-ir` and the dialect crate
@@ -287,7 +326,7 @@ export const ROWS = [
   {
     prefix: "apps/solid-typefacts/",
     owner: "the Type Facts producer (separate workspace; the default producer)",
-    checks: ["typefacts", "coverage", "ownership-gate", "wasm-parity"],
+    checks: ["typefacts", "backend-staleness", "coverage", "ownership-gate", "ir-edit-fuzz", "wasm-parity"],
   },
   {
     prefix: "apps/solid-typefacts/tests/",
@@ -313,6 +352,19 @@ export const ROWS = [
     prefix,
     owner: "the Type Facts differential harness (test tooling; not read by the checker)",
     checks: ["differential-harness"],
+  })),
+  // The incrementality tools, one exact path each: neighbours in scripts/ stay
+  // unmapped on purpose.
+  ...[
+    "scripts/ir-edit-fuzz.mjs",
+    "scripts/ir-edit-fuzz.test.mjs",
+    "scripts/ir-read-lint.mjs",
+    "scripts/ir-read-lint.test.mjs",
+    "scripts/ir-read-lint.allowlist.json",
+  ].map((prefix) => ({
+    prefix,
+    owner: "the IR incrementality tools (lint and random-edit harness)",
+    checks: ["ir-tools-test", "ir-read-lint", "ir-edit-fuzz"],
   })),
   { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
   { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm", "wasm-parity"] },
@@ -371,7 +423,7 @@ export function planFor(paths) {
   }
   // Prerequisite, not a row: a gate that runs the checker must run *this*
   // source's checker.
-  const needsChecker = ["coverage", "ownership-gate", "repro-causes"].some((check) => selected.has(check));
+  const needsChecker = ["coverage", "ownership-gate", "repro-causes", "ir-edit-fuzz"].some((check) => selected.has(check));
   const ordered = [
     // In every plan, mapped or empty: the producer is gitignored, so no change
     // set can report that it needs rebuilding. The stamp check is ~10ms when it
@@ -381,8 +433,11 @@ export function planFor(paths) {
     ...(needsChecker ? ["build-debug"] : []),
     // Before the process tests: it rebuilds with the harness pins recomputed,
     // and everything after it should run against that binary.
-    ...["facts-lib", "ir-lib", "backend-process", "dialects-process"].filter((id) => selected.has(id)),
+    ...["facts-lib", "ir-lib", "backend-process", "backend-staleness", "dialects-process"].filter((id) =>
+      selected.has(id)
+    ),
     ...["coverage", "ownership-gate", "repro-causes", "repro-budget"].filter((id) => selected.has(id)),
+    ...["ir-read-lint", "ir-tools-test", "ir-edit-fuzz"].filter((id) => selected.has(id)),
     // Separate workspace; its tests drive the producer built above.
     ...["typefacts"].filter((id) => selected.has(id)),
     ...["differential-harness"].filter((id) => selected.has(id)),
@@ -586,6 +641,7 @@ export const LANES = {
   "facts-lib": "rust",
   "ir-lib": "rust",
   "backend-process": "rust",
+  "backend-staleness": "rust",
   "dialects-process": "rust",
   "differential-harness": "rust",
   typefacts: "typefacts",
@@ -593,6 +649,11 @@ export const LANES = {
   "ownership-gate": "gates",
   "repro-causes": "gates",
   "repro-budget": "gates",
+  // The IR edit fuzz drives the debug checker's daemon, like the gates; the
+  // read lint and the IR tool tests build nothing.
+  "ir-edit-fuzz": "gates",
+  "ir-read-lint": "preflight",
+  "ir-tools-test": "preflight",
   // The CLI launcher falls back to `make build-rust` when it finds no
   // checker, so the suite queues with the other `rust/target` users.
   "bun-test-cli": "rust",

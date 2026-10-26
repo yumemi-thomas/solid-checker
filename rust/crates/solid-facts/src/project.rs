@@ -262,6 +262,27 @@ impl TypeScriptTable {
         )
     }
 
+    /// [`Self::entities_for_path`] as a shared slice: the table's own (a
+    /// retained table hands out the rows it holds, no copy), an override's, or
+    /// a copy of a synthetic table's. A holder keeps it across tables, and
+    /// replaces it for each path a table delta names.
+    #[must_use]
+    pub fn entities_shared_for_path(&self, path: &str) -> Arc<[EntityFact]> {
+        if let Some(entities) = self
+            .entity_overrides
+            .as_deref()
+            .and_then(|overrides| overrides.get(path))
+        {
+            return Arc::clone(entities);
+        }
+        match &self.retained {
+            Some(table) => table
+                .entities_shared_for_path(path)
+                .map_or_else(|| Arc::from([]), Arc::clone),
+            None => Arc::from(self.entities_for_path(path)),
+        }
+    }
+
     #[must_use]
     pub fn file(&self, path: &str) -> Option<&FileFact> {
         if let Some(files) = &self.file_overrides {
@@ -341,6 +362,48 @@ impl TypeScriptTable {
                     .flat_map(|table| table.symbols.iter())
                     .map(TypeScriptSymbol::Synthetic),
             )
+    }
+
+    /// The ids of the symbols whose alias target or declarations differ
+    /// between `previous` and this table, added and removed ones included:
+    /// for two retained tables, from the index leaves they do not share
+    /// ([`FactTable::symbols_with_moved_declarations`]); otherwise by
+    /// comparing every symbol of both.
+    #[must_use]
+    pub fn symbols_with_moved_declarations(&self, previous: &Self) -> Vec<Arc<str>> {
+        if let (Some(current), Some(previous), None, None) = (
+            &self.retained,
+            &previous.retained,
+            &self.synthetic,
+            &previous.synthetic,
+        ) {
+            return current.symbols_with_moved_declarations(previous);
+        }
+        type Rows<'t> = HashMap<&'t str, (&'t str, &'t [typefacts::Declaration])>;
+        fn rows(table: &TypeScriptTable) -> Rows<'_> {
+            let mut rows = Rows::new();
+            for symbol in table.symbols() {
+                // The first row of an id is the one `symbol` answers.
+                rows.entry(symbol.id())
+                    .or_insert((symbol.alias_target(), symbol.declarations()));
+            }
+            rows
+        }
+        let (current, before) = (rows(self), rows(previous));
+        let mut moved = current
+            .iter()
+            .filter(|(id, row)| before.get(*id) != Some(*row))
+            .map(|(id, _)| *id)
+            .chain(
+                before
+                    .keys()
+                    .filter(|id| !current.contains_key(*id))
+                    .copied(),
+            )
+            .map(Arc::<str>::from)
+            .collect::<Vec<_>>();
+        moved.sort_unstable();
+        moved
     }
 
     #[must_use]
@@ -454,6 +517,9 @@ impl<'de> Deserialize<'de> for TypeScriptTable {
 #[serde(rename_all = "camelCase")]
 pub struct TypeScriptChanges {
     pub unchanged: bool,
+    /// A whole-table replacement: the path lists name only the new table's
+    /// paths, so they are no delta (see `typefacts::session::TableChanges`).
+    pub full: bool,
     pub entity_paths: Vec<String>,
     pub symbol_ids: Vec<String>,
     pub file_paths: Vec<String>,

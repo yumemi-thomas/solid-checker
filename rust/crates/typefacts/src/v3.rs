@@ -14,6 +14,13 @@ use crate::{
     SymbolFact, TupleShape, TypeDescriptor,
 };
 
+/// The empty string, shared: most decoded entities have no runtime identity,
+/// and `Arc::from("")` allocates a fresh header for each (app-game: 400 K).
+fn empty_str() -> Arc<str> {
+    static EMPTY: std::sync::OnceLock<Arc<str>> = std::sync::OnceLock::new();
+    Arc::clone(EMPTY.get_or_init(|| Arc::from("")))
+}
+
 pub const TYPE_FACTS_SCHEMA_V1: u64 = 1;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V3: u64 = 3;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V4: u64 = 4;
@@ -74,7 +81,7 @@ pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 20] = [
 ];
 
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:30a8ab33da6469011c74e8802729a9d3eca8f5c9e5d1a623ba5522ac3cc8aa2b";
+    "sha256:61cbcb41ba0d3f6cdaa2244ea8d405175bd0735119af27e3c155d268ca361c11";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -485,9 +492,14 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // Protocol 82 (ADR 0368) adds `ModuleFact.root`; a protocol-81 consumer
 // decodes with `deny_unknown_fields` and would reject it.
 // Protocol 83 (ADR 0368 review) adds the `Modules` answer's `unmappedRoots`.
-// Protocol 84 (ADR 0436) adds the `declaredKeys` demand and entity field, carried
-// by Wire table schema v23; a protocol-83 consumer would refuse the new bit.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 84;
+// Protocol 84 adds the `Modules` demand `distinctBareImports` (ADR 0382); a
+// protocol-83 producer decodes with `deny_unknown_fields` and would reject it.
+// Protocol 85 adds the `Modules` demand `omitModules` and the `Update` answer's
+// `graphKept` (ADR 0419); a protocol-84 producer would reject
+// the first, and a protocol-84 client would reject the second.
+// Protocol 86 (ADR 0436) adds the `declaredKeys` demand and entity field, carried
+// by Wire table schema v23; a protocol-85 consumer would refuse the new bit.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 86;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -623,6 +635,12 @@ pub struct ModuleGraphRequest {
     pub import_paths: Vec<String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub packages: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub distinct_bare_imports: bool,
+    /// Answer no module inventory (`modules`, `unmappedRoots`): only the
+    /// requested imports and the paths the program does not hold.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub omit_modules: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -703,6 +721,12 @@ pub struct Response {
     pub timings: Option<ServerTimings>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub affected: Vec<String>,
+    /// An `Update` answer: the producer replaced the one changed file in place
+    /// and rebuilt nothing, so every other file's text, every file's module
+    /// resolution and the program's file set are the previous generation's;
+    /// only the changed file's own import positions can differ.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub graph_kept: bool,
     pub project_id: String,
     pub request_id: u64,
     pub generation: u64,
@@ -1395,7 +1419,7 @@ fn decode_entity_run(
         let runtime_identity = if flags & rows::ENTITY_RUNTIME_IDENTITY != 0 {
             cursor.string_index(strings, "runtime identity")?
         } else {
-            Arc::from("")
+            empty_str()
         };
         let runtime_value_domain = if flags & rows::ENTITY_RUNTIME_VALUE_DOMAIN != 0 {
             Some(parse_runtime_value_domain(cursor.u64()?)?)
@@ -1421,7 +1445,7 @@ fn decode_entity_run(
                     }
                     ConstantValue {
                         kind: ConstantValueKind::Number,
-                        string: Arc::from(""),
+                        string: empty_str(),
                         number,
                     }
                 }
@@ -1509,14 +1533,14 @@ fn decode_entity_run(
                         }
                         PrimitiveLiteralCandidate {
                             kind: PrimitiveLiteralKind::Number,
-                            string: Arc::from(""),
+                            string: empty_str(),
                             number,
                             boolean: false,
                         }
                     }
                     2 => PrimitiveLiteralCandidate {
                         kind: PrimitiveLiteralKind::Boolean,
-                        string: Arc::from(""),
+                        string: empty_str(),
                         number: 0.0,
                         boolean: match cursor.u64()? {
                             0 => false,
@@ -2003,10 +2027,10 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
                         declarations: declarations.into(),
                         references: references.into(),
                     }),
-                    Arc::from(""),
+                    empty_str(),
                 )
             }
-            1 => (SymbolOp::Remove { id: id.clone() }, Arc::from("")),
+            1 => (SymbolOp::Remove { id: id.clone() }, empty_str()),
             2 => {
                 let path = cursor.string_index(&strings, "symbol reference path")?;
                 if path.is_empty() {

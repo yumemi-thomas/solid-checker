@@ -13,8 +13,9 @@ use typefacts::v3::{
 #[test]
 fn handshake_declares_the_operation_sets_protocol() {
     assert_eq!(
-        TYPE_FACTS_HANDSHAKE_PROTOCOL, 84,
-        "protocol 84 adds the declaredKeys demand and Wire table schema v23 (ADR 0436)"
+        TYPE_FACTS_HANDSHAKE_PROTOCOL, 86,
+        "protocol 86 adds the declaredKeys demand and Wire table schema v23 (ADR 0436); \
+         85 added the modules demand omitModules and the update answer's graphKept"
     );
 }
 
@@ -26,6 +27,8 @@ fn lifecycle_modules_is_a_valid_read_only_generation_operation() {
         imports: true,
         import_paths: Vec::new(),
         packages: true,
+        distinct_bare_imports: false,
+        omit_modules: false,
     });
     let response = lifecycle(&mut session, request);
     // Valid: the failure is the backend's, not the validator's.

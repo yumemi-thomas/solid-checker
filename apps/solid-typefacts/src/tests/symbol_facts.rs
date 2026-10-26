@@ -102,6 +102,7 @@ fn semantic_demand_runs_reject_a_cross_file_query_location() {
             &[SemanticDemandRun {
                 path: &run_path,
                 demands: &demands,
+                shared: None,
             }],
         )
         .unwrap_err();
@@ -206,6 +207,7 @@ fn a_batch_structural_accessor_keeps_no_descriptor() {
             &[SemanticDemandRun {
                 path: &path,
                 demands: &demands,
+                shared: None,
             }],
         )
         .unwrap();
@@ -250,6 +252,7 @@ fn a_descriptor_depends_on_its_location_only() {
                 &[SemanticDemandRun {
                     path: &path,
                     demands: &demands,
+                    shared: None,
                 }],
             )
             .unwrap();
@@ -644,33 +647,39 @@ fn symbol_evidence_spells_internal_names_like_go() {
     let ctx = Context::new();
     let mut project = scratch.open();
     // The checker has no symbol *at* the expression; its declared symbol is
-    // the unnamed class's `__class`.
+    // the unnamed class's `__class`. A pass's row of the id holds what the
+    // `symbols` answer serves; no position names the symbol, so it is
+    // computed in the pass that minted the id.
     let start = find(&path, source, "class").start_byte;
-    let id = project
+    let (id, row) = project
         .with_env(|env, _| {
             let file = env.program.get_source_file(&path).unwrap();
             let node = crate::nodes::node_at(file, u32::try_from(start).unwrap());
-            env.id_for(node.symbol().expect("class expression symbol"))
+            let id = env.id_for(node.symbol().expect("class expression symbol"));
+            let row = crate::per_file::row_for(env, &id);
+            (id, row)
         })
         .unwrap();
+    assert!(row.found, "{id}");
+    let names: Vec<&str> = row
+        .declarations
+        .iter()
+        .map(|declaration| &*declaration.name)
+        .collect();
+    assert_eq!(names, ["__class"], "row declarations: {row:?}");
+    assert!(
+        names.iter().all(|name| !name.contains('\u{7f}')),
+        "tsrs's internal-name marker reached the wire"
+    );
+    // Asked later, outside any pass that reached it, the id fails closed.
     let query = typefacts::v3::SymbolQuery {
-        id: id.clone(),
+        id,
         references: false,
         references_only: false,
     };
     let facts =
         crate::backend::SymbolEvidence::symbol_evidence(&mut project, &ctx, &[query]).unwrap();
-    assert_eq!(facts.len(), 1);
-    let names: Vec<&str> = facts[0]
-        .declarations
-        .iter()
-        .map(|declaration| &*declaration.name)
-        .collect();
-    assert_eq!(names, ["__class"], "evidence declarations: {facts:?}");
-    assert!(
-        names.iter().all(|name| !name.contains('\u{7f}')),
-        "tsrs's internal-name marker reached the wire"
-    );
+    assert!(facts[0].declarations.is_empty(), "{facts:?}");
 }
 
 #[test]
@@ -682,7 +691,7 @@ fn wire_symbol_name_only_rewrites_the_internal_prefix() {
     assert_eq!(wire_symbol_name("plain"), "plain");
     assert_eq!(wire_symbol_name("__index"), "__index");
     assert_eq!(wire_symbol_name("a\u{7f}b"), "a\u{7f}b");
-    // ADR 0367: no checker counter reaches the wire.
+    // No checker counter reaches the wire.
     assert_eq!(wire_symbol_name("\u{7f}#4@#add"), "__#@#add");
     assert_eq!(wire_symbol_name("\u{7f}@iterator@16"), "__@iterator");
 }

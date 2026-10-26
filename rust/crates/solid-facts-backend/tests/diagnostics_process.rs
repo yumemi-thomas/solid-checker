@@ -14,6 +14,14 @@ mod dependency_fresh_native_process;
 #[path = "removed_package_flags_process.rs"]
 mod removed_package_flags_process;
 
+// ADR 0352: the provider census answers alike on every analysis worker count.
+#[path = "context_census_workers_process.rs"]
+mod context_census_workers_process;
+
+// The server rules answer alike on every analysis worker count.
+#[path = "server_rules_workers_process.rs"]
+mod server_rules_workers_process;
+
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]

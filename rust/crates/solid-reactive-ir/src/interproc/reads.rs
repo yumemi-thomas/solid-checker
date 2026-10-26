@@ -1,5 +1,6 @@
 //! Direct and typed reference contributions and the interprocedural read solver.
 
+use super::node_index::{FileNodes, NodeIndex};
 use super::*;
 
 pub(super) fn cached_reactive_source(
@@ -347,7 +348,7 @@ pub(crate) struct InterproceduralContext<'a, 'facts> {
     pub(crate) entities: &'a EntitySymbols,
     pub(crate) references_by_source: &'a HashMap<SymbolId, Vec<Location>>,
     pub(crate) symbol_names: &'a HashMap<SymbolId, SymbolId>,
-    pub(crate) retained_source_paths: &'a HashSet<String>,
+    pub(crate) unchanged_paths: &'a HashSet<String>,
     /// ADR 0294's typed candidates, for [`typed_candidate_contributions`].
     pub(crate) typed_sources: &'a HashMap<SymbolId, crate::source_discovery::TypedSource>,
     pub(crate) lookup: &'a SemanticLookup<'facts>,
@@ -394,30 +395,45 @@ pub(super) fn interprocedural_reads(
         graph: mut interprocedural_graph_cache,
         results: mut interprocedural_result_cache,
     } = caches;
+    // What the stage reads before its result chunks run is part of each
+    // chunk's proof (the resolver, transport, the merged graph).
+    let recording = crate::base::reads::begin();
+    // The recomputed graph chunks' and the refresh's reads: their own
+    // proofs, replayed into the stage's recording once the result chunks'
+    // stage proof is taken (`stage_only`).
+    let mut chunk_reads = Vec::new();
     let mut phase_started = Instant::now();
-    let (nodes, graph_node_reused_paths) =
-        discover_summary_graph_nodes(context, interprocedural_graph_cache.as_deref_mut());
+    let (file_nodes, graph_node_reused_paths) = discover_summary_graph_nodes(
+        context,
+        interprocedural_graph_cache.as_deref_mut(),
+        &mut chunk_reads,
+    );
+    let graph_nodes = phase_started.elapsed();
+    let step_started = Instant::now();
+    let node_index = NodeIndex::new(&file_nodes);
+    let NodeIndex {
+        nodes,
+        nodes_by_path,
+        indexes,
+        by_symbol,
+        functions,
+        ..
+    } = &node_index;
+    let node_index_elapsed = step_started.elapsed();
+    let step_started = Instant::now();
     let provenance = accessor_provenance::Resolver::new(
         facts,
         lookup,
         accessors,
         source_kinds,
         symbol_names,
-        nodes
-            .iter()
-            .map(|node| (node.path.clone(), node.span))
-            .collect(),
+        Arc::clone(functions),
     );
-    let (transported_calls, unavailable_calls, array_source_origins) =
-        transported_call_targets(context, &provenance);
-    let transport_identity_matches = interprocedural_result_cache.as_ref().is_none_or(|cache| {
-        cache.transported_calls == transported_calls
-            && cache.unavailable_calls == unavailable_calls
-            && cache.array_source_origins == array_source_origins
-    });
+    let resolver = step_started.elapsed();
+    let step_started = Instant::now();
+    let (transported_calls, unavailable_calls) = transported_call_targets(context, &provenance);
+    let transport = step_started.elapsed();
     let (transported_bodies, array_member_bodies) = transported_body_sets(&transported_calls);
-    let nodes_by_path = function_indices_by_path(&nodes);
-    let (indexes, by_symbol) = summary_node_indexes(&nodes);
     let mut summaries = vec![SummaryReads::default(); nodes.len()];
     let mut callback_summaries = vec![Vec::<CallbackSummary>::new(); nodes.len()];
     let mut callback_forwardings = Vec::new();
@@ -438,11 +454,12 @@ pub(super) fn interprocedural_reads(
     let mut invoked_parameter_members = vec![Vec::<ParameterMemberInvocation>::new(); nodes.len()];
     let mut returned_binding_candidates = Vec::new();
     let mut factory_call_candidates = Vec::new();
+    let step_started = Instant::now();
     let (graph_reused_files, graph_recomputed_files) = {
         let mut graph = InterproceduralGraphAssembly {
-            nodes: &nodes,
-            nodes_by_path: &nodes_by_path,
-            by_symbol: &by_symbol,
+            nodes,
+            nodes_by_path,
+            by_symbol,
             summaries: &mut summaries,
             callback_summaries: &mut callback_summaries,
             callback_forwardings: &mut callback_forwardings,
@@ -462,28 +479,39 @@ pub(super) fn interprocedural_reads(
         };
         merge_graph_contributions(
             context,
-            &nodes,
-            &nodes_by_path,
+            nodes,
+            nodes_by_path,
             &graph_node_reused_paths,
             interprocedural_graph_cache,
             &mut graph,
+            &mut chunk_reads,
         )
     };
-    refresh_member_invocation_contexts(
-        context,
-        &nodes,
-        &nodes_by_path,
-        &mut invoked_parameter_members,
-    );
+    let merge = step_started.elapsed();
+    let step_started = Instant::now();
+    // What the refresh decides is the result view's (each node's member
+    // invocations): its reads join the graph chunks'.
+    let ((), refresh_reads) = crate::base::reads::record_detached(|| {
+        super::refresh::refresh_member_invocation_contexts(
+            context,
+            nodes,
+            nodes_by_path,
+            &mut invoked_parameter_members,
+        );
+    });
+    chunk_reads.push(refresh_reads);
+    let refresh = step_started.elapsed();
+    let mut fixed_points = crate::InterproceduralFixedPointTimings::default();
+    let step_started = Instant::now();
     let transported_edges = add_transported_call_summaries(
         &TransportedCallInputs {
             context,
             provenance: &provenance,
             transported_calls: &transported_calls,
             transported_bodies: &transported_bodies,
-            nodes: &nodes,
-            nodes_by_path: &nodes_by_path,
-            indexes: &indexes,
+            nodes,
+            nodes_by_path,
+            indexes,
         },
         &mut summaries,
         &mut edges,
@@ -492,20 +520,23 @@ pub(super) fn interprocedural_reads(
     // Extra memo-wrapper source origins also enter through ordinary discovery.
     // Tag those rows before any normal summary hop can copy them.
     tag_extra_source_origins(&provenance, &mut summaries);
+    fixed_points.transported = step_started.elapsed();
+    let step_started = Instant::now();
     propagate_callback_forwardings(
         &callback_forwardings,
-        &nodes,
+        nodes,
         &mut escaped_parameters,
         &mut callback_summaries,
         &mut unresolved_callback_obligations,
     );
+    fixed_points.callback_forwarding = step_started.elapsed();
     let graph = phase_started.elapsed();
     phase_started = Instant::now();
     let (direct_index, direct_references, direct_summaries) = add_direct_reference_summaries(
         context,
         interprocedural_result_cache.as_deref_mut(),
-        &nodes,
-        &nodes_by_path,
+        nodes,
+        nodes_by_path,
         &mut summaries,
         phase_started,
     );
@@ -516,16 +547,17 @@ pub(super) fn interprocedural_reads(
         returns_by_ast_owner,
     } = collect_returned_summaries(
         context,
-        &nodes,
-        &nodes_by_path,
-        &indexes,
-        &by_symbol,
+        nodes,
+        nodes_by_path,
+        indexes,
+        by_symbol,
         &mut summaries,
     );
     let returned_direct = phase_started.elapsed();
     let returned_delta_started = Instant::now();
     propagate_returned_summary_deltas(&mut returned, &returned_edges);
     let returned_delta = returned_delta_started.elapsed();
+    fixed_points.returned = returned_delta;
     let call_summary_delta_started = Instant::now();
     let mut summary_propagation = SummaryPropagation {
         reverse_edges: reverse_summary_edges(&mut edges),
@@ -534,11 +566,12 @@ pub(super) fn interprocedural_reads(
         guaranteed_edges,
     };
     summary_propagation.run(&mut summaries);
-
+    fixed_points.calls = call_summary_delta_started.elapsed();
+    let step_started = Instant::now();
     attach_dispatch_edges(
         &DispatchGraph {
             dispatches: &dispatches,
-            nodes: &nodes,
+            nodes,
             callback_summaries: &callback_summaries,
             unresolved_callback_obligations: &unresolved_callback_obligations,
             invoked_parameters: &invoked_parameters,
@@ -552,21 +585,23 @@ pub(super) fn interprocedural_reads(
         &mut edges,
         &mut summary_propagation,
     );
-
+    fixed_points.dispatch = step_started.elapsed();
+    let step_started = Instant::now();
     add_returned_function_reads(
         context,
-        &nodes,
-        &indexes,
+        nodes,
+        indexes,
         &summaries,
         &returns_by_ast_owner,
         &mut returned,
     );
+    fixed_points.returned_functions = step_started.elapsed();
     let call_summary_delta = call_summary_delta_started.elapsed();
     let factory_propagation_started = Instant::now();
     let returned_bindings = propagate_factory_reads(
         context,
-        &nodes,
-        &by_symbol,
+        nodes,
+        by_symbol,
         &returned,
         &FactoryCandidates {
             returned_bindings: &returned_binding_candidates,
@@ -577,12 +612,13 @@ pub(super) fn interprocedural_reads(
     );
 
     let factory_propagation = factory_propagation_started.elapsed();
+    fixed_points.factory = factory_propagation;
     let propagation = phase_started.elapsed();
     phase_started = Instant::now();
     let result_view = InterproceduralResultView {
-        nodes: &nodes,
-        indexes: &indexes,
-        by_symbol: &by_symbol,
+        nodes,
+        indexes,
+        by_symbol,
         summaries: &summaries,
         invoked_parameters: &invoked_parameters,
         invoked_parameter_members: &invoked_parameter_members,
@@ -590,8 +626,8 @@ pub(super) fn interprocedural_reads(
     };
     let result_read_context = InterproceduralResultReadContext {
         result: result_view,
-        source_kinds,
-        accessors,
+        source_kinds: super::transport_reads::SourceKindsRead(source_kinds),
+        accessors: super::transport_reads::AccessorsRead(accessors),
         entities,
         symbol_names,
         lookup: context.lookup,
@@ -600,6 +636,29 @@ pub(super) fn interprocedural_reads(
         array_member_bodies: &array_member_bodies,
         provenance: &provenance,
     };
+    // What the stage's other chunks were handed is their own read: each
+    // result chunk records what it is handed itself (`indexes::hand_outs`).
+    // So are the resolver's and transport's answers: a result chunk records
+    // each one it asks (`transport_reads`), so what building them read is
+    // not its read. Nor is what a recomputed graph chunk read: what the
+    // graph gives a result chunk is the result view, whose every entry it
+    // reads is a dependency compared by value (`dependency_matches`); and a
+    // reused graph chunk's reads were never part of this proof, so no
+    // result chunk could rely on them. The member-invocation refresh
+    // likewise decides only view entries.
+    let stage_only = |reads: &crate::base::reads::Reads| {
+        reads
+            .without_tables(crate::indexes::HAND_OUT_TABLES)
+            .without_tables(accessor_provenance::RESOLVER_TABLES)
+            .without_tables(
+                accessor_provenance::TRANSPORT_TABLES_FROM
+                    ..accessor_provenance::TRANSPORT_TABLES_END,
+            )
+    };
+    let stage_reads = stage_only(&recording.so_far());
+    for reads in &chunk_reads {
+        crate::base::reads::replay(reads);
+    }
     let ResultReads {
         mut result,
         result_reused_files,
@@ -607,10 +666,9 @@ pub(super) fn interprocedural_reads(
     } = collect_result_reads(
         context,
         interprocedural_result_cache,
-        transport_identity_matches,
         &result_read_context,
-        &array_source_origins,
         &mut dispatch_obligations,
+        &stage_reads,
     );
     // ADR 0289: computed fresh on every analysis, never retained per file:
     // the derivation reads other files' literals and the provider census.
@@ -625,7 +683,9 @@ pub(super) fn interprocedural_reads(
         result.extend(getter_reads);
         dispatch_obligations.extend(getter_obligations);
     }
-    export_parameter_member_dispatch_obligations(context, &nodes, &mut dispatch_obligations);
+    let step_started = Instant::now();
+    export_parameter_member_dispatch_obligations(context, nodes, &mut dispatch_obligations);
+    fixed_points.parameter_member_obligations = step_started.elapsed();
     let factory_instances = returned_bindings
         .values()
         .filter(|summary| !summary.is_empty())
@@ -633,16 +693,12 @@ pub(super) fn interprocedural_reads(
     let result_reads = phase_started.elapsed();
     let (export_summaries, export_work) = export_structured_return_obligations(
         context,
-        &StructuredReturnInputs {
-            nodes: &nodes,
-            indexes: &indexes,
-            by_symbol: &by_symbol,
-            summaries: &summaries,
-            returned: &returned,
-        },
+        nodes,
         &mut dispatch_obligations,
+        &mut fixed_points,
     );
     let results_and_exports = phase_started.elapsed();
+    recording.finish();
     InterproceduralResult {
         reads: result.into(),
         source_call_targets: Arc::new(transported_calls),
@@ -650,6 +706,12 @@ pub(super) fn interprocedural_reads(
         factory_instances,
         timings: InterproceduralTimings {
             graph,
+            graph_nodes,
+            node_index: node_index_elapsed,
+            resolver,
+            transport,
+            merge,
+            refresh,
             direct_summaries,
             direct_index,
             direct_references,
@@ -662,6 +724,7 @@ pub(super) fn interprocedural_reads(
             result_reads,
             export_summaries,
             export_work,
+            fixed_points,
             graph_reused_files,
             graph_recomputed_files,
             result_reused_files,
@@ -671,7 +734,6 @@ pub(super) fn interprocedural_reads(
 }
 
 type TransportedBodies<'a> = HashSet<(&'a str, Span)>;
-type SummaryNodeIndexes = (HashMap<(String, Span), usize>, HashMap<SymbolId, usize>);
 
 fn transported_body_sets(
     transported_calls: &HashMap<Location, accessor_provenance::Callable>,
@@ -694,29 +756,15 @@ fn transported_body_sets(
     (transported_bodies, array_member_bodies)
 }
 
-fn summary_node_indexes(nodes: &[SummaryNode]) -> SummaryNodeIndexes {
-    let indexes = nodes
-        .iter()
-        .enumerate()
-        .map(|(index, node)| ((node.path.clone(), node.span), index))
-        .collect::<HashMap<_, _>>();
-    let by_symbol = nodes
-        .iter()
-        .enumerate()
-        .filter_map(|(index, node)| node.symbol.clone().map(|symbol| (symbol, index)))
-        .collect::<HashMap<_, _>>();
-    (indexes, by_symbol)
-}
-
 fn tag_extra_source_origins(
     provenance: &accessor_provenance::Resolver<'_, '_>,
     summaries: &mut [SummaryReads],
 ) {
     if provenance.has_extra_source_origins() {
         for summary in summaries {
-            for read in &mut summary.ordered {
+            summary.rewrite(|read| {
                 read.transported |= provenance.has_source_origin(&read.symbol);
-            }
+            });
         }
     }
 }
@@ -733,73 +781,108 @@ fn reverse_summary_edges(edges: &mut [Vec<usize>]) -> Vec<Vec<usize>> {
     reverse_edges
 }
 
-fn discover_summary_graph_nodes<'a>(
+/// Each file's summary nodes, in file order: its graph chunk's when that is
+/// reused, else computed now (and cached as the chunk's, pending its
+/// contribution).
+fn discover_summary_graph_nodes<'a, 'c>(
     context: &InterproceduralContext<'a, '_>,
     interprocedural_graph_cache: Option<
-        &mut HashMap<solid_facts::core::SourcePath, CachedInterproceduralGraph>,
+        &'c mut HashMap<solid_facts::core::SourcePath, CachedInterproceduralGraph>,
     >,
-) -> (Vec<SummaryNode>, HashSet<&'a str>) {
+    chunk_reads: &mut Vec<crate::base::reads::Reads>,
+) -> (Vec<(&'a str, FileNodes<'c>)>, HashSet<&'a str>) {
     let InterproceduralContext {
         facts,
         project_indexes,
         entities,
-        retained_source_paths,
+        unchanged_paths,
         lookup,
+        accessors,
         ..
     } = context;
-    let mut nodes = Vec::new();
     let mut graph_node_reused_paths = HashSet::default();
-    if let Some(cache) = interprocedural_graph_cache {
-        let current_paths = facts
-            .files
-            .iter()
-            .map(|file| file.path.as_str())
-            .collect::<HashSet<_>>();
-        cache.retain(|path, _| current_paths.contains(path.as_str()));
-        let reusable_paths = facts
-            .files
-            .iter()
-            .filter_map(|file| {
-                (retained_source_paths.contains(file.path.as_str())
-                    && cache.get(file.path.as_str()).is_some_and(|cached| {
-                        cached.member_resolution == lookup.member_resolution_digest()
-                            && (Arc::ptr_eq(&cached.compiler, &file.compiler)
-                                || same_compiler_semantics(&cached.compiler, &file.compiler))
-                    }))
-                .then_some(file.path.as_str())
-            })
-            .collect::<HashSet<_>>();
+    let Some(cache) = interprocedural_graph_cache else {
         let discovered = parallel_file_results(&facts.files, |file| {
-            (!reusable_paths.contains(file.path.as_str()))
-                .then(|| discover_summary_nodes(file, project_indexes, entities))
+            discover_summary_nodes(file, project_indexes, entities, lookup)
         });
-        for (file, discovered) in facts.files.iter().zip(discovered) {
-            if let Some(file_nodes) = discovered {
-                nodes.extend(file_nodes.iter().cloned());
-                cache.insert(
-                    file.path.clone(),
-                    CachedInterproceduralGraph {
-                        nodes: file_nodes,
-                        contribution: InterproceduralGraphContribution::default(),
-                        compiler: file.compiler.clone(),
-                        member_resolution: lookup.member_resolution_digest(),
-                    },
-                );
-            } else {
-                let cached = cache
-                    .get(file.path.as_str())
-                    .expect("reusable graph path has a cached contribution");
-                nodes.extend(cached.nodes.iter().cloned());
-                graph_node_reused_paths.insert(file.path.as_str());
-            }
-        }
-    } else {
-        for file_nodes in parallel_file_results(&facts.files, |file| {
-            discover_summary_nodes(file, project_indexes, entities)
-        }) {
-            nodes.extend(file_nodes);
+        let nodes = facts
+            .files
+            .iter()
+            .zip(discovered)
+            .map(|(file, nodes)| (file.path.as_str(), FileNodes::Computed(nodes)))
+            .collect();
+        return (nodes, graph_node_reused_paths);
+    };
+    let current_paths = facts
+        .files
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect::<HashSet<_>>();
+    cache.retain(|path, _| current_paths.contains(path.as_str()));
+    let reusable_paths = facts
+        .files
+        .iter()
+        .filter_map(|file| {
+            (unchanged_paths.contains(file.path.as_str())
+                && cache.get(file.path.as_str()).is_some_and(|cached| {
+                    cached.proof.holds(*lookup)
+                        && super::transport_reads::hold_accessors(&cached.accessor_reads, accessors)
+                        && (Arc::ptr_eq(&cached.compiler, &file.compiler)
+                            || same_compiler_semantics(&cached.compiler, &file.compiler))
+                }))
+            .then_some(file.path.as_str())
+        })
+        .collect::<HashSet<_>>();
+    let discovered = parallel_file_results(&facts.files, |file| {
+        (!reusable_paths.contains(file.path.as_str())).then(|| {
+            crate::base::reads::record_detached(|| {
+                discover_summary_nodes(file, project_indexes, entities, lookup)
+            })
+        })
+    });
+    let mut computed = Vec::with_capacity(discovered.len());
+    for (file, discovered) in facts.files.iter().zip(discovered) {
+        if let Some((file_nodes, reads)) = discovered {
+            chunk_reads.push(reads.clone());
+            // The nodes' reads, until the merge adds the contribution's.
+            cache.insert(
+                file.path.clone(),
+                CachedInterproceduralGraph {
+                    nodes: file_nodes.clone(),
+                    contribution: InterproceduralGraphContribution::default(),
+                    compiler: file.compiler.clone(),
+                    proof: crate::base::reads::ReadProof::pending(reads),
+                    accessor_reads: Vec::new(),
+                },
+            );
+            computed.push(Some(file_nodes));
+        } else {
+            debug_assert!(
+                cache.contains_key(file.path.as_str()),
+                "reusable graph path has a cached contribution"
+            );
+            graph_node_reused_paths.insert(file.path.as_str());
+            computed.push(None);
         }
     }
+    let cache = &*cache;
+    let nodes = facts
+        .files
+        .iter()
+        .zip(computed)
+        .map(|(file, computed)| {
+            let nodes = match computed {
+                Some(nodes) => FileNodes::Computed(nodes),
+                None => FileNodes::Reused(
+                    &cache
+                        .get(file.path.as_str())
+                        .expect("reusable graph path has a cached contribution")
+                        .nodes,
+                ),
+            };
+            (file.path.as_str(), nodes)
+        })
+        .collect();
     (nodes, graph_node_reused_paths)
 }
 
@@ -809,10 +892,9 @@ fn transported_call_targets(
 ) -> (
     HashMap<Location, accessor_provenance::Callable>,
     HashSet<Location>,
-    HashSet<SymbolId>,
 ) {
     let lookup = context.lookup;
-    let (mut transported_calls, unavailable_calls) = provenance.calls();
+    let (mut transported_calls, unavailable_calls) = provenance.transported_calls();
     // ADR 0299 review: accessor transport predates the shared exact object
     // target map. An escaped or uninitialized literal must not regain its
     // read summary through that older path after the owner edge is withheld.
@@ -825,7 +907,7 @@ fn transported_call_targets(
             return false;
         };
         !crate::object_members::literal_receiver_call(file, Span::new(start, end), lookup)
-            || lookup.object_member_targets().contains_key(site)
+            || lookup.object_member_target_at(site).is_some()
     });
     for (site, (path, span)) in lookup.object_member_targets() {
         transported_calls.insert(
@@ -836,15 +918,7 @@ fn transported_call_targets(
             },
         );
     }
-    let array_source_origins = if transported_calls
-        .values()
-        .any(|target| matches!(target, accessor_provenance::Callable::ArrayMembers(_)))
-    {
-        provenance.proven_source_origins().cloned().collect()
-    } else {
-        HashSet::default()
-    };
-    (transported_calls, unavailable_calls, array_source_origins)
+    (transported_calls, unavailable_calls)
 }
 
 fn merge_graph_contributions(
@@ -856,6 +930,7 @@ fn merge_graph_contributions(
         &mut HashMap<solid_facts::core::SourcePath, CachedInterproceduralGraph>,
     >,
     graph: &mut InterproceduralGraphAssembly<'_>,
+    chunk_reads: &mut Vec<crate::base::reads::Reads>,
 ) -> (u64, u64) {
     let InterproceduralContext {
         facts,
@@ -890,17 +965,21 @@ fn merge_graph_contributions(
         Some(cache) => {
             let contributions = parallel_file_results(&facts.files, |file| {
                 (!graph_node_reused_paths.contains(file.path.as_str())).then(|| {
-                    discover_interprocedural_graph(
-                        file,
-                        nodes,
-                        nodes_by_path,
-                        InterproceduralGraphSymbols {
-                            entities,
-                            names: symbol_names,
-                        },
-                        lookup,
-                        accessors,
-                    )
+                    crate::base::reads::record_detached(|| {
+                        super::transport_reads::record(|| {
+                            discover_interprocedural_graph(
+                                file,
+                                nodes,
+                                nodes_by_path,
+                                InterproceduralGraphSymbols {
+                                    entities,
+                                    names: symbol_names,
+                                },
+                                lookup,
+                                accessors,
+                            )
+                        })
+                    })
                 })
             });
             for (file, contribution) in facts.files.iter().zip(contributions) {
@@ -912,9 +991,14 @@ fn merge_graph_contributions(
                     continue;
                 }
                 graph_recomputed_files += 1;
-                let contribution =
+                let ((contribution, accessor_reads), mut reads) =
                     contribution.expect("recomputed graph path has a fresh contribution");
+                chunk_reads.push(reads.clone());
                 graph.merge(file.path.as_str(), &contribution);
+                // The nodes' reads (this build's) and the contribution's.
+                if let Some(discovered) = cache.get(file.path.as_str()) {
+                    reads.extend(&discovered.proof.reads);
+                }
                 cache.insert(
                     file.path.clone(),
                     CachedInterproceduralGraph {
@@ -926,102 +1010,14 @@ fn merge_graph_contributions(
                             .collect(),
                         contribution,
                         compiler: file.compiler.clone(),
-                        member_resolution: lookup.member_resolution_digest(),
+                        proof: crate::base::reads::ReadProof::new(reads, *lookup),
+                        accessor_reads,
                     },
                 );
             }
         }
     }
     (graph_reused_files, graph_recomputed_files)
-}
-
-fn refresh_member_invocation_contexts(
-    context: &InterproceduralContext<'_, '_>,
-    nodes: &[SummaryNode],
-    nodes_by_path: &HashMap<String, Vec<usize>>,
-    invoked_parameter_members: &mut [Vec<ParameterMemberInvocation>],
-) {
-    let InterproceduralContext {
-        facts,
-        entities,
-        symbol_names,
-        lookup,
-        ..
-    } = context;
-    // A callback consumer can change in another file while its forwarding
-    // helper's cached graph contribution remains reusable. Refresh invocation
-    // context from the current source census before dependency states are read.
-    let mut member_consumers = crate::execution_role::ReadConsumerSummaries::new(lookup);
-    for file in &facts.files {
-        let allowed = allowed_callback_spans(file, lookup);
-        for owner in nodes_by_path.get(file.path.as_str()).into_iter().flatten() {
-            for invocation in &mut invoked_parameter_members[*owner] {
-                let site = invocation.site;
-                let default =
-                    file.ast.functions.iter().any(|function| {
-                        function.span.contains(site) && !function.body.contains(site)
-                    });
-                let role =
-                    semantic_execution_role(file, site, &allowed, entities, symbol_names, lookup);
-                invocation.dispatch_read_excluded = !default
-                    && (crate::execution_role::excluded_role_holds(file, site, role, lookup)
-                        || member_consumers.proves_tracked_or_fresh(file, site)
-                        || crate::execution_role::await_continuation_decides_nothing(
-                            file, site, lookup,
-                        ));
-            }
-        }
-    }
-    // ADR 0320: a function that hands its own parameter, as the whole
-    // argument, to an exact project callee invoking a member of it invokes
-    // that member too: the dispatch is decided by this function's callers.
-    // Without this, a call written in a non-rendering helper raises its
-    // obligation nowhere. Recomputed from the merged graph every build; a
-    // forwarded invocation's context is the forwarding call's.
-    let mut site_excluded = |file: &solid_facts::FileFacts, site: Span| {
-        let allowed = allowed_callback_spans(file, lookup);
-        let default = file
-            .ast
-            .functions
-            .iter()
-            .any(|function| function.span.contains(site) && !function.body.contains(site));
-        let role = semantic_execution_role(file, site, &allowed, entities, symbol_names, lookup);
-        !default
-            && (crate::execution_role::excluded_role_holds(file, site, role, lookup)
-                || member_consumers.proves_tracked_or_fresh(file, site)
-                || crate::execution_role::await_continuation_decides_nothing(file, site, lookup))
-    };
-    unmodeled_parameter_uses(
-        facts,
-        nodes,
-        nodes_by_path,
-        lookup,
-        invoked_parameter_members,
-        &mut site_excluded,
-    );
-    forward_parameter_member_invocations(
-        facts,
-        nodes,
-        nodes_by_path,
-        lookup,
-        invoked_parameter_members,
-        |file, site| {
-            let allowed = allowed_callback_spans(file, lookup);
-            let default = file
-                .ast
-                .functions
-                .iter()
-                .any(|function| function.span.contains(site) && !function.body.contains(site));
-            let role =
-                semantic_execution_role(file, site, &allowed, entities, symbol_names, lookup);
-            !default
-                && (crate::execution_role::excluded_role_holds(file, site, role, lookup)
-                    || member_consumers.proves_tracked_or_fresh(file, site)
-                    || crate::execution_role::await_continuation_decides_nothing(
-                        file, site, lookup,
-                    ))
-        },
-    );
 }
 
 /// The read-only inputs of [`add_transported_call_summaries`].
@@ -1436,8 +1432,8 @@ fn collect_returned_summaries<'a>(
                         } else if let Some(target) = by_symbol.get(symbol).copied()
                             && target != index
                         {
-                            for read in summaries[target].iter() {
-                                returned[index].push_unique(read.clone());
+                            for (hops, read) in summaries[target].rows() {
+                                returned[index].insert(read.clone(), hops + 1);
                             }
                         }
                     }
@@ -1581,9 +1577,12 @@ fn attach_dispatch_edges(
             if !edges[*owner].contains(&target) {
                 edges[*owner].push(target);
                 summary_propagation.reverse_edges[target].push(*owner);
-                let target_reads = summaries[target].to_vec();
-                for read in target_reads {
-                    if summaries[*owner].push_unique(read) {
+                let target_reads = summaries[target]
+                    .rows()
+                    .map(|(hops, read)| (hops, read.clone()))
+                    .collect::<Vec<_>>();
+                for (hops, read) in target_reads {
+                    if summaries[*owner].insert(read, hops + 1) {
                         dispatch_edges_added = true;
                     }
                 }
@@ -1625,8 +1624,8 @@ fn add_returned_function_reads<'a>(
             if value.value == solid_facts::ast::ReturnValueKind::Function
                 && let Some(target) = indexes.get(&(node.path.clone(), value.span))
             {
-                for read in summaries[*target].iter() {
-                    returned[index].push_unique(read.clone());
+                for (hops, read) in summaries[*target].rows() {
+                    returned[index].insert(read.clone(), hops + 1);
                 }
             }
         }
@@ -1651,6 +1650,8 @@ fn propagate_factory_reads(
     let returned_binding_candidates = candidates.returned_bindings;
     let factory_call_candidates = candidates.factory_calls;
     let mut returned_bindings = HashMap::<SymbolId, Vec<SummaryRead>>::default();
+    // The factory each binding's rows come from, for their hop counts.
+    let mut binding_targets = HashMap::<SymbolId, usize>::default();
     if returned.iter().any(|summary| !summary.is_empty()) {
         for (binding_symbol, target_symbol) in returned_binding_candidates {
             let Some(target) = by_symbol.get(target_symbol).copied() else {
@@ -1663,6 +1664,7 @@ fn propagate_factory_reads(
                 }
             }
             returned_bindings.insert(binding_symbol.clone(), summary);
+            binding_targets.insert(binding_symbol.clone(), target);
         }
         let mut factory_reads_added = false;
         if !returned_bindings.is_empty() {
@@ -1673,10 +1675,11 @@ fn propagate_factory_reads(
                 let Some(factory_reads) = returned_bindings.get(symbol) else {
                     continue;
                 };
-                for read in factory_reads {
-                    let previous_len = summaries[*owner].len();
-                    summaries[*owner].push_unique(read.clone());
-                    factory_reads_added |= summaries[*owner].len() != previous_len;
+                let hops = returned[binding_targets[symbol]]
+                    .rows()
+                    .map(|(hops, _)| hops);
+                for (read, hops) in factory_reads.iter().zip(hops) {
+                    factory_reads_added |= summaries[*owner].insert(read.clone(), hops + 1);
                 }
             }
         }
@@ -1696,19 +1699,42 @@ struct ResultReads {
 fn collect_result_reads(
     context: &InterproceduralContext<'_, '_>,
     interprocedural_result_cache: Option<&mut CachedInterproceduralResults>,
-    transport_identity_matches: bool,
     result_read_context: &InterproceduralResultReadContext<'_, '_>,
-    array_source_origins: &HashSet<SymbolId>,
     dispatch_obligations: &mut Vec<StaticDefect>,
+    stage_reads: &crate::base::reads::Reads,
 ) -> ResultReads {
     let InterproceduralContext {
         facts,
-        retained_source_paths,
+        unchanged_paths,
+        lookup,
         ..
     } = context;
+    // A file's result reads, recorded: its proof is what it read of the
+    // lookup, and what it read of the transport tables (`transport_reads`).
+    // What the stage read before it ([`crate::base::reads`]) is one proof
+    // every file computed in this build shares, checked once per build.
+    let read_file = |file: &solid_facts::FileFacts| {
+        let ((computed, transport), reads) = crate::base::reads::record(|| {
+            super::transport_reads::record(|| {
+                interprocedural_result_reads_for_file(file, result_read_context)
+            })
+        });
+        (computed, (reads, transport))
+    };
+    let stage_proof = std::cell::OnceCell::new();
+    let stage_proof = || {
+        Arc::clone(stage_proof.get_or_init(|| {
+            Arc::new(crate::base::reads::ReadProof::new(
+                stage_reads.clone(),
+                *lookup,
+            ))
+        }))
+    };
+    // Each kept stage proof's verdict, by address; the proof is held so no
+    // other takes its address during the build.
+    let mut stage_proofs_hold =
+        HashMap::<usize, (Arc<crate::base::reads::ReadProof>, bool)>::default();
     let result_view = result_read_context.result;
-    let transported_calls = result_read_context.transported_calls;
-    let unavailable_calls = result_read_context.unavailable_calls;
     let result_capacity = interprocedural_result_cache.as_ref().map_or(0, |cache| {
         cache.files.values().map(|file| file.reads.len()).sum()
     });
@@ -1716,40 +1742,14 @@ fn collect_result_reads(
     let mut result_reused_files = 0;
     let mut result_recomputed_files = 0;
     if let Some(cache) = interprocedural_result_cache {
-        cache.transported_calls.clone_from(transported_calls);
-        cache.unavailable_calls.clone_from(unavailable_calls);
-        cache.array_source_origins.clone_from(array_source_origins);
-        // Call-role proofs inspect callee syntax beyond its read summary:
-        // moving an await/default/edge can preserve that summary byte for
-        // byte. Until syntax dependencies are retained per hop, a changed,
-        // added or removed file holding such syntax, before or after the
-        // edit, invalidates result-file reuse, including callers.
-        let all_result_sources_retained = facts
-            .files
-            .iter()
-            .filter(|file| !retained_source_paths.contains(file.path.as_str()))
-            .all(|file| {
-                !call_role_syntax(file)
-                    && cache
-                        .files
-                        .get(file.path.as_str())
-                        .is_none_or(|cached| !cached.call_role_syntax)
-            })
-            && cache.files.iter().all(|(path, cached)| {
-                !cached.call_role_syntax
-                    || facts
-                        .files
-                        .iter()
-                        .any(|file| file.path.as_str() == path.as_str())
-            });
         if cache.files.is_empty()
             && cache.dependency_states.is_empty()
             && cache.dependency_users.is_empty()
         {
-            let per_file = parallel_file_results(&facts.files, |file| {
-                interprocedural_result_reads_for_file(file, result_read_context)
-            });
-            for (file, (reads, obligations, dependencies)) in facts.files.iter().zip(per_file) {
+            let per_file = parallel_file_results(&facts.files, read_file);
+            for (file, ((reads, obligations, dependencies), (recorded, transport))) in
+                facts.files.iter().zip(per_file)
+            {
                 result_recomputed_files += 1;
                 result.extend(reads.iter().cloned());
                 dispatch_obligations.extend(obligations.iter().cloned());
@@ -1763,7 +1763,9 @@ fn collect_result_reads(
                         reads,
                         dispatch_obligations: obligations,
                         compiler: file.compiler.clone(),
-                        call_role_syntax: call_role_syntax(file),
+                        proof: crate::base::reads::ReadProof::new(recorded, *lookup),
+                        stage_proof: stage_proof(),
+                        transport,
                     },
                 );
             }
@@ -1800,13 +1802,22 @@ fn collect_result_reads(
                 .map(|(dependency, _)| dependency.clone())
                 .collect::<HashSet<_>>();
             for file in &facts.files {
-                if all_result_sources_retained
-                    && transport_identity_matches
-                    && retained_source_paths.contains(file.path.as_str())
+                if unchanged_paths.contains(file.path.as_str())
                     && let Some(cached) = cache.files.get(file.path.as_str())
                     && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                         || same_compiler_semantics(&cached.compiler, &file.compiler))
                     && cached.dependencies.is_disjoint(&changed_dependencies)
+                    && cached.proof.holds(*lookup)
+                    && stage_proofs_hold
+                        .entry(Arc::as_ptr(&cached.stage_proof) as usize)
+                        .or_insert_with(|| {
+                            (
+                                Arc::clone(&cached.stage_proof),
+                                cached.stage_proof.holds(*lookup),
+                            )
+                        })
+                        .1
+                    && super::transport_reads::hold(&cached.transport, result_read_context)
                 {
                     result_reused_files += 1;
                     result.extend(cached.reads.iter().cloned());
@@ -1814,8 +1825,7 @@ fn collect_result_reads(
                     continue;
                 }
                 result_recomputed_files += 1;
-                let (reads, obligations, dependencies) =
-                    interprocedural_result_reads_for_file(file, result_read_context);
+                let ((reads, obligations, dependencies), (recorded, transport)) = read_file(file);
                 result.extend(reads.iter().cloned());
                 dispatch_obligations.extend(obligations.iter().cloned());
                 if let Some(previous) = cache.files.remove(file.path.as_str()) {
@@ -1847,7 +1857,9 @@ fn collect_result_reads(
                         reads,
                         dispatch_obligations: obligations,
                         compiler: file.compiler.clone(),
-                        call_role_syntax: call_role_syntax(file),
+                        proof: crate::base::reads::ReadProof::new(recorded, *lookup),
+                        stage_proof: stage_proof(),
+                        transport,
                     },
                 );
             }
@@ -1916,16 +1928,28 @@ fn export_parameter_member_dispatch_obligations(
         else {
             continue;
         };
-        let allowed = allowed_by_path
-            .entry(file.path.as_str())
-            .or_insert_with(|| allowed_callback_spans(file, context.lookup));
-        let direct_member = file.ast.calls.iter().find_map(|call| {
-            if !function.body.contains(call.span)
-                || !containing_ast_function(&file.ast, call.span)
-                    .is_some_and(|owner| owner.span == function.span)
+        // The first call written in the function's own body whose callee is
+        // a member of one of its parameters, not a tracked JSX role and not
+        // a standard-library method. The conjuncts are pure, so the cheap
+        // syntactic ones run first: the role (and the file's allowed
+        // callback spans it reads) is asked only of a parameter's member.
+        let direct_member = file.ast.calls_within(function.body).find_map(|call| {
+            if !containing_ast_function(&file.ast, call.span)
+                .is_some_and(|owner| owner.span == function.span)
             {
                 return None;
             }
+            let (receiver, path) = context.lookup.member_callee_receiver(file, call.callee)?;
+            if !node
+                .parameters
+                .iter()
+                .any(|parameter| parameter == &receiver)
+            {
+                return None;
+            }
+            let allowed = allowed_by_path
+                .entry(file.path.as_str())
+                .or_insert_with(|| allowed_callback_spans(file, context.lookup));
             if semantic_execution_role(
                 file,
                 call.callee,
@@ -1945,11 +1969,7 @@ fn export_parameter_member_dispatch_obligations(
             {
                 return None;
             }
-            let (receiver, path) = context.lookup.member_callee_receiver(file, call.callee)?;
-            node.parameters
-                .iter()
-                .any(|parameter| parameter == &receiver)
-                .then_some(path)
+            Some(path)
         });
         if let Some(path) = direct_member {
             dispatch_obligations.push(StaticDefect {
@@ -1973,111 +1993,24 @@ fn export_parameter_member_dispatch_obligations(
     }
 }
 
-/// The settled summaries structured-return discovery reads.
-struct StructuredReturnInputs<'a> {
-    nodes: &'a [SummaryNode],
-    indexes: &'a HashMap<(String, Span), usize>,
-    by_symbol: &'a HashMap<SymbolId, usize>,
-    summaries: &'a [SummaryReads],
-    returned: &'a [SummaryReads],
-}
-
 /// Files with at most this many returns filter them per exported function;
 /// larger ones group them by owner once.
 const SMALL_RETURN_COUNT: usize = 16;
 
+/// The `StructuredReturnUnresolved` obligation of each shorthand property an
+/// exported function returns that no exact project declaration answers.
 fn export_structured_return_obligations(
     context: &InterproceduralContext<'_, '_>,
-    inputs: &StructuredReturnInputs<'_>,
+    nodes: &[SummaryNode],
     dispatch_obligations: &mut Vec<StaticDefect>,
+    fixed_points: &mut crate::InterproceduralFixedPointTimings,
 ) -> (Duration, u64) {
-    let work = AtomicU64::new(0);
-    let InterproceduralContext {
-        facts,
-        accessors,
-        source_kinds,
-        entities,
-        symbol_names,
-        lookup,
-        ..
-    } = context;
-    let StructuredReturnInputs {
-        nodes,
-        indexes,
-        by_symbol,
-        summaries,
-        returned,
-    } = inputs;
+    let InterproceduralContext { facts, lookup, .. } = context;
     let export_started = Instant::now();
-    let mut structured_returns = vec![None; nodes.len()];
-    let has_structured_return_seed = facts.files.iter().any(|file| {
-        !file.ast.object_properties.is_empty()
-            || file
-                .ast
-                .functions
-                .iter()
-                .filter_map(|function| function.expression_return.as_ref())
-                .chain(file.ast.returns.iter())
-                .any(|returned| {
-                    !returned.elements().is_empty() || !returned.properties().is_empty()
-                })
-    });
-    let accessor_declarations = structured_returns::accessor_declarations(accessors);
-    let accessors_by_identity = std::sync::OnceLock::new();
-    let module_exports = std::sync::OnceLock::new();
-    if has_structured_return_seed {
-        for _ in 0..=nodes.len() {
-            let discovered = discover_structured_returns(&StructuredReturnDiscovery {
-                facts,
-                nodes,
-                indexes,
-                by_symbol,
-                summaries,
-                returned,
-                structured_returns: &structured_returns,
-                work: &work,
-                accessors,
-                accessor_declarations: &accessor_declarations,
-                accessors_by_identity: &accessors_by_identity,
-                module_exports: &module_exports,
-                source_kinds,
-                entities,
-                symbol_names,
-                lookup,
-            });
-            let mut changed = false;
-            for (target, returned) in structured_returns.iter_mut().zip(discovered) {
-                if *target != returned {
-                    *target = returned;
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
-    }
-    let structured_discovery = StructuredReturnDiscovery {
-        facts,
-        nodes,
-        indexes,
-        by_symbol,
-        summaries,
-        returned,
-        structured_returns: &structured_returns,
-        work: &work,
-        accessors,
-        accessor_declarations: &accessor_declarations,
-        accessors_by_identity: &accessors_by_identity,
-        module_exports: &module_exports,
-        source_kinds,
-        entities,
-        symbol_names,
-        lookup,
-    };
+    let mut work = 0;
     let mut returns_by_owner: HashMap<&str, HashMap<Span, Vec<usize>>> = HashMap::default();
     for node in nodes.iter().filter(|node| node.exported) {
-        work.fetch_add(1, Ordering::Relaxed);
+        work += 1;
         let Some(file) = lookup.file_by_path(node.path.as_str()) else {
             continue;
         };
@@ -2124,9 +2057,8 @@ fn export_structured_return_obligations(
             )
             .flat_map(|returned| returned.properties())
         {
-            work.fetch_add(1, Ordering::Relaxed);
-            let Some(reason) =
-                structured_discovery.unresolved_shorthand_reason(file, property.value)
+            work += 1;
+            let Some(reason) = unresolved_shorthand_reason(file, property.value, facts, lookup)
             else {
                 continue;
             };
@@ -2146,5 +2078,6 @@ fn export_structured_return_obligations(
             });
         }
     }
-    (export_started.elapsed(), work.into_inner())
+    fixed_points.shorthand_obligations = export_started.elapsed();
+    (export_started.elapsed(), work)
 }

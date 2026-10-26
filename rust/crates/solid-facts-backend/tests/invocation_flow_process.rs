@@ -655,6 +655,76 @@ fn daemon_follows_the_boundary_manifest() {
     let _ = fs::remove_dir_all(&sockets);
 }
 
+/// The generation the daemon answered at (`SOLID_CHECKER_TIMINGS`): a new
+/// session starts at 1, every overlay update adds one.
+fn retained_generation(
+    typefacts: &str,
+    tsconfig: &std::path::Path,
+    sockets: &std::path::Path,
+) -> u64 {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", typefacts)
+        .env("SOLID_CHECKER_DAEMON", "1")
+        .env("SOLID_CHECKER_DAEMON_IDLE_SECS", "10")
+        .env("SOLID_CHECKER_TIMINGS", "1")
+        .env("TMPDIR", sockets)
+        .args(["--format", "json", "--project"])
+        .arg(tsconfig)
+        .args([
+            "--runtime-target",
+            "browser",
+            "--runtime-build",
+            "development",
+            "--rendering",
+            "csr",
+        ])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    stderr
+        .lines()
+        .find_map(|line| {
+            let value: serde_json::Value = serde_json::from_str(line).ok()?;
+            (value["mode"] == "retained-daemon").then(|| value["generation"].as_u64())?
+        })
+        .unwrap_or_else(|| panic!("no retained answer: {stderr}"))
+}
+
+/// An edit to a tracked source is the daemon's overlay update, not a new
+/// session: the resolution witness does not observe tracked bytes. Each
+/// retained answer is still the fresh one.
+#[test]
+fn daemon_edits_a_tracked_source_without_a_rebuild() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let (directory, _) = project(
+        "daemon-tracked-edit",
+        &[("App.tsx", RETAIN_APP), ("lib.ts", RETAIN_LIB)],
+    );
+    let directory = directory.canonicalize().unwrap();
+    let tsconfig = directory.join("tsconfig.json");
+    let sockets = PathBuf::from(format!("/tmp/sct-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&sockets);
+    fs::create_dir_all(&sockets).unwrap();
+    assert_eq!(retained_generation(&typefacts, &tsconfig, &sockets), 1);
+    let lib = directory.join("lib.ts");
+    for (generation, text) in [(2, RETAIN_LIB_BODY), (3, RETAIN_LIB)] {
+        fs::write(&lib, text).unwrap();
+        assert_eq!(
+            retained_generation(&typefacts, &tsconfig, &sockets),
+            generation,
+            "the edit is an update of the retained session"
+        );
+        let (retained, hit) = cli_check(&typefacts, &tsconfig, &sockets, true);
+        let (fresh, _) = cli_check(&typefacts, &tsconfig, &sockets, false);
+        assert_eq!(hit, Some(true), "the unchanged repeat is a cached answer");
+        assert_eq!(retained, fresh, "generation {generation}");
+    }
+    fs::remove_dir_all(&directory).unwrap();
+    let _ = fs::remove_dir_all(&sockets);
+}
+
 const OTHER: &str = r#"import { createSignal } from "solid-js";
 export function Other() {
   const [count] = createSignal(0);
@@ -901,6 +971,96 @@ fn resolution_case_retaining(
             "{label}: {name}: an unchanged repeat is cached"
         );
     }
+    fs::remove_dir_all(&directory).unwrap();
+    let _ = fs::remove_dir_all(&sockets);
+}
+
+/// An overlay update keeps the retained resolution witness and observes only
+/// the edited file's imports on top. Here the edit adds a bare import whose
+/// lookup walks a directory no other importer's walk reaches
+/// (`src/node_modules`), to the same package file, so the program keeps its
+/// files and the session is updated, not rebuilt. Relinking that directory's
+/// copy must still be noticed.
+#[test]
+fn an_edit_that_adds_a_bare_import_is_witnessed() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let relative = WS_APP.replace("\"@ws/lib\"", "\"../lib/use\"");
+    let (directory, _) = project("ws-edit-import", &[]);
+    let directory = directory.canonicalize().unwrap();
+    let manifest = r#"{"name":"@ws/lib","private":true,"types":"index.ts"}"#;
+    write(&directory.join("src/App.tsx"), &relative);
+    write(
+        &directory.join("lib/use.ts"),
+        "export { keep } from \"@ws/lib\";\n",
+    );
+    write(&directory.join("packages/one/index.ts"), WS_EVENT);
+    write(&directory.join("packages/one/package.json"), manifest);
+    write(&directory.join("packages/two/index.ts"), WS_BODY);
+    write(&directory.join("packages/two/package.json"), manifest);
+    let one = std::path::Path::new("../../../packages/one");
+    relink(
+        &directory.join("node_modules/@ws/lib"),
+        std::path::Path::new("../../packages/one"),
+    );
+    relink(&directory.join("src/node_modules/@ws/lib"), one);
+    let tsconfig = directory.join("tsconfig.json");
+    let config = fs::read_to_string(&tsconfig).unwrap().replace(
+        r#""include": ["*.ts", "*.tsx"]"#,
+        r#""include": ["*.d.ts", "src/*.tsx", "lib/*.ts"]"#,
+    );
+    fs::write(&tsconfig, config).unwrap();
+    let sockets = PathBuf::from(format!("/tmp/scw-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&sockets);
+    fs::create_dir_all(&sockets).unwrap();
+    let reads = |findings: &serde_json::Value| {
+        findings
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|finding| finding["id"] == "SC1001")
+    };
+    let agree = |step: &str, body: bool| {
+        let (retained, _) = cli_check(&typefacts, &tsconfig, &sockets, true);
+        let (fresh, _) = cli_check(&typefacts, &tsconfig, &sockets, false);
+        assert_eq!(retained, fresh, "{step}: retained and one-shot differ");
+        assert_eq!(reads(&fresh), body, "{step}");
+    };
+    assert_eq!(retained_generation(&typefacts, &tsconfig, &sockets), 1);
+    agree("through the relative re-export", false);
+    write(&directory.join("src/App.tsx"), WS_APP);
+    assert_eq!(
+        retained_generation(&typefacts, &tsconfig, &sockets),
+        2,
+        "the added import resolves to a file the program holds: an update"
+    );
+    agree("imported directly", false);
+    relink(
+        &directory.join("src/node_modules/@ws/lib"),
+        std::path::Path::new("../../../packages/two"),
+    );
+    agree("the nearer copy relinked to the body package", true);
+    // A relink in the same request as an edit that keeps the file's module
+    // lines: the daemon checks its resolution witness while the producer
+    // applies the edit, and the stale witness abandons that session for a
+    // fresh one.
+    relink(&directory.join("src/node_modules/@ws/lib"), one);
+    write(
+        &directory.join("src/App.tsx"),
+        &format!("{WS_APP}\nconst extra = 1;\n"),
+    );
+    agree("relinked back beside an edit", false);
+    // One that changes them: the witness is checked before the edit is sent.
+    relink(
+        &directory.join("src/node_modules/@ws/lib"),
+        std::path::Path::new("../../../packages/two"),
+    );
+    write(
+        &directory.join("src/App.tsx"),
+        &format!("{WS_APP}\nimport type {{}} from \"@ws/lib\";\n"),
+    );
+    agree("relinked beside an edit of an import", true);
     fs::remove_dir_all(&directory).unwrap();
     let _ = fs::remove_dir_all(&sockets);
 }

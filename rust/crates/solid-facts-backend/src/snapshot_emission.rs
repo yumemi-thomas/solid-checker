@@ -91,7 +91,7 @@ pub(crate) fn emit(
     };
     let output = match format {
         "json" => {
-            let mut output = json_output::go_compatible(snapshot, true)?;
+            let mut output = json_output::go_compatible_report(snapshot)?.output;
             output.push(b'\n');
             output
         }
@@ -115,6 +115,28 @@ pub(crate) fn emit(
         "full" => render_default(dialect, project_id, snapshot, elapsed, false)?,
         format => return Err(format!("unsupported format {format:?}").into()),
     };
+    Ok(Emission {
+        output,
+        exit_code: i32::from(
+            certify && certify_fails(&snapshot.status, has_notice(snapshot), internal),
+        ),
+    })
+}
+
+/// The `json` report narrowed to the findings that can matter to `file`
+/// (`--only-file`), and the process result `emit` would give it.
+pub(crate) fn emit_only_file(
+    snapshot: &Snapshot,
+    file: &str,
+    certify: bool,
+    internal: bool,
+) -> Result<Emission, Box<dyn std::error::Error>> {
+    let report = json_output::go_compatible_report(snapshot)?;
+    let mut output = report
+        .index
+        .only_file(&report.output, file)
+        .unwrap_or(report.output);
+    output.push(b'\n');
     Ok(Emission {
         output,
         exit_code: i32::from(

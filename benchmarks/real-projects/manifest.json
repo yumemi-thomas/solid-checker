@@ -1,0 +1,43 @@
+{
+  "format": 1,
+  "projects": [
+    {
+      "name": "app-game",
+      "repo": "https://github.com/SonyStone/app-game",
+      "commit": "3064fed238a043da90041f8eb86b357e253330bf",
+      "patch": "app-game.patch",
+      "install": "npx -y pnpm@10.32.1 install --no-frozen-lockfile --ignore-scripts",
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:040de7d8130ae5102e73bbf16234dc0a2e4d6a6903344745126fdb2e7c360daf",
+      "tsconfig": "apps/web/tsconfig.json",
+      "editFile": "apps/web/src/home-page.tsx",
+      "bodyAnchor": "function AppTitle() {",
+      "kinds": ["code", "mid", "body", "import"]
+    },
+    {
+      "name": "sensor-sim",
+      "repo": "https://github.com/heinergrote/sensor-sim",
+      "commit": "d34c8fcd7e86c92ee95fe4e2a1baf947e12fd871",
+      "patch": "sensor-sim.patch",
+      "install": "npx -y pnpm@10.33.2 install --no-frozen-lockfile --ignore-scripts",
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:f15a1ad9e497a2173e5af0cc8ce95a317977aaea506754ba5f85104f9e84ce55",
+      "tsconfig": "packages/frontend/tsconfig.json",
+      "editFile": "packages/frontend/src/components/control/SimDetails.tsx",
+      "bodyAnchor": "export function SimDetails(props: { id: string }) {",
+      "kinds": ["code", "mid", "body", "import"]
+    },
+    {
+      "name": "solid-groove",
+      "repo": "https://github.com/afternoon/solid-groove",
+      "commit": "f3340174fb2daba2eba220640731844b8a33d232",
+      "patch": "solid-groove.patch",
+      "install": "bun install --ignore-scripts",
+      "lockfile": "bun.lock",
+      "lockfileDigest": "sha256:24d01da5a3ea749ee9654cff03ae1fe5fc172559fb656ecf59e80ade772bdf72",
+      "tsconfig": "tsconfig.json",
+      "editFile": "src/components/ReleaseBadge.tsx",
+      "kinds": ["code", "mid", "import"]
+    }
+  ]
+}

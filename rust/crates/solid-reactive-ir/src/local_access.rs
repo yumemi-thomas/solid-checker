@@ -11,7 +11,7 @@ use crate::owners::{
     function_binding_name, inside_known_value_function_argument, inside_non_component_function,
     read_loading_cover, typed_accessor_descriptor_at,
 };
-use crate::pipeline::parallel_file_chunk_results;
+use crate::pipeline::{parallel_file_chunk_results, parallel_slice_results};
 use crate::source_discovery::{AsyncSourceOptions, PropUse, PropsReactivityIndex};
 use crate::{
     ActionInvocation, AsyncRead, ExecutionRole, ReactiveRead, ReactiveSourceKind, ReactiveWrite,
@@ -478,7 +478,7 @@ pub(crate) fn argument_proves_non_reactive(
     file: &solid_facts::FileFacts,
     argument: &solid_facts::ast::ArgumentFact,
     entities: &EntitySymbols,
-    source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
+    source_kinds: &impl crate::interproc::SourceKindTable,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     use solid_facts::ast::RuntimeValueKind;
@@ -494,7 +494,7 @@ pub(crate) fn argument_proves_non_reactive(
     let Some(symbol) = entities.get(&location(file.path.shared(), argument.span)) else {
         return false;
     };
-    if source_kinds.contains_key(symbol.as_str()) {
+    if source_kinds.source_kind(symbol.as_str()).is_some() {
         return false;
     }
     file.ast.bindings.iter().any(|binding| {
@@ -514,12 +514,11 @@ pub(crate) fn argument_proves_non_reactive(
 }
 
 pub(crate) struct LocalAccessReuse<'a> {
-    pub(crate) aggregate_reusable: bool,
     pub(crate) typescript_unchanged: bool,
     pub(crate) source_discovery_delta: Option<&'a SourceDiscoveryTypeScriptDelta>,
-    pub(crate) changed_source_symbols: &'a HashSet<SymbolId>,
-    pub(crate) retained_source_paths: &'a HashSet<String>,
-    pub(crate) global_async_context_unchanged: bool,
+    /// The files whose own facts are the last build's
+    /// ([`crate::source_discovery::SourceDiscovery::unchanged_paths`]).
+    pub(crate) unchanged_paths: &'a HashSet<String>,
 }
 
 impl LocalAccessContext<'_, '_> {
@@ -529,30 +528,23 @@ impl LocalAccessContext<'_, '_> {
         reuse: LocalAccessReuse<'_>,
     ) -> LocalAccessBuild {
         let LocalAccessReuse {
-            aggregate_reusable,
             typescript_unchanged,
             source_discovery_delta,
-            changed_source_symbols,
-            retained_source_paths,
-            global_async_context_unchanged,
+            unchanged_paths,
         } = reuse;
-        if aggregate_reusable
-            && let Some(cached) = cache.as_deref().and_then(|cache| cache.aggregate.as_ref())
-        {
-            return LocalAccessBuild {
-                result: cached.clone(),
-                reused: true,
-                reused_files: u64::try_from(self.facts.files.len()).unwrap_or(u64::MAX),
-                recomputed_files: 0,
-            };
-        }
-
         let mut result = LocalAccessResult::default();
         let mut reused_files = 0;
         let mut recomputed_files = 0;
         if let Some(cache) = cache {
             let exact_typescript_delta = typescript_unchanged || source_discovery_delta.is_some();
-            let mut candidate_dependencies = changed_source_symbols.clone();
+            // The symbols whose source-discovery entries moved since the
+            // files were last checked, by value: whichever file's discovery
+            // or project pass moved them (ADR 0397).
+            let sources = self.sources();
+            let mut candidate_dependencies = match &cache.sources {
+                Some(previous) => previous.changed_symbols(&sources),
+                None => cache.dependency_states.keys().cloned().collect(),
+            };
             if let Some(delta) = source_discovery_delta {
                 candidate_dependencies.extend(delta.semantic_symbol_ids.iter().cloned());
             }
@@ -584,29 +576,45 @@ impl LocalAccessContext<'_, '_> {
             cache
                 .files
                 .retain(|path, _| current_paths.contains(path.as_str()));
+            let mut recompute = Vec::new();
             for file in &self.facts.files {
                 if let Some(cached) = cache.files.get(file.path.as_str())
                     && exact_typescript_delta
                     && self.cached_matches(
                         file,
                         cached,
-                        retained_source_paths.contains(file.path.as_str()),
+                        unchanged_paths.contains(file.path.as_str()),
                         &changed_dependencies,
-                        global_async_context_unchanged,
                     )
                 {
                     reused_files += 1;
                     continue;
                 }
-                let contribution = self.discover(file);
+                recompute.push(file);
+            }
+            // Each file's contribution reads only this build's facts and
+            // lookup, so the files are discovered in parallel and recorded in
+            // their order.
+            let fresh = parallel_slice_results(&recompute, |file| {
+                crate::base::reads::record(|| {
+                    (
+                        self.discover(file),
+                        self.dependencies(file),
+                        self.call_multiplicities(file),
+                    )
+                })
+            });
+            for (file, ((contribution, dependencies, call_multiplicities), reads)) in
+                recompute.into_iter().zip(fresh)
+            {
                 cache.files.insert(
                     file.path.clone(),
                     CachedLocalAccessFile {
                         source_hash: file.source_hash.clone(),
-                        cross_file_proofs: self.lookup.member_resolution_digest(),
+                        proof: crate::base::reads::ReadProof::new(reads, self.lookup),
                         compiler: file.compiler.clone(),
-                        dependencies: self.dependencies(file),
-                        call_multiplicities: self.call_multiplicities(file),
+                        dependencies,
+                        call_multiplicities,
                         contribution,
                     },
                 );
@@ -652,19 +660,35 @@ impl LocalAccessContext<'_, '_> {
             }) {
                 append_local_access_result_owned(&mut result, partial);
             }
-            cache.aggregate = Some(result.clone());
+            cache.sources = Some(sources);
         } else {
-            for file in &self.facts.files {
-                let contribution = self.discover(file);
+            for contribution in
+                parallel_slice_results(&self.facts.files, |file| self.discover(file))
+            {
                 append_local_access_result(&mut result, &contribution);
                 recomputed_files += 1;
             }
         }
         LocalAccessBuild {
             result,
-            reused: false,
             reused_files,
             recomputed_files,
+        }
+    }
+
+    /// The tables a file's chunk reads by symbol, as this build has them.
+    fn sources(&self) -> crate::cache::LocalAccessSources {
+        crate::cache::LocalAccessSources {
+            accessors: self.accessors.clone(),
+            typed_sources: self.typed_sources.clone(),
+            accessor_origins: self.accessor_origins.clone(),
+            setters: self.setters.clone(),
+            actions: self.actions.clone(),
+            source_primitives: self.source_primitives.clone(),
+            async_sources: self.async_sources.clone(),
+            source_async_options: self.source_async_options.clone(),
+            source_kinds: self.source_kinds.clone(),
+            server_rendering: self.server_rendering,
         }
     }
 
@@ -778,16 +802,17 @@ impl LocalAccessContext<'_, '_> {
         &self,
         file: &solid_facts::FileFacts,
         cached: &CachedLocalAccessFile,
-        retained_source_path: bool,
+        unchanged_path: bool,
         changed_dependencies: &HashSet<SymbolId>,
-        global_async_context_unchanged: bool,
     ) -> bool {
-        retained_source_path
+        unchanged_path
             && cached.source_hash == file.source_hash
-            && cached.cross_file_proofs == self.lookup.member_resolution_digest()
+            && cached.proof.holds(self.lookup)
             && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                 || same_compiler_semantics(&cached.compiler, &file.compiler))
-            && (global_async_context_unchanged || cached.contribution.async_reads.is_empty())
+            // A file's async reads depend on the whole program's async
+            // context, which no chunk proof covers.
+            && cached.contribution.async_reads.is_empty()
             && cached.dependencies.is_disjoint(changed_dependencies)
             && cached
                 .call_multiplicities
@@ -2415,8 +2440,8 @@ fn exempt_store_get_runs_nothing(
         return false;
     }
     // The store is declared in this file: the file's own bytes then bind the
-    // literal for the local-access cache, and the cross-file digest binds the
-    // project-wide vetoes above.
+    // literal for the local-access cache, and the chunk records the
+    // project-wide vetoes above ([`crate::base::reads`]).
     if store.path.as_ref() != file.path.as_str() {
         return false;
     }

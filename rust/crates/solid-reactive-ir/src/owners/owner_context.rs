@@ -15,8 +15,7 @@ pub(super) const OWNER_CONTEXT_LEAVES_REGION: u8 = OWNER_CONTEXT_PROVEN_UNOWNED
 /// `None` when no region contains `span`.
 ///
 /// `functions` yields `(key, span, body)` for the file's owner nodes; the key
-/// comes back unchanged, so the batch pass can carry node indices and a
-/// per-file fragment, which has no indices yet, function spans. The innermost
+/// comes back unchanged, so a caller can carry node indices or function spans. The innermost
 /// region is the only one that needs asking: an outer region's chain is a
 /// superset of it, so an outer region answers only where the innermost does.
 pub(crate) fn providing_region_chain<K>(
@@ -152,53 +151,6 @@ pub(crate) fn handler_value_span(file: &solid_facts::FileFacts, value: Span) -> 
         .map_or(value, |element| file.ast.peel_ts_sugar_span(element.span))
 }
 
-/// The owner-graph node of the callback `argument` names, if it names one
-/// exactly ([`callback_literal_span`]), or the function its identifier names.
-/// Any other expression names no callback: an entity at a call's span carries
-/// the callee's symbol, so resolving it would mark the callee's body unowned
-/// for a call that returns a different function (SC4001 review D).
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn owner_callback_index(
-    nodes: &[OwnerNode],
-    nodes_by_path: &HashMap<String, Vec<usize>>,
-    by_symbol: &HashMap<SymbolId, usize>,
-    file: &solid_facts::FileFacts,
-    argument: Span,
-    entities: &EntitySymbols,
-    handler_tuple: bool,
-    lookup: &SemanticLookup<'_>,
-) -> Option<usize> {
-    // A wrapper call is never an array, so the tuple slot cannot reach it.
-    let literal = callback_literal_span(file, argument, handler_tuple)
-        .or_else(|| crate::indexes::identity_wrapped_literal_span(lookup, file, argument));
-    if let Some(span) = literal {
-        return nodes_by_path
-            .get(file.path.as_str())
-            .into_iter()
-            .flatten()
-            .copied()
-            .find(|index| nodes[*index].span == span);
-    }
-    // ADR 0358: an event attribute's member read names the function it holds
-    // exactly, when the object literal it reads resolves (`object_member_function`).
-    if handler_tuple && let Some((target, function)) = lookup.object_member_function(file, argument)
-    {
-        return nodes_by_path
-            .get(target.path.as_str())
-            .into_iter()
-            .flatten()
-            .copied()
-            .find(|index| nodes[*index].span == function.span);
-    }
-    if !is_identifier_span(file, argument) {
-        return None;
-    }
-    entities
-        .value_symbol(file, argument)
-        .and_then(|symbol| by_symbol.get(symbol))
-        .copied()
-}
-
 /// The context an `onSettled` callback takes when its call sits outside every
 /// leaf body ([`OwnerEdgeKind::QueuedLeaf`]). Under a children-capable owner the
 /// callback runs under its leaf owner, [`OWNER_CONTEXT_LEAF_OWNED`]; with no
@@ -288,49 +240,6 @@ pub(super) fn event_owner_edge(lookup: &SemanticLookup<'_>, generator: bool) -> 
     }
 }
 
-/// Calls that run after an `await` on every path through their async
-/// function's own body, keyed by file and callee start.
-///
-/// The positions are the producer's `calls_after_await` dominance fact (the
-/// same one `reactive-read-after-await` proves reads with): branches, `&&`,
-/// `try`/`catch`, loops and `switch` merge conservatively, and a nested
-/// closure is never scanned, so a callback handed to `runWithOwner` after the
-/// `await` is not one of them. Such a call runs from a promise continuation,
-/// on an otherwise empty stack. Whether an owner is current there is the
-/// dialect's fresh-stack answer, the same one host schedulers get
-/// ([`Dialect::fresh_stack_callback_owner`]): Solid 2.0's owner is a
-/// synchronous dynamic scope, so none is. Empty for a dialect that does not
-/// answer [`solid_dialect::CallbackOwner::None`].
-pub(crate) struct AwaitContinuations<'a> {
-    pub(super) starts: HashMap<&'a str, HashSet<u64>>,
-}
-
-impl<'a> AwaitContinuations<'a> {
-    pub(crate) fn new(facts: &'a ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
-        let mut starts = HashMap::<&'a str, HashSet<u64>>::default();
-        if lookup.dialect.fresh_stack_callback_owner() == Some(solid_dialect::CallbackOwner::None) {
-            for file in facts.typescript.files() {
-                for function in file.async_functions.iter() {
-                    for call in &function.calls_after_await {
-                        starts
-                            .entry(call.path.as_ref())
-                            .or_default()
-                            .insert(call.start_byte);
-                    }
-                }
-            }
-        }
-        Self { starts }
-    }
-
-    /// Whether the call whose callee starts at `start` runs after an `await`.
-    pub(crate) fn contains(&self, path: &str, start: u32) -> bool {
-        self.starts
-            .get(path)
-            .is_some_and(|starts| starts.contains(&u64::from(start)))
-    }
-}
-
 /// The owner context of an operation that runs after an `await`
 /// ([`AwaitContinuations`]): proven unowned on every run, whatever context
 /// the enclosing function was entered with.
@@ -378,17 +287,6 @@ pub(super) fn callback_call_owner_edge(
     } else {
         kind
     }
-}
-
-pub(crate) fn owner_context_at(
-    nodes: &[OwnerNode],
-    nodes_by_path: &HashMap<String, Vec<usize>>,
-    contexts: &[u8],
-    path: &str,
-    span: Span,
-) -> u8 {
-    containing_function_indexed(nodes, nodes_by_path, path, span)
-        .map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index])
 }
 
 /// Whether the operation at `span` runs only after the same invocation of its
@@ -464,9 +362,9 @@ pub(super) fn guarded_by_owner_probe(
 /// passes, every operation, every uncertainty source — which is why the
 /// discarded-region guard is applied here rather than at each push site.
 ///
-/// Two passes build these candidates (`find_missing_owners` in batch,
-/// `discover_owner_file` plus the incremental emission), and the comments above
-/// record what happens when a rule is duplicated across them: they drift.
+/// Candidates come from `discover_owner_file` and the emission in
+/// `find_missing_owners_incremental`: the one owner analysis (a build with no
+/// retained cache runs it over a scratch fragment table).
 pub(crate) fn push_owner_requirement(
     requirements: &mut Vec<OwnerRequirement>,
     seen: &mut HashSet<(String, u64, u64, String)>,
@@ -975,8 +873,7 @@ pub(crate) fn is_identifier_span(file: &solid_facts::FileFacts, span: Span) -> b
 /// whatever `wrap` returns, and the arrow inside may run on `wrap`'s own
 /// stack, under the scheduling call's owner.
 ///
-/// Both owner passes reach this through [`owner_callback_edges`], so the
-/// batch and incremental graphs cannot disagree about it.
+/// Reached through [`owner_callback_edges`].
 pub(crate) fn fresh_stack_scheduler_edges(
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,

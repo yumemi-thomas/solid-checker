@@ -29,6 +29,7 @@ pub(crate) struct CachedAnswer {
     pub(crate) runtime: RuntimeEnvironment,
     pub(crate) status: Arc<str>,
     pub(crate) body: Arc<[u8]>,
+    pub(crate) index: Arc<crate::json_output::FindingIndex>,
     /// The notice the answer was computed with. It is a function of the same
     /// inputs as the snapshot, so it is reused with it.
     pub(crate) notice: Arc<str>,
@@ -74,6 +75,7 @@ mod tests {
             runtime: RuntimeEnvironment::default(),
             status: Arc::from("certified"),
             body: Arc::from(&b"snapshot"[..]),
+            index: Arc::default(),
             notice: Arc::from(""),
         }
     }

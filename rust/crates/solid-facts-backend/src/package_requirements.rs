@@ -171,6 +171,11 @@ fn external_package_boundary_with(
 ) -> PackageBoundary {
     let mut boundary = PackageBoundary::default();
     let mut owners = HashMap::new();
+    // One read of each manifest per boundary: many imports resolve to the
+    // same package, and every one asked the same question of the same file.
+    let mut solid_users: HashMap<&str, bool> = HashMap::new();
+    // The files the program holds, looked up once per import below.
+    let held: HashSet<&str> = facts.files.iter().map(|file| file.path.as_str()).collect();
     if let Some(imports) = &facts.resolved_imports {
         let imported: HashSet<&str> = imports
             .iter()
@@ -193,7 +198,7 @@ fn external_package_boundary_with(
                 continue;
             }
             if is_package_local_edge(reader, &mut owners, importer, import)
-                || is_workspace_project_edge(facts, import)
+                || is_workspace_project_edge(facts, &held, import)
             {
                 continue;
             }
@@ -250,10 +255,11 @@ fn external_package_boundary_with(
             }
             if package.is_some()
                 && import.resolution == solid_facts::ImportResolution::NodeModules
-                && import
-                    .package_manifest
-                    .as_deref()
-                    .is_some_and(|manifest| manifest_uses_solid(reader, manifest))
+                && import.package_manifest.as_deref().is_some_and(|manifest| {
+                    *solid_users
+                        .entry(manifest)
+                        .or_insert_with(|| manifest_uses_solid(reader, manifest))
+                })
             {
                 record(
                     UnanalyzableReason::LegacyRequirementFallback,
@@ -328,6 +334,7 @@ fn is_package_local_edge(
 /// installed copy under `node_modules` keep the marker.
 fn is_workspace_project_edge(
     facts: &solid_facts::ProjectFacts,
+    held: &HashSet<&str>,
     import: &solid_facts::AttestedImport,
 ) -> bool {
     let target = import.resolved_path.as_ref();
@@ -337,7 +344,7 @@ fn is_workspace_project_edge(
             .components()
             .any(|component| component.as_os_str() == "node_modules")
         && facts.dependency_source_root(target).is_none()
-        && facts.files.iter().any(|file| file.path.as_str() == target)
+        && held.contains(target)
 }
 
 /// Whether `path` is a file Vite itself resolves as its configuration

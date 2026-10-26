@@ -126,6 +126,21 @@ impl Drop for VetoComputation {
 }
 
 impl SemanticLookup<'_> {
+    /// Whether some module of the program calls direct `eval`, which can read
+    /// or write any binding it sees: read once per build.
+    pub(crate) fn program_has_eval(&self) -> bool {
+        self.hazard_present(crate::base::Hazard::Eval)
+    }
+
+    /// ADR 0292: [`crate::interproc::accessor_provenance::reflective_prototype_write`],
+    /// scanned once per build.
+    pub(crate) fn reflective_prototype_write_present(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::ReflectivePrototypeWrite);
+        *self.reflective_prototype_write.get_or_init(|| {
+            crate::interproc::accessor_provenance::scan_reflective_prototype_write(self)
+        })
+    }
+
     /// ADR 0356, narrowed by ADR 0435: DOM dispatch runs handlers on its
     /// caller's stack. A visible synchronous dispatch withholds the ownerless
     /// proof for event-only invocations unless its target cannot reach a JSX
@@ -133,22 +148,36 @@ impl SemanticLookup<'_> {
     /// guessed handler edge. A project method with the same spelling does not
     /// select either library declaration.
     pub(crate) fn synchronous_event_dispatch_present(&self) -> bool {
-        #[cfg(debug_assertions)]
-        VetoComputation::assert_not_computing();
-        self.event_dispatch_sites()
-            .iter()
-            .any(DispatchSite::withholds_owner_proofs)
+        crate::base::reads::note(crate::base::reads::Section::SynchronousDispatch);
+        self.dispatch_veto().0
     }
 
     /// [`Self::synchronous_event_dispatch_present`] for reads in an event
     /// handler, whose proof also needs the delivery outside a strict-read
     /// window.
     pub(crate) fn synchronous_event_read_dispatch_present(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::SynchronousDispatch);
+        self.dispatch_veto().1
+    }
+
+    /// The two veto answers, owner proofs and read proofs
+    /// ([`Self::synchronous_event_dispatch_present`],
+    /// [`Self::synchronous_event_read_dispatch_present`]): the section
+    /// [`crate::base::reads::Section::SynchronousDispatch`] binds them. With no
+    /// call anywhere that resolves to a dispatch (the hazard
+    /// [`crate::base::Hazard::SynchronousDispatch`]) neither holds, whatever
+    /// the censuses say, and they are not computed.
+    pub(crate) fn dispatch_veto(&self) -> (bool, bool) {
         #[cfg(debug_assertions)]
         VetoComputation::assert_not_computing();
-        self.event_dispatch_sites()
-            .iter()
-            .any(DispatchSite::withholds_read_proofs)
+        if !self.hazard_present(crate::base::Hazard::SynchronousDispatch) {
+            return (false, false);
+        }
+        let sites = self.event_dispatch_sites();
+        (
+            sites.iter().any(DispatchSite::withholds_owner_proofs),
+            sites.iter().any(DispatchSite::withholds_read_proofs),
+        )
     }
 
     /// [`Self::event_dispatch_sites`] as the report states them, in source
@@ -189,6 +218,13 @@ impl SemanticLookup<'_> {
     /// over time, not by the sites already out.
     pub(crate) fn event_dispatch_sites(&self) -> &[DispatchSite] {
         self.synchronous_event_dispatch.get_or_init(|| {
+            // The veto's own computation: its value is the section's.
+            crate::base::reads::suppress(|| self.classified_dispatch_sites())
+        })
+    }
+
+    fn classified_dispatch_sites(&self) -> Vec<DispatchSite> {
+        {
             #[cfg(debug_assertions)]
             let _guard = VetoComputation::enter();
             let mut sites = self.placed_dispatch_sites().to_vec();
@@ -212,7 +248,7 @@ impl SemanticLookup<'_> {
                 }
             }
             sites
-        })
+        }
     }
 
     /// Every synchronous dispatch call of the program with the receiver and

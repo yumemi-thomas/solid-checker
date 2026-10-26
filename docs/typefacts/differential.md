@@ -79,9 +79,10 @@ candidate returned for the same exchange) and the ids in a `symbols` request. A
 symbol id belongs to the producer that issued it: `symbol:<generation>:<n>`
 follows its visit order, and the canonical id of a library symbol hashes offsets
 in its TypeScript snapshot's lib text. Such an id is replaced by the id the
-replaying producer gave the entity at the same source location in the preceding
-analyze tables (`rewrittenSymbolIds` in `replay.json`), unless two locations
-disagree about it, and an id no entity carries is sent as recorded. The tables
+replaying producer put at the same place in the preceding analyze tables (any
+position of an entity row) or the alias target of a translated row
+(`rewrittenSymbolIds` in `replay.json`), unless two places disagree; else it
+is sent as recorded. The tables
 themselves are compared as they came. Cancel frames are not replayed.
 
 Unless `--no-evidence` is given, each producer is also asked, just before the
@@ -129,9 +130,12 @@ Normalisation, in `normalizeTranscript`:
   left alone: a canonical id that differs without proof is a difference. A
   well-known symbol's counter suffix (`__@hasInstance@73`) is dropped from the
   name.
-- Generation-scoped `symbol:<gen>:<n>` ids are renamed from content (first
-  declaration, else first use), one mapping per transcript. Canonical
-  `symbol:h:...` ids compare exactly.
+- Generation-scoped `symbol:<gen>:<n>` ids are renamed from content, one
+  mapping per transcript: a row's first project declaration (transcript or
+  evidence), else the site an object carries it at (a call signature has no
+  row), else its first use. Ids sharing it are numbered by declaration list,
+  then uses (entity, column, JSON pointer). Canonical `symbol:h:...` ids
+  compare exactly unless `compare --canonical-ids` (ADR 0366).
 - `stateToken` keeps only its presence; timings and the source-arena path are
   dropped.
 
@@ -185,15 +189,17 @@ session reports the same cells), so they are not port defects:
   (`Hono<...>` texts): two Go runs print different orders; the cause in Go is
   not isolated.
 
-Rust differs from Go by design in these cells (ADR 0367). It runs tsrs's
-canonical check history (`tsrs_core::compat`), so a normalized object-literal
-union's properties can print in another order: text only, and no decision
-reads type text. An entity's own descriptor is its location's type, where Go
-gave every entity of a symbol the first one answered (`families_differential`
-counts these rows). Wire names and runtime identities leave the checker's
-counters out (`__@iterator`, the runtime identity of `[Symbol.hasInstance]` at
-`instanceof`). Check-first can change a fact to the source-order answer (a
-`.value` read on an object literal gets reference space `Value`).
+Rust differs from Go by design in these cells (ADR 0367, 0398). It runs
+tsrs's canonical check history (`tsrs_core::compat`), so a normalized
+object-literal union's properties can print in another order: text only, and
+no decision reads type text. An entity's own descriptor is its location's
+type, where Go gave every entity of a symbol the first one answered
+(`families_differential` counts these rows). Wire names and runtime identities
+leave the checker's counters out (`__@iterator`, the runtime identity of
+`[Symbol.hasInstance]` at `instanceof`). Each file is checked first by a
+checker of its own, which can change a fact to the source-order answer (a
+`.value` read on an object literal gets reference space `Value`), and derived
+symbols take exact derived keys where Go handed out counters.
 
 ## Replaying the archive
 

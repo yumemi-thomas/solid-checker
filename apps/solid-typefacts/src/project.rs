@@ -2,15 +2,16 @@
 //!
 //! `Project` implements [`Backend`](crate::backend::Backend) for everything
 //! that is not a fact family: opening a configured project over the overlay
-//! file system, the single-checker program, `sources` and source digests, the
+//! file system, the program, `sources` and source digests, the
 //! `modules` graph, and transactional `update` with the affected set, the
 //! retained import graph and the declaration-shape cutoff.
 //!
 //! The symbol families (S4a: `resolve_alias`, `declarations`, `symbol_evidence`,
 //! `references_batch`, `changed_references`, and `semantic_demand_runs` for the
 //! symbol, reference-space and structural-accessor facts) answer from the
-//! identity state (`identity`) and the reference index (`references`) this
-//! module keeps beside the program. The `Source*` families, async function
+//! per-file passes (`per_file`, `passes`; ADR 0398): each file's facts come
+//! from a checker of its own, and `symbols` questions from the rows and the
+//! merged reference index those passes left. The `Source*` families, async function
 //! facts and the per-file source-fact memo (`sourceFactsMemo`) are in
 //! `source_facts`; the update path evicts the memo beside the reference index.
 //!
@@ -31,10 +32,10 @@ use crate::import_graph::{
     ImportGraph, affected_from_reverse_deps, every_source_path, global_scope_change,
 };
 use crate::inputs::ProgramInputs;
-use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SymbolId, blank_symbol};
+use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SymbolId};
 use crate::module_graph::{normalize_type_script_path, type_script_path_dir};
 use crate::nodes::node_at;
-use crate::overlay::OverlayFs;
+use crate::overlay::{LookupStats, OverlayFs};
 use crate::references::ReferenceIndex;
 use crate::semantic_runs::Unavailable;
 use crate::shape::{
@@ -43,11 +44,11 @@ use crate::shape::{
 };
 use crate::trace::SharedTrace;
 use crate::unsafe_boundary::{Generation, HostLease, UpdateKind};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 use tsrs_ast::{
-    Node, SymbolFlags, get_source_file_of_node, is_class_declaration, is_external_module,
+    Node, get_source_file_of_node, is_class_declaration, is_external_module,
     is_function_declaration, is_variable_declaration,
 };
 use tsrs_compiler::new_compiler_host;
@@ -162,13 +163,16 @@ pub struct UpdateMetrics {
     pub kind: Option<UpdateKind>,
     /// Whether the chain was rebuilt after this update (the rebase policy).
     pub rebased: bool,
+    /// What the candidate program's build asked the base file system, and
+    /// what its lookups answered (zero unless a trace is listening).
+    pub fs: LookupStats,
 }
 
 pub struct Project {
-    trace: SharedTrace,
+    pub(crate) trace: SharedTrace,
     config_path: String,
     fs: Arc<OverlayFs>,
-    generation: Option<Generation>,
+    pub(crate) generation: Option<Generation>,
     /// After `generation`: dropped after every configuration parsed through it.
     config_host: HostLease<ConfigHost>,
     versions: HashMap<String, u64>,
@@ -182,15 +186,20 @@ pub struct Project {
     /// Symbol identity (Go: `idsBySymbol`, `symbolsByID`, `durableRefs`,
     /// `exportedIdentities`).
     pub(crate) ids: Identities,
-    /// The reference index (Go: `referenceIndex`), with the binder-level
-    /// answers it retains across updates (ADR 0369).
+    /// The reference index (Go: `referenceIndex`), merged from the passes'
+    /// contributions.
     pub(crate) references: ReferenceIndex,
-    /// Digests of the accepted program's inputs (ADR 0369).
+    /// Digests of the accepted program's inputs (pass reuse, `passes`).
     pub(crate) inputs: ProgramInputs,
+    /// The last source inventory (`source_digests`) and the files replaced
+    /// in place since; `None` after a rebuilt chain.
+    source_digests: Option<(Vec<SourceDigest>, HashSet<String>)>,
     /// Demanded facts left absent because their family is not ported yet.
     pub unavailable: Unavailable,
     /// Per-file `Source*` facts across generations (Go: `sourceFactsMemo`).
     pub(crate) source_memo: HashMap<String, crate::source_facts::FileFactsMemo>,
+    /// The per-file passes' state (`per_file`, ADR 0398).
+    pub(crate) per_file: crate::per_file::PerFile,
 }
 
 impl Project {
@@ -219,7 +228,7 @@ impl Project {
             },
             directory: type_script_path_dir(&config_path),
         });
-        let generation = build_program(ctx, &config_path, &fs, &config_host)?;
+        let generation = build_program(ctx, &config_path, &fs, &config_host, trace.is_some())?;
         let mut project = Self {
             trace,
             config_path,
@@ -234,13 +243,29 @@ impl Project {
             ids: Identities::new(1),
             references: ReferenceIndex::default(),
             inputs: ProgramInputs::default(),
+            source_digests: None,
             unavailable: Unavailable::default(),
             source_memo: HashMap::new(),
+            per_file: crate::per_file::PerFile::new(),
         };
         // Go: `collectExportedIdentities` seeds the symbol store at open.
         let generation = project.generation.as_ref().expect("just built");
         let program = generation.program();
-        generation.with_checker(|checker| project.ids.seed_exported(program, checker));
+        // A checker of its own, freed after (the exported identities are
+        // pointer-free), so the program's single checker is never made.
+        let scanned = crate::identity::scan_exports_on_workers(
+            generation,
+            program.source_files(),
+            project.per_file.workers,
+        );
+        let pass = generation.file_checker();
+        generation.with_checker(|checker| {
+            project
+                .ids
+                .seed_exported_with(program, checker, Some(scanned));
+        });
+        project.ids.purge_scope_pointers();
+        drop(pass);
         project.graph = ImportGraph::rebuild(program);
         Ok(project)
     }
@@ -262,6 +287,12 @@ impl Project {
             .generation
             .as_ref()
             .ok_or_else(|| BackendError(ERR_CLOSED.to_owned()))?;
+        if !generation.in_file_checker() {
+            // A question asked outside any pass gets a scratch pass of its
+            // own.
+            self.per_file.stats.scratch_passes += 1;
+            return self.in_file_pass(|this| this.with_env(f))?;
+        }
         let program = generation.program();
         let (ids, references, inputs) = (&mut self.ids, &mut self.references, &mut self.inputs);
         Ok(generation.with_checker(|checker| {
@@ -305,7 +336,15 @@ impl Project {
                         node.end().source_offset().map_or(-1, i64::from),
                     ))
                 })?;
-            Ok(env.id_for(symbol))
+            let id = env.id_for(symbol);
+            if id.is_empty() {
+                // No exact key (`Identities::derived_keys`): no id to answer.
+                return Err(BackendError(format!(
+                    "not found: symbol at byte {} has no exact id",
+                    location.start_byte
+                )));
+            }
+            Ok(id)
         })?
     }
 
@@ -338,15 +377,8 @@ impl Project {
     pub fn references(&mut self, ctx: &Context, id: &str) -> Result<Vec<Location>, BackendError> {
         check(ctx)?;
         let id: SymbolId = id.into();
-        self.with_env(|env, references| {
-            let target = env
-                .symbol_for(&id)
-                .ok_or_else(|| BackendError(format!("not found: symbol {id}")))?;
-            let canonical = env.canonical_symbol(target);
-            let canonical = env.id_for(canonical);
-            references.ensure(env);
-            Ok(references.query(env, &canonical))
-        })?
+        self.per_file_references(ctx, &id)?
+            .ok_or_else(|| BackendError(format!("not found: symbol {id}")))
     }
 
     /// The identity state, for tests.
@@ -381,11 +413,6 @@ impl Project {
     }
 
     #[cfg(test)]
-    pub(crate) fn reference_index_mut_for_test(&mut self) -> &mut ReferenceIndex {
-        &mut self.references
-    }
-
-    #[cfg(test)]
     pub(crate) fn release_analysis_state_for_test(&mut self) {
         ClosureBackend::release_analysis_state(self);
     }
@@ -410,10 +437,14 @@ fn build_program(
     config_path: &str,
     fs: &Arc<OverlayFs>,
     config_host: &HostLease<ConfigHost>,
+    counting: bool,
 ) -> Result<Generation, String> {
     if let Some(reason) = ctx.err() {
         return Err(reason.to_owned());
     }
+    // The configuration's file lists and the program's resolutions ask the
+    // disk the same questions again and again: one build, one set of answers.
+    let _lookups = fs.build_scope(counting);
     let directory = type_script_path_dir(config_path);
     let config_host = config_host.as_static();
     *config_host
@@ -527,16 +558,42 @@ impl ClosureBackend for Project {
             .as_ref()
             .ok_or_else(|| BackendError(ERR_CLOSED.to_owned()))?;
         // `Text(file)` is the SHA-256 the digest spells, memoized while the
-        // file's parse is reused (ADR 0369).
+        // file's parse is reused.
+        let program = generation.program();
+        if self.source_digests.is_none() {
+            self.inputs.prime(program, self.per_file.workers);
+        }
         let inputs = &mut self.inputs;
-        let mut digests: Vec<SourceDigest> = generation
-            .program()
+        // Kept while the chain reuses every parse: only the replaced files'
+        // rows are computed again.
+        if let Some((digests, dirty)) = &mut self.source_digests {
+            let mut kept = true;
+            for path in dirty.drain() {
+                let file = program
+                    .get_source_file(&path)
+                    .filter(|file| !file.is_declaration_file() && clean(file.file_name()) == path);
+                match (
+                    file,
+                    digests.binary_search_by(|digest| (*digest.path).cmp(&path)),
+                ) {
+                    (Some(file), Ok(at)) => {
+                        digests[at] = source_digest_of(&path, &inputs.text(file))
+                    }
+                    _ => kept = false,
+                }
+            }
+            if kept {
+                return Ok(digests.clone());
+            }
+        }
+        let mut digests: Vec<SourceDigest> = program
             .source_files()
             .iter()
             .filter(|file| !file.is_declaration_file())
             .map(|file| source_digest_of(&clean(file.file_name()), &inputs.text(*file)))
             .collect();
         digests.sort_by(|left, right| left.path.cmp(&right.path));
+        self.source_digests = Some((digests.clone(), HashSet::new()));
         Ok(digests)
     }
 
@@ -561,8 +618,16 @@ impl ClosureBackend for Project {
 
     fn discard_derived_state(&mut self) {
         self.ids.release_pointers();
+        // Per-file passes keep their merged reference index across the
+        // program change, to patch it by the files that changed.
+        if let Some(index) = self.references.take_pass_index() {
+            self.per_file.stashed_index = Some(index);
+        }
+        // It describes the replaced program now: only a patch may use it.
+        self.per_file.stashed_current = false;
         self.references.reset();
         self.evict_source_memo();
+        self.per_file.clear_rows();
     }
 
     /// Go: `Close`.
@@ -574,6 +639,7 @@ impl ClosureBackend for Project {
         self.ids.close();
         self.references.forget();
         self.inputs = ProgramInputs::default();
+        self.source_digests = None;
         self.source_memo.clear();
         self.generation = None;
         self.graph = ImportGraph::default();
@@ -586,14 +652,7 @@ impl ClosureBackend for Project {
     fn resolve_alias(&mut self, ctx: &Context, id: &str) -> Result<Option<SymbolId>, BackendError> {
         check(ctx)?;
         let id: SymbolId = id.into();
-        self.with_env(|env, _| {
-            let symbol = env.symbol_for(&id)?;
-            if !symbol.flags().intersects(SymbolFlags::Alias) {
-                return None;
-            }
-            let original = env.checker.get_aliased_symbol(symbol);
-            Some(env.id_for(original))
-        })
+        Ok(self.per_file_row_answer(&id)?.0)
     }
 
     /// Go: `Declarations`. No declarations is `ErrNotFound`, like an unknown
@@ -605,32 +664,7 @@ impl ClosureBackend for Project {
     ) -> Result<Option<Vec<Declaration>>, BackendError> {
         check(ctx)?;
         let id: SymbolId = id.into();
-        self.with_env(|env, _| {
-            let symbol = env.symbol_for(&id)?;
-            let declarations = id_declarations(env, &id, symbol);
-            (!declarations.is_empty()).then_some(declarations)
-        })
-    }
-
-    /// Check-first (ADR 0367): the full check of every demanded file, in path
-    /// order, with no checker lease held (`unsafe_boundary` invariant 7). The
-    /// diagnostics are dropped; the resolved-call fallback asks again for the
-    /// files it needs, which the checker answers without checking twice.
-    fn check_demanded_files(&mut self, ctx: &Context, paths: &[&str]) -> Result<(), BackendError> {
-        check(ctx)?;
-        let generation = self.live()?;
-        let program = generation.program();
-        for path in paths {
-            let Some(file) = absolute(path)
-                .ok()
-                .and_then(|absolute_path| program.get_source_file(&absolute_path))
-            else {
-                continue;
-            };
-            let _ = generation.semantic_diagnostics(file);
-            check(ctx)?;
-        }
-        Ok(())
+        Ok(self.per_file_row_answer(&id)?.1)
     }
 
     /// Go: `SemanticDemandRuns`.
@@ -640,14 +674,8 @@ impl ClosureBackend for Project {
         runs: &[SemanticDemandRun<'_>],
     ) -> Result<Vec<SemanticDemandRunResult>, BackendError> {
         check(ctx)?;
-        let mut unavailable = std::mem::take(&mut self.unavailable);
-        let outcome = self.with_env(|env, references| {
-            crate::semantic_runs::run(ctx, env, references, runs, &mut unavailable)
-        });
-        for (family, count) in unavailable.0 {
-            *self.unavailable.0.entry(family).or_default() += count;
-        }
-        outcome?
+        // Aligned results: the pooled passes keep only rows.
+        Ok(self.sequential_results(ctx, runs, &[])?.0)
     }
 
     /// Go: `AsyncFunctionsAt` (`source_facts`).
@@ -657,6 +685,15 @@ impl ClosureBackend for Project {
         locations: &[Location],
     ) -> Result<Vec<AsyncFunctionFact>, BackendError> {
         self.async_functions_at_locations(ctx, locations)
+    }
+
+    fn per_file_demand_runs(
+        &mut self,
+        ctx: &Context,
+        runs: &[SemanticDemandRun<'_>],
+        async_locations: &[Location],
+    ) -> Result<(Vec<crate::model::RunAnswer>, Vec<AsyncFunctionFact>), BackendError> {
+        Project::per_file_demand_runs(self, ctx, runs, async_locations)
     }
 
     fn source_calls(&mut self, ctx: &Context, path: &str) -> Result<Vec<SourceCall>, BackendError> {
@@ -695,27 +732,17 @@ impl ClosureBackend for Project {
         ids: &[SymbolId],
     ) -> Result<HashMap<SymbolId, Vec<Location>>, BackendError> {
         check(ctx)?;
-        self.with_env(|env, references| {
-            references.ensure(env);
-            let mut result = HashMap::with_capacity(ids.len());
-            for id in ids {
-                let Some(target) = env.symbol_for(id) else {
-                    continue;
-                };
-                let canonical = env.canonical_symbol(target);
-                let canonical = env.id_for(canonical);
-                result.insert(id.clone(), references.query(env, &canonical));
-            }
-            result
-        })
+        self.per_file_references_batch(ctx, ids)
     }
 
-    /// Go: `ChangedReferences`. The index keeps no delta between tables (every
-    /// table rebuilds it, ADR 0364), so the answer is always "not exact".
+    /// Go: `ChangedReferences`: the merged passes name every changed answer
+    /// (ADR 0389), or the table is not exact.
     fn changed_references(&mut self, ctx: &Context) -> Result<(Vec<SymbolId>, bool), BackendError> {
         check(ctx)?;
-        self.with_env(|env, references| references.ensure(env))?;
-        Ok((Vec::new(), false))
+        self.ensure_references_per_file(ctx)?;
+        Ok(self
+            .per_file_symbol_changes()
+            .map_or_else(|| (Vec::new(), false), |ids| (ids, true)))
     }
 
     /// Go: `ReleaseAnalysisState`: drops checker-expanded query state once its
@@ -729,16 +756,34 @@ impl ClosureBackend for Project {
         let Some(generation) = &mut self.generation else {
             return;
         };
-        if !generation.has_checker() {
-            return;
+        // No pass is live here, so no handle points into a file checker; the
+        // rows and the merged index are the analysis state.
+        let state = &mut self.per_file;
+        state.clear_rows();
+        self.ids.purge_scope_pointers();
+        // Per-file passes keep their merged reference index (pointer-free)
+        // for this generation's reference questions and the next table's
+        // patch: what a rescan of every file would build again.
+        if let Some(index) = self.references.take_pass_index() {
+            state.stashed_index = Some(index);
+            state.stashed_current = true;
         }
-        self.ids.release_pointers();
         self.references.release_analysis_state();
-        generation.release_checker();
+        if generation.has_checker() {
+            generation.release_checker();
+        }
     }
 
     fn binder_retention(&mut self) -> crate::references::BinderRetention {
         self.references.take_retention()
+    }
+
+    fn tracks_content_versions(&self) -> bool {
+        self.per_file_content_version("").is_some()
+    }
+
+    fn content_version(&self, path: &str) -> Option<u64> {
+        self.per_file_content_version(path).flatten()
     }
 }
 
@@ -752,66 +797,7 @@ impl SymbolEvidence for Project {
         queries: &[SymbolQuery],
     ) -> Result<Vec<SymbolFact>, BackendError> {
         check(ctx)?;
-        let started = Instant::now();
-        let mut reused = 0_usize;
-        let outcome = self.with_env(|env, references| {
-            if queries.iter().any(|query| query.references) {
-                references.ensure(env);
-            }
-            let mut facts = Vec::with_capacity(queries.len());
-            for query in queries {
-                check(ctx)?;
-                let mut fact = blank_symbol(query.id.clone());
-                // A binder-level, non-alias symbol's facts from an earlier
-                // generation (ADR 0369): its declarations, and its references
-                // under its own id, which is its canonical id.
-                if let Some(declarations) = references.retained_symbol_fact(env, &query.id) {
-                    reused += 1;
-                    if !query.references_only {
-                        fact.declarations = declarations;
-                    }
-                    if query.references {
-                        fact.references = references.query(env, &query.id).into();
-                    }
-                    facts.push(fact);
-                    continue;
-                }
-                let Some(symbol) = env.symbol_for(&query.id) else {
-                    facts.push(fact);
-                    continue;
-                };
-                if !query.references_only {
-                    if symbol.flags().intersects(SymbolFlags::Alias) {
-                        let original = env.checker.get_aliased_symbol(symbol);
-                        fact.alias_target = env.id_for(original);
-                    }
-                    fact.declarations = id_declarations(env, &query.id, symbol).into();
-                    references.retain_symbol_fact(env, &query.id, symbol, &fact.declarations);
-                }
-                if query.references {
-                    let canonical = env.canonical_symbol(symbol);
-                    let canonical = env.id_for(canonical);
-                    fact.references = references.query(env, &canonical).into();
-                }
-                facts.push(fact);
-            }
-            Ok(facts)
-        })?;
-        if let Some(trace) = &self.trace {
-            let count = |value: usize| i64::try_from(value).unwrap_or(i64::MAX);
-            trace.metrics(
-                "symbols",
-                &[
-                    ("queries", count(queries.len())),
-                    ("retainedFacts", count(reused)),
-                    (
-                        "elapsedNs",
-                        i64::try_from(started.elapsed().as_nanos()).unwrap_or(i64::MAX),
-                    ),
-                ],
-            );
-        }
-        outcome
+        self.per_file_symbol_evidence(ctx, queries)
     }
 }
 
@@ -869,6 +855,7 @@ impl Project {
         if changed_paths.is_empty() {
             return Ok(UpdateOutcome {
                 affected: Vec::new(),
+                graph_kept: false,
             });
         }
         let overlay_duration = stage.elapsed();
@@ -914,8 +901,12 @@ impl Project {
         let old_shape_duration = stage.elapsed();
 
         // The candidate program. The accepted generation stays intact until
-        // the candidate is committed below.
+        // the candidate is committed below. Whatever the candidate's build
+        // asks the disk, it asks once (`OverlayFs::build_scope`): an in-place
+        // replacement asks next to nothing, a rebuilt chain re-resolves every
+        // import of every file.
         let stage = Instant::now();
+        let lookups = candidate_fs.build_scope(self.trace.is_some());
         let candidate = if incremental
             && generation
                 .program()
@@ -926,9 +917,16 @@ impl Project {
             let host = compiler_host(&type_script_path_dir(&self.config_path), &candidate_fs);
             generation.prepare_update(&incremental_path, host)
         } else {
-            build_program(ctx, &self.config_path, &candidate_fs, &self.config_host)
-                .map_err(BackendError)?
+            build_program(
+                ctx,
+                &self.config_path,
+                &candidate_fs,
+                &self.config_host,
+                self.trace.is_some(),
+            )
+            .map_err(BackendError)?
         };
+        let lookup_stats = lookups.finish();
         let program_duration = stage.elapsed();
 
         let mut semantic_cutoff = false;
@@ -1001,18 +999,37 @@ impl Project {
             Vec::new()
         };
         let candidate_kind = candidate.kind();
+        // Whether the edited file adds to the global scope or augments a
+        // module, before or after: then any module's exports can move.
+        let global_exports = changed_paths.iter().any(|path| {
+            [generation.program(), candidate.program()]
+                .iter()
+                .any(|program| {
+                    program
+                        .get_source_file(path)
+                        .is_none_or(crate::inputs::contributes_to_global_scope)
+                })
+        });
 
         // Commit: nothing below can fail.
         let generation = self.generation.as_mut().expect("checked live above");
         generation.commit(candidate);
-        // Only a parse-reusing update keeps every other file's text and
-        // module resolution as read (ADR 0369).
+        // Only a parse-reusing update keeps every other file's text as read.
         let reused = candidate_kind == UpdateKind::Reused;
         self.inputs
             .program_changed(reused.then_some(incremental_path.as_str()));
-        self.references.start_retaining();
-        if !reused {
+        if reused {
+            self.per_file.reuse.file_replaced(&incremental_path);
+            if let Some((_, dirty)) = &mut self.source_digests {
+                dirty.insert(clean(&incremental_path));
+            }
+        } else {
+            self.source_digests = None;
+            // A rebuilt chain read the file system again. Kept passes are
+            // checked path by path against the new program's text, exports
+            // and resolutions at the next table (`passes::Reuse::refresh`).
             self.ids.forget_runtime_paths();
+            self.per_file.reuse.program_rebuilt();
         }
         self.fs = candidate_fs;
         self.versions = candidate_versions;
@@ -1025,15 +1042,35 @@ impl Project {
         // re-keying) before anything can read them.
         let ids = &mut self.ids;
         let identities_started = Instant::now();
+        // The exports scan in a checker of its own, freed after (its output
+        // is pointer-free).
+        // A parse-reusing update kept every other file's parse and
+        // resolutions: only the modules that reach the edited file can export
+        // something else.
+        let rescan = (reused && !global_exports)
+            .then(|| self.per_file.reuse.reaching(&clean(&incremental_path)))
+            .flatten();
+        // Every module rescanned: on the pass workers first.
+        let scanned = rescan.is_none().then(|| {
+            crate::identity::scan_exports_on_workers(
+                accepted,
+                program.source_files(),
+                self.per_file.workers,
+            )
+        });
+        let pass = accepted.file_checker();
         accepted.with_checker(|checker| {
             ids.after_update(
                 generation_number,
                 program,
                 checker,
-                incremental.then_some(incremental_path.as_str()),
+                rescan.as_deref(),
+                scanned,
                 current_exports,
             );
         });
+        ids.purge_scope_pointers();
+        drop(pass);
         let identities_duration = identities_started.elapsed();
 
         // The retained graph must advance on every accepted update, even ones
@@ -1079,9 +1116,8 @@ impl Project {
         // source-fact memo, not this generation's reference index, and not the
         // identity maps (`Identities::after_update`). What carries over is the
         // program's own incremental reuse, the declaration shapes that decide
-        // the affected set, and binder-level answers kept with the digests
-        // they read (`references`, `inputs`; ADR 0369), which are checked
-        // before any reuse.
+        // the affected set, and the per-file passes kept with their read sets
+        // (`per_file`, `passes`), which are checked before any reuse.
         ClosureBackend::discard_derived_state(self);
         if incremental {
             for path in &affected {
@@ -1111,6 +1147,7 @@ impl Project {
             identities: identities_duration,
             kind: Some(candidate_kind),
             rebased,
+            fs: lookup_stats,
         };
         if let Some(trace) = &self.trace {
             let metrics = self.last_update;
@@ -1128,10 +1165,24 @@ impl Project {
                     ("affectedNs", nanos(metrics.affected)),
                     ("invalidationNs", nanos(metrics.invalidation)),
                     ("identitiesNs", nanos(metrics.identities)),
+                    ("fsHits", i64::try_from(metrics.fs.hits).unwrap_or(i64::MAX)),
+                    (
+                        "fsMisses",
+                        i64::try_from(metrics.fs.misses).unwrap_or(i64::MAX),
+                    ),
+                    (
+                        "fsReads",
+                        i64::try_from(metrics.fs.reads).unwrap_or(i64::MAX),
+                    ),
                 ],
             );
         }
-        Ok(UpdateOutcome { affected })
+        // A rebase after the update builds the chain again from the disk as
+        // it is now: nothing the earlier program resolved is kept then.
+        Ok(UpdateOutcome {
+            affected,
+            graph_kept: reused && !rebased,
+        })
     }
 
     fn point_config_host_at_accepted_overlay(&self) {
@@ -1160,11 +1211,16 @@ impl Project {
             return false;
         }
         let host = compiler_host(&type_script_path_dir(&self.config_path), &self.fs);
+        let lookups = self.fs.build_scope(false);
         let fresh = generation.rebuilt(host);
+        drop(lookups);
         // The identity maps and the generation-scoped reference ids name the
         // chain about to be freed.
         self.ids.release_pointers();
         self.ids.forget_runtime_paths();
+        self.ids.forget_export_roots();
+        self.per_file.reuse.program_rebuilt();
+        self.source_digests = None;
         generation.commit(fresh);
         self.inputs.program_changed(None);
         true
@@ -1198,16 +1254,45 @@ pub(crate) fn validate_location(location: &Location, source: &str) -> Result<(),
 }
 
 /// Go: `declarationKind`.
-fn declaration_kind(node: tsrs_core::P<Node>) -> &'static str {
-    if is_variable_declaration(node) {
-        "variable"
+/// The declaration's kind, one shared string per kind: every retained row's
+/// declarations hold one.
+fn declaration_kind(node: tsrs_core::P<Node>) -> Arc<str> {
+    static KINDS: std::sync::OnceLock<[Arc<str>; 4]> = std::sync::OnceLock::new();
+    let kinds =
+        KINDS.get_or_init(|| ["variable", "function", "class", "declaration"].map(Arc::from));
+    let kind = if is_variable_declaration(node) {
+        0
     } else if is_function_declaration(node) {
-        "function"
+        1
     } else if is_class_declaration(node) {
-        "class"
+        2
     } else {
-        "declaration"
+        3
+    };
+    Arc::clone(&kinds[kind])
+}
+
+/// The clean path of `file_name` as a shared string. Declarations name few
+/// distinct files (the libraries' most), and each retained row holds its
+/// declarations' paths. Content-keyed, so a path is never another file's; a
+/// thread's map is cleared once it holds 4,096 paths.
+fn declaration_path(file_name: &str) -> Arc<str> {
+    thread_local! {
+        static PATHS: std::cell::RefCell<HashMap<Box<str>, Arc<str>>> =
+            std::cell::RefCell::new(HashMap::new());
     }
+    PATHS.with(|paths| {
+        let mut paths = paths.borrow_mut();
+        if let Some(path) = paths.get(file_name) {
+            return Arc::clone(path);
+        }
+        if paths.len() >= 4096 {
+            paths.clear();
+        }
+        let path: Arc<str> = clean(file_name).into();
+        paths.insert(file_name.into(), Arc::clone(&path));
+        path
+    })
 }
 
 /// Go: `wireSymbolName`. Go marks an internal symbol name with a leading
@@ -1230,7 +1315,7 @@ pub(crate) fn wire_symbol_name(name: &str) -> String {
 /// origins' declarations (ADR 0371), in `(path, start, end)` order: the
 /// properties sharing a `Set` id list them in their constituents' order,
 /// which follows type ids.
-fn id_declarations(
+pub(crate) fn id_declarations(
     env: &Env<'_>,
     id: &SymbolId,
     symbol: tsrs_core::P<tsrs_ast::Symbol>,
@@ -1256,6 +1341,10 @@ fn id_declarations(
 /// Go: `declarationsForSymbol`.
 pub(crate) fn declarations_for_symbol(symbol: tsrs_core::P<tsrs_ast::Symbol>) -> Vec<Declaration> {
     let mut declarations = Vec::with_capacity(symbol.declarations().len());
+    // Go's codec spells the internal-name marker `__` at the wire seam
+    // (`wireSymbolName`); tsrs's marker is U+007F, so spell it here. One
+    // string for every declaration of the symbol.
+    let mut name: Option<Arc<str>> = None;
     for node in symbol.declarations() {
         let Some(file) = get_source_file_of_node(*node) else {
             continue;
@@ -1268,12 +1357,10 @@ pub(crate) fn declarations_for_symbol(symbol: tsrs_core::P<tsrs_ast::Symbol>) ->
             continue;
         };
         declarations.push(Declaration {
-            // Go's codec spells the internal-name marker `__` at the wire seam
-            // (`wireSymbolName`); tsrs's marker is U+007F, so spell it here.
-            name: wire_symbol_name(symbol.name()).into(),
-            kind: declaration_kind(*node).into(),
+            name: Arc::clone(name.get_or_insert_with(|| wire_symbol_name(symbol.name()).into())),
+            kind: declaration_kind(*node),
             location: Location {
-                path: clean(file.file_name()).into(),
+                path: declaration_path(file.file_name()),
                 start_byte: u64::from(skip_trivia(file.text(), pos)),
                 end_byte: u64::from(end),
             },

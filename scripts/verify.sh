@@ -387,6 +387,18 @@ wasm_parity_lane() {
     bun scripts/wasm-parity.mjs --scratch "$wasm_parity_scratch" --update-frames "$wasm_parity_scratch/update-frames"
 }
 
+# The retained IR's safety net (ADR 0383): a short random-edit differential run
+# over copies of fixture projects -- the daemon's answer must equal a fresh one
+# after every edit, shadow mode silent. No Cargo. The long budget on the rc17
+# corpus is `make ir-edit-fuzz-corpus`.
+ir_fuzz_lane() {
+  lane_step ir-edit-fuzz
+  SOLID_CHECKER_BIN="$checker_bin" \
+    SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/ir-edit-fuzz.mjs --fixtures --steps 6
+  SOLID_CHECKER_BIN="$checker_bin" \
+    SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/ir-edit-fuzz.mjs --fixtures --family retype --steps 4
+}
+
 js_lane() {
   # The checker this run built: without it the CLI launcher falls back to
   # `make build-rust`, a second Cargo in `rust/target`.
@@ -407,6 +419,7 @@ if [ "$run_wasm" = 1 ]; then
   lane wasm-parity wasm_parity_lane
 fi
 lane js js_lane
+lane ir-fuzz ir_fuzz_lane
 lanes_wait
 
 # Absolute wall-time thresholds: this step must have the machine to itself, so
@@ -423,6 +436,8 @@ jq empty fixtures/obligation-cases/*.json
 bun scripts/dialect-manifests.mjs validate
 bun scripts/doc-budget.mjs
 bun scripts/repro-budget.mjs
+# A ratchet on raw cross-file reads in the reactive IR (ADR 0383).
+bun scripts/ir-read-lint.mjs
 
 step ""
 summarize

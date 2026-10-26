@@ -11,8 +11,10 @@
 //!
 //! The witness records, from the open program's own module graph:
 //!
-//! - every file the program holds, by content (a file outside the tracked
-//!   sources -- a package's declarations -- edited in place);
+//! - every file the program holds outside the tracked sources, by content (a
+//!   package's declarations edited in place). A tracked source's edit is the
+//!   daemon's own overlay update, so observing its bytes here would turn
+//!   every edit into a rebuild;
 //! - for every non-relative import, each `node_modules/<name>` and
 //!   `node_modules/@types/<name>` candidate on the walk from the importing
 //!   file's directory to the root: absent, a directory (with its realpath),
@@ -97,9 +99,48 @@ fn observe(path: &Path) -> Observed {
     }
 }
 
+/// Canonical paths of directories, each resolved once per check. Most
+/// entries of a witness are `node_modules` candidates sharing a few parents,
+/// and `canonicalize` walks every component.
+#[derive(Default)]
+struct RealPaths {
+    known: std::sync::Mutex<std::collections::HashMap<PathBuf, Option<PathBuf>>>,
+}
+
+impl RealPaths {
+    fn of(&self, directory: &Path) -> Option<PathBuf> {
+        if let Ok(known) = self.known.lock()
+            && let Some(real) = known.get(directory)
+        {
+            return real.clone();
+        }
+        let real = fs::canonicalize(directory).ok();
+        if let Ok(mut known) = self.known.lock() {
+            known.insert(directory.to_path_buf(), real.clone());
+        }
+        real
+    }
+
+    /// What [`observe`] records for a directory `path` that is no symlink: a
+    /// real directory's canonical path is its parent's with its own name.
+    fn directory(&self, path: &Path) -> Option<PathBuf> {
+        match (path.parent(), path.file_name()) {
+            (Some(parent), Some(name)) if !parent.as_os_str().is_empty() => {
+                self.of(parent).map(|real| real.join(name))
+            }
+            _ => fs::canonicalize(path).ok(),
+        }
+    }
+}
+
 /// Whether `path` still is what `recorded` saw. A file whose metadata is
 /// unchanged is not reread.
+#[cfg(test)]
 fn still(path: &Path, recorded: &Observed) -> bool {
+    still_with(path, recorded, &RealPaths::default())
+}
+
+fn still_with(path: &Path, recorded: &Observed, real: &RealPaths) -> bool {
     if let Observed::File {
         stamp: recorded_stamp,
         hash: recorded_hash,
@@ -115,6 +156,18 @@ fn still(path: &Path, recorded: &Observed) -> bool {
             return true;
         }
         return fs::read(path).is_ok_and(|bytes| hash(&bytes) == *recorded_hash);
+    }
+    if let Observed::Directory {
+        realpath: recorded_real,
+    } = recorded
+    {
+        let Ok(metadata) = fs::symlink_metadata(path) else {
+            return false;
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return false;
+        }
+        return real.directory(path) == *recorded_real;
     }
     if *recorded == Observed::Unreadable {
         return false;
@@ -145,20 +198,71 @@ fn types_name(name: &str) -> String {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct ResolutionWitness {
     observed: BTreeMap<PathBuf, Observed>,
 }
 
+/// Drops every absent entry that lies under another absent entry. A path under
+/// a missing ancestor is missing for the same reason, and the ancestor's own
+/// entry already fails the moment that ancestor appears, so the descendant
+/// adds a filesystem read per check and no information. (`BTreeMap` orders
+/// paths by component, so a path's descendants follow it contiguously.)
+///
+/// Only absent descendants go. One recorded present, by an earlier request,
+/// under an ancestor observed absent now, says the ancestor was removed since:
+/// it stays, and fails the next check (review R1 finding 2).
+fn prune_shadowed_absent(observed: &mut BTreeMap<PathBuf, Observed>) {
+    let mut shadow: Option<PathBuf> = None;
+    let mut shadowed = Vec::new();
+    for (path, seen) in observed.iter() {
+        if let Some(absent) = &shadow
+            && path.starts_with(absent)
+        {
+            if *seen == Observed::Absent {
+                shadowed.push(path.clone());
+            }
+            continue;
+        }
+        shadow = (*seen == Observed::Absent).then(|| path.clone());
+    }
+    for path in shadowed {
+        observed.remove(&path);
+    }
+}
+
 impl ResolutionWitness {
-    pub(crate) fn of(graph: &typefacts::ModuleGraph) -> Self {
-        let mut observed = BTreeMap::new();
+    /// `tracked` names the sources the caller reconciles by content itself.
+    /// A tracked path spelled differently from the module's is observed, so
+    /// a mismatch costs a rebuild, never a missed edit.
+    pub(crate) fn of(graph: &typefacts::ModuleGraph, tracked: impl Fn(&str) -> bool) -> Self {
+        let mut witness = Self {
+            observed: BTreeMap::new(),
+        };
+        witness.extend(graph, tracked);
+        witness
+    }
+
+    /// Adds what `graph` read to a witness that is still [`Self::current`],
+    /// keeping every entry already recorded (each still as it was). After an
+    /// overlay update that kept the program's files, `graph` scoped to the
+    /// edited files makes a superset of a fresh witness: an import the edit
+    /// dropped stays observed, which can only cost a rebuild.
+    pub(crate) fn extend(
+        &mut self,
+        graph: &typefacts::ModuleGraph,
+        tracked: impl Fn(&str) -> bool,
+    ) {
+        let observed = &mut self.observed;
         let mut record = |path: PathBuf| {
             observed
                 .entry(path)
                 .or_insert_with_key(|path| observe(path));
         };
         for module in &graph.modules {
-            record(PathBuf::from(module.path.as_ref()));
+            if !tracked(module.path.as_ref()) {
+                record(PathBuf::from(module.path.as_ref()));
+            }
         }
         for import in &graph.imports {
             let text = import.text.as_ref();
@@ -204,14 +308,39 @@ impl ResolutionWitness {
                 record(ancestor.join("node_modules"));
             }
         }
-        Self { observed }
+        prune_shadowed_absent(&mut self.observed);
     }
 
-    /// Whether every recorded entry is still as it was.
+    /// Whether every recorded entry is still as it was. The entries are
+    /// independent filesystem reads (tens of thousands for a monorepo's
+    /// `node_modules` walks), checked on six workers; any change answers no.
     pub(crate) fn current(&self) -> bool {
-        self.observed
-            .iter()
-            .all(|(path, recorded)| still(path, recorded))
+        const WORKERS: usize = 6;
+        let entries = self.observed.iter().collect::<Vec<_>>();
+        let real = RealPaths::default();
+        if entries.len() < 512 {
+            return entries
+                .iter()
+                .all(|(path, recorded)| still_with(path, recorded, &real));
+        }
+        let moved = std::sync::atomic::AtomicBool::new(false);
+        std::thread::scope(|scope| {
+            for worker in 0..WORKERS {
+                let (entries, moved, real) = (&entries, &moved, &real);
+                scope.spawn(move || {
+                    for (path, recorded) in entries.iter().skip(worker).step_by(WORKERS) {
+                        if moved.load(std::sync::atomic::Ordering::Relaxed) {
+                            return;
+                        }
+                        if !still_with(path, recorded, real) {
+                            moved.store(true, std::sync::atomic::Ordering::Relaxed);
+                            return;
+                        }
+                    }
+                });
+            }
+        });
+        !moved.into_inner()
     }
 }
 
@@ -251,6 +380,94 @@ mod tests {
         assert!(!still(&manifest, &observations[1].1));
         fs::create_dir_all(&absent).unwrap();
         assert!(!still(&absent, &observations[2].1));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn an_absent_entry_under_an_absent_one_adds_nothing() {
+        let mut observed = BTreeMap::new();
+        let absent = || Observed::Absent;
+        for path in ["/a", "/a/x", "/a/x/y", "/a2", "/b/c", "/b/c/d"] {
+            observed.insert(PathBuf::from(path), absent());
+        }
+        observed.insert(
+            PathBuf::from("/b"),
+            Observed::Directory {
+                realpath: Some(PathBuf::from("/b")),
+            },
+        );
+        prune_shadowed_absent(&mut observed);
+        let kept = observed
+            .keys()
+            .map(|p| p.to_str().unwrap())
+            .collect::<Vec<_>>();
+        // `/a2` is not under `/a`; `/b/c/d` is under the absent `/b/c`.
+        assert_eq!(kept, ["/a", "/a2", "/b", "/b/c"]);
+    }
+
+    #[test]
+    fn an_entry_recorded_present_under_one_now_absent_is_kept() {
+        // An earlier request recorded the package's declarations; this one
+        // first observes the package directory, after it was removed.
+        let mut observed = BTreeMap::new();
+        observed.insert(PathBuf::from("/m/node_modules/@s/pkg"), Observed::Absent);
+        let declarations = Observed::File {
+            stamp: (1, 2, 3, 4, 5, 6, 7),
+            hash: [0; 32],
+        };
+        observed.insert(
+            PathBuf::from("/m/node_modules/@s/pkg/index.d.ts"),
+            declarations.clone(),
+        );
+        observed.insert(
+            PathBuf::from("/m/node_modules/@s/pkg/package.json"),
+            Observed::Absent,
+        );
+        prune_shadowed_absent(&mut observed);
+        assert_eq!(
+            observed
+                .keys()
+                .map(|p| p.to_str().unwrap())
+                .collect::<Vec<_>>(),
+            [
+                "/m/node_modules/@s/pkg",
+                "/m/node_modules/@s/pkg/index.d.ts"
+            ]
+        );
+        assert!(!still(
+            Path::new("/m/node_modules/@s/pkg/index.d.ts"),
+            &declarations
+        ));
+    }
+
+    #[test]
+    fn a_directory_whose_ancestor_is_relinked_moves_the_observation() {
+        let root = std::env::temp_dir().join(format!("sc-resolution-dirs-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let root = {
+            fs::create_dir_all(&root).unwrap();
+            root.canonicalize().unwrap()
+        };
+        fs::create_dir_all(root.join("p/d")).unwrap();
+        fs::create_dir_all(root.join("elsewhere/d")).unwrap();
+        let entry = root.join("p/d");
+        let seen = observe(&entry);
+        let real = RealPaths::default();
+        assert!(still_with(&entry, &seen, &real));
+        // A fresh memo, as the next check has.
+        fs::rename(root.join("p"), root.join("moved")).unwrap();
+        std::os::unix::fs::symlink(root.join("moved"), root.join("p")).unwrap();
+        assert!(!still_with(&entry, &seen, &RealPaths::default()));
+        // The directory itself replaced by a link, or by a file.
+        fs::remove_file(root.join("p")).unwrap();
+        fs::rename(root.join("moved"), root.join("p")).unwrap();
+        assert!(still_with(&entry, &seen, &RealPaths::default()));
+        fs::remove_dir(&entry).unwrap();
+        std::os::unix::fs::symlink(root.join("elsewhere/d"), &entry).unwrap();
+        assert!(!still_with(&entry, &seen, &RealPaths::default()));
+        fs::remove_file(&entry).unwrap();
+        fs::write(&entry, b"x").unwrap();
+        assert!(!still_with(&entry, &seen, &RealPaths::default()));
         fs::remove_dir_all(&root).unwrap();
     }
 }

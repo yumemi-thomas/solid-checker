@@ -592,6 +592,19 @@ impl DiagnosticSession {
     pub fn retain_for_idle(&mut self, retention: CacheRetention) {
         self.builder.retain_for_idle(retention);
     }
+
+    /// Whether an analysis leaves the memo store's end-of-build sweep to
+    /// [`Self::finish_deferred`] ([`IncrementalBuilder::defer_memo_end`]): for
+    /// a caller that has its answer written before it sweeps.
+    pub fn defer_memo_end(&mut self, defer: bool) {
+        self.builder.defer_memo_end(defer);
+    }
+
+    /// Runs the sweep the last analysis deferred, if one is due. The next
+    /// analysis runs a pending one itself, first.
+    pub fn finish_deferred(&mut self) {
+        self.builder.finish_deferred();
+    }
 }
 
 /// Runs ordinary analysis of one project against its package boundary.
@@ -1076,6 +1089,7 @@ pub fn unsupported_runtime_snapshot(
 }
 
 fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>) -> Snapshot {
+    let mut places = SourcePlacer::new(sources);
     let has_violation = findings.iter().any(|finding| finding.kind == "violation");
     let has_unresolved = findings
         .iter()
@@ -1100,11 +1114,11 @@ fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>)
             subject_kind: finding.subject_kind,
             coverage_family: finding.coverage_family,
             coverage_subject: finding.coverage_subject,
-            primary_location: source_location(&finding.primary_location, sources),
+            primary_location: places.place(&finding.primary_location),
             related_locations: finding
                 .related_locations
                 .iter()
-                .map(|location| source_location(location, sources))
+                .map(|location| places.place(location))
                 .collect(),
             evidence: finding
                 .evidence
@@ -1114,7 +1128,7 @@ fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>)
                     location: step
                         .location
                         .as_ref()
-                        .map(|location| source_location(location, sources)),
+                        .map(|location| places.place(location)),
                 })
                 .collect(),
             fixes: finding
@@ -1127,7 +1141,7 @@ fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>)
                         .edits
                         .into_iter()
                         .map(|edit| SnapshotTextEdit {
-                            location: source_location(&edit.location, sources),
+                            location: places.place(&edit.location),
                             new_text: edit.new_text,
                         })
                         .collect(),
@@ -1185,6 +1199,82 @@ pub fn analysis_metrics(facts: &ProjectFacts, program: &Program) -> Metrics {
             + program.static_defects.len(),
         cached_summaries: 0,
         unresolved_obligations,
+    }
+}
+
+/// The start of each line of `source`: offset 0, then each byte after a
+/// newline.
+fn line_starts(source: &SourceFile) -> Arc<[u32]> {
+    let mut starts = vec![0_u32];
+    starts.extend(
+        source
+            .source
+            .bytes()
+            .enumerate()
+            .filter(|(_, byte)| *byte == b'\n')
+            .map(|(index, _)| u32::try_from(index + 1).unwrap_or(u32::MAX)),
+    );
+    starts.into()
+}
+
+/// [`source_location`] over one generation's sources: the same answers, with
+/// the path lookup and the line scan done once rather than per location.
+struct SourcePlacer<'a> {
+    sources: std::collections::HashMap<&'a str, &'a SourceFile>,
+    starts: std::collections::HashMap<&'a str, Arc<[u32]>>,
+}
+
+impl<'a> SourcePlacer<'a> {
+    fn new(sources: &'a [SourceFile]) -> Self {
+        let mut by_path = std::collections::HashMap::with_capacity(sources.len());
+        for source in sources {
+            // `source_location` took the first source of a path.
+            by_path.entry(source.path.as_str()).or_insert(source);
+        }
+        Self {
+            sources: by_path,
+            starts: std::collections::HashMap::new(),
+        }
+    }
+
+    fn place(&mut self, location: &typefacts::Location) -> SourceLocation {
+        let (line, column) = match self.sources.get(location.path.as_ref()) {
+            None => (1, 1),
+            Some(&source) => {
+                let starts = match self.starts.get(source.path.as_str()) {
+                    Some(starts) => Arc::clone(starts),
+                    None => {
+                        let starts = line_starts(source);
+                        self.starts
+                            .insert(source.path.as_str(), Arc::clone(&starts));
+                        starts
+                    }
+                };
+                let mut offset = usize::try_from(location.start_byte)
+                    .unwrap_or(usize::MAX)
+                    .min(source.source.len());
+                while !source.source.is_char_boundary(offset) {
+                    offset = offset.saturating_sub(1);
+                }
+                let at = u32::try_from(offset).unwrap_or(u32::MAX);
+                // `starts[0]` is the file start; each later entry follows a
+                // newline, and the newlines before `offset` are the entries
+                // at or before it.
+                let line = starts.partition_point(|start| *start <= at);
+                let line_start = starts[line - 1] as usize;
+                (
+                    line,
+                    source.source[line_start..offset].encode_utf16().count() + 1,
+                )
+            }
+        };
+        SourceLocation {
+            path: location.path.to_string(),
+            start_byte: location.start_byte,
+            end_byte: location.end_byte,
+            line,
+            column,
+        }
     }
 }
 

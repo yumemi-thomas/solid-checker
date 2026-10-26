@@ -31,21 +31,23 @@ pub fn module_graph(
     demand: &ModuleGraphRequest,
 ) -> Result<ModuleInventory, BackendError> {
     let files = program.source_files();
-    let mut inventory = ModuleInventory {
-        modules: Vec::with_capacity(files.len()),
-        ..ModuleInventory::default()
-    };
-    let (roots, unmapped) = root_positions(program);
-    inventory.unmapped_roots = unmapped;
-    for file in files {
-        check(ctx)?;
-        let mut fact = module_fact(program, *file);
-        fact.root = roots.get(&file.addr()).copied();
-        inventory.modules.push(fact);
+    let mut inventory = ModuleInventory::default();
+    // A caller that holds the inventory (the daemon, after an update that
+    // replaced one file in place) asks for some files' imports only.
+    if !demand.omit_modules {
+        inventory.modules = Vec::with_capacity(files.len());
+        let (roots, unmapped) = root_positions(program);
+        inventory.unmapped_roots = unmapped;
+        for file in files {
+            check(ctx)?;
+            let mut fact = module_fact(program, *file);
+            fact.root = roots.get(&file.addr()).copied();
+            inventory.modules.push(fact);
+        }
+        inventory
+            .modules
+            .sort_by(|left, right| left.path.cmp(&right.path));
     }
-    inventory
-        .modules
-        .sort_by(|left, right| left.path.cmp(&right.path));
     if !demand.imports {
         return Ok(inventory);
     }
@@ -56,13 +58,30 @@ pub fn module_graph(
     let patterns = PathsPatterns::of(program);
     for file in answered {
         check(ctx)?;
-        append_import_facts(
-            &mut inventory.imports,
-            program,
-            file,
-            &patterns,
-            packages.as_mut(),
-        )?;
+        if !demand.distinct_bare_imports {
+            append_import_facts(
+                &mut inventory.imports,
+                program,
+                file,
+                &patterns,
+                packages.as_mut(),
+            )?;
+            continue;
+        }
+        let mut facts = Vec::new();
+        append_import_facts(&mut facts, program, file, &patterns, packages.as_mut())?;
+        facts.sort_by_key(|fact| fact.specifier.start_byte);
+        let mut seen = HashSet::new();
+        inventory.imports.extend(facts.into_iter().filter(|fact| {
+            !fact.text.starts_with('.')
+                && !fact.text.starts_with('/')
+                && seen.insert((
+                    Arc::clone(&fact.text),
+                    Arc::clone(&fact.resolved_path),
+                    Arc::clone(&fact.included_path),
+                    Arc::clone(&fact.symlink_path),
+                ))
+        }));
     }
     inventory.imports.sort_by(|left, right| {
         left.specifier

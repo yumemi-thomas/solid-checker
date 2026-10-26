@@ -191,6 +191,10 @@ pub struct ExchangeTimings {
     pub server_retained_files: u64,
     pub server_recomputed_files: u64,
     pub server_non_durable_files: u64,
+    /// The client's symbol closure after the analysis (its own requests
+    /// included), and whether it was patched from the previous one.
+    pub client_close_symbols: Duration,
+    pub client_closure_patched: bool,
 }
 
 /// How long the two halves of one update exchange took.
@@ -207,6 +211,11 @@ pub struct UpdateTimings {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct TableChanges {
     pub unchanged: bool,
+    /// The table was replaced whole (a full transition: no base, e.g. the
+    /// session's first table or one after a producer restart). The path
+    /// lists then name the new table's paths only, not the ones it dropped,
+    /// so no consumer may treat them as a delta.
+    pub full: bool,
     pub entity_paths: Vec<String>,
     pub symbol_ids: Vec<String>,
     pub file_paths: Vec<String>,
@@ -897,13 +906,39 @@ pub struct Session {
     state_token: String,
     retained_demands: HashMap<String, Arc<[EntityDemand]>>,
     retained_table: Option<FactTable>,
-    affected_paths: HashSet<String>,
     reference_tier: HashSet<Arc<str>>,
     symbols_by_path: HashMap<Arc<str>, Vec<Arc<str>>>,
+    /// The reasons of the retained closure, for patching it
+    /// ([`closure::ClosureIndex`]).
+    closure_index: Option<closure::ClosureIndex>,
+    /// Whether the last closure was patched from the previous one.
+    last_closure_patched: bool,
+    /// The demand paths the pending analysis changes or removes.
+    pending_demand_paths: HashSet<String>,
+    /// The retained demand runs' reference locations, by path.
+    retained_reference_locations: HashMap<Arc<str>, HashSet<crate::Location>>,
+    /// Whether `retained_reference_locations` are the retained runs'.
+    reference_locations_valid: bool,
     last_exchange_timings: Option<ExchangeTimings>,
     last_update_timings: Option<UpdateTimings>,
+    /// What the last acknowledged update said about the module graph.
+    last_update_graph: Option<UpdateGraph>,
     last_table_changes: Option<TableChanges>,
     closed: bool,
+}
+
+/// What the producer said about the module graph when it acknowledged an
+/// update ([`Session::last_update_graph`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UpdateGraph {
+    /// The producer process the answer came from ([`Session::restart_epoch`]).
+    pub epoch: u64,
+    /// The generation the update produced.
+    pub generation: u64,
+    /// The producer replaced the update's one changed file in place and
+    /// rebuilt nothing (`Response::graph_kept`): the module graph is the
+    /// previous generation's but for that file's own import positions.
+    pub kept: bool,
 }
 
 fn normalize_project_id(project_id: String) -> Result<String, SessionError> {
@@ -1013,11 +1048,16 @@ impl Session {
             state_token: String::new(),
             retained_demands: HashMap::new(),
             retained_table: None,
-            affected_paths: HashSet::new(),
             reference_tier: HashSet::new(),
             symbols_by_path: HashMap::new(),
+            closure_index: None,
+            last_closure_patched: false,
+            pending_demand_paths: HashSet::new(),
+            retained_reference_locations: HashMap::new(),
+            reference_locations_valid: false,
             last_exchange_timings: None,
             last_update_timings: None,
+            last_update_graph: None,
             last_table_changes: None,
             closed: false,
         }
@@ -1037,6 +1077,14 @@ impl Session {
 
     pub fn take_last_exchange_timings(&mut self) -> Option<ExchangeTimings> {
         self.last_exchange_timings.take()
+    }
+
+    /// Whether the last analysis patched its symbol closure from the
+    /// previous one (an exact producer, instant-edits P4) rather than closing
+    /// it in full.
+    #[must_use]
+    pub const fn last_closure_patched(&self) -> bool {
+        self.last_closure_patched
     }
 
     pub fn take_last_table_changes(&mut self) -> Option<TableChanges> {
@@ -1061,6 +1109,25 @@ impl Session {
     /// Returns the most recent update's send and wait split, if there was one.
     pub fn take_last_update_timings(&mut self) -> Option<UpdateTimings> {
         self.last_update_timings.take()
+    }
+
+    /// How many times the producer has been restarted: a program built by a
+    /// producer after a restart is a fresh build from the file system, so
+    /// nothing learned from an earlier producer's program carries over to it.
+    #[must_use]
+    pub const fn restart_epoch(&self) -> u64 {
+        self.restart_epoch
+    }
+
+    /// What the producer answered about the module graph to the update that
+    /// produced the session's current generation, or `None` when the last
+    /// update was answered by a producer that has since been restarted, was
+    /// re-sent after a restart, or there was none.
+    #[must_use]
+    pub fn last_update_graph(&self) -> Option<UpdateGraph> {
+        self.last_update_graph.filter(|graph| {
+            graph.generation == self.generation && graph.epoch == self.restart_epoch
+        })
     }
 
     /// Analyses one generation from demands the caller already keeps grouped by
@@ -1135,20 +1202,29 @@ impl Session {
             .iter()
             .flat_map(|group| group.demands().iter().cloned())
             .collect::<Vec<_>>();
-        let reference_locations = groups
+        // The retained runs' reference locations with the changed and
+        // removed runs' replaced: proportional to what changed.
+        // A failure that neither committed nor restored them (a recovery
+        // that failed again) leaves them unknown: every run is replaced.
+        let whole = reset_state || !self.reference_locations_valid;
+        let retained_locations = std::mem::take(&mut self.retained_reference_locations);
+        self.reference_locations_valid = false;
+        let reference_locations = if whole {
+            closure::ReferenceLocations::new(HashMap::new(), groups, &[])
+        } else {
+            closure::ReferenceLocations::new(retained_locations, &changed, &removed)
+        };
+        self.pending_demand_paths = changed
             .iter()
-            .flat_map(|group| group.demands())
-            .filter(|demand| demand.references)
-            .map(|demand| demand.location.clone())
-            .collect::<HashSet<_>>();
-        let demand_roots_changed = reset_state || !changed.is_empty() || !removed.is_empty();
+            .map(|group| group.path().to_owned())
+            .chain(removed.iter().cloned())
+            .collect();
 
         match self.analyze_exchange(
             wire_demands,
             removed.clone(),
             reset_state,
             &reference_locations,
-            demand_roots_changed,
         ) {
             Err(SessionError::Service { code, .. })
                 if code == "state-mismatch" && self.can_recover() =>
@@ -1162,8 +1238,10 @@ impl Session {
                     .flat_map(|group| group.demands().iter().cloned())
                     .collect::<Vec<_>>();
                 let table =
-                    self.analyze_exchange(complete, Vec::new(), true, &reference_locations, true)?;
+                    self.analyze_exchange(complete, Vec::new(), true, &reference_locations)?;
                 self.retain_all_groups(groups);
+                self.retained_reference_locations = reference_locations.commit();
+                self.reference_locations_valid = true;
                 Ok(table)
             }
             // A producer that died *after* answering the analyze request, while
@@ -1197,15 +1275,24 @@ impl Session {
                     .flat_map(|group| group.demands().iter().cloned())
                     .collect::<Vec<_>>();
                 let table =
-                    self.analyze_exchange(complete, Vec::new(), true, &reference_locations, true)?;
+                    self.analyze_exchange(complete, Vec::new(), true, &reference_locations)?;
                 self.retain_all_groups(groups);
+                self.retained_reference_locations = reference_locations.commit();
+                self.reference_locations_valid = true;
                 Ok(table)
             }
             Ok(table) => {
                 self.retain_changed_groups(&changed, &removed);
+                self.retained_reference_locations = reference_locations.commit();
+                self.reference_locations_valid = true;
                 Ok(table)
             }
-            Err(error) => Err(error),
+            Err(error) => {
+                // The retained runs did not move: neither do their locations.
+                self.retained_reference_locations = reference_locations.restore();
+                self.reference_locations_valid = !whole;
+                Err(error)
+            }
         }
     }
 
@@ -1289,6 +1376,10 @@ impl Session {
                 self.restart_and_replay()?;
                 let worked = work();
                 self.update(changes)?;
+                // As for an update re-sent after a restart below: its answer
+                // describes the replayed program, not the one before the
+                // edit (review R1 finding 4).
+                self.last_update_graph = None;
                 return Ok(worked);
             }
             Err(error) => return Err(error),
@@ -1336,17 +1427,25 @@ impl Session {
         });
         match outcome {
             Ok(response) => {
-                self.commit_update(changes, response.affected);
+                self.commit_update(changes);
+                self.last_update_graph = Some(UpdateGraph {
+                    epoch: self.restart_epoch,
+                    generation: self.generation,
+                    kept: response.graph_kept,
+                });
                 Ok(())
             }
             Err(error) if error.is_transport_failure() && self.can_recover() => {
                 // This update is not in the replay state yet, so the replay
                 // restores everything before it and it is re-sent exactly once.
+                // Its answer says nothing about the module graph the session
+                // held before the restart.
                 self.restart_and_replay()?;
                 let mut retry = request(Operation::Update, &self.project_id, self.generation + 1);
                 retry.changes.clone_from(&changes);
-                let response = self.exchange_once(&mut retry)?;
-                self.commit_update(changes, response.affected);
+                self.exchange_once(&mut retry)?;
+                self.commit_update(changes);
+                self.last_update_graph = None;
                 Ok(())
             }
             Err(error) => Err(error),
@@ -1354,11 +1453,8 @@ impl Session {
     }
 
     /// Records an acknowledged update: one generation, one replay batch.
-    fn commit_update(&mut self, changes: Vec<FileChange>, affected: Vec<String>) {
+    fn commit_update(&mut self, changes: Vec<FileChange>) {
         self.generation += 1;
-        self.affected_paths.extend(affected);
-        self.affected_paths
-            .extend(changes.iter().map(|change| change.path.clone()));
         self.supersede_replayed_overlays(&changes);
         self.replay_batches.push(changes);
     }
@@ -1441,6 +1537,8 @@ impl Session {
             imports: demand.imports,
             import_paths: demand.import_paths.clone(),
             packages: demand.packages,
+            distinct_bare_imports: demand.distinct_bare_imports,
+            omit_modules: demand.omit_modules,
         });
         let response = self.exchange(modules)?;
         Ok(ModuleGraph {
@@ -1503,8 +1601,7 @@ impl Session {
         wire_demands: Vec<EntityDemand>,
         removed_demand_paths: Vec<String>,
         reset_state: bool,
-        reference_locations: &HashSet<crate::Location>,
-        demand_roots_changed: bool,
+        reference_locations: &closure::ReferenceLocations,
     ) -> Result<FactTable, SessionError> {
         let (demands, compact_demands) = if reset_state && !wire_demands.is_empty() {
             (Vec::new(), Some(v3::compact_demands(&wire_demands)))
@@ -1521,49 +1618,53 @@ impl Session {
         };
         analyze.reset_state = reset_state;
         analyze.removed_demand_paths = removed_demand_paths;
-        if !demand_roots_changed && self.retained_table.is_some() {
-            let invalidated = self.invalidated_symbol_ids();
-            analyze.symbol_queries = invalidated
-                .into_iter()
-                .map(|id| SymbolQuery {
-                    id,
-                    references: false,
-                    references_only: false,
-                })
-                .collect();
-            analyze.reference_paths = self.affected_paths.iter().cloned().collect();
-            analyze.reference_paths.sort();
-            analyze.release_analysis = true;
+        if !reset_state && self.retained_table.is_some() {
+            // The producer names every changed `symbols` answer when it can
+            // (ADR 0389); the closure is then patched from them.
             analyze.reference_changes = true;
         }
+        // The analysis is released by the closure's last request: an exact
+        // producer answers it from the analysis's own rows.
         let response = self.exchange(analyze)?;
         self.last_exchange_timings = Some(exchange_timings(&response));
-        let (mut candidate, mut changes) = prepare_analyze_response(
+        let (mut candidate, mut changes, delta) = prepare_analyze_response_mode(
             &response,
             &self.project_id,
             self.generation,
             &mut self.retained_table,
             &self.state_token,
         )?;
+        let close_started = std::time::Instant::now();
         if response.timings.is_some_and(|timings| timings.materialized) {
+            let exact = (delta && !reset_state && response.reference_changes_exact)
+                .then_some(response.changed_reference_symbols.as_slice());
+            let previous = self.retained_table.clone();
+            let demand_paths = std::mem::take(&mut self.pending_demand_paths);
+            let paths = closure::ChangedPaths {
+                entities: &changes.entity_paths,
+                files: &changes.file_paths,
+                demands: &demand_paths,
+            };
             changes.symbol_ids = self.close_symbols(
+                previous.as_ref(),
                 &mut candidate,
                 reference_locations,
-                demand_roots_changed
-                    || !changes.entity_paths.is_empty()
-                    || !changes.file_paths.is_empty(),
+                exact,
+                &paths,
                 &response.state_token,
-                Some(&response),
             )?;
             changes.unchanged = changes.entity_paths.is_empty()
                 && changes.file_paths.is_empty()
                 && changes.symbol_ids.is_empty();
         }
+        if let Some(timings) = &mut self.last_exchange_timings {
+            timings.client_close_symbols = close_started.elapsed();
+            timings.client_closure_patched = self.last_closure_patched;
+        }
         let returned = candidate.clone();
         // The candidate and successor token publish together. All decoding,
         // identity checks, and candidate construction completed above.
         self.retained_table = Some(candidate);
-        self.affected_paths.clear();
         self.state_token = response.state_token;
         self.last_table_changes = Some(changes);
         Ok(returned)
@@ -1574,21 +1675,109 @@ impl Session {
     /// and are retained only in Rust.
     fn close_symbols(
         &mut self,
+        previous: Option<&FactTable>,
         table: &mut FactTable,
-        reference_locations: &HashSet<crate::Location>,
-        seeds_changed: bool,
+        reference_locations: &closure::ReferenceLocations,
+        exact: Option<&[Arc<str>]>,
+        paths: &closure::ChangedPaths<'_>,
         state_token: &str,
-        prefetched: Option<&Response>,
     ) -> Result<Vec<String>, SessionError> {
-        if !seeds_changed
-            && table.symbol_count() != 0
-            && let Some(changed) = self.patch_stable_symbols(table, state_token, prefetched)?
+        self.last_closure_patched = false;
+        if let Some(changed) = exact.filter(|_| table.symbol_count() != 0)
+            && let Some(previous) = previous
         {
-            return Ok(changed);
+            self.last_closure_patched = true;
+            let changed = changed.iter().cloned().collect::<HashSet<_>>();
+            if !verify_symbol_patch() {
+                return self.patch_symbol_closure(
+                    previous,
+                    table,
+                    reference_locations,
+                    &changed,
+                    paths,
+                    state_token,
+                    true,
+                );
+            }
+            // The full closure, from the same table and in the same
+            // analysis, is the reference the patch must equal.
+            let mut fresh = table.clone();
+            let tier = self.reference_tier.clone();
+            let by_path = self.symbols_by_path.clone();
+            let patched_changes = self.patch_symbol_closure(
+                previous,
+                table,
+                reference_locations,
+                &changed,
+                paths,
+                state_token,
+                false,
+            )?;
+            let (patched_tier, patched_paths, patched_index) = (
+                std::mem::replace(&mut self.reference_tier, tier),
+                std::mem::replace(&mut self.symbols_by_path, by_path),
+                self.closure_index.take(),
+            );
+            let fresh_changes =
+                self.close_symbols_full(&mut fresh, reference_locations, state_token, false)?;
+            let fresh_index = closure::ClosureIndex::build(&fresh, reference_locations);
+            let same_paths = || {
+                let canonical = |paths: &HashMap<Arc<str>, Vec<Arc<str>>>| {
+                    paths
+                        .iter()
+                        .map(|(path, ids)| {
+                            // A row declared twice in one file is filed once
+                            // or twice; only membership is read.
+                            let mut ids = ids.clone();
+                            ids.sort();
+                            ids.dedup();
+                            (Arc::clone(path), ids)
+                        })
+                        .collect::<HashMap<_, _>>()
+                };
+                canonical(&patched_paths) == canonical(&self.symbols_by_path)
+            };
+            let differing = [
+                (*table != fresh, "rows"),
+                (patched_tier != self.reference_tier, "reference tier"),
+                (patched_changes != fresh_changes, "change list"),
+                (!same_paths(), "path index"),
+                (
+                    patched_index.is_some() && patched_index != fresh_index,
+                    "closure index",
+                ),
+            ]
+            .into_iter()
+            .filter_map(|(differs, part)| differs.then_some(part))
+            .collect::<Vec<_>>();
+            if !differing.is_empty() {
+                let detail =
+                    closure::index_difference(patched_index.as_ref(), fresh_index.as_ref());
+                symbol_patch_mismatch(
+                    table,
+                    &fresh,
+                    &patched_changes,
+                    &fresh_changes,
+                    &format!("{} differ{detail}", differing.join(", ")),
+                );
+                *table = fresh;
+            }
+            self.closure_index = fresh_index;
+            return Ok(fresh_changes);
         }
+        self.close_symbols_full(table, reference_locations, state_token, true)
+    }
+
+    fn close_symbols_full(
+        &mut self,
+        table: &mut FactTable,
+        reference_locations: &closure::ReferenceLocations,
+        state_token: &str,
+        trust_changes: bool,
+    ) -> Result<Vec<String>, SessionError> {
         let mut seen = HashSet::<Arc<str>>::with_capacity(table.entity_count());
         let mut pending = Vec::<Arc<str>>::with_capacity(table.entity_count());
-        let mut reference_roots = Vec::with_capacity(reference_locations.len());
+        let mut reference_roots = Vec::new();
         {
             let mut enqueue = |id: &Arc<str>| {
                 if !id.is_empty() && seen.insert(Arc::clone(id)) {
@@ -1696,11 +1885,15 @@ impl Session {
                     .is_some_and(|fact| fact.alias_target.is_empty())
             })
             .collect::<Vec<_>>();
+        let reference_changes_exact = reference_changes_exact && trust_changes;
+        // A retained row's references are this table's only where the id was
+        // in the previous reference tier; outside it the row holds none.
         let mut reference_ids = full_ids
             .iter()
             .filter(|id| {
                 !reference_changes_exact
                     || changed_references.contains(*id)
+                    || !self.reference_tier.contains(*id)
                     || table.symbol_fact(id).is_none()
             })
             .cloned()
@@ -1747,7 +1940,7 @@ impl Session {
         }
         if reference_changes_exact {
             for id in &full_ids {
-                if changed_references.contains(id) {
+                if changed_references.contains(id) || !self.reference_tier.contains(id) {
                     continue;
                 }
                 if let Some(retained) = table.symbol_fact(id)
@@ -1768,173 +1961,10 @@ impl Session {
         self.reference_tier = full_ids.into_iter().collect();
         let changed = table.replace_symbols(facts);
         self.rebuild_symbol_path_index(table);
+        // The next table is patched from this closure when the producer names
+        // its changes exactly.
+        self.closure_index = closure::ClosureIndex::build(table, reference_locations);
         Ok(changed)
-    }
-
-    fn patch_stable_symbols(
-        &mut self,
-        table: &mut FactTable,
-        state_token: &str,
-        prefetched: Option<&Response>,
-    ) -> Result<Option<Vec<String>>, SessionError> {
-        let invalidated = self.invalidated_symbol_ids();
-        let owned_response;
-        let response = if let Some(response) = prefetched {
-            response
-        } else {
-            let mut probe = request(Operation::Symbols, &self.project_id, self.generation);
-            probe.state_token = state_token.to_owned();
-            probe.reference_changes = true;
-            probe.symbol_queries = invalidated
-                .iter()
-                .map(|id| SymbolQuery {
-                    id: Arc::clone(id),
-                    references: false,
-                    references_only: false,
-                })
-                .collect();
-            owned_response = self.exchange_once(&mut probe)?;
-            &owned_response
-        };
-        if !response.reference_changes_exact {
-            return Ok(None);
-        }
-        if response.symbol_evidence.len() != invalidated.len() {
-            return Err(SessionError::InvalidResponse(format!(
-                "stable symbol oracle returned {} rows for {} queries",
-                response.symbol_evidence.len(),
-                invalidated.len()
-            )));
-        }
-        let invalidated_set = invalidated.iter().cloned().collect::<HashSet<_>>();
-        let mut patches = HashMap::<Arc<str>, crate::SymbolFact>::new();
-        for mut fact in response.symbol_evidence.iter().cloned() {
-            let expected = Arc::clone(&fact.id);
-            if !invalidated_set.contains(&expected) {
-                return Err(SessionError::InvalidResponse(format!(
-                    "stable symbol oracle returned unexpected row {:?}",
-                    fact.id
-                )));
-            }
-            let retained = table.symbol_fact(&expected).ok_or_else(|| {
-                SessionError::InvalidResponse(format!("retained symbol {expected:?} disappeared"))
-            })?;
-            if fact.alias_target != retained.alias_target {
-                return Ok(None);
-            }
-            fact.references = retained.references;
-            patches.insert(expected, fact);
-        }
-        let mut refresh = response
-            .changed_reference_symbols
-            .iter()
-            .filter(|&id| self.reference_tier.contains(id) && table.symbol(id).is_some())
-            .cloned()
-            .collect::<Vec<_>>();
-        refresh.sort();
-        refresh.dedup();
-        let mut released = prefetched.is_some();
-        let mut reference_patches = Vec::new();
-        if !response.reference_evidence.is_empty() {
-            let eligible = refresh.iter().cloned().collect::<HashSet<_>>();
-            for fact in &response.reference_evidence {
-                if eligible.contains(&fact.id) && fact.alias_target.is_empty() {
-                    reference_patches.push(fact.clone());
-                }
-            }
-            let covered = reference_patches
-                .iter()
-                .map(|fact| Arc::clone(&fact.id))
-                .collect::<HashSet<_>>();
-            refresh.retain(|id| !covered.contains(id));
-        }
-        if !refresh.is_empty() {
-            let mut request = request(Operation::Symbols, &self.project_id, self.generation);
-            request.state_token = state_token.to_owned();
-            request.symbol_queries = refresh
-                .iter()
-                .map(|id| SymbolQuery {
-                    id: Arc::clone(id),
-                    references: true,
-                    references_only: false,
-                })
-                .collect();
-            request.release_analysis = true;
-            let response = self.exchange_once(&mut request)?;
-            released = true;
-            if response.symbol_evidence.len() != refresh.len() {
-                return Err(SessionError::InvalidResponse(format!(
-                    "stable reference oracle returned {} rows for {} queries",
-                    response.symbol_evidence.len(),
-                    refresh.len()
-                )));
-            }
-            for (expected, fact) in refresh.into_iter().zip(response.symbol_evidence) {
-                if fact.id != expected || !fact.alias_target.is_empty() {
-                    return Err(SessionError::InvalidResponse(format!(
-                        "stable reference oracle returned invalid row for {expected:?}"
-                    )));
-                }
-                patches.insert(expected, fact);
-            }
-        }
-        for id in &invalidated_set {
-            if let Some(previous) = table.symbol_fact(id) {
-                for declaration in previous.declarations.iter() {
-                    let path = declaration.location.path.as_ref();
-                    if let Some(ids) = self.symbols_by_path.get_mut(path) {
-                        ids.retain(|candidate| candidate != id);
-                        if ids.is_empty() {
-                            self.symbols_by_path.remove(path);
-                        }
-                    }
-                }
-            }
-        }
-        let structural = patches
-            .values()
-            .filter(|fact| invalidated_set.contains(&fact.id))
-            .cloned()
-            .collect::<Vec<_>>();
-        let mut changed = table.patch_symbols(patches.into_values().collect());
-        let mut reference_paths = self.affected_paths.iter().cloned().collect::<Vec<_>>();
-        reference_paths.sort();
-        for fact in reference_patches {
-            if table.patch_reference_paths(&fact.id, &reference_paths, &fact.references) {
-                changed.push(fact.id.to_string());
-            }
-        }
-        changed.sort();
-        changed.dedup();
-        for fact in structural {
-            for declaration in fact.declarations.iter() {
-                let ids = self
-                    .symbols_by_path
-                    .entry(Arc::clone(&declaration.location.path))
-                    .or_default();
-                if !ids.contains(&fact.id) {
-                    ids.push(Arc::clone(&fact.id));
-                }
-            }
-        }
-        if !released {
-            let mut release = request(Operation::Symbols, &self.project_id, self.generation);
-            release.state_token = state_token.to_owned();
-            release.release_analysis = true;
-            self.exchange_once(&mut release)?;
-        }
-        Ok(Some(changed))
-    }
-
-    fn invalidated_symbol_ids(&self) -> Vec<Arc<str>> {
-        self.affected_paths
-            .iter()
-            .filter_map(|path| self.symbols_by_path.get(path.as_str()))
-            .flatten()
-            .cloned()
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect()
     }
 
     fn rebuild_symbol_path_index(&mut self, table: &FactTable) {
@@ -2012,6 +2042,7 @@ impl Session {
             SessionError::ProducerProvenance("producer restart epoch overflow".into())
         })?;
         self.generation = 1;
+        self.last_update_graph = None;
         self.clear_retained_state();
         let mut open = request(Operation::Open, &self.project_id, 1);
         self.exchange_once(&mut open)?;
@@ -2028,9 +2059,11 @@ impl Session {
         self.state_token.clear();
         self.retained_demands.clear();
         self.retained_table = None;
-        self.affected_paths.clear();
         self.reference_tier.clear();
         self.symbols_by_path.clear();
+        self.closure_index = None;
+        self.retained_reference_locations.clear();
+        self.reference_locations_valid = false;
     }
 
     fn ensure_open(&self) -> Result<(), SessionError> {
@@ -2109,9 +2142,12 @@ fn exchange_timings(response: &Response) -> ExchangeTimings {
         server_retained_files: server.retained_files,
         server_recomputed_files: server.recomputed_files,
         server_non_durable_files: server.non_durable_files,
+        client_close_symbols: Duration::ZERO,
+        client_closure_patched: false,
     }
 }
 
+#[cfg(test)]
 fn prepare_analyze_response(
     response: &Response,
     expected_project: &str,
@@ -2119,6 +2155,25 @@ fn prepare_analyze_response(
     retained: &mut Option<FactTable>,
     retained_state_token: &str,
 ) -> Result<(FactTable, TableChanges), SessionError> {
+    prepare_analyze_response_mode(
+        response,
+        expected_project,
+        expected_generation,
+        retained,
+        retained_state_token,
+    )
+    .map(|(table, changes, _)| (table, changes))
+}
+
+/// [`prepare_analyze_response`], and whether the candidate was derived from
+/// the retained table (a reuse or a delta) rather than replaced whole.
+fn prepare_analyze_response_mode(
+    response: &Response,
+    expected_project: &str,
+    expected_generation: u64,
+    retained: &mut Option<FactTable>,
+    retained_state_token: &str,
+) -> Result<(FactTable, TableChanges, bool), SessionError> {
     if response.schema != v3::TYPE_FACTS_SCHEMA_V1 {
         return Err(SessionError::InvalidResponse(format!(
             "response schema is {}, expected {}",
@@ -2157,6 +2212,7 @@ fn prepare_analyze_response(
                 unchanged: true,
                 ..TableChanges::default()
             },
+            true,
         ));
     }
 
@@ -2171,7 +2227,10 @@ fn prepare_analyze_response(
         ));
     }
     match transition.mode {
-        TransitionMode::Full => Ok(materialize_full_transition(transition)),
+        TransitionMode::Full => {
+            let (table, changes) = materialize_full_transition(transition);
+            Ok((table, changes, false))
+        }
         TransitionMode::Delta => {
             let retained_table = retained.as_ref().ok_or_else(|| {
                 SessionError::InvalidResponse("delta transition has no retained table".into())
@@ -2188,8 +2247,64 @@ fn prepare_analyze_response(
             validate_table_transition_application(retained_table, &transition)?;
             let changes = table_changes_against(retained_table, &transition);
             let candidate = retained_table.apply_delta(transition);
-            Ok((candidate, changes))
+            Ok((candidate, changes, true))
         }
+    }
+}
+
+/// `TYPEFACTS_VERIFY_SYMBOL_PATCH=1`: every patched symbol closure is
+/// compared with a full one from the same table (tests and fuzz); a mismatch
+/// is also appended to `TYPEFACTS_VERIFY_SYMBOL_PATCH_LOG`.
+fn verify_symbol_patch() -> bool {
+    static VERIFY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *VERIFY.get_or_init(|| {
+        std::env::var_os("TYPEFACTS_VERIFY_SYMBOL_PATCH").is_some_and(|value| value == "1")
+    })
+}
+
+/// A patched symbol closure differed from the full one: reported, and the
+/// full one is served; a test build panics.
+fn symbol_patch_mismatch(
+    patched: &FactTable,
+    fresh: &FactTable,
+    patched_changes: &[String],
+    fresh_changes: &[String],
+    parts: &str,
+) {
+    let first = patched
+        .symbols()
+        .zip(fresh.symbols())
+        .find(|(left, right)| {
+            left.id() != right.id()
+                || left.alias_target() != right.alias_target()
+                || left.declarations() != right.declarations()
+                || !left.references().eq(right.references())
+        })
+        .map(|(left, right)| format!("{left:?} != {right:?}"));
+    let message =
+        format!(
+            "Type Facts symbol patch mismatch (served the full closure): {parts}; {} vs {} rows; changes {} vs {}; first {}",
+            patched.symbol_count(),
+            fresh.symbol_count(),
+            patched_changes.len(),
+            fresh_changes.len(),
+            first.unwrap_or_else(
+                || "row sets agree (tier, path index or change list differ)".to_owned()
+            )
+        );
+    eprintln!("{message}");
+    // A daemon's stderr goes nowhere: the edit harness reads this file.
+    if let Some(path) = std::env::var_os("TYPEFACTS_VERIFY_SYMBOL_PATCH_LOG")
+        && let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+    {
+        use std::io::Write as _;
+        let _ = writeln!(file, "{message}");
+    }
+    if cfg!(test) {
+        panic!("{message}");
     }
 }
 
@@ -2216,6 +2331,7 @@ fn table_changes(transition: &WireTableTransition) -> TableChanges {
         && file_paths.is_empty();
     TableChanges {
         unchanged,
+        full: false,
         entity_paths,
         symbol_ids,
         file_paths,
@@ -2256,6 +2372,7 @@ fn table_changes_against(table: &FactTable, transition: &WireTableTransition) ->
     let unchanged = entity_paths.is_empty() && symbol_ids.is_empty() && file_paths.is_empty();
     TableChanges {
         unchanged,
+        full: false,
         entity_paths,
         symbol_ids,
         file_paths,
@@ -2318,7 +2435,9 @@ fn apply_table_transition(
 }
 
 fn materialize_full_transition(transition: WireTableTransition) -> (FactTable, TableChanges) {
-    let changes = table_changes(&transition);
+    let mut changes = table_changes(&transition);
+    changes.full = true;
+    changes.unchanged = false;
     (FactTable::materialize_full(transition), changes)
 }
 
@@ -2390,5 +2509,6 @@ fn terminate_child(child: &mut Child) {
     let _ = child.wait();
 }
 
+mod closure;
 #[cfg(test)]
 mod tests;

@@ -299,7 +299,7 @@ const NATIVE_VALUE_OPTIONS = new Set([
   "--enable-rule", "--host-suppresses", "--format", "--runtime-resolution", "--daemon-runtime",
   "--dependency-source", "--runtime-realm", "--runtime-target", "--runtime-build",
   "--rendering", "--program-boundary", "--runtime-condition", "--runtime-conditions",
-  "--framework-transform"
+  "--framework-transform", "--only-file"
 ]);
 const NATIVE_FLAGS = new Set([
   "--certify", "--internal", "--feedback-facts", "--serve", "--help", "-h", "--no-package-contracts"
@@ -420,9 +420,16 @@ function loadSnapshot(context) {
     .filter(rule => manifestEntriesByRule.get(rule)?.defaultEnabled === false);
   const enableRules = [...new Set([...configuredRules, ...activeDefaultDisabled])].sort();
   const hostSuppressions = [...(hostSuppressedRules.get(contextFilename(context)) ?? [])].sort();
+  // The adapter reports a file's own findings (`projectFindings`), so the
+  // native checker is asked for the ones that can matter to this file alone:
+  // a whole-project report is megabytes to move and parse per linted file.
+  // A custom command is not told, since it may not know the flag.
+  const linted = contextFilename(context);
+  const onlyFile = !config.command && isAbsolute(linted) ? resolve(linted) : null;
   const key = JSON.stringify({
     command,
     commandArgs,
+    onlyFile,
     project,
     dialect,
     presets,
@@ -462,6 +469,7 @@ function loadSnapshot(context) {
     "--format",
     "json"
   ];
+  if (onlyFile) args.push("--only-file", onlyFile);
   if (dialect) args.push("--dialect", dialect);
   if (runtimeResolution === "required") args.push("--runtime-resolution", "required");
   for (const preset of presets) args.push("--preset", preset);

@@ -314,27 +314,125 @@ impl Tables {
     }
 }
 
-/// The symbol of each entity row that has one, by `path:start-end`.
+/// Every symbol id an entity row carries, by where it sits: the row's own
+/// `symbol` by `path:start-end`, and an id inside another column (a resolved
+/// call's target, a parameter's symbol) by `path:start-end` and its JSON
+/// pointer and rank in that string. A `symbols` request names ids the checker
+/// read from any of these, not only from an entity's own symbol.
 fn entity_map(table: &Value) -> HashMap<String, String> {
-    table
+    let mut map = HashMap::new();
+    for row in table
         .get("entities")
         .and_then(Value::as_array)
-        .map(|rows| rows.iter().filter_map(entity_symbol).collect())
-        .unwrap_or_default()
+        .into_iter()
+        .flatten()
+    {
+        let Some(location) = entity_location(row) else {
+            continue;
+        };
+        let Some(columns) = row.as_object() else {
+            continue;
+        };
+        for (column, value) in columns {
+            if column == "location" {
+                continue;
+            }
+            if column == "symbol"
+                && let Some(symbol) = value.as_str()
+            {
+                map.insert(location.clone(), symbol.to_owned());
+                continue;
+            }
+            nested_ids(value, &format!("{location}#/{column}"), &mut map);
+        }
+    }
+    map
 }
 
-/// `(path:start-end, symbol)` of an entity row that has a symbol.
-fn entity_symbol(row: &Value) -> Option<(String, String)> {
+fn nested_ids(value: &Value, pointer: &str, into: &mut HashMap<String, String>) {
+    match value {
+        Value::String(text) => {
+            for (rank, id) in symbol_ids(text).into_iter().enumerate() {
+                into.insert(format!("{pointer}#{rank}"), id.to_owned());
+            }
+        }
+        Value::Array(items) => {
+            for (index, item) in items.iter().enumerate() {
+                nested_ids(item, &format!("{pointer}/{index}"), into);
+            }
+        }
+        Value::Object(map) => {
+            for (key, item) in map {
+                nested_ids(item, &format!("{pointer}/{key}"), into);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Every symbol id inside `text`: `symbol:h:<hex>` or `symbol:<gen>:<n>`.
+fn symbol_ids(text: &str) -> Vec<&str> {
+    const MARK: &str = "symbol:";
+    let mut ids = Vec::new();
+    let mut from = 0;
+    while let Some(found) = text[from..].find(MARK) {
+        let start = from + found;
+        let tail = &text[start + MARK.len()..];
+        let length = if let Some(hex) = tail.strip_prefix("h:") {
+            let digits = hex.bytes().take_while(u8::is_ascii_hexdigit).count();
+            (digits > 0).then_some(2 + digits)
+        } else {
+            let generation = tail.bytes().take_while(u8::is_ascii_digit).count();
+            let rest = &tail[generation..];
+            let counter = rest
+                .strip_prefix(':')
+                .map_or(0, |n| n.bytes().take_while(u8::is_ascii_digit).count());
+            (generation > 0 && counter > 0).then_some(generation + 1 + counter)
+        };
+        match length {
+            Some(length) => {
+                ids.push(&text[start..start + MARK.len() + length]);
+                from = start + MARK.len() + length;
+            }
+            None => from = start + MARK.len(),
+        }
+    }
+    ids
+}
+
+/// Each row's alias target by id, from a `symbols` answer (packed or not);
+/// `None` for an answer that is not one.
+fn symbol_answer_rows(response: &Response) -> Option<HashMap<String, String>> {
+    if !response.ok {
+        return None;
+    }
+    let rows = if response.table_transition.is_empty() {
+        serde_json::to_value(&response.symbol_evidence).ok()?
+    } else {
+        symbol_table_rows(response).ok()?
+    };
+    Some(
+        rows.as_array()?
+            .iter()
+            .filter_map(|row| {
+                Some((
+                    row.get("id")?.as_str()?.to_owned(),
+                    row.get("aliasTarget")?.as_str()?.to_owned(),
+                ))
+            })
+            .filter(|(_, target)| !target.is_empty())
+            .collect(),
+    )
+}
+
+/// `path:start-end` of an entity row.
+fn entity_location(row: &Value) -> Option<String> {
     let location = row.get("location")?;
-    let symbol = row.get("symbol")?.as_str()?;
-    Some((
-        format!(
-            "{}:{}-{}",
-            location.get("path")?.as_str()?,
-            location.get("startByte")?,
-            location.get("endByte")?
-        ),
-        symbol.to_owned(),
+    Some(format!(
+        "{}:{}-{}",
+        location.get("path")?.as_str()?,
+        location.get("startByte")?,
+        location.get("endByte")?
     ))
 }
 
@@ -349,21 +447,54 @@ pub struct IdMap {
 impl IdMap {
     pub fn reconcile(&mut self, recorded: &Tables, replayed: &Tables) {
         for (location, recorded_id) in &recorded.entities {
-            if !recorded_id.starts_with("symbol:") || self.ambiguous.contains(recorded_id) {
-                continue;
+            if let Some(replayed_id) = replayed.entities.get(location) {
+                self.pair(recorded_id, replayed_id);
             }
-            let Some(replayed_id) = replayed.entities.get(location) else {
+        }
+    }
+
+    /// After a `symbols` exchange: each recorded query id's row is paired
+    /// with the replayed row for the id it was sent as, and the recorded
+    /// row's alias target is mapped to the replayed row's. A checker follows
+    /// alias targets from its own answers, so a later request names an id
+    /// no entity carries.
+    pub fn reconcile_symbols(
+        &mut self,
+        recorded_ids: &[String],
+        recorded: &Response,
+        replayed: &Response,
+    ) {
+        let (Some(recorded_rows), Some(replayed_rows)) =
+            (symbol_answer_rows(recorded), symbol_answer_rows(replayed))
+        else {
+            return;
+        };
+        for recorded_id in recorded_ids {
+            let sent = self.map.get(recorded_id).unwrap_or(recorded_id);
+            let (Some(old), Some(new)) = (recorded_rows.get(recorded_id), replayed_rows.get(sent))
+            else {
                 continue;
             };
-            match self.map.get(recorded_id) {
-                Some(known) if known != replayed_id => {
-                    self.map.remove(recorded_id);
-                    self.ambiguous.insert(recorded_id.clone());
-                }
-                Some(_) => {}
-                None => {
-                    self.map.insert(recorded_id.clone(), replayed_id.clone());
-                }
+            self.pair(old, new);
+        }
+    }
+
+    fn pair(&mut self, recorded_id: &str, replayed_id: &str) {
+        if !recorded_id.starts_with("symbol:")
+            || replayed_id.is_empty()
+            || self.ambiguous.contains(recorded_id)
+        {
+            return;
+        }
+        match self.map.get(recorded_id) {
+            Some(known) if known != replayed_id => {
+                self.map.remove(recorded_id);
+                self.ambiguous.insert(recorded_id.to_owned());
+            }
+            Some(_) => {}
+            None => {
+                self.map
+                    .insert(recorded_id.to_owned(), replayed_id.to_owned());
             }
         }
     }
@@ -566,6 +697,80 @@ mod tests {
                 "symbol:h:bbbbbbbbbbbbbbbbbbbbbbbb",
                 "symbol:h:cccccccccccccccccccccccc"
             ]
+        );
+    }
+
+    #[test]
+    fn an_id_seen_only_inside_a_resolved_call_is_translated_by_its_place_there() {
+        let call = |target: &str, parameter: &str| {
+            json!({"entities": [{
+                "location": {"path": "/p/a.ts", "startByte": 3, "endByte": 8},
+                "resolvedCall": {
+                    "target": target,
+                    "arguments": [{"parameter": {"symbol": format!("text {parameter}")}}],
+                },
+            }]})
+        };
+        let recorded = Tables {
+            entities: entity_map(&call("symbol:h:aaaaaaaaaaaaaaaaaaaaaaaa", "symbol:1:12")),
+            ..Tables::default()
+        };
+        let replayed = Tables {
+            entities: entity_map(&call("symbol:h:bbbbbbbbbbbbbbbbbbbbbbbb", "symbol:1:6")),
+            ..Tables::default()
+        };
+        let mut map = IdMap::default();
+        map.reconcile(&recorded, &replayed);
+        let mut request: Request = serde_json::from_value(json!({
+            "schema": 1, "operation": "symbols", "projectId": "p", "requestId": 4, "generation": 1,
+            "symbolQueries": [{"id": "symbol:h:aaaaaaaaaaaaaaaaaaaaaaaa"}, {"id": "symbol:1:12"}]
+        }))
+        .unwrap();
+        assert_eq!(map.translate(&mut request), 2);
+        let ids: Vec<&str> = request
+            .symbol_queries
+            .iter()
+            .map(|q| q.id.as_ref())
+            .collect();
+        assert_eq!(ids, ["symbol:h:bbbbbbbbbbbbbbbbbbbbbbbb", "symbol:1:6"]);
+    }
+
+    #[test]
+    fn an_alias_target_learned_from_a_symbols_answer_is_translated_by_its_row() {
+        let answer = |id: &str, target: &str| -> Response {
+            serde_json::from_value(json!({
+                "schema": 1, "requestId": 3, "projectId": "p", "generation": 1, "ok": true,
+                "symbolEvidence": [{"id": id, "aliasTarget": target}],
+            }))
+            .unwrap()
+        };
+        let mut map = IdMap::default();
+        map.reconcile(
+            &tables(&[("/p/a.ts", 1, "symbol:h:aaaaaaaaaaaaaaaaaaaaaaaa")]),
+            &tables(&[("/p/a.ts", 1, "symbol:h:bbbbbbbbbbbbbbbbbbbbbbbb")]),
+        );
+        // The recorded query was sent as the replayed id, so the two rows
+        // pair, and with them their alias targets.
+        map.reconcile_symbols(
+            &["symbol:h:aaaaaaaaaaaaaaaaaaaaaaaa".to_owned()],
+            &answer(
+                "symbol:h:aaaaaaaaaaaaaaaaaaaaaaaa",
+                "symbol:h:cccccccccccccccccccccccc",
+            ),
+            &answer(
+                "symbol:h:bbbbbbbbbbbbbbbbbbbbbbbb",
+                "symbol:h:dddddddddddddddddddddddd",
+            ),
+        );
+        let mut request: Request = serde_json::from_value(json!({
+            "schema": 1, "operation": "symbols", "projectId": "p", "requestId": 4, "generation": 1,
+            "symbolQueries": [{"id": "symbol:h:cccccccccccccccccccccccc"}]
+        }))
+        .unwrap();
+        assert_eq!(map.translate(&mut request), 1);
+        assert_eq!(
+            request.symbol_queries[0].id.as_ref(),
+            "symbol:h:dddddddddddddddddddddddd"
         );
     }
 

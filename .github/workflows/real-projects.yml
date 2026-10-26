@@ -1,0 +1,148 @@
+name: Real-project edits
+
+# What users wait on: a CLI check with the retained daemon after one edit, on
+# real Solid 2 projects, timed for the merge base and the head interleaved on
+# this one runner (ADR 0423). The gate is the paired median head/base ratio per
+# project and edit kind; benchmarks/lib/real-projects.mjs holds it.
+on:
+  pull_request:
+    paths:
+      - "rust/**"
+      - "apps/**"
+      - "**/Cargo.lock"
+      - "benchmarks/**"
+      - ".github/workflows/real-projects.yml"
+  # Main measures nothing: it publishes its own runtime and the prepared
+  # projects, the caches every pull request reads.
+  push:
+    branches: [main]
+    paths:
+      - "rust/**"
+      - "apps/**"
+      - "**/Cargo.lock"
+      - "benchmarks/**"
+      - ".github/workflows/real-projects.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  edits:
+    name: Real-project edit latency
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      # app-game's daemon and Type Facts child peaked at 3.2 GiB (polled every
+      # 50 ms over a cold start and twelve edits, macOS arm64). The default
+      # ceiling on a 16 GB runner is 15% of memory, about 2.4 GiB, and an
+      # evicted daemon answers one-shot, which the gate refuses. The limit is a
+      # ceiling, not a reservation: base and head together peak near 6.4 GiB.
+      SOLID_CHECKER_DAEMON_MAX_RSS_MB: "8192"
+      PREPARED: /tmp/real-projects
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The merge base is built in a worktree.
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          shared-key: real-projects
+          # A pull request's cache scope is unreadable from main, and writing it
+          # evicts the entries on main that every run restores from.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: ./.github/actions/typefacts
+
+      - id: base
+        if: github.event_name != 'push'
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base=$(git merge-base HEAD "origin/${{ github.base_ref }}")
+          else
+            base=$(git merge-base HEAD origin/main)
+            if [ "$base" = "$(git rev-parse HEAD)" ]; then base=$(git rev-parse HEAD^); fi
+          fi
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+
+      # The prepared projects (clone at the pinned commit, patch, install,
+      # verify), keyed on what prepares them. Restored everywhere, saved only
+      # from main. The prepare step re-verifies a restored tree.
+      - id: projects
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/real-projects
+          key: real-projects-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('benchmarks/real-projects/**', 'benchmarks/real-projects-prepare.mjs', 'benchmarks/lib/real-projects.mjs') }}
+      - name: Prepare the real projects
+        run: bun benchmarks/real-projects-prepare.mjs --root "$PREPARED"
+      - name: Publish the prepared projects
+        if: github.ref == 'refs/heads/main' && steps.projects.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/real-projects
+          key: ${{ steps.projects.outputs.cache-primary-key }}
+
+      - name: Build the head runtime
+        run: |
+          cargo build --release --manifest-path rust/Cargo.toml \
+            -p solid-facts-backend --bin solid-checker-rust
+          runtime=/tmp/real-runtime/${{ github.sha }}
+          mkdir -p "$runtime"
+          cp rust/target/release/solid-checker-rust bin/solid-typefacts "$runtime/"
+
+      # A runtime is the checker paired with the producer its commit pinned,
+      # cached under the commit sha: main publishes each of its own, and a pull
+      # request restores its merge base's. The directory carries the sha
+      # because a cache entry restores to the path it was archived from.
+      - name: Publish this commit's runtime as a future base
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/real-runtime/${{ github.sha }}
+          key: real-runtime-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+
+      - id: base-runtime
+        if: github.event_name != 'push'
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/real-runtime/${{ steps.base.outputs.sha }}
+          key: real-runtime-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.base.outputs.sha }}
+
+      # On a miss the base is built in a worktree whose target directories are
+      # the head's, so the dependency builds restored above are reused.
+      - name: Build the merge-base runtime
+        if: github.event_name != 'push' && steps.base-runtime.outputs.cache-hit != 'true'
+        run: |
+          git worktree add /tmp/real-base "${{ steps.base.outputs.sha }}"
+          mkdir -p rust/target apps/solid-typefacts/target
+          ln -s "$GITHUB_WORKSPACE/rust/target" /tmp/real-base/rust/target
+          ln -s "$GITHUB_WORKSPACE/apps/solid-typefacts/target" /tmp/real-base/apps/solid-typefacts/target
+          cd /tmp/real-base
+          TYPEFACTS_BUILD_ID=dev scripts/build-typefacts.sh
+          cargo build --release --manifest-path rust/Cargo.toml \
+            -p solid-facts-backend --bin solid-checker-rust
+          runtime=/tmp/real-runtime/${{ steps.base.outputs.sha }}
+          mkdir -p "$runtime"
+          cp rust/target/release/solid-checker-rust bin/solid-typefacts "$runtime/"
+
+      - name: Time edits against the merge base
+        if: github.event_name != 'push'
+        run: |
+          bun benchmarks/real-projects.mjs \
+            --base "/tmp/real-runtime/${{ steps.base.outputs.sha }}" \
+            --head "/tmp/real-runtime/${{ github.sha }}" \
+            --root "$PREPARED" --n 9 \
+            --out "$RUNNER_TEMP/real-projects.jsonl" \
+            --summary "$GITHUB_STEP_SUMMARY"
+      - if: always() && github.event_name != 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-projects-timings
+          path: ${{ runner.temp }}/real-projects.jsonl
+          if-no-files-found: ignore
