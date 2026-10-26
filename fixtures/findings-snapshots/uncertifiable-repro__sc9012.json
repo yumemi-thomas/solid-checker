@@ -327,8 +327,18 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-mutation-client.tsx",
-      "start": 1070,
-      "end": 1073,
+      "start": 1187,
+      "end": 1194,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-new-instance.tsx",
+      "start": 900,
+      "end": 905,
       "fixes": 0
     },
     {

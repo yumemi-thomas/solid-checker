@@ -77,8 +77,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/other-rules/src/return-branches-on-prop.tsx",
-      "start": 351,
-      "end": 386,
+      "start": 793,
+      "end": 828,
       "fixes": 0
     }
   ]

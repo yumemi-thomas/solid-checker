@@ -2767,6 +2767,94 @@ const unparenthesized = (node) => {
   return node;
 };
 
+/** The expressions a function returns (an expression body, or the `return`s of its own body). */
+function returnedExpressions(fn) {
+  if (!fn.body) return [];
+  if (!ts.isBlock(fn.body)) return [fn.body];
+  const found = [];
+  const visit = (node) => {
+    if (isFunction(node) || ts.isClassLike(node)) return;
+    if (ts.isReturnStatement(node) && node.expression) found.push(node.expression);
+    ts.forEachChild(node, visit);
+  };
+  visit(fn.body);
+  return found;
+}
+
+/** The value a property of an object literal holds, or null when the literal has no plain property of that name (a spread, a computed name, a missing one). */
+function literalProperty(literal, name) {
+  if (literal.properties.some((property) => ts.isSpreadAssignment(property))) return null;
+  for (const property of literal.properties) {
+    if (property.name && (ts.isIdentifier(property.name) || ts.isStringLiteralLike(property.name)) && property.name.text === name) {
+      return ts.isPropertyAssignment(property) ? property.initializer : property;
+    }
+  }
+  return null;
+}
+
+/**
+ * The structure of an event handler read from a member that is not a member of
+ * `props` (`workspace.undo`), by TypeScript's resolution of how the object
+ * comes to be. A member of a project function's result is `factory-member`
+ * when every return of that function is an object literal that holds the
+ * member as a function written in the project, else the result's
+ * `other-member:factory-returns-<origins>`; any other object takes its own
+ * origin (`other-member:member-of-parameter`). The member must be a function the
+ * literal writes (a method, or a name bound to a function in the project):
+ * one the factory takes from another call (`other-member:factory-member-<origin>`)
+ * is another construct.
+ */
+function handlerMemberCause(project, site) {
+  const origin = valueOrigin(project, site);
+  if (origin !== "member-of-call-project") return `other-member:${origin}`;
+  const path = [];
+  let root = unparenthesized(site);
+  while (ts.isPropertyAccessExpression(root)) {
+    path.unshift(root.name.text);
+    root = unparenthesized(root.expression);
+  }
+  const unread = `other-member:${origin}`;
+  if (!ts.isIdentifier(root)) return unread;
+  let declaration = project.symbol(root)?.declarations?.[0];
+  while (declaration && ts.isBindingElement(declaration)) declaration = declaration.parent?.parent;
+  if (!declaration || !ts.isVariableDeclaration(declaration) || !declaration.initializer) return unread;
+  let call = unparenthesized(declaration.initializer);
+  if (ts.isAwaitExpression(call)) call = unparenthesized(call.expression);
+  if (!ts.isCallExpression(call)) return unread;
+  const callee = resolveCallee(project, call);
+  if (!callee.fn) return unread;
+  const returned = returnedExpressions(callee.fn).map(unparenthesized);
+  if (!returned.length) return unread;
+  // The member's value where the literal writes it: a method, or a name or expression whose origin is a function written in the project.
+  const memberValue = (expression, names) => {
+    if (!ts.isObjectLiteralExpression(expression)) return null;
+    const property = literalProperty(expression, names[0]);
+    if (!property) return null;
+    if (names.length > 1) return memberValue(unparenthesized(ts.isShorthandPropertyAssignment(property) ? property.name : property), names.slice(1));
+    if (ts.isMethodDeclaration(property)) return "function-literal";
+    if (!ts.isShorthandPropertyAssignment(property)) return valueOrigin(project, property);
+    const bound = project.checker.getShorthandAssignmentValueSymbol(property)?.declarations?.[0];
+    return declarationOrigin(project, bound, false, 0);
+  };
+  const values = returned.map((expression) => memberValue(expression, path));
+  if (values.every((value) => value === "function-literal" || value === "function-declaration")) return "factory-member";
+  if (values.every((value) => value !== null)) return `other-member:factory-member-${[...new Set(values)].sort().join("+")}`;
+  return `other-member:factory-returns-${[...new Set(returned.map((expression) => valueOrigin(project, expression)))].sort().join("+")}`;
+}
+
+/**
+ * What the argument a project-declared member is called on (in the callee, by
+ * `memberCause`) is, by TypeScript's resolution of how its value comes to be:
+ * `member-of-call-project` (`kui.api`, a member of a project function's
+ * result), `new-project` (an instance built with `new` of a project class),
+ * a parameter, a literal, a package function's result, and so on.
+ */
+function projectTypeCause(project, site, message) {
+  const slot = resultCall(site, message);
+  const argument = slot && slot.index >= 0 ? slot.call.arguments[slot.index] : null;
+  return argument ? valueOrigin(project, argument) : "no-argument";
+}
+
 /** What the callee `fn` resolved from a call is: its resolved body, or why there is none. */
 function calleeBodyOrReason(project, call) {
   const callee = resolveCallee(project, call);
@@ -3033,7 +3121,7 @@ function constructsEventTarget(project, receiver, depth = 0) {
 
 
 /** The structure segment of an SC9012 label: the mechanism the old reading's label stood for, split where it joined several. */
-function sc9012Structure(project, finding, site, family, context) {
+function sc9012Structure(project, finding, site, family, context, open) {
   const message = finding.message;
   if (family === "leaf-callback-body") return leafCalleeCause(project, site);
   if (family === "runtime-target-unselected" && context === "computed-call-target-unresolved") return computedTargetCause(project, site, enclosingFunction(site));
@@ -3042,10 +3130,16 @@ function sc9012Structure(project, finding, site, family, context) {
   if (context === "parameter-member-target-unresolved" || context === "exported-parameter-member-dispatch") {
     if (context === "exported-parameter-member-dispatch" && family === "parameter-member-call") return exportedKind(project, site);
     const old = parameterMemberCause(project, site, message);
-    return family === "parameter-member-call" && ["project-type", "member-not-in-callee", "callee-unresolved"].includes(old) ? memberCause(project, old, site, message) : old;
+    const caused = family === "parameter-member-call" && ["project-type", "member-not-in-callee", "callee-unresolved"].includes(old) ? memberCause(project, old, site, message) : old;
+    return caused === "project-type" && !open ? `${caused}/${projectTypeCause(project, site, message)}` : caused;
   }
   if (context === "parameter-use-unmodeled") {
     const kind = argumentKinds(project, site, message);
+    if (kind === "typed-primitive-argument" && !open) {
+      // A primitive proven by its type only is held by what the parameter does with it: wrapped in a literal that is handed on, or handed on whole.
+      const use = unmodeledUse(project, site);
+      return use.startsWith("wrapped:") ? `${kind}/wrapped/${use.slice("wrapped:".length)}` : `${kind}/${use}`;
+    }
     return kind === "object-argument" ? `${kind}/${unmodeledUse(project, site)}` : kind;
   }
   if (family === "parameter-member-call" && context === "parameter-member-path-unresolved") return pathCause(project, site, message);
@@ -3148,7 +3242,7 @@ export function classify(project, finding, file, { vetoed, open = false }, entry
     const escape = context.startsWith("parameter-") || context === "exported-parameter-member-dispatch" ? componentEscape(project, fn) : null;
     const component = escape ? enclosingComponent(fn) : null;
     if (escape && flaggedArguments(site).some((argument) => readsParameterOf(project, argument, component))) structure = `escaped-component:${escape}`;
-    else structure = sc9012Structure(project, finding, site, family, context);
+    else structure = sc9012Structure(project, finding, site, family, context, open);
   } else if (rule === "SC7007") {
     structure = family === "server-function-argument" ? serverArgumentCause(project, site) : "";
   } else if (rule === "SC1003" || rule === "SC1004" || rule === "SC5003") {
@@ -3164,7 +3258,7 @@ export function classify(project, finding, file, { vetoed, open = false }, entry
       structure = /^props$/.test(name) ? "props" : spreadOperand(project, site);
     } else if (context === "handler-member-unresolved") {
       const name = finding.message.match(/hands (.*?) to an element/s)?.[1] ?? "";
-      structure = /^_?props\.[\w$]+$/.test(name) ? "props-member" : "other-member";
+      structure = /^_?props\.[\w$]+$/.test(name) ? "props-member" : open ? "other-member" : handlerMemberCause(project, site);
     } else if (open && family === "exported-function-callers") {
       // A call that needs an owner (`useContext`, `onCleanup`), or a callback
       // whose returned cleanup needs one (`onSettled(() => ...)`).

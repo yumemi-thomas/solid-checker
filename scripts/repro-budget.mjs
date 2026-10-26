@@ -40,7 +40,10 @@ export const BUDGETS = {
     // 149 files and 2_849 lines at 139 cases (97.4% of the corpus's results).
     // Raised from 160 and 3_000 when mixed labels were split into one case per
     // mechanism (ADR 0406): 177 files and 3_390 lines at 167 cases.
-    uncertifiable: { files: 180, lines: 3_400 },
+    // Raised from 3_400 lines when three buckets an independent review found
+    // mixed were split (a factory-result handler member, a `new` instance
+    // handed to a project method): 179 files and 3_446 lines at 169 cases.
+    uncertifiable: { files: 180, lines: 3_450 },
     violation: { files: 16, lines: 400 },
     clean: { files: 16, lines: 400 },
   },

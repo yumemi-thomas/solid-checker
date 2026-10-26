@@ -5,7 +5,7 @@
   "manifest": "scripts/corpus/rc17-manifest.json",
   "sweep": "release checker at f405f2cff (the spread fix), browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui); veto attribution from a veto-off sweep (ADR 0405)",
   "results": 6717,
-  "reproduced": 4520
+  "reproduced": 4433
  },
  "cases": [
   {
@@ -649,14 +649,14 @@
     "src/param-use-primitive.tsx"
    ],
    "causes": [
-    "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument"
+    "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/wrapped"
    ],
    "expect": [
     {
      "rule": "SC9012",
      "family": "runtime-target-unselected",
      "context": "parameter-use-unmodeled",
-     "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument"
+     "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/wrapped/object:argument:function-project"
     }
    ],
    "source": {
@@ -666,8 +666,8 @@
     "commit": "992d406ed4a9eca3a57973ec7d13ec4b0ccbd00e"
    },
    "status": "uncertifiable",
-   "labelWeight": 150,
-   "sites": 92,
+   "labelWeight": 110,
+   "sites": 68,
    "verification": {
     "samples": [
      {
@@ -677,7 +677,7 @@
       "rule": "SC9012",
       "verdict": "same",
       "mechanism": "typed-primitive-argument-wrapped-in-literal",
-      "note": "download(filename, text, type) (TopicsRoute.tsx:351-352) wraps text and type into `new Blob([text], { type })`; the argument topicsCsv(rows) is a typed string (not a literal), the case's shape (primitive parameter wrapped in a literal passed to a call)."
+      "note": "download(filename, text, type) (TopicsRoute.tsx:351) wraps text in the array literal [text] handed to new Blob; the argument topicsCsv(rows) is a typed string. An array literal, not an object: a probe on the set (a temporary file, removed) shows the checker flags an array wrapper handed to a library constructor exactly as an object one."
      },
      {
       "app": "inferay",
@@ -686,7 +686,7 @@
       "rule": "SC9012",
       "verdict": "same",
       "mechanism": "typed-primitive-argument-wrapped-in-literal",
-      "note": "dispatchCreateAgentChat(target) (shared/lib/dom.tsx:400-405) wraps its string-union parameter in `{ target }` handed to dispatchWindowEvent; argument is a typed parameter."
+      "note": "dispatchCreateAgentChat(target) (shared/lib/dom.tsx:400-405) wraps its string-union parameter in { target } handed to the project function dispatchWindowEvent: the case's shape."
      },
      {
       "app": "kui",
@@ -695,7 +695,7 @@
       "rule": "SC9012",
       "verdict": "same",
       "mechanism": "typed-primitive-argument-wrapped-in-literal",
-      "note": "fetchSchema(api, clusterId, subject, version) (feature-schemas/src/data.ts:217-226) wraps three string parameters in `{ params: { path: { clusterId, subject, version } } }` handed to api.get; arguments are typed strings (props.clusterId, props.subject, version()). The shown .get message is the other result at this line."
+      "note": "fetchSchema(api, clusterId, subject, version) (feature-schemas data.ts:217-226) wraps subject and version in { params: { path: { clusterId, subject, version } } } handed to api.get (a project interface member); arguments props.subject and version() are typed strings."
      },
      {
       "app": "error-menu-web",
@@ -704,20 +704,20 @@
       "rule": "SC9012",
       "verdict": "same",
       "mechanism": "typed-primitive-argument-wrapped-in-literal",
-      "note": "readProject(projectId: string) (api/projects.ts:24-25) puts the string in { path: { project_id } } for api(...), as the case's readReporting does; the call is in an async closure of the component, the obligation is the argument's use either way."
+      "note": "readProject(projectId) (api/projects.ts:24-25) wraps the string in { path: { project_id: projectId } } for api(...): the case's own shape, from the case's source app."
      },
      {
-      "app": "app-game",
-      "path": "apps/night-defense/src/NightDefenseScene.tsx",
-      "line": 464,
+      "app": "inferay",
+      "path": "src/modules/explorer/components/FileSearch/index.tsx",
+      "line": 38,
       "rule": "SC9012",
       "verdict": "same",
-      "mechanism": "typed-primitive-argument-handed-to-unfollowed-call",
-      "note": "drawTower (NightDefenseScene.tsx:1093) passes numeric parameters x, y whole to graphics.circle/moveTo/roundRect (pixi methods); arguments tower.x/tower.y are typed numbers with no literal proof. The use shape differs from the case's literal wrap, but the missing piece (a typed primitive argument is not proven primitive) is the same. The shown .clear message is the other result."
+      "mechanism": "typed-primitive-argument-wrapped-in-literal",
+      "note": "searchFiles(cwd, query, signal) (explorer/services/explorerApi.ts:4-12) wraps cwd and query in { cwd, q: query, limit } handed to new URLSearchParams; arguments cwd! and text are typed strings. A library constructor in place of the case's project function; a probe on the set shows the same result for it."
      }
     ]
    },
-   "verifiedWeight": 92
+   "verifiedWeight": 68
   },
   {
    "id": "withheld-object-member",
@@ -1438,7 +1438,7 @@
     "src/handler-member.tsx"
    ],
    "causes": [
-    "SC4001/handler-unresolved/handler-member-unresolved"
+    "SC4001/handler-unresolved/handler-member-unresolved/props-member"
    ],
    "expect": [
     {
@@ -1455,8 +1455,8 @@
     "commit": "27e760dc6b155a98b24d83b4d7d75eadb5dcba86"
    },
    "status": "uncertifiable",
-   "labelWeight": 190,
-   "sites": 189,
+   "labelWeight": 146,
+   "sites": 145,
    "verification": {
     "samples": [
      {
@@ -1466,7 +1466,7 @@
       "rule": "SC4001",
       "verdict": "same",
       "mechanism": "props-member-handler",
-      "note": "FrameControls(props: FrameControlsProps) at line 14; onClick={props.onPreviousFrame}, required callback prop typed in FrameControlsProps (line 6). Same construct as the case: a props member used directly as an element event handler."
+      "note": "FrameControls(props: FrameControlsProps) (line 14); onClick={props.onPreviousFrame} at line 23, a required callback prop typed in FrameControlsProps (line 6): a props member used directly as an element handler, as the case."
      },
      {
       "app": "app-game",
@@ -1475,7 +1475,7 @@
       "rule": "SC4001",
       "verdict": "same",
       "mechanism": "props-member-handler",
-      "note": "TopBar(props: {...}) inline props type; onClick={props.optimizeActive} on a <button>, optimizeActive: () => void (line 39). Same construct as the case: a props member used directly as an element event handler."
+      "note": "TopBar(props: {...}) with an inline props type; onClick={props.optimizeActive} on a <button> at line 118, optimizeActive: () => void in that type. A props member used directly as a handler."
      },
      {
       "app": "helge-dev",
@@ -1484,7 +1484,7 @@
       "rule": "SC4001",
       "verdict": "same",
       "mechanism": "props-member-handler",
-      "note": "Hamburger(props: HamburgerProps); onClick={props.onClick} on <button> (eslint-disable comment irrelevant). Same construct as the case: a props member used directly as an element event handler."
+      "note": "Hamburger(props: HamburgerProps); onClick={props.onClick} on a <button> (line 14), onClick: () => void in HamburgerProps. The eslint-disable comment does not change what the checker reads."
      },
      {
       "app": "app-game",
@@ -1493,7 +1493,7 @@
       "rule": "SC4001",
       "verdict": "same",
       "mechanism": "props-member-handler",
-      "note": "Same component as #1; onClick={props.onNextFrame} on <button>. Same construct as the case: a props member used directly as an element event handler."
+      "note": "Same component as the first sample; onClick={props.onNextFrame} on a <button> at line 43, a required callback prop. A props member used directly as a handler."
      },
      {
       "app": "inferay",
@@ -1502,11 +1502,89 @@
       "rule": "SC4001",
       "verdict": "same",
       "mechanism": "props-member-handler",
-      "note": "MarkdownBlock(props: MarkdownEvents & {...}) line 29; onWheel={props.onTableWheel} on a <div>, typed as a required callback prop (line 12). Same construct as the case: a props member used directly as an element event handler."
+      "note": "MarkdownBlock(props: MarkdownEvents & {...}) (line 29); onWheel={props.onTableWheel} on a <div> at line 101, onTableWheel required in MarkdownEvents (line 12). A props member used directly as a handler."
      }
     ]
    },
-   "verifiedWeight": 189
+   "verifiedWeight": 145
+  },
+  {
+   "id": "handler-factory-member",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/handler-factory-member.tsx"
+   ],
+   "causes": [
+    "SC4001/handler-unresolved/handler-member-unresolved/factory-member"
+   ],
+   "expect": [
+    {
+     "rule": "SC4001",
+     "family": "handler-unresolved",
+     "context": "handler-member-unresolved",
+     "cause": "SC4001/handler-unresolved/handler-member-unresolved/factory-member"
+    }
+   ],
+   "source": {
+    "app": "every-deck-of-cards",
+    "path": "src/ExplorerPage.tsx",
+    "line": 68,
+    "commit": "27e760dc6b155a98b24d83b4d7d75eadb5dcba86"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 22,
+   "sites": 22,
+   "verification": {
+    "samples": [
+     {
+      "app": "app-game",
+      "path": "apps/browser-atlas/src/App.tsx",
+      "line": 1101,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "member-of-project-factory-object-literal",
+      "note": "onPointerDown={scrollRestoration.onUserInteraction} (App.tsx:1101); scrollRestoration = createTreeScrollRestoration(...) (App.tsx:721), a project function returning an object literal that writes the method onUserInteraction() (createTreeScrollRestoration.ts:79). Not a prop: the object is a factory result, as in the case."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/ui-components-examples/cloud-storage-tree/FileList.tsx",
+      "line": 202,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "member-of-project-factory-object-literal",
+      "note": "onPointerLeave={longPressHandlers.onPointerLeave} (FileList.tsx:202); createLongPressHandlers (useLongPress.ts:27) returns an object literal that writes the method onPointerLeave(). The return type is annotated with an interface; a probe on the case file with an annotated return gave the same result."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/ui-components-examples/cloud-storage-tree/FileList.tsx",
+      "line": 203,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "member-of-project-factory-object-literal",
+      "note": "onPointerCancel={longPressHandlers.onPointerCancel} (FileList.tsx:203); the same factory result as the previous sample, method onPointerCancel() written in the returned literal."
+     },
+     {
+      "app": "inferay",
+      "path": "src/modules/conversation/components/ChatMessageList/Bubble.tsx",
+      "line": 66,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "member-of-project-factory-object-literal",
+      "note": "onClick={_source.handleCopy} (Bubble.tsx:66); _source = useCopyText(...) (CopyButton.tsx:6), a project function whose returned literal holds handleCopy, a const arrow function written in the factory."
+     },
+     {
+      "app": "app-game",
+      "path": "apps/browser-atlas/src/App.tsx",
+      "line": 1102,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "member-of-project-factory-object-literal",
+      "note": "onKeyDown={scrollRestoration.onUserInteraction} (App.tsx:1102); the same factory result and method as the first sample."
+     }
+    ]
+   },
+   "verifiedWeight": 22
   },
   {
    "id": "handler-spread-rest",
@@ -8104,14 +8182,14 @@
     "src/param-member-mutation-client.tsx"
    ],
    "causes": [
-    "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type"
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/member-of-call-project"
    ],
    "expect": [
     {
      "rule": "SC9012",
      "family": "parameter-member-call",
      "context": "parameter-member-target-unresolved",
-     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type"
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/member-of-call-project"
     }
    ],
    "source": {
@@ -8121,8 +8199,8 @@
     "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
    },
    "status": "uncertifiable",
-   "labelWeight": 137,
-   "sites": 89,
+   "labelWeight": 97,
+   "sites": 49,
    "verification": {
     "samples": [
      {
@@ -8131,8 +8209,8 @@
       "line": 270,
       "rule": "SC9012",
       "verdict": "same",
-      "mechanism": "project-interface-method-called-on-context-client",
-      "note": "fetchClusters(api) calls api.get(..) (feature-clusters data.ts:217) on the project interface KuiApiClient (api/src/client.ts:32); kui.api comes from useKui(), inside a useQuery load callback."
+      "mechanism": "project-interface-method-called-on-hook-returned-client",
+      "note": "load: () => fetchClusters(kui.api) (ClustersRoute.tsx:270) with kui = useKui() (project hook returning the context value); fetchClusters(api: KuiApiClient) calls api.get on the project interface (feature-clusters data.ts:217). The callback is a useQuery load, not a createMutation one; the blocking call is the same."
      },
      {
       "app": "kui",
@@ -8140,8 +8218,8 @@
       "line": 453,
       "rule": "SC9012",
       "verdict": "same",
-      "mechanism": "project-interface-method-called-on-context-client",
-      "note": "fetchTopicStatistics (feature-topics data.ts:350) calls api.get(..) on KuiApiClient, inside a useQuery load callback."
+      "mechanism": "project-interface-method-called-on-hook-returned-client",
+      "note": "fetchTopicStatistics(kui.api, ...) (TopicsRoute.tsx:453) with kui = useKui(); the callee calls api.get on KuiApiClient (feature-topics data.ts). Same construct, in a useQuery callback."
      },
      {
       "app": "kui",
@@ -8149,8 +8227,8 @@
       "line": 347,
       "rule": "SC9012",
       "verdict": "same",
-      "mechanism": "project-interface-method-called-on-context-client",
-      "note": "fetchThroughput (shell overview/throughput.ts:377) calls api.get(..) on KuiApiClient from a metric() callback."
+      "mechanism": "project-interface-method-called-on-hook-returned-client",
+      "note": "metric(key, (id) => fetchThroughput(kui.api, id, range())) (Overview.tsx:347) with kui = useKui() (line 280); fetchThroughput(api: KuiApiClient) calls api.get at throughput.ts:377."
      },
      {
       "app": "kui",
@@ -8158,8 +8236,8 @@
       "line": 612,
       "rule": "SC9012",
       "verdict": "same",
-      "mechanism": "project-interface-method-called-on-context-client",
-      "note": "track (feature-messages track.ts:138) calls api.post(..) on KuiApiClient inside a createMutation callback: the case's pattern."
+      "mechanism": "project-interface-method-called-on-hook-returned-client",
+      "note": "createMutation((q) => track(kui.api, ...)) (MessagesRoute.tsx:612) with kui = useKui(); track(api: KuiApiClient) calls api.post (track.ts:138): the case's pattern."
      },
      {
       "app": "kui",
@@ -8167,12 +8245,90 @@
       "line": 244,
       "rule": "SC9012",
       "verdict": "same",
-      "mechanism": "project-interface-method-called-on-context-client",
-      "note": "registerFilter (feature-messages filters.ts:188) calls api.post(..) on KuiApiClient inside a createMutation callback."
+      "mechanism": "project-interface-method-called-on-hook-returned-client",
+      "note": "createMutation((source) => registerFilter(kui.api, ...)) (MessagesRoute.tsx:244) with kui = useKui(); registerFilter(api: KuiApiClient) calls api.post (filters.ts:188)."
      }
     ]
    },
-   "verifiedWeight": 89
+   "verifiedWeight": 49
+  },
+  {
+   "id": "param-member-new-instance",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/param-member-new-instance.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/new-project"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/new-project"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/ogl-examples/raycasting/raycasting.tsx",
+    "line": 61,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 15,
+   "sites": 15,
+   "verification": {
+    "samples": [
+     {
+      "app": "app-game",
+      "path": "packages/math-examples/camera-projection-webgl2/normal-box.component.tsx",
+      "line": 52,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "project-class-instance-built-with-new",
+      "note": "scene.addChild(mesh) (normal-box.component.tsx:52); mesh = new Mesh(...) (line 12), a project class (@app-game/ogl); addChild(child) (ogl/core/transform.ts:107) calls child.setParent on it. An instance built with new handed to a project method that calls a class method on it, as the case."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/ogl-examples/raycasting/raycasting.tsx",
+      "line": 61,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "project-class-instance-built-with-new",
+      "note": "plane.setParent(scene) (raycasting.tsx:61); scene = new Transform() (line 33), project class; setParent(parent) (transform.ts:92) calls parent.addChild: the case's source."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/ogl-examples/raycasting/raycasting.tsx",
+      "line": 64,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "project-class-instance-built-with-new",
+      "note": "sphere.setParent(scene) (raycasting.tsx:64); the same new Transform() argument and the same callee as the previous sample."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/paint/brush-example/brush-example.tsx",
+      "line": 63,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "project-class-instance-built-with-new",
+      "note": "grid.setParent(scene) (brush-example.tsx:63); scene = new Transform() (line 51); setParent calls parent.addChild (transform.ts:98)."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/paint/paint-ogl-1/brush-1/brush.component.tsx",
+      "line": 29,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "project-class-instance-built-with-new",
+      "note": "brushScene.addChild(mesh) (brush.component.tsx:29); mesh = new Mesh(gl, ...) (line 24), a project class; addChild calls child.setParent (transform.ts:112)."
+     }
+    ]
+   },
+   "verifiedWeight": 15
   },
   {
    "id": "param-member-data-read",
@@ -12187,6 +12343,11 @@
    "why": "a dependency (relay-runtime) whose typings and source are not in the set's node_modules, and a case may not add a package"
   },
   {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-lib",
+   "weight": 14,
+   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:exported-with-tag-callers:callers-pass-other",
    "weight": 13,
    "why": "an exported component whose tag callers pass other props; not reduced yet"
@@ -12367,6 +12528,16 @@
    "why": "9 distinct corpus sites, under ADR 0406's 10 for a case of its own"
   },
   {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/call-project",
+   "weight": 9,
+   "why": "9 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-project",
+   "weight": 9,
+   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/handed-to-package",
    "weight": 8,
    "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
@@ -12450,6 +12621,11 @@
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:spread:argument:new-package:babylonjs",
    "weight": 8,
    "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:function-project-in-closure",
+   "weight": 8,
+   "why": "7 distinct corpus sites, under ADR 0406's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/get-accessor:local-object:JsxSpreadAttribute",
@@ -12812,6 +12988,11 @@
    "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
   },
   {
+   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-returns-call-package",
+   "weight": 5,
+   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:array-element:spread",
    "weight": 4,
    "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
@@ -13018,6 +13199,26 @@
   },
   {
    "cause": "SC9012/runtime-target-unselected/withheld-object-member/module-prefix-call+used-before-initialized+object-escapes+member-not-function-literal",
+   "weight": 4,
+   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-package:pixi.js",
+   "weight": 4,
+   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-returns-call-project",
+   "weight": 4,
+   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-returns-object-literal",
+   "weight": 4,
+   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/parameter",
    "weight": 4,
    "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
   },
@@ -13255,6 +13456,26 @@
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:object:argument:member-package:typegpu",
    "weight": 3,
    "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:member-of-parameter",
+   "weight": 3,
+   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-member-member-of-call-project",
+   "weight": 3,
+   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/binding",
+   "weight": 3,
+   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/object-literal",
+   "weight": 3,
+   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>after-await",
@@ -13778,6 +13999,21 @@
   },
   {
    "cause": "SC9012/type-only-source/type-only-source/object-member:argument-of:project",
+   "weight": 2,
+   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-member-destructured-call-project",
+   "weight": 2,
+   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/call-package",
+   "weight": 2,
+   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-package:@solidjs/router",
    "weight": 2,
    "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
   },
@@ -14988,6 +15224,46 @@
   },
   {
    "cause": "SC9012/type-only-source/type-only-source/package-callback",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:member-of-function-literal",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/member-of-parameter",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/no-use-read",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/NullKeyword",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-unresolved",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/destructured-parameter",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:new-lib",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/member-of-call-package",
    "weight": 1,
    "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
   }
