@@ -9,6 +9,13 @@
 //   facts.files       the project's file list
 //   files()           SemanticLookup::files(), the same list behind the lookup
 //   file_by_path      another file's facts by path
+//   symbols_by_id     SemanticLookup::symbols_by_id(): a symbol's alias target
+//                     and declarations in any file (a project declaration
+//                     merged into a package's, a retargeted re-export). A
+//                     computation that reads them must note the symbol's
+//                     `Probe::SymbolInfo` first (`note_probe_read`, or
+//                     `note_symbol_declarations`); the lint cannot see that,
+//                     it only makes a new read a reviewed one.
 //   typescript-table  a whole-table scan of the TypeFacts table
 //                     (`typescript.entities()`, `.symbols()`, `.files()`):
 //                     every file's rows, which a cache filling from it must
@@ -125,6 +132,7 @@ export function countReads(text) {
     "facts.files": 0,
     "files()": 0,
     file_by_path: 0,
+    symbols_by_id: 0,
     "typescript-table": 0,
     "symbol_names-scan": 0,
     "hashmap-iteration": 0
@@ -162,6 +170,7 @@ export function readSites(text) {
     add("facts.files", (line.match(/\bfacts\s*\.\s*files\b/g) ?? []).length);
     add("files()", (line.match(/\.\s*files\s*\(\s*\)/g) ?? []).length);
     add("file_by_path", (line.match(/\bfile_by_path\b/g) ?? []).length);
+    add("symbols_by_id", (line.match(/\bsymbols_by_id\s*\(\s*\)/g) ?? []).length);
     if (iterated.some((pattern) => pattern.test(line))) add("hashmap-iteration", 1);
   });
   // Method chains span lines (`self.facts\n.typescript\n.entities()`): the

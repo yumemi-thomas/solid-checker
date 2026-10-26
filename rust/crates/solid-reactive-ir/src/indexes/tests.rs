@@ -1249,3 +1249,113 @@ fn a_hazard_question_is_a_recorded_read() {
         assert_eq!(reads.memos().len(), 1, "{source}: the hazard's probe");
     }
 }
+
+/// ADR 0438: whether `it(...)` is a reviewed runner's registration is read
+/// from its symbol's declarations in any file (a project script may merge one
+/// into the runner's global) and through its alias chain, so the answer is a
+/// recorded read of each symbol visited: a reader that recorded the first
+/// build's reads reruns when the symbol's declarations or alias target move,
+/// though the file it reads and the answer itself have not.
+#[test]
+fn a_test_runner_registration_records_its_symbols_declarations() {
+    const JEST: &str = "/app/node_modules/@types/jest/index.d.ts";
+    let source = "it(\"t\", () => {});\n";
+    let symbol =
+        |id: &str, alias_target: &str, declarations: &[(&str, u64)]| -> typefacts::SymbolFact {
+            serde_json::from_value(serde_json::json!({
+                "id": id,
+                "aliasTarget": alias_target,
+                "declarations": declarations
+                    .iter()
+                    .map(|(kind, start)| serde_json::json!({
+                        "kind": kind,
+                        "name": "it",
+                        "location": { "path": JEST, "startByte": start, "endByte": start + 2 },
+                    }))
+                    .collect::<Vec<_>>(),
+            }))
+            .expect("a symbol row")
+        };
+    let facts_of = |symbols: Vec<typefacts::SymbolFact>| {
+        let name = span_of(source, "it", 0);
+        let entity: typefacts::EntityFact = serde_json::from_value(serde_json::json!({
+            "location": { "path": PATH, "startByte": name.start, "endByte": name.end },
+            "symbol": "sym:local",
+        }))
+        .expect("an entity row naming the registration function");
+        let mut facts = project(source);
+        facts.typescript = TypeScriptTable::from_parts(
+            3,
+            1,
+            "fixture",
+            Vec::new(),
+            vec![entity],
+            symbols,
+            Vec::new(),
+        );
+        facts
+    };
+    let spans = [(span_of(source, "it", 0), "sym:local")];
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    let reads_of = |facts: &ProjectFacts| {
+        let ((answer, reads), _) = memo_build(facts, &store, &spans, |lookup| {
+            lookup.begin_memos();
+            let file = &facts.files[0];
+            let call = file
+                .ast
+                .call_at(span_of(source, "it(\"t\", () => {})", 0))
+                .expect("the registration call");
+            crate::base::reads::record(|| lookup.test_runner_callback(file, call))
+        });
+        (answer, reads.memos())
+    };
+    // Whether a read of `before` is asked again in `after` and answers
+    // differently: what makes a reader that held `before` rerun.
+    let moved = |before: &[crate::base::reads::MemoRead],
+                 after: &[crate::base::reads::MemoRead]| {
+        before.iter().any(|read| {
+            after.iter().any(|again| {
+                again.table == read.table
+                    && again.query == read.query
+                    && again.changed_at != read.changed_at
+            })
+        })
+    };
+    // `it` is a local alias of the global declared in the runner's typings.
+    let one = facts_of(vec![
+        symbol("sym:local", "sym:global", &[]),
+        symbol("sym:global", "", &[("VariableDeclaration", 0)]),
+    ]);
+    let (answer, first) = reads_of(&one);
+    assert_eq!(answer, Some(TestRunnerCallback::Scheduled));
+    assert_eq!(reads_of(&one).1, first, "the same program reads the same");
+    // A second declaration of the global, in the runner's own file: the
+    // answer and every file read are the same, the symbol's declarations are
+    // not.
+    let two = facts_of(vec![
+        symbol("sym:local", "sym:global", &[]),
+        symbol(
+            "sym:global",
+            "",
+            &[("VariableDeclaration", 0), ("FunctionDeclaration", 40)],
+        ),
+    ]);
+    let (answer, second) = reads_of(&two);
+    assert_eq!(answer, Some(TestRunnerCallback::Scheduled));
+    assert!(
+        moved(&first, &second),
+        "the root's declarations are a recorded read the second build answers differently"
+    );
+    // The alias retargeted to another root with the same declarations.
+    let retargeted = facts_of(vec![
+        symbol("sym:local", "sym:other", &[]),
+        symbol("sym:other", "", &[("VariableDeclaration", 0)]),
+        symbol("sym:global", "", &[("VariableDeclaration", 0)]),
+    ]);
+    let (answer, third) = reads_of(&retargeted);
+    assert_eq!(answer, Some(TestRunnerCallback::Scheduled));
+    assert!(
+        moved(&first, &third),
+        "the alias target is a recorded read the third build answers differently"
+    );
+}

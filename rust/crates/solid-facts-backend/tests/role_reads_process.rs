@@ -56,6 +56,12 @@ impl Drop for Project {
 impl Project {
     /// `None` without a producer (process tests skip silently).
     fn scratch(tag: &str, files: &[(&str, &str)]) -> Option<Self> {
+        Self::scratch_with(tag, files, &[])
+    }
+
+    /// A project whose `support` files are on disk for the program (typings
+    /// under `node_modules`) but are not sources the session analyzes.
+    fn scratch_with(tag: &str, files: &[(&str, &str)], support: &[(&str, &str)]) -> Option<Self> {
         let typefacts = env::var("SOLID_TYPEFACTS_BIN").ok()?;
         let root = env::temp_dir()
             .join("sc-scratch.noindex")
@@ -68,8 +74,10 @@ impl Project {
             r#"{"compilerOptions":{"jsx":"preserve","module":"ESNext","moduleResolution":"Bundler","strict":true,"target":"ES2022"},"include":["*.ts","*.tsx"]}"#,
         )
         .unwrap();
-        for (name, source) in files {
-            fs::write(root.join(name), source).unwrap();
+        for (name, source) in files.iter().chain(support) {
+            let path = root.join(name);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, source).unwrap();
         }
         let root = root.canonicalize().unwrap();
         let project_id = root.join("tsconfig.json").to_string_lossy().into_owned();
@@ -110,6 +118,24 @@ impl Project {
                     path: path.to_string_lossy().into_owned(),
                     version: self.version,
                     source: Some(source.to_owned()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap()
+    }
+
+    /// Deletes the source `name` (a `SourceChange` without a source).
+    fn remove(&mut self, name: &str) -> Arc<ProjectFacts> {
+        self.version += 1;
+        let path = self.root.join(name);
+        fs::remove_file(&path).unwrap();
+        self.session
+            .edit(
+                vec![SourceChange {
+                    path: path.to_string_lossy().into_owned(),
+                    version: self.version,
+                    source: None,
                     compiler_options: CompilerOptions::default(),
                 }],
                 None,
@@ -247,5 +273,85 @@ fn a_callee_use_site_edit_in_another_file_moves_the_callers_result() {
         ],
         "b.ts",
         &[USE_SITE_INLINE],
+    );
+}
+
+/// ADR 0438: a registration function is a reviewed runner's only while every
+/// declaration of its symbol lies in the runner's installed typings. The
+/// symbol's declarations are read from any file (`registration_root_runner`),
+/// so a project script merging a declaration into the global `it` moves the
+/// answer for a test file that did not change. End to end, the Type Facts
+/// delta also names that file today (the symbol gains a project declaration, so
+/// its reference rows move), so this case passes without the read being
+/// recorded; `a_test_runner_registration_records_its_symbols_declarations`
+/// (solid-reactive-ir, indexes/tests.rs) is the one that pins the recording.
+const JEST_TYPES: &str = "declare namespace jest {\n  interface It {\n    (name: string, fn: () => void): void;\n  }\n}\ndeclare var it: jest.It;\n";
+const JEST_APP: &str = "import { createSignal } from \"solid-js\";\nexport function Harness() {\n  const [c] = createSignal(0);\n  const probe = () => c();\n  it(\"t\", () => {\n    probe();\n  });\n  return <div />;\n}\n";
+const JEST_SHIM: &str = "var it: jest.It = ((n: string, f: () => void) => f()) as any;\n";
+
+#[test]
+fn a_project_declaration_merged_into_a_runner_global_moves_the_registration() {
+    let files = [("test.tsx", JEST_APP)];
+    let support = [
+        ("node_modules/@types/jest/index.d.ts", JEST_TYPES),
+        (
+            "jest-types.d.ts",
+            "/// <reference path=\"./node_modules/@types/jest/index.d.ts\" />\n",
+        ),
+    ];
+    let Some(mut project) = Project::scratch_with("runner-global", &files, &support) else {
+        return;
+    };
+    let mut builder = IncrementalBuilder::default();
+    let first = project.analyze();
+    let (before, _) = retained_is_fresh(&mut builder, &first, "runner-global: first");
+    // A new analyzed script declares `var it` too: the symbol now has a
+    // project declaration, so `it(...)` is no longer the runner's.
+    let facts = project.edit("zshim.ts", JEST_SHIM);
+    let (merged, _) = retained_is_fresh(&mut builder, &facts, "runner-global: merged");
+    assert!(
+        first_difference(&before, &merged).is_some(),
+        "runner-global: the merged declaration must move the fresh answer"
+    );
+    let facts = project.remove("zshim.ts");
+    let (back, _) = retained_is_fresh(&mut builder, &facts, "runner-global: removed");
+    assert!(
+        first_difference(&before, &back).is_none(),
+        "runner-global: back to the first answer"
+    );
+}
+
+/// The same through an export of the runner's package reached by a re-export:
+/// a project module augmentation merges a namespace into `it`. Today that
+/// addition makes the session recompute every file (a module augmentation
+/// leaves no delta), so retained equals fresh without the recording as well.
+const GLOBALS_TYPES: &str = "export declare function it(name: string, fn: () => void): void;\n";
+const GLOBALS_APP: &str = "import { createSignal } from \"solid-js\";\nimport { it } from \"./runner\";\nexport function Harness() {\n  const [c] = createSignal(0);\n  const probe = () => c();\n  it(\"t\", () => {\n    probe();\n  });\n  return <div />;\n}\n";
+const GLOBALS_AUGMENT: &str = "export {};\ndeclare module \"@jest/globals\" {\n  namespace it {\n    const tag: number;\n  }\n}\n";
+
+#[test]
+fn a_project_augmentation_of_a_runner_export_moves_the_registration() {
+    let files = [
+        ("test.tsx", GLOBALS_APP),
+        ("runner.ts", "export { it } from \"@jest/globals\";\n"),
+    ];
+    let support = [
+        ("node_modules/@jest/globals/index.d.ts", GLOBALS_TYPES),
+        (
+            "node_modules/@jest/globals/package.json",
+            "{\"name\":\"@jest/globals\",\"version\":\"29.0.0\",\"types\":\"index.d.ts\"}\n",
+        ),
+    ];
+    let Some(mut project) = Project::scratch_with("runner-export", &files, &support) else {
+        return;
+    };
+    let mut builder = IncrementalBuilder::default();
+    let first = project.analyze();
+    let (before, _) = retained_is_fresh(&mut builder, &first, "runner-export: first");
+    let facts = project.edit("zaugment.ts", GLOBALS_AUGMENT);
+    let (merged, _) = retained_is_fresh(&mut builder, &facts, "runner-export: augmented");
+    assert!(
+        first_difference(&before, &merged).is_some(),
+        "runner-export: the augmentation must move the fresh answer"
     );
 }

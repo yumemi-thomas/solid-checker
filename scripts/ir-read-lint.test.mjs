@@ -16,6 +16,7 @@ test("each raw read kind is counted, comments and test modules are not", () => {
         for file in facts.files.iter() {}
         for file in lookup.files() {}
         let _ = lookup.file_by_path("x");
+        let _ = self.symbols_by_id().get("x");
         let seen: HashSet<String> = HashSet::default();
         let by_name = HashMap::<String, u8>::default();
         for name in &seen {}
@@ -36,6 +37,7 @@ test("each raw read kind is counted, comments and test modules are not", () => {
     "facts.files": 1,
     "files()": 1,
     file_by_path: 1,
+    symbols_by_id: 1,
     "typescript-table": 2,
     "symbol_names-scan": 1,
     "hashmap-iteration": 2

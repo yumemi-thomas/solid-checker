@@ -121,14 +121,28 @@ impl SemanticLookup<'_> {
         root: Span,
     ) -> Option<(bool, crate::runtime_semantics::SuiteBodyRun)> {
         use crate::runtime_semantics::SuiteBodyRun;
+        // The symbol's alias target and declarations, in any file (a project
+        // script merging a declaration into a runner's global, a module
+        // augmentation, a re-export edited elsewhere), are read from the
+        // TypeScript table: a recorded read of each symbol visited, the root
+        // included, as `intrinsic_tag_prop` does.
+        let note = |id: &str| {
+            self.note_probe_read(crate::base::memo::probes::Probe::SymbolInfo, || {
+                Self::symbol_key(id)
+            });
+        };
         let mut symbol = self.symbol_at(file.path.as_str(), root)?;
         for _ in 0..MAX_ALIAS_HOPS {
+            note(symbol.id());
             if symbol.alias_target().is_empty() {
                 break;
             }
+            // An absent target is an answer too.
+            note(symbol.alias_target());
             let target = self.symbols_by_id().get(symbol.alias_target()).copied()?;
             symbol = target;
         }
+        note(symbol.id());
         if !symbol.alias_target().is_empty() {
             return None;
         }

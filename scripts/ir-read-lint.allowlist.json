@@ -93,10 +93,12 @@
   },
   "rust/crates/solid-reactive-ir/src/indexes/callees.rs": {
     "facts.files": 3,
-    "file_by_path": 2
+    "file_by_path": 2,
+    "symbols_by_id": 2
   },
   "rust/crates/solid-reactive-ir/src/indexes/census.rs": {
     "files()": 3,
+    "symbols_by_id": 2,
     "typescript-table": 1,
     "hashmap-iteration": 2
   },
@@ -115,6 +117,7 @@
     "facts.files": 2,
     "files()": 2,
     "file_by_path": 1,
+    "symbols_by_id": 1,
     "typescript-table": 4
   },
   "rust/crates/solid-reactive-ir/src/indexes/compound.rs": {
@@ -144,7 +147,8 @@
     "hashmap-iteration": 2
   },
   "rust/crates/solid-reactive-ir/src/indexes/memo_probes.rs": {
-    "facts.files": 2
+    "facts.files": 2,
+    "symbols_by_id": 1
   },
   "rust/crates/solid-reactive-ir/src/indexes/project_memos.rs": {
     "files()": 1
@@ -157,12 +161,14 @@
     "facts.files": 1
   },
   "rust/crates/solid-reactive-ir/src/indexes/test_runner.rs": {
-    "file_by_path": 1
+    "file_by_path": 1,
+    "symbols_by_id": 1
   },
   "rust/crates/solid-reactive-ir/src/indexes.rs": {
     "facts.files": 9,
     "files()": 4,
     "file_by_path": 3,
+    "symbols_by_id": 7,
     "typescript-table": 3,
     "symbol_names-scan": 1,
     "hashmap-iteration": 1
