@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 639,
-      "end": 648,
+      "start": 646,
+      "end": 655,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 694,
-      "end": 706,
+      "start": 701,
+      "end": 713,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 796,
-      "end": 810,
+      "start": 803,
+      "end": 817,
       "fixes": 0
     },
     {
@@ -57,8 +57,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 909,
-      "end": 924,
+      "start": 916,
+      "end": 931,
       "fixes": 0
     },
     {
@@ -67,8 +67,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 1032,
-      "end": 1041,
+      "start": 1039,
+      "end": 1048,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 1113,
-      "end": 1122,
+      "start": 1120,
+      "end": 1129,
       "fixes": 0
     },
     {
@@ -87,8 +87,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 1176,
-      "end": 1185,
+      "start": 1183,
+      "end": 1192,
       "fixes": 0
     },
     {
@@ -97,8 +97,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 1237,
-      "end": 1246,
+      "start": 1244,
+      "end": 1253,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 1302,
-      "end": 1311,
+      "start": 1309,
+      "end": 1318,
       "fixes": 0
     },
     {
@@ -117,8 +117,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 1368,
-      "end": 1377,
+      "start": 1375,
+      "end": 1384,
       "fixes": 0
     },
     {
@@ -127,8 +127,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 1436,
-      "end": 1445,
+      "start": 1443,
+      "end": 1452,
       "fixes": 0
     },
     {
@@ -137,8 +137,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 1502,
-      "end": 1511,
+      "start": 1509,
+      "end": 1518,
       "fixes": 0
     },
     {
@@ -147,8 +147,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 1562,
-      "end": 1571,
+      "start": 1569,
+      "end": 1578,
       "fixes": 0
     },
     {
@@ -157,8 +157,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 1624,
-      "end": 1633,
+      "start": 1631,
+      "end": 1640,
       "fixes": 0
     },
     {
@@ -167,8 +167,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 1689,
-      "end": 1698,
+      "start": 1696,
+      "end": 1705,
       "fixes": 0
     },
     {
@@ -177,8 +177,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
-      "start": 1752,
-      "end": 1761,
+      "start": 1759,
+      "end": 1768,
       "fixes": 0
     }
   ]

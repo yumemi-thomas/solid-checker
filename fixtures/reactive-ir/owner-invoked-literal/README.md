@@ -1,6 +1,6 @@
 # owner-invoked-literal
 
-**Claim (ADR 0347).** An immediately invoked function literal runs in its call, under the owner of the code around it: module scope and an unowned callback are unowned, a component body is owned. A plain IIFE creating an effect is a `missing-owner` violation where the effect is unowned: `moduleScope` and `detachedIife` (inside `runWithOwner(null, …)`). `Owned` (component body) stays silent.
+**Claim (ADR 0347).** An immediately invoked function literal runs in its call, under the owner of the code around it: module scope and an unowned callback are unowned, a component body is owned. A plain IIFE creating an effect is a `missing-owner` violation where the effect is unowned: `moduleScope` and `DetachedIife` (inside `runWithOwner(null, …)`). `Owned` (component body) stays silent.
 
 Silent: `generated` (a generator runs none of its body); `unused` (dormant); `AsyncOwned` (code before an async IIFE's first `await` runs under the component's owner).
 

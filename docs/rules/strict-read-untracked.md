@@ -134,6 +134,10 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   followed (ADR 0331): one passed, stored, aliased by a written `let`, or
   exported from an open program leaves its body reads uncertifiable, beside
   whatever its calls prove.
+- **A function nothing renders is no component body (ADR 0403).** A dead
+  or lowercase JSX-returning function, and a callback or IIFE evaluated at
+  module scope, leave body reads uncertifiable; an exported capitalized
+  function is a component by module surface (ADR 0331).
 - **A named local handler can forward a callback prop.** A project component
   may invoke a callback prop from a synchronous immutable local arrow bound
   only to intrinsic event attributes or exact component props that themselves

@@ -20,6 +20,12 @@ in event handlers, actions, `createEffect` apply callbacks, directive apply
 callbacks, and the children-forbidden leaf scopes `onSettled` and `createTrackedEffect` — the runtime's write guard
 explicitly exempts leaf imperative scopes.
 
+A function body is a component body only where a tag (or another reference that
+renders it) places it (ADR 0403). A function nothing renders, a callback or IIFE
+evaluated at module scope, and a JSX-returning function bound to a call's result
+are not placed: a write there is uncertifiable, never a violation. An exported
+capitalized function stays a component by module surface (ADR 0331).
+
 A `createRenderEffect` apply callback is only partly such a scope. Its first run
 happens before `createRenderEffect` returns, under the caller's owner, so a
 write there throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in a component body, a

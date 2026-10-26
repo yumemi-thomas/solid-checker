@@ -136,8 +136,8 @@ SC6001 root lifetime (ADR 0355): explicit roots in ref apply remain uncertifiabl
 Recall trade (ADR 0354): first-iteration reads before a loop await and reads after an awaiting switch case remain uncertifiable.
 
 Known false-positive shapes left open (fire today, wanted gone):
-- `no-write-in-pure-computation` (SC2001), found 2026-10-25 while renaming: a setter call in a module-level `.map` callback that returns JSX, and in an exported lowercase function returning JSX, is reported as a violation. At module scope no owner is live, so the guard cannot fire; the component proof is too eager there. Unverified by probe; upstream is silent on both.
 
+- `no-write-in-pure-computation` (SC2001) and `strict-read-untracked` (SC1001), ADR 0403: an exported capitalized JSX-returning function nothing in the program renders is a component by module surface, so unseen code that calls it plainly makes its body findings wrong. Recall trade: a dead, unexported or lowercase one, or one bound to a call's result, is uncertifiable even when a framework renders it.
 - `strict-read-untracked` (SC1001): a function rendered by a tag the program never reaches (`<Show when={false}><Row/></Show>`) and also called plainly (`items().map(Row)`) keeps its component proof.
 - `leaf-owner-forbidden-call` (SC3001), precision (minor): a site in a dead tracked-effect body is claimed although the body never runs, when every path to its creation is an owned leaf body (probe m4, line 8).
 - Suppression comments (ADR 0387): comment lines break as ESLint's do (`\r`, U+2028/9), a finding's line only at `\n`; `/* eslint solid/reactivity: [...] */` is ESLint's alone; an upstream name with no checker rule suppresses nothing; a comment only native applies draws ESLint's unused-directive warning.

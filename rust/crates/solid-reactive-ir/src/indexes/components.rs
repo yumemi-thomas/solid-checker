@@ -163,6 +163,19 @@ impl<'a> SemanticLookup<'a> {
         if function.name.is_none() && self.compound_value(file.path.as_str(), function.span) {
             return Identity::Proven;
         }
+        // An anonymous function literal called where it is written has that
+        // call as its only entry: no reference can hand it to `createComponent`
+        // (a named expression's own name could), so it runs in its caller's
+        // position, never as a component. Its callers' role is its role.
+        if function.name.is_none()
+            && file
+                .ast
+                .calls
+                .iter()
+                .any(|call| file.ast.peel_ts_sugar_span(call.callee) == function.span)
+        {
+            return Identity::No;
+        }
         let binding_name = crate::owners::component_binding_name(file, function);
         let directly_contains_jsx = |span: Span| {
             file.ast.jsx_within(span).any(|element| {
@@ -348,6 +361,11 @@ impl<'a> SemanticLookup<'a> {
         };
         let mut alias_entries = AliasEntries::default();
         let mut reference_escapes = true;
+        // A reference that renders the function: a dialect renderer's prop, a
+        // proven `lazy` default, an audited route option, a compound member a
+        // tag reaches. A declaration, a module surface and a callback position
+        // are accounted for but render nothing (see `direct_return_proof`).
+        let mut rendered_by_reference = false;
         if !method
             && let Some(symbol) = binding_name
                 .and_then(|name| self.entities.at(file.path.as_str(), name.span))
@@ -376,12 +394,14 @@ impl<'a> SemanticLookup<'a> {
                 let component_value = component_value_operation(candidate, span);
                 referenced_as_callback |= callback;
                 referenced_as_component_property |= component_value;
+                let renders = rendered_by_dialect_prop(candidate, span)
+                    || self.lazy_default_value(candidate, function, span)
+                    || self.route_component_value(candidate.path.as_str(), span)
+                    || self.compound_value(candidate.path.as_str(), span);
+                rendered_by_reference |= renders;
                 let escapes = !(callback && !component_value)
-                    && !rendered_by_dialect_prop(candidate, span)
-                    && !reference_is_declaration_or_module_surface(candidate, span)
-                    && !self.lazy_default_value(candidate, function, span)
-                    && !self.route_component_value(candidate.path.as_str(), span)
-                    && !self.compound_value(candidate.path.as_str(), span);
+                    && !renders
+                    && !reference_is_declaration_or_module_surface(candidate, span);
                 reference_escapes |= escapes;
                 if !escapes
                     || call_references.contains(&(candidate.path.as_str(), span))
@@ -421,7 +441,20 @@ impl<'a> SemanticLookup<'a> {
             && (!used_as_any_call_argument || hoc_bound)
             && !used_as_render_value
             && (!referenced_as_callback || referenced_as_component_property);
-        if direct_return_proof && !reference_escapes
+        // ADR 0403: accounting for every reference proves a component only
+        // when some reference renders it. A function nothing renders passes
+        // the census with no entry at all, and its body is not shown to run,
+        // let alone as a component's. The one kept premise (ADR 0331): an
+        // exported capitalized binding is the host's component by module
+        // surface (a file route's default export, a library component).
+        let surface_component = binding_name.is_some_and(|name| {
+            binding_exported(file, name.span)
+                && file
+                    .source_text(name.span)
+                    .and_then(|text| text.chars().next())
+                    .is_some_and(|first| first.is_ascii_uppercase())
+        });
+        if direct_return_proof && !reference_escapes && (rendered_by_reference || surface_component)
             || self.binding_has_component_type(file, binding_name)
         {
             Identity::Proven
