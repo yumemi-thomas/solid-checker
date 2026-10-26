@@ -1932,10 +1932,6 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
             .any(|read| read.query == super::QueryId(u32::MAX));
         for section in sections {
             match section {
-                // The veto is the hazard's sites classified by where they are
-                // written and by the censuses (ADR 0435, 0437, 0438): with no
-                // dispatch call anywhere the hazard's probe is the answer;
-                // otherwise it is the whole program's.
                 // The raw hazards index: the hazard's probe stands for it, as
                 // for a reflective definition below. The veto is the next arm.
                 crate::base::reads::Section::SynchronousDispatch => {

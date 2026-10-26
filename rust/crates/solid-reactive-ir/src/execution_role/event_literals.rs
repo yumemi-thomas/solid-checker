@@ -156,7 +156,7 @@ fn registered_test_callback(
 
 thread_local! {
     /// The write classifier's role at each call the write flow has asked of
-    /// during one table computation (empty otherwise).
+    /// during one write-flow answer (empty otherwise).
     static WRITE_SITE_ROLES: std::cell::RefCell<HashMap<(String, Span, RootBodyGuard), ExecutionRole>> =
         std::cell::RefCell::new(HashMap::default());
 }

@@ -682,7 +682,7 @@ fn literal_write_flow_role(
 
 /// ADR 0442: the role the invocations of `span`'s function (or of a function
 /// around it that runs `span` in place) give a write there, from the
-/// function's own answer ([`write_flow_answer`]). `None` while the table is computed, in an open program, and for a
+/// function's own answer ([`write_flow_answer`]). `None` while an answer is computed, in an open program, and for a
 /// function the walk proves nothing about.
 pub(super) fn write_flow_role(
     file: &solid_facts::FileFacts,
