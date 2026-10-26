@@ -256,6 +256,66 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/package-convex-mutation.ts",
+      "start": 453,
+      "end": 534,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/package-hono-route.ts",
+      "start": 378,
+      "end": 409,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/package-relay-commit.tsx",
+      "start": 1218,
+      "end": 1233,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/package-relay-request.tsx",
+      "start": 884,
+      "end": 899,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/package-webgpu-context.tsx",
+      "start": 590,
+      "end": 615,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/package-webgpu-context.tsx",
+      "start": 590,
+      "end": 628,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-default-forwarded.tsx",
       "start": 618,
       "end": 630,
@@ -287,8 +347,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-diverge-function.tsx",
-      "start": 980,
-      "end": 1033,
+      "start": 1023,
+      "end": 1076,
       "fixes": 0
     },
     {
@@ -297,8 +357,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-diverge-function.tsx",
-      "start": 995,
-      "end": 1006,
+      "start": 1038,
+      "end": 1049,
       "fixes": 0
     },
     {

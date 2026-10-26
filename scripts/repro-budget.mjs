@@ -43,7 +43,10 @@ export const BUDGETS = {
     // Raised from 3_400 lines when three buckets an independent review found
     // mixed were split (a factory-result handler member, a `new` instance
     // handed to a project method): 179 files and 3_446 lines at 169 cases.
-    uncertifiable: { files: 180, lines: 3_450 },
+    // Raised from 180 and 3_450 when verified coverage was taken past 70%:
+    // SC9012 results the dispatch veto holds, open-program families, cases on
+    // published package declarations: 197 files and 3_897 lines at 186 cases.
+    uncertifiable: { files: 200, lines: 3_950 },
     violation: { files: 16, lines: 400 },
     clean: { files: 16, lines: 400 },
   },

@@ -27,8 +27,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/callback-stored-in-object.tsx",
-      "start": 1004,
-      "end": 1019,
+      "start": 1011,
+      "end": 1026,
       "fixes": 0
     },
     {
@@ -37,28 +37,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/callback-to-project-fn.tsx",
-      "start": 555,
-      "end": 569,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/callback-to-project-fn.tsx",
-      "start": 595,
-      "end": 610,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/callback-to-project-fn.tsx",
-      "start": 612,
-      "end": 626,
+      "start": 1123,
+      "end": 1138,
       "fixes": 0
     },
     {
@@ -152,6 +132,36 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/handler-in-conditional.tsx",
+      "start": 713,
+      "end": 727,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/handler-in-conditional.tsx",
+      "start": 728,
+      "end": 736,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/handler-in-conditional.tsx",
+      "start": 903,
+      "end": 913,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -207,8 +217,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/options-object.tsx",
-      "start": 884,
-      "end": 894,
+      "start": 870,
+      "end": 880,
       "fixes": 0
     },
     {
@@ -217,8 +227,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc1001/src/options-object.tsx",
-      "start": 916,
-      "end": 931,
+      "start": 902,
+      "end": 917,
       "fixes": 0
     },
     {

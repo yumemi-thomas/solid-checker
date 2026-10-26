@@ -1,12 +1,12 @@
-// app-game solid-dnd-playground SortableOverlayDemo.tsx:41 (solid-dnd createDnd): a component hands an options object
-// to a project hook whose helper calls one of its members; the object names that member by a reference to a value a
-// call returned (here a project factory's closure), not by a function literal or a declared function.
+// app-game solid-dnd-playground FlipDebugOverlay.tsx:53 (useElementTrails, `addCycleMarker` destructured from useGapTrail): a
+// component hands an options object to a project hook whose helper calls one of its members; the object names that member by
+// a reference to a closure destructured from a project hook's result, not by a function literal or a declared function.
 import { createMemo } from "solid-js";
 
 type TreeNode = { id: string; children: TreeNode[] };
 
-function makeChildren(): (node: TreeNode) => TreeNode[] {
-  return (node) => node.children;
+function useChildren() {
+  return { childrenOf: (node: TreeNode): TreeNode[] => node.children };
 }
 
 function createTreeView(props: { items: () => TreeNode[]; getChildren: (node: TreeNode) => TreeNode[] }) {
@@ -17,7 +17,7 @@ function createTreeView(props: { items: () => TreeNode[]; getChildren: (node: Tr
 }
 
 export function Explorer(props: { roots: TreeNode[] }) {
-  const childrenOf = makeChildren();
+  const { childrenOf } = useChildren();
   const tree = createTreeView({ items: () => props.roots, getChildren: childrenOf });
   return <p>{tree.total()}</p>;
 }

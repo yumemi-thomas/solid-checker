@@ -5,7 +5,7 @@
   "manifest": "scripts/corpus/rc17-manifest.json",
   "sweep": "release checker at f405f2cff (the spread fix), browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui); veto attribution from a veto-off sweep (ADR 0447)",
   "results": 6717,
-  "reproduced": 4433
+  "reproduced": 4814
  },
  "cases": [
   {
@@ -2268,14 +2268,14 @@
     "src/options-object.tsx"
    ],
    "causes": [
-    "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/called-in-kept-closure"
+    "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/called-in-kept-closure:result-member"
    ],
    "expect": [
     {
      "rule": "SC1001",
      "family": "callback-to-unproven-consumer",
      "context": "",
-     "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/called-in-kept-closure"
+     "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/called-in-kept-closure:result-member"
     },
     {
      "rule": "SC2001",
@@ -2285,14 +2285,14 @@
     }
    ],
    "source": {
-    "app": "kui",
-    "path": "frontend/packages/shell/src/App.tsx",
-    "line": 448,
-    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+    "app": "solid-groove",
+    "path": "src/editor/DrumMachinePanel.tsx",
+    "line": 257,
+    "commit": "f3340174fb2daba2eba220640731844b8a33d232"
    },
    "status": "uncertifiable",
-   "labelWeight": 19,
-   "sites": 17,
+   "labelWeight": 11,
+   "sites": 9,
    "verification": {
     "samples": [
      {
@@ -2302,25 +2302,7 @@
       "rule": "SC1001",
       "verdict": "same",
       "mechanism": "options-object-to-project-function-kept-in-result-members",
-      "note": "props.pad.id is read in `command` callback in the options object passed to project createControlGesture (DrumMachinePanel.tsx:251-262); controlGesture.ts:21-83 keeps props.command in the returned input/commit members, which PadControl calls from onInput/onCommit (:276-279). Same shape as the case (here handlers call them, not a package virtualizer)."
-     },
-     {
-      "app": "app-game",
-      "path": "apps/grease-pencil-typegpu/src/features/viewport/CanvasViewport.tsx",
-      "line": 21,
-      "rule": "SC1001",
-      "verdict": "unsure",
-      "mechanism": "options-object-forwarded-through-wrapper-to-workspace-package-function",
-      "note": "createGreaseNavigation (greaseNavigation.ts:6-18) does not keep the callbacks; it wraps them in a new options object (`transform: (g) => params.renderer()?...`) handed to createNavigationPuck in workspace package @app-game/navigation-puck/controller.ts (params.* read in pointer-drag code, :82-175). Two-hop forward plus cross-package, which the single-hop case does not reproduce."
-     },
-     {
-      "app": "app-game",
-      "path": "apps/solid-svg-editor/src/features/inspector/InspectorPanel.tsx",
-      "line": 39,
-      "rule": "SC1001",
-      "verdict": "same",
-      "mechanism": "options-object-to-project-function-kept-in-result-members",
-      "note": "`{ root: () => props.root }` goes to project createInspectorVirtualScroll (InspectorVirtualScroll.tsx:18), which reads props.root() in a createMemo (:35) and in the returned member scrollRowToTop (:133), called from InspectorPanel.tsx:56,82. Same options-object-kept-in-members shape."
+      "note": "props.pad is read in the `command` callback of the options object handed to project createControlGesture (DrumMachinePanel.tsx:251-262); src/commands/controlGesture.ts:21-83 calls props.command from its returned input/commit members. The message has no callers clause, as the case's."
      },
      {
       "app": "solid-groove",
@@ -2329,7 +2311,7 @@
       "rule": "SC1001",
       "verdict": "same",
       "mechanism": "options-object-to-project-function-kept-in-result-members",
-      "note": "props.trackId read in the same `command` callback (DrumMachinePanel.tsx:255-261) handed to createControlGesture; identical to #1."
+      "note": "props.trackId is read in the same `command` callback as #1; createControlGesture keeps it in the returned input/commit members."
      },
      {
       "app": "app-game",
@@ -2338,11 +2320,29 @@
       "rule": "SC1001",
       "verdict": "same",
       "mechanism": "options-object-to-project-function-kept-in-result-members",
-      "note": "`key`/`ready` callbacks in options object passed to project createTreeScrollRestoration (App.tsx:721); createTreeScrollRestoration.ts reads props.key()/props.ready() in a createTrackedEffect (:21-27) and in the returned onScroll member (:67-76)."
+      "note": "`key` callback in the options object of project createTreeScrollRestoration (App.tsx:721); tree-view/createTreeScrollRestoration.ts reads props.key() in a createTrackedEffect (:20-27) and in the returned member onScroll (:67-76)."
+     },
+     {
+      "app": "solid-groove",
+      "path": "src/editor/StepEditor.tsx",
+      "line": 196,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "options-object-to-project-function-kept-in-result-members",
+      "note": "props.clip read in the `command` callback of velocityControl = createControlGesture({...}) (StepEditor.tsx:188-197), the same function as #1."
+     },
+     {
+      "app": "solid-groove",
+      "path": "src/editor/Mixer.tsx",
+      "line": 558,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "options-object-to-project-function-kept-in-result-members",
+      "note": "props.track read in the `command` callback of PanControl's createControlGesture (Mixer.tsx:552-561), the same function as #1."
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 9
   },
   {
    "id": "callback-to-project-function",
@@ -2352,21 +2352,15 @@
     "src/callback-to-project-fn.tsx"
    ],
    "causes": [
-    "SC1001/callback-to-unproven-consumer/project-function-argument/called-in-kept-closure",
-    "SC1001/callback-to-unproven-consumer/condition/project-function-argument/called-in-kept-closure"
+    "SC1001/callback-to-unproven-consumer/project-function-argument/called-in-kept-closure:member-of:argument-of:project",
+    "SC1001/callback-to-unproven-consumer/condition/project-function-argument/called-in-kept-closure:member-of:argument-of:project"
    ],
    "expect": [
     {
      "rule": "SC1001",
      "family": "callback-to-unproven-consumer",
      "context": "",
-     "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/called-in-kept-closure"
-    },
-    {
-     "rule": "SC1001",
-     "family": "callback-to-unproven-consumer",
-     "context": "condition",
-     "cause": "SC1001/callback-to-unproven-consumer/condition/project-function-argument/called-in-kept-closure"
+     "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/called-in-kept-closure:member-of:argument-of:project"
     }
    ],
    "source": {
@@ -2376,36 +2370,18 @@
     "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
    },
    "status": "uncertifiable",
-   "labelWeight": 8,
-   "sites": 5,
+   "labelWeight": 6,
+   "sites": 3,
    "verification": {
     "samples": [
-     {
-      "app": "inferay",
-      "path": "src/modules/repository/components/diff/components/DiffViewer/DiffPanels.tsx",
-      "line": 20,
-      "rule": "SC1001",
-      "verdict": "same",
-      "mechanism": "callback-to-project-function-keeps-it",
-      "note": "`() => _props.scrollRef` is a positional callback to project useSplitDiffScroll (hooks/useSplitDiffScroll.tsx:5), which keeps masterRef in returned members syncFromMaster/syncFromFollower (and externalScrollTop in getters). Same as the case's project createQuery keeping fetcher/key in a returned member."
-     },
-     {
-      "app": "app-game",
-      "path": "packages/card-stack/src/CardStackViewport.tsx",
-      "line": 9,
-      "rule": "SC1001",
-      "verdict": "different",
-      "mechanism": "callback-to-project-function-used-only-inside-package-callbacks",
-      "note": "createDragScroll (card-stack/src/primitives/createDragScroll.ts:10) returns nothing; it reads `enabled()` inside onDown passed to @solid-primitives createPointerListeners (:20-23) and in a createEffect compute (:84). The blocker is a closure handed to a package function, not a callback kept in a member of the project function's result."
-     },
      {
       "app": "kui",
       "path": "frontend/packages/feature-topics/src/TopicsRoute.tsx",
       "line": 749,
       "rule": "SC1001",
       "verdict": "same",
-      "mechanism": "callback-to-project-function-keeps-it",
-      "note": "useClusterReadOnly(() => props.clusterId) (TopicsRoute.tsx:749) is the same project helper (:181-193) as the case's cited site; it wraps the callback into key: () => `...${clusterId()}` for project useQuery and returns a closure."
+      "mechanism": "callback-wrapped-into-options-of-project-useQuery",
+      "note": "useClusterReadOnly(() => props.clusterId) (:749) is the helper at :181-193: its arrows read clusterId() inside the key/load options handed to project useQuery, which reads key in a lazy memo and binds load through registry.internals.bind (kernel data/query/useQuery.ts:241-275)."
      },
      {
       "app": "kui",
@@ -2413,8 +2389,8 @@
       "line": 458,
       "rule": "SC1001",
       "verdict": "same",
-      "mechanism": "callback-to-project-function-keeps-it",
-      "note": "This is the case's own cited site (TopicsRoute.tsx:458 via useClusterReadOnly :181)."
+      "mechanism": "callback-wrapped-into-options-of-project-useQuery",
+      "note": "The case's own source: the same helper call (:458) with the same useQuery hand-off."
      },
      {
       "app": "kui",
@@ -2422,12 +2398,12 @@
       "line": 127,
       "rule": "SC1001",
       "verdict": "same",
-      "mechanism": "callback-to-project-function-keeps-it",
-      "note": "AlertsRoute.tsx:100-112 has a byte-identical useClusterReadOnly(clusterId) helper that wraps the callback into a project useQuery key; same path as the case's cited TopicsRoute site."
+      "mechanism": "callback-wrapped-into-options-of-project-useQuery",
+      "note": "AlertsRoute.tsx:100-112 holds a byte-identical useClusterReadOnly helper over the same kernel useQuery."
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 3
   },
   {
    "id": "leaf-destructured-accessor",
@@ -3970,15 +3946,15 @@
     "src/props-other.tsx"
    ],
    "causes": [
-    "SC1001/direct-read-callers-unenumerable/props-escape:other:callers-pass-project-call-result",
-    "SC1001/direct-read-callers-unenumerable/props-escape:other:callers-pass-callback-parameter"
+    "SC1001/direct-read-callers-unenumerable/props-escape:other:callers-pass-project-call-result:in-package-callback",
+    "SC1001/direct-read-callers-unenumerable/props-escape:other:callers-pass-callback-parameter:in-package-callback"
    ],
    "expect": [
     {
      "rule": "SC1001",
      "family": "direct-read-callers-unenumerable",
      "context": "",
-     "cause": "SC1001/direct-read-callers-unenumerable/props-escape:other:callers-pass-callback-parameter"
+     "cause": "SC1001/direct-read-callers-unenumerable/props-escape:other:callers-pass-callback-parameter:in-package-callback"
     }
    ],
    "source": {
@@ -3988,37 +3964,10 @@
     "commit": "3064fed238a043da90041f8eb86b357e253330bf"
    },
    "status": "uncertifiable",
-   "labelWeight": 5,
-   "sites": 5,
+   "labelWeight": 1,
+   "sites": 1,
    "verification": {
     "samples": [
-     {
-      "app": "app-game",
-      "path": "packages/typegpu-examples/typegpu-draw-app-example/ui/PointerDebugOverlay.tsx",
-      "line": 425,
-      "rule": "SC1001",
-      "verdict": "unsure",
-      "mechanism": "private-component-caller-passes-accessor-or-function-call",
-      "note": "Only App.tsx:40 renders the tag inside a package callback (Errored fallback) as the case does; the others render the tag in a component body passing an accessor call (item(), twoFingerGesture()!, code())."
-     },
-     {
-      "app": "compass-ui",
-      "path": "apps/ui/src/components/MarkdownText.tsx",
-      "line": 161,
-      "rule": "SC1001",
-      "verdict": "unsure",
-      "mechanism": "private-component-caller-passes-accessor-or-function-call",
-      "note": "Only App.tsx:40 renders the tag inside a package callback (Errored fallback) as the case does; the others render the tag in a component body passing an accessor call (item(), twoFingerGesture()!, code())."
-     },
-     {
-      "app": "compass-ui",
-      "path": "apps/ui/src/components/MarkdownText.tsx",
-      "line": 127,
-      "rule": "SC1001",
-      "verdict": "unsure",
-      "mechanism": "private-component-caller-passes-accessor-or-function-call",
-      "note": "Only App.tsx:40 renders the tag inside a package callback (Errored fallback) as the case does; the others render the tag in a component body passing an accessor call (item(), twoFingerGesture()!, code())."
-     },
      {
       "app": "app-game",
       "path": "apps/solid-dnd-playground/src/App.tsx",
@@ -4026,20 +3975,11 @@
       "rule": "SC1001",
       "verdict": "same",
       "mechanism": "private-component-in-errored-fallback",
-      "note": "DemoError rendered inside the Errored fallback callback, passing toError(err()). The case source."
-     },
-     {
-      "app": "app-game",
-      "path": "apps/browser-atlas/src/tree-view/TreeView.tsx",
-      "line": 184,
-      "rule": "SC1001",
-      "verdict": "unsure",
-      "mechanism": "private-component-caller-passes-accessor-or-function-call",
-      "note": "Only App.tsx:40 renders the tag inside a package callback (Errored fallback) as the case does; the others render the tag in a component body passing an accessor call (item(), twoFingerGesture()!, code())."
+      "note": "DemoError is rendered only by the tag in Errored's fallback callback (App.tsx:27), passing toError(err()); the read props.error (:40) is the case's source."
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 1
   },
   {
    "id": "props-condition-spread-caller",
@@ -5501,7 +5441,8 @@
     "src/pkg-callback-to-package.tsx"
    ],
    "causes": [
-    "SC1001/callback-to-unproven-consumer/package-callback"
+    "SC1001/callback-to-unproven-consumer/package-callback",
+    "SC1001/callback-to-unproven-consumer/condition/package-callback"
    ],
    "expect": [
     {
@@ -5518,8 +5459,8 @@
     "commit": "3064fed238a043da90041f8eb86b357e253330bf"
    },
    "status": "uncertifiable",
-   "labelWeight": 13,
-   "sites": 12,
+   "labelWeight": 16,
+   "sites": 15,
    "verification": {
     "samples": [
      {
@@ -5542,6 +5483,15 @@
      },
      {
       "app": "app-game",
+      "path": "packages/paint/input-visualizer/shortcut-settings.tsx",
+      "line": 108,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "prop-read-in-callback-handed-to-package",
+      "note": "editingActionId() (:108) is a signal accessor read in the keydown callback handed to makeEventListener from @solid-primitives/event-listener (:106-108); the read sits in an `if` condition (analysis context: condition), which does not change the blocker: a callback a package keeps or runs later. Merged label condition/package-callback also read at PaintStudio.tsx:84 (panel() in a createEventListener keydown callback) and shortcut-settings.tsx:115 (keyup callback): same construct."
+     },
+     {
+      "app": "app-game",
       "path": "packages/film-annotation-player/Canvas.tsx",
       "line": 55,
       "rule": "SC1001",
@@ -5557,19 +5507,10 @@
       "verdict": "same",
       "mechanism": "prop-read-in-callback-handed-to-package",
       "note": "signal accessor ref() read in an rxjs filter() callback in a pipe (:81-83)."
-     },
-     {
-      "app": "app-game",
-      "path": "packages/paint/ui-example/components/navigation-popup.tsx",
-      "line": 38,
-      "rule": "SC1001",
-      "verdict": "same",
-      "mechanism": "prop-read-in-callback-handed-to-package",
-      "note": "The case's own source site: props.navigationIsActive read in the callback handed to zoom.active.listen (createEventBus from @solid-primitives/event-bus)."
      }
     ]
    },
-   "verifiedWeight": 12
+   "verifiedWeight": 15
   },
   {
    "id": "dependency-source-getter",
@@ -6422,19 +6363,10 @@
     "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
    },
    "status": "uncertifiable",
-   "labelWeight": 5,
-   "sites": 5,
+   "labelWeight": 4,
+   "sites": 4,
    "verification": {
     "samples": [
-     {
-      "app": "every-deck-of-cards",
-      "path": "src/ArrangePage.tsx",
-      "line": 24,
-      "rule": "SC9012",
-      "verdict": "different",
-      "mechanism": "bigint-hook-result-argument-in-spread-rendered-component",
-      "note": "createDeckEditor(query.initialIndex, query.commit) (ArrangePage.tsx:24): `query` comes from the local hook createDeckQuery (URL state), not from the component's props; the classifier reached props only through a closure chain (gestures/editor), so this is a typed-primitive argument of a hook result, not a prop value."
-     },
      {
       "app": "kui",
       "path": "frontend/packages/feature-ksql/src/KsqlRoute.tsx",
@@ -6442,7 +6374,7 @@
       "rule": "SC9012",
       "verdict": "same",
       "mechanism": "prop-string-handed-to-project-function-in-spread-rendered-component",
-      "note": "KsqlScreen (KsqlRoute.tsx:150-) is rendered with a spread; props.clusterId (string) goes to planStatement(kui.api, props.clusterId, statement) inside a createMutation callback: the case's own mechanism."
+      "note": "props.clusterId handed to planStatement(kui.api, props.clusterId, statement) in a createMutation callback of KsqlScreen, a component rendered with a spread; the finding is the parameter-use-unmodeled one."
      },
      {
       "app": "kui",
@@ -6451,7 +6383,7 @@
       "rule": "SC9012",
       "verdict": "same",
       "mechanism": "prop-string-handed-to-project-function-in-spread-rendered-component",
-      "note": "props.clusterId handed to runStatement(kui.api, props.clusterId, confirmed) inside a createMutation callback (:214)."
+      "note": "props.clusterId handed to runStatement(...) in the apply createMutation callback."
      },
      {
       "app": "kui",
@@ -6460,7 +6392,7 @@
       "rule": "SC9012",
       "verdict": "same",
       "mechanism": "prop-string-handed-to-project-function-in-spread-rendered-component",
-      "note": "props.clusterId handed to fetchClusterWriteState(kui.api, props.clusterId) in a useQuery load callback (:169)."
+      "note": "props.clusterId handed to fetchClusterWriteState(kui.api, props.clusterId) in a useQuery load callback."
      },
      {
       "app": "kui",
@@ -6469,11 +6401,11 @@
       "rule": "SC9012",
       "verdict": "same",
       "mechanism": "prop-string-handed-to-project-function-in-spread-rendered-component",
-      "note": "props.clusterId handed to fetchObjects(kui.api, props.clusterId) in a useQuery load callback (:163): the case's source."
+      "note": "The case's own source: props.clusterId handed to fetchObjects(kui.api, props.clusterId) in a useQuery load callback."
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 4
   },
   {
    "id": "write-mixed-entries",
@@ -8593,81 +8525,45 @@
     "src/param-member-diverge-function.tsx"
    ],
    "causes": [
-    "SC9012/parameter-member-call/parameter-member-targets-diverge/function-reference:call-result"
+    "SC9012/parameter-member-call/parameter-member-targets-diverge/function-reference:call-result:destructured-project"
    ],
    "expect": [
     {
      "rule": "SC9012",
      "family": "parameter-member-call",
      "context": "parameter-member-targets-diverge",
-     "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge/function-reference:call-result"
+     "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge/function-reference:call-result:destructured-project"
     },
     {
      "rule": "SC1001",
      "family": "callback-to-unproven-consumer",
      "context": "",
-     "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/sibling-called/variable:project"
+     "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/sibling-called/object-binding:project"
     }
    ],
    "source": {
     "app": "app-game",
-    "path": "apps/solid-dnd-playground/src/demos/SortableOverlayDemo.tsx",
-    "line": 41,
+    "path": "apps/solid-dnd-playground/src/components/FlipDebugOverlay.tsx",
+    "line": 53,
     "commit": "3064fed238a043da90041f8eb86b357e253330bf"
    },
    "status": "uncertifiable",
-   "labelWeight": 12,
-   "sites": 12,
+   "labelWeight": 1,
+   "sites": 1,
    "verification": {
     "samples": [
      {
       "app": "app-game",
-      "path": "apps/solid-dnd-playground/src/demos/SortableOverlayDemo.tsx",
-      "line": 41,
-      "rule": "SC9012",
-      "verdict": "unsure",
-      "mechanism": "object-member-references-package-call-result",
-      "note": "`getContainerElement: containerRef` where containerRef is a createSignal accessor (SortableOverlayDemo.tsx:38-43); a package call result the dialect models, unlike the case's project-factory closure; whether a reference-following change moves it is not established."
-     },
-     {
-      "app": "app-game",
-      "path": "packages/paint/ui-example/trigonometry.tsx",
-      "line": 136,
-      "rule": "SC9012",
-      "verdict": "unsure",
-      "mechanism": "object-member-references-package-call-passthrough-of-caller-callback",
-      "note": "`onChange = untrack(() => props.onChange)` (trigonometry.tsx:123): the member is a package call result that returns the caller's own callback, so following the reference reaches an unknown value, not a project closure."
-     },
-     {
-      "app": "app-game",
-      "path": "apps/grease-pencil-typegpu/src/App.tsx",
-      "line": 68,
+      "path": "apps/solid-dnd-playground/src/components/FlipDebugOverlay.tsx",
+      "line": 53,
       "rule": "SC9012",
       "verdict": "same",
-      "mechanism": "object-member-references-project-call-result",
-      "note": "`setDocumentState` is destructured from a project hook's result and named in the options object (grease-pencil App.tsx:48,68), a project call result like the case's factory closure."
-     },
-     {
-      "app": "app-game",
-      "path": "packages/ui-components-examples/breadcrumbs/components.tsx",
-      "line": 50,
-      "rule": "SC9012",
-      "verdict": "unsure",
-      "mechanism": "object-member-references-package-call-result",
-      "note": "`onChange: setWidth` where setWidth is a createSignal setter (breadcrumbs/components.tsx:50); package call result, as #1."
-     },
-     {
-      "app": "app-game",
-      "path": "packages/solid-view-cube/src/ViewCube.tsx",
-      "line": 69,
-      "rule": "SC9012",
-      "verdict": "unsure",
-      "mechanism": "object-member-references-package-call-result",
-      "note": "`orientation` is a createMemo accessor (ViewCube.tsx:31) named as a member of the options object; package call result, as #1."
+      "mechanism": "options-member-names-closure-destructured-from-project-hook",
+      "note": "`addCycleMarker` (a function declaration useGapTrail returns, gapTrail.ts:115-126) is named in useElementTrails' options (:52-58) and the callee reads it as opts.addCycleMarker (untrack(opts.addCycleMarker)). Experiment on a copy of the app: naming it `() => addCycleMarker()` removes this finding."
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 1
   },
   {
    "id": "unowned-primitive-in-package",
@@ -9885,9 +9781,7 @@
     "src/prop-presence-in-show.tsx"
    ],
    "causes": [
-    "SC2001/unplaced-write/component-prop>component-prop/package-component",
-    "SC2001/unplaced-write/component-prop>view:component-prop/handed-to-solid:merge",
-    "SC1001/callback-to-unproven-consumer/component-prop>component-prop/forwarded-to-component"
+    "SC2001/unplaced-write/component-prop>view:component-prop/handed-to-solid:merge"
    ],
    "expect": [
     {
@@ -9916,40 +9810,22 @@
     "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
    },
    "status": "uncertifiable",
-   "labelWeight": 5,
-   "sites": 3,
+   "labelWeight": 1,
+   "sites": 1,
    "verification": {
     "samples": [
-     {
-      "app": "kui",
-      "path": "frontend/packages/feature-topics/src/TopicsRoute.tsx",
-      "line": 662,
-      "rule": "SC2001",
-      "verdict": "unsure",
-      "mechanism": "prop-presence-in-show-function-child-forwarded-through-button",
-      "note": "TopicsRoute:657 passes onCreate to TopicListPage, which tests it in Show when={props.onCreate} (TopicListPage.tsx:565) with a function child and calls create()() as the onClick of the project Button; Button (kernel Button.tsx:90-127) omits/merges props and calls p.onClick?.(event). Headline construct matches the case, but the callback is reached via a Show accessor and a second project component, which the case lacks."
-     },
      {
       "app": "kui",
       "path": "frontend/packages/kernel/src/components/StatusPill.stories.tsx",
       "line": 62,
       "rule": "SC2001",
       "verdict": "same",
-      "mechanism": "prop-presence-in-show",
-      "note": "This is the story the case file cites. StatusPill.tsx:63 reads merge(props), :82-83 tests props.onClick !== undefined in Show, :102 calls props.onClick?.() in a native button onClick; the story's onClick arrow (stories:62) is the setter call."
-     },
-     {
-      "app": "kui",
-      "path": "frontend/packages/feature-topics/src/TopicsRoute.tsx",
-      "line": 987,
-      "rule": "SC2001",
-      "verdict": "unsure",
-      "mechanism": "prop-presence-in-show-function-child-forwarded-through-button",
-      "note": "onAdd goes to TopicPartitions, which has Show when={props.onAdd} with function child calling add()() inside the project Button's onClick (TopicPartitions.tsx:193-205). Same as #1: Show presence test matches, but extra Show-accessor and Button forwarding differ from the case."
+      "mechanism": "callback-prop-through-merge-view",
+      "note": "The story's onClick arrow (setLive) goes to StatusPill, which hands all of props to merge (StatusPill.tsx:63) and calls props.onClick?.() in a native button onClick (:102); the case's own source."
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 1
   },
   {
    "id": "prop-to-factory-component",
@@ -10865,18 +10741,18 @@
       "path": "apps/ui/src/store.ts",
       "line": 1683,
       "rule": "SC2001",
-      "verdict": "same",
+      "verdict": "unsure",
       "mechanism": "factory-result-assigned-to-let",
-      "note": "stopAgent is a member of the object createAppStore returns (store.ts:1955, :716). The let is test-router.tsx:42-47 (`let store!: AppStore; ... store = createAppStore(...)`), the exact site the case cites; other callers are const via createRoot."
+      "note": "stopAgent is a member of the object createAppStore returns (store.ts:1955, :716). The let is test-router.tsx:42-47 (`let store!: AppStore; ... store = createAppStore(...)`), the exact site the case cites; other callers are const via createRoot. [round 2: removing the case blocker in a corpus clone moved no store.ts site; treated as unsure]"
      },
      {
       "app": "compass-ui",
       "path": "apps/ui/src/store.ts",
       "line": 1814,
       "rule": "SC2001",
-      "verdict": "same",
+      "verdict": "unsure",
       "mechanism": "factory-result-assigned-to-let",
-      "note": "setActiveRepo is returned from createAppStore (store.ts:1919); same factory and same let-assigned caller (test-router.tsx:47)."
+      "note": "setActiveRepo is returned from createAppStore (store.ts:1919); same factory and same let-assigned caller (test-router.tsx:47). [round 2: removing the case blocker in a corpus clone moved no store.ts site; treated as unsure]"
      },
      {
       "app": "app-game",
@@ -10892,18 +10768,18 @@
       "path": "apps/ui/src/store.ts",
       "line": 1470,
       "rule": "SC2001",
-      "verdict": "same",
+      "verdict": "unsure",
       "mechanism": "factory-result-assigned-to-let",
-      "note": "recordAnswer is internal, called only from answerAsk and answerAskText (store.ts:1508, :1518), which createAppStore returns. Same factory and test-router.tsx let."
+      "note": "recordAnswer is internal, called only from answerAsk and answerAskText (store.ts:1508, :1518), which createAppStore returns. Same factory and test-router.tsx let. [round 2: removing the case blocker in a corpus clone moved no store.ts site; treated as unsure]"
      },
      {
       "app": "compass-ui",
       "path": "apps/ui/src/store.ts",
       "line": 1416,
       "rule": "SC2001",
-      "verdict": "same",
+      "verdict": "unsure",
       "mechanism": "factory-result-assigned-to-let",
-      "note": "sendAsk is called only from submitAsk (store.ts:1539), which createAppStore returns (:1940). Same factory and test-router.tsx let."
+      "note": "sendAsk is called only from submitAsk (store.ts:1539), which createAppStore returns (:1940). Same factory and test-router.tsx let. [round 2: removing the case blocker in a corpus clone moved no store.ts site; treated as unsure]"
      }
     ]
    },
@@ -11153,14 +11029,14 @@
     "src/argument-of-package-listeners.ts"
    ],
    "causes": [
-    "SC2001/unplaced-write/object-member:argument-of:package/handed-to-package"
+    "SC2001/unplaced-write/object-member:argument-of:package/handed-to-package:createPointerListeners"
    ],
    "expect": [
     {
      "rule": "SC2001",
      "family": "unplaced-write",
      "context": "",
-     "cause": "SC2001/unplaced-write/object-member:argument-of:package/handed-to-package"
+     "cause": "SC2001/unplaced-write/object-member:argument-of:package/handed-to-package:createPointerListeners"
     }
    ],
    "source": {
@@ -11170,8 +11046,8 @@
     "commit": "3064fed238a043da90041f8eb86b357e253330bf"
    },
    "status": "uncertifiable",
-   "labelWeight": 23,
-   "sites": 23,
+   "labelWeight": 16,
+   "sites": 16,
    "verification": {
     "samples": [
      {
@@ -11181,7 +11057,7 @@
       "rule": "SC2001",
       "verdict": "same",
       "mechanism": "handler-object-to-package-createPointerListeners",
-      "note": "onMove is a method of the object literal passed to createPointerListeners imported from @solid-primitives/pointer (:2, :71-127), the case's package function."
+      "note": "setOffset in onMove, a method of the options object passed to createPointerListeners (@solid-primitives/pointer, :71-127)."
      },
      {
       "app": "app-game",
@@ -11190,7 +11066,7 @@
       "rule": "SC2001",
       "verdict": "same",
       "mechanism": "handler-object-to-package-createPointerListeners",
-      "note": "onDown is a method of the same createPointerListeners options object (:71)."
+      "note": "setDirect in onDown of the same options object (:71)."
      },
      {
       "app": "app-game",
@@ -11199,16 +11075,7 @@
       "rule": "SC2001",
       "verdict": "same",
       "mechanism": "handler-object-to-package-createPointerListeners",
-      "note": "onDown is a method of the object passed to createPointerListeners from @solid-primitives/pointer (:2, :16-18)."
-     },
-     {
-      "app": "jandibat-web",
-      "path": "packages/solid-relay/src/primitives/createLazyLoadQuery.ts",
-      "line": 155,
-      "rule": "SC2001",
-      "verdict": "different",
-      "mechanism": "observer-object-to-subscribe-member-of-caller-supplied-observable",
-      "note": "The setter is in an `error` handler of an observer object passed to `source?.subscribe({...})`, where source = params.fetchObservable() (:~139), a caller-supplied relay-runtime Observable, so the target is a method on a caller-supplied value. The call sits in `retain`, a method of a cache `entry` object created in a createMemo and invoked later from an effect (:~190). No package function receives a handler object."
+      "note": "setDragging in onDown of the object passed to createPointerListeners (:16-25)."
      },
      {
       "app": "app-game",
@@ -11217,11 +11084,20 @@
       "rule": "SC2001",
       "verdict": "same",
       "mechanism": "handler-object-to-package-createPointerListeners",
-      "note": "onDown is in the object passed to createPointerListeners from @solid-primitives/pointer (:1, :43-55), wrapped in a local arrow called from a JSX ref callback; the sink is the same package function."
+      "note": "setActive in onDown of the object passed to createPointerListeners in pointerActive (:41-55); handlers are arrow properties, the sink is the same package function."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/paint/ui-example/components/cap.tsx",
+      "line": 36,
+      "rule": "SC2001",
+      "verdict": "same",
+      "mechanism": "handler-object-to-package-createPointerListeners",
+      "note": "setHovering in the onDown arrow of the object passed to createPointerListeners in pointerHover (:30-39)."
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 16
   },
   {
    "id": "write-options-sibling-called",
@@ -11760,14 +11636,14 @@
     "src/callback-stored-in-object.tsx"
    ],
    "causes": [
-    "SC1001/callback-to-unproven-consumer/project-function-argument/stored:object-member"
+    "SC1001/callback-to-unproven-consumer/project-function-argument/stored:object-member:argument-of:project"
    ],
    "expect": [
     {
      "rule": "SC1001",
      "family": "callback-to-unproven-consumer",
      "context": "",
-     "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/stored:object-member"
+     "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/stored:object-member:argument-of:project"
     }
    ],
    "source": {
@@ -11777,8 +11653,8 @@
     "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
    },
    "status": "uncertifiable",
-   "labelWeight": 13,
-   "sites": 4,
+   "labelWeight": 12,
+   "sites": 3,
    "verification": {
     "samples": [
      {
@@ -11787,17 +11663,8 @@
       "line": 810,
       "rule": "SC1001",
       "verdict": "same",
-      "mechanism": "callback-stored-in-object",
-      "note": "The `load` callback (fetchTopicConfig, reads props.clusterId/props.topicName) is the third argument of useTabQuery (:807). useTabQuery (TopicsRoute.tsx:148-156) puts `load` in `{ key, load, registry }` handed to kernel useQuery, which binds it through `registry.internals.bind(key, options.load)` (useQuery.ts:257): the case."
-     },
-     {
-      "app": "app-game",
-      "path": "packages/solid-nest/src/BlockTree.tsx",
-      "line": 166,
-      "rule": "SC1001",
-      "verdict": "unsure",
-      "mechanism": "callback-stored-in-object-then-class-constructor",
-      "note": "The callbacks are positional arguments of the static VirtualTree.create (solid-nest/src/virtual-tree.ts:43-100), which stores them in an `init` object (`key: getKey, options: getOptions`) handed to a class constructor: the first stop (stored in an object member) is the case's, but the object goes to `new VirtualTree(init)` and instance fields, not to a registry method."
+      "mechanism": "callback-stored-in-options-handed-to-project-useQuery",
+      "note": "`load` (reads props.clusterId/props.topicName) is the third argument of useTabQuery (:807); useTabQuery (:148-156) puts it in { key, load, registry } for kernel useQuery, which binds it through registry.internals.bind(key, options.load) (useQuery.ts:257)."
      },
      {
       "app": "kui",
@@ -11805,8 +11672,8 @@
       "line": 824,
       "rule": "SC1001",
       "verdict": "same",
-      "mechanism": "callback-stored-in-object",
-      "note": "The `load` callback (fetchTopicConsumers, reads props.clusterId/props.topicName) is the third argument of useTabQuery (:821). useTabQuery (TopicsRoute.tsx:148-156) puts `load` in `{ key, load, registry }` handed to kernel useQuery, which binds it through `registry.internals.bind(key, options.load)` (useQuery.ts:257): the case."
+      "mechanism": "callback-stored-in-options-handed-to-project-useQuery",
+      "note": "The same useTabQuery hand-off (:821)."
      },
      {
       "app": "kui",
@@ -11814,12 +11681,12 @@
       "line": 818,
       "rule": "SC1001",
       "verdict": "same",
-      "mechanism": "callback-stored-in-object",
-      "note": "The `load` callback (fetchPartitions, reads props.clusterId/props.topicName) is the third argument of useTabQuery (:813). useTabQuery (TopicsRoute.tsx:148-156) puts `load` in `{ key, load, registry }` handed to kernel useQuery, which binds it through `registry.internals.bind(key, options.load)` (useQuery.ts:257): the case."
+      "mechanism": "callback-stored-in-options-handed-to-project-useQuery",
+      "note": "The same useTabQuery hand-off (:813)."
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 3
   },
   {
    "id": "local-object-context-value",
@@ -11853,27 +11720,18 @@
     "commit": "3064fed238a043da90041f8eb86b357e253330bf"
    },
    "status": "uncertifiable",
-   "labelWeight": 13,
-   "sites": 12,
+   "labelWeight": 12,
+   "sites": 11,
    "verification": {
     "samples": [
-     {
-      "app": "app-game",
-      "path": "packages/ui-components-examples/cloud-storage-tree/CloudStorageContext.tsx",
-      "line": 182,
-      "rule": "SC1001",
-      "verdict": "unsure",
-      "mechanism": "read-in-nested-array-callback-inside-escaping-async-method-after-await",
-      "note": "The read `treeData()` (:182) is inside a `.filter` arrow nested in the async method navigateToFolder, after two awaits. The case reads directly in a sync method body. The message says 'written in rendering function' where the other samples name the method, so the blocking callback may be the filter arrow and not the method. The enclosing method does escape through the context value (:513), but I cannot tell that this is the blocking construct."
-     },
      {
       "app": "app-game",
       "path": "packages/ui-components-examples/cloud-storage-tree/CloudStorageContext.tsx",
       "line": 382,
       "rule": "SC1001",
       "verdict": "same",
-      "mechanism": "local-object-context-value",
-      "note": "The read `state.selection.selectedIds` is directly in the body of downloadSelected, a method of the local `actions` object (:~148), which is placed in the provider value `{ state, setState, actions, ... }` (:513). The read is before any await. The message names the method as the callback, as the case does."
+      "mechanism": "method-of-local-object-in-context-value",
+      "note": "state.selection.selectedIds read in the first statement of downloadSelected, a method of the local `actions` object handed on only through the provider value (:513); before any await."
      },
      {
       "app": "app-game",
@@ -11881,8 +11739,8 @@
       "line": 220,
       "rule": "SC1001",
       "verdict": "same",
-      "mechanism": "local-object-context-value",
-      "note": "The read `treeData()` is in the sync method toggleExpand of the local `actions` object (:~203-228), which is handed on only through the context provider value (:513). This is the case's shape: a method of a local object reading reactive state."
+      "mechanism": "method-of-local-object-in-context-value",
+      "note": "treeData() read in a condition of the synchronous method toggleExpand of `actions`; no await in the method before it."
      },
      {
       "app": "app-game",
@@ -11890,8 +11748,8 @@
       "line": 370,
       "rule": "SC1001",
       "verdict": "same",
-      "mechanism": "local-object-context-value",
-      "note": "`state.currentFolderId` is read at the top of the async method refresh, as the argument of its first await (evaluated synchronously), in a method of local `actions` that escapes via the context value (:513)."
+      "mechanism": "method-of-local-object-in-context-value",
+      "note": "state.currentFolderId read as the argument of the first await of `refresh`, evaluated before the suspension."
      },
      {
       "app": "app-game",
@@ -11899,12 +11757,21 @@
       "line": 340,
       "rule": "SC1001",
       "verdict": "same",
-      "mechanism": "local-object-context-value",
-      "note": "`state.dialog.targetId` is read in the method rename, the same method the case comment cites, in the argument of its first await. `actions` escapes via the context provider value (:513) and is used locally only through the onSettled calls and sibling methods."
+      "mechanism": "method-of-local-object-in-context-value",
+      "note": "state.dialog.targetId read in the first statement of `rename`, before its first await."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/ui-components-examples/cloud-storage-tree/CloudStorageContext.tsx",
+      "line": 353,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "method-of-local-object-in-context-value",
+      "note": "Array.from(state.selection.selectedIds) in the first statement of deleteSelected, before any await."
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 11
   },
   {
    "id": "read-pushed-to-local-entries",
@@ -12239,78 +12106,1384 @@
     ]
    },
    "verifiedWeight": 0
+  },
+  {
+   "id": "veto-handler-helper",
+   "kind": "uncertifiable",
+   "project": "veto-event-target",
+   "files": [
+    "src/handler-helper.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/dispatch-veto:event-target+helper/handler"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/dispatch-veto:event-target+helper/handler"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/folder-tabs/src/App.tsx",
+    "line": 41,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 24,
+   "sites": 23,
+   "verification": {
+    "samples": [
+     {
+      "app": "app-game",
+      "path": "packages/navigation-puck/src/NavigationPuck.tsx",
+      "line": 125,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-of-helper-invoking-member-of-parameter",
+      "note": "onKeyDown={(e) => nudge(e, 'pan')} on a button: nudge (:34) calls event.preventDefault() on its parameter, the case's navigate(event) shape; the project's event-target and helper dispatches withhold the handler placement."
+     },
+     {
+      "app": "app-game",
+      "path": "apps/solid-svg-editor/src/features/inspector/InspectorInputs.tsx",
+      "line": 627,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-of-helper-invoking-member-of-parameter",
+      "note": "button onClick={() => props.update(formatPoints(addPoint(points())))}: formatPoints invokes .map on the array it is handed, the case's toggleRelative shape."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/navigation-puck/src/NavigationPuck.tsx",
+      "line": 131,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-of-helper-invoking-member-of-parameter",
+      "note": "onPointerDown={(e) => begin(e, 'zoom')}: begin (:21) calls event.preventDefault()/stopPropagation() and target.setPointerCapture on its parameters; same as :125."
+     },
+     {
+      "app": "app-game",
+      "path": "apps/browser-atlas/src/App.tsx",
+      "line": 2223,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-of-helper-invoking-member-of-parameter",
+      "note": "exportDocument is run by button onClick={() => void exportDocument()} (:888); it hands binding.backend to createExplorerDocumentSnapshot, which invokes .load on it (a project-type member): the case's snapshot(backend) shape."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/solid-view-cube/src/ViewCube.tsx",
+      "line": 106,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-of-helper-invoking-member-of-parameter",
+      "note": "the local arrow start (:92) hands event.currentTarget to gesture.start, which calls .setPointerCapture on it; start runs from onPointerDown={(event) => start(event, true)} (:199, :217, :268). One local-arrow hop more than the case's direct handler call."
+     }
+    ]
+   },
+   "verifiedWeight": 23
+  },
+  {
+   "id": "veto-helper-handler-argument",
+   "kind": "uncertifiable",
+   "project": "veto-event-target",
+   "files": [
+    "src/handler-argument.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:event-target+helper/handler"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "parameter-use-unmodeled",
+     "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:event-target+helper/handler"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/paint/ui-example/components/navigation-popup.tsx",
+    "line": 68,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 16,
+   "sites": 16,
+   "verification": {
+    "samples": [
+     {
+      "app": "app-game",
+      "path": "apps/paint/src/SymmetryPanel.tsx",
+      "line": 9,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-with-argument-handed-to-member",
+      "note": "update (:9) hands an object literal to props.session.updateSymmetry; update is called from the select/range onChange handlers (:22 ...): handler-delivered call with an object argument handed to a member of another object, as the case."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/paint/ui-example/components/navigation-popup.tsx",
+      "line": 68,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-with-argument-handed-to-member",
+      "note": "onPointerMove calls zoom.move({x, y}) on a gesture object: the case's source; intrinsic handler hands an object literal to a member of another object."
+     },
+     {
+      "app": "app-game",
+      "path": "apps/browser-atlas/src/App.tsx",
+      "line": 1292,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-with-argument-handed-to-member",
+      "note": "selectSearchMatch hands matches[index] to navigation.select; it runs from button onClick (:1067, :1075) and the keydown handler handleSearchKeyDown (:1267, :1276)."
+     },
+     {
+      "app": "app-game",
+      "path": "apps/grease-pencil-typegpu/src/App.tsx",
+      "line": 148,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-with-argument-handed-to-member",
+      "note": "the onResetView prop (project component AppToolbar) calls renderer()?.setViewportMode(...); AppToolbar.tsx:233 runs props.onResetView() from a button onClick: the case's component-prop route."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/svg-editor/path-input.tsx",
+      "line": 144,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-with-argument-handed-to-member",
+      "note": "onClick of the project component Button (:174, onClick={props.onClick} on a <button>) calls convertPathCommand(state, index, newType) with a computed value: the component-prop route."
+     }
+    ]
+   },
+   "verifiedWeight": 16
+  },
+  {
+   "id": "veto-updater-callback",
+   "kind": "uncertifiable",
+   "project": "veto-event-target",
+   "files": [
+    "src/updater-callback.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-path-unresolved/dispatch-veto:event-target+helper/not-handler:project-function-argument/member-of-parameter",
+    "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:event-target+helper/not-handler:project-function-argument/member-of-parameter"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-path-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-path-unresolved/dispatch-veto:event-target+helper/not-handler:project-function-argument/member-of-parameter"
+    },
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "parameter-use-unmodeled",
+     "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:event-target+helper/not-handler:project-function-argument/member-of-parameter"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/grease-pencil-typegpu/src/app/sidebar/MaterialSection.tsx",
+    "line": 38,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 27,
+   "sites": 20,
+   "verification": {
+    "samples": [
+     {
+      "app": "app-game",
+      "path": "apps/grease-pencil-typegpu/src/app/sidebar/MaterialSection.tsx",
+      "line": 48,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-updater-callback-handed-to-parent-function-in-handler",
+      "note": "onSetStrokeMode prop callback calls props.updateDocument((currentDocument) => setActiveMaterialStrokeMode(currentDocument, strokeMode)); the prop is forwarded to MaterialStrokeControls.tsx:37 and run from a select onChange: the case's updater callback handed to a props function."
+     },
+     {
+      "app": "app-game",
+      "path": "apps/grease-pencil-typegpu/src/app/sidebar/LayerSection.tsx",
+      "line": 66,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-updater-callback-handed-to-parent-function-in-handler",
+      "note": "onSetLayerOpacity prop callback calls props.updateDocument((currentDocument) => setLayerOpacity(...)); LayerPanel.tsx:114 runs the prop from an input onInput: the case's shape (the helper reads .layers through a member path)."
+     },
+     {
+      "app": "app-game",
+      "path": "apps/grease-pencil-typegpu/src/app/sidebar/MaterialSection.tsx",
+      "line": 73,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-updater-callback-handed-to-parent-function-in-handler",
+      "note": "onSetFillColor prop callback (lines 71-75) calls props.updateDocument((currentDocument) => setActiveMaterialFillColor(...)); MaterialPanel.tsx:76 forwards it to MaterialColorStrip.tsx:27, which runs it from a button onClick: the case's shape."
+     },
+     {
+      "app": "app-game",
+      "path": "apps/grease-pencil-typegpu/src/app/AppToolbar.tsx",
+      "line": 163,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-updater-callback-handed-to-parent-function-in-handler",
+      "note": "onSetStrokeRadius prop callback calls props.updateDocument((document) => setActiveMaterialStrokeRadius(document, radius)); BrushControls.tsx:22 runs the prop from the range input onInput."
+     },
+     {
+      "app": "app-game",
+      "path": "apps/grease-pencil-typegpu/src/app/sidebar/MaterialSection.tsx",
+      "line": 63,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-updater-callback-handed-to-parent-function-in-handler",
+      "note": "onSetFillStyle prop callback with props.updateDocument updater; MaterialFillControls.tsx:31 runs the prop from a select onChange: the case's shape."
+     }
+    ]
+   },
+   "verifiedWeight": 20
+  },
+  {
+   "id": "veto-store-handler",
+   "kind": "uncertifiable",
+   "project": "veto-listener-wrapper",
+   "files": [
+    "src/store-handler.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/withheld-object-member/dispatch-veto:project-callback/handler"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "withheld-object-member",
+     "cause": "SC9012/runtime-target-unselected/withheld-object-member/dispatch-veto:project-callback/handler"
+    }
+   ],
+   "source": {
+    "app": "probus-hk",
+    "path": "src/components/AlertSheet.tsx",
+    "line": 44,
+    "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 33,
+   "sites": 33,
+   "verification": {
+    "samples": [
+     {
+      "app": "probus-hk",
+      "path": "src/components/AlertSheet.tsx",
+      "line": 44,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-of-withheld-object-member",
+      "note": "alerts.remove (stores/alerts.ts: object literal after the module-level persistedCollection(...) call) is called in toggle, which :90 hands as onToggle to AlertOption, whose button runs it as onClick (:216); the project's TabBar.tsx:271-272 searchLink.click() dispatches (inside createHotkey callbacks) withhold that handler placement."
+     },
+     {
+      "app": "probus-hk",
+      "path": "src/components/SettingsSheet.tsx",
+      "line": 435,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-of-withheld-object-member",
+      "note": "settings.setVehiclesOnMap (stores/settings.ts:196, shorthand member of the exported literal after the persistedCollection call) is called in the onChange prop of Toggle, which Chrome.tsx:389 runs from its button onClick: the case's project-component-prop route."
+     },
+     {
+      "app": "probus-hk",
+      "path": "src/components/SettingsSheet.tsx",
+      "line": 384,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-of-withheld-object-member",
+      "note": "sheets.openRangeInSettings (stores/sheets.ts:89, member of the exported literal whose other members are non-literal signals) is called in an intrinsic <button onClick>: the case's element-handler route, held by the same dispatch veto."
+     },
+     {
+      "app": "probus-hk",
+      "path": "src/components/SettingsSheet.tsx",
+      "line": 451,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-of-withheld-object-member",
+      "note": "settings.setVehiclesAway in the onChange prop of Toggle (Chrome.tsx:389 onClick): same as :435."
+     },
+     {
+      "app": "probus-hk",
+      "path": "src/routes/Nearby.tsx",
+      "line": 632,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-of-withheld-object-member",
+      "note": "settings.setNearbyMode (stores/settings.ts:203) is called in the onChange prop of Segmented, which Chrome.tsx:352 runs from its button onClick: the project-component-prop route."
+     }
+    ]
+   },
+   "verifiedWeight": 33
+  },
+  {
+   "id": "veto-handler-argument",
+   "kind": "uncertifiable",
+   "project": "veto-listener-wrapper",
+   "files": [
+    "src/handler-argument.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:project-callback/handler"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "parameter-use-unmodeled",
+     "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:project-callback/handler"
+    },
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/unplaced-read/dispatch-veto:project-callback"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/settings/components/Settings/BackgroundScenePicker.tsx",
+    "line": 90,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 15,
+   "sites": 15,
+   "verification": {
+    "samples": [
+     {
+      "app": "inferay",
+      "path": "src/modules/repository/components/changes/components/ChangesPanel/DetailIdentity.tsx",
+      "line": 62,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-with-object-argument",
+      "note": "img onLoad (intrinsic handler, :59) calls the project function rememberLoadedAuthorAvatar(email, event.currentTarget.src) (useGitAuthorAvatars.ts:63), which wraps the url in an object literal handed to setAvatars/rememberAvatars; the project's useRepositoryWorkbench.tsx:781 dispatch withholds the handler placement."
+     },
+     {
+      "app": "inferay",
+      "path": "src/modules/workspace/components/WorkspaceSidebar/index.tsx",
+      "line": 173,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-with-object-argument",
+      "note": "setAgentLayoutMode(mode) (shared/lib/native.tsx:400) is called in updateLayoutMode, which :292 passes as onUpdateLayoutMode to SidebarWorkspacesSection whose buttons call it from onClick (:99, :157): the case's component-prop route."
+     },
+     {
+      "app": "inferay",
+      "path": "src/modules/settings/components/Settings/BackgroundScenePicker.tsx",
+      "line": 167,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-with-object-argument",
+      "note": "onInput on a range input calls updateAppBackground({glassOpacity: ...}) (useAppAppearance.tsx:111), which wraps the patch in an object handed to rustProject: the case's own shape (intrinsic handler, object literal argument)."
+     },
+     {
+      "app": "probus-hk",
+      "path": "src/components/TabBar.tsx",
+      "line": 450,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-with-object-argument",
+      "note": "button onClick calls swapTheme(next().value, pointerOrigin(event)) (lib/themeSwap.ts:57, a project function): intrinsic handler hands arguments to a project function; same placement withheld by the dispatch veto."
+     },
+     {
+      "app": "probus-hk",
+      "path": "src/components/SettingsSheet.tsx",
+      "line": 353,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "veto-handler-call-with-object-argument",
+      "note": "Segmented onChange prop calls swapTheme(v, pointerOrigin(event)); Chrome.tsx:352 runs it from the button onClick: the case's component-prop route."
+     }
+    ]
+   },
+   "verifiedWeight": 15
+  },
+  {
+   "id": "handler-in-conditional",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/handler-in-conditional.tsx"
+   ],
+   "causes": [
+    "SC1001/unplaced-read/intrinsic-handler/in-conditional"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "unplaced-read",
+     "context": "",
+     "cause": "SC1001/unplaced-read/intrinsic-handler/in-conditional"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/conversation/components/ChatMessageList/CheckpointMarker.tsx",
+    "line": 52,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 38,
+   "sites": 32,
+   "verification": {
+    "samples": [
+     {
+      "app": "inferay",
+      "path": "src/modules/repository/components/operations/ChatDiffPanel/ViewerHeader.tsx",
+      "line": 109,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "prop-or-accessor-read-in-handler-inside-conditional-jsx",
+      "note": "onMouseLeave={() => _props.setHoveredModeIndex(null)} on a <div> inside the fragment of the ternary `_props.mainViewMode !== \"graph\" ? (<>...</>) : null` (:104): a prop read in a handler of an element in a conditional branch of an exported component, as the case's props.onRevert read."
+     },
+     {
+      "app": "inferay",
+      "path": "src/modules/repository/components/operations/ChatDiffPanel/ViewerHeader.tsx",
+      "line": 141,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "prop-or-accessor-read-in-handler-inside-conditional-jsx",
+      "note": "onPointerDown handler of a <button> in the same ternary fragment reads _props.onViewModeChange (:141): same."
+     },
+     {
+      "app": "inferay",
+      "path": "src/modules/repository/components/changes/components/ChangesPanel/TreeNodeRow.tsx",
+      "line": 175,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "prop-or-accessor-read-in-handler-inside-conditional-jsx",
+      "note": "onClick of a <button> inside `{file() && props.onAction && (<button ...>)}` (:170) reads props.onAction (and the accessor file()): the case's `props.id && (<button ...>)` logical shape, prop plus accessor reads."
+     },
+     {
+      "app": "inferay",
+      "path": "src/modules/conversation/components/ChatComposer/CommandMenuRow.tsx",
+      "line": 50,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "prop-or-accessor-read-in-handler-inside-conditional-jsx",
+      "note": "onClick of a <button> inside `{_props.command.isFromLibrary && _props.command.id && (<button ...>)}` (:44) reads _props.setSlashMenu: logical && branch, exported component, prop read."
+     },
+     {
+      "app": "inferay",
+      "path": "src/modules/repository/components/operations/ChatDiffPanel/ViewerHeader.tsx",
+      "line": 140,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "prop-or-accessor-read-in-handler-inside-conditional-jsx",
+      "note": "onPointerDown handler of the second mode button in the same ternary fragment reads _props.onMainViewModeChange (:140): same as :141."
+     }
+    ]
+   },
+   "verifiedWeight": 32
+  },
+  {
+   "id": "open-primitive-prop-argument",
+   "kind": "uncertifiable",
+   "project": "open-program/packages/ui",
+   "files": [
+    "src/primitive-prop-argument.tsx"
+   ],
+   "causes": [
+    "SC9012/open-program-boundary/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "parameter-use-unmodeled",
+     "cause": "SC9012/open-program-boundary/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument"
+    },
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/open-program-boundary/parameter-member-call/parameter-member-target-unresolved/project-type"
+    },
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/open-program-boundary/callback-to-unproven-consumer/project-function-argument/called-in-kept-closure"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-clusters/src/ClustersRoute.tsx",
+    "line": 359,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 58,
+   "sites": 43,
+   "verification": {
+    "samples": [
+     {
+      "app": "kui",
+      "path": "frontend/packages/feature-messages/src/MessagesRoute.tsx",
+      "line": 257,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "prop-primitive-argument-unprovable-open",
+      "note": "prepare = createMutation((source) => registerFilter(kui.api, props.clusterId, source)) (:257); props.clusterId is typed string on BrowserScreen (:107), passed on from a keyed Show (:82); registerFilter hands clusterId to api.post as params.path (filters.ts:188-189). Same: a string prop handed to a project data function inside a callback a project function keeps."
+     },
+     {
+      "app": "kui",
+      "path": "frontend/packages/feature-messages/src/MessagesRoute.tsx",
+      "line": 244,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "prop-primitive-argument-unprovable-open",
+      "note": "compile = createMutation((source) => registerFilter(kui.api, props.clusterId, source)) (:244): the same prop-to-data-function call as the case, in a kept callback."
+     },
+     {
+      "app": "kui",
+      "path": "frontend/packages/feature-topics/src/TopicsRoute.tsx",
+      "line": 542,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "prop-primitive-argument-unprovable-open",
+      "note": "create = createMutation((topic) => createTopic(kui.api, props.clusterId, topic)) (:542); TopicsScreen(props: { clusterId: string }) (:412); createTopic wraps clusterId in params.path for api.post (write.ts:50-51). Same shape as the case."
+     },
+     {
+      "app": "kui",
+      "path": "frontend/packages/feature-topics/src/TopicsRoute.tsx",
+      "line": 824,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "prop-primitive-argument-unprovable-open",
+      "note": "fetchTopicConsumers(kui.api, props.clusterId, props.topicName) in a useTabQuery loader callback (:824); data.ts:474-475 puts clusterId in params.path of api.get. Same as the case (prop string to a data function that wraps it for an api method)."
+     },
+     {
+      "app": "kui",
+      "path": "frontend/packages/feature-topics/src/TopicsRoute.tsx",
+      "line": 535,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "prop-primitive-argument-unprovable-open",
+      "note": "deleteTopics(kui.api, props.clusterId, names) inside the createMutation callback (:535). The callee hands clusterId on in closures to planDeletion/deleteTopic (write.ts:454-462) rather than wrapping it in a literal, but the blocked fact is the same: props.clusterId typed string, primitive only provable from the component's callers."
+     }
+    ]
+   },
+   "verifiedWeight": 43
+  },
+  {
+   "id": "open-query-key-callback",
+   "kind": "uncertifiable",
+   "project": "open-program/packages/ui",
+   "files": [
+    "src/query-key-callback.tsx"
+   ],
+   "causes": [
+    "SC1001/open-program-boundary/callback-to-unproven-consumer/object-member:argument-of:project/handed-to-package"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/open-program-boundary/callback-to-unproven-consumer/object-member:argument-of:project/handed-to-package"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-clusters/src/BrokersScreen.tsx",
+    "line": 72,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 27,
+   "sites": 17,
+   "verification": {
+    "samples": [
+     {
+      "app": "kui",
+      "path": "frontend/packages/feature-topics/src/TopicsRoute.tsx",
+      "line": 742,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "key-callback-to-useQuery",
+      "note": "key: () => `topic-overview|${props.clusterId}|...` in useQuery({ key, load }) (:742); kernel useQuery runs options.key() in a lazy createMemo and untrack(options.key) in reload (useQuery.ts:260-290), as the case's useQuery does."
+     },
+     {
+      "app": "kui",
+      "path": "frontend/packages/feature-schemas/src/SchemasRoute.tsx",
+      "line": 406,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "key-callback-to-useQuery",
+      "note": "key: () => `schemas:compat:${props.clusterId}:${props.subject}` of useQuery (:406): a prop read in the key callback of the same kernel useQuery."
+     },
+     {
+      "app": "kui",
+      "path": "frontend/packages/feature-clusters/src/BrokersScreen.tsx",
+      "line": 77,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "key-callback-to-useQuery",
+      "note": "key: () => `clusters/${props.clusterId}` of useQuery (:77) in the exported BrokersScreen (:68); the case's shape exactly."
+     },
+     {
+      "app": "kui",
+      "path": "frontend/packages/feature-clusters/src/BrokersScreen.tsx",
+      "line": 299,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "key-callback-to-useQuery",
+      "note": "key: () => `clusters/${props.clusterId}/brokers/${props.brokerId}/configs` of useQuery in BrokerSettings (:291-299). BrokerSettings is not exported itself, but its props come from an exported screen; the read is a prop in a useQuery key callback."
+     },
+     {
+      "app": "kui",
+      "path": "frontend/packages/feature-schemas/src/SchemasRoute.tsx",
+      "line": 401,
+      "rule": "SC1001",
+      "verdict": "same",
+      "mechanism": "key-callback-to-useQuery",
+      "note": "key: () => `schemas:schema:${props.clusterId}:...` of useQuery (:401): a prop read in a useQuery key callback."
+     }
+    ]
+   },
+   "verifiedWeight": 17
+  },
+  {
+   "id": "package-event-listener-target",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/pkg-event-listener-target.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-target-unresolved/callee-package:@solid-primitives/event-listener"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-target-unresolved",
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/callee-package:@solid-primitives/event-listener"
+    },
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/package-callback"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/abr-viewer/src/components/OptionMenu.tsx",
+    "line": 50,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 34,
+   "sites": 34,
+   "verification": {
+    "samples": [
+     {
+      "app": "app-game",
+      "path": "packages/paint/offscreen-canvas-paint/offscreen-canvas-paint.tsx",
+      "line": 16,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "package-make-event-listener-target",
+      "note": "makeEventListener(pointerTarget, 'pointermove', ...) imported from @solid-primitives/event-listener (:3, :16); pointerTarget is a canvas cast to HTMLElement (:13). The package calls addEventListener on its first parameter, as in the case."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/ogl-examples/mouse-flowmap/mouse-flowmap.tsx",
+      "line": 72,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "package-make-event-listener-target",
+      "note": "makeEventListener(window, 'pointermove', updateMouse, false) from the package (:10, :72); the case passes window the same way."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/paint/input-visualizer/shortcut-settings.tsx",
+      "line": 348,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "package-make-event-listener-target",
+      "note": "makeEventListener(window, 'keydown', ...) from the package (:1, :348): window handed to the package's target parameter."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/paint/canvas-paint/canvas-paint-step-by-step-2.tsx",
+      "line": 173,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "package-make-event-listener-target",
+      "note": "makeEventListener(pointerTarget, 'pointermove', ...) from the package (:19, :173); pointerTarget is a cast DOM element, a target whose implementation the checker cannot select, as window in the case."
+     },
+     {
+      "app": "app-game",
+      "path": "apps/gpu-text-rendering/src/features/scene/FrameLoop.tsx",
+      "line": 39,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "package-make-event-listener-target",
+      "note": "makeEventListener(gpu.signal, 'abort', gate.destroy, { once: true }) from the package (:1, :39): an AbortSignal (EventTarget) handed to the package's target parameter that calls addEventListener on it."
+     }
+    ]
+   },
+   "verifiedWeight": 34
+  },
+  {
+   "id": "package-hono-route",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/package-hono-route.ts"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/exported-parameter-member-dispatch/callback-argument:package:hono"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "exported-parameter-member-dispatch",
+     "cause": "SC9012/parameter-member-call/exported-parameter-member-dispatch/callback-argument:package:hono"
+    }
+   ],
+   "source": {
+    "app": "sensor-sim",
+    "path": "packages/server/src/routes/status.ts",
+    "line": 12,
+    "commit": "d34c8fcd7e86c92ee95fe4e2a1baf947e12fd871"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 24,
+   "sites": 24,
+   "verification": {
+    "samples": [
+     {
+      "app": "sensor-sim",
+      "path": "packages/server/src/routes/sims.ts",
+      "line": 24,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "hono-route-callback-context-method",
+      "note": ".get('/:id', (c) => { const sim = c.get('sim'); return c.json(sim) }) on an exported Hono app (sims.ts:24): a route callback handed to Hono#get calls methods of c."
+     },
+     {
+      "app": "sensor-sim",
+      "path": "packages/server/src/routes/login.ts",
+      "line": 17,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "hono-route-callback-context-method",
+      "note": ".post('/', zValidator(...), async (c) => { await c.req.json() ... }) on loginApp = new Hono() (:17): route callback handed to Hono#post calls c.req.json."
+     },
+     {
+      "app": "sensor-sim",
+      "path": "packages/server/src/routes/me.ts",
+      "line": 9,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "hono-route-callback-context-method",
+      "note": ".get('/', (c) => { const user = c.get('user') as User ... c.json(profile) }) on meApp = new Hono() (me.ts:9): the case's shape."
+     },
+     {
+      "app": "sensor-sim",
+      "path": "packages/server/src/routes/users.ts",
+      "line": 34,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "hono-route-callback-context-method",
+      "note": ".post('/', zValidator(...), async (c) => { await c.req.json() ... }) on a Hono app (:34): route callback calling c.req.json."
+     },
+     {
+      "app": "sensor-sim",
+      "path": "packages/server/src/routes/sims.ts",
+      "line": 63,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "hono-route-callback-context-method",
+      "note": ".delete('/:id', async (c) => { const sim = c.get('sim') ... c.json(...) }) (:63): route callback handed to Hono#delete calling c.get and c.json."
+     }
+    ]
+   },
+   "verifiedWeight": 24
+  },
+  {
+   "id": "package-convex-handler",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/package-convex-mutation.ts"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/exported-parameter-member-dispatch/callback-option:package:convex"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "exported-parameter-member-dispatch",
+     "cause": "SC9012/parameter-member-call/exported-parameter-member-dispatch/callback-option:package:convex"
+    }
+   ],
+   "source": {
+    "app": "expenses-app",
+    "path": "convex/user.ts",
+    "line": 29,
+    "commit": "f24e272713513d7721133159a53ea960c756df13"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 14,
+   "sites": 14,
+   "verification": {
+    "samples": [
+     {
+      "app": "expenses-app",
+      "path": "convex/expenses.ts",
+      "line": 147,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "convex-handler-ctx-method",
+      "note": "handler: async (ctx, args) => { const me = await getMeDocument(ctx); ... } in an exported mutation({ args, handler }) from ./_generated/server (builders typed by convex/server); message: invokes .db.query on a caller-supplied value. Case: mutationGeneric handler calling ctx.db."
+     },
+     {
+      "app": "expenses-app",
+      "path": "convex/exchangeRates.ts",
+      "line": 145,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "convex-handler-ctx-method",
+      "note": "handler: async (ctx, { currency }) => ... in an exported query({ args, handler }) (:145): ctx.db.query on the handler's ctx parameter, as in the case."
+     },
+     {
+      "app": "expenses-app",
+      "path": "convex/invitations.ts",
+      "line": 173,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "convex-handler-ctx-method",
+      "note": "handler: async (ctx, args) => { const { token } = args; ... } of exported mutation acceptInvitation (:173): handler option of a convex builder using ctx.db."
+     },
+     {
+      "app": "expenses-app",
+      "path": "convex/expenses.ts",
+      "line": 244,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "convex-handler-ctx-method",
+      "note": "handler: async (ctx, args) => ... of exported mutation updateExpense (:244); message: invokes .db.get on a caller-supplied value. Same handler-option shape."
+     },
+     {
+      "app": "expenses-app",
+      "path": "convex/invitations.ts",
+      "line": 70,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "convex-handler-ctx-method",
+      "note": "handler: async (ctx) => ... of exported mutation expireAllInvitations (:70): handler option calling ctx.db.query."
+     }
+    ]
+   },
+   "verifiedWeight": 14
+  },
+  {
+   "id": "package-relay-request",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/package-relay-request.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:function-package:relay-runtime"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "parameter-use-unmodeled",
+     "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:function-package:relay-runtime"
+    }
+   ],
+   "source": {
+    "app": "jandibat-web",
+    "path": "apps/web/src/pages/AuthPage.tsx",
+    "line": 84,
+    "commit": "0e8f6b64d1436917ad283088fe753d0a036a3715"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 14,
+   "sites": 14,
+   "verification": {
+    "samples": [
+     {
+      "app": "jandibat-web",
+      "path": "apps/web/test/relay-secret-mutation.test.tsx",
+      "line": 78,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "request-object-to-relay-runtime-function",
+      "note": "createRelayEphemeralMutation(url, secretMutation(...)) (:78): the argument is a request object a project function builds; the callee (relay/secret-mutation.ts:10-12) hands its mutation parameter to relay-runtime's getRequest, as in the case."
+     },
+     {
+      "app": "jandibat-web",
+      "path": "apps/web/src/pages/ConnectionsRelayPage.tsx",
+      "line": 58,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "request-object-to-relay-runtime-function",
+      "note": "createRelayEphemeralMutation(defaultApiBaseUrl(), connectMutation) (:58): a generated request object to the same callee, which passes it to getRequest."
+     },
+     {
+      "app": "jandibat-web",
+      "path": "apps/web/src/pages/ConnectionsRelayPage.tsx",
+      "line": 31,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "request-object-to-relay-runtime-function",
+      "note": "createRelayPaginationFragment(fragment, ...) = solid-relay's createPaginationFragment (workspace package, packages/solid-relay/src/primitives/createPaginationFragment.ts:73-79): fragment is handed to relay-runtime's getFragment (:81). A project function handing its parameter to a relay-runtime function, as in the case (different relay-runtime function)."
+     },
+     {
+      "app": "jandibat-web",
+      "path": "apps/web/src/pages/AuthPage.tsx",
+      "line": 363,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "request-object-to-relay-runtime-function",
+      "note": "createRelayEphemeralMutation(defaultApiBaseUrl(), beginPasskeySignInMutation) (:363): same callee and shape as the case."
+     },
+     {
+      "app": "jandibat-web",
+      "path": "apps/web/test/relay-pagination-compat.test.tsx",
+      "line": 79,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "request-object-to-relay-runtime-function",
+      "note": "createRelayPaginationFragment(fragment, () => subject()?.subject) (:79-81): same callee as ConnectionsRelayPage:31, hands the fragment to relay-runtime's getFragment."
+     }
+    ]
+   },
+   "verifiedWeight": 14
+  },
+  {
+   "id": "package-webgpu-context",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/package-webgpu-context.tsx"
+   ],
+   "causes": [
+    "SC9012/leaf-callback-body/member-package/instance-destructured-types-only",
+    "SC9012/leaf-callback-body/member-package/call-expression-types-only"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/member-package/instance-destructured-types-only"
+    },
+    {
+     "rule": "SC9012",
+     "family": "leaf-callback-body",
+     "context": "",
+     "cause": "SC9012/leaf-callback-body/member-package/call-expression-types-only"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/typegpu-examples/1.1-webgpu-fundamentals/index.tsx",
+    "line": 83,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 21,
+   "sites": 11,
+   "verification": {
+    "samples": [
+     {
+      "app": "app-game",
+      "path": "packages/typegpu-examples/5.3-index-buffers/index.tsx",
+      "line": 168,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "types-only-package-member-in-leaf-callback",
+      "note": "createTrackedEffect callback calls context.getCurrentTexture().createView() (:168); context destructured from useTypeGPU() (:80), a GPUCanvasContext typed by @webgpu/types (declarations only)."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/typegpu-examples/5.2-webgpu-instancing-with-vertex-buffers/index.tsx",
+      "line": 168,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "types-only-package-member-in-leaf-callback",
+      "note": "same: context.getCurrentTexture().createView() in the createTrackedEffect callback (:168), context destructured from useTypeGPU() (:80)."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/typegpu-examples/3-webgpu-uniforms/index.tsx",
+      "line": 149,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "types-only-package-member-in-leaf-callback",
+      "note": "same: context.getCurrentTexture().createView() (:149), context destructured from useTypeGPU() (:75)."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/typegpu-examples/6.1-webgpu-textures/index.tsx",
+      "line": 164,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "types-only-package-member-in-leaf-callback",
+      "note": "same: context.getCurrentTexture().createView() (:164), context destructured from useTypeGPU() (:108)."
+     },
+     {
+      "app": "app-game",
+      "path": "packages/typegpu-examples/2-webgpu-inter-stage-variables/index.tsx",
+      "line": 136,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "types-only-package-member-in-leaf-callback",
+      "note": "same: context.getCurrentTexture().createView() (:136), context destructured from useTypeGPU() (:112)."
+     }
+    ]
+   },
+   "verifiedWeight": 11
+  },
+  {
+   "id": "package-relay-commit",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/package-relay-commit.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:object:argument:function-package:relay-runtime-in-closure"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "parameter-use-unmodeled",
+     "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:object:argument:function-package:relay-runtime-in-closure"
+    }
+   ],
+   "source": {
+    "app": "jandibat-web",
+    "path": "apps/web/src/pages/AuthPage.tsx",
+    "line": 190,
+    "commit": "0e8f6b64d1436917ad283088fe753d0a036a3715"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 12,
+   "sites": 12,
+   "verification": {
+    "samples": [
+     {
+      "app": "jandibat-web",
+      "path": "apps/web/src/pages/ConnectionsRelayPage.tsx",
+      "line": 63,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "param-wrapped-in-options-to-relay-commit-in-closure",
+      "note": "enqueue = createRelayMutation<...>(enqueueMutation) (:63): createRelayMutation (relay/index.ts:14-15) passes mutation to solid-relay's createMutation, which puts it in the options literal given to relay-runtime's commitMutation inside commit (createMutation.ts:37-39); the case has the same two-layer shape."
+     },
+     {
+      "app": "jandibat-web",
+      "path": "apps/web/test/relay-cross-route.test.tsx",
+      "line": 67,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "param-wrapped-in-options-to-relay-commit-in-closure",
+      "note": "updateSubject = createRelayMutation<...>(updateMutation) inside a test component (:67): same callee and two-layer chain as the case."
+     },
+     {
+      "app": "jandibat-web",
+      "path": "apps/web/test/relay-compat.test.tsx",
+      "line": 73,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "param-wrapped-in-options-to-relay-commit-in-closure",
+      "note": "updateSubject = createRelayMutation<...>(mutation) (:73): same callee and chain as the case."
+     },
+     {
+      "app": "jandibat-web",
+      "path": "apps/web/src/subjects/OwnerGate.tsx",
+      "line": 83,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "param-wrapped-in-options-to-relay-commit-in-closure",
+      "note": "createSubject = createRelayMutation<AuthCreateSubjectMutation>(createSubjectMutation) (:83): same callee and chain as the case."
+     },
+     {
+      "app": "jandibat-web",
+      "path": "apps/web/src/pages/ConnectionsRelayPage.tsx",
+      "line": 56,
+      "rule": "SC9012",
+      "verdict": "same",
+      "mechanism": "param-wrapped-in-options-to-relay-commit-in-closure",
+      "note": "connectPublic = createRelayMutation<...>(connectMutation) (:56): same callee and chain as the case."
+     }
+    ]
+   },
+   "verifiedWeight": 12
+  },
+  {
+   "id": "write-in-route-store-mixed",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/route-store-mixed-callers.ts"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/via-callers:mixed:helper-call-chain|object-member:argument-of:project/assigned-to-variable|object-member:argument-of:project/unplaced-invocation:after-await|object-member:factory-result/assigned-to-variable|package-callback",
+    "SC2001/unplaced-write/via-callers:mixed:object-member:factory-result/unplaced-invocation:mixed|package-callback"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/via-callers:mixed:object-member:factory-result/unplaced-invocation:mixed|package-callback"
+    }
+   ],
+   "source": {
+    "app": "compass-ui",
+    "path": "apps/ui/src/store.ts",
+    "line": 1109,
+    "commit": "2e4e7b875e371e45c5ffa4ee39715d57cf2049a5"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 26,
+   "sites": 26,
+   "verification": {
+    "samples": [
+     {
+      "app": "compass-ui",
+      "path": "apps/ui/src/store.ts",
+      "line": 1179,
+      "rule": "SC2001",
+      "verdict": "same",
+      "mechanism": "write-in-route-apply-reached-from-let-navigate-and-effect-apply",
+      "note": "setSelectedTopicId(null) (:1179) is in applyTopicRoute (:1163), a helper applyRoute (:1104) calls (:1115); applyRoute is entered from routerNavigate (:742, a `let` function re-assigned by bindRouter :768) and from the createEffect apply (:779): the case's let-bound navigate plus effect apply."
+     },
+     {
+      "app": "compass-ui",
+      "path": "apps/ui/src/store.ts",
+      "line": 1157,
+      "rule": "SC2001",
+      "verdict": "same",
+      "mechanism": "write-in-route-apply-reached-from-let-navigate-and-effect-apply",
+      "note": "setSelectedChannelId (:1157) is in applyChannelRoute (:1146), called by applyRoute (:1117) and so entered from the same let-bound routerNavigate and effect apply."
+     },
+     {
+      "app": "compass-ui",
+      "path": "apps/ui/src/store.ts",
+      "line": 1199,
+      "rule": "SC2001",
+      "verdict": "same",
+      "mechanism": "write-in-route-apply-reached-from-let-navigate-and-effect-apply",
+      "note": "setSelectedAgentId(agentId) (:1199) is in applyAgentRoute (:1189), called by applyRoute (:1123): same callers as the case."
+     },
+     {
+      "app": "compass-ui",
+      "path": "apps/ui/src/store.ts",
+      "line": 1173,
+      "rule": "SC2001",
+      "verdict": "same",
+      "mechanism": "write-in-route-apply-reached-from-let-navigate-and-effect-apply",
+      "note": "setSelectedTopicId(topicId) (:1173) in applyTopicRoute (:1163), reached from applyRoute (:1115): same chain."
+     },
+     {
+      "app": "compass-ui",
+      "path": "apps/ui/src/store.ts",
+      "line": 1133,
+      "rule": "SC2001",
+      "verdict": "same",
+      "mechanism": "write-in-route-apply-reached-from-let-navigate-and-effect-apply",
+      "note": "setView(\"settings\") in a switch arm of applyRoute (:1104) itself, entered from routerNavigate (:755) and the createEffect apply (:779)."
+     }
+    ]
+   },
+   "verifiedWeight": 26
+  },
+  {
+   "id": "handler-spread-any-call-result",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/handler-spread-any-call-result.tsx"
+   ],
+   "causes": [
+    "SC4001/handler-unresolved/handler-spread-unresolved/unresolved-call-result"
+   ],
+   "expect": [
+    {
+     "rule": "SC4001",
+     "family": "handler-unresolved",
+     "context": "handler-spread-unresolved",
+     "cause": "SC4001/handler-unresolved/handler-spread-unresolved/unresolved-call-result"
+    }
+   ],
+   "source": {
+    "app": "viviana-ui-web",
+    "path": "apps/web/src/routes/solid-spectrum/docs/hooks/create-button.tsx",
+    "line": 200,
+    "commit": "b005c00acb61c07b60612430753d3a2400182bbd"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 14,
+   "sites": 14,
+   "verification": {
+    "samples": [
+     {
+      "app": "viviana-ui-web",
+      "path": "apps/web/src/routes/solid-spectrum/playground.tsx",
+      "line": 1354,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "spread-of-any-call-result-onto-element",
+      "note": "{...buttonProps} spreads a binding destructured from createButton(...) (:1347); createButton is imported from @proyecto-viviana/solidaria (:97-102), a workspace package whose package.json points types and exports at ./dist, which does not exist, so the call result is any with no declaration: the case's any-typed call result."
+     },
+     {
+      "app": "viviana-ui-web",
+      "path": "apps/web/src/components/playground/advanced-sections.tsx",
+      "line": 1075,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "spread-of-any-call-result-onto-element",
+      "note": "{...(groupProps as unknown as JSX.HTMLAttributes)} (:1075) spreads a binding destructured from createCheckboxGroup(...) (:1065) of the same unbuilt solidaria package; the cast leaves the any key set no fact."
+     },
+     {
+      "app": "viviana-ui-web",
+      "path": "apps/web/src/routes/solid-spectrum/docs/hooks/create-press.tsx",
+      "line": 80,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "spread-of-any-call-result-onto-element",
+      "note": "{...(pressProps as unknown ...)} on a div; pressProps comes from createPress(...) imported from @proyecto-viviana/solidaria (:4): same unresolved call result."
+     },
+     {
+      "app": "viviana-ui-web",
+      "path": "apps/web/src/routes/solid-spectrum/playground.tsx",
+      "line": 1332,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "spread-of-any-call-result-onto-element",
+      "note": "{...buttonProps} from createButton(...) (:1326), the same unbuilt package import."
+     },
+     {
+      "app": "viviana-ui-web",
+      "path": "apps/web/src/components/playground/advanced-sections.tsx",
+      "line": 1079,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "spread-of-any-call-result-onto-element",
+      "note": "{...labelProps} (:1079) from the same createCheckboxGroup destructure (:1065)."
+     }
+    ]
+   },
+   "verifiedWeight": 14
+  },
+  {
+   "id": "exported-function-reached-by-dynamic-import",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/dynamic-import-holder.ts",
+    "src/dynamic-import-barrel.ts"
+   ],
+   "causes": [
+    "SC4001/exported-function-callers/function:named-export:not-lazy"
+   ],
+   "expect": [
+    {
+     "rule": "SC4001",
+     "family": "exported-function-callers",
+     "context": "",
+     "cause": "SC4001/exported-function-callers/function:named-export:not-lazy"
+    }
+   ],
+   "source": {
+    "app": "jandibat-web",
+    "path": "packages/solid-relay/src/utils/useIsMounted.ts",
+    "line": 5,
+    "commit": "0e8f6b64d1436917ad283088fe753d0a036a3715"
+   },
+   "status": "uncertifiable",
+   "labelWeight": 20,
+   "sites": 20,
+   "verification": {
+    "samples": [
+     {
+      "app": "jandibat-web",
+      "path": "packages/solid-relay/src/RelayEnvironment.ts",
+      "line": 67,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "exported-function-in-package-loaded-by-dynamic-import",
+      "note": "useContext at :67 in an exported function of solid-relay; closed-program run of apps/web keeps it and removing the two `await import(\"solid-relay\")` in apps/web/test (relay-auth-epoch.test.tsx:21, relay-environment.test.tsx:13) from a scratch copy clears all 13 solid-relay SC4001: the case's dynamic-import hand-out."
+     },
+     {
+      "app": "kui",
+      "path": "frontend/packages/kernel/src/data/alerts/context.tsx",
+      "line": 18,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "exported-function-in-package-loaded-by-dynamic-import",
+      "note": "useContext in an exported kernel function; in the closed shell run it stays, and removing the eight `import(\"@kui/feature-...\").then(featureModule)` loads of shell/src/features/registry.ts in a scratch copy clears it (and the other six kui sites): the same dynamic-import hand-out."
+     },
+     {
+      "app": "jandibat-web",
+      "path": "packages/solid-relay/src/utils/createFetchTracker.ts",
+      "line": 31,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "exported-function-in-package-loaded-by-dynamic-import",
+      "note": "onSettled cleanup in an exported hook of solid-relay; cleared with the others by removing the tests' dynamic import of solid-relay."
+     },
+     {
+      "app": "jandibat-web",
+      "path": "packages/solid-relay/src/primitives/createLazyLoadQuery.ts",
+      "line": 191,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "exported-function-in-package-loaded-by-dynamic-import",
+      "note": "createEffect in exported createLazyLoadQuery; same package, cleared by the same removal."
+     },
+     {
+      "app": "jandibat-web",
+      "path": "packages/solid-relay/src/primitives/createLazyLoadQuery.ts",
+      "line": 176,
+      "rule": "SC4001",
+      "verdict": "same",
+      "mechanism": "exported-function-in-package-loaded-by-dynamic-import",
+      "note": "createEffect in the same exported function; same removal clears it."
+     }
+    ]
+   },
+   "verifiedWeight": 20
   }
  ],
  "notReproduced": [
-  {
-   "cause": "SC9012/open-program-boundary/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument",
-   "weight": 58,
-   "why": "an open-program family (ADR 0444) the open-program-boundary project does not hold yet; it needs a file there"
-  },
-  {
-   "cause": "SC1001/unplaced-read/intrinsic-handler",
-   "weight": 40,
-   "why": "handlers that stay uncertifiable with no veto in the closed run; the donegeon LoginRoute.tsx reduction did not finish"
-  },
   {
    "cause": "SC4001/open-program-boundary/exported-function-callers/cleanup-callback",
    "weight": 36,
    "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
-   "cause": "SC9012/runtime-target-unselected/withheld-object-member/dispatch-veto:project-callback",
-   "weight": 35,
-   "why": "an SC9012 result the dispatch veto holds (it clears in the veto-off sweep); no case reproduces an SC9012 under the veto"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/callee-package:@solid-primitives/event-listener",
-   "weight": 34,
-   "why": "the callee is @solid-primitives/event-listener 3.0.0-next.3, which the set carries as JavaScript only (no .d.ts): a case importing it fails tsc (TS7016), and adding its published typings is a change to the package listing"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/dispatch-veto:event-target+helper",
-   "weight": 34,
-   "why": "an SC9012 result the dispatch veto holds (it clears in the veto-off sweep); no case reproduces an SC9012 under the veto"
-  },
-  {
-   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:event-target+helper",
-   "weight": 31,
-   "why": "an SC9012 result the dispatch veto holds (it clears in the veto-off sweep); no case reproduces an SC9012 under the veto"
-  },
-  {
-   "cause": "SC1001/open-program-boundary/callback-to-unproven-consumer/object-member:argument-of:project/handed-to-package",
-   "weight": 27,
-   "why": "an open-program family (ADR 0444) the open-program-boundary project does not hold yet; it needs a file there"
-  },
-  {
-   "cause": "SC2001/unplaced-write/via-callers:mixed:helper-call-chain|object-member:argument-of:project/assigned-to-variable|object-member:argument-of:project/unplaced-invocation:after-await|object-member:factory-result/assigned-to-variable|package-callback",
-   "weight": 26,
-   "why": "a write whose callers place it in several different ways; one case per caller combination is not worth its lines"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/parameter-member-path-unresolved/dispatch-veto:event-target+helper",
-   "weight": 25,
-   "why": "an SC9012 result the dispatch veto holds (it clears in the veto-off sweep); no case reproduces an SC9012 under the veto"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/exported-parameter-member-dispatch/callback-argument:package:hono",
-   "weight": 24,
-   "why": "a dependency (hono) whose typings and source are not in the set's node_modules, and a case may not add a package"
-  },
-  {
    "cause": "SC2001/unplaced-write/object-member:factory-result/sibling-called/unknown-origin",
    "weight": 23,
-   "why": "every reduction tried was certified: the checker withholds at the corpus site for a reason the reduced file lacks"
-  },
-  {
-   "cause": "SC4001/exported-function-callers/function:named-export:not-lazy",
-   "weight": 20,
-   "why": "reproduces only with the program boundary open (a project-wide cause); needs its own project, an owner decision"
-  },
-  {
-   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:project-callback",
-   "weight": 18,
-   "why": "an SC9012 result the dispatch veto holds (it clears in the veto-off sweep); no case reproduces an SC9012 under the veto"
+   "why": "23 sites in three mechanisms: 16 are members of a factory result lifted into a nested bag of a second factory (app-game solid-svg-editor, called as app.root.m()), 6 are reached through a component prop (props.model.m()), 1 a member chain. A sibling accessor called on the nested bag reproduces (a memo beside the member), but the corpus tree stays uncertifiable after every `app.x.y()` call is aliased, so it holds further blockers (members read as unresolved handlers, members never read by name); no faithful single-cause reduction"
   },
   {
    "cause": "SC1001/direct-read/component-body:getter",
@@ -12320,27 +13493,12 @@
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/callee-package:@tanstack/router-core",
    "weight": 15,
-   "why": "a dependency (@tanstack/router-core) whose typings and source are not in the set's node_modules, and a case may not add a package"
+   "why": "needs @tanstack/solid-router, router-core and history declarations (about 310 KB, 78 files) and a nested seroval 1.6.4 under router-core that the set's top-level seroval 1.6.7 cannot stand in for; skipped for bytes"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:non-jsx-reference:object-member+exported",
    "weight": 14,
    "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC4001/handler-unresolved/handler-spread-unresolved/unresolved-call-result",
-   "weight": 14,
-   "why": "a spread of a call's result whose callee does not resolve; not reduced yet"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/exported-parameter-member-dispatch/callback-option:package:convex",
-   "weight": 14,
-   "why": "a dependency (convex) whose typings and source are not in the set's node_modules, and a case may not add a package"
-  },
-  {
-   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:function-package:relay-runtime",
-   "weight": 14,
-   "why": "a dependency (relay-runtime) whose typings and source are not in the set's node_modules, and a case may not add a package"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-lib",
@@ -12350,7 +13508,7 @@
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:exported-with-tag-callers:callers-pass-other",
    "weight": 13,
-   "why": "an exported component whose tag callers pass other props; not reduced yet"
+   "why": "12 sites, not one cause: tags pass a mix of values (a callback parameter, a literal, a project call) the checker cannot classify (Cube), or the read is a computed key props.nodes[id] that stays uncertifiable with literal callers (TreeDisplay); the label only says the callers pass several kinds"
   },
   {
    "cause": "SC1001/unplaced-read/unresolved-callback",
@@ -12360,12 +13518,12 @@
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/sibling-called/array-binding:package+object-binding:other:Identifier+object-binding:project",
    "weight": 13,
-   "why": "every reduction tried was certified: the checker withholds at the corpus site for a reason the reduced file lacks"
+   "why": "a reduction reproduces the label (members of a factory result destructured into an options object whose callee calls sibling accessors), but the 13 sites (app-game solid-svg-editor selectNode, zoomBy, rotateViewportBy) stay uncertifiable after every options.x() call of createViewportInteractions is aliased, since the same members also flow through the controller nested bag; a checker change modelling the options hop alone would not move them"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:factory-result",
    "weight": 12,
-   "why": "a read in a factory's returned closure; adding one to write-in-factory-member gave no result"
+   "why": "two mechanisms of 6 distinct sites each: callbacks in objects a plain function returns (app-game browser-atlas contextPrimaryAction) and in the object a thunk returns inside an options object handed to useShortcuts (solid-groove); neither reaches ADR 0448s 10"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/condition/props-escape:exported-with-tag-callers:read-of-callback-parameter",
@@ -12380,7 +13538,7 @@
   {
    "cause": "SC9012/leaf-callback-body/via:unmodeled",
    "weight": 12,
-   "why": "a leaf callback reached through a hand-off the classifier does not name; not reduced yet"
+   "why": "12 sites in 9 files whose callbacks end at different calls (a class-instance method, a webgl call chain, an actions member, a project method), none named by the classifier; no shared mechanism to reduce"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/forwarded:project-data-read",
@@ -12390,12 +13548,7 @@
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:member-package:maplibre-gl",
    "weight": 12,
-   "why": "a dependency (maplibre-gl) whose typings and source are not in the set's node_modules, and a case may not add a package"
-  },
-  {
-   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:object:argument:function-package:relay-runtime-in-closure",
-   "weight": 12,
-   "why": "a dependency (relay-runtime) whose typings and source are not in the set's node_modules, and a case may not add a package"
+   "why": "maplibre-gl's declarations alone are 1.37 MB (16 files with its geojson-vt and vt-pbf types), over a quarter of the set's byte budget; skipped for bytes"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:object:argument:member-project",
@@ -12411,11 +13564,6 @@
    "cause": "SC2001/unplaced-write/dispatch-veto:test-file",
    "weight": 11,
    "why": "a ninth project: each veto site kind needs its own project, all eight are used, and the story kind (51 results) took the eighth"
-  },
-  {
-   "cause": "SC9012/leaf-callback-body/member-package/instance-destructured-types-only",
-   "weight": 11,
-   "why": "the callee's package ships types only; the set holds no types-only package"
   },
   {
    "cause": "SC9012/runtime-target-unselected/computed-call-target-unresolved/destructured",
@@ -12435,17 +13583,12 @@
   {
    "cause": "SC2001/unplaced-write/via-callers:package-callback",
    "weight": 10,
-   "why": "a helper called only from onSettled certifies; the corpus's other gap was not found"
-  },
-  {
-   "cause": "SC9012/leaf-callback-body/member-package/call-expression-types-only",
-   "weight": 10,
-   "why": "the callee's package ships types only; the set holds no types-only package"
+   "why": "10 sites in two mechanisms: 7 are functions a test file calls inside an `it` callback (ai-memory-ui auth.ts signIn and changePassword and jar-hell-web rememberViewed clear when the tests leave the program; app-game card-stack createMotionViewport has a test caller too), 3 are helpers called from effect or observer callbacks of their own component; each under ADR 0448s 10"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:new-package:babylonjs",
    "weight": 10,
-   "why": "a dependency (babylonjs) whose typings and source are not in the set's node_modules, and a case may not add a package"
+   "why": "babylonjs ships babylon.d.ts of 6.8 MB, beyond the set's 5 MB budget by itself; skipped for bytes"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/get-accessor:argument-of:package",
@@ -12518,17 +13661,17 @@
    "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/call-project",
+   "weight": 9,
+   "why": "9 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:member-unresolved",
    "weight": 9,
    "why": "9 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/destructured-alias",
-   "weight": 9,
-   "why": "9 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/call-project",
    "weight": 9,
    "why": "9 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
@@ -12913,6 +14056,11 @@
    "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-returns-call-package",
+   "weight": 5,
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC9012/leaf-callback-body/member-body-not-entered/call-result",
    "weight": 5,
    "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
@@ -12953,6 +14101,16 @@
    "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge/function-reference:call-result:destructured-package",
+   "weight": 5,
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:event-target+helper/not-handler:project-function-argument/destructured",
+   "weight": 5,
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:binding-package:@solid-primitives/utils-in-closure",
    "weight": 5,
    "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
@@ -12988,9 +14146,9 @@
    "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
-   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-returns-call-package",
-   "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+   "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/called-in-kept-closure:called",
+   "weight": 4,
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:array-element:spread",
@@ -13018,6 +14176,11 @@
    "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC1001/direct-read-callers-unenumerable/props-escape:other:callers-pass-project-call-result",
+   "weight": 4,
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC1001/direct-read/component-body:package-callback",
    "weight": 4,
    "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
@@ -13028,6 +14191,11 @@
    "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC2001/unplaced-write/component-prop>component-prop/package-component",
+   "weight": 4,
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC2001/unplaced-write/component-prop>object-member:context-or-prop-value",
    "weight": 4,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
@@ -13036,6 +14204,11 @@
    "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:mixed",
    "weight": 4,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+  },
+  {
+   "cause": "SC2001/unplaced-write/object-member:argument-of:package/handed-to-package:createNativeDroppable",
+   "weight": 4,
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:project/unplaced-invocation:object-member:factory-result",
@@ -13098,6 +14271,16 @@
    "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-returns-call-project",
+   "weight": 4,
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-returns-object-literal",
+   "weight": 4,
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC4001/handler-unresolved/handler-spread-unresolved/member-of:solid-call-result",
    "weight": 4,
    "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
@@ -13148,7 +14331,17 @@
    "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC9012/parameter-member-call/parameter-member-path-unresolved/dispatch-veto:event-target+helper/handler",
+   "weight": 4,
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC9012/parameter-member-call/parameter-member-path-unresolved/escaped-component:PropertyAccessExpression-reference",
+   "weight": 4,
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/dispatch-veto:event-target+helper/not-handler:project-function-argument/member-of-parameter",
    "weight": 4,
    "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
@@ -13164,6 +14357,16 @@
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/forwarded:project-callable-read",
+   "weight": 4,
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/parameter",
+   "weight": 4,
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge/function-reference:call-result:package",
    "weight": 4,
    "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
@@ -13193,6 +14396,11 @@
    "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-package:pixi.js",
+   "weight": 4,
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC9012/runtime-target-unselected/returned-callable-outside-source-universe/dispatch-veto:event-target+helper",
    "weight": 4,
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
@@ -13203,34 +14411,9 @@
    "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
-   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-package:pixi.js",
-   "weight": 4,
-   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-returns-call-project",
-   "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-returns-object-literal",
-   "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/parameter",
-   "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
    "cause": "SC1001/callback-to-unproven-consumer/condition/get-accessor:argument-of:project/object-new-argument",
    "weight": 3,
    "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/condition/package-callback",
-   "weight": 3,
-   "why": "not attempted: the condition variant of read-in-package-callback"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/get-accessor:argument-of:project/object-new-argument",
@@ -13378,6 +14561,16 @@
    "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-member-member-of-call-project",
+   "weight": 3,
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:member-of-parameter",
+   "weight": 3,
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC4001/handler-unresolved/handler-spread-unresolved/project-call-result:function",
    "weight": 3,
    "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
@@ -13428,6 +14621,16 @@
    "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/binding",
+   "weight": 3,
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/object-literal",
+   "weight": 3,
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC9012/runtime-target-unselected/parameter-default-unresolved/dispatch-veto:event-target+helper",
    "weight": 3,
    "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
@@ -13456,26 +14659,6 @@
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:object:argument:member-package:typegpu",
    "weight": 3,
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:member-of-parameter",
-   "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-member-member-of-call-project",
-   "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/binding",
-   "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/object-literal",
-   "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>after-await",
@@ -13511,6 +14694,11 @@
    "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>view+forwarded:other:ObjectLiteralExpression",
    "weight": 2,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/called-in-kept-closure:member-of:argument-of:project",
+   "weight": 2,
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/destructured-parameter",
@@ -13619,6 +14807,11 @@
   },
   {
    "cause": "SC1001/unplaced-read/get-accessor:exported-object",
+   "weight": 2,
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC1001/unplaced-read/intrinsic-handler/in-callback",
    "weight": 2,
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
@@ -13793,6 +14986,11 @@
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-member-destructured-call-project",
+   "weight": 2,
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC4001/handler-unresolved/handler-spread-unresolved/member-of:parameter",
    "weight": 2,
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
@@ -13923,6 +15121,11 @@
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/dispatch-veto:event-target+helper/not-handler:returned-closure",
+   "weight": 2,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/escaped-component:PropertyAccessExpression-reference",
    "weight": 2,
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
@@ -13931,6 +15134,11 @@
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/forwarded:lib-es-data-read",
    "weight": 2,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/call-package",
+   "weight": 2,
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/unresolved",
@@ -13963,6 +15171,11 @@
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:project-callback/not-handler:via-callers:mixed",
+   "weight": 2,
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:binding-package:@solid-primitives/utils",
    "weight": 2,
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
@@ -13974,6 +15187,11 @@
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:object:argument:new-lib",
+   "weight": 2,
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-package:@solidjs/router",
    "weight": 2,
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
@@ -13993,27 +15211,17 @@
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC9012/runtime-target-unselected/withheld-object-member/dispatch-veto:project-callback/not-handler:component-prop>passed-to-project",
+   "weight": 2,
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC9012/runtime-target-unselected/withheld-object-member/module-prefix-call+used-before-initialized+object-escapes",
    "weight": 2,
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/type-only-source/type-only-source/object-member:argument-of:project",
-   "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-member-destructured-call-project",
-   "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/call-package",
-   "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-package:@solidjs/router",
    "weight": 2,
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
@@ -14133,6 +15341,16 @@
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/called-in-kept-closure:member-of:local-object",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/called-in-kept-closure:result-member:callers-unenumerable",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/default-parameter/called-in-async-closure",
    "weight": 1,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
@@ -14173,12 +15391,32 @@
    "why": "a corpus-checkout artifact: inferay imports @contracts from build/presentation/contracts, which its checkout lacks, so those types are any"
   },
   {
+   "cause": "SC1001/callback-to-unproven-consumer/object-member:local-object:context-value:nested-after-await",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC1001/callback-to-unproven-consumer/other:jsx-child",
    "weight": 1,
    "why": "not attempted: one or two results"
   },
   {
+   "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/called-in-kept-closure:member-of:argument-of:package",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/called-in-kept-closure:result-member",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/handed-to-package",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/stored:object-member:local-object",
    "weight": 1,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
@@ -14441,6 +15679,21 @@
    "cause": "SC2001/unplaced-write/component-prop>view+forwarded:spread-into-package-component",
    "weight": 1,
    "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
+  },
+  {
+   "cause": "SC2001/unplaced-write/object-member:argument-of:package/handed-to-package:create",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC2001/unplaced-write/object-member:argument-of:package/handed-to-package:mutationOptions",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC2001/unplaced-write/object-member:argument-of:package/handed-to-package:subscribe",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:project/default-parameter/sibling-called/absent",
@@ -14739,6 +15992,11 @@
   },
   {
    "cause": "SC4001/exported-function-callers/function:export-list:lazy-loaded",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:member-of-function-literal",
    "weight": 1,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
@@ -15048,6 +16306,11 @@
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC9012/parameter-member-call/parameter-member-path-unresolved/dispatch-veto:event-target+helper/not-handler:object-member:argument-of:project",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC9012/parameter-member-call/parameter-member-path-unresolved/dispatch-veto:story",
    "weight": 1,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
@@ -15059,6 +16322,26 @@
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/callee-unresolved",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/dispatch-veto:event-target+helper/not-handler:component-body",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/dispatch-veto:event-target+helper/not-handler:object-member:factory-result",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/dispatch-veto:event-target+helper/not-handler:project-function-argument/destructured",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/dispatch-veto:event-target+helper/not-handler:via-callers:mixed",
    "weight": 1,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
@@ -15078,12 +16361,42 @@
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/destructured-parameter",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/member-of-call-package",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/member-of-parameter",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/NullKeyword",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge/dispatch-veto:event-target+helper",
    "weight": 1,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge/escaped-component:PropertyAccessExpression-reference",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge/function-reference:call-result:destructured-project:package-typed",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge/function-reference:call-result:tuple-destructured-project",
    "weight": 1,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
@@ -15143,7 +16456,32 @@
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:event-target+helper/not-handler:component-prop>component-prop>deep-chain",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:event-target+helper/not-handler:project-function-argument/FunctionDeclaration",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:event-target+helper/not-handler:via-callers:object-member:factory-result",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/dispatch-veto:project-callback/not-handler:returned-closure",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/escaped-component:PropertyAccessExpression-reference",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/escaped-component:spread-caller:via-binding",
    "weight": 1,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
@@ -15198,6 +16536,21 @@
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-unresolved",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:new-lib",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/no-use-read",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC9012/runtime-target-unselected/withheld-object-member/member-not-function-literal",
    "weight": 1,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
@@ -15224,46 +16577,6 @@
   },
   {
    "cause": "SC9012/type-only-source/type-only-source/package-callback",
-   "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:member-of-function-literal",
-   "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/member-of-parameter",
-   "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/no-use-read",
-   "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/NullKeyword",
-   "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-unresolved",
-   "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/destructured-parameter",
-   "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:new-lib",
-   "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/member-of-call-package",
    "weight": 1,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   }

@@ -387,9 +387,25 @@ function invocationPosition(project, callee, call) {
     if (use.kind === "bound") return "called-in-bound-helper";
     if (use.kind === "called") return "called-in-iife";
     if (use.kind === "jsx-child" || use.kind === "component-prop") return "called-in-jsx-callback";
-    return "called-in-kept-closure";
+    return `called-in-kept-closure@${keptClosureFate(project, nested)}`;
   }
   return "called-in-body";
+}
+
+/**
+ * Where the closure a callee keeps goes (the `@` note after `called-in-kept-closure`,
+ * kept on the label of the cases that stand for it): a member of the object the
+ * callee returns, or something else (a member of an object it hands on, a binding).
+ */
+function keptClosureFate(project, closure) {
+  const fates = new Set();
+  for (const use of usesOf(project, closure)) {
+    if (use.kind === "object-member") {
+      const fate = objectFate(project, use.object);
+      fates.add(fate === "factory-result" ? "result-member" : `member-of:${fate}`);
+    } else fates.add(use.kind);
+  }
+  return [...fates].sort().join("+");
 }
 
 /** The declaration the identifier `node` reads as a value; the name of a shorthand property reads the binding it names, not the property. */
@@ -580,7 +596,7 @@ function valueUseReason(project, callee, value, read, siblings, key, depth) {
   }
   if (use.kind === "bound") return "aliased";
   if (use.kind === "destructured") return "destructured";
-  return `stored:${use.kind}`;
+  return use.kind === "object-member" ? `stored:object-member@${objectFate(project, use.object)}` : `stored:${use.kind}`;
 }
 
 /**
@@ -1176,7 +1192,10 @@ class WriteWalk {
       return null;
     }
     // A package's function is read from its source, or not at all: which package does not matter.
-    if (callee.origin.startsWith("package")) return "handed-to-package";
+    if (callee.origin.startsWith("package")) {
+      this.packageCallee = callee.declared ?? callee.name;
+      return "handed-to-package";
+    }
     if (callee.origin === "unresolved") return "handed-to-unresolved-callee";
     if (callee.origin !== "project") return `handed-to-${originKind(callee.origin)}:${callee.declared ?? callee.name}`;
     const declaration = calleeDeclaration(project, call);
@@ -1367,9 +1386,11 @@ function walkRoot(project, fn) {
  * no delivery, else `walk-completes` (the walk finds every invocation and each
  * is a delivery, so the gap is elsewhere).
  */
-function writeWalkReason(project, fn) {
+function writeWalkReason(project, fn, structure = "") {
   const walk = new WriteWalk(project);
   const reason = walk.functionInvocations(fn);
+  // A handler object handed to a package function: which function reads it from its source is what decides the entries.
+  if (reason === "handed-to-package" && structure === "object-member:argument-of:package" && walk.packageCallee) return `handed-to-package:${walk.packageCallee}`;
   // A default the walk did not follow, with nothing else in its way: the invocations past it are read as they would be.
   const defaulted = reason === "default-parameter/no-other-blocker";
   if (reason && !defaulted) return reason;
@@ -1547,7 +1568,7 @@ function propsEscapeCause(project, fn, context = "", read = null) {
   if (reference) return reference + (plain && ["object-member", "PropertyAccessExpression"].includes(census.other[0].kind) ? exported : "");
   if (!census.tags.length) return census.exported ? "exported-unrendered" : "unrendered";
   if (census.exported) return read ? `exported-with-tag-callers:${callerValuesCause(project, census, read, component)}` : "exported-with-tag-callers";
-  return read && plain ? `other:${callerValuesCause(project, census, read, component)}` : "other";
+  return read && plain ? `other:${callerValuesCause(project, census, read, component, true)}` : "other";
 }
 
 /**
@@ -1557,7 +1578,7 @@ function propsEscapeCause(project, fn, context = "", read = null) {
  * callers are all known still cannot be certified when what they pass comes
  * from a caller whose own callers are not.
  */
-function callerValuesCause(project, census, read, component) {
+function callerValuesCause(project, census, read, component, inCallbacks = false) {
   let node = read;
   while (ts.isElementAccessExpression(node) || ts.isCallExpression(node) || ts.isNonNullExpression(node) || (ts.isPropertyAccessExpression(node) && !ts.isIdentifier(node.expression))) node = node.expression;
   if (!ts.isPropertyAccessExpression(node)) return "prop-unnamed";
@@ -1567,9 +1588,19 @@ function callerValuesCause(project, census, read, component) {
   if (enclosingFunction(declaration) !== component) return "read-of-callback-parameter";
   const values = callerValues(project, census, node.name.text, 0);
   if (values.has("exported-prop")) return "forwarded-from-exported";
-  if (values.has("project-call-result")) return "callers-pass-project-call-result";
-  if (values.size === 1) return { omitted: "callers-omit-prop", "local-binding": "callers-pass-local-binding", "callback-parameter": "callers-pass-callback-parameter" }[[...values][0]] ?? "callers-pass-other";
+  // Every tag written in a callback a package runs (`<Errored fallback={(err) => <Card .../>}>`): the package decides when the component renders.
+  const inCallback = inCallbacks && census.tags.length > 0 && census.tags.every((use) => renderedInPackageCallback(project, use.node)) ? ":in-package-callback" : "";
+  if (values.has("project-call-result")) return `callers-pass-project-call-result${inCallback}`;
+  if (values.size === 1) return ({ omitted: "callers-omit-prop", "local-binding": "callers-pass-local-binding", "callback-parameter": `callers-pass-callback-parameter${inCallback}` }[[...values][0]] ?? "callers-pass-other");
   return "callers-pass-other";
+}
+
+/** Whether the JSX tag `node` is written in a function a package's component or function is handed (an `Errored` fallback). */
+function renderedInPackageCallback(project, node) {
+  const holder = enclosingFunction(node);
+  if (!holder) return false;
+  const use = useOf(project, holder);
+  return (use.kind === "component-prop" || use.kind === "argument") && use.origin.startsWith("package");
 }
 
 /** An expression without its parentheses, assertions and non-null marks. */
@@ -2930,7 +2961,15 @@ function literalMemberCause(project, site, member) {
   const callable = (type.isUnion() ? type.types : [type]).some((one) => one.getCallSignatures().length > 0);
   const reference = ts.isShorthandPropertyAssignment(property) ? declarationOrigin(project, project.checker.getShorthandAssignmentValueSymbol(property)?.declarations?.[0], false, 0) : valueOrigin(project, value);
   // What the reference names: a function the program declares, a value a call (a signal, a hook) hands back, or what the caller supplies.
-  const kind = /^(function-declaration|function-literal)$/.test(reference) ? "declared-function" : /^(destructured-)?call-/.test(reference) ? "call-result" : "caller-supplied";
+  const result = reference.match(/^(destructured-)?call-(\w+)$/);
+  // A result of a project function whose type a package declares (a Solid `Setter`) is that package's function passed along, not a closure the project wrote.
+  const memberType = project.checker.getNonNullableType(project.checker.getTypeAtLocation(value));
+  const named = memberType.aliasSymbol ?? (memberType.symbol?.name === "__type" ? undefined : memberType.symbol);
+  const typed = result && result[2] === "project" && named?.declarations?.[0] && origin(named.declarations[0]).startsWith("package") ? ":package-typed" : "";
+  // A closure taken from a tuple a project function returns (`const [value, set] = createStore()`) is another reference than one from its object.
+  const bound = ts.isShorthandPropertyAssignment(property) ? project.checker.getShorthandAssignmentValueSymbol(property)?.declarations?.[0] : ts.isIdentifier(value) ? project.symbol(value)?.declarations?.[0] : undefined;
+  const tuple = result && result[2] === "project" && bound && ts.isBindingElement(bound) && ts.isArrayBindingPattern(bound.parent) ? "tuple-" : "";
+  const kind = /^(function-declaration|function-literal)$/.test(reference) ? "declared-function" : result ? `call-result:${tuple}${result[1] ?? ""}${result[2]}${typed}` : /^(destructured-)?call-/.test(reference) ? "call-result" : "caller-supplied";
   return callable ? `function-reference:${kind}` : `data-${valueOrigin(project, value) === "primitive-literal" ? "literal" : "value"}`;
 }
 
@@ -3120,6 +3159,67 @@ function constructsEventTarget(project, receiver, depth = 0) {
 }
 
 
+/**
+ * The SC9012 veto labels that split on where the holding function runs. The
+ * corpus attributes a result to the veto from the veto-off sweep (ADR 0447),
+ * which does not say why that sweep certifies it; the veto withholds the
+ * placement of an event handler, so `/handler` is a site the rest of the
+ * reading places as one (`placementCause`), `/not-handler` any other.
+ */
+const VETO_SPLIT = new Set([
+  "runtime-target-unselected/withheld-object-member/project-callback",
+  "runtime-target-unselected/parameter-use-unmodeled/project-callback",
+  "runtime-target-unselected/parameter-use-unmodeled/event-target+helper",
+  "parameter-member-call/parameter-member-target-unresolved/event-target+helper",
+  "parameter-member-call/parameter-member-path-unresolved/event-target+helper",
+]);
+const vetoSplits = (family, context, vetoed) => VETO_SPLIT.has(`${family}/${context}/${vetoed}`);
+
+/**
+ * The placement of the function holding an SC9012 site, by the rest of the
+ * reading. A function handed to a project function is told apart by what binds
+ * the callee: a parameter (`props.updateDocument(callback)`), a destructured
+ * signal setter, a declared or imported function.
+ */
+function placementOf(project, fn, site) {
+  const placement = placementCause(project, fn, site);
+  if (placement !== "project-function-argument") return placement;
+  const call = usesOf(project, fn).find((use) => use.kind === "argument")?.call;
+  let root = call && unparenthesized(call.expression);
+  let member = false;
+  while (root && (ts.isPropertyAccessExpression(root) || ts.isElementAccessExpression(root))) {
+    member = true;
+    root = unparenthesized(root.expression);
+  }
+  const declaration = root && ts.isIdentifier(root) ? project.symbol(root)?.declarations?.[0] : null;
+  const kind = !declaration ? "expression" : ts.isParameter(declaration) ? "parameter" : ts.isBindingElement(declaration) ? "destructured" : ts.SyntaxKind[declaration.kind];
+  return `${placement}/${member ? "member-of-" : ""}${kind}`;
+}
+
+/** The veto label of an SC9012 result by the placement of the function holding it. */
+const vetoSplit = (vetoed, placement) => `dispatch-veto:${vetoed}/${PLACED.test(placement) ? "handler" : `not-handler:${placement}`}`;
+
+/** Set while the report classifies a veto-held SC9012 result: classify() records there whether its site is placed. */
+let vetoProbe = null;
+
+/**
+ * Where the JSX element carrying the handler `fn` sits, up to the function
+ * that holds it: in a conditional or logical expression (`cond && <button/>`,
+ * `cond ? <a/> : <b/>`), else in a callback, else directly in the component.
+ */
+function handlerRegion(fn) {
+  const { parent } = peel(fn);
+  const attribute = parent && ts.isJsxExpression(parent) ? parent.parent : null;
+  if (!attribute || !ts.isJsxAttribute(attribute)) return "not-a-literal-attribute";
+  let node = attribute.parent.parent;
+  for (let parent = node.parent; parent; node = parent, parent = parent.parent) {
+    if (isFunction(parent)) return "in-callback";
+    if (ts.isConditionalExpression(parent) && node !== parent.condition) return "in-conditional";
+    if (ts.isBinaryExpression(parent) && [ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(parent.operatorToken.kind) && node === parent.right) return "in-conditional";
+  }
+  return "direct";
+}
+
 /** The structure segment of an SC9012 label: the mechanism the old reading's label stood for, split where it joined several. */
 function sc9012Structure(project, finding, site, family, context, open) {
   const message = finding.message;
@@ -3192,6 +3292,12 @@ function handlerArgumentCause(project, site) {
   return argumentSlot(site) ? valueOrigin(project, site) : "no-argument";
 }
 
+/** The structures whose note (where a kept closure or a stored object goes) a case reads; the others keep the bare label. */
+const NOTED_STRUCTURE = /^(object-member:argument-of:project\/called-in-kept-closure|project-function-argument\/(called-in-kept-closure|stored:object-member))@[^/]*$/;
+
+/** The structures a case reads whose message names no enumeration of the component's callers. */
+const CALLERS_CLAUSE_GATED = /^(object-member:argument-of:project\/called-in-kept-closure:result-member|project-function-argument\/(called-in-kept-closure:member-of:argument-of:project|stored:object-member:argument-of:project)|object-member:local-object:context-value(:nested-after-await)?)$/;
+
 /** The cause of one uncertifiable finding. */
 export function classify(project, finding, file, { vetoed, open = false }, entry = {}) {
   const family = messageFamily(finding.message);
@@ -3227,22 +3333,44 @@ export function classify(project, finding, file, { vetoed, open = false }, entry
     } finally {
       readSite = false;
     }
+    // A read nested in a callback of a method that has suspended: the method's await, not the callback's place, is what it waits on.
+    if (rule === "SC1001" && /^object-member:local-object:context-value$/.test(structure)) {
+      for (let outer = fn; outer; outer = enclosingFunction(outer)) {
+        if (afterSuspension(outer, site)) {
+          structure += ":nested-after-await";
+          break;
+        }
+      }
+    }
     if (rule === "SC1001" && family === "direct-read" && ["component-body", "package-callback"].includes(structure)) structure = `${structure}:${readInCalleeCause(project, finding)}`;
     if (rule === "SC1001" && family === "unplaced-read" && structure === "component-body") structure = `${structure}:${readPositionCause(site)}`;
     if (rule === "SC1001" && family === "unplaced-read" && context !== "condition" && structure === "after-await") structure = `after-await:${afterSuspension(fn, site) ? "in-async-function" : "promise-continuation"}`;
+    // The note on a kept closure names the case's mechanism only where a case reads it.
+    const noted = !open && !vetoed && family === "callback-to-unproven-consumer" && NOTED_STRUCTURE.test(structure);
+    structure = structure.replace(/(called-in-kept-closure|read-in-kept-closure|stored:object-member)@([^/]*)/g, (match, label, note) => (noted ? `${label}:${note}` : label));
+    // A prop read of a component whose callers cannot be enumerated carries a second obligation in its message; the cases below read the message without it.
+    if (rule === "SC1001" && family === "callback-to-unproven-consumer" && !open && !vetoed && CALLERS_CLAUSE_GATED.test(structure) && /call sites cannot be enumerated/.test(finding.message)) structure += ":callers-unenumerable";
+    // A handler the reading places that the checker still does not: where its element sits.
+    if (rule === "SC1001" && family === "unplaced-read" && context !== "condition" && structure === "intrinsic-handler" && !vetoed) structure += `/${handlerRegion(fn)}`;
     // ADR 0356: while an unexcluded dispatch site remains, no handler is
     // placed; a site the rest of the reading places as a handler is held by
     // the veto alone.
     if (vetoed && PLACED.test(structure)) structure = `dispatch-veto:${vetoed}`;
     // A write's cause is the structure it sits in and where the checker's walk of the function's invocations stops.
     else if (rule === "SC2001" && (family === "unplaced-write" ? WALKED_STRUCTURES : family === "unplaced-call" ? WALKED_CALL_STRUCTURES : new Set()).has(structure)) {
-      structure += `/${writeWalkReason(project, walkRoot(project, fn))}`;
+      structure += `/${writeWalkReason(project, walkRoot(project, fn), structure)}`;
     }
   } else if (rule === "SC9012") {
     const escape = context.startsWith("parameter-") || context === "exported-parameter-member-dispatch" ? componentEscape(project, fn) : null;
     const component = escape ? enclosingComponent(fn) : null;
-    if (escape && flaggedArguments(site).some((argument) => readsParameterOf(project, argument, component))) structure = `escaped-component:${escape}`;
+    if (escape && flaggedArguments(site).some((argument) => readsParameterOf(project, argument, component))) {
+      structure = `escaped-component:${escape}`;
+      // An argument that reaches the props only through a local binding is not a prop handed on.
+      if (escape === "spread-caller" && context === "parameter-use-unmodeled" && !flaggedArguments(site).some((argument) => readsParameterOf(project, argument, component, 5))) structure += ":via-binding";
+    }
+    else if (vetoed && vetoSplits(family, context, vetoed)) structure = vetoSplit(vetoed, placementOf(project, fn, site));
     else structure = sc9012Structure(project, finding, site, family, context, open);
+    if (vetoProbe) vetoProbe.placement = placementOf(project, fn, site);
   } else if (rule === "SC7007") {
     structure = family === "server-function-argument" ? serverArgumentCause(project, site) : "";
   } else if (rule === "SC1003" || rule === "SC1004" || rule === "SC5003") {
@@ -3357,14 +3485,17 @@ export function classifyReport(report, closedReport = null, noVetoReport = null)
             unvetoed.set(k, unvetoed.get(k) - 1);
             entry.cause = classify(project, finding, file, { vetoed: null }, entry);
           } else {
+            vetoProbe = finding.id === "SC9012" && vetoSplits(entry.family, entry.context, vetoed) ? { placement: "" } : null;
             const reading = classify(project, finding, file, { vetoed: null }, entry);
+            const probe = vetoProbe;
+            vetoProbe = null;
             // The veto holds a site the rest of the reading places as a
             // handler. One it holds that the reading places elsewhere (a
             // handler a project factory returns, a helper) is another
             // construct: a story-held site keeps its reading apart.
             const handler = PLACED.test(reading);
             const veto = vetoed === "story" && !handler && ["SC1001", "SC2001"].includes(finding.id) ? `dispatch-veto-other:story/${reading.split("/").pop()}` : `dispatch-veto:${vetoed}`;
-            entry.cause = [finding.id, entry.family, entry.context, veto].filter((part) => part !== "").join("/");
+            entry.cause = [finding.id, entry.family, entry.context, probe ? vetoSplit(vetoed, probe.placement) : veto].filter((part) => part !== "").join("/");
           }
         } else entry.cause = classify(project, finding, file, { vetoed }, entry);
       }

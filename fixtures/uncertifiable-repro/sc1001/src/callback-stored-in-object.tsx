@@ -1,6 +1,6 @@
 // kui feature-topics TopicsRoute.tsx:824 (useTabQuery, :148): a callback reading props is handed to a project function that puts it in
 // an object (`{ key, load }`) it hands to `useQuery`, which binds it through a registry's interface method (kernel useQuery.ts:257).
-import { createMemo } from "solid-js";
+import { createMemo, createSignal } from "solid-js";
 
 interface Registry {
   readonly internals: { bind(key: string, load: () => string): void };
@@ -22,10 +22,15 @@ function useTabQuery(key: () => string, load: () => string) {
   return { state: query };
 }
 
-export function Consumers(props: { clusterId: string }) {
+function Consumers(props: { clusterId: string }) {
   const consumers = useTabQuery(
     () => "consumers",
     () => `topic:${props.clusterId}`,
   );
   return <p>{consumers.state()}</p>;
+}
+
+export function App() {
+  const [cluster] = createSignal("main");
+  return <Consumers clusterId={cluster()} />;
 }

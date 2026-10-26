@@ -1,6 +1,5 @@
-// kui shell/src/App.tsx:444-448 (createAlerts, kernel/data/alerts/store.ts:267): callbacks in an
-// options object handed to a project function, which keeps them in members of its result
-// that only a package's virtualizer calls (here: nothing in the project).
+// solid-groove src/editor/DrumMachinePanel.tsx:257 (createControlGesture, src/commands/controlGesture.ts:21): callbacks in an
+// options object handed to a project function, which keeps them in members of its result that the component calls later.
 import { createSignal } from "solid-js";
 
 type ListOptions = { count: () => number; getScrollElement: () => HTMLElement | undefined; onRange: (first: number) => void };
