@@ -116,6 +116,16 @@
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-package-call.tsx",
+      "start": 356,
+      "end": 457,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-props.tsx",
       "start": 231,
       "end": 236,
@@ -147,8 +157,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-dependency-getter.tsx",
-      "start": 328,
-      "end": 345,
+      "start": 339,
+      "end": 356,
       "fixes": 0
     },
     {
@@ -206,6 +216,26 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-call-expression.ts",
+      "start": 472,
+      "end": 491,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-call-expression.ts",
+      "start": 472,
+      "end": 510,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-function.ts",
       "start": 429,
       "end": 435,
@@ -219,6 +249,16 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-member.ts",
       "start": 406,
       "end": 419,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-namespace-member.ts",
+      "start": 502,
+      "end": 514,
       "fixes": 0
     },
     {
@@ -267,8 +307,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/unrooted-read.tsx",
-      "start": 433,
-      "end": 446,
+      "start": 446,
+      "end": 459,
       "fixes": 0
     }
   ]

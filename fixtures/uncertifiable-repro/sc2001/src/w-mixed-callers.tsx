@@ -1,6 +1,6 @@
-// solid-groove EditorView.tsx:186-188 (callers :486, :514) with SamplerPanel.tsx:93: a helper
-// that writes is called from a literal handler and from a callback prop whose child also reads
-// `props.onBrowse` in `<Show when>`; that second entry is not a delivery, so no caller places it.
+// solid-groove EditorView.tsx:186-188 (callers :486, :514) with SamplerPanel.tsx:93: a helper that writes is called from a literal
+// handler and from a callback prop that two components forward before a child reads it in `<Show when>`; that second entry is not a
+// delivery, so no caller places it.
 import { createSignal, Show } from "solid-js";
 
 function Picker(props: { onBrowse?: () => void }) {
@@ -11,6 +11,14 @@ function Picker(props: { onBrowse?: () => void }) {
   );
 }
 
+function Panel(props: { onBrowse?: () => void }) {
+  return <Picker onBrowse={props.onBrowse} />;
+}
+
+function Shelf(props: { onBrowse?: () => void }) {
+  return <Panel onBrowse={props.onBrowse} />;
+}
+
 export function Editor() {
   const [open, setOpen] = createSignal(false);
   function openLibrary() {
@@ -19,7 +27,7 @@ export function Editor() {
   return (
     <div>
       <button onClick={() => openLibrary()}>Loop</button>
-      <Picker onBrowse={() => openLibrary()} />
+      <Shelf onBrowse={() => openLibrary()} />
       <p>{open() ? "open" : ""}</p>
     </div>
   );

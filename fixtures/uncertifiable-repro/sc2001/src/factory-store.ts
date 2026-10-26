@@ -1,5 +1,5 @@
-// compass-ui store.ts:1750: a factory returns closures over its signals in an
-// object; another module calls them as members of the result.
+// kui shell/src/data/appearance.ts:193 (createAppearanceSync): a factory returns closures over its
+// signals in an object; another module calls them as members of the result.
 import { createSignal } from "solid-js";
 
 export function createPaletteStore() {

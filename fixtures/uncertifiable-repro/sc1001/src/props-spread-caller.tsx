@@ -1,4 +1,4 @@
-// app-game SortableItem: a component is rendered with a spread of props, so which props reach it is not enumerable.
+// app-game solid-svg-editor svg-renderer.tsx:29: a private component is rendered with a spread of props, so which props reach it is not enumerable.
 import { createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
 

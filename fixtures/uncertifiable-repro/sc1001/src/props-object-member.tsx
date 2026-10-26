@@ -1,4 +1,4 @@
-// kui NavItem.tsx:74: a component referenced from a route table (`{ component: Page }`) is not rendered by a JSX tag.
+// app-game solid-dnd createDragSensor.tsx:552: a private component referenced from an object (`{ component: Page }`) is not rendered by a JSX tag.
 import { createSignal } from "solid-js";
 
 function Page(props: { title: string }) {

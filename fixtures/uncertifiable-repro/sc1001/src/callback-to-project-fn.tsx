@@ -1,5 +1,5 @@
-// inferay SkillProposalCard/index.tsx:32: a callback reading props is handed
-// to a project function that keeps it (a project `createQuery`).
+// kui feature-topics TopicsRoute.tsx:458 (useClusterReadOnly, :181): a callback reading props is
+// handed to a project function that keeps it (a project `createQuery`).
 import { createSignal } from "solid-js";
 
 function createQuery<T>(key: () => string[], fetcher: (key: string[]) => Promise<T>) {

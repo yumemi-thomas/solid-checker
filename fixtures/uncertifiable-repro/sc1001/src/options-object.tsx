@@ -1,5 +1,5 @@
-// ai-memory-ui workspace-cascader.tsx:120-122: callbacks in an options object
-// handed to a project function, which keeps them in members of its result
+// kui shell/src/App.tsx:444-448 (createAlerts, kernel/data/alerts/store.ts:267): callbacks in an
+// options object handed to a project function, which keeps them in members of its result
 // that only a package's virtualizer calls (here: nothing in the project).
 import { createSignal } from "solid-js";
 

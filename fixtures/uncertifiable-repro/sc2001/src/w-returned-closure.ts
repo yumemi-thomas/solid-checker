@@ -1,8 +1,13 @@
-// app-game browser-atlas createPersistentTreeUndoHistory.ts:41-46: the closure that writes is the
-// value a function returns, so the analysis never sees where it is called.
-import { createSignal } from "solid-js";
+// oscartbeaumont-website routes/invoicer/util.ts:34,37: the closure that writes is what a `get` trap returns, and the trap is a member of
+// the handler object of `new Proxy(...)`, so the analysis never sees where it is called.
+import { createStore } from "solid-js";
 
-export function createBumper(step: number) {
-  const [count, setCount] = createSignal(0);
-  return () => setCount(count() + step);
+export function createListProxy(initial: string[]) {
+  const [items, setItems] = createStore(initial);
+  return new Proxy(items, {
+    get(target, key) {
+      if (key === "push") return (value: string) => setItems((draft) => { draft.push(value); });
+      return Reflect.get(target, key);
+    },
+  });
 }

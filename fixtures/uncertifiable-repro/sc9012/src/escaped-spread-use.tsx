@@ -1,27 +1,25 @@
-// kui feature-ksql KsqlRoute.tsx:163: the component is rendered with a spread
-// (`<SensorDemo {...props.rest} />`), so its call sites are unknown. It passes an
-// options object to a project function that hands it on to a member of another
-// object (app-game SensorDemo.tsx:15, solid-dnd dragSensor/solid.ts:103).
-type SensorOptions = { threshold?: number; onDragStart?: () => void };
+// kui feature-ksql KsqlRoute.tsx:163: the component is rendered with a spread (`<Reporting {...rest} />`), so
+// its callers are unknown; the string prop it hands a project function from a load closure is not proven a primitive.
 
-function createSensorScope() {
-  return {
-    createSensor(options: SensorOptions) {
-      return { threshold: options.threshold ?? 4, start: () => options.onDragStart?.() };
-    },
-  };
+async function api(route: string, init: { path: Record<string, string> }): Promise<{ status: number }> {
+  return { status: route.length + Object.keys(init.path).length };
 }
 
-function createDragSensor(options: SensorOptions = {}) {
-  const scope = createSensorScope();
-  return scope.createSensor(options);
+const readReporting = async (projectId: string) => {
+  const response = await api("/projects/{project_id}/reporting", { path: { project_id: projectId } });
+  return response.status === 200;
+};
+
+function useQuery(options: { load: () => Promise<boolean> }) {
+  const pending = options.load();
+  return () => pending;
 }
 
-function SensorDemo(props: { label?: string }) {
-  const sensor = createDragSensor({ threshold: 8, onDragStart: () => console.log("start") });
-  return <div onPointerDown={() => sensor.start()}>{props.label ?? sensor.threshold}</div>;
+function Reporting(properties: { projectId: string }) {
+  const enabled = useQuery({ load: () => readReporting(properties.projectId) });
+  return <p>{String(enabled())}</p>;
 }
 
-export function Page(props: { rest: { label?: string } }) {
-  return <SensorDemo {...props.rest} />;
+export function Page(rest: { projectId: string }) {
+  return <Reporting {...rest} />;
 }

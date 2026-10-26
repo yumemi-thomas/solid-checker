@@ -1,5 +1,6 @@
-// app-game gpu-text-rendering GpuTextRendering.tsx:49 (`open`, via ViewerToolbar.tsx:180) and solid-svg-editor InspectorPanel.tsx:104: a child hands
-// a callback prop on to a component that never names it (Button copies its props); `Bar` forwards once (`forwarded:prop-unused`), `Bars` twice.
+// app-game gpu-text-rendering GpuTextRendering.tsx:49 (`open`, via ViewerToolbar.tsx:180) and solid-svg-editor InspectorPanel.tsx:104: a child
+// spreads its props onto a component that never names the callback (Button copies its props), so the callback is forwarded to a consumer
+// that does not name it; `Bar` forwards once (`forwarded:prop-unused`), `Bars` twice.
 import { createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
 
@@ -13,15 +14,15 @@ function Button(props: ButtonProps) {
   return <button {...domProps} />;
 }
 
-function Bar(props: { onPress: () => void }) {
-  return <Button onClick={props.onPress}>Go</Button>;
+function Bar(props: ButtonProps) {
+  return <Button {...props}>Go</Button>;
 }
 
-function Bars(props: { onPress: () => void }) {
+function Bars(props: ButtonProps) {
   return (
     <>
-      <Button onClick={props.onPress}>Go</Button>
-      <Button onClick={props.onPress}>Again</Button>
+      <Button {...props}>Go</Button>
+      <Button {...props}>Again</Button>
     </>
   );
 }
@@ -31,8 +32,8 @@ export function Page() {
   const [m, setM] = createSignal(0);
   return (
     <>
-      <Bar onPress={() => setN(n() + 1)} />
-      <Bars onPress={() => setM(m() + 1)} />
+      <Bar onClick={() => setN(n() + 1)} />
+      <Bars onClick={() => setM(m() + 1)} />
     </>
   );
 }

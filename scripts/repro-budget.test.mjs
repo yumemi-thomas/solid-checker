@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { BUDGETS, corpusManifest, measure, trackedFiles, violations } from "./repro-budget.mjs";
+import { BUDGETS, corpusManifest, measure, trackedFiles, verifiedWeight, violations } from "./repro-budget.mjs";
 
 const commit = "35c4cc6b7c932f5dee5815b37d3601e7dff90b58";
 const sha = "0".repeat(64);
@@ -19,7 +19,15 @@ const valid = () => ({
         causes: ["SC2001/unplaced-write/after-await"],
         expect: [{ rule: "SC2001", family: "unplaced-write", context: "", cause: "SC2001/unplaced-write/after-await" }],
         source: { app: "one", path: "src/a.tsx", line: 3, commit },
-        weight: 20,
+        labelWeight: 20,
+        sites: 2,
+        verification: {
+          samples: [
+            { app: "one", path: "src/a.tsx", line: 3, rule: "SC2001", verdict: "same", mechanism: "write-after-await" },
+            { app: "one", path: "src/b.tsx", line: 9, rule: "SC2001", verdict: "same", mechanism: "write-after-await" },
+          ],
+        },
+        verifiedWeight: 2,
         status: "uncertifiable",
       },
     ],
@@ -100,4 +108,18 @@ test("a clean case expects no result, and an unknown kind is reported", () => {
   assert.ok(violations(state).some((line) => /a clean case expects no result/.test(line)));
   state.table.cases[0].kind = "flaky";
   assert.ok(violations(state).some((line) => /kind flaky is not one of/.test(line)));
+});
+
+test("a case's verified weight is its sites only when every sample reads the same", () => {
+  const state = valid();
+  const entry = state.table.cases[0];
+  assert.equal(verifiedWeight(entry), 2);
+  entry.verification.samples[1].verdict = "different";
+  assert.equal(verifiedWeight(entry), 0);
+  assert.ok(violations(state).some((line) => /verifiedWeight 2 is not 0/.test(line)));
+  entry.verification.samples[1].verdict = "same";
+  entry.sites = 7;
+  assert.equal(verifiedWeight(entry), 0, "two samples of seven sites verify nothing");
+  entry.verification.samples[0].verdict = "maybe";
+  assert.ok(violations(state).some((line) => /a verification sample needs/.test(line)));
 });

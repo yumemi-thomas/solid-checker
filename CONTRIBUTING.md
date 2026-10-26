@@ -156,10 +156,15 @@ Solid 2 repositories, then discard them:
    (`--checker <that build>`), and never commit it.
 3. Uncertifiable results: group them by cause,
    `node scripts/uncertifiable-causes.mjs --report sweep.json --closed-report closed.json --noveto-report noveto.json --cases fixtures/uncertifiable-repro/cases.json`.
-   A cause a case stands for updates that case's `weight`; a new cause
-   becomes a case, folded into an existing file when its mechanism is the
-   same; one that cannot be reproduced faithfully (a package beyond the
-   budget, a checkout artifact) goes to `notReproduced` with its reason.
+   A cause a case stands for updates that case's `labelWeight` and `sites`;
+   a new cause of 10 distinct sites or more becomes a case, folded into an
+   existing file when its mechanism is the same; one that cannot be
+   reproduced faithfully (a package beyond the budget, a checkout artifact)
+   or has fewer sites goes to `notReproduced` with its reason. Then verify
+   (ADR 0406): `--draw 5 --draw-out samples.json` gives each case's seeded
+   sample of sites; read each from source against the case's file, record
+   the verdicts in the case's `verification.samples`, and split a case whose
+   samples do not all read the same. Quote only verified coverage.
 4. Violations, after triage: a real defect becomes a `violation` case; a false
    positive blocks the release until the checker is fixed, and its shape
    becomes a `clean` case.

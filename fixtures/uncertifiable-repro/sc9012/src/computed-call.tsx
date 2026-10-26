@@ -1,5 +1,5 @@
-// app-game math-examples m2x3/demo-angle-visualization.tsx:19: a JSX attribute
-// calls an element of an array of accessors (`points[0]()`).
+// app-game math-examples m2x3/demo-rotation-matrix-between-point-pairs.tsx:73: a JSX attribute calls
+// an element of an array of accessors the component builds itself (`points[0]()`).
 import { createSignal } from "solid-js";
 
 export function Marker() {

@@ -1,5 +1,5 @@
-// expenses-app AddExpenseForm.tsx:38-50 (callers ExpensesTabContent.tsx:337, :588): an exported form seeds signals
-// from a prop; its one tag caller passes a prop of an exported component, so what reaches the prop is not enumerable.
+// error-menu-web IconPicker.tsx:137 (caller ProjectSettingsModal.tsx:191): an exported form seeds signals from a prop;
+// its one tag caller passes a prop of an exported component, so what reaches the prop is not enumerable.
 import { createSignal } from "solid-js";
 
 type Draft = { name: string; total: number };

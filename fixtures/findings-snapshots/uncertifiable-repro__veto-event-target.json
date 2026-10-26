@@ -2,26 +2,6 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/veto-event-target/src/handler-call-argument.tsx",
-      "start": 443,
-      "end": 457,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/veto-event-target/src/handler-call-argument.tsx",
-      "start": 443,
-      "end": 457,
-      "fixes": 0
-    },
-    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",

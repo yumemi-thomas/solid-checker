@@ -1,11 +1,13 @@
-// ai-memory-ui screens/activity.tsx:64-67: a thunk returning an options object
-// whose callback reads a signal, handed to the app's own `useQuery` wrapper.
+// ai-memory-ui screens/activity.tsx:64-67 (lib/query.ts:23-37): a thunk returning an options object whose callback reads a signal is
+// handed to the app's own `useQuery` wrapper, which destructures the callback out of the object it gets and hands the object on.
 import { createSignal } from "solid-js";
 
 type QueryOptions<T> = { queryKey: unknown[]; queryFn: () => Promise<T> };
 
 function useQuery<T>(options: () => QueryOptions<T>) {
-  return { key: () => options().queryKey, fetch: () => options().queryFn() };
+  const resolved = options();
+  const { queryFn } = resolved;
+  return { ...resolved, queryFn: () => queryFn() };
 }
 
 export function Activity() {
@@ -14,5 +16,5 @@ export function Activity() {
     queryKey: ["activity", days()],
     queryFn: async () => days() * 2,
   }));
-  return <button onClick={() => setDays(30)}>{q.key().length}</button>;
+  return <button onClick={() => setDays(30)}>{q.queryKey.length}</button>;
 }

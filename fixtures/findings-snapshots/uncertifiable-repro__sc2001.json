@@ -26,6 +26,26 @@
       "code": "SC2001",
       "kind": "uncertifiable",
       "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/argument-of-package-listeners.ts",
+      "start": 486,
+      "end": 503,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/argument-of-package-listeners.ts",
+      "start": 531,
+      "end": 549,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/argument-of-package.ts",
       "start": 333,
       "end": 347,
@@ -36,9 +56,59 @@
       "code": "SC2001",
       "kind": "uncertifiable",
       "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-store.ts",
-      "start": 349,
-      "end": 369,
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-accessor-memo.tsx",
+      "start": 497,
+      "end": 518,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-assigned.ts",
+      "start": 430,
+      "end": 443,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-merged.tsx",
+      "start": 391,
+      "end": 405,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-reexported.ts",
+      "start": 469,
+      "end": 481,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-sibling-mentions-this.tsx",
+      "start": 552,
+      "end": 564,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-sibling-mentions-this.tsx",
+      "start": 633,
+      "end": 649,
       "fixes": 0
     },
     {
@@ -47,8 +117,28 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/factory-store.ts",
-      "start": 433,
-      "end": 454,
+      "start": 384,
+      "end": 404,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-store.ts",
+      "start": 468,
+      "end": 489,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/local-object-this-text.tsx",
+      "start": 659,
+      "end": 680,
       "fixes": 0
     },
     {
@@ -69,6 +159,46 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/local-object.tsx",
       "start": 813,
       "end": 833,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/options-default-to-signature.tsx",
+      "start": 845,
+      "end": 888,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/options-default-to-signature.tsx",
+      "start": 861,
+      "end": 886,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/options-default-to-signature.tsx",
+      "start": 872,
+      "end": 881,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/options-sibling-called.tsx",
+      "start": 700,
+      "end": 718,
       "fixes": 0
     },
     {
@@ -147,8 +277,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
-      "start": 631,
-      "end": 662,
+      "start": 705,
+      "end": 736,
       "fixes": 0
     },
     {
@@ -157,8 +287,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
-      "start": 692,
-      "end": 700,
+      "start": 766,
+      "end": 774,
       "fixes": 0
     },
     {
@@ -167,8 +297,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
-      "start": 1141,
-      "end": 1154,
+      "start": 1152,
+      "end": 1165,
       "fixes": 0
     },
     {
@@ -177,8 +307,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
-      "start": 1146,
-      "end": 1149,
+      "start": 1157,
+      "end": 1160,
       "fixes": 0
     },
     {
@@ -187,8 +317,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
-      "start": 1186,
-      "end": 1199,
+      "start": 1197,
+      "end": 1210,
       "fixes": 0
     },
     {
@@ -197,8 +327,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
-      "start": 1191,
-      "end": 1194,
+      "start": 1202,
+      "end": 1205,
       "fixes": 0
     },
     {
@@ -222,23 +352,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
-      "start": 601,
-      "end": 632,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
-      "start": 662,
-      "end": 670,
+      "start": 763,
+      "end": 786,
       "fixes": 0
     },
     {
@@ -247,8 +367,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
-      "start": 1099,
-      "end": 1113,
+      "start": 1215,
+      "end": 1229,
       "fixes": 0
     },
     {
@@ -257,8 +377,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
-      "start": 1180,
-      "end": 1190,
+      "start": 1296,
+      "end": 1306,
       "fixes": 0
     },
     {
@@ -267,8 +387,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
-      "start": 1270,
-      "end": 1286,
+      "start": 1386,
+      "end": 1402,
       "fixes": 0
     },
     {
@@ -277,8 +397,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
-      "start": 1279,
-      "end": 1285,
+      "start": 1395,
+      "end": 1401,
       "fixes": 0
     },
     {
@@ -312,6 +432,26 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-omit-view.tsx",
+      "start": 484,
+      "end": 488,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-omit-view.tsx",
+      "start": 609,
+      "end": 623,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -339,6 +479,36 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-presence-in-show.tsx",
       "start": 1238,
       "end": 1256,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-sibling-called.tsx",
+      "start": 776,
+      "end": 786,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-spread-onto-intrinsic.tsx",
+      "start": 524,
+      "end": 529,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-spread-onto-intrinsic.tsx",
+      "start": 796,
+      "end": 810,
       "fixes": 0
     },
     {
@@ -477,8 +647,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-mixed-callers.tsx",
-      "start": 624,
-      "end": 637,
+      "start": 837,
+      "end": 850,
       "fixes": 0
     },
     {
@@ -507,8 +677,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-refresh-method.ts",
-      "start": 441,
-      "end": 454,
+      "start": 490,
+      "end": 503,
       "fixes": 0
     },
     {
@@ -517,8 +687,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-returned-closure.ts",
-      "start": 322,
-      "end": 346,
+      "start": 476,
+      "end": 519,
       "fixes": 0
     },
     {

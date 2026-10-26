@@ -34,13 +34,37 @@ export const BUDGETS = {
     // Raised from 60 files and 1_500 lines when every cause of the rc.17
     // corpus, not only those of 20 results or more, was to be reproduced:
     // 149 files and 2_849 lines at 139 cases (97.4% of the corpus's results).
-    uncertifiable: { files: 160, lines: 3_000 },
+    // Raised from 160 and 3_000 when mixed labels were split into one case per
+    // mechanism (ADR 0406): 177 files and 3_390 lines at 167 cases.
+    uncertifiable: { files: 180, lines: 3_400 },
     violation: { files: 16, lines: 400 },
     clean: { files: 16, lines: 400 },
   },
   /** Bytes of the shared node_modules. */
   nodeModulesBytes: 5_000_000,
 };
+
+/**
+ * How many distinct corpus sites of an uncertifiable case are read from
+ * source before its label counts as verified: all of them when there are
+ * fewer.
+ */
+export const VERIFICATION_SAMPLE = 5;
+
+/** The verdicts a source read gives a sampled site. */
+export const VERDICTS = ["same", "different", "unsure"];
+
+/**
+ * ADR 0404's verified weight: a case stands for the distinct sites of its
+ * label only when every sampled site reads, from source, as the mechanism its
+ * files reproduce; one other reading makes the label a grouping and nothing
+ * more (`verifiedWeight` 0), until the bucket is split.
+ */
+export function verifiedWeight(entry) {
+  const samples = entry.verification?.samples ?? [];
+  const needed = Math.min(VERIFICATION_SAMPLE, entry.sites ?? 0);
+  return needed > 0 && samples.length >= needed && samples.every((sample) => sample.verdict === "same") ? entry.sites : 0;
+}
 
 /** The status a case of each kind may have today. */
 export const STATUSES = {
@@ -144,7 +168,21 @@ export function violations(state, { tracked = null, manifest = null } = {}) {
         if (typeof expected[field] !== "string") found.push(`${where}: an expected result has no ${field}`);
       }
     }
-    if (!Number.isInteger(entry.weight) || entry.weight < 0) found.push(`${where}: weight is not a count`);
+    if (entry.kind === "uncertifiable") {
+      // Results the classifier's label gives the case, the distinct source
+      // sites among them (a file several projects analyze counts once), and
+      // what a source read of a sample of those sites found.
+      if (!Number.isInteger(entry.labelWeight) || entry.labelWeight < 0) found.push(`${where}: labelWeight is not a count`);
+      if (!Number.isInteger(entry.sites) || entry.sites < 0 || entry.sites > entry.labelWeight) found.push(`${where}: sites is not a count of at most labelWeight`);
+      const samples = entry.verification?.samples;
+      if (!Array.isArray(samples)) found.push(`${where}: no verification samples`);
+      for (const sample of samples ?? []) {
+        if (!sample.app || !sample.path || !Number.isInteger(sample.line) || !sample.rule || !VERDICTS.includes(sample.verdict) || typeof sample.mechanism !== "string") {
+          found.push(`${where}: a verification sample needs app, path, line, rule, a verdict (${VERDICTS.join(", ")}) and a mechanism`);
+        }
+      }
+      if (entry.verifiedWeight !== verifiedWeight(entry)) found.push(`${where}: verifiedWeight ${entry.verifiedWeight} is not ${verifiedWeight(entry)} (its sites when every one of at least ${VERIFICATION_SAMPLE} samples reads the same, else 0)`);
+    } else if (!Number.isInteger(entry.weight) || entry.weight < 0) found.push(`${where}: weight is not a count`);
     if (!STATUSES[entry.kind].includes(entry.status)) found.push(`${where}: status ${entry.status} is not one a ${entry.kind} case has (${STATUSES[entry.kind].join(", ")})`);
     const source = entry.source ?? {};
     if (!source.app || !source.path || !Number.isInteger(source.line) || !/^[0-9a-f]{40}$/.test(source.commit ?? "")) {
