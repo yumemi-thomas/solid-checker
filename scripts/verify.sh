@@ -366,7 +366,13 @@ gates_lane() {
 # repository. See scripts/wasm-parity/README.md.
 wasm_parity_lane() {
   lane_step wasm-parity
-  wasm_parity_scratch=$(mktemp -d "${TMPDIR:-/tmp}/sc-wasm-parity.XXXXXX")
+  # On macOS the scratch must have the OS's /private alias (wasm-parity.mjs
+  # checks it), which a TMPDIR moved elsewhere would not.
+  case "$(uname -s)" in
+    Darwin) wasm_parity_tmp=/private/tmp ;;
+    *) wasm_parity_tmp=${TMPDIR:-/tmp} ;;
+  esac
+  wasm_parity_scratch=$(mktemp -d "$wasm_parity_tmp/sc-wasm-parity.XXXXXX")
   mkdir -p "$wasm_parity_scratch/n2-tmp"
   TMPDIR="$wasm_parity_scratch/n2-tmp" TYPEFACTS_BRIDGE_FRAMES="$wasm_parity_scratch/update-frames" \
     TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" \
