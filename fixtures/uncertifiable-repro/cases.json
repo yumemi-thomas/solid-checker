@@ -52,9 +52,9 @@
       "path": "web/apps/client/src/routes/TeamSettingsRoute.tsx",
       "line": 278,
       "rule": "SC2001",
-      "verdict": "same",
-      "mechanism": "write-after-await",
-      "note": "setActionError in catch after await api.team.cancelInvitation (:268) in async cancelInvitation, called via void from onClick (:782)."
+      "verdict": "different",
+      "mechanism": "write-after-await + second blocker",
+      "note": "[experiment round 3: removing the case blocker left the site: SC2001 uncertifiable: setter \"setActionError\" is called in TeamSettingsRoute, but no compiler or semantic fact places where this code runs] setActionError in catch after await api.team.cancelInvitation (:268) in async cancelInvitation, called via void from onClick (:782)."
      },
      {
       "app": "ai-memory-ui",
@@ -70,9 +70,9 @@
       "path": "packages/ui-components-examples/cloud-storage-tree/CloudStorageContext.tsx",
       "line": 198,
       "rule": "SC2001",
-      "verdict": "same",
-      "mechanism": "write-after-await",
-      "note": "setState in catch after several awaits (:152-190) in an async method of the actions object (an extra hop; the write itself is the after-await shape)."
+      "verdict": "different",
+      "mechanism": "write-after-await + second blocker",
+      "note": "[experiment round 3: removing the case blocker left the site: SC2001 uncertifiable: setter \"setState\" is called in CloudStorageProvider, but no compiler or semantic fact places where this code runs] setState in catch after several awaits (:152-190) in an async method of the actions object (an extra hop; the write itself is the after-await shape)."
      },
      {
       "app": "ai-memory-ui",
@@ -85,7 +85,7 @@
      }
     ]
    },
-   "verifiedWeight": 256
+   "verifiedWeight": 0
   },
   {
    "id": "write-in-factory-member",
@@ -675,9 +675,9 @@
       "path": "frontend/packages/feature-topics/src/TopicsRoute.tsx",
       "line": 580,
       "rule": "SC9012",
-      "verdict": "same",
-      "mechanism": "typed-primitive-argument-wrapped-in-literal",
-      "note": "download(filename, text, type) (TopicsRoute.tsx:351) wraps text in the array literal [text] handed to new Blob; the argument topicsCsv(rows) is a typed string. An array literal, not an object: a probe on the set (a temporary file, removed) shows the checker flags an array wrapper handed to a library constructor exactly as an object one."
+      "verdict": "different",
+      "mechanism": "typed-primitive-argument-wrapped-in-literal + second blocker",
+      "note": "[experiment round 3: removing the case blocker left the site: the runtime target of download cannot be selected exactly, and its possible implementations do not have one proven reactive-read behavior,topicsCsv invokes .map] download(filename, text, type) (TopicsRoute.tsx:351) wraps text in the array literal [text] handed to new Blob; the argument topicsCsv(rows) is a typed string. An array literal, not an object: a probe on the set (a temporary file, removed) shows the checker flags an array wrapper handed to a library constructor exactly as an object one."
      },
      {
       "app": "inferay",
@@ -693,9 +693,9 @@
       "path": "frontend/packages/feature-schemas/src/SchemasRoute.tsx",
       "line": 402,
       "rule": "SC9012",
-      "verdict": "same",
-      "mechanism": "typed-primitive-argument-wrapped-in-literal",
-      "note": "fetchSchema(api, clusterId, subject, version) (feature-schemas data.ts:217-226) wraps subject and version in { params: { path: { clusterId, subject, version } } } handed to api.get (a project interface member); arguments props.subject and version() are typed strings."
+      "verdict": "different",
+      "mechanism": "typed-primitive-argument-wrapped-in-literal + second blocker",
+      "note": "[experiment round 3: removing the case blocker left the site: fetchSchema invokes .get on a caller-supplied value, but the exact runtime implementation cannot be selected and the possible implementations do not have one pr] fetchSchema(api, clusterId, subject, version) (feature-schemas data.ts:217-226) wraps subject and version in { params: { path: { clusterId, subject, version } } } handed to api.get (a project interface member); arguments props.subject and version() are typed strings."
      },
      {
       "app": "error-menu-web",
@@ -717,7 +717,7 @@
      }
     ]
    },
-   "verifiedWeight": 68
+   "verifiedWeight": 0
   },
   {
    "id": "withheld-object-member",
@@ -1067,9 +1067,9 @@
       "path": "packages/webgl-examples/tiled-map/tiled-map.tsx",
       "line": 40,
       "rule": "SC9012",
-      "verdict": "same",
-      "mechanism": "lib-dom-member-on-parameter",
-      "note": "createIndexBuffer(gl, PLANE) (tiled-map/utils.ts:29) is a plain project function invoking gl.createBuffer on a WebGL2 context from createWebGL2Context(canvas); the call sits in a callback inside the component body rather than an effect apply, but the blocking branch (no exact origin for the argument, lib.dom member) is the same."
+      "verdict": "different",
+      "mechanism": "lib-dom-member-on-parameter + second blocker",
+      "note": "[experiment round 3: removing the case blocker left the site: the runtime target of createIndexBuffer cannot be selected exactly, and its possible implementations do not have one proven reactive-read behavior] createIndexBuffer(gl, PLANE) (tiled-map/utils.ts:29) is a plain project function invoking gl.createBuffer on a WebGL2 context from createWebGL2Context(canvas); the call sits in a callback inside the component body rather than an effect apply, but the blocking branch (no exact origin for the argument, lib.dom member) is the same."
      },
      {
       "app": "dashiboard-ui",
@@ -1109,7 +1109,7 @@
      }
     ]
    },
-   "verifiedWeight": 122
+   "verifiedWeight": 0
   },
   {
    "id": "param-member-path",
@@ -8149,40 +8149,40 @@
       "path": "frontend/packages/feature-topics/src/TopicsRoute.tsx",
       "line": 453,
       "rule": "SC9012",
-      "verdict": "same",
-      "mechanism": "project-interface-method-called-on-hook-returned-client",
-      "note": "fetchTopicStatistics(kui.api, ...) (TopicsRoute.tsx:453) with kui = useKui(); the callee calls api.get on KuiApiClient (feature-topics data.ts). Same construct, in a useQuery callback."
+      "verdict": "different",
+      "mechanism": "project-interface-method-called-on-hook-returned-client + second blocker",
+      "note": "[experiment round 3: removing the case blocker left the site: the runtime target of fetchTopicStatistics cannot be selected exactly, and its possible implementations do not have one proven reactive-read behavior] fetchTopicStatistics(kui.api, ...) (TopicsRoute.tsx:453) with kui = useKui(); the callee calls api.get on KuiApiClient (feature-topics data.ts). Same construct, in a useQuery callback."
      },
      {
       "app": "kui",
       "path": "frontend/packages/shell/src/overview/Overview.tsx",
       "line": 347,
       "rule": "SC9012",
-      "verdict": "same",
-      "mechanism": "project-interface-method-called-on-hook-returned-client",
-      "note": "metric(key, (id) => fetchThroughput(kui.api, id, range())) (Overview.tsx:347) with kui = useKui() (line 280); fetchThroughput(api: KuiApiClient) calls api.get at throughput.ts:377."
+      "verdict": "different",
+      "mechanism": "project-interface-method-called-on-hook-returned-client + second blocker",
+      "note": "[experiment round 3: removing the case blocker left the site: the runtime target of fetchThroughput cannot be selected exactly, and its possible implementations do not have one proven reactive-read behavior,the runtime tar] metric(key, (id) => fetchThroughput(kui.api, id, range())) (Overview.tsx:347) with kui = useKui() (line 280); fetchThroughput(api: KuiApiClient) calls api.get at throughput.ts:377."
      },
      {
       "app": "kui",
       "path": "frontend/packages/feature-messages/src/MessagesRoute.tsx",
       "line": 612,
       "rule": "SC9012",
-      "verdict": "same",
-      "mechanism": "project-interface-method-called-on-hook-returned-client",
-      "note": "createMutation((q) => track(kui.api, ...)) (MessagesRoute.tsx:612) with kui = useKui(); track(api: KuiApiClient) calls api.post (track.ts:138): the case's pattern."
+      "verdict": "different",
+      "mechanism": "project-interface-method-called-on-hook-returned-client + second blocker",
+      "note": "[experiment round 3: removing the case blocker left the site: the runtime target of track cannot be selected exactly, and its possible implementations do not have one proven reactive-read behavior] createMutation((q) => track(kui.api, ...)) (MessagesRoute.tsx:612) with kui = useKui(); track(api: KuiApiClient) calls api.post (track.ts:138): the case's pattern."
      },
      {
       "app": "kui",
       "path": "frontend/packages/feature-messages/src/MessagesRoute.tsx",
       "line": 244,
       "rule": "SC9012",
-      "verdict": "same",
-      "mechanism": "project-interface-method-called-on-hook-returned-client",
-      "note": "createMutation((source) => registerFilter(kui.api, ...)) (MessagesRoute.tsx:244) with kui = useKui(); registerFilter(api: KuiApiClient) calls api.post (filters.ts:188)."
+      "verdict": "different",
+      "mechanism": "project-interface-method-called-on-hook-returned-client + second blocker",
+      "note": "[experiment round 3: removing the case blocker left the site: the runtime target of registerFilter cannot be selected exactly, and its possible implementations do not have one proven reactive-read behavior,the runtime targ] createMutation((source) => registerFilter(kui.api, ...)) (MessagesRoute.tsx:244) with kui = useKui(); registerFilter(api: KuiApiClient) calls api.post (filters.ts:188)."
      }
     ]
    },
-   "verifiedWeight": 49
+   "verifiedWeight": 0
   },
   {
    "id": "param-member-new-instance",
@@ -8296,9 +8296,9 @@
       "path": "packages/solid-view-cube/src/ViewCube.tsx",
       "line": 85,
       "rule": "SC9012",
-      "verdict": "same",
-      "mechanism": "project-type-data-field-read-handed-on",
-      "note": "snapOrientation reads orientation.direction (a vector field) and hands it to dot()/cross() (cubeGeometry.ts:124-139); the message's `.direction` is a data field, as `.lat` in the case."
+      "verdict": "different",
+      "mechanism": "project-type-data-field-read-handed-on + second blocker",
+      "note": "[experiment round 3: removing the case blocker left the site: snapOrientation invokes .direction on a caller-supplied value, but the exact runtime implementation cannot be selected and the possible implementations do not h] snapOrientation reads orientation.direction (a vector field) and hands it to dot()/cross() (cubeGeometry.ts:124-139); the message's `.direction` is a data field, as `.lat` in the case."
      },
      {
       "app": "app-game",
@@ -8323,9 +8323,9 @@
       "path": "packages/twgl-examples/uniform-buffer-objects/uniform-buffer-objects.tsx",
       "line": 138,
       "rule": "SC9012",
-      "verdict": "same",
-      "mechanism": "project-type-data-field-read-handed-on",
-      "note": "bindUniformBlock (@app-game/twgl programs.ts:1756-1770) reads uniformBlockInfo.buffer/.offset/.array.byteLength and passes them to gl.bindBufferRange; the `.buffer` message is a data field read."
+      "verdict": "different",
+      "mechanism": "project-type-data-field-read-handed-on + second blocker",
+      "note": "[experiment round 3: removing the case blocker left the site: bindUniformBlock invokes .bindBufferRange on a caller-supplied value, but the exact runtime implementation cannot be selected and the possible implementations d] bindUniformBlock (@app-game/twgl programs.ts:1756-1770) reads uniformBlockInfo.buffer/.offset/.array.byteLength and passes them to gl.bindBufferRange; the `.buffer` message is a data field read."
      },
      {
       "app": "app-game",
@@ -8338,7 +8338,7 @@
      }
     ]
    },
-   "verifiedWeight": 64
+   "verifiedWeight": 0
   },
   {
    "id": "veto-story",
