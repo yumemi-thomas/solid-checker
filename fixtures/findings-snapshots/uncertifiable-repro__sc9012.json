@@ -467,8 +467,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-use-object.tsx",
-      "start": 673,
-      "end": 730,
+      "start": 680,
+      "end": 737,
       "fixes": 0
     },
     {

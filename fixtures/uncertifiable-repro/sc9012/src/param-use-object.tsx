@@ -1,6 +1,6 @@
 // app-game SensorDemo.tsx:15: a component passes an options object to a
 // project function that hands it on to a member of another object
-// (solid-dnd dragSensor/solid.ts:103, `scope.createSensor(options)`).
+// (solid-dnd createDragSensor.tsx:515-523, `factory.createSensor(options)`).
 type SensorOptions = { threshold?: number; onDragStart?: () => void };
 
 function createSensorScope() {
