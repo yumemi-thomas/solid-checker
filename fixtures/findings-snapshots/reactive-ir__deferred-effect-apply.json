@@ -117,16 +117,6 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/deferred-effect-apply/App.tsx",
-      "start": 1677,
-      "end": 1693,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/deferred-effect-apply/App.tsx",
       "start": 1680,
       "end": 1693,
       "fixes": 0

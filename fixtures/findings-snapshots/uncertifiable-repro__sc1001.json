@@ -97,16 +97,6 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/handler-factory-options.tsx",
-      "start": 911,
-      "end": 1007,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/handler-factory-options.tsx",
       "start": 915,
       "end": 938,
       "fixes": 0
@@ -239,16 +229,6 @@
       "path": "fixtures/uncertifiable-repro/sc1001/src/prop-mixed-callers-read.tsx",
       "start": 1424,
       "end": 1438,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/prop-mixed-callers-read.tsx",
-      "start": 1441,
-      "end": 1460,
       "fixes": 0
     },
     {

@@ -12,8 +12,10 @@ pub(crate) fn reference_symbol(
     lookup: &SemanticLookup<'_>,
 ) -> Option<SymbolId> {
     let span = file.ast.peel_ts_sugar_span(span);
+    // `value_symbol`, not `get`: an entity names the symbol at its FIRST BYTE,
+    // so `get` at `(props.q === undefined ? {} : {})` answers `props`.
     entities
-        .get(&location(file.path.shared(), span))
+        .value_symbol(file, span)
         .cloned()
         .or_else(|| {
             lookup

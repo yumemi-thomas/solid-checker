@@ -2076,15 +2076,17 @@ impl LocalAccessContext<'_, '_> {
         result: &mut LocalAccessResult,
     ) {
         for spread in &file.ast.spreads {
-            let argument = location(file.path.shared(), spread.argument);
-            let inline_root = if !self.entities.get(&argument).is_some_and(|symbol| {
+            // The value the argument denotes, not the symbol at its first
+            // byte: `...(props.q ? {} : {})` spreads no props object.
+            let argument = self.entities.value_symbol(file, spread.argument);
+            let inline_root = if !argument.is_some_and(|symbol| {
                 self.prop_sources.contains_key(symbol) || self.accessors.contains_key(symbol)
             }) {
                 self.inline_view_root(file, spread.argument)
             } else {
                 None
             };
-            let Some(symbol) = inline_root.as_ref().or(self.entities.get(&argument)) else {
+            let Some(symbol) = inline_root.as_ref().or(argument) else {
                 continue;
             };
             let execution = semantic_execution_role(
