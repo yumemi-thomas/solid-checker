@@ -346,6 +346,7 @@ fn diagnostic_session_keys_retention_on_requested_enablement() {
                 runtime: RuntimeEnvironment::default(),
                 feedback_facts: false,
                 host_suppressions: &[],
+                default_program_boundary: None,
             },
         )
         .unwrap();
@@ -361,6 +362,7 @@ fn diagnostic_session_keys_retention_on_requested_enablement() {
                 runtime: RuntimeEnvironment::default(),
                 feedback_facts: false,
                 host_suppressions: &[],
+                default_program_boundary: None,
             },
         )
         .unwrap();
@@ -376,6 +378,7 @@ fn diagnostic_session_keys_retention_on_requested_enablement() {
                 runtime: RuntimeEnvironment::default(),
                 feedback_facts: false,
                 host_suppressions: &[],
+                default_program_boundary: None,
             },
         )
         .unwrap();

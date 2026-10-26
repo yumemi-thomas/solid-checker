@@ -54,16 +54,105 @@ pub fn program_boundary_digest(project: &Path) -> [u8; 32] {
     decide(project).digest
 }
 
+/// The default boundary and the digest of what deciding it read, from one
+/// read of the disk: a daemon request that needs both (the answer's inputs
+/// and the analysis' options) decides once and takes the digest of the very
+/// state the analysis used, so a manifest edited meanwhile moves the next
+/// request's digest.
+#[derive(Clone, Copy, Debug)]
+pub struct BoundaryDecision {
+    pub boundary: ProgramBoundary,
+    pub digest: [u8; 32],
+}
+
 pub(crate) fn default_program_boundary(project: &Path) -> ProgramBoundary {
     decide(project).boundary
 }
 
 pub(crate) fn decide(project: &Path) -> Decision {
+    decide_observed(project).0
+}
+
+/// [`decide`], and what the disk showed while it ran (`None` where the
+/// observation cannot be re-checked by a stat: a symbolic link was involved).
+fn decide_observed(project: &Path) -> (Decision, Option<Vec<Seen>>) {
     let mut reads = Reads::default();
     let boundary = decide_with(project, &mut reads);
-    Decision {
-        boundary,
-        digest: reads.transcript.finalize().into(),
+    let witness = reads.cacheable.then_some(reads.seen);
+    (
+        Decision {
+            boundary,
+            digest: reads.transcript.finalize().into(),
+        },
+        witness,
+    )
+}
+
+/// One thing the disk showed a decision: a path that was absent, a path with
+/// the stamp it had when read (a file's, or a directory whose listing was
+/// read; any entry added, removed or renamed in a directory moves its stamp),
+/// or the real path a directory canonicalized to. The stamp is the daemon's
+/// own file stamp: device, inode, length, modification and change times, the
+/// last of which a rewrite cannot set back.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Seen {
+    Absent(PathBuf),
+    Stamp(PathBuf, [i64; 7]),
+    Canonical(PathBuf, PathBuf),
+}
+
+impl Seen {
+    fn holds(&self) -> bool {
+        match self {
+            Self::Absent(path) => fs::symlink_metadata(path).is_err(),
+            Self::Stamp(path, stamp) => fs::symlink_metadata(path).is_ok_and(|metadata| {
+                !metadata.file_type().is_symlink() && stamp_of(&metadata) == *stamp
+            }),
+            Self::Canonical(path, real) => fs::canonicalize(path).is_ok_and(|now| now == *real),
+        }
+    }
+}
+
+#[allow(clippy::cast_possible_wrap)]
+fn stamp_of(metadata: &fs::Metadata) -> [i64; 7] {
+    use std::os::unix::fs::MetadataExt;
+    [
+        metadata.dev() as i64,
+        metadata.ino() as i64,
+        metadata.len() as i64,
+        metadata.mtime(),
+        metadata.mtime_nsec(),
+        metadata.ctime(),
+        metadata.ctime_nsec(),
+    ]
+}
+
+/// The decision a daemon keeps between requests while the disk still shows
+/// what it showed (ADR 0444): a request that finds every observation as
+/// recorded takes the kept decision and its digest, and any other decides
+/// again. A decision that involved a symbolic link is never kept, since a
+/// link's target can change under unchanged stamps.
+#[derive(Default)]
+pub struct BoundaryCache {
+    kept: Option<(PathBuf, BoundaryDecision, Vec<Seen>)>,
+}
+
+impl BoundaryCache {
+    #[must_use]
+    pub fn decide(&mut self, project: &Path) -> BoundaryDecision {
+        if let Some((kept_project, decision, witness)) = &self.kept
+            && kept_project == project
+            && witness.iter().all(Seen::holds)
+        {
+            return *decision;
+        }
+        let (decision, witness) = decide_observed(project);
+        let decision = BoundaryDecision {
+            boundary: decision.boundary,
+            digest: decision.digest,
+        };
+        self.kept = witness.map(|witness| (project.to_path_buf(), decision, witness));
+        decision
     }
 }
 
@@ -73,7 +162,11 @@ fn decide_with(project: &Path, reads: &mut Reads) -> ProgramBoundary {
     } else {
         project.parent().unwrap_or(project)
     };
+    let raw_start = start;
     let start = fs::canonicalize(start).unwrap_or_else(|_| start.to_path_buf());
+    reads
+        .seen
+        .push(Seen::Canonical(raw_start.to_path_buf(), start.clone()));
     let Some((package_directory, read)) =
         start.ancestors().find_map(
             |directory| match reads.file(&directory.join("package.json")) {
@@ -384,6 +477,7 @@ fn matching_directories(
         }
     } else {
         let child = directory.join(segment);
+        reads.observe(&child);
         if child.is_dir() {
             matching_directories(reads, &child, rest, visited, into)?;
         }
@@ -472,7 +566,7 @@ fn normalized(path: &Path) -> PathBuf {
 }
 
 /// What reading one file gave.
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum Read {
     Absent,
     Unreadable,
@@ -480,14 +574,53 @@ enum Read {
 }
 
 /// Everything one decision read, folded into a digest: a file's bytes or its
-/// absence, a directory's subdirectory names.
-#[derive(Default)]
+/// absence, a directory's subdirectory names. A file is read once per
+/// decision (a member's manifest is asked for twice, to list the members and
+/// to read their dependencies), so the decision sees one snapshot of it.
 struct Reads {
     transcript: Sha256,
+    files: std::collections::HashMap<PathBuf, Read>,
+    /// What the disk showed, in the order asked ([`Seen`]).
+    seen: Vec<Seen>,
+    /// False once a symbolic link was involved.
+    cacheable: bool,
+}
+
+impl Default for Reads {
+    fn default() -> Self {
+        Self {
+            transcript: Sha256::new(),
+            files: std::collections::HashMap::new(),
+            seen: Vec::new(),
+            cacheable: true,
+        }
+    }
 }
 
 impl Reads {
+    /// Records what `path` is now: absent, or its stamp. The stamp is taken
+    /// before the path is read, so a change during the read is a change.
+    fn observe(&mut self, path: &Path) {
+        match fs::symlink_metadata(path) {
+            Err(_) => self.seen.push(Seen::Absent(path.to_path_buf())),
+            Ok(metadata) if metadata.file_type().is_symlink() => self.cacheable = false,
+            Ok(metadata) => self
+                .seen
+                .push(Seen::Stamp(path.to_path_buf(), stamp_of(&metadata))),
+        }
+    }
+
     fn file(&mut self, path: &Path) -> Read {
+        if let Some(read) = self.files.get(path) {
+            return read.clone();
+        }
+        let read = self.read_file(path);
+        self.files.insert(path.to_path_buf(), read.clone());
+        read
+    }
+
+    fn read_file(&mut self, path: &Path) -> Read {
+        self.observe(path);
         self.transcript.update(b"file\0");
         self.transcript.update(path.as_os_str().as_encoded_bytes());
         if !path.is_file() {
@@ -508,6 +641,8 @@ impl Reads {
     }
 
     fn subdirectories(&mut self, directory: &Path) -> Vec<PathBuf> {
+        self.observe(directory);
+        let mut links = false;
         let mut children = fs::read_dir(directory)
             .into_iter()
             .flatten()
@@ -516,9 +651,20 @@ impl Reads {
                 let name = entry.file_name();
                 name != "node_modules" && name != ".git"
             })
-            .filter(|entry| entry.path().is_dir())
+            .filter(|entry| match entry.file_type() {
+                Ok(kind) if kind.is_dir() => true,
+                // A link is a directory if its target is.
+                Ok(kind) if kind.is_symlink() => {
+                    links = true;
+                    entry.path().is_dir()
+                }
+                _ => false,
+            })
             .map(|entry| entry.path())
             .collect::<Vec<_>>();
+        if links {
+            self.cacheable = false;
+        }
         children.sort();
         self.transcript.update(b"list\0");
         self.transcript
@@ -835,5 +981,114 @@ mod tests {
         fs::create_dir_all(tree.0.join("packages/new")).unwrap();
         fs::write(tree.0.join("packages/new/package.json"), "{}").unwrap();
         assert_ne!(program_boundary_digest(&project), after, "a new member");
+    }
+
+    /// What an uncached decision says now, beside what the kept one says.
+    fn both(
+        cache: &mut BoundaryCache,
+        project: &Path,
+    ) -> ((ProgramBoundary, [u8; 32]), (ProgramBoundary, [u8; 32])) {
+        let kept = cache.decide(project);
+        let fresh = decide(project);
+        ((kept.boundary, kept.digest), (fresh.boundary, fresh.digest))
+    }
+
+    /// The kept decision is the uncached one after every edit of the files a
+    /// decision reads, including a rewrite of the same length whose
+    /// modification time is put back (the change time still moves).
+    #[test]
+    fn a_kept_decision_follows_the_disk_as_an_uncached_one_does() {
+        let tree = Tree::new(&[
+            ("package.json", ROOT),
+            ("packages/kernel/package.json", KERNEL),
+            (
+                "packages/shell/package.json",
+                r#"{"name": "@x/shell", "private": true}"#,
+            ),
+        ]);
+        let project = tree.0.join("packages/kernel/tsconfig.json");
+        let mut cache = BoundaryCache::default();
+        let (kept, fresh) = both(&mut cache, &project);
+        assert_eq!(kept, fresh);
+        assert_eq!(kept.0, Closed);
+        assert!(cache.kept.is_some(), "an unchanged disk keeps the decision");
+        let (kept, fresh) = both(&mut cache, &project);
+        assert_eq!(kept, fresh, "a request that finds the disk as it was");
+
+        let feature = tree.0.join("packages/feature/package.json");
+        let depends =
+            r#"{"name": "@x/feature", "private": true, "dependencies": {"@x/kernel": "1"}}"#;
+        let plain =
+            r#"{"name": "@x/feature", "private": true, "dependencies": {"@y/kernel": "1"}}"#;
+        assert_eq!(depends.len(), plain.len());
+        fs::create_dir_all(feature.parent().unwrap()).unwrap();
+        fs::write(&feature, depends).unwrap();
+        let (kept, fresh) = both(&mut cache, &project);
+        assert_eq!(kept, fresh, "a new member that depends on the project");
+        assert_eq!(kept.0, Open);
+
+        let modified = fs::metadata(&feature).unwrap().modified().unwrap();
+        fs::write(&feature, plain).unwrap();
+        fs::File::options()
+            .write(true)
+            .open(&feature)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(modified))
+            .unwrap();
+        let (kept, fresh) = both(&mut cache, &project);
+        assert_eq!(kept, fresh, "same length, same modification time");
+        assert_eq!(kept.0, Closed);
+
+        fs::remove_dir_all(feature.parent().unwrap()).unwrap();
+        let (kept, fresh) = both(&mut cache, &project);
+        assert_eq!(kept, fresh, "the member's directory is gone");
+
+        fs::write(
+            tree.0.join("package.json"),
+            r#"{"private": true, "workspaces": ["packages/*", "extra/*"]}"#,
+        )
+        .unwrap();
+        fs::create_dir_all(tree.0.join("extra/app")).unwrap();
+        fs::write(tree.0.join("extra/app/package.json"), depends).unwrap();
+        let (kept, fresh) = both(&mut cache, &project);
+        assert_eq!(kept, fresh, "a new workspace pattern with a dependent");
+        assert_eq!(kept.0, Open);
+
+        fs::remove_file(tree.0.join("package.json")).unwrap();
+        let (kept, fresh) = both(&mut cache, &project);
+        assert_eq!(kept, fresh, "the workspace root manifest is gone");
+    }
+
+    /// A symbolic link's target can change under unchanged stamps, so a
+    /// decision that listed one is decided again every time.
+    #[cfg(unix)]
+    #[test]
+    fn a_decision_that_involved_a_link_is_never_kept() {
+        let tree = Tree::new(&[
+            ("package.json", ROOT),
+            ("packages/kernel/package.json", KERNEL),
+            (
+                "elsewhere/shell/package.json",
+                r#"{"name": "@x/shell", "private": true}"#,
+            ),
+        ]);
+        std::os::unix::fs::symlink(
+            tree.0.join("elsewhere/shell"),
+            tree.0.join("packages/shell"),
+        )
+        .unwrap();
+        let project = tree.0.join("packages/kernel/tsconfig.json");
+        let mut cache = BoundaryCache::default();
+        let (kept, fresh) = both(&mut cache, &project);
+        assert_eq!(kept, fresh);
+        assert!(cache.kept.is_none(), "a listed link: not kept");
+        fs::write(
+            tree.0.join("elsewhere/shell/package.json"),
+            r#"{"name": "@x/shell", "private": true, "dependencies": {"@x/kernel": "1"}}"#,
+        )
+        .unwrap();
+        let (kept, fresh) = both(&mut cache, &project);
+        assert_eq!(kept, fresh);
+        assert_eq!(kept.0, Open, "through the link");
     }
 }

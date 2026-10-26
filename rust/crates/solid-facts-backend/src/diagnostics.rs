@@ -8,8 +8,8 @@ use std::{
 use serde::{Deserialize, Serialize};
 use solid_facts::ProjectFacts;
 use solid_reactive_ir::{
-    AnalysisInputs, CacheRetention, Finding, IncrementalBuilder, Program, RuleOptions,
-    RuntimeEnvironment, suppress_findings_owned_by_enabled_rules,
+    AnalysisInputs, CacheRetention, Finding, IncrementalBuilder, Program, ProgramBoundary,
+    RuleOptions, RuntimeEnvironment, suppress_findings_owned_by_enabled_rules,
 };
 
 use crate::dialect::{self, Dialect};
@@ -120,6 +120,10 @@ pub struct RequestedRuleEnablement<'a> {
     pub feedback_facts: bool,
     /// Rule ids the host suppresses `eslint-disable` comments for (ADR 0429).
     pub host_suppressions: &'a [String],
+    /// The default program boundary the caller already decided for this
+    /// project in this request, used where the runtime selects none; `None`
+    /// decides it here (ADR 0444).
+    pub default_program_boundary: Option<ProgramBoundary>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -341,7 +345,11 @@ impl DiagnosticSession {
             .map_err(BackendError::RuntimePremise)?;
         rule_options.runtime = enablement.runtime;
         if rule_options.runtime.program_boundary.is_none() {
-            rule_options.runtime.program_boundary = Some(default_program_boundary(project));
+            rule_options.runtime.program_boundary = Some(
+                enablement
+                    .default_program_boundary
+                    .unwrap_or_else(|| default_program_boundary(project)),
+            );
         }
         rule_options.runtime.router_install =
             crate::installed_bytes::router_install_evidence(project, facts);
