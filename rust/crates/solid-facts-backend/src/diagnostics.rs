@@ -1292,52 +1292,7 @@ fn discover_package_install(
     Ok(None)
 }
 
-/// The program boundary a check uses when the user selected none (ADR 0193).
-///
-/// An application is the whole program: every caller of its exported
-/// components and hooks is one of its own call sites. A published library is
-/// not. The nearest `package.json` at or above the project decides:
-///
-/// - `"private": true` is an application;
-/// - otherwise, a manifest that publishes an entry (`exports`, `main`,
-///   `module`, `types`, `typings` or `bin`) is a library;
-/// - a manifest that publishes nothing is an application.
-///
-/// No manifest, or one that cannot be read, keeps the open boundary: a build
-/// that cannot tell stays fail-closed.
-pub(crate) fn default_program_boundary(project: &Path) -> solid_reactive_ir::ProgramBoundary {
-    use solid_reactive_ir::ProgramBoundary;
-    let start = if project.is_dir() {
-        project
-    } else {
-        project.parent().unwrap_or(project)
-    };
-    let Some(manifest) = start
-        .ancestors()
-        .map(|directory| directory.join("package.json"))
-        .find(|candidate| candidate.is_file())
-    else {
-        return ProgramBoundary::Open;
-    };
-    let Ok(text) = std::fs::read_to_string(&manifest) else {
-        return ProgramBoundary::Open;
-    };
-    let Ok(serde_json::Value::Object(fields)) = serde_json::from_str::<serde_json::Value>(&text)
-    else {
-        return ProgramBoundary::Open;
-    };
-    if fields.get("private") == Some(&serde_json::Value::Bool(true)) {
-        return ProgramBoundary::Closed;
-    }
-    let publishes = ["exports", "main", "module", "types", "typings", "bin"]
-        .iter()
-        .any(|field| fields.contains_key(*field));
-    if publishes {
-        ProgramBoundary::Open
-    } else {
-        ProgramBoundary::Closed
-    }
-}
+pub(crate) use crate::program_boundary::default_program_boundary;
 
 /// Loads the project's per-rule options from the nearest
 /// `.solid-checker/rule-options.json`, walking ancestors. A project without one gets upstream's defaults;

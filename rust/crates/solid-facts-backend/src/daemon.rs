@@ -1659,6 +1659,14 @@ fn input_files(
         };
         files.push((path.clone(), hash));
     }
+    // ADR 0193, 0402: the default program boundary reads the nearest
+    // manifest and, for an application, its workspaces' declarations, member
+    // listings and member manifests. One digest of all of them is an input,
+    // so a sibling that starts depending on the project reopens it.
+    files.push((
+        directory.join(".solid-checker-program-boundary"),
+        solid_facts_backend::program_boundary_digest(&state.project),
+    ));
     // ADR 0324: the premise reads the installed router's bytes, which no
     // tracked source holds (`dist/index.js` is no program file), so each
     // resolved install is an input by the digest the premise compares.

@@ -27,7 +27,8 @@ export const FILE_BUDGETS = {
   // And for ADR 0396's async and test-helper limits: 28_418 bytes against 28_000.
   // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 32_000.
   // And for ADR 0401's untracked-read misses: 32_541 bytes against 32_000: 33_000.
-  "docs/open-work.md": 33_000,
+  // And for ADRs 0402-0403's trades (workspace boundary, exported capitalized components): 33_453 bytes against 33_000: 34_000.
+  "docs/open-work.md": 34_000,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for the
   // catalog review's ADRs 0381-0392, 4 bytes under 115_600; and for ADR 0393,
@@ -41,7 +42,8 @@ export const FILE_BUDGETS = {
   // And for ADR 0398: 152_282 bytes against 151_000: 153_000.
   // And for ADR 0401: 154_913 bytes against 153_000: 156_000.
   // And for ADRs 0386-0387's suppression comments: 156_435 bytes against 156_000: 157_000.
-  "docs/decisions.md": 157_000,
+  // And for ADRs 0402-0403 (workspace program boundary, census with no entry): 160_120 bytes against 157_000: 161_000.
+  "docs/decisions.md": 161_000,
 };
 
 export const GROUP_BUDGETS = [
@@ -51,7 +53,8 @@ export const GROUP_BUDGETS = [
   // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 650_000.
   // And for ADRs 0398-0401 and their rule pages: 650_087 bytes against 650_000: 656_000.
   // And for ADRs 0386-0387 (suppression section, SC9016's page): 658_058 bytes against 656_000: 660_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 660_000 },
+  // And for ADRs 0402-0403 (decisions, open work, fixture READMEs): 662_349 bytes against 660_000: 664_000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 664_000 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
@@ -66,7 +69,8 @@ export const GROUP_BUDGETS = [
     // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 290_000.
     // And for the Opus review's fixes (suite bodies per runner, after-await and sync-dispatch variants): 295_000.
     // And for ADRs 0386-0387's fixtures (group key, suppression comments): 297_071 bytes against 295_000: 298_000.
-    bytes: 298_000,
+    // And for ADRs 0402-0403's fixtures (workspace boundary, census with no entry): 298_292 bytes against 298_000: 299_500.
+    bytes: 299_500,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

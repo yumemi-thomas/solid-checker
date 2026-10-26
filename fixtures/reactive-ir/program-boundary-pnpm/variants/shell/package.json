@@ -1,0 +1,1 @@
+{ "name": "@mono/shell", "private": true, "dependencies": { "kernel": "link:../kernel" } }

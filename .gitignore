@@ -635,3 +635,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/provider-value-untracked/node_modules/**
 !fixtures/reactive-ir/run-with-owner-in-computation/node_modules/
 !fixtures/reactive-ir/run-with-owner-in-computation/node_modules/**
+!fixtures/reactive-ir/component-census-no-entry/node_modules/
+!fixtures/reactive-ir/component-census-no-entry/node_modules/**
+!fixtures/reactive-ir/program-boundary-workspace/node_modules/
+!fixtures/reactive-ir/program-boundary-workspace/node_modules/**
+!fixtures/reactive-ir/program-boundary-pnpm/node_modules/
+!fixtures/reactive-ir/program-boundary-pnpm/node_modules/**
+!fixtures/reactive-ir/program-boundary-standalone/node_modules/
+!fixtures/reactive-ir/program-boundary-standalone/node_modules/**
