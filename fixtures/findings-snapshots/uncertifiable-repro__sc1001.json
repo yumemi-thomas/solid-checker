@@ -17,8 +17,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/callback-to-project-fn.tsx",
-      "start": 550,
-      "end": 565,
+      "start": 528,
+      "end": 542,
       "fixes": 0
     },
     {
@@ -27,8 +27,18 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/callback-to-project-fn.tsx",
-      "start": 567,
-      "end": 581,
+      "start": 568,
+      "end": 583,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/callback-to-project-fn.tsx",
+      "start": 585,
+      "end": 599,
       "fixes": 0
     },
     {
@@ -166,6 +176,36 @@
       "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/prop-bound-read.tsx",
+      "start": 701,
+      "end": 710,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/prop-in-conditional-spread-read.tsx",
+      "start": 799,
+      "end": 814,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/prop-in-effect-apply-read.tsx",
+      "start": 609,
+      "end": 624,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/prop-merged-nested-helper.tsx",
       "start": 930,
       "end": 941,
@@ -189,6 +229,66 @@
       "path": "fixtures/uncertifiable-repro/sc1001/src/prop-merged-nested-helper.tsx",
       "start": 1008,
       "end": 1022,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/prop-mixed-callers-read.tsx",
+      "start": 1424,
+      "end": 1438,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/prop-mixed-callers-read.tsx",
+      "start": 1441,
+      "end": 1460,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/prop-mixed-callers-read.tsx",
+      "start": 1444,
+      "end": 1460,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/prop-presence-in-show-read.tsx",
+      "start": 869,
+      "end": 883,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/prop-presence-in-show-read.tsx",
+      "start": 885,
+      "end": 895,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/prop-untracked-alias-read.tsx",
+      "start": 625,
+      "end": 639,
       "fixes": 0
     },
     {

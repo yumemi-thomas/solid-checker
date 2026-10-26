@@ -5,7 +5,7 @@
   "manifest": "scripts/corpus/rc17-manifest.json",
   "sweep": "release checker at 11f04f5fe, browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui)",
   "results": 6760,
-  "reproduced": 6333
+  "reproduced": 6583
  },
  "cases": [
   {
@@ -546,7 +546,9 @@
     "src/callback-to-project-fn.tsx"
    ],
    "causes": [
+    "SC1001/callback-to-unproven-consumer/condition/project-function-argument",
     "SC1001/callback-to-unproven-consumer/project-function-argument",
+    "SC1001/unplaced-read/condition/project-function-argument",
     "SC1001/unplaced-read/project-function-argument",
     "SC2001/unplaced-write/project-function-argument",
     "SC2001/unplaced-write/via-callers:project-function-argument"
@@ -557,6 +559,12 @@
      "family": "callback-to-unproven-consumer",
      "context": "",
      "cause": "SC1001/callback-to-unproven-consumer/project-function-argument"
+    },
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "condition",
+     "cause": "SC1001/callback-to-unproven-consumer/condition/project-function-argument"
     }
    ],
    "source": {
@@ -565,7 +573,7 @@
     "line": 32,
     "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
    },
-   "weight": 172,
+   "weight": 176,
    "status": "uncertifiable"
   },
   {
@@ -3240,533 +3248,1171 @@
    },
    "weight": 51,
    "status": "uncertifiable"
+  },
+  {
+   "id": "param-member-targets-diverge",
+   "kind": "uncertifiable",
+   "project": "sc9012",
+   "files": [
+    "src/param-member-targets-diverge.tsx"
+   ],
+   "causes": [
+    "SC9012/parameter-member-call/parameter-member-targets-diverge"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-targets-diverge",
+     "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge"
+    },
+    {
+     "rule": "SC9012",
+     "family": "parameter-member-call",
+     "context": "parameter-member-targets-diverge",
+     "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge/escaped-component:object-member-reference"
+    },
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/object-member:options-thunk:project"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/screens/scope-wiki.tsx",
+    "line": 30,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 35,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "unowned-primitive-in-package",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/pkg-raf.tsx",
+    "src/pkg-pointer.tsx"
+   ],
+   "causes": [
+    "SC4001/unowned-primitive"
+   ],
+   "expect": [
+    {
+     "rule": "SC4001",
+     "family": "unowned-primitive",
+     "context": "",
+     "cause": "SC4001/unowned-primitive"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/ogl-examples/draw-modes/draw-modes.tsx",
+    "line": 91,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 11,
+   "status": "uncertifiable",
+   "note": "@solid-primitives/pointer imports @solid-primitives/rootless, which the set does not hold; the result is the same without it."
+  },
+  {
+   "id": "write-in-package-component-handler",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/pkg-kobalte-dialog-setters.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/package-component-prop",
+    "SC2001/unplaced-write/via-callers:package-component-prop"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/via-callers:package-component-prop"
+    },
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/package-component-prop"
+    }
+   ],
+   "source": {
+    "app": "error-menu-web",
+    "path": "web/src/components/AddProjectModal.tsx",
+    "line": 98,
+    "commit": "992d406ed4a9eca3a57973ec7d13ec4b0ccbd00e"
+   },
+   "weight": 40,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "read-in-package-component-callback",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/pkg-kobalte-dialog-prop-read.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/package-component-prop"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/package-component-prop"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/solid-svg-editor/src/features/viewport/svg-renderer.tsx",
+    "line": 55,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 18,
+   "status": "uncertifiable",
+   "note": "Stands in by key through a Kobalte Dialog: the corpus sites hand the callback to a Dynamic (app-game, which certifies here) or to components of unresolved workspace links (viviana-ui-web)."
+  },
+  {
+   "id": "prop-forwarded-to-package-component",
+   "kind": "uncertifiable",
+   "project": "sc4001",
+   "files": [
+    "src/pkg-kobalte-dialog-prop-forward.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/component-prop>package-component-prop"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/component-prop>package-component-prop"
+    }
+   ],
+   "source": {
+    "app": "viviana-ui-web",
+    "path": "apps/web/src/components/playground/advanced-sections.tsx",
+    "line": 174,
+    "commit": "b005c00acb61c07b60612430753d3a2400182bbd"
+   },
+   "weight": 12,
+   "status": "uncertifiable",
+   "note": "Stands in by key through a Kobalte Dialog: the corpus's package components are viviana-ui-web workspace links whose types do not resolve in its checkout."
+  },
+  {
+   "id": "prop-bound-read",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/prop-bound-read.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/component-prop>component-prop>PropertyAccessExpression"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop>PropertyAccessExpression"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/conversation/components/AgentChatView/ChatWorkspacePicker.tsx",
+    "line": 16,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 5,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-in-conditional-spread-read",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/prop-in-conditional-spread-read.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/component-prop>JsxSpreadAttribute"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/component-prop>JsxSpreadAttribute"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-messages/src/MessagesRoute.tsx",
+    "line": 444,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 4,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-in-effect-apply-read",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/prop-in-effect-apply-read.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/component-prop>package-callback"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/component-prop>package-callback"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-topics/src/TopicsRoute.tsx",
+    "line": 1045,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 15,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-mixed-callers-read",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/prop-mixed-callers-read.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/component-prop>mixed"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/component-prop>mixed"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-messages/src/MessageFilterBar.tsx",
+    "line": 455,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 16,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-presence-in-show-read",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/prop-presence-in-show-read.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/component-prop>view:component-prop"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/component-prop>view:component-prop"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-messages/src/MessageFilterBar.tsx",
+    "line": 699,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 4,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-untracked-alias-read",
+   "kind": "uncertifiable",
+   "project": "sc1001",
+   "files": [
+    "src/prop-untracked-alias-read.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/component-prop>returned"
+   ],
+   "expect": [
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/component-prop>returned"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/conversation/components/AgentChatView/AgentChatMessages.tsx",
+    "line": 61,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 3,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-also-handed-to-callback",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-also-handed-to-callback.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>placed"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>placed"
+    }
+   ],
+   "source": {
+    "app": "dashiboard-ui",
+    "path": "dashiboard-ui/src/components/FilePicker.tsx",
+    "line": 44,
+    "commit": "3f91389394c1711f5c8380ea3cca89f076e5a534"
+   },
+   "weight": 3,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-bound",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-bound.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>PropertyAccessExpression"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>PropertyAccessExpression"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/workspace/components/InlineDirectoryPicker/index.tsx",
+    "line": 88,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 3,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-called-after-await",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-called-after-await.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>after-await"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>after-await"
+    }
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/conversation/components/AgentChatView/index.tsx",
+    "line": 98,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 1,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-called-from-two-arrows",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-called-from-two-arrows.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>component-prop>deep-chain"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>component-prop>deep-chain"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-clusters/src/ClustersRoute.tsx",
+    "line": 199,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 14,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-forwarded-to-unresolved",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-forwarded-to-unresolved.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/component-prop>forwarded:deep-chain",
+    "SC1001/callback-to-unproven-consumer/component-prop>forwarded:prop-unused",
+    "SC2001/unplaced-write/component-prop>forwarded:deep-chain",
+    "SC2001/unplaced-write/component-prop>forwarded:prop-unused"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>forwarded:prop-unused"
+    },
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>forwarded:deep-chain"
+    },
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:lib-es"
+    },
+    {
+     "rule": "SC4001",
+     "family": "handler-unresolved",
+     "context": "handler-spread-unresolved",
+     "cause": "SC4001/handler-unresolved/handler-spread-unresolved/named-rest"
+    },
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:prop-unused"
+    },
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:deep-chain"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "apps/gpu-text-rendering/src/features/viewer/GpuTextRendering.tsx",
+    "line": 49,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 12,
+   "status": "uncertifiable",
+   "note": "Reaches its labels through the copied-props Button of prop-in-copied-dom-props.tsx; in the app-game source the callback is also handed to a project function, and which use fails there was not isolated."
+  },
+  {
+   "id": "prop-handed-to-package-function",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-handed-to-package-function.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>package-callback"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>package-callback"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/paint/input-visualizer/shortcut-settings.tsx",
+    "line": 228,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 2,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-in-conditional-spread",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-in-conditional-spread.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>JsxSpreadAttribute"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>JsxSpreadAttribute"
+    }
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-connect/src/ConnectRoute.tsx",
+    "line": 182,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 5,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-in-handler-registry",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-in-handler-registry.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>object-member:factory-result"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>object-member:factory-result"
+    }
+   ],
+   "source": {
+    "app": "solid-groove",
+    "path": "src/instrument/InstrumentKindPicker.tsx",
+    "line": 123,
+    "commit": "f3340174fb2daba2eba220640731844b8a33d232"
+   },
+   "weight": 1,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-in-listener-registration",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-in-listener-registration.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>IfStatement"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>IfStatement"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/typegpu-examples/typegpu-draw-app-example/ui/PointerDebugOverlay.tsx",
+    "line": 144,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 2,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-mixed-callers",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-mixed-callers.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>mixed"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>mixed"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/ui-components-examples/cursor-emulation/index.tsx",
+    "line": 257,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 5,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-presence-in-show",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-presence-in-show.tsx"
+   ],
+   "causes": [
+    "SC1001/callback-to-unproven-consumer/component-prop>component-prop",
+    "SC2001/unplaced-write/component-prop>component-prop",
+    "SC2001/unplaced-write/component-prop>view:component-prop"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>component-prop"
+    },
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>view:component-prop"
+    },
+    {
+     "rule": "SC1001",
+     "family": "callback-to-unproven-consumer",
+     "context": "",
+     "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop"
+    }
+   ],
+   "source": {
+    "app": "donegeon-client",
+    "path": "web/apps/client/src/components/task/ProjectPicker.tsx",
+    "line": 71,
+    "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
+   },
+   "weight": 11,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-to-factory-component",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-to-factory-component.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>component-not-a-function"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>component-not-a-function"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/pixijs-examples/pages/GraphicsSvg.tsx",
+    "line": 43,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 3,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-typeof-guard-spread",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-typeof-guard-spread.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>view:TypeOfExpression"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>view:TypeOfExpression"
+    },
+    {
+     "rule": "SC4001",
+     "family": "handler-unresolved",
+     "context": "handler-spread-unresolved",
+     "cause": "SC4001/handler-unresolved/handler-spread-unresolved/named-rest"
+    }
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/components/select.tsx",
+    "line": 42,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 1,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-untracked-alias",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-untracked-alias.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>returned",
+    "SC2001/unplaced-write/component-prop>view:returned"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>view:returned"
+    },
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>returned"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/paint/ui-example/trigonometry.tsx",
+    "line": 47,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 10,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-via-tag-member",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-via-tag-member.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>forwarded:placed"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>forwarded:placed"
+    }
+   ],
+   "source": {
+    "app": "error-menu-web",
+    "path": "web/src/components/AddProjectModal.tsx",
+    "line": 91,
+    "commit": "992d406ed4a9eca3a57973ec7d13ec4b0ccbd00e"
+   },
+   "weight": 4,
+   "status": "uncertifiable"
+  },
+  {
+   "id": "prop-view-escapes",
+   "kind": "uncertifiable",
+   "project": "sc2001",
+   "files": [
+    "src/prop-view-escapes.tsx"
+   ],
+   "causes": [
+    "SC2001/unplaced-write/component-prop>view:prop-unused"
+   ],
+   "expect": [
+    {
+     "rule": "SC2001",
+     "family": "unplaced-write",
+     "context": "",
+     "cause": "SC2001/unplaced-write/component-prop>view:prop-unused"
+    }
+   ],
+   "source": {
+    "app": "app-game",
+    "path": "packages/ui-components-examples/solid-props-proxy/example-3.tsx",
+    "line": 40,
+    "commit": "3064fed238a043da90041f8eb86b357e253330bf"
+   },
+   "weight": 6,
+   "status": "uncertifiable"
   }
  ],
  "notReproduced": [
   {
-   "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge",
-   "weight": 35,
-   "why": "not reproduced"
-  },
-  {
-   "cause": "SC2001/unplaced-write/package-component-prop",
-   "weight": 30,
-   "why": "not reproduced"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/package-component-prop",
-   "weight": 18,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/component-prop>mixed",
-   "weight": 16,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/component-prop>package-callback",
-   "weight": 15,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>component-prop>deep-chain",
-   "weight": 14,
-   "why": "under 20 results"
-  },
-  {
    "cause": "SC1001/unplaced-read/unresolved-callback",
    "weight": 13,
-   "why": "under 20 results"
+   "why": "a corpus-checkout artifact: inferay imports @contracts from build/presentation/contracts, which its checkout lacks, so those types are any"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:factory-result",
    "weight": 12,
-   "why": "under 20 results"
+   "why": "a read in a factory's returned closure; adding one to write-in-factory-member gave no result"
   },
   {
    "cause": "SC1001/unplaced-read/component-prop>view+forwarded:view+forwarded:passed-to-project",
    "weight": 12,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/component-prop>package-component-prop",
-   "weight": 12,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC4001/unowned-primitive",
-   "weight": 11,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/via-callers:package-component-prop",
-   "weight": 10,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/dispatch-veto:test-file",
    "weight": 10,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>view:returned",
-   "weight": 9,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>component-prop",
-   "weight": 9,
-   "why": "under 20 results"
+   "why": "a ninth project: each veto site kind needs its own project, all eight are used, and the story kind (51 results) took the eighth"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:component-prop",
    "weight": 6,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>forwarded:prop-unused",
-   "weight": 6,
-   "why": "under 20 results"
+   "why": "the child forwards the callback to a router Link from a package (ai-memory-ui); not reproduced"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/object-member:argument-of:project",
    "weight": 6,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>view:prop-unused",
-   "weight": 6,
-   "why": "under 20 results"
+   "why": "the read variant of a reproduced cause; the same read added to its case file gave no result"
   },
   {
    "cause": "SC1001/unplaced-read/dispatch-veto:test-file",
    "weight": 6,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>forwarded:deep-chain",
-   "weight": 5,
-   "why": "under 20 results"
+   "why": "a ninth project: each veto site kind needs its own project, all eight are used, and the story kind (51 results) took the eighth"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:package-callback",
    "weight": 5,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>mixed",
-   "weight": 5,
-   "why": "under 20 results"
+   "why": "a helper called only from onSettled certifies; the corpus's other gap was not found"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop>deep-chain",
    "weight": 5,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop>PropertyAccessExpression",
-   "weight": 5,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>JsxSpreadAttribute",
-   "weight": 5,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/unplaced-read/condition/lib-dom-callback",
    "weight": 4,
-   "why": "under 20 results"
+   "why": "the read variant of a reproduced cause; the same read added to its case file gave no result"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:mixed",
    "weight": 4,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>object-member:context-or-prop-value",
    "weight": 4,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>forwarded:placed",
-   "weight": 4,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/component-prop>view:component-prop",
-   "weight": 4,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/component-prop>JsxSpreadAttribute",
-   "weight": 4,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:component-prop>deep-chain",
    "weight": 4,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/package-callback",
    "weight": 3,
-   "why": "under 20 results"
+   "why": "not attempted: the condition variant of read-in-package-callback"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:package-callback",
    "weight": 3,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>component-not-a-function",
-   "weight": 3,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:component-prop>deep-chain",
    "weight": 3,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>view:package-callback",
    "weight": 3,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>placed",
-   "weight": 3,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/component-prop>returned",
-   "weight": 3,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC1001/unplaced-read/condition/project-function-argument",
-   "weight": 3,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/unplaced-read/component-prop>forwarded:deep-chain",
    "weight": 3,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>PropertyAccessExpression",
-   "weight": 3,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>passed-to-project",
    "weight": 3,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>after-await",
    "weight": 2,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>view+forwarded:other:ObjectLiteralExpression",
    "weight": 2,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:listener-callback",
    "weight": 2,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:project-function-argument",
    "weight": 2,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:prop-unused",
    "weight": 2,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:component-prop>forwarded:deep-chain",
    "weight": 2,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/unplaced-read/component-prop>view+forwarded:view+forwarded:view+forwarded:passed-to-project",
    "weight": 2,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>view:passed-to-project",
    "weight": 2,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>package-callback",
-   "weight": 2,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>object-member",
    "weight": 2,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>IfStatement",
-   "weight": 2,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/unresolved-callback",
    "weight": 2,
-   "why": "under 20 results"
+   "why": "a corpus-checkout artifact: inferay imports @contracts from build/presentation/contracts, which its checkout lacks, so those types are any"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:PrefixUnaryExpression",
    "weight": 2,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:JsxSpreadAttribute",
    "weight": 2,
-   "why": "under 20 results"
+   "why": "not attempted: one or two results"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>other:jsx-child",
    "weight": 2,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:JsxSpreadAttribute",
    "weight": 2,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/unplaced-read/intrinsic-handler",
    "weight": 2,
-   "why": "under 20 results"
+   "why": "handlers that stay uncertifiable with no veto in the closed run; the donegeon LoginRoute.tsx reduction did not finish"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>component-not-a-function",
    "weight": 2,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>component-prop>component-not-a-function",
    "weight": 2,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>view:TypeOfExpression",
-   "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>view:object-member:context-or-prop-value",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:component-prop>component-prop>view:placed",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>view+forwarded:view+forwarded:project-function-argument",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/unplaced-read/lib-dom-callback",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "the read variant of a reproduced cause; the same read added to its case file gave no result"
   },
   {
    "cause": "SC1001/unplaced-read/condition/component-prop>view+forwarded:view+forwarded:view+forwarded:passed-to-project",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:mixed",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/escaped-component:BindingElement-reference",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "the escaped-component mechanism with another reference form (reproduced in scratch by swapping the reference line); one result, not kept as a file"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:PrefixUnaryExpression",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:component-prop>object-member:argument-of:project",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>object-member:argument-of:project",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/unresolved",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "the member resolves only through a project .d.ts intersection; a mapped type and an index signature gave project-type instead"
   },
   {
    "cause": "SC9005/package-source-unavailable",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "needs @rigelbuild/solid-markdown 3.0.0-rc.0 and its unified/remark dependency tree analyzed as source"
   },
   {
    "cause": "SC1001/unplaced-read/via-callers:package-callback",
    "weight": 1,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:deep-chain",
-   "weight": 1,
-   "why": "under 20 results"
+   "why": "a helper called only from onSettled certifies; the corpus's other gap was not found"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>component-prop>prop-unused",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>prop-unused",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/via-callers:package-callback",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a helper called only from onSettled certifies; the corpus's other gap was not found"
   },
   {
    "cause": "SC1001/unplaced-read/condition/intrinsic-handler",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "handlers that stay uncertifiable with no veto in the closed run; the donegeon LoginRoute.tsx reduction did not finish"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:package",
    "weight": 1,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>after-await",
-   "weight": 1,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/condition/project-function-argument",
-   "weight": 1,
-   "why": "under 20 results"
+   "why": "not attempted: one or two results"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:passed-to-package",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:after-await",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/escaped-component:argument-reference",
    "weight": 1,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>returned",
-   "weight": 1,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>view:component-prop",
-   "weight": 1,
-   "why": "under 20 results"
+   "why": "the escaped-component mechanism with another reference form (reproduced in scratch by swapping the reference line); one result, not kept as a file"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>view+forwarded:spread-into-package-component",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/direct-read/other:JsxSelfClosingElement",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "not attempted: one or two results"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop>component-not-a-function",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>component-prop>component-prop>component-not-a-function",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>component-prop>forwarded:component-prop>component-not-a-function",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>package-component-prop",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a package component reached through an unresolved viviana-ui-web workspace link"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>component-prop>forwarded:deep-chain",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>component-prop>object-member:argument-of:project",
    "weight": 1,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC2001/unplaced-write/component-prop>object-member:factory-result",
-   "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:component-prop>component-prop>placed",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>placed",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>object-member",
    "weight": 1,
-   "why": "under 20 results"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop",
-   "weight": 1,
-   "why": "under 20 results"
+   "why": "a callback-prop chain minimisation did not isolate (a written-out copy certified, or the chain runs through app-game workspace packages)"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:unresolved",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "a corpus-checkout artifact: inferay imports @contracts from build/presentation/contracts, which its checkout lacks, so those types are any"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/other:jsx-child",
    "weight": 1,
-   "why": "under 20 results"
+   "why": "not attempted: one or two results"
   }
  ]
 }

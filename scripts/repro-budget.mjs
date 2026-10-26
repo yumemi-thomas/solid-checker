@@ -33,8 +33,8 @@ export const BUDGETS = {
   kinds: {
     // Raised from 60 files and 1_500 lines when every cause of the rc.17
     // corpus, not only those of 20 results or more, was to be reproduced:
-    // 121 files and 2_162 lines at 112 cases.
-    uncertifiable: { files: 140, lines: 2_500 },
+    // 149 files and 2_849 lines at 139 cases (97.4% of the corpus's results).
+    uncertifiable: { files: 160, lines: 3_000 },
     violation: { files: 16, lines: 400 },
     clean: { files: 16, lines: 400 },
   },

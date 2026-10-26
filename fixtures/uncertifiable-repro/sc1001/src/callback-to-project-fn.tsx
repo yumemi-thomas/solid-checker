@@ -8,6 +8,6 @@ function createQuery<T>(key: () => string[], fetcher: (key: string[]) => Promise
 }
 
 export function SkillProposalCard(props: { messageId: string; proposal: string }) {
-  const query = createQuery(() => ["skills", "proposal", props.messageId, props.proposal], async (key) => key.join("/"));
+  const query = createQuery(() => (props.proposal ? ["skills", "proposal", props.messageId, props.proposal] : ["skills"]), async (key) => key.join("/"));
   return <button onClick={() => void query.refetch()}>{query.data() ?? "Load"}</button>;
 }

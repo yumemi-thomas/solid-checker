@@ -152,9 +152,10 @@ Solid 2 repositories, then discard them:
    `node scripts/corpus-sweep.mjs --manifest <m> --apps-root <apps> --out sweep.json`.
 3. Uncertifiable results: group them by cause,
    `node scripts/uncertifiable-causes.mjs --report sweep.json --closed-report closed.json --cases fixtures/uncertifiable-repro/cases.json`.
-   A cause a case stands for updates that case's `weight`; a new cause of 20
-   results or more (or one that bears on soundness) becomes a case; the rest
-   go to `notReproduced`.
+   A cause a case stands for updates that case's `weight`; a new cause
+   becomes a case, folded into an existing file when its mechanism is the
+   same; one that cannot be reproduced faithfully (a package beyond the
+   budget, a checkout artifact) goes to `notReproduced` with its reason.
 4. Violations, after triage: a real defect becomes a `violation` case; a false
    positive blocks the release until the checker is fixed, and its shape
    becomes a `clean` case.

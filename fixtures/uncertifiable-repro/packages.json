@@ -201,6 +201,115 @@
    }
   },
   {
+   "name": "@solid-primitives/raf",
+   "version": "4.0.0-next.2",
+   "integrity": "sha512-YCM5TEhlOKoGke02sv5q5bet5rNRpX7itg4MyaKG28h2y2PvmaVuZSMF6UOICN/kpTwbHRUvqdhCSCkTSn0Ldw==",
+   "files": {
+    "dist/index.d.ts": "5fc2b53a6ee628e6f9b486457737ffdfcb2cbceb99fcc2eef91b82b796f9077d",
+    "dist/index.js": "5513b328a9174ee6fdb3b8b6790555cafae42994611455bff079c399b796d477",
+    "package.json": "67f02d10f0dedd16d7b6d1798b3a01d06d364fe24c3a18579daac11c3b67de71"
+   }
+  },
+  {
+   "name": "@solid-primitives/pointer",
+   "version": "1.0.0-next.2",
+   "integrity": "sha512-BaNEkQW8hmrAslMZD6Z41jlza2XxW85TTevAa9W6kpwNkNbRFbAUAFX+jVMq4mdEtVdYM4On7b25nE8tAB+zIQ==",
+   "files": {
+    "dist/helpers.d.ts": "c580a8ff096998458e871ce8c46007c186e0917d8665bdd97bd6f45cef3ebe93",
+    "dist/helpers.js": "9925b392e50f9466b52c6a769b0f9dcb91d1b4c011006c906ae1de116a03e4b8",
+    "dist/index.d.ts": "751a2078c356692c58f898ed918416ebf62c333915976828769f6ad77d1100ce",
+    "dist/index.js": "7a33b0c6244a55c8adcc89d0cbfd13fba8de5c00a283bea2485458814bb7191f",
+    "dist/types.d.ts": "ed1e4fe59cd4326273ebbb2e440cfff2973405a09a51c564e6634778724059be",
+    "package.json": "93bad5a1fd9fdd9b72212820b4f5f8a26709f2fe0a886d30afe42b358c54e41d"
+   }
+  },
+  {
+   "name": "@solid-primitives/event-listener",
+   "version": "3.0.0-next.3",
+   "integrity": "sha512-DU89Vh/z7F1RTvL69RDDOyIoZ0TeYc/Mrdf+pSIGL5WORjL8TxKc91weBRJUrbeA4Co9bHJs+buSd3NPWbxWAg==",
+   "files": {
+    "dist/callbackWrappers.js": "770c3994dbbd481a04e9a9337f40ab4be48952093a350d10093872d8547415bf",
+    "dist/components.js": "216e15302888778f89af6324c6b1095f0281432733c51a08cf6212d8cc8f2032",
+    "dist/eventListener.js": "4f6b49cd2446afca79859501ae3cf34c80bc611c01e3bd85e3ac65a0b9724cdc",
+    "dist/eventListenerMap.js": "a79f65cdcd00163d8984a900e3d546abea36b5df0b2e247faab29129236c8370",
+    "dist/eventListenerStack.js": "f0cf1f1fa6ebeeb9fd5e58373862a7050651d1257d81c0b461b5ab830a8c6c8a",
+    "dist/index.js": "15ffa8042705aada967e8ed8a1c6b3f57e1b57c14092888be8d3edefe0b50837",
+    "package.json": "4b0c5a0bb17871e40235407bf4005186715795f64111f50421dabba6c338ed45"
+   }
+  },
+  {
+   "name": "@kobalte/core",
+   "version": "2.0.0-alpha.2",
+   "integrity": "sha512-XondeC9sn3zMeo/3CxNnV6MAjCLsw/euikAzW1W5R1eyAKki8er2PrsA0ihlVuYsXBZvnHm2HMiAVDdmC4VdHg==",
+   "files": {
+    "dist/button/Cw4fT4wG.jsx": "bdb304ddf42709cda1fe87541c26bab0541146a930feaff8afa0bc0f91229379",
+    "dist/create-disclosure-state/DV_ixT98.jsx": "25b5d5062dda52e9ddf50a1c31e7051437f4dd553054211bf1bcde61616cfb72",
+    "dist/create-register-id/BLTiiqMx.jsx": "f8161ac9bd8430c5234e10f3425dfdeae415d743351b494fe15e740d828bea43",
+    "dist/create-tag-name/D6_aBB9R.jsx": "7075d83676369cc7385bbb5d374558f238ddaf0e32e081eac0282daf3b31a517",
+    "dist/dialog/Dqui1AYx.jsx": "36aef8f4d077a054e394f26bc47414b10b53c5291c994dd63eea8277ec3fb364",
+    "dist/dialog/index.d.ts": "7735af64c5aec77104293f6a989393c33c628304da49ef550d4207c4784c9180",
+    "dist/dialog/index.jsx": "b3ff87010e172614c8e47ec058fb4dc0389ad9bc92c6a346dd8a39acaa0dd452",
+    "dist/dismissable-layer/RyRdwdaj.jsx": "99eec99b0ac0b38c8440ac5dde33bbdf91855a1c688ab907929423db4b6fb614",
+    "dist/index/Bjp2qtUK.d.ts": "0ab83b381744c9539b73c7079acd969562e793bf22d6cacbe8a92ce5608609a0",
+    "dist/index/CFIwL2Gi.d.ts": "aa228dabd835349e4f296fc721d2e4a755f173f4ca9afd96c3b7540ae1ce8798",
+    "dist/index/D_ZxK-J-.d.ts": "b577a8d528ee6a5b077a1769ebc775b78ad888d78088b03a921f48caa2ee0ede",
+    "dist/index/f8UOK3dK.d.ts": "c84260552d9f1bb47d37a17c189f1328766cf3cf1386b7a67061c644642e4fb2",
+    "dist/layer-stack/DUp9FXTP.jsx": "ad21d88a12f4431bea170636c6952078edebf14b3301f5bf15a35fc5e2a832d3",
+    "dist/polymorphic/index.jsx": "48e48c25674d1d560c7ac182309225b8baa9690ab073221ef0cd88f2a2ebc61d",
+    "dist/rolldown-runtime/BBjsoOtd.jsx": "bc1c4c6b4073846c33e02846e4b262d6747c77fc72ca9f9cc2f23b8ff135c35d",
+    "package.json": "13f45e5452bca92d71182e5c13a4f5a9c651aefad5f32d29374b43ae422bcfc1"
+   }
+  },
+  {
+   "name": "@solid-primitives/focus",
+   "version": "1.0.0-next.4",
+   "integrity": "sha512-OPi75QpOJ3L/Ea9oT1MYrpsGz5z0nyeR40MAjAzcP6lKxPSrpN/3UbFL2I/oLKbPM+7fgIBfW0iwyvzSjVxtsg==",
+   "files": {
+    "dist/autofocus.js": "db6dffd11131c4a522dac932f8493a24cdf6b43064b241bcc5a8447acd054547",
+    "dist/focusGroup.js": "1e559a67f7653ceabf52959721efada1f194ee50b4c908b421bbb86581919e3b",
+    "dist/focusRestore.js": "f0c222429b7da91a82f8a306c85205c64d6da95b41cb9d17f61767e799112b2c",
+    "dist/focusSignal.js": "7d18b38b0c19eb21854e3ef84d0a1fd108ee758760879631d94080fd449f6db3",
+    "dist/focusTrap.js": "2c930e603c4e7a1b32517ba87cb1b9d2f149272ded7b31a3cfa815d9cbad1011",
+    "dist/index.js": "7de63f96a27d1fa6c683b91a2749dcdcfcd6536896287d7307904a3290a14496",
+    "dist/restoreFocus.js": "c87cfc3f093d743b20086c0ab6ef8874018100eaaa1cece2ddd7f18e5dd090df",
+    "dist/tabbable.js": "7c3a91d29e132170f6ccf49704aaacbe7797251eeccdfb0673f77f631e3880e1",
+    "package.json": "da0dff83bb011bfa673b1a421a539da6444bfee56d6d2bafd72dbb465cb03b8b"
+   }
+  },
+  {
+   "name": "@solid-primitives/interaction",
+   "version": "1.0.0-next.4",
+   "integrity": "sha512-V+kos+abAkAJLNAvj3A7iitNcSvbosFsjBoXh7K8GdWoABWEfPEf3DZsN+01UQOAf+4G0XLXPN4Y/IRe2EOBZQ==",
+   "files": {
+    "dist/index.d.ts": "593ee70c0f8199699a7c96060c7c05198c6a7ca739967919dc0c215013644bd0",
+    "dist/index.js": "59cab11f91108073b7c7bb3fe86888f371ed0858480d388dbd7599df8192357a",
+    "package.json": "d9a615c05a1dff47dd0507a9bd2bb1e70d19f14b9b8eb7c7c4db977a6a5db9cf"
+   }
+  },
+  {
+   "name": "@solid-primitives/scroll",
+   "version": "3.0.0-next.4",
+   "integrity": "sha512-6Zod2Q2YPnkZhijVMSOhU2e1ip5hzOSQNhZIaKh7Kx7HcocYrzhn1NqYJlaUr464o1hFZweEQVkhALi9EHvt/Q==",
+   "files": {
+    "dist/index.js": "00fddd681e81a6c243a9b93a40be059e75e264d05d61a10398be368c1e7cbc56",
+    "dist/preventScroll.js": "32ef8eb622dd57b92da0198c06b3989a57b4c4fd0234b8fc91e759abe5c5cf53",
+    "dist/scrollPosition.js": "a94006a4e1c710d9a5a994fbab773efefe2419bf0c78ee22f56d6d0453b0c1b1",
+    "package.json": "39237d967dc7b794947b2e999f187d20c2f2d1010c47667188aa2d7c551cc249"
+   }
+  },
+  {
+   "name": "@solid-primitives/props",
+   "version": "4.0.0-next.3",
+   "integrity": "sha512-V2Gn96sQLLhwyiAcGogExqP8+5++Itv0/KBQMNiNp/ldNwbQkr8Q11Ku5VXswYFiFmuiHJ/pGANfwzgsla7zpA==",
+   "files": {
+    "dist/combineProps.js": "79bf91f6300ee9f2a80bc6544f9dcea90da20347cc947bef0eb2ab95b83caf53",
+    "dist/filterProps.js": "b10f2b49b03f03931b1933acfb28eecd69716e76aa5c5b5d543b955f4ab6e1b2",
+    "dist/index.js": "d20f97f4adf33d02f468c7acedb3ce1bb96335c7a5c03b4f9ad8cb92fd50b3da",
+    "dist/propTraps.js": "9ad08db6a1cd93dccaa137c21da14020cb11e09dd272812860adac61b827dc2f",
+    "package.json": "c474e3add7bab1324f4cfcdb0c6ecce5e2dd84c809e78dca9c6d76c4a827e6b7"
+   }
+  },
+  {
    "name": "vitest",
    "version": "5.0.5",
    "integrity": "sha512-cPODOMF8YnkiiYtDdHo6n4wWmBrOBBbOIYH2d33M4l3CdNn72h+qMmO6uXffUN6A5AZFXNND/d+krS9mgkXRfg==",
