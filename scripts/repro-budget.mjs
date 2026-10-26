@@ -48,7 +48,9 @@ export const BUDGETS = {
     // published package declarations: 197 files and 3_897 lines at 186 cases.
     uncertifiable: { files: 200, lines: 3_950 },
     violation: { files: 16, lines: 400 },
-    clean: { files: 16, lines: 400 },
+    // Raised from 16 and 400 for 30 certified corpus shapes, each confirmed
+    // quiet on the rc.17 runtime: 40 files and 798 lines.
+    clean: { files: 42, lines: 820 },
   },
   /** Bytes of the shared node_modules. */
   nodeModulesBytes: 5_000_000,

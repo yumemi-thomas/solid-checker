@@ -13472,6 +13472,486 @@
     ]
    },
    "verifiedWeight": 20
+  },
+  {
+   "id": "clean-async-memo-loading",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-async-memo-loading.tsx"
+   ],
+   "source": {
+    "app": "helge-dev",
+    "path": "src/pages/Article.tsx",
+    "line": 13,
+    "commit": "81f6cf1657563e775744119c785cffc265d6dea2"
+   },
+   "weight": 3,
+   "status": "certified"
+  },
+  {
+   "id": "clean-context-provider",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-context-provider.tsx"
+   ],
+   "source": {
+    "app": "donegeon-client",
+    "path": "web/apps/client/src/context/ApiContext.tsx",
+    "line": 12,
+    "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
+   },
+   "weight": 11,
+   "status": "certified"
+  },
+  {
+   "id": "clean-for-keyed-fn",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-for-keyed-fn.tsx"
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/repository/components/operations/ChatDiffPanel/RepositoryOperationBar.tsx",
+    "line": 24,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 23,
+   "status": "certified"
+  },
+  {
+   "id": "clean-memo-chain",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-memo-chain.tsx"
+   ],
+   "source": {
+    "app": "donegeon-client",
+    "path": "web/apps/client/src/page/BoardControllerDeck.tsx",
+    "line": 175,
+    "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
+   },
+   "weight": 44,
+   "status": "certified"
+  },
+  {
+   "id": "clean-memo-in-for",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-memo-in-for.tsx"
+   ],
+   "source": {
+    "app": "donegeon-client",
+    "path": "web/apps/client/src/components/board/BoardStage.tsx",
+    "line": 483,
+    "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
+   },
+   "weight": 7,
+   "status": "certified"
+  },
+  {
+   "id": "clean-merge-defaults",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-merge-defaults.tsx"
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/kernel/src/components/IconTile.tsx",
+    "line": 35,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 3,
+   "status": "certified"
+  },
+  {
+   "id": "clean-omit-rest",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-omit-rest.tsx"
+   ],
+   "source": {
+    "app": "hoxxes-briefing",
+    "path": "apps/web/src/pages/briefing/ui/dive/dive-glyphs.tsx",
+    "line": 172,
+    "commit": "36ab210625350c03d136bbfe4a71d4908e7650fa"
+   },
+   "weight": 11,
+   "status": "certified"
+  },
+  {
+   "id": "clean-ref-setter",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-ref-setter.tsx"
+   ],
+   "source": {
+    "app": "donegeon-client",
+    "path": "web/apps/client/src/components/board/BoardSettingsModal.tsx",
+    "line": 225,
+    "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
+   },
+   "weight": 6,
+   "status": "certified"
+  },
+  {
+   "id": "clean-ref-untrack",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-ref-untrack.tsx"
+   ],
+   "source": {
+    "app": "dashiboard-ui",
+    "path": "dashiboard-ui/src/components/Button.tsx",
+    "line": 70,
+    "commit": "3f91389394c1711f5c8380ea3cca89f076e5a534"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-store-draft",
+   "kind": "clean",
+   "project": "sc1001",
+   "files": [
+    "src/clean-store-draft.tsx"
+   ],
+   "source": {
+    "app": "compass-ui",
+    "path": "apps/ui/src/components/SettingsView.tsx",
+    "line": 88,
+    "commit": "2e4e7b875e371e45c5ffa4ee39715d57cf2049a5"
+   },
+   "weight": 6,
+   "status": "certified"
+  },
+  {
+   "id": "clean-action-optimistic",
+   "kind": "clean",
+   "project": "sc2001",
+   "files": [
+    "src/clean-action-optimistic.tsx"
+   ],
+   "source": {
+    "app": "hoxxes-briefing",
+    "path": "apps/web/src/pages/briefing/ui/board/RefreshPanel.tsx",
+    "line": 81,
+    "commit": "36ab210625350c03d136bbfe4a71d4908e7650fa"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-copied-timer",
+   "kind": "clean",
+   "project": "sc2001",
+   "files": [
+    "src/clean-copied-timer.tsx"
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/components/page-reader.tsx",
+    "line": 36,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 6,
+   "status": "certified"
+  },
+  {
+   "id": "clean-derived-signal-latest",
+   "kind": "clean",
+   "project": "sc2001",
+   "files": [
+    "src/clean-derived-signal-latest.tsx"
+   ],
+   "source": {
+    "app": "jar-hell-web",
+    "path": "web/src/pages/PackagePage.tsx",
+    "line": 24,
+    "commit": "5e0d76c55e4b23909bcdcc8b6cbcf60b6cd7e06f"
+   },
+   "weight": 3,
+   "status": "certified"
+  },
+  {
+   "id": "clean-effect-interval-write",
+   "kind": "clean",
+   "project": "sc2001",
+   "files": [
+    "src/clean-effect-interval-write.tsx"
+   ],
+   "source": {
+    "app": "spotify-desk-thing",
+    "path": "src/components/PlayerControls/PlayerProgressBar.tsx",
+    "line": 24,
+    "commit": "b79162ad88a8069943bf2cd4cea9619b354c1106"
+   },
+   "weight": 2,
+   "status": "certified"
+  },
+  {
+   "id": "clean-interval-hook",
+   "kind": "clean",
+   "project": "sc2001",
+   "files": [
+    "src/clean-interval-hook.tsx"
+   ],
+   "source": {
+    "app": "oscartbeaumont-website",
+    "path": "src/date.ts",
+    "line": 5,
+    "commit": "60823453a7e5e3aaa52179746d26abb46c7ff373"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-ref-let-settled",
+   "kind": "clean",
+   "project": "sc2001",
+   "files": [
+    "src/clean-ref-let-settled.tsx"
+   ],
+   "source": {
+    "app": "viviana-ui-web",
+    "path": "apps/web/src/components/showcase/GlasselatedShell.tsx",
+    "line": 39,
+    "commit": "b005c00acb61c07b60612430753d3a2400182bbd"
+   },
+   "weight": 3,
+   "status": "certified"
+  },
+  {
+   "id": "clean-run-unowned-store-write",
+   "kind": "clean",
+   "project": "sc2001",
+   "files": [
+    "src/clean-run-unowned-store-write.tsx"
+   ],
+   "source": {
+    "app": "probus-hk",
+    "path": "src/lib/tanstack/virtual.ts",
+    "line": 66,
+    "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-module-root-memo",
+   "kind": "clean",
+   "project": "sc4001",
+   "files": [
+    "src/clean-module-root-memo.tsx"
+   ],
+   "source": {
+    "app": "probus-hk",
+    "path": "src/stores/clock.ts",
+    "line": 67,
+    "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
+   },
+   "weight": 3,
+   "status": "certified"
+  },
+  {
+   "id": "clean-owner-or-root",
+   "kind": "clean",
+   "project": "sc4001",
+   "files": [
+    "src/clean-owner-or-root.tsx"
+   ],
+   "source": {
+    "app": "dashiboard-ui",
+    "path": "dashiboard-ui/src/persist.ts",
+    "line": 49,
+    "commit": "3f91389394c1711f5c8380ea3cca89f076e5a534"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-render-effect-cleanup",
+   "kind": "clean",
+   "project": "sc4001",
+   "files": [
+    "src/clean-render-effect-cleanup.tsx"
+   ],
+   "source": {
+    "app": "skyjtx-website",
+    "path": "apps/skyjt-website/src/presentations/about/useParallax.ts",
+    "line": 116,
+    "commit": "11dc4e0b0c72b6ce1e25bb53db203b52b99b9d11"
+   },
+   "weight": 3,
+   "status": "certified"
+  },
+  {
+   "id": "clean-root-dispose",
+   "kind": "clean",
+   "project": "sc4001",
+   "files": [
+    "src/clean-root-dispose.tsx"
+   ],
+   "source": {
+    "app": "kui",
+    "path": "frontend/packages/feature-messages/src/transport.ts",
+    "line": 95,
+    "commit": "83dd60195d12f10833737bf63a7be372a0a0453f"
+   },
+   "weight": 4,
+   "status": "certified"
+  },
+  {
+   "id": "clean-tracked-effect",
+   "kind": "clean",
+   "project": "sc4001",
+   "files": [
+    "src/clean-tracked-effect.tsx"
+   ],
+   "source": {
+    "app": "viviana-ui-web",
+    "path": "apps/web/src/components/showcase/GlasselatedShell.tsx",
+    "line": 30,
+    "commit": "b005c00acb61c07b60612430753d3a2400182bbd"
+   },
+   "weight": 1,
+   "status": "certified"
+  },
+  {
+   "id": "clean-children-helper",
+   "kind": "clean",
+   "project": "other-rules",
+   "files": [
+    "src/clean-children-helper.tsx"
+   ],
+   "source": {
+    "app": "skyjtx-website",
+    "path": "apps/skyjt-website/src/components/Card/Card.tsx",
+    "line": 18,
+    "commit": "11dc4e0b0c72b6ce1e25bb53db203b52b99b9d11"
+   },
+   "weight": 6,
+   "status": "certified"
+  },
+  {
+   "id": "clean-dynamic-as",
+   "kind": "clean",
+   "project": "other-rules",
+   "files": [
+    "src/clean-dynamic-as.tsx"
+   ],
+   "source": {
+    "app": "hoxxes-briefing",
+    "path": "apps/web/src/shared/ui/eyebrow/index.tsx",
+    "line": 35,
+    "commit": "36ab210625350c03d136bbfe4a71d4908e7650fa"
+   },
+   "weight": 3,
+   "status": "certified"
+  },
+  {
+   "id": "clean-dynamic-spread",
+   "kind": "clean",
+   "project": "other-rules",
+   "files": [
+    "src/clean-dynamic-spread.tsx"
+   ],
+   "source": {
+    "app": "expenses-app",
+    "path": "src/components/icons.tsx",
+    "line": 32,
+    "commit": "f24e272713513d7721133159a53ea960c756df13"
+   },
+   "weight": 2,
+   "status": "certified"
+  },
+  {
+   "id": "clean-errored-reset",
+   "kind": "clean",
+   "project": "other-rules",
+   "files": [
+    "src/clean-errored-reset.tsx"
+   ],
+   "source": {
+    "app": "inferay",
+    "path": "src/modules/conversation/components/ChatPaneBoundary/index.tsx",
+    "line": 5,
+    "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
+   },
+   "weight": 3,
+   "status": "certified"
+  },
+  {
+   "id": "clean-lazy-route",
+   "kind": "clean",
+   "project": "other-rules",
+   "files": [
+    "src/clean-lazy-route.tsx"
+   ],
+   "source": {
+    "app": "viviana-ui-web",
+    "path": "apps/web/src/routes/admin.tsx",
+    "line": 10,
+    "commit": "b005c00acb61c07b60612430753d3a2400182bbd"
+   },
+   "weight": 34,
+   "status": "certified"
+  },
+  {
+   "id": "clean-loading-boundary",
+   "kind": "clean",
+   "project": "other-rules",
+   "files": [
+    "src/clean-loading-boundary.tsx"
+   ],
+   "source": {
+    "app": "every-deck-of-cards",
+    "path": "src/Layout.tsx",
+    "line": 35,
+    "commit": "27e760dc6b155a98b24d83b4d7d75eadb5dcba86"
+   },
+   "weight": 35,
+   "status": "certified"
+  },
+  {
+   "id": "clean-portal-show",
+   "kind": "clean",
+   "project": "other-rules",
+   "files": [
+    "src/clean-portal-show.tsx"
+   ],
+   "source": {
+    "app": "ai-memory-ui",
+    "path": "src/components/tooltip.tsx",
+    "line": 64,
+    "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
+   },
+   "weight": 5,
+   "status": "certified"
+  },
+  {
+   "id": "clean-switch-match",
+   "kind": "clean",
+   "project": "other-rules",
+   "files": [
+    "src/clean-switch-match.tsx"
+   ],
+   "source": {
+    "app": "donegeon-client",
+    "path": "web/apps/client/src/app.tsx",
+    "line": 37,
+    "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
+   },
+   "weight": 26,
+   "status": "certified"
   }
  ],
  "notReproduced": [
