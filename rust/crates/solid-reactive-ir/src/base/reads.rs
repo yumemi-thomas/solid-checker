@@ -56,9 +56,6 @@ pub(crate) enum Section {
     LiteralReceivers,
     /// The invocation-flow answer of every literal (ADR 0319, 0391).
     FlowAnswers,
-    /// The write-flow answer of every function handed to project code
-    /// (ADR 0442).
-    WriteFlowAnswers,
     /// The literals every invocation of which is an event delivery (ADR 0327).
     EventLiterals,
     /// The calls that never return normally (ADR 0278, 0279).
@@ -69,8 +66,7 @@ pub(crate) enum Section {
     /// The returned-callback invocations and their sites (ADR 0390, 0392).
     ReturnedCallbacks,
     /// The synchronous event-dispatch hazard (ADR 0356) read as the raw base
-    /// index of hazards: the hazard, and the two answers the classified
-    /// sites give.
+    /// index of hazards: the hazard alone.
     SynchronousDispatch,
     /// The classified dispatch veto (ADR 0356, narrowed by ADR 0435, 0437,
     /// 0438), read through its two answers, owner proofs and read proofs
@@ -92,13 +88,12 @@ pub(crate) enum Section {
 }
 
 impl Section {
-    pub(crate) const ALL: [Self; 17] = [
+    pub(crate) const ALL: [Self; 16] = [
         Self::Components,
         Self::MemberTargets,
         Self::SpreadTargets,
         Self::LiteralReceivers,
         Self::FlowAnswers,
-        Self::WriteFlowAnswers,
         Self::EventLiterals,
         Self::NeverReturning,
         Self::ReturnedSources,

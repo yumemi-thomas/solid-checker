@@ -1936,10 +1936,10 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
                 // written and by the censuses (ADR 0435, 0437, 0438): with no
                 // dispatch call anywhere the hazard's probe is the answer;
                 // otherwise it is the whole program's.
+                // The raw hazards index: the hazard's probe stands for it, as
+                // for a reflective definition below. The veto is the next arm.
                 crate::base::reads::Section::SynchronousDispatch => {
-                    if self.hazard(crate::base::Hazard::SynchronousDispatch) {
-                        whole = true;
-                    }
+                    let _ = self.hazard(crate::base::Hazard::SynchronousDispatch);
                 }
                 // A reader of the veto's two answers records the answers
                 // (ADR 0450): the hazard's probe, and while the hazard is

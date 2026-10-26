@@ -820,10 +820,6 @@ pub(super) struct SemanticLookup<'a> {
     memos: crate::base::memo::build::LookupMemos<'a>,
     /// ADR 0319: every literal's invocation-flow answer.
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
-    /// ADR 0442: the write-flow answer of every function handed to project
-    /// code.
-    write_flow_answers:
-        OnceLock<HashMap<crate::execution_role::WriteFlowKey, (crate::ExecutionRole, bool)>>,
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
     /// ADR 0435: every dispatch call with the receiver and caller its own
@@ -1189,7 +1185,6 @@ impl<'a> SemanticLookup<'a> {
             hand_out_reads: hand_outs::HandOutReads::default(),
             memos: crate::base::memo::build::LookupMemos::owned(&file_table),
             invocation_flow_answers: OnceLock::new(),
-            write_flow_answers: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
             placed_event_dispatch: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
@@ -1647,36 +1642,19 @@ impl<'a> SemanticLookup<'a> {
                 }
                 None => hasher.update([0]),
             },
-            Section::SynchronousDispatch | Section::DispatchVeto => {
-                // The hazard itself (a reader of the raw index), then the two
-                // answers the classified sites give.
+            Section::SynchronousDispatch => {
+                // The hazard itself: a reader of the raw index.
+                hasher.update([u8::from(
+                    self.hazard_present(crate::base::Hazard::SynchronousDispatch),
+                )]);
+            }
+            Section::DispatchVeto => {
+                // The hazard, then the two answers the classified sites give.
                 hasher.update([u8::from(
                     self.hazard_present(crate::base::Hazard::SynchronousDispatch),
                 )]);
                 let (owner, read) = self.dispatch_veto();
                 hasher.update([u8::from(owner), u8::from(read)]);
-            }
-            Section::WriteFlowAnswers => {
-                // ADR 0442: every answer, the role and whether the walk read
-                // another module. An answer that read only its own module is a
-                // function of that module and of tables the asking chunk does
-                // not itself read (component identity, event literals, apply
-                // answers), so the whole table is bound, not only the answers
-                // that crossed modules.
-                let mut writes = self.write_flow_answers().iter().collect::<Vec<_>>();
-                writes.sort_unstable_by(|left, right| {
-                    (&left.0.0, left.0.1, left.0.2 as u8).cmp(&(
-                        &right.0.0,
-                        right.0.1,
-                        right.0.2 as u8,
-                    ))
-                });
-                for ((path, span, guard), (role, across_modules)) in writes {
-                    text(&mut hasher, path);
-                    hasher.update(span.start.to_le_bytes());
-                    hasher.update(span.end.to_le_bytes());
-                    text(&mut hasher, &format!("{guard:?}:{role:?}:{across_modules}"));
-                }
             }
             Section::ReflectivePrototypeWrite => {
                 hasher.update([u8::from(self.reflective_prototype_write_present())]);
@@ -2100,15 +2078,17 @@ impl<'a> SemanticLookup<'a> {
         self.invocation_flow_answers.get().is_some()
     }
 
-    /// ADR 0442: the write-flow answer of every function handed to project
-    /// code, computed once.
-    pub(crate) fn write_flow_answers(
+    /// ADR 0442: the write-flow answer of one function and guard, a memo
+    /// (ADR 0450): a reader records that answer, not the answers of the
+    /// program.
+    pub(crate) fn write_flow_answer_at(
         &self,
-    ) -> &HashMap<crate::execution_role::WriteFlowKey, (crate::ExecutionRole, bool)> {
-        crate::base::reads::note(crate::base::reads::Section::WriteFlowAnswers);
-        self.write_flow_answers.get_or_init(|| {
-            crate::base::reads::suppress(|| crate::execution_role::write_flow_answers(self))
-        })
+        path: &str,
+        span: Span,
+        exempts_root: bool,
+    ) -> Option<(crate::ExecutionRole, bool)> {
+        self.memo_world()
+            .answer::<project_memos::WriteFlowAnswer>(&(path.to_owned(), span, exempts_root))
     }
 
     /// The literals whose every invocation comes through event delivery, for the

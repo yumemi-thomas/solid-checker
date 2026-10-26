@@ -499,3 +499,51 @@ fn the_first_dispatch_site_and_the_removal_of_the_last_move_the_readers() {
     );
     touch(&mut project, &mut builder, "hazard: removed", 2);
 }
+
+/// ADR 0442, per function (ADR 0450): the role a write has in a function handed
+/// to a component is the role of the component's call of it. The component's
+/// file changes how it calls the prop; the file of the write is not touched,
+/// so the write's chunk is reused only while its recorded answer holds.
+const PROP_APP: &str = "import { setCount } from \"./state\";\nimport { Panel } from \"./panel\";\nexport function App() {\n  return <Panel onPress={() => setCount(1)} />;\n}\n";
+const PANEL_EVENT: &str = "export function Panel(props: { onPress: () => void }) {\n  return <button onClick={() => props.onPress()}>x</button>;\n}\n";
+const PANEL_BODY: &str = "export function Panel(props: { onPress: () => void }) {\n  props.onPress();\n  return <button>x</button>;\n}\n";
+
+#[test]
+fn a_write_flow_answer_follows_the_components_call_in_another_file() {
+    let files = [
+        ("App.tsx", PROP_APP),
+        ("panel.tsx", PANEL_EVENT),
+        ("state.ts", STATE),
+    ];
+    let Some(mut project) = Project::scratch("write-flow", &files) else {
+        return;
+    };
+    assert_eq!(
+        env::var("SOLID_CHECKER_IR_SHADOW").as_deref(),
+        Ok("panic"),
+        "run with SOLID_CHECKER_IR_SHADOW=panic"
+    );
+    let mut builder = IncrementalBuilder::default();
+    builder.verify_reused_memos(true);
+    let first = project.analyze();
+    let (event, _) = retained_is_fresh(&mut builder, &first, "write-flow: event");
+    for (label, panel) in [("body", PANEL_BODY), ("event again", PANEL_EVENT)] {
+        let facts = project.edit(&[("panel.tsx", panel)]);
+        let (now, _) = retained_is_fresh(&mut builder, &facts, &format!("write-flow: {label}"));
+        let moved = first_difference(&event, &now).is_some();
+        assert_eq!(
+            moved,
+            panel == PANEL_BODY,
+            "write-flow: {label}: the answer moves with the call"
+        );
+        // A touch of the module that holds the write: its chunk asks the
+        // function's answer again, and verify-reused recomputes the kept one.
+        let touched = format!("{PROP_APP}// touch {label}\n");
+        let facts = project.edit(&[("App.tsx", &touched)]);
+        retained_is_fresh(
+            &mut builder,
+            &facts,
+            &format!("write-flow: {label}, then a touch"),
+        );
+    }
+}

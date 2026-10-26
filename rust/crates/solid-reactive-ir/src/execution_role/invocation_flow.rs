@@ -523,41 +523,43 @@ pub(super) fn literal_flow_role<'a, W: FlowWorld<'a>>(
 }
 
 thread_local! {
-    /// Set while [`write_flow_answers`] computes the table: the write walk,
-    /// asked at an invocation site, then skips its own use of the table, so
+    /// Set while [`write_flow_answer`] computes an answer: the write walk,
+    /// asked at an invocation site, then skips its own use of the answers, so
     /// every answer is computed from an empty context and no order of
     /// computation matters.
     static COMPUTING_WRITE_FLOW: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
-/// The key of a write-flow answer: the literal and the guard of the write.
-pub(crate) type WriteFlowKey = (String, Span, RootBodyGuard);
-
-/// ADR 0442: the write-flow answer of every function a closed program hands
-/// to project code (a component prop value, an argument of a call that is no
-/// primitive, a named function), per guard, computed once per build. Only a
-/// proven role is kept, with whether the walk read another module than the
-/// function's own; see [`literal_write_flow_role`].
-pub(crate) fn write_flow_answers(
+/// ADR 0442, per function and guard (ADR 0450): the write-flow answer of a
+/// function a closed program hands to project code (a component prop value, an
+/// argument of a call that is no primitive, a named function). Only a proven
+/// role is an answer, with whether the walk read another module than the
+/// function's own; see [`literal_write_flow_role`]. `None` for a function that
+/// is no candidate and for one the walk proves nothing about.
+///
+/// The walk's cache of the classifier's role at each call lives for one answer
+/// only: what the classifier says at a call depends on the build.
+pub(crate) fn write_flow_answer(
     lookup: &SemanticLookup<'_>,
-) -> HashMap<WriteFlowKey, (ExecutionRole, bool)> {
-    let mut answers = HashMap::default();
-    let outer = COMPUTING_WRITE_FLOW.with(|computing| computing.replace(true));
-    for file in lookup.files() {
-        for literal in &file.ast.functions {
-            if !write_flow_candidate(file, literal) {
-                continue;
-            }
-            for guard in [RootBodyGuard::Rejects, RootBodyGuard::Exempts] {
-                if let Some(answer) = literal_write_flow_role(file, literal, guard, lookup) {
-                    answers.insert((file.path.to_string(), literal.span, guard), answer);
-                }
-            }
-        }
+    path: &str,
+    span: Span,
+    exempts_root: bool,
+) -> Option<(ExecutionRole, bool)> {
+    let file = lookup.file_by_path(path)?;
+    let literal = file.ast.function_at(span)?;
+    if !write_flow_candidate(file, literal) {
+        return None;
     }
+    let guard = if exempts_root {
+        RootBodyGuard::Exempts
+    } else {
+        RootBodyGuard::Rejects
+    };
+    let outer = COMPUTING_WRITE_FLOW.with(|computing| computing.replace(true));
+    let answer = literal_write_flow_role(file, literal, guard, lookup);
     COMPUTING_WRITE_FLOW.with(|computing| computing.set(outer));
     clear_write_site_roles();
-    answers
+    answer
 }
 
 /// Whether `literal` is handed to other code where it is written: the value
@@ -679,8 +681,8 @@ fn literal_write_flow_role(
 }
 
 /// ADR 0442: the role the invocations of `span`'s function (or of a function
-/// around it that runs `span` in place) give a write there, from the per-build
-/// table. `None` while the table is computed, in an open program, and for a
+/// around it that runs `span` in place) give a write there, from the
+/// function's own answer ([`write_flow_answer`]). `None` while the table is computed, in an open program, and for a
 /// function the walk proves nothing about.
 pub(super) fn write_flow_role(
     file: &solid_facts::FileFacts,
@@ -695,7 +697,6 @@ pub(super) fn write_flow_role(
     if !innermost.body.contains(span) {
         return None;
     }
-    let answers = lookup.write_flow_answers();
     let mut enclosing = file.ast.functions_body_containing(span).collect::<Vec<_>>();
     enclosing.sort_by_key(|function| function.span.end - function.span.start);
     // Where the write, then each layer around it, sits in the next function
@@ -711,9 +712,12 @@ pub(super) fn write_flow_role(
             return Some(suspended);
         }
         position = function.span;
-        if let Some((role, _)) = answers
-            .get(&(file.path.to_string(), function.span, root_body))
-            .copied()
+        if write_flow_candidate(file, function)
+            && let Some((role, _)) = lookup.write_flow_answer_at(
+                file.path.as_str(),
+                function.span,
+                root_body == RootBodyGuard::Exempts,
+            )
         {
             return Some(role);
         }
