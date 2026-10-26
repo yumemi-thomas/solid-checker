@@ -72,7 +72,7 @@ impl CompilerFactsProvider for NativeCompilerFacts {
 /// generates the checker compiles with, and no option turns the error off.
 const REMOVED_NAMESPACES: [&str; 5] = ["on", "oncapture", "attr", "bool", "use"];
 
-/// ADR 0399: which refusals are a defect of the source.
+/// ADR 0441: which refusals are a defect of the source.
 ///
 /// Only a removed 1.x attribute form (`attr:`, `bool:`, `on:`, `oncapture:`,
 /// `use:`, `classList`) is proven: the error does not depend on an option the

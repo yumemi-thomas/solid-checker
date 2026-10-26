@@ -43,7 +43,7 @@ fn a_compile_error_is_a_refusal_of_the_source() {
     }
 }
 
-/// ADR 0399: a refusal is a proven defect only for a removed 1.x attribute
+/// ADR 0441: a refusal is a proven defect only for a removed 1.x attribute
 /// form whose name `tsc` does not also reject (a hyphen exempts it), and the
 /// classification reads the pinned compiler's own messages, so a pin move that
 /// rewords one fails here instead of silently demoting or promoting it.

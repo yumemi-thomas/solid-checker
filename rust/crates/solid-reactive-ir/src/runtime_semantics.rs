@@ -91,7 +91,7 @@ pub(super) const FRESH_STACK_SCHEDULERS: &[&str] = &[
     "ReportingObserver.construct",
 ];
 
-/// ADR 0396: when a reviewed runner runs the body of a suite registration
+/// ADR 0438: when a reviewed runner runs the body of a suite registration
 /// (`describe`, `suite`, `test.describe`). Per runner, read on its published
 /// bytes: only a runner that defers the body past the registration call may be
 /// placed on its own scheduler's stack.
@@ -110,7 +110,7 @@ pub(super) enum SuiteBodyRun {
     Unproven,
 }
 
-/// ADR 0396: the test runners whose registered callbacks are reviewed to run
+/// ADR 0438: the test runners whose registered callbacks are reviewed to run
 /// with no Solid owner and outside every strict-read window. Each entry is a
 /// run of consecutive path components of an installed declaration file (so a
 /// project directory named `vitest` is not one: `node_modules` leads each),
@@ -119,7 +119,7 @@ pub(super) enum SuiteBodyRun {
 /// invokes every registered test and hook from its own scheduler (an awaited
 /// call from its collection or run loop), with no Solid API on the stack. A
 /// suite body is the exception, and each runner's answer is its own
-/// ([`SuiteBodyRun`]); the bytes are cited in ADR 0396. A runner configured
+/// ([`SuiteBodyRun`]); the bytes are cited in ADR 0438. A runner configured
 /// to wrap tests in a Solid root, or patched, is outside the premise.
 ///
 /// - `vitest` and `@vitest/runner`: the declarations of `test`, `it`,

@@ -45,7 +45,7 @@ pub struct Options {
     pub presets: Vec<String>,
     pub enable_rules: Vec<String>,
     pub feedback_facts: bool,
-    /// Rule ids the host suppresses `eslint-disable` comments for (ADR 0387).
+    /// Rule ids the host suppresses `eslint-disable` comments for (ADR 0429).
     pub host_suppressions: Vec<String>,
     /// The effective dependency-source selection (names or `*`).
     pub dependency_sources: Vec<String>,

@@ -3,7 +3,7 @@
 `SC2001` · **error** · violation
 
 Formerly `reactive-write-in-owned-scope` (that name is an alias). The name follows
-eslint-plugin-solid's `no-write-in-pure-computation` (ADR 0381, 0382); the scope
+eslint-plugin-solid's `no-write-in-pure-computation` (ADR 0381, 0424); the scope
 is a superset of upstream's: memo and effect-compute bodies and component bodies,
 and also root bodies, `render`/`hydrate` code, `untrack`/`flush(fn)` callbacks,
 `refresh()` and helpers placed by their entries.
@@ -21,7 +21,7 @@ callbacks, and the children-forbidden leaf scopes `onSettled` and `createTracked
 explicitly exempts leaf imperative scopes.
 
 A function body is a component body only where a tag (or another reference that
-renders it) places it (ADR 0403). A function nothing renders, a callback or IIFE
+renders it) places it (ADR 0445). A function nothing renders, a callback or IIFE
 evaluated at module scope, and a JSX-returning function bound to a call's result
 are not placed: a write there is uncertifiable, never a violation. An exported
 capitalized function stays a component by module surface (ADR 0331).
@@ -124,7 +124,7 @@ the key: a literal without it (`{ name: "x" }`, `{ ownedWrite: false }`) keeps t
 violation, and options the analysis cannot read (a variable, a spread, a
 non-literal `ownedWrite` value), or a setter known only by its type, may carry
 `ownedWrite: true`, so the write is **uncertifiable**, never a violation and
-never a silent clean (ADR 0382). Upstream resolves options held in one level of
+never a silent clean (ADR 0424). Upstream resolves options held in one level of
 `const` and reports the write; the checker keeps it uncertifiable (ownership case
 `no-write-in-pure-computation/const-held-options/001`). A **store** setter has no
 such opt-in: `storeSetter` (`dist/dev.js:5847`) calls `devGuardStoreSetterWrite`
@@ -167,13 +167,13 @@ are all of them (ADR 0378): every other use of the function (stored,
 aliased, returned in an object, exported from an open program, a method) may
 run it in an owned scope, and an entry the checker cannot place does not say
 where it runs, so the write is **uncertifiable**. A use that hands the function
-to project code is an entry the walk follows (ADR 0400, below):
+to project code is an entry the walk follows (ADR 0442, below):
 `<Child run={reset} />`, where `Child` calls `props.run()` in its body, throws
 `REACTIVE_WRITE_IN_OWNED_SCOPE` and is a violation. In a closed program a
 function the program only ever delivers as an event handler, however it is
 passed along, stays legal (ADR 0327).
 
-**Handed to project code (ADR 0400).** A function literal, or a same-file
+**Handed to project code (ADR 0442).** A function literal, or a same-file
 function named by identifier that the file hands on, takes for its writes the
 role of each place project code invokes it. A prop of an exactly resolved
 component: an intrinsic `on…` attribute or a call in the child's handler is

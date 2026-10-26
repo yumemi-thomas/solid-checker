@@ -1695,7 +1695,7 @@
    ],
    "absent": []
   },
-  "note": "Kept divergence from eslint-plugin-solid 0.18.1 (ADR 0382): upstream resolves the options argument through one level of `const` indirection and reports this write; the checker reads only an object literal written at the call, so options held in a variable may carry `ownedWrite: true` and the write is uncertifiable, never a violation and never a silent clean. Literal options without the key (`{ name: \"count\" }` at the call) stay a violation (`fixtures/reactive-ir/owned-write-option`)."
+  "note": "Kept divergence from eslint-plugin-solid 0.18.1 (ADR 0424): upstream resolves the options argument through one level of `const` indirection and reports this write; the checker reads only an object literal written at the call, so options held in a variable may carry `ownedWrite: true` and the write is uncertifiable, never a violation and never a silent clean. Literal options without the key (`{ name: \"count\" }` at the call) stay a violation (`fixtures/reactive-ir/owned-write-option`)."
  },
  {
   "id": "no-write-in-pure-computation/store-owned-write/001",
@@ -1850,7 +1850,7 @@
      }
     ]
    },
-   "note": "Kept divergence from eslint-plugin-solid 0.18.1 (ADR 0383): upstream's test case 6 (\"mutating the read proxy is wrong even inside the setter\") reports a write through the read proxy inside its own setter callback. On rc.17 it commits: `storeSetter` adds the store to `writeScopes` for the callback (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5847-5866`), so the `set` trap's `inDraft(target)` holds (`:4955-4957`, `:5691-5700`) and the value lands after `flush()` (probed: `count` reads 5, and a `push` of the store's array through the proxy there lands too). A write through another store's proxy inside the callback is still dropped (`scopeKey` differs) and stays a finding (fixtures/reactive-ir/store-mutators `OtherSetter`)."
+   "note": "Kept divergence from eslint-plugin-solid 0.18.1 (ADR 0425): upstream's test case 6 (\"mutating the read proxy is wrong even inside the setter\") reports a write through the read proxy inside its own setter callback. On rc.17 it commits: `storeSetter` adds the store to `writeScopes` for the callback (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5847-5866`), so the `set` trap's `inDraft(target)` holds (`:4955-4957`, `:5691-5700`) and the value lands after `flush()` (probed: `count` reads 5, and a `push` of the store's array through the proxy there lands too). A write through another store's proxy inside the callback is still dropped (`scopeKey` differs) and stays a finding (fixtures/reactive-ir/store-mutators `OtherSetter`)."
   },
   {
    "id": "no-store-mutation-outside-setter/projection-compute-write/001",
@@ -1871,7 +1871,7 @@
      }
     ]
    },
-   "note": "Kept divergence from eslint-plugin-solid 0.18.1 (ADR 0383), which resolves `selected` to its `createProjection` initializer wherever it is written. Inside the compute function the result symbol commits like the draft: `runProjectionComputed` runs the function inside `storeSetter(draft, \u2026)` (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:6675-6678`), which write-enables the family (`:5847-5866`; probed: a re-run's `selected.viaResult = 2` landed after `flush()`). The same holds for a function-form `createStore(fn, seed)`'s store (fixtures/reactive-ir/projection-writes)."
+   "note": "Kept divergence from eslint-plugin-solid 0.18.1 (ADR 0425), which resolves `selected` to its `createProjection` initializer wherever it is written. Inside the compute function the result symbol commits like the draft: `runProjectionComputed` runs the function inside `storeSetter(draft, \u2026)` (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:6675-6678`), which write-enables the family (`:5847-5866`; probed: a re-run's `selected.viaResult = 2` landed after `flush()`). The same holds for a function-form `createStore(fn, seed)`'s store (fixtures/reactive-ir/projection-writes)."
   },
   {
    "id": "no-store-mutation-outside-setter/delete-required-property/001",
@@ -2189,7 +2189,7 @@
      }
     ]
    },
-   "note": "Where upstream and this checker differ by design: upstream's built-in list matches an imported name, so it is silent on a project function or a member call too; the ADR 0385 resolution is stricter in the same direction for built-ins (exact import binding), and a project function spelled `GET` is not the wrapper. Only the project's own `clientWrappers` option names a callee by spelling."
+   "note": "Where upstream and this checker differ by design: upstream's built-in list matches an imported name, so it is silent on a project function or a member call too; the ADR 0427 resolution is stricter in the same direction for built-ins (exact import binding), and a project function spelled `GET` is not the wrapper. Only the project's own `clientWrappers` option names a callee by spelling."
   },
   {
    "id": "valid-use-server/client-wrappers-option/001",
@@ -2415,7 +2415,7 @@
     ],
     "absent": []
    },
-   "note": "Upstream badUnnamedDerivedSignal case 32 in its two-argument form (the exact one-argument form is `run-with-owner-in-compute/one-argument-effect/003`). `runWithOwner` sets `tracking = false` around its callback and leaves the strict-read window as the call had it (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:5776-5785`), and an effect compute has no window, so the read subscribes nothing and raises nothing: probed on rc.17, one run, `observers(signal)` empty, no diagnostic, and a write does not re-run it (`scripts/probes/rc17-untracked-reads/3-unnamed-derived.mjs`, 3d). The finding says so and does not promise the dev warning (ADR 0401)."
+   "note": "Upstream badUnnamedDerivedSignal case 32 in its two-argument form (the exact one-argument form is `run-with-owner-in-compute/one-argument-effect/003`). `runWithOwner` sets `tracking = false` around its callback and leaves the strict-read window as the call had it (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:5776-5785`), and an effect compute has no window, so the read subscribes nothing and raises nothing: probed on rc.17, one run, `observers(signal)` empty, no diagnostic, and a write does not re-run it (`scripts/probes/rc17-untracked-reads/3-unnamed-derived.mjs`, 3d). The finding says so and does not promise the dev warning (ADR 0443)."
   },
   {
    "id": "strict-read-untracked/run-with-owner-in-compute/component/002",

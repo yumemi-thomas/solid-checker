@@ -20,7 +20,7 @@
 //
 // `--apps` sweeps only the named apps. `--program-boundary` passes the
 // assertion to every project, so a second sweep with `closed` measures how
-// many results the open-program premise holds (ADR 0402; see
+// many results the open-program premise holds (ADR 0444; see
 // scripts/uncertifiable-causes.mjs `--closed-report`).
 //
 // Use the release binary: a debug build inflates certification about 19x.

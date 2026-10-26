@@ -40,7 +40,7 @@ stay inside the producer's tsrs backend.
   imported callbacks, and local alias chains are handled conservatively; nested
   function calls are excluded. This keeps async classification and SC1002 flow
   facts inside the producer's tsrs backend.
-- Optionally answer `declaredKeys` (ADR 0394): the sorted property names the type
+- Optionally answer `declaredKeys` (ADR 0436): the sorted property names the type
   at an exact expression declares, only when the set is provably complete (no
   index signature, `any` or open member, type parameter or unclosed mapped type).
 - Apply monotonically versioned in-memory file overlays, incrementally update a

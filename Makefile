@@ -212,7 +212,7 @@ coverage-update: build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/coverage.mjs --update
 
-# The uncertifiable reproduction set (ADR 0404): every case still produces its
+# The uncertifiable reproduction set (ADR 0446): every case still produces its
 # expected results with the cause the classifier reads, and the set stays in
 # its budget. The corpus side (scripts/uncertifiable-causes.mjs --report) needs
 # a sweep and runs by hand; CONTRIBUTING.md, "Adding a repo to the reproduction set".

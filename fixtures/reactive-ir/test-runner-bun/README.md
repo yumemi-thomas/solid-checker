@@ -1,6 +1,6 @@
 # test-runner-bun
 
-Claim (ADR 0396): a callback handed directly to `bun:test`'s `describe` and `test` (declared in `bun-types/test.d.ts`) runs from the runner's scheduler with no owner and no strict-read window, so a synchronous dispatch in it does not withhold the event proofs: the handler's effect creation is a violation (SC4001); its write and read are clean.
+Claim (ADR 0438): a callback handed directly to `bun:test`'s `describe` and `test` (declared in `bun-types/test.d.ts`) runs from the runner's scheduler with no owner and no strict-read window, so a synchronous dispatch in it does not withhold the event proofs: the handler's effect creation is a violation (SC4001); its write and read are clean.
 
 Published bytes: `node_modules/bun-types` is `bun-types@1.4.4`, integrity `sha512-yjrJh5oGX7mMPKGd19YXyIjmEuj4G4zNC30bs7PM9Az7NQ3ndF3j6hbeRdvJTRQEhJ/FYQwW0a2moweEi2hMxQ==`; only `package.json` and `test.d.ts` are copied, unchanged (`bun-test.d.ts` is a reference that brings the module declaration into the program, as the package's own `index.d.ts` does):
 

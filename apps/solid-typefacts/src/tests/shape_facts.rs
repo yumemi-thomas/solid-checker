@@ -564,7 +564,7 @@ tuple;\n";
     assert!(undemanded[0].library_types.is_none(), "undemanded");
 }
 
-/// ADR 0394: a key set is answered only when the checker resolves it
+/// ADR 0436: a key set is answered only when the checker resolves it
 /// completely. Every case names the expression and either its exact sorted
 /// keys or `None` for an open one.
 #[test]

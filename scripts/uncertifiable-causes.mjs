@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Groups a sweep's uncertifiable results by cause, and maps each cause to the
-// reproduction that stands for it (fixtures/uncertifiable-repro, ADR 0404).
+// reproduction that stands for it (fixtures/uncertifiable-repro, ADR 0446).
 //
 //   node scripts/uncertifiable-causes.mjs --report <sweep.json>
 //     [--closed-report <sweep.json>] [--noveto-report <sweep.json>] [--cases fixtures/uncertifiable-repro/cases.json]
@@ -16,7 +16,7 @@
 // an await), the census of the component holding a read. `--closed-report` is
 // a second sweep of the same corpus with `--program-boundary closed`
 // (scripts/corpus-sweep.mjs): a result it no longer holds is attributed to
-// the open program boundary (ADR 0402), whatever else is true of it.
+// the open program boundary (ADR 0444), whatever else is true of it.
 // `--noveto-report` is a sweep by a scratch build whose dispatch sites
 // withhold nothing (`withholds_owner_proofs` and `withholds_read_proofs` in
 // indexes/event_delivery.rs answer false; never committed): in a project with
@@ -877,7 +877,7 @@ function placementCause(project, fn, site, depth = 0, seen = new Set(), refine =
 
 // ---------------------------------------------------------------------------
 // The write walk: why the checker's forward walk of a function's invocations
-// (ADR 0319, 0400; `InvocationFlow::uses` in execution_role/event_literals.rs)
+// (ADR 0319, 0442; `InvocationFlow::uses` in execution_role/event_literals.rs)
 // stops. The walk starts from the function that holds a write, follows the
 // value through the holders it models (calls, member accesses, arguments of
 // project functions, component props, object members, returns, `const`
@@ -1402,7 +1402,7 @@ const VIEW_CALLS = new Set(["omit", "merge", "splitProps", "mergeProps"]);
 
 /**
  * Where a project component invokes the prop `name` it is handed: the child's
- * side of ADR 0400's walk through `props.<name>`. Each invocation is placed
+ * side of ADR 0442's walk through `props.<name>`. Each invocation is placed
  * like any other site (an intrinsic handler is a delivery); the prop is
  * followed through `omit`/`merge`/`splitProps` views (`view:`), a destructured
  * binding (`destructured:`), a spread or attribute into another project
@@ -1497,7 +1497,7 @@ function childInvocationCause(project, declaration, name, depth, seen, marks = n
 }
 
 /**
- * How the census of the component enclosing `fn` escapes (ADR 0331, 0403):
+ * How the census of the component enclosing `fn` escapes (ADR 0331, 0445):
  * a reference that is not a tag, an import or an export (`component: () =>
  * Page()`, `{ component: Page }`), or a tag with a spread. Null when every
  * reference is a tag without a spread, or `fn` is in no component.
@@ -2611,7 +2611,7 @@ function enclosingComponent(fn) {
 /**
  * Whether a value read in `node` comes from a parameter of `component` (its
  * props), directly or through the local bindings and closures that hold it. A
- * component whose callers cannot be enumerated (ADR 0331, 0403) leaves such a
+ * component whose callers cannot be enumerated (ADR 0331, 0445) leaves such a
  * value unproven; one whose arguments do not come from its props is held by
  * what those arguments are.
  */
@@ -3058,7 +3058,7 @@ function unmodeledUse(project, site) {
 function vetoKinds(project, premises) {
   const kinds = new Set();
   for (const premise of premises) {
-    const match = premise.match(/^synchronous dispatch \(ADR 0393\) at (.+):(\d+) withholds event handler/);
+    const match = premise.match(/^synchronous dispatch \(ADR 0435\) at (.+):(\d+) withholds event handler/);
     if (!match) continue;
     const [, path, line] = match;
     if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(path)) {
@@ -3318,7 +3318,7 @@ export function classifyReport(report, closedReport = null, noVetoReport = null)
     if (!findings.length) continue;
     const project = new Project(row.root, row.project);
     // A result the closed run keeps is held by what holds there: closing a
-    // program can also exclude dispatch sites (ADR 0396's test-only helper).
+    // program can also exclude dispatch sites (ADR 0438's test-only helper).
     const vetoed = vetoKinds(project, closedPremises.get(`${row.app}|${row.project}`) ?? row.premises ?? []);
     for (const finding of findings) {
       const k = key(row, finding);
@@ -3567,7 +3567,7 @@ export const siteKey = (site) => `${site.app}|${site.path}|${site.line}|${site.r
 
 /**
  * The seeded sample of each case's distinct sites a source read verifies
- * (ADR 0404): the same sites for the same report, whoever draws them.
+ * (ADR 0446): the same sites for the same report, whoever draws them.
  */
 export function drawSamples(sites, id, size) {
   const rank = (key) => createHash("sha256").update(`${id}|${key}`).digest("hex");

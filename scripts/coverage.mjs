@@ -115,7 +115,7 @@ function fixtureProjects() {
 }
 
 /**
- * The uncertifiable reproduction set (ADR 0404): projects at any depth
+ * The uncertifiable reproduction set (ADR 0446): projects at any depth
  * (a workspace member sits under its workspace), one snapshot each, whose
  * id joins the path with `-`. They read the set's shared node_modules and,
  * for a workspace member, its sibling manifests, all above the project

@@ -806,18 +806,18 @@ pub(super) struct SemanticLookup<'a> {
     identity_wrappers: OnceLock<HashMap<&'a str, usize>>,
     /// ADR 0319: every literal's invocation-flow answer.
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
-    /// ADR 0400: the write-flow answer of every function handed to project
+    /// ADR 0442: the write-flow answer of every function handed to project
     /// code.
     write_flow_answers:
         OnceLock<HashMap<crate::execution_role::WriteFlowKey, (crate::ExecutionRole, bool)>>,
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
-    /// ADR 0396: the literals whose every invocation is a test runner's.
+    /// ADR 0438: the literals whose every invocation is a test runner's.
     test_invoked_literals: OnceLock<HashSet<(String, Span)>>,
-    /// ADR 0393: every dispatch call with the receiver and caller its own
+    /// ADR 0435: every dispatch call with the receiver and caller its own
     /// position decides.
     placed_event_dispatch: OnceLock<Vec<event_delivery::DispatchSite>>,
-    /// ADR 0395: [`Self::placed_event_dispatch`] with the sites in an
+    /// ADR 0437: [`Self::placed_event_dispatch`] with the sites in an
     /// event-only function. The veto reads this one.
     synchronous_event_dispatch: OnceLock<Vec<event_delivery::DispatchSite>>,
     /// ADR 0320: whether some call may copy keys into an existing object.
@@ -1519,7 +1519,7 @@ impl<'a> SemanticLookup<'a> {
                 u8::from(self.synchronous_event_dispatch_present()),
                 u8::from(self.synchronous_event_read_dispatch_present()),
             ]);
-            // ADR 0400: a write's role in a function handed to project
+            // ADR 0442: a write's role in a function handed to project
             // code is the same walk's answer for writes. Only an answer that
             // read another module than the function's own can move with that
             // module's contents; one that read only its own is a function of
@@ -1829,7 +1829,7 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| crate::execution_role::invocation_flow_answers(self))
     }
 
-    /// ADR 0400: the write-flow answer of every function handed to project
+    /// ADR 0442: the write-flow answer of every function handed to project
     /// code, computed once.
     pub(crate) fn write_flow_answers(
         &self,
@@ -1845,7 +1845,7 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| crate::execution_role::event_invoked_literals(self))
     }
 
-    /// ADR 0396: the helper literals every invocation of which is written in a
+    /// ADR 0438: the helper literals every invocation of which is written in a
     /// test runner's callback; see [`crate::execution_role::test_invoked_literals`].
     pub(crate) fn test_invoked_literals(&self) -> &HashSet<(String, Span)> {
         self.test_invoked_literals

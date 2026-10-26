@@ -550,7 +550,7 @@ pub(crate) fn owner_callback_edges(
         if !scheduled.is_empty() {
             return scheduled;
         }
-        // ADR 0396: a suite body the runner runs inside the registration call
+        // ADR 0438: a suite body the runner runs inside the registration call
         // runs under the owner of the call's position.
         let inline_suite = inline_suite_body_edges(file, call, lookup);
         if !inline_suite.is_empty() {
@@ -1004,7 +1004,7 @@ pub(crate) fn fresh_stack_scheduler_edges(
                 .entity_at(file.path.as_str(), argument.span)
                 .and_then(|entity| entity.callability);
             crate::runtime_semantics::argument_behavior(resolved, callability, *index).map_or_else(
-                // ADR 0396: a reviewed test runner invokes a registered callback
+                // ADR 0438: a reviewed test runner invokes a registered callback
                 // from its own scheduler.
                 || {
                     lookup.test_runner_callback(file, call)

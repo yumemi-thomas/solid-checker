@@ -15,7 +15,7 @@ as `createMemo`, `createRoot`, and function-form `createSignal` cannot attach,
 and `flush()` cannot re-enter the flush cycle. Solid throws for all three
 operation variants in its development build only: the `@solidjs/signals`
 rc.17 production bundle (`dist/prod`) carries no such guard, so there the
-call does not throw (ADR 0392). Value-form state such as `createSignal(0)` and
+call does not throw (ADR 0434). Value-form state such as `createSignal(0)` and
 `createStore(object)` is allowed because it attaches no child work.
 
 The callback must be a directly written function literal, an exact function
@@ -30,7 +30,7 @@ aliased, wrapper-built, package, or otherwise unresolved callbacks produce
 merely created by the callback executes outside the leaf extent.
 
 A standard-library call in that extent is judged by its exact declaration,
-optional (`el?.scrollIntoView()`) or not (ADR 0397). One that dispatches an
+optional (`el?.scrollIntoView()`) or not (ADR 0439). One that dispatches an
 event synchronously (`focus`, `click`, `dispatchEvent`, dialog and popover
 toggles, `AbortController.abort`) keeps the obligation, since a listener it
 reaches may call `onCleanup`; so does an optional `getContext`.

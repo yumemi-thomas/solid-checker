@@ -5,7 +5,7 @@
 // a fresh `new EventTarget()` dispatched in code the analysis does not place
 // (app-game: a WebGPU work-done callback; here an exported function nothing
 // calls). It reaches only that object's listeners, but no exclusion of ADR
-// 0393 covers it.
+// 0435 covers it.
 const events = new EventTarget();
 
 export const tileEvents: EventTarget = events;

@@ -1,5 +1,5 @@
 //! The program boundary a check uses when the user selected none (ADR 0193,
-//! ADR 0402).
+//! ADR 0444).
 //!
 //! An application is the whole program: every caller of its exported
 //! components and hooks is one of its own call sites. A published library is

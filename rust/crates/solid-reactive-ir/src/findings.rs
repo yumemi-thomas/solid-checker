@@ -33,7 +33,7 @@ pub struct RuleMetadata {
     pub default_enabled: bool,
     /// Whether a project may configure the rule by name. `false` for an
     /// obligation (SC9005, SC9012): an internal uncertifiable result that no
-    /// option reaches and no key names (ADR 0398).
+    /// option reaches and no key names (ADR 0440).
     pub configurable: bool,
     pub presets: &'static [&'static str],
 }
@@ -48,7 +48,7 @@ pub const DOCS_BASE_URL: &str =
 /// adapter. Catalogs remain responsible for ordering and metadata; this owns
 /// the shared wire shape and formatting.
 ///
-/// One entry per rule *name*, the configurable identity (ADR 0384): codes that
+/// One entry per rule *name*, the configurable identity (ADR 0426): codes that
 /// share a name become one entry whose `code` is the first and whose `codes`
 /// lists every one. Two rules of one name must agree on every other field.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -74,7 +74,7 @@ pub fn rule_manifest_json(
     let mut entries: Vec<(RuleMetadata, Vec<&'static str>)> = Vec::new();
     for metadata in rules {
         // An obligation has no key to configure, so the plugin has no entry
-        // for it (ADR 0398).
+        // for it (ADR 0440).
         if !metadata.configurable {
             continue;
         }

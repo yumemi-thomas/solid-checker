@@ -1,6 +1,6 @@
 # package-behavior-unavailable (SC9005)
 
-An **obligation**, not a rule ([ADR 0398](../decisions.md#adr-0398)): an
+An **obligation**, not a rule ([ADR 0440](../decisions.md#adr-0440)): an
 imported package's required runtime behavior could not be established from
 source. It is an **uncertifiable** result, never a proved violation, and an
 internal one ([ADR 0328](../decisions.md#adr-0328)): the human formats and

@@ -1,5 +1,5 @@
 // Violation. Corpus: app-game packages/math-examples/camera-projection-svg/cube.tsx:50 and
-// polygon.tsx:22: `attr:data-z` on an element (ADR 0399).
+// polygon.tsx:22: `attr:data-z` on an element (ADR 0441).
 import { createSignal } from "solid-js";
 
 export function Vertex() {

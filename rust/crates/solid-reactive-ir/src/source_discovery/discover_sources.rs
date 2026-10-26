@@ -591,7 +591,7 @@ fn discover_typed_sources(
                     (ReactiveSourceKind::Store, crate::OwnedWriteOption::Off)
                 } else {
                     // Found by its type alone: the source, and so its options,
-                    // are out of view (ADR 0382).
+                    // are out of view (ADR 0424).
                     (
                         ReactiveSourceKind::Accessor,
                         crate::OwnedWriteOption::Unknown,

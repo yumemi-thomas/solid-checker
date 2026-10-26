@@ -65,14 +65,14 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   callback. Visible native synchronous dispatch withholds its execution proof
   (ADR 0356), so its reads are then uncertifiable; otherwise it is not reported.
   A dispatch on the global `window` (or `document` on web rc.17), or written in
-  a scheduler callback or at module top level, does not withhold it (ADR 0393);
+  a scheduler callback or at module top level, does not withhold it (ADR 0435);
   one in a `runWithOwner(null, …)` callback does, because that leaves the
   enclosing strict-read window open. A dispatch in a callback a reviewed test
-  runner registers (ADR 0396, an async one included, or a helper only such
+  runner registers (ADR 0438, an async one included, or a helper only such
   callbacks call, in a closed program, exported or not when every other
   module's reference to it is a call, and a call past an `await` in an async
-  helper included; a literal handed to such a helper is one, ADR 0400), or
-  written in a function only events invoke (ADR 0395), does not withhold it
+  helper included; a literal handed to such a helper is one, ADR 0442), or
+  written in a function only events invoke (ADR 0437), does not withhold it
   either, and a read in a registered test callback is placed outside every
   strict-read window, as in a scheduled callback. A helper handed a literal
   (`fireAndFlush(() => el.dispatchEvent(...))`) places the literal where the
@@ -83,7 +83,7 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   sets `tracking = false`, so a read written directly in it (`item => item + tag()`)
   subscribes nothing and goes stale. Only a call that passes `name` opens a
   strict-read window around it; unnamed, Solid raises nothing, and the finding's
-  hint says so instead of promising the dev warning (ADR 0401). JSX the map
+  hint says so instead of promising the dev warning (ADR 0443). JSX the map
   function returns tracks its own expressions, `untrack(() => tag())` is the
   explicit snapshot, and a function it only returns runs when its caller does.
   The list or count thunk is a tracked computation. The index accessor of a
@@ -134,7 +134,7 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   followed (ADR 0331): one passed, stored, aliased by a written `let`, or
   exported from an open program leaves its body reads uncertifiable, beside
   whatever its calls prove.
-- **A function nothing renders is no component body (ADR 0403).** A dead
+- **A function nothing renders is no component body (ADR 0445).** A dead
   or lowercase JSX-returning function, and a callback or IIFE evaluated at
   module scope, leave body reads uncertifiable; an exported capitalized
   function is a component by module surface (ADR 0331).
@@ -262,7 +262,7 @@ explicit one-time snapshot; it does not make the prop reactive.
 - **Getter arity.** The rc.13 accessor is `read.bind(null, node)` over `function read(el)` (`dist/dev.js` `accessor`, `dist/prod/signals.js` `accessor`). `solid-js`'s client wrappers return it unchanged, and its server builds return arrows with no parameter. Probed on the dev and prod client builds: `length` 0 and `typeof` `"function"`. The walk folds `p.length` against a numeric literal (`===`, `!==`, `==`, `!=`, `<`, `<=`, `>`, `>=`), and `typeof p`, or a `p.length` that only feeds a test, is no escape, so a branch that cannot run for the arguments is proven absent. A hoisted function declaration's body runs whenever it is called, so an earlier `return` leaves it possible rather than unreachable. A binding declared in a file with a direct `eval` is refused, and a binding the module exports proves no length.
 - **Not decided.** A read through another helper hop, an array of accessors (`accessArray`), and a read after an `await` (always an obligation).
 
-This rule is a member of the `reactivity` group key ([ADR 0386](../decisions.md#adr-0386)): `reactivity` in `rule-options.json` or a disable comment reaches it, and `strict-read-untracked` alone overrides the group.
+This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#adr-0428)): `reactivity` in `rule-options.json` or a disable comment reaches it, and `strict-read-untracked` alone overrides the group.
 
 ## Related
 

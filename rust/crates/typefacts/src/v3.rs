@@ -46,7 +46,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V21: u64 = 21;
 /// v22 keeps the rows of v21 under a new number: a v21 table from another build
 /// is refused, so the merged line's transitions carry 22.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V22: u64 = 22;
-/// v23 adds the declared-keys entity field (ADR 0394): row flag bit 16 followed,
+/// v23 adds the declared-keys entity field (ADR 0436): row flag bit 16 followed,
 /// when set, by a count and that many strings, after the runtime binding kind.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V23: u64 = 23;
 /// Every Wire table schema a transition may carry (v10 is retired).
@@ -485,7 +485,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // Protocol 82 (ADR 0368) adds `ModuleFact.root`; a protocol-81 consumer
 // decodes with `deny_unknown_fields` and would reject it.
 // Protocol 83 (ADR 0368 review) adds the `Modules` answer's `unmappedRoots`.
-// Protocol 84 (ADR 0394) adds the `declaredKeys` demand and entity field, carried
+// Protocol 84 (ADR 0436) adds the `declaredKeys` demand and entity field, carried
 // by Wire table schema v23; a protocol-83 consumer would refuse the new bit.
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 84;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {

@@ -131,7 +131,7 @@ tsrs or Oxc nodes across fact-domain interfaces.
 
 ## The pre-release run and the reproduction set
 
-Precision work iterates on `fixtures/uncertifiable-repro` (ADR 0404), a few
+Precision work iterates on `fixtures/uncertifiable-repro` (ADR 0446), a few
 small projects on published rc.17 bytes: one short case per cause or shape, in
 one table, `cases.json`, with a `kind` (`uncertifiable`, `violation`, `clean`).
 `make repro-causes` checks that each case still produces what it stands for,
@@ -150,7 +150,7 @@ Solid 2 repositories, then discard them:
 2. Sweep it, and once more with `--program-boundary closed` for the
    open-program counterfactual:
    `node scripts/corpus-sweep.mjs --manifest <m> --apps-root <apps> --out sweep.json`.
-   For the dispatch veto's share (ADR 0405), sweep once more with a scratch
+   For the dispatch veto's share (ADR 0447), sweep once more with a scratch
    build in its own worktree whose `withholds_owner_proofs` and
    `withholds_read_proofs` (`indexes/event_delivery.rs`) return `false`
    (`--checker <that build>`), and never commit it.
@@ -161,7 +161,7 @@ Solid 2 repositories, then discard them:
    existing file when its mechanism is the same; one that cannot be
    reproduced faithfully (a package beyond the budget, a checkout artifact)
    or has fewer sites goes to `notReproduced` with its reason. Then verify
-   (ADR 0406): `--draw 5 --draw-out samples.json` gives each case's seeded
+   (ADR 0448): `--draw 5 --draw-out samples.json` gives each case's seeded
    sample of sites; read each from source against the case's file, record
    the verdicts in the case's `verification.samples`, and split a case whose
    samples do not all read the same. Quote only verified coverage.

@@ -327,7 +327,7 @@ fn only_synchronous_owner_swappers_inherit_the_calling_window() {
 /// may run — RFC 03 tells authors to prefer a literal or key function),
 /// and — for `Show`/`Match`, whose `keyed` is boolean-only — any
 /// expression form at all.
-/// ADR 0401: only the map function of `mapArray` and `repeat` is untracked
+/// ADR 0443: only the map function of `mapArray` and `repeat` is untracked
 /// without a window of its own, and only `runWithOwner` clears tracking in the
 /// window of its call. `createRoot` shares the code read but not a probe, and
 /// the list and count thunks stay tracked computations.

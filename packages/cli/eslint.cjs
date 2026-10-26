@@ -73,7 +73,7 @@ function userFacing(finding) {
 
 /**
  * The registry key of a rule's findings: its name, or `name#code` for a former
- * name that covered one code of a merged rule (ADR 0384), which reports and so
+ * name that covered one code of a merged rule (ADR 0426), which reports and so
  * owns that code's findings only.
  */
 function ownedKey(ruleName, code) {
@@ -82,7 +82,7 @@ function ownedKey(ruleName, code) {
 
 /**
  * Per-file registry of the ESLint rule keys that are enabled for the file
- * during the current lint pass (ADR 0387). ESLint applies an
+ * during the current lint pass (ADR 0429). ESLint applies an
  * `eslint-disable solid-checker/<key>` comment to the messages reported under
  * that key, so native must not apply the same comment again: the unused
  * directive would be reported by ESLint, and a finding suppressed twice is
@@ -853,7 +853,7 @@ const DEPRECATED_RULE_KEYS = [
   ["reactive-write-in-owned-scope", "no-write-in-pure-computation"],
   ["no-direct-mutation", "no-store-mutation-outside-setter"],
   // The third entry limits a former name to the one code of the merged rule it
-  // covered (ADR 0384), so each keeps its own severity and findings.
+  // covered (ADR 0426), so each keeps its own severity and findings.
   ["resolve-in-tracked-scope", "no-await-primitive-in-tracked-scope", ["SC2004"]],
   ["resolve-in-reactive-scope", "no-await-primitive-in-tracked-scope", ["SC2004"]],
   ["until-in-tracked-scope", "no-await-primitive-in-tracked-scope", ["SC2005"]],
@@ -867,7 +867,7 @@ const DEPRECATED_RULE_KEYS = [
   ["no-owner-settled-cleanup", "missing-owner"]
 ];
 
-// ADR 0398: SC9005 and SC9012 (with SC9011 merged into it) are obligations,
+// ADR 0440: SC9005 and SC9012 (with SC9011 merged into it) are obligations,
 // internal uncertifiable results, and no ESLint key configures one. A key a
 // config still names stays a deprecated rule that reports nothing, so an
 // existing config loads and its setting changes nothing. Native accepts every
@@ -891,7 +891,7 @@ for (const catalog of Object.values(manifests)) {
   }
 }
 
-// ADR 0386: `reactivity` groups four member rules in `rule-options.json`, which
+// ADR 0428: `reactivity` groups four member rules in `rule-options.json`, which
 // native expands. ESLint cannot report a member's finding under the group's id
 // and one rule cannot read another's severity, so the key exists here only to
 // be valid in a migrated config and in a disable comment (ESLint refuses an
@@ -940,7 +940,7 @@ for (const name of RETIRED_RULE_KEYS) {
     meta: {
       type: "problem",
       docs: {
-        description: `solid-checker ${name} is an obligation, not a rule (ADR 0398); this key does nothing`
+        description: `solid-checker ${name} is an obligation, not a rule (ADR 0440); this key does nothing`
       },
       deprecated: true,
       replacedBy: [],
@@ -974,7 +974,7 @@ for (const catalog of Object.values(manifests)) {
       // Shipped configs keep the historical key: a user config that turned
       // `contract-note` off must keep silencing the note.
       "solid-checker/contract-note": "warn",
-      // The manifest lists configurable rules only (ADR 0398): an obligation
+      // The manifest lists configurable rules only (ADR 0440): an obligation
       // has no key.
       ...Object.fromEntries(
         catalog.rules

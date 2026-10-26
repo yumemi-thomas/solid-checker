@@ -39,13 +39,13 @@ use serde::Deserialize;
 pub struct RuleOptions {
     overrides: BTreeMap<String, RuleOverride>,
     /// Overrides of a single finding code, set through a former rule name that
-    /// covered one code of a merged rule (ADR 0384): `resolve-in-tracked-scope`
+    /// covered one code of a merged rule (ADR 0426): `resolve-in-tracked-scope`
     /// reaches `SC2004` alone, where the merged name reaches both codes.
     code_overrides: BTreeMap<String, RuleOverride>,
     requested_presets: BTreeSet<String>,
     requested_rules: BTreeSet<String>,
     /// Rule ids the host applies `eslint-disable` comments for itself
-    /// (ADR 0387): the ESLint adapter reports per-rule ids, and ESLint
+    /// (ADR 0429): the ESLint adapter reports per-rule ids, and ESLint
     /// suppresses a message by the id it was reported under, so the checker
     /// must not suppress the same comment a second time. Host-selected, like
     /// [`Self::runtime`], and never read from the project's configuration.
@@ -59,7 +59,7 @@ pub struct RuleOptions {
     /// cache identity and never inferred from project rule configuration.
     pub development_feedback: bool,
     /// `valid-use-server`'s `clientWrappers` entries, in upstream's name
-    /// grammar (ADR 0385): names the project itself declares to be client-side
+    /// grammar (ADR 0427): names the project itself declares to be client-side
     /// declaration wrappers, beside the built-in list.
     client_wrappers: Vec<String>,
 }
@@ -117,7 +117,7 @@ impl RuleOptions {
     /// [`Self::parse_with_scoped_aliases`] where a key may also name a group
     /// (`group` returns its members): its `enabled` sets every member, and a
     /// member the document also names takes its own setting whatever order the
-    /// keys sort in (ADR 0386). The group is not a rule and `has_rule` is not
+    /// keys sort in (ADR 0428). The group is not a rule and `has_rule` is not
     /// asked about it.
     pub fn parse_with_groups(
         encoded: &str,
@@ -386,7 +386,7 @@ mod tests {
         );
     }
 
-    /// ADR 0384: a former name limited to one code disables that code alone;
+    /// ADR 0426: a former name limited to one code disables that code alone;
     /// the merged name still governs both, and a code override wins for its own
     /// code.
     #[test]

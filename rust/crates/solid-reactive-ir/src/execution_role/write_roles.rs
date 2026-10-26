@@ -189,7 +189,7 @@ pub(super) fn nested_in_leaf_scope(
     .then_some(WriteRegionAdjustment::LeafScope)
 }
 
-/// The write classification of `span`, and where it ends unplaced, ADR 0400:
+/// The write classification of `span`, and where it ends unplaced, ADR 0442:
 /// the function that holds the write, or one that runs it in place, is handed
 /// to other code (a component's prop, a call's argument, a named function),
 /// and every invocation of it is found and placed by the invocation flow
@@ -227,7 +227,7 @@ pub(super) fn semantic_write_execution_role_within(
 }
 
 /// The `visiting` entry that restricts [`semantic_write_role_walk`] to the
-/// role the position itself proves (ADR 0400): the aggregation over every
+/// role the position itself proves (ADR 0442): the aggregation over every
 /// entry of the function that holds it is skipped. The write flow asks it of a
 /// call inside a function it entered through one activation, where another
 /// call site of that function says nothing about this run.

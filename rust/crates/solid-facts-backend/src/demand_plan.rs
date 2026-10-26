@@ -214,7 +214,7 @@ fn collect_jsx_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut De
             .is_some_and(|name| name.starts_with(|c: char| c.is_ascii_lowercase()));
         // A spread onto an intrinsic element hands the element every key of its
         // object, so whether any key is an event listener is a question about
-        // the type of exactly the spread argument (ADR 0394). The producer
+        // the type of exactly the spread argument (ADR 0436). The producer
         // answers only when the declared key set is provably complete.
         if dialect.semantic_demands.spread_declared_keys
             && element.member_object.is_none()

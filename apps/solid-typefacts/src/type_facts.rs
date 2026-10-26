@@ -731,7 +731,7 @@ fn minimum_parameter_count(checker: &mut Checker, value: P<Type>) -> u32 {
     u32::try_from(minimum.unwrap_or(0)).unwrap_or(u32::MAX)
 }
 
-/// ADR 0394: the property names the type at exactly the demanded expression
+/// ADR 0436: the property names the type at exactly the demanded expression
 /// declares, or `None` unless they are all known. Known means every
 /// constituent that can hold a value is an object type (a union adds the
 /// names of each member, an intersection of each member) with no index
@@ -745,7 +745,7 @@ fn minimum_parameter_count(checker: &mut Checker, value: P<Type>) -> u32 {
 ///
 /// The answer is the declared type's, not the value's: a value typed
 /// `{ class?: string }` may hold more keys at run time (structural subtyping).
-/// ADR 0394 states that premise.
+/// ADR 0436 states that premise.
 pub fn declared_keys_at(checker: &mut Checker, node: P<Node>) -> Option<Vec<Arc<str>>> {
     let value = checker.get_type_at_location(node);
     let mut names: BTreeSet<String> = BTreeSet::new();

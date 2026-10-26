@@ -1200,7 +1200,7 @@ fn no_direct_mutation(
         // `removed-because-redundant`). What type-checks is a deliberate
         // rebinding (`count = otherAccessor`, `store = { ... }` on a `let`)
         // or a cast, whose later reads are not proven to fail, so the branch
-        // is gone (ADR 0383).
+        // is gone (ADR 0425).
         if !through_member {
             continue;
         }
@@ -1368,7 +1368,7 @@ const ARRAY_MUTATORS: [&str; 9] = [
 /// = T` from `@solidjs/signals` rc.7, and a nested array is mutable on every
 /// release), and the runtime drops it: every element write and the `length`
 /// write reach the proxy's `set` trap, which returns `true` without storing
-/// (rc.17 `dist/dev.js:5691-5700`, ADR 0383).
+/// (rc.17 `dist/dev.js:5691-5700`, ADR 0425).
 fn no_store_mutator_call(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,

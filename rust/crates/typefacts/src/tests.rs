@@ -13,7 +13,7 @@ use super::*;
 // `type_descriptor` before it, it costs 8. Primitive literal candidates
 // use the same thin-Arc representation; the one new pointer raises the
 // deliberate retained-row ceiling by exactly 8 bytes. `declared_keys` (ADR
-// 0394) is the same thin `Arc` and raises it by 8 more: it is demanded only at
+// 0436) is the same thin `Arc` and raises it by 8 more: it is demanded only at
 // an intrinsic element's spread arguments, so a bare `Option` is the cheapest
 // way to carry its absence on every other row.
 #[test]

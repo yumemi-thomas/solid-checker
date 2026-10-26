@@ -125,7 +125,7 @@ export const CHECKS = {
       SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
     },
   },
-  // ADR 0404: the reproduction set's budget, and each case's cause.
+  // ADR 0446: the reproduction set's budget, and each case's cause.
   "repro-budget": {
     commands: [
       ["bun", "scripts/repro-budget.mjs"],
@@ -268,7 +268,7 @@ export const ROWS = [
   },
   {
     prefix: "fixtures/uncertifiable-repro/",
-    owner: "the uncertifiable reproduction set (ADR 0404)",
+    owner: "the uncertifiable reproduction set (ADR 0446)",
     checks: ["coverage", "ownership-gate", "repro-budget", "repro-causes"],
   },
   ...["scripts/repro-budget.mjs", "scripts/repro-budget.test.mjs"].map((prefix) => ({

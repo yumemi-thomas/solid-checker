@@ -348,7 +348,7 @@ gates_lane() {
   lane_step coverage
   SOLID_CHECKER_BIN="$checker_bin" \
     SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/coverage.mjs
-  # ADR 0404: each reproduction still reads as the cause it stands for.
+  # ADR 0446: each reproduction still reads as the cause it stands for.
   lane_step repro-causes
   bun scripts/uncertifiable-causes.mjs --repro fixtures/uncertifiable-repro \
     --cases fixtures/uncertifiable-repro/cases.json \

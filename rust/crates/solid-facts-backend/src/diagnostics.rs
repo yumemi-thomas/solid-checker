@@ -118,7 +118,7 @@ pub struct RequestedRuleEnablement<'a> {
     pub rules: &'a [String],
     pub runtime: RuntimeEnvironment,
     pub feedback_facts: bool,
-    /// Rule ids the host suppresses `eslint-disable` comments for (ADR 0387).
+    /// Rule ids the host suppresses `eslint-disable` comments for (ADR 0429).
     pub host_suppressions: &'a [String],
 }
 
@@ -486,7 +486,7 @@ impl DiagnosticSession {
         // nothing about it is proven, and neither is anything a finding
         // elsewhere reaches through it. Its sites are unplaced in the IR; a
         // violation located in it, or whose evidence passes through it, is an
-        // obligation here. Each refused file gets one SC9015 (ADR 0399).
+        // obligation here. Each refused file gets one SC9015 (ADR 0441).
         let refused = facts
             .files
             .iter()
@@ -531,7 +531,7 @@ impl DiagnosticSession {
                 ));
             }
         }
-        // ADR 0387: after every reclassification, so a comment removes only a
+        // ADR 0429: after every reclassification, so a comment removes only a
         // violation that would have been reported, and before the notices,
         // which have no site to comment on.
         let unknown_names = crate::suppression::apply(
@@ -610,7 +610,7 @@ pub fn analyze_project_inputs_measured_with_enablement(
 /// Drops the findings of disabled rules. Returns the dropped uncertifiable
 /// findings (`RuleMetadata::uncertifiable`), which report where the analysis is
 /// incomplete rather than a defect. An obligation (SC9005, SC9012) is never
-/// dropped: it has no key to disable it (ADR 0398).
+/// dropped: it has no key to disable it (ADR 0440).
 fn retain_enabled(
     dialect: &Dialect,
     options: &RuleOptions,
@@ -620,7 +620,7 @@ fn retain_enabled(
     let mut withheld_coverage = Vec::new();
     for finding in std::mem::take(findings) {
         match (dialect.rule_metadata)(&finding.rule) {
-            // An obligation has no key, so nothing disables it (ADR 0398).
+            // An obligation has no key, so nothing disables it (ADR 0440).
             Some(metadata)
                 if !metadata.configurable
                     || options.is_enabled_for_code(
@@ -884,7 +884,7 @@ pub fn unaudited_router_finding(
 }
 
 /// The `SC9015` finding for a file the dialect compiler refused (ADR 0360,
-/// 0399). It is about the file, not a site in it, and states the compiler's
+/// 0441). It is about the file, not a site in it, and states the compiler's
 /// own message: the file has no compiler facts, so the analysis claims nothing
 /// else about it and withholds what depends on it.
 ///
@@ -1378,7 +1378,7 @@ pub fn discovered_rule_options_path(project_directory: &Path) -> Option<PathBuf>
     None
 }
 
-/// ADR 0393: one synchronous DOM dispatch call. A site that withholds event
+/// ADR 0435: one synchronous DOM dispatch call. A site that withholds event
 /// proofs says which; an excluded one says why, so a report lists everything
 /// the veto decided.
 fn dispatch_premise(site: &solid_reactive_ir::EventDispatchSite) -> String {
@@ -1394,14 +1394,14 @@ fn dispatch_premise(site: &solid_reactive_ir::EventDispatchSite) -> String {
             "window" | "document" => format!("receiver {}", site.receiver),
             _ => format!("caller {}", site.caller.as_deref().unwrap_or("unproven")),
         };
-        return format!("synchronous dispatch (ADR 0393) at {at} excluded: {why}");
+        return format!("synchronous dispatch (ADR 0435) at {at} excluded: {why}");
     }
     let caller = site
         .caller
         .as_deref()
         .map_or_else(String::new, |caller| format!(", caller {caller}"));
     format!(
-        "synchronous dispatch (ADR 0393) at {at} withholds event handler {withheld}: receiver {}{caller}",
+        "synchronous dispatch (ADR 0435) at {at} withholds event handler {withheld}: receiver {}{caller}",
         site.receiver
     )
 }

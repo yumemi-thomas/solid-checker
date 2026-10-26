@@ -48,7 +48,7 @@ fn tracked_region_within(file: &solid_facts::FileFacts, argument: Span, span: Sp
     })
 }
 
-/// ADR 0401: the role of a callback that clears tracking where its call is in a
+/// ADR 0443: the role of a callback that clears tracking where its call is in a
 /// tracked scope (`runWithOwner`): untracked with no window, unless the call
 /// itself runs after an await its async function reaches. Past one the code runs
 /// from a promise continuation, outside every tracking scope and strict-read
@@ -224,7 +224,7 @@ pub(super) fn semantic_role_before_awaits(
                             dialect
                                 .callback_clears_tracking_in_calling_window(primitive, index)
                                 // JSX the callback writes tracks its own
-                                // expressions, as it did before ADR 0401: the
+                                // expressions, as it did before ADR 0443: the
                                 // silent deferred role, whatever the call is.
                                 .then(|| {
                                     tracked_region_within(file, call.arguments[index].span, span)
@@ -274,7 +274,7 @@ pub(super) fn semantic_role_before_awaits(
         return match at_call {
             // The listener is cleared and no window is open there. For a call
             // that clears tracking and leaves the window as it found it
-            // (`runWithOwner`, ADR 0401) the read is stale and unwarned: it is
+            // (`runWithOwner`, ADR 0443) the read is stale and unwarned: it is
             // reported. For one the engine does not model that way
             // (`createRoot`) it stays the silent deferred role.
             ExecutionRole::TrackedJsx if clears_tracking => {
@@ -310,7 +310,7 @@ pub(super) fn semantic_role_before_awaits(
                         && tracked_region_within(file, call.arguments[index].span, span))
             })
     }) {
-        // A map function runs untracked in no window of its own (ADR 0401); the
+        // A map function runs untracked in no window of its own (ADR 0443); the
         // other reporting slots (an apply, a render entry) run in one.
         return if file.ast.arguments_containing(span).any(|(call, index)| {
             crate::call_primitive_name_cached(lookup, file, call, entities, symbol_names, dialect)
@@ -1130,7 +1130,7 @@ pub(crate) fn fresh_stack_callback_call<'file, 'lookup>(
         let Some(behavior) =
             crate::runtime_semantics::argument_behavior(resolved, callability, index)
         else {
-            // ADR 0396: a callback handed directly to a reviewed test runner's
+            // ADR 0438: a callback handed directly to a reviewed test runner's
             // registration runs from the runner's own scheduler, except a suite
             // body its runner runs inside the registration call (a synchronous
             // function: an async body's resumptions run elsewhere), which

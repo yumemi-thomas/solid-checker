@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// The uncertifiable reproduction set's budget (ADR 0404).
+// The uncertifiable reproduction set's budget (ADR 0446).
 //
 // fixtures/uncertifiable-repro stands in for the 13 GB corpus a precision
 // slice used to be measured on, so it has to stay small enough to run in
@@ -7,7 +7,7 @@
 // corpus's meant. This gate holds both: few projects, one short file per cause
 // or shape, a source size per kind of case, and a shared node_modules that
 // holds only the published bytes its manifest lists. Violation and clean cases
-// (from the pre-release run, ADR 0404) have budget lines of their own, so they
+// (from the pre-release run, ADR 0446) have budget lines of their own, so they
 // never crowd out the uncertifiable ones. Raising a budget is a deliberate edit
 // here, with the reason beside it, as in scripts/doc-budget.mjs.
 //
@@ -39,7 +39,7 @@ export const BUDGETS = {
     // corpus, not only those of 20 results or more, was to be reproduced:
     // 149 files and 2_849 lines at 139 cases (97.4% of the corpus's results).
     // Raised from 160 and 3_000 when mixed labels were split into one case per
-    // mechanism (ADR 0406): 177 files and 3_390 lines at 167 cases.
+    // mechanism (ADR 0448): 177 files and 3_390 lines at 167 cases.
     // Raised from 3_400 lines when three buckets an independent review found
     // mixed were split (a factory-result handler member, a `new` instance
     // handed to a project method): 179 files and 3_446 lines at 169 cases.
@@ -62,7 +62,7 @@ export const VERIFICATION_SAMPLE = 5;
 export const VERDICTS = ["same", "different", "unsure"];
 
 /**
- * ADR 0404's verified weight: a case stands for the distinct sites of its
+ * ADR 0446's verified weight: a case stands for the distinct sites of its
  * label only when every sampled site reads, from source, as the mechanism its
  * files reproduce; one other reading makes the label a grouping and nothing
  * more (`verifiedWeight` 0), until the bucket is split.

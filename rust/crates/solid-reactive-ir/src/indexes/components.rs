@@ -441,7 +441,7 @@ impl<'a> SemanticLookup<'a> {
             && (!used_as_any_call_argument || hoc_bound)
             && !used_as_render_value
             && (!referenced_as_callback || referenced_as_component_property);
-        // ADR 0403: accounting for every reference proves a component only
+        // ADR 0445: accounting for every reference proves a component only
         // when some reference renders it. A function nothing renders passes
         // the census with no entry at all, and its body is not shown to run,
         // let alone as a component's. The one kept premise (ADR 0331): an

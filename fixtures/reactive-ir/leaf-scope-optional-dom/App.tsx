@@ -3,7 +3,7 @@ import { onCleanup, onSettled } from "solid-js";
 type Refs = { el?: HTMLDivElement; canvas?: HTMLCanvasElement; input?: HTMLInputElement };
 
 // ---- Clean: an optional call is read like its non-optional form (ADR 0318,
-// ADR 0397): the exact `lib.dom` declaration decides, and only a member that
+// ADR 0439): the exact `lib.dom` declaration decides, and only a member that
 // dispatches an event synchronously or creates a WebGL context stays open.
 
 export function OptionalQueries(props: Refs) {
@@ -54,7 +54,7 @@ export function DirectRemoveListener(props: { el: HTMLDivElement }) {
   return <div />;
 }
 
-// ---- Clean: optional calls of members that dispatch no event (ADR 0397).
+// ---- Clean: optional calls of members that dispatch no event (ADR 0439).
 
 export function OptionalSetAttribute(props: Refs) {
   onSettled(() => {

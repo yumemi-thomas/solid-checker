@@ -119,7 +119,7 @@ A user-facing grouping of the runtime misbehavior that findings prevent: silent 
 _Avoid_: Bug category, rule group (that is the SCxxxx numbering)
 
 **Suppression comment**:
-A source comment that switches rules off or on, in the `eslint-disable` family or the checker's own `solid-checker-disable` family, read with ESLint's grammar (ADR 0387). It removes violations at a site and nothing else: an uncertifiable result, a notice or a project finding is never removed by a comment.
+A source comment that switches rules off or on, in the `eslint-disable` family or the checker's own `solid-checker-disable` family, read with ESLint's grammar (ADR 0429). It removes violations at a site and nothing else: an uncertifiable result, a notice or a project finding is never removed by a comment.
 _Avoid_: Directive fact (a string prologue directive such as `"use server"` is a `DirectiveFact`), lint directive, ignore comment
 
 **Source-edge refusal**:

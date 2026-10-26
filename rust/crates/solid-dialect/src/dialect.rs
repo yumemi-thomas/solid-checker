@@ -939,7 +939,7 @@ pub trait Dialect: Sync {
     }
 
     /// Whether an event dispatched on the global `document` object reaches no
-    /// event handler this runtime installs from JSX (ADR 0393): its delegated
+    /// event handler this runtime installs from JSX (ADR 0435): its delegated
     /// handler starts at the event's target and looks for handler data on the
     /// elements of the path, and `document` carries none; undelegated handlers
     /// are listeners on their own elements, below the document. The default
@@ -1461,7 +1461,7 @@ pub trait Dialect: Sync {
     }
 
     /// Whether the callback at `argument` runs with tracking off and opens no
-    /// strict-read window of its own (ADR 0401): a reactive read in it
+    /// strict-read window of its own (ADR 0443): a reactive read in it
     /// subscribes nothing and, unless the call passes an option that opens one
     /// ([`Self::callback_may_open_strict_window`]), raises nothing either, so
     /// the stale value is not pointed out at run time.
@@ -1475,7 +1475,7 @@ pub trait Dialect: Sync {
     }
 
     /// Whether the callback at `argument` clears tracking but keeps the strict
-    /// -read window of the call that runs it (ADR 0401, `runWithOwner`). In a
+    /// -read window of the call that runs it (ADR 0443, `runWithOwner`). In a
     /// tracked computation such a call has no window, so the callback's read
     /// is untracked and unwarned.
     fn callback_clears_tracking_in_calling_window(

@@ -930,7 +930,7 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                 finding.kind = "uncertifiable".into();
             }
             // The setter's source may carry `ownedWrite: true` in options the
-            // analysis cannot read (ADR 0382), which exempts the write.
+            // analysis cannot read (ADR 0424), which exempts the write.
             if write.owned_write == crate::OwnedWriteOption::Unknown {
                 finding.kind = "uncertifiable".into();
             }
@@ -970,7 +970,7 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // Fail-honest: an options argument the analyzer cannot read may
             // declare a loadingValue or seedLoadingValue, and a declared first
             // flight neither throws (SC5001) nor needs a boundary (SC5003,
-            // SC5005; ADR 0388) — so the finding is no longer a *proven*
+            // SC5005; ADR 0430) — so the finding is no longer a *proven*
             // defect and becomes a proof obligation instead.
             if read.options_opaque && matches!(finding.id.as_str(), "SC5001" | "SC5003" | "SC5005")
             {

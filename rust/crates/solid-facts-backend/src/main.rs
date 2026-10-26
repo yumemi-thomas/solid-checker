@@ -41,7 +41,7 @@ struct Request {
     #[serde(default)]
     enable_rules: Vec<String>,
     /// Rule ids the host applies `eslint-disable` comments for itself
-    /// (ADR 0387).
+    /// (ADR 0429).
     #[serde(default)]
     host_suppressions: Vec<String>,
     #[serde(default = "json_format")]

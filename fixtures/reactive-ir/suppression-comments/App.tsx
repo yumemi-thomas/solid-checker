@@ -2,7 +2,7 @@ import { createSignal } from "solid-js";
 
 // Each component below holds one untracked read (SC1001, strict-read-untracked)
 // at the line `console.log(doubled());`, guarded by one suppression form
-// (ADR 0387). `Plain` has no comment and is the one reported site.
+// (ADR 0429). `Plain` has no comment and is the one reported site.
 
 export function Plain() {
   const [count] = createSignal(0);

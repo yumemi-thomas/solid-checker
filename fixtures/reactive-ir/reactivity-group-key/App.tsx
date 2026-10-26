@@ -1,7 +1,7 @@
 import { createMemo, createSignal } from "solid-js";
 
 // One proven defect for each of the four members of the `reactivity` group key
-// (ADR 0386), and one for SC1003, which the key does not reach.
+// (ADR 0428), and one for SC1003, which the key does not reach.
 
 // strict-read-untracked (SC1001): the helper reads `count`, and the component
 // body calls it untracked.

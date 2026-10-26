@@ -58,7 +58,7 @@ pub enum Rule {
     /// carries no compiler facts (ADR 0360). The backend appends it beside the
     /// analysis (`diagnostics.rs`); the rules engine never produces it.
     CompilerRefusedSource,
-    /// Decided by suppression comments (ADR 0387): a `solid-checker/*` name in
+    /// Decided by suppression comments (ADR 0429): a `solid-checker/*` name in
     /// an `eslint-disable` or `solid-checker-disable` comment that names no
     /// rule of this checker. The backend appends it beside the analysis
     /// (`diagnostics.rs`); the rules engine never produces it.
@@ -132,7 +132,7 @@ impl Rule {
                 "warning",
                 false,
             ),
-            // ADR 0398: SC9012 and SC9005 are obligations, not rules. SC9012
+            // ADR 0440: SC9012 and SC9005 are obligations, not rules. SC9012
             // also carries what SC9011 (`reactive-source-uncaptured`) was, as
             // the context `package-callee`; no key configures either.
             Self::ReactiveDispatchUnresolved => {
@@ -149,7 +149,7 @@ impl Rule {
                 ("SC2002", "action-called-in-owned-scope", "error", false)
             }
             // `resolve` and `until` are one configurable rule with two codes
-            // (ADR 0384): the name is the identity a project configures, the
+            // (ADR 0426): the name is the identity a project configures, the
             // code names the defect, so a finding says which primitive it is
             // about (SC2004 `resolve`, SC2005 `until`) and one name enables
             // or disables both. The rc.0 dev guard of `resolve` throws on an
@@ -238,7 +238,7 @@ impl Rule {
             // A misplaced or unextractable directive leaves server code on
             // the client (or fails the build), and a directive file's
             // re-export or non-function export fails the compile or the
-            // server boot (ADR 0385), so this is an error.
+            // server boot (ADR 0427), so this is an error.
             Self::ValidUseServer => ("SC7006", "valid-use-server", "error", false),
             // The default transport throws at the call site (probed, rc.0
             // server-functions client), so the proven form is an error.
@@ -259,7 +259,7 @@ impl Rule {
             // the installed runtime, not the project's source -- but a warning:
             // the analysis ran, and every other finding beside it stands.
             Self::UnauditedSolidRelease => ("SC9014", "unaudited-solid-release", "warning", true),
-            // ADR 0399: a refusal the dialect proves a defect of the source (a
+            // ADR 0441: a refusal the dialect proves a defect of the source (a
             // removed 1.x attribute `tsc` accepts) is an error, one per file.
             // Every other refusal keeps ADR 0360's project-level notice (a
             // warning, uncertifiable): the file has no compiler facts, so
@@ -356,7 +356,7 @@ mod tests {
         assert_eq!(identities.len(), Rule::ALL.len());
     }
 
-    /// ADR 0384: the name is the configurable identity, so codes that share
+    /// ADR 0426: the name is the configurable identity, so codes that share
     /// one must agree on everything a configuration or a preset can see.
     #[test]
     fn codes_sharing_a_name_share_their_configuration() {

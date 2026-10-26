@@ -940,7 +940,7 @@ fn member_call_operations(
     else {
         return false;
     };
-    // ADR 0397: an optional call (`el?.scrollIntoView()`) is read like the
+    // ADR 0439: an optional call (`el?.scrollIntoView()`) is read like the
     // non-optional form -- the same exact `lib.dom` declaration, the same
     // premises. ADR 0329: a member that dispatches an event synchronously
     // (`el.focus()`, `el.click()`) re-enters registered listeners in either
@@ -1040,7 +1040,7 @@ fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
     )
 }
 
-/// ADR 0397: `lib.dom` members whose optional form stays refused although the
+/// ADR 0439: `lib.dom` members whose optional form stays refused although the
 /// non-optional form is trusted: `getContext` creates a WebGL context, which
 /// fires `webglcontextcreationerror` at the canvas synchronously on failure
 /// (ADR 0318). The non-optional form keeps the trust it has always had.
@@ -1783,7 +1783,7 @@ fn returned_call_domain<'a>(
 mod dom_dispatch_tests {
     use super::{refused_when_optional, synchronously_dispatching_dom_member};
 
-    /// ADR 0329 and ADR 0397: the members refused in both forms, and the
+    /// ADR 0329 and ADR 0439: the members refused in both forms, and the
     /// ones an optional call reads like its non-optional form.
     #[test]
     fn only_dispatching_dom_members_are_refused() {

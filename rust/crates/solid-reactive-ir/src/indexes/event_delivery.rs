@@ -9,10 +9,10 @@ pub(crate) enum DispatchReceiver {
     Element,
     /// `EventTarget.dispatchEvent` on a receiver nothing proves.
     Unknown,
-    /// The global `window` (ADR 0393).
+    /// The global `window` (ADR 0435).
     Window,
     /// The global `document`, where the dialect says it reaches no JSX
-    /// handler (ADR 0393).
+    /// handler (ADR 0435).
     Document,
 }
 
@@ -34,15 +34,15 @@ pub(crate) enum DispatchCaller {
     /// window of the enclosing code stays open, so only owner proofs use it.
     DetachedOwner,
     /// A callback a reviewed test runner invokes from its own scheduler
-    /// (ADR 0396): no owner and no strict-read window.
+    /// (ADR 0438): no owner and no strict-read window.
     TestRunner,
     /// A helper every one of whose invocations is a call written in a test
-    /// runner's callback, or in another such helper (ADR 0396): it runs on the
+    /// runner's callback, or in another such helper (ADR 0438): it runs on the
     /// runner's stack or a continuation of it, with no owner and no window.
     TestHelper,
     /// A function whose every invocation is an event delivery (ADR 0327's
     /// census): a delivery it makes runs on the stack of a delivery, which
-    /// has no owner and no window (ADR 0395).
+    /// has no owner and no window (ADR 0437).
     EventHandler,
 }
 
@@ -113,7 +113,7 @@ impl VetoComputation {
     fn assert_not_computing() {
         assert!(
             !VETO_COMPUTING.get(),
-            "the dispatch veto was read while its census computes (ADR 0395)"
+            "the dispatch veto was read while its census computes (ADR 0437)"
         );
     }
 }
@@ -126,7 +126,7 @@ impl Drop for VetoComputation {
 }
 
 impl SemanticLookup<'_> {
-    /// ADR 0356, narrowed by ADR 0393: DOM dispatch runs handlers on its
+    /// ADR 0356, narrowed by ADR 0435: DOM dispatch runs handlers on its
     /// caller's stack. A visible synchronous dispatch withholds the ownerless
     /// proof for event-only invocations unless its target cannot reach a JSX
     /// handler or its caller has no owner. This is counterevidence, not a
@@ -180,7 +180,7 @@ impl SemanticLookup<'_> {
 
     /// Every synchronous dispatch call of the program, classified: the
     /// statically placed sites ([`Self::placed_dispatch_sites`]), then the ones
-    /// in an event-only function (ADR 0395) or a test-only helper (ADR 0396).
+    /// in an event-only function (ADR 0437) or a test-only helper (ADR 0438).
     ///
     /// The second step reads the two censuses, which read no veto (an
     /// answer asked of the veto while this computes is a bug; debug builds
@@ -377,7 +377,7 @@ impl SemanticLookup<'_> {
                 },
             );
         }
-        // ADR 0396: a suite body its runner runs inside the registration call
+        // ADR 0438: a suite body its runner runs inside the registration call
         // is a synchronous callback of that call, so its caller is the caller
         // of the registration written at that position.
         if let Some(registration) = self.inline_suite_body_registration(file, site) {

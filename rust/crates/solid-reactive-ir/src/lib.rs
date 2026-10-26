@@ -169,7 +169,7 @@ pub enum ExecutionRole {
     UntrackedCallback,
     /// Untracked like [`Self::UntrackedCallback`], but in no strict-read window:
     /// the code runs with tracking off where the runtime raises no warning
-    /// unless an option of the call opens one (ADR 0401: a `mapArray` or
+    /// unless an option of the call opens one (ADR 0443: a `mapArray` or
     /// `repeat` map function, and a `runWithOwner` callback inside a tracked
     /// computation). The read is as stale as any other, and the finding must not
     /// promise a development warning.
@@ -563,7 +563,7 @@ pub struct ReactiveWrite {
     pub context: Arc<str>,
 }
 
-/// What a source's options argument proves about `ownedWrite` (ADR 0382),
+/// What a source's options argument proves about `ownedWrite` (ADR 0424),
 /// the node option that exempts the source's setter from the owned-scope
 /// write guard. Only an exact object literal proves the key present or
 /// absent; an options value the syntax does not show may carry it.
@@ -723,7 +723,7 @@ pub const EXPORTED_PARAMETER_MEMBER_DISPATCH: &str = "exported-parameter-member-
 /// `projection.rs`, which words it.
 pub const DEPENDENCY_SOURCE_GETTER: &str = "dependency-source-getter:";
 
-/// ADR 0398: the `analysis_context` of a dispatch obligation at an argument
+/// ADR 0440: the `analysis_context` of a dispatch obligation at an argument
 /// position where a reactive source is handed to a callee imported from a
 /// package, whose reactive behavior no analyzed source or primitive describes
 /// (SC9011 before the merge). Producer: `upstream_compat/shared_reactivity.rs`;
@@ -1290,7 +1290,7 @@ pub struct Program {
     /// proven ([`site_in_undecided_component`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub undecided_component_regions: Vec<UndecidedRegion>,
-    /// Every synchronous DOM dispatch call (ADR 0356, 0393) and what it
+    /// Every synchronous DOM dispatch call (ADR 0356, 0435) and what it
     /// withholds, so a report can list what keeps event proofs out of reach.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub event_dispatch_sites: Vec<EventDispatchSite>,
@@ -2148,7 +2148,7 @@ fn call_primitive_name(
 }
 
 /// What `call`'s options argument proves about `ownedWrite` for a source made
-/// by `primitive` (ADR 0382). A primitive that returns a store never reads
+/// by `primitive` (ADR 0424). A primitive that returns a store never reads
 /// the option, so it is `Off` whatever the argument holds; an unresolved
 /// primitive reads the first options slot and keeps an unreadable value
 /// `Unknown`.

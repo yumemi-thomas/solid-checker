@@ -95,7 +95,7 @@ pub trait CompilerFactsProvider {
     fn analyze(&mut self, request: &AnalysisRequest)
     -> Result<ExecutionMap, CompilerProviderError>;
 
-    /// What a refusal this provider returned says about the source (ADR 0399).
+    /// What a refusal this provider returned says about the source (ADR 0441).
     /// `reason` is the compiler's own message, without the path prefix. A
     /// provider that does not classify its refusals answers
     /// [`RefusalVerdict::Unproven`], so none becomes a violation.

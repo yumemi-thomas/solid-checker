@@ -92,7 +92,7 @@ export function InstanceOwnMethod() {
 }
 
 // Obligation: `inherited` is declared in the base class, not in the
-// constructed class (not followed: ADR 0397 leaves inherited methods open).
+// constructed class (not followed: ADR 0439 leaves inherited methods open).
 export function InstanceInheritedMethod() {
   const child = new Child();
   onSettled(() => {

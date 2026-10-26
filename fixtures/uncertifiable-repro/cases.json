@@ -1,9 +1,9 @@
 {
  "schemaVersion": 1,
- "note": "The reproduction set's one table (ADR 0404). A case is one cause or shape of a kind: uncertifiable (it stands for `causes`, keys of scripts/uncertifiable-causes.mjs, and `weight` is how many results of the rc.17 corpus sweep it stands for), violation or clean (from the pre-release run). `expect` is what its files produce today; `source` is the corpus site it was reduced from. `notReproduced` is the long tail of the same sweep.",
+ "note": "The reproduction set's one table (ADR 0446). A case is one cause or shape of a kind: uncertifiable (it stands for `causes`, keys of scripts/uncertifiable-causes.mjs, and `weight` is how many results of the rc.17 corpus sweep it stands for), violation or clean (from the pre-release run). `expect` is what its files produce today; `source` is the corpus site it was reduced from. `notReproduced` is the long tail of the same sweep.",
  "corpus": {
   "manifest": "scripts/corpus/rc17-manifest.json",
-  "sweep": "release checker at f405f2cff (the spread fix), browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui); veto attribution from a veto-off sweep (ADR 0405)",
+  "sweep": "release checker at f405f2cff (the spread fix), browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui); veto attribution from a veto-off sweep (ADR 0447)",
   "results": 6717,
   "reproduced": 4433
  },
@@ -12245,7 +12245,7 @@
   {
    "cause": "SC9012/open-program-boundary/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument",
    "weight": 58,
-   "why": "an open-program family (ADR 0402) the open-program-boundary project does not hold yet; it needs a file there"
+   "why": "an open-program family (ADR 0444) the open-program-boundary project does not hold yet; it needs a file there"
   },
   {
    "cause": "SC1001/unplaced-read/intrinsic-handler",
@@ -12255,7 +12255,7 @@
   {
    "cause": "SC4001/open-program-boundary/exported-function-callers/cleanup-callback",
    "weight": 36,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/withheld-object-member/dispatch-veto:project-callback",
@@ -12280,7 +12280,7 @@
   {
    "cause": "SC1001/open-program-boundary/callback-to-unproven-consumer/object-member:argument-of:project/handed-to-package",
    "weight": 27,
-   "why": "an open-program family (ADR 0402) the open-program-boundary project does not hold yet; it needs a file there"
+   "why": "an open-program family (ADR 0444) the open-program-boundary project does not hold yet; it needs a file there"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:helper-call-chain|object-member:argument-of:project/assigned-to-variable|object-member:argument-of:project/unplaced-invocation:after-await|object-member:factory-result/assigned-to-variable|package-callback",
@@ -12315,7 +12315,7 @@
   {
    "cause": "SC1001/direct-read/component-body:getter",
    "weight": 16,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/callee-package:@tanstack/router-core",
@@ -12325,7 +12325,7 @@
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:non-jsx-reference:object-member+exported",
    "weight": 14,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-spread-unresolved/unresolved-call-result",
@@ -12345,7 +12345,7 @@
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-lib",
    "weight": 14,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:exported-with-tag-callers:callers-pass-other",
@@ -12370,12 +12370,12 @@
   {
    "cause": "SC1001/direct-read-callers-unenumerable/condition/props-escape:exported-with-tag-callers:read-of-callback-parameter",
    "weight": 12,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:placed/sibling-called:prop/array-binding:package",
    "weight": 12,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:unmodeled",
@@ -12385,7 +12385,7 @@
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/forwarded:project-data-read",
    "weight": 12,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:member-package:maplibre-gl",
@@ -12400,7 +12400,7 @@
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:object:argument:member-project",
    "weight": 12,
-   "why": "9 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "9 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/component-prop>view:placed",
@@ -12420,17 +12420,17 @@
   {
    "cause": "SC9012/runtime-target-unselected/computed-call-target-unresolved/destructured",
    "weight": 11,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>view:placed/element-spread",
    "weight": 10,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/object-mentions-this-in-text",
    "weight": 10,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:package-callback",
@@ -12450,222 +12450,222 @@
   {
    "cause": "SC1001/callback-to-unproven-consumer/get-accessor:argument-of:package",
    "weight": 9,
-   "why": "9 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "9 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:prop-value:project",
    "weight": 9,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:exported-with-tag-callers:callers-pass-local-binding",
    "weight": 9,
-   "why": "9 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "9 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/unplaced-read/component-body:jsx-attribute:handler-call-argument",
    "weight": 9,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/unplaced-read/component-body:jsx-attribute:ref-call-argument",
    "weight": 9,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/unplaced-read/condition/component-body:jsx-attribute:ref-call-argument",
    "weight": 9,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/component-body:jsx-attribute:ref-call-argument",
    "weight": 9,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/condition/component-body:jsx-attribute:ref-call-argument",
    "weight": 9,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/destructured-array-from-package-call",
    "weight": 9,
-   "why": "7 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "7 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-body-not-entered/chained-instance-new",
    "weight": 9,
-   "why": "9 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "9 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/chained-instance-destructured",
    "weight": 9,
-   "why": "9 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "9 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/let-binding",
    "weight": 9,
-   "why": "9 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "9 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-path-unresolved/unresolved-method",
    "weight": 9,
-   "why": "9 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "9 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/member-not-in-callee",
    "weight": 9,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:member-unresolved",
    "weight": 9,
-   "why": "9 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "9 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/destructured-alias",
    "weight": 9,
-   "why": "9 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "9 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/call-project",
    "weight": 9,
-   "why": "9 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "9 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-project",
    "weight": 9,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/handed-to-package",
    "weight": 8,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:exported-with-tag-callers:read-of-local",
    "weight": 8,
-   "why": "7 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "7 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read/component-body:body",
    "weight": 8,
-   "why": "7 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "7 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/unplaced-read/condition/component-body:jsx-attribute:handler-call-argument",
    "weight": 8,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/project-function-argument/handed-to-callee-signature",
    "weight": 8,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:project-function-argument/unplaced-invocation:object-member:factory-result",
    "weight": 8,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/instance-new",
    "weight": 8,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/static-value",
    "weight": 8,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/parameter",
    "weight": 8,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/unexplained",
    "weight": 8,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/open-program-boundary/parameter-member-call/parameter-member-target-unresolved/project-type",
    "weight": 8,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/callee-package:@solid-primitives/resize-observer",
    "weight": 8,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/callee-package:@solidjs/router",
    "weight": 8,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-callable-read",
    "weight": 8,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:member-package:convex",
    "weight": 8,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:new-project",
    "weight": 8,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:spread:argument:new-package:babylonjs",
    "weight": 8,
-   "why": "8 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "8 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:function-project-in-closure",
    "weight": 8,
-   "why": "7 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "7 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/get-accessor:local-object:JsxSpreadAttribute",
    "weight": 7,
-   "why": "7 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "7 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read/component-body:member",
    "weight": 7,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/project-function-argument/called-in-bound-helper",
    "weight": 7,
-   "why": "7 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "7 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>component-prop>deep-chain/sibling-called:prop/array-binding:package",
    "weight": 7,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/object-uses-this",
    "weight": 7,
-   "why": "7 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "7 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/open-program-boundary/parameter-member-call/parameter-member-path-unresolved/lib-es-method",
    "weight": 7,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/exported-parameter-member-dispatch/function-declaration",
    "weight": 7,
-   "why": "7 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "7 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/forwarded:lib-dom-data-read",
    "weight": 7,
-   "why": "7 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "7 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/object-member:argument-of:project",
@@ -12675,47 +12675,47 @@
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/object-spread",
    "weight": 6,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/called-in-bound-helper",
    "weight": 6,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/called-in-project-callback",
    "weight": 6,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:exported-with-tag-callers:callers-pass-project-call-result",
    "weight": 6,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:exported-with-tag-callers:read-of-callback-parameter",
    "weight": 6,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/direct-read-callers-unenumerable/props-escape:exported-with-tag-callers:callers-pass-other",
    "weight": 6,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/unplaced-read/object-member:argument-of:project/called-in-kept-closure",
    "weight": 6,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/unplaced-read/object-member:argument-of:project/object-spread",
    "weight": 6,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/unplaced-read/project-function-argument/callee-destructured-binding",
    "weight": 6,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/dispatch-veto:test-file",
@@ -12730,12 +12730,12 @@
   {
    "cause": "SC2001/unplaced-write/component-prop>placed/sibling-called:prop/array-binding:package",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:placed/handed-to-solid:merge",
    "weight": 6,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/intrinsic-handler",
@@ -12745,92 +12745,92 @@
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:package/handed-to-solid:createStore",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:project/handed-to-callee-variable",
    "weight": 6,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:local-object/handed-to-package",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:object-member:factory-result/sibling-called/array-binding:package|package-callback",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:object-member:factory-result/sibling-called/object-binding:project+variable:package",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/instance-new-types-only",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-value/solid-primitive-result",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-body-not-entered/chained-instance-call",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-signature",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/callee-package:@solid-primitives/keyboard",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/forwarded:project-method",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-maybe-callable-read",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge/function-reference:declared-function",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-default-unresolved/callee-package:@solid-primitives/keyboard",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/destructured-parameter:plain",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/member-chain-in-closure",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:object:argument:function-project",
    "weight": 6,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/returned-callable-outside-source-universe/tuple-element-of-call-package",
    "weight": 6,
-   "why": "6 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop>deep-chain",
@@ -12840,192 +12840,192 @@
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/called-in-bound-helper",
    "weight": 5,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/callee-signature",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:exported-with-tag-callers:callers-pass-callback-parameter",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:not-in-component+spread-caller+exported",
    "weight": 5,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/direct-read-callers-unenumerable/props-escape:exported-with-tag-callers:callers-omit-prop",
    "weight": 5,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/unplaced-read/after-await:promise-continuation",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:deep-chain/sibling-called:prop/member-read",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>prop-unused/handed-to-solid:merge",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/component-not-a-function:solid-call",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/exported-reference:PropertyAccessExpression",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/handed-to-solid:onSettled",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/sibling-called/variable:package",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/unplaced-invocation:after-await",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>deep-chain|component-prop>prop-unused/handed-to-lib-es:keys",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:object-member:array-element",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-body-not-entered/call-result",
    "weight": 5,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-body-not-entered/let-binding",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-declaration-only",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/chained-instance-call",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/new-package-class",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-package/instance-new-types-only",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-path-unresolved/package-method",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/forwarded:project-maybe-callable-read",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:binding-package:@solid-primitives/utils-in-closure",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:binding-package:typegpu",
    "weight": 5,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:member-lib",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/callee-package:@solid-primitives/event-listener",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/no-use-read",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/rest-parameter",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/withheld-object-member/used-before-initialized+member-not-function-literal",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-returns-call-package",
    "weight": 5,
-   "why": "5 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:array-element:spread",
    "weight": 4,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:local-object:argument-of:project/nested-member",
    "weight": 4,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:options-thunk:project/object-array-element",
    "weight": 4,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/default-parameter/called-in-project-callback",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/handed-to-project",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read/component-body:package-callback",
    "weight": 4,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read/component-body:some-paths",
    "weight": 4,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>object-member:context-or-prop-value",
@@ -13040,192 +13040,192 @@
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:project/unplaced-invocation:object-member:factory-result",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:context-or-prop-value/assigned-to-variable",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:context-or-prop-value/sibling-called/unknown-origin",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/binding-written-or-exported",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/handed-to-lib-dom:addEventListener",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/handed-to-lib-es:assign",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/handed-to-solid:onCleanup",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/unmodeled:ArrayLiteralExpression",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:local-object/spread-onto-component",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/project-function-argument/parameter-written",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:component-prop>component-not-a-function",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/exported-function-callers/function:default-export:lazy-loaded",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-spread-unresolved/member-of:solid-call-result",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-spread-unresolved/object-literal",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/destructured-object-from-project-call",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-body-not-entered/instance-new",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/parameter",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-unresolved",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:new-project-class",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:parameter",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:std-member-unread-binary-expression",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/exported-parameter-member-dispatch/function-expression",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-path-unresolved/escaped-component:PropertyAccessExpression-reference",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/escaped-component:object-member-reference",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/escaped-component:spread-caller",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/forwarded:project-callable-read",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-call-argument-unproven/call-package",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-call-argument-unproven/dispatch-veto:event-target+helper",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-call-argument-unproven/JsxElement",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:function-package:relay-runtime-in-closure",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:function-package:solid-js",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/returned-callable-outside-source-universe/dispatch-veto:event-target+helper",
    "weight": 4,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/withheld-object-member/module-prefix-call+used-before-initialized+object-escapes+member-not-function-literal",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-package:pixi.js",
    "weight": 4,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-returns-call-project",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-returns-object-literal",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/parameter",
    "weight": 4,
-   "why": "4 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/get-accessor:argument-of:project/object-new-argument",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/package-callback",
@@ -13235,52 +13235,52 @@
   {
    "cause": "SC1001/callback-to-unproven-consumer/get-accessor:argument-of:project/object-new-argument",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/get-accessor:options-thunk:project/read-in-project-callback",
    "weight": 3,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/object-getter",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/rest-parameter",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read/component-body:project-callback",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/callback-to-unproven-consumer/handler-placed",
    "weight": 3,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/callback-to-unproven-consumer/object-member:argument-of:project/object-spread",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/callback-to-unproven-consumer/project-function-argument/called-in-async-closure",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/unplaced-read/component-prop>view:prop-unused",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/component-body:jsx-attribute:component",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/component-prop>forwarded:deep-chain",
@@ -13290,17 +13290,17 @@
   {
    "cause": "SC1001/unplaced-read/condition/component-body:jsx-attribute:intrinsic",
    "weight": 3,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1004/conditional-return/private:callers-in-callbacks",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>component-prop/sibling-called:prop/member-read",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:component-prop>deep-chain",
@@ -13310,7 +13310,7 @@
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:placed/walk-completes",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>view:package-callback",
@@ -13325,157 +13325,157 @@
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:project/assigned-to-variable",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:project/handed-to-callee-signature",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:project/sibling-called/variable:package",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:project/unplaced-invocation:after-await",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:context-or-prop-value/spread-onto-component",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/project-function-argument/unplaced-invocation:mixed",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>deep-chain|component-prop>forwarded:deep-chain/unplaced-invocation:component-prop>forwarded:placed|component-prop>forwarded:placed/walk-completes",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:object-member:argument-of:package/handed-to-package|package-callback",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:object-member:argument-of:project/handed-to-lib-dom:addEventListener",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/exported-function-callers/function:named-export:called-from-lazy-route",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/exported-function-callers/function:named-export:lazy-loaded",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-spread-unresolved/project-call-result:function",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-spread-unresolved/project-call-result:member",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-spread-unresolved/project-call-result:variable",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/unowned-primitive/package-primitive:called",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-body-not-entered/chained-instance-call",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-body-not-entered/instance-call",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/chained-instance-new-types-only",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-body-not-entered/let-binding",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-package/call-expression-types-only+new-package-class",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/exported-parameter-member-dispatch/class-constructor",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-default-unresolved/dispatch-veto:event-target+helper",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-default-unresolved/omitted:object-literal",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:function-package:rxjs",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/callee-project-without-body",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/spread-arguments:function-project",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:object:argument:member-package:typegpu",
    "weight": 3,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:member-of-parameter",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-member-member-of-call-project",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/binding",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/object-literal",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>after-await",
@@ -13500,7 +13500,7 @@
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>returned-from:getter",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>component-not-a-function",
@@ -13515,37 +13515,37 @@
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/destructured-parameter",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/object-destructured",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/sibling-called/array-binding:package",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/callee-destructured-binding",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/callee-signature",
    "weight": 2,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/default-parameter/called-in-kept-closure",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/parameter-unused",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/unresolved-callback",
@@ -13555,62 +13555,62 @@
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:exported-with-tag-callers:prop-unnamed",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:other:prop-unnamed",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:other:read-of-callback-parameter",
    "weight": 2,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:spread-caller+non-jsx-reference:object-member+exported",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read/component-body:after-await",
    "weight": 2,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read/component-body:component-prop",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read/component-body:read-unlocated",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read/package-callback:body",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read/package-callback:component-prop",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/callback-to-unproven-consumer/component-prop>object-member:array-element:bound",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/after-await:in-async-function",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/component-body:jsx-attribute:intrinsic",
    "weight": 2,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/condition/intrinsic-handler",
@@ -13620,27 +13620,27 @@
   {
    "cause": "SC1001/unplaced-read/get-accessor:exported-object",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/project-function-argument/callee-destructured-binding",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/project-function-argument/no-such-parameter",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-call/component-prop>after-await/sibling-called:prop/array-binding:package",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>component-prop/sibling-called:prop/array-binding:package",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>component-prop>component-not-a-function",
@@ -13650,7 +13650,7 @@
   {
    "cause": "SC2001/unplaced-write/component-prop>component-prop>deep-chain/unplaced-invocation:component-prop>prop-unused",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:listener-callback",
@@ -13660,7 +13660,7 @@
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:placed/unplaced-invocation:component-prop>forwarded:placed",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:PrefixUnaryExpression",
@@ -13675,7 +13675,7 @@
   {
    "cause": "SC2001/unplaced-write/component-prop>prop-unused/sibling-called:prop/array-binding:package",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>view+forwarded:view+forwarded:project-function-argument",
@@ -13685,37 +13685,37 @@
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:project/default-parameter/unplaced-invocation:object-member:argument-of:project",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:project/unmodeled:ArrayLiteralExpression",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/computed-member",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/no-invocation",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/sibling-called/array-binding:package+member-read",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/unplaced-invocation:object-member:argument-of:package",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/walk-completes",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:JsxSpreadAttribute",
@@ -13725,212 +13725,212 @@
   {
    "cause": "SC2001/unplaced-write/object-member:local-object/handed-to-lib-es:set",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:options-thunk:project",
    "weight": 2,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/other:ObjectLiteralExpression/unmodeled:ArrayLiteralExpression",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/project-function-argument/handed-to-callee-call-result",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/project-function-argument/handed-to-callee-variable",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/project-function-argument/handed-to-lib-dom:addEventListener",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/project-function-argument/unplaced-invocation:object-member:assigned",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/returned-closure/handed-to-package",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:component-prop>mixed",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>deep-chain|component-prop>prop-unused/handed-to-lib-es:keys|listener-callback",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>deep-chain|component-prop>view:placed/handed-to-solid:merge",
    "weight": 2,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:helper-call-chain|object-member:factory-result/unplaced-invocation:lib-dom-callback|object-member:factory-result/walk-completes",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:object-member:argument-of:project/default-parameter/handed-to-callee-signature|package-callback",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:object-member:argument-of:project/sibling-called/array-binding:package|project-function-argument/unplaced-invocation:mixed",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-spread-unresolved/member-of:parameter",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-spread-unresolved/project-call-result:destructured",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-spread-unresolved/solid-call-result",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-spread-unresolved/view-of-local",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/dependency-source-getter/dependency-source-getter/component-body",
    "weight": 2,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/element-access-callee",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-body-not-entered/chained-destructured",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-body-not-entered/chained-parameter",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-body-not-entered/other",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-getter",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/chained-let-binding",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/instance-call-project",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/instance-destructured",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/static-class",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-value/call-result-project",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:destructured-object-from-parameter-value",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-body-not-entered/call-result+new-project-class",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-declaration-only",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-package/static-value-types-only",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-signature+member-value/other",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-signature+member-value/solid-primitive-result+parameter",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/open-program-boundary/dependency-source-getter/dependency-source-getter/via-callers:mixed",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/open-program-boundary/parameter-member-call/parameter-member-target-unresolved/forwarded:project-method",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/open-program-boundary/parameter-member-call/parameter-member-target-unresolved/project-data-read",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-default-unresolved/omitted:call-project",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/callee-package:@solid-primitives/storage",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/escaped-component:PropertyAccessExpression-reference",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/forwarded:lib-es-data-read",
    "weight": 2,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/unresolved",
@@ -13940,87 +13940,87 @@
   {
    "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge/function-reference:caller-supplied",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/exported-parameter-member-dispatch/static-method",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-call-argument-unproven/parameter",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-default-unresolved/callee-package:@solid-primitives/rootless",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-default-unresolved/omitted:array-literal",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:binding-package:@solid-primitives/utils",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/callee-package:@solid-primitives/storage",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:object:argument:new-lib",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/returned-callable-outside-source-universe/bound-to-call-project",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/returned-callable-outside-source-universe/dispatch-veto:project-callback",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/withheld-object-member/dispatch-veto:event-target+helper",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/withheld-object-member/module-prefix-call+used-before-initialized+object-escapes",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/type-only-source/type-only-source/object-member:argument-of:project",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:factory-member-destructured-call-project",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/call-package",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-package:@solidjs/router",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop/called-in-bound-helper",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>component-prop>component-not-a-function",
@@ -14030,7 +14030,7 @@
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:deep-chain/forwarded>forwarded>forwarded>forwarded-to-component",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>forwarded:PrefixUnaryExpression",
@@ -14050,7 +14050,7 @@
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>package-callback:other-package",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>placed",
@@ -14060,7 +14060,7 @@
   {
    "cause": "SC1001/callback-to-unproven-consumer/component-prop>returned-from:project-callback",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/component-prop>placed",
@@ -14080,42 +14080,42 @@
   {
    "cause": "SC1001/callback-to-unproven-consumer/condition/project-function-argument/default-parameter/called-in-project-callback",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/get-accessor:argument-of:project/callee-call-result",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/get-accessor:argument-of:project/object-handed-to-project",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/get-accessor:argument-of:project/read-in-kept-closure",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/get-accessor:argument-of:project/sibling-called/function-declaration",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/get-accessor:local-object:argument-of:project",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/get-accessor:options-thunk:project/object-destructured",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/get-accessor:prop-value:project",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:package",
@@ -14125,47 +14125,47 @@
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/called-in-async-closure",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/called-in-body",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/default-parameter/called-in-async-closure",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/no-use",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/parameter-unused",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/sibling-called/function-declaration",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/sibling-called/member-read+object-binding:project",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/sibling-called/variable:project",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/stored:object-member",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:unresolved",
@@ -14180,7 +14180,7 @@
   {
    "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/handed-to-package",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/via-callers:package-callback",
@@ -14190,42 +14190,42 @@
   {
    "cause": "SC1001/direct-read-callers-unenumerable/condition/props-escape:exported-with-tag-callers:callers-pass-local-binding",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/condition/props-escape:exported-with-tag-callers:callers-pass-other",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:non-jsx-reference:PropertyAccessExpression+exported",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:not-in-component:anonymous",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:not-in-component+exported",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:not-in-component+non-jsx-reference:called+exported",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read-callers-unenumerable/props-escape:other:callers-pass-local-binding",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read/component-body:sync-callback",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/direct-read/other:JsxSelfClosingElement",
@@ -14235,62 +14235,62 @@
   {
    "cause": "SC1001/direct-read/package-callback:some-paths",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/callback-to-unproven-consumer/component-prop>forwarded:other:jsx-child",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/direct-read-callers-unenumerable/condition/props-escape:exported-with-tag-callers:callers-pass-other",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/unplaced-read/component-prop>component-prop>deep-chain",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/open-program-boundary/unplaced-read/condition/after-await",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/component-body:body",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/condition/component-body:jsx-attribute:handler",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/condition/project-function-argument/called-in-bound-helper",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/dispatch-veto-other:story/called-in-kept-closure",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/dispatch-veto-other:story/callee-destructured-binding",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/dispatch-veto-other:story/object-spread",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/get-accessor:options-thunk:package",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/lib-dom-callback",
@@ -14300,12 +14300,12 @@
   {
    "cause": "SC1001/unplaced-read/object-member:argument-of:project/object-handed-to-project",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/via-callers:component-body",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/via-callers:package-callback",
@@ -14315,32 +14315,32 @@
   {
    "cause": "SC1003/destructured-props/exported:parameter-pattern",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1003/destructured-props/private:callers-in-components",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1003/destructured-props/unnamed-function:parameter-pattern",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1004/conditional-return/private:callers-in-components",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/open-program-boundary/unplaced-write/via-callers:mixed:component-prop>component-prop>view:placed|component-prop>deep-chain|component-prop>placed/handler-placed",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>component-not-a-function/component-not-a-function:solid-call",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>component-prop>component-prop>component-not-a-function",
@@ -14390,22 +14390,22 @@
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:placed/sibling-called:prop/call-result+member-read+other:ConditionalExpression+variable:lib-es",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>forwarded:prop-unused/handed-to-solid:omit",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>listener-callback/handed-to-lib-dom:addEventListener",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>listener-callback/unplaced-invocation:listener-callback",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>package-component-prop",
@@ -14415,22 +14415,22 @@
   {
    "cause": "SC2001/unplaced-write/component-prop>placed/sibling-called:prop/object-binding:project",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>placed/walk-completes",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>prop-unused/handed-to-package",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>returned/element-spread",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/component-prop>view:object-member:context-or-prop-value",
@@ -14445,142 +14445,142 @@
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:project/default-parameter/sibling-called/absent",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:project/sibling-called:prop/array-binding:package+function-declaration+member-read",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:project/sibling-called/absent",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:argument-of:project/unmodeled:BinaryExpression",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/handed-to-package",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/intrinsic-attribute:not-event",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/sibling-called:prop/array-binding:package+member-read",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/sibling-called:prop/call-result+member-read+other:ConditionalExpression+variable:lib-es",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/sibling-called/accessor+member-read",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/sibling-called/array-binding:package+object-binding:other:Identifier",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/sibling-called/array-binding:package+spread",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/sibling-called/object-binding:project+variable:package",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/unmodeled:ExpressionStatement",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/unplaced-invocation:intrinsic-handler",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/unplaced-invocation:mixed",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/unplaced-invocation:object-member:argument-of:project",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/unplaced-invocation:object-member:factory-result",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/unplaced-invocation:other:intrinsic-attribute",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:factory-result/unplaced-invocation:package-callback",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:local-object/unmodeled:ArrayLiteralExpression",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/object-member:new-argument/constructed:lib-es",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/other:ObjectLiteralExpression/unmodeled:IfStatement",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/project-function-argument/default-parameter/unplaced-invocation:after-await",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/project-function-argument/handed-to-callee-destructured-binding",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/project-function-argument/handed-to-lib-es:add",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/returned-closure/handed-to-solid:createStore",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/returned-closure/intrinsic-attribute:not-event",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/returned-closure/unmodeled:ExpressionWithTypeArguments",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:component-prop>component-prop>placed",
@@ -14595,7 +14595,7 @@
   {
    "cause": "SC2001/unplaced-write/via-callers:component-prop>view:placed",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:component-prop>view+forwarded:view+forwarded:placed",
@@ -14605,172 +14605,172 @@
   {
    "cause": "SC2001/unplaced-write/via-callers:exported",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>component-prop>deep-chain/sibling-called:prop/array-binding:package|component-prop>view+forwarded:view+forwarded:placed/handed-to-solid:omit",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>component-prop>deep-chain/unplaced-invocation:component-prop>view:placed|component-prop>view:placed/handed-to-solid:omit",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>component-prop>deep-chain/unplaced-invocation:component-prop>view:placed|component-prop>view+forwarded:view+forwarded:placed/handed-to-solid:omit",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>component-prop>view:placed|component-prop>forwarded:deep-chain/handed-to-solid:omit",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>deep-chain|component-prop>forwarded:deep-chain/sibling-called:prop/member-read",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>deep-chain|component-prop>forwarded:deep-chain/unplaced-invocation:component-prop>forwarded:placed|component-prop>forwarded:placed/walk-completes|listener-callback",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>deep-chain|component-prop>forwarded:deep-chain/walk-completes|helper-call-chain|listener-callback|package-callback",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>deep-chain|component-prop>view+forwarded:view+forwarded:placed/handed-to-solid:omit",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>forwarded:deep-chain/handed-to-lib-es:bind|component-prop>placed/walk-completes",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>placed/walk-completes|listener-callback",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:component-prop>view:placed/exported-reference:component-prop|exported",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:lib-dom-callback|listener-callback|object-member:factory-result/sibling-called/object-binding:project+variable:package|project-function-argument/handed-to-lib-dom:addEventListener|returned-closure/handed-to-solid:createEffect",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:lib-dom-callback|object-member:JsxSpreadAttribute",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:listener-callback|object-member:factory-result/component-not-a-function:solid-call",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:listener-callback|object-member:factory-result/walk-completes",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:object-member:argument-of:lib-es|package-callback",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:object-member:argument-of:package/handed-to-package|object-member:factory-result/sibling-called/array-binding:package",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:object-member:argument-of:package/handed-to-package|other:array-element",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:object-member:factory-result/exported-reference:exported|project-function-argument/handed-to-callee-signature",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:object-member:factory-result/exported-reference:exported|project-function-argument/unplaced-invocation:mixed",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:object-member:factory-result/sibling-called/array-binding:package+object-binding:other:Identifier|object-member:factory-result/sibling-called/array-binding:package+object-binding:other:Identifier+object-binding:project|object-member:factory-result/sibling-called/unknown-origin|object-member:factory-result/unmodeled:ArrayLiteralExpression|object-member:factory-result/unplaced-invocation:after-await|object-member:factory-result/unplaced-invocation:object-member:argument-of:project",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:object-member:factory-result/sibling-called/array-binding:package+object-binding:other:Identifier|object-member:factory-result/sibling-called/array-binding:package+object-binding:other:Identifier+object-binding:project|object-member:factory-result/unmodeled:ArrayLiteralExpression",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:mixed:object-member:local-object/walk-completes|package-callback",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:object-member:factory-result/sibling-called/unknown-origin",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:object-member:factory-result/walk-completes",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-write/via-callers:project-function-argument/handed-to-callee-destructured-binding",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/exported-function-callers/function:export-list:lazy-loaded",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/unowned-primitive/dispatch-veto:event-target+helper",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/unowned-primitive/package-primitive:function:default-export:lazy-loaded",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/unowned-primitive/solid-primitive:called",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC5003/unrooted-read/root-present:non-jsx-reference:PropertyAccessExpression+exported",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC5003/unrooted-read/root-present:unnamed-function",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC7007/server-function-argument/server-function-rich-argument-unresolved/call-result-property",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9005/package-source-unavailable",
@@ -14780,492 +14780,492 @@
   {
    "cause": "SC9012/dependency-source-getter/dependency-source-getter/component-prop>component-prop>deep-chain",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/dependency-source-getter/dependency-source-getter/component-prop>listener-callback",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/dependency-source-getter/dependency-source-getter/object-member:argument-of:project",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/destructured-object-from-binding",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-body-not-entered/chained-call-result",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/chained-instance-call-project",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/instance-call-project-types-only",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/instance-call-types-only",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/member-package/other",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/unresolved",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:binding+member-body-not-entered/other+member-value/other+parameter+std-member-unread-call-result",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:binding+new-project-class",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:call-result+member-body-not-entered/chained-instance-call",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:call-result+member-body-not-entered/chained-instance-call+std-member-unread-binary-expression",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:call-result+member-body-not-entered/chained-this",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:call-result+member-body-not-entered/parameter+parameter",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:destructured-object-from-parameter-value+member-signature",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:destructured-object-in-parameter",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:destructured-object-in-parameter+function-package+member-body-not-entered/chained-destructured",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:destructured-object-in-parameter+member-body-not-entered/call-result+new-project-class",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:function-package+member-package/instance-call-project",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:function-package+member-package/instance-new+new-package-class",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-body-not-entered/call-result+member-body-not-entered/chained-instance-call+member-signature+member-unresolved+new-project-class",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-body-not-entered/call-result+member-body-not-entered/chained-this+member-body-not-entered/instance-call+new-project-class",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-body-not-entered/chained-other",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-body-not-entered/chained-other+member-body-not-entered/destructured+member-body-not-entered/other",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-body-not-entered/chained-this+member-package/chained-this-types-only+member-package/other-types-only+member-unresolved",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-body-not-entered/let-binding+member-package/chained-let-binding-types-only+member-package/instance-call-types-only+member-package/let-binding-types-only+member-package/static-value+member-package/static-value-types-only+new-project-class",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-body-not-entered/other",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-package/call-expression+member-package/let-binding",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-package/chained-instance-new-types-only+member-package/instance-new-types-only+new-package-class",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-package/chained-this-types-only+member-unresolved",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-package/instance-new+new-package-class",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-package/let-binding",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-signature+member-unresolved",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-signature+new-project-class",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-signature+new-project-class+parameter",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-signature+parameter",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:member-value/other+std-member-unread-call-result",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:new-unresolved-class",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:std-member-unread-awaited-binding+std-member-unread-call-result",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/leaf-callback-body/via:unresolved",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/open-program-boundary/dependency-source-getter/dependency-source-getter/via-callers:component-body",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/open-program-boundary/dependency-source-getter/dependency-source-getter/via-callers:other:jsx-child",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/open-program-boundary/parameter-member-call/parameter-member-target-unresolved/escaped-component:object-member-reference",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/open-program-boundary/parameter-member-call/parameter-member-target-unresolved/escaped-component:spread-caller",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/open-program-boundary/parameter-member-call/parameter-member-target-unresolved/forwarded:lib-es-data-read",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/open-program-boundary/parameter-member-call/parameter-member-targets-diverge/data-literal",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/open-program-boundary/parameter-member-call/parameter-member-targets-diverge/data-value",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/open-program-boundary/runtime-target-unselected/parameter-call-argument-unproven/parameter",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/package-callee/package-callee/member-of-let-binding",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/exported-parameter-member-dispatch/callback-argument:unresolved",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-default-unresolved/omitted:lib-binding",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-default-unresolved/omitted:object-literal",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-path-unresolved/dispatch-veto:story",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-path-unresolved/project-method",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/callee-unresolved",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/forwarded:lib-es-method",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/forwarded:package-method",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/forwarded:unresolved-data-read",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge/dispatch-veto:event-target+helper",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge/escaped-component:PropertyAccessExpression-reference",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-targets-diverge/non-literal-argument:call-project",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/primitive-value/primitive-value/PropertyAccessExpression",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/computed-call-target-unresolved/keyed-member",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/computed-call-target-unresolved/local-binding/intrinsic-handler",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-call-argument-unproven/destructured-call-package",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-call-argument-unproven/destructured-call-project",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-call-argument-unproven/escaped-component:PropertyAccessExpression-reference",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-call-argument-unproven/member-of-parameter",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-default-unresolved/dispatch-veto:project-callback",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-default-unresolved/omitted:function-declaration",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-default-unresolved/omitted:parameter",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/escaped-component:PropertyAccessExpression-reference",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:binding-package:@solidjs/signals",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:function-package:@types/node",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:new-package:@pierre/trees",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/argument:new-package:@tanstack/virtual-core",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/callee-package:@kobalte/utils",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/callee-package:@solid-primitives/transition-group",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/spread-arguments:member-lib",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:array:argument:member-lib",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:object:argument:parameter-project-in-closure",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/object-argument/wrapped:spread:argument:member-lib",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/withheld-object-member/member-not-function-literal",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/withheld-object-member/module-prefix-call+object-escapes",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/withheld-object-member/receiver-not-name",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/withheld-object-member/used-before-initialized+object-escapes",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/type-only-source/type-only-source/component-prop>TypeOfExpression",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/type-only-source/type-only-source/package-callback",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC4001/handler-unresolved/handler-member-unresolved/other-member:member-of-function-literal",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/member-of-parameter",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/no-use-read",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/NullKeyword",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:member-unresolved",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/destructured-parameter",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/runtime-target-unselected/parameter-use-unmodeled/typed-primitive-argument/argument:new-lib",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/member-of-call-package",
    "weight": 1,
-   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+   "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   }
  ]
 }

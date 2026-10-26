@@ -330,7 +330,7 @@ const c = X3;
     );
 }
 
-/// ADR 0398: SC9005 and SC9012 are obligations, so a comment naming one of them
+/// ADR 0440: SC9005 and SC9012 are obligations, so a comment naming one of them
 /// (by rule name, code, or a retired name or code) is accepted without a notice
 /// and removes nothing, whatever the comment's range.
 #[test]
@@ -420,7 +420,7 @@ fn the_upstream_name_list_is_pinned() {
     let distinct = dialect::UPSTREAM_RULE_NAMES.iter().collect::<BTreeSet<_>>();
     assert_eq!(distinct.len(), 35);
     // Every upstream name a checker rule carries resolves to it, or to its
-    // group; the one with a different claim has no alias (ADR 0390).
+    // group; the one with a different claim has no alias (ADR 0432).
     let v2 = dialect::default_dialect();
     for (upstream, resolves) in [
         ("components-return-once", true),

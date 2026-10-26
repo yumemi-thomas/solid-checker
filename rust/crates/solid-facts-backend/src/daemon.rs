@@ -60,7 +60,7 @@ struct CheckRequest {
     presets: Vec<String>,
     #[serde(default)]
     enable_rules: Vec<String>,
-    /// Rule ids the host applies `eslint-disable` comments for (ADR 0387).
+    /// Rule ids the host applies `eslint-disable` comments for (ADR 0429).
     #[serde(default)]
     host_suppressions: Vec<String>,
     #[serde(default)]
@@ -1659,7 +1659,7 @@ fn input_files(
         };
         files.push((path.clone(), hash));
     }
-    // ADR 0193, 0402: the default program boundary reads the nearest
+    // ADR 0193, 0444: the default program boundary reads the nearest
     // manifest and, for an application, its workspaces' declarations, member
     // listings and member manifests. One digest of all of them is an input,
     // so a sibling that starts depending on the project reopens it.

@@ -1,7 +1,7 @@
 // kui kernel Select.tsx:205 (and the kernel's exported hooks and helpers):
 // the package is a workspace member a sibling depends on (frontend/package.json
 // workspaces; feature-* depend on @kui/kernel), so its program is open
-// (ADR 0402) and no exported symbol's callers can be enumerated.
+// (ADR 0444) and no exported symbol's callers can be enumerated.
 import { createContext, createSignal, onCleanup, useContext, For, Show } from "solid-js";
 
 const DensityContext = createContext<{ compact: boolean }>({ compact: false });

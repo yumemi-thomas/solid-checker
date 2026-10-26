@@ -84,18 +84,18 @@ pub(super) struct InvocationFlow<'a, 'l, 'c> {
     /// the call (which `createRoot` and `runWithOwner` pass through from
     /// their caller although they supply an owner).
     pub(super) owner_mode: bool,
-    /// The owner question's other census (ADR 0396): the entries that count
+    /// The owner question's other census (ADR 0438): the entries that count
     /// are the function literals a reviewed test runner invokes (a
     /// registration's callback, [`SemanticLookup::test_runner_callback`]),
     /// not an event delivery. Meaningful only with `owner_mode`.
     pub(super) test_entries: bool,
-    /// ADR 0400: the write question. A call's role is the write classifier's
+    /// ADR 0442: the write question. A call's role is the write classifier's
     /// role at the call under this guard, and the join keeps an owned entry
     /// as the answer (ADR 0378). Never combined with `owner_mode`.
     pub(super) write_root_body: Option<RootBodyGuard>,
     /// The modules this walk read (a holder, a callee, a caller, a rendered
     /// component): an answer that read another module than the literal's own
-    /// depends on that module's contents (ADR 0400's digest binding).
+    /// depends on that module's contents (ADR 0442's digest binding).
     pub(super) touched: HashSet<&'a str>,
 }
 
@@ -211,7 +211,7 @@ thread_local! {
 /// The key of a write-flow answer: the literal and the guard of the write.
 pub(crate) type WriteFlowKey = (String, Span, RootBodyGuard);
 
-/// ADR 0400: the write-flow answer of every function a closed program hands
+/// ADR 0442: the write-flow answer of every function a closed program hands
 /// to project code (a component prop value, an argument of a call that is no
 /// primitive, a named function), per guard, computed once per build. Only a
 /// proven role is kept, with whether the walk read another module than the
@@ -315,7 +315,7 @@ fn named_function_handed_on(
 }
 
 /// The one role every invocation of `literal` runs in, for a write in it
-/// (ADR 0400): followed forward as ADR 0319 follows a value, each call's role
+/// (ADR 0442): followed forward as ADR 0319 follows a value, each call's role
 /// the write classifier's at the call. An invocation in an owned scope makes
 /// the answer that role, as ADR 0378's entries rule has it; every other
 /// invocation must be one proven role, and any census gap or unplaced
@@ -361,7 +361,7 @@ fn literal_write_flow_role(
     Some((role, across_modules))
 }
 
-/// ADR 0400: the role the invocations of `span`'s function (or of a function
+/// ADR 0442: the role the invocations of `span`'s function (or of a function
 /// around it that runs `span` in place) give a write there, from the per-build
 /// table. `None` while the table is computed, in an open program, and for a
 /// function the walk proves nothing about.

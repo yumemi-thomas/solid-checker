@@ -1,6 +1,6 @@
 # owned-write-option
 
-ADR 0382: a setter's source may opt out of the owned-scope write guard with `ownedWrite: true`, and only an exact options literal proves the key's value.
+ADR 0424: a setter's source may opt out of the owned-scope write guard with `ownedWrite: true`, and only an exact options literal proves the key's value.
 
 - `plain`, `named` and `off` (`ownedWrite: false`): literal options without a true key keep the SC2001 violation in the memo compute.
 - `on` (`ownedWrite: true`): the guard exempts the write (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:5622`), no finding.

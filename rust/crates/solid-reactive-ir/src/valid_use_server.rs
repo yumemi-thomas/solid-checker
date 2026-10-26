@@ -1,5 +1,5 @@
 //! SC7006 `valid-use-server`: where the `"use server"` directive takes effect
-//! and what a module-level directive file may export or call (ADR 0385).
+//! and what a module-level directive file may export or call (ADR 0427).
 //!
 //! # Premises
 //!

@@ -1,6 +1,6 @@
 # test-runner-vitest4
 
-Claim (ADR 0396): vitest 4 declares `describe`, `it`, `test`, `suite` and the hooks in `@vitest/runner` and re-exports them from `vitest`, so the registration's declaration lies in `node_modules/@vitest/runner`, a reviewed runner location. A dispatch written in an async `it` callback, after an await, is excluded from the veto as in `test-runner-vitest` (this project: the handler's effect creation is the one violation).
+Claim (ADR 0438): vitest 4 declares `describe`, `it`, `test`, `suite` and the hooks in `@vitest/runner` and re-exports them from `vitest`, so the registration's declaration lies in `node_modules/@vitest/runner`, a reviewed runner location. A dispatch written in an async `it` callback, after an await, is excluded from the veto as in `test-runner-vitest` (this project: the handler's effect creation is the one violation).
 
 Published bytes (the rc.17 corpus's solid-groove installs them; copied unchanged, only the declaration files `vitest`'s types need):
 

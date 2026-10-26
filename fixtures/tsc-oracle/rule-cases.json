@@ -322,7 +322,7 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
-      "why": "ADR 0401: a read in a `mapArray` map function. TypeScript has nothing to say about it (the call is well typed against the published rc.17 `map.d.ts` signature); rc.17 runs the mapper under `runWithOwner`, so the read is untracked and, without `name`, unwarned. The claim is the runtime's, not a type's.",
+      "why": "ADR 0443: a read in a `mapArray` map function. TypeScript has nothing to say about it (the call is well typed against the published rc.17 `map.d.ts` signature); rc.17 runs the mapper under `runWithOwner`, so the read is untracked and, without `name`, unwarned. The claim is the runtime's, not a type's.",
       "code": "import { createSignal, mapArray } from \"solid-js\";\nconst [list] = createSignal([1, 2]);\nconst [tag] = createSignal(\"a\");\nexport function Rows() {\n  const rows = mapArray(list, (item) => `${item}${tag()}`);\n  return <div>{rows()}</div>;\n}\n"
     },
     {
@@ -330,7 +330,7 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
-      "why": "ADR 0401: a read in a context provider's `value`. `<Ctx value={count()}>` type-checks against `createContext`'s `Context<T>` (a `FlowComponent` taking `value: T`); the provider reads `value` once and stores the snapshot, so a later write never reaches a child. The claim is the provider's runtime behavior, which no type expresses.",
+      "why": "ADR 0443: a read in a context provider's `value`. `<Ctx value={count()}>` type-checks against `createContext`'s `Context<T>` (a `FlowComponent` taking `value: T`); the provider reads `value` once and stores the snapshot, so a later write never reaches a child. The claim is the provider's runtime behavior, which no type expresses.",
       "code": "import { createContext, createSignal } from \"solid-js\";\nconst Theme = createContext<number>();\nconst [count] = createSignal(1);\nexport function Provided() {\n  return <Theme value={count()}><span /></Theme>;\n}\n"
     },
     {
@@ -338,7 +338,7 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
-      "why": "ADR 0401: a read in a `runWithOwner` callback inside a memo compute. `runWithOwner<T>(owner: Owner | null, fn: () => T): T` accepts it; at run time it sets `tracking = false` around `fn`, so the compute subscribes to nothing and the read is stale with no dev warning. The claim is the runtime's.",
+      "why": "ADR 0443: a read in a `runWithOwner` callback inside a memo compute. `runWithOwner<T>(owner: Owner | null, fn: () => T): T` accepts it; at run time it sets `tracking = false` around `fn`, so the compute subscribes to nothing and the read is stale with no dev warning. The claim is the runtime's.",
       "code": "import { createMemo, createSignal, getOwner, runWithOwner } from \"solid-js\";\nconst [signal] = createSignal(0);\nexport function Derived() {\n  const owner = getOwner();\n  const value = createMemo(() => runWithOwner(owner, () => signal()));\n  return <span>{value()}</span>;\n}\n"
     },
     {
@@ -1056,7 +1056,7 @@
       "expect": "silent",
       "checker": "reports",
       "checkerKind": "violation",
-      "why": "ADR 0399: `attr:data-z` is a removed 1.x form the pinned compiler refuses, and TypeScript accepts it: a name that contains a hyphen is exempt from the excess-property check, so the refusal is not `tsc`'s claim and the checker reports it as an error. The pinned rc.17 compiler errors on every removed 1.x attribute form on a native element (`packages/compiler/src/shared/removed.rs:19-52`, solidjs/solid #4199), whatever the options.",
+      "why": "ADR 0441: `attr:data-z` is a removed 1.x form the pinned compiler refuses, and TypeScript accepts it: a name that contains a hyphen is exempt from the excess-property check, so the refusal is not `tsc`'s claim and the checker reports it as an error. The pinned rc.17 compiler errors on every removed 1.x attribute form on a native element (`packages/compiler/src/shared/removed.rs:19-52`, solidjs/solid #4199), whatever the options.",
       "code": "export const Case = () => <p attr:data-z=\"1\">x</p>;\n"
     },
     {
@@ -1065,7 +1065,7 @@
       "expect": "silent",
       "checker": "reports",
       "checkerKind": "violation",
-      "why": "ADR 0399: `on:custom-event` has a hyphen, so TypeScript is silent where the compiler refuses the removed `on:` namespace; the hyphen is what keeps the claim off `tsc`'s subject, whichever removed namespace it is written in. The pinned rc.17 compiler errors on every removed 1.x attribute form on a native element (`packages/compiler/src/shared/removed.rs:19-52`, solidjs/solid #4199), whatever the options.",
+      "why": "ADR 0441: `on:custom-event` has a hyphen, so TypeScript is silent where the compiler refuses the removed `on:` namespace; the hyphen is what keeps the claim off `tsc`'s subject, whichever removed namespace it is written in. The pinned rc.17 compiler errors on every removed 1.x attribute form on a native element (`packages/compiler/src/shared/removed.rs:19-52`, solidjs/solid #4199), whatever the options.",
       "code": "export const Case = () => <button on:custom-event={() => {}}>x</button>;\n"
     },
     {
@@ -1077,7 +1077,7 @@
       "allow": [
         2322
       ],
-      "why": "ADR 0399: `attr:title` has no hyphen, so TypeScript reports the excess property (TS2322) on the same attribute. The checker's finding is a different, weaker claim, ADR 0360's notice that the file has no compiler facts and nothing in it is proven; it is not a violation, and it is not user-facing as one. The pinned rc.17 compiler errors on every removed 1.x attribute form on a native element (`packages/compiler/src/shared/removed.rs:19-52`, solidjs/solid #4199), whatever the options.",
+      "why": "ADR 0441: `attr:title` has no hyphen, so TypeScript reports the excess property (TS2322) on the same attribute. The checker's finding is a different, weaker claim, ADR 0360's notice that the file has no compiler facts and nothing in it is proven; it is not a violation, and it is not user-facing as one. The pinned rc.17 compiler errors on every removed 1.x attribute form on a native element (`packages/compiler/src/shared/removed.rs:19-52`, solidjs/solid #4199), whatever the options.",
       "code": "export const Case = () => <p attr:title=\"1\">x</p>;\n"
     },
     {
@@ -1089,7 +1089,7 @@
       "allow": [
         2322
       ],
-      "why": "ADR 0399: `classList` is a removed 1.x prop, and the rc.17 typings declare no such property, so TypeScript reports TS2322 on it. The checker keeps only the ADR 0360 notice that the file has no compiler facts, never the refusal as a violation. The pinned rc.17 compiler errors on every removed 1.x attribute form on a native element (`packages/compiler/src/shared/removed.rs:19-52`, solidjs/solid #4199), whatever the options.",
+      "why": "ADR 0441: `classList` is a removed 1.x prop, and the rc.17 typings declare no such property, so TypeScript reports TS2322 on it. The checker keeps only the ADR 0360 notice that the file has no compiler facts, never the refusal as a violation. The pinned rc.17 compiler errors on every removed 1.x attribute form on a native element (`packages/compiler/src/shared/removed.rs:19-52`, solidjs/solid #4199), whatever the options.",
       "code": "export const Case = () => <p classList={{ a: true }}>x</p>;\n"
     },
     {
@@ -1098,7 +1098,7 @@
       "expect": "silent",
       "checker": "reports",
       "checkerKind": "uncertifiable",
-      "why": "ADR 0387: a comment is not part of the typed program, so TypeScript has no opinion on which rule names an `eslint-disable` comment carries; the checker's SC9016 notice says only that `solid-checker/strict-read-untrackd` names no rule of this checker and so suppresses nothing.",
+      "why": "ADR 0429: a comment is not part of the typed program, so TypeScript has no opinion on which rule names an `eslint-disable` comment carries; the checker's SC9016 notice says only that `solid-checker/strict-read-untrackd` names no rule of this checker and so suppresses nothing.",
       "code": "// eslint-disable-next-line solid-checker/strict-read-untrackd\nexport const answer = 42;\n"
     },
     {
@@ -1108,7 +1108,7 @@
       "expect": "silent",
       "checker": "reports",
       "checkerCount": 9,
-      "why": "SC2003's in-place array arm (ADR 0383). All nine `Array.prototype` mutators on a store path type-check on the audited rc.17 (`Store<T> = T`, and a nested array is mutable on every release), while the proxy's `set` trap returns without storing outside a setter (rc.17 `dist/dev.js:5691-5700`; probed: every mutator dropped, STORE_WRITE_OUTSIDE_SETTER warned). The call must resolve to the standard library's `Array` method: the project fixture `store-mutators` pins the silent spellings.",
+      "why": "SC2003's in-place array arm (ADR 0425). All nine `Array.prototype` mutators on a store path type-check on the audited rc.17 (`Store<T> = T`, and a nested array is mutable on every release), while the proxy's `set` trap returns without storing outside a setter (rc.17 `dist/dev.js:5691-5700`; probed: every mutator dropped, STORE_WRITE_OUTSIDE_SETTER warned). The call must resolve to the standard library's `Array` method: the project fixture `store-mutators` pins the silent spellings.",
       "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ items: [3, 1, 2] });\nexport function Mutators() {\n  store.items.push(1);\n  store.items.pop();\n  store.items.shift();\n  store.items.unshift(0);\n  store.items.splice(0, 1);\n  store.items.sort();\n  store.items.reverse();\n  store.items.fill(7);\n  store.items.copyWithin(0, 1);\n}\n"
     },
     {
@@ -1118,7 +1118,7 @@
       "expect": "silent",
       "checker": "reports",
       "checkerCount": 2,
-      "why": "SC2003's projection arm (ADR 0383). A `createProjection` result is a derived store: an assignment or an in-place mutator through it outside its compute function type-checks (`Store<T> = T`) and is dropped (rc.17 `dist/dev.js:5691-5700`; probed). The finding names the projection, not a setter.",
+      "why": "SC2003's projection arm (ADR 0425). A `createProjection` result is a derived store: an assignment or an in-place mutator through it outside its compute function type-checks (`Store<T> = T`) and is dropped (rc.17 `dist/dev.js:5691-5700`; probed). The finding names the projection, not a setter.",
       "code": "import { createProjection } from \"solid-js\";\nconst selected = createProjection<{ list: number[]; other?: boolean }>((draft) => {\n  draft.other = true;\n}, { list: [] });\nexport function Outside() {\n  selected.other = true;\n  selected.list.push(1);\n}\n"
     },
     {
@@ -1142,7 +1142,7 @@
         2356,
         2365
       ],
-      "why": "SC2003's accessor-binding arm (`count = 2` on a signal accessor), removed by ADR 0383. On the audited rc.17 typings a `const` binding is TS2588 (\"Cannot assign to 'count' because it is a constant\"), and a `let` binding of `SourceAccessor<number>` assigned a number is TS2322, a function is TS2322 (the `$REFRESH` brand), `count++` is TS2356 and `count += 1` is TS2365; a memo accessor is TS2322/TS2588 the same way. What type-checks is a deliberate rebinding with another accessor or a store root assigned an object of its type, or a cast; none is a dropped write, so the arm was deleted, not demoted (fixture `accessor-rebinding`).",
+      "why": "SC2003's accessor-binding arm (`count = 2` on a signal accessor), removed by ADR 0425. On the audited rc.17 typings a `const` binding is TS2588 (\"Cannot assign to 'count' because it is a constant\"), and a `let` binding of `SourceAccessor<number>` assigned a number is TS2322, a function is TS2322 (the `$REFRESH` brand), `count++` is TS2356 and `count += 1` is TS2365; a memo accessor is TS2322/TS2588 the same way. What type-checks is a deliberate rebinding with another accessor or a store root assigned an object of its type, or a cast; none is a dropped write, so the arm was deleted, not demoted (fixture `accessor-rebinding`).",
       "code": "import { createSignal, createMemo } from \"solid-js\";\nconst [fixed] = createSignal(0);\nfixed = 2;\nlet [count] = createSignal(0);\nlet [bumped] = createSignal(0);\nlet [added] = createSignal(0);\nlet [fn] = createSignal(0);\nlet memo = createMemo(() => 1);\ncount = 2;\nbumped++;\nadded += 1;\nfn = () => 5;\nmemo = 3;\nexport { fixed, count, bumped, added, fn, memo };\n"
     },
     {
@@ -1167,7 +1167,7 @@
       "allow": [
         2790
       ],
-      "why": "Upstream's `delete store.path` shape, not adopted (ADR 0381, 0383). The proxy drops it outside a setter (rc.17 `deleteProperty` trap `dist/dev.js:5761-5767`; probed), but for a required property under strictNullChecks `tsc` reports TS2790 (\"The operand of a 'delete' operator must be optional\"), so the write is TypeScript's. The property whose type includes `undefined` (`nick` below, or an optional one) type-checks, and no Type Fact says that at a delete operand, so the checker stays silent on both (docs/open-work.md). Not strict-only in the checker's favour: a non-strict project is silent in `tsc` too, and the checker's silence there is the fail-closed default.",
+      "why": "Upstream's `delete store.path` shape, not adopted (ADR 0381, 0425). The proxy drops it outside a setter (rc.17 `deleteProperty` trap `dist/dev.js:5761-5767`; probed), but for a required property under strictNullChecks `tsc` reports TS2790 (\"The operand of a 'delete' operator must be optional\"), so the write is TypeScript's. The property whose type includes `undefined` (`nick` below, or an optional one) type-checks, and no Type Fact says that at a delete operand, so the checker stays silent on both (docs/open-work.md). Not strict-only in the checker's favour: a non-strict project is silent in `tsc` too, and the checker's silence there is the fail-closed default.",
       "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ req: { id: 1 }, user: { nick: undefined as string | undefined } });\nexport function Remove() {\n  delete store.req.id;\n  delete store.user.nick;\n}\n"
     },
     {
@@ -1177,7 +1177,7 @@
       "expect": "silent",
       "checker": "reports",
       "checkerCount": 5,
-      "why": "SC7006's placement arm (ADR 0385), each shape one TypeScript accepts without comment: a `\"use server\"` string statement after another statement or in a block, a template literal, and a directive in an object method or class method. The audited compiler (`@solidjs/compiler@2.0.0-rc.17`) reads a directive only from the prologue and extracts only functions, function expressions and block-bodied arrows, so it leaves these on the client (or rejects the method forms, `validate.rs`); no type says so. The project fixtures `valid-use-server-placement` and the ownership cases pin the silent spellings.",
+      "why": "SC7006's placement arm (ADR 0427), each shape one TypeScript accepts without comment: a `\"use server\"` string statement after another statement or in a block, a template literal, and a directive in an object method or class method. The audited compiler (`@solidjs/compiler@2.0.0-rc.17`) reads a directive only from the prologue and extracts only functions, function expressions and block-bodied arrows, so it leaves these on the client (or rejects the method forms, `validate.rs`); no type says so. The project fixtures `valid-use-server-placement` and the ownership cases pin the silent spellings.",
       "code": "export async function afterStatement(id: string) {\n  const table = \"users\";\n  \"use server\";\n  return [table, id];\n}\nexport async function inBlock(id: string) {\n  if (id) {\n    \"use server\";\n    return id;\n  }\n  return \"\";\n}\nexport async function template(id: string) {\n  `use server`;\n  return id;\n}\nexport const api = {\n  async load(id: string) {\n    \"use server\";\n    return id;\n  },\n};\nexport class Api {\n  async load(id: string) {\n    \"use server\";\n    return id;\n  }\n}\n"
     },
     {
@@ -1187,7 +1187,7 @@
       "expect": "silent",
       "checker": "reports",
       "checkerCount": 3,
-      "why": "SC7006's module-level arm (ADR 0385): under a module-level directive a module-scope call to a client-side declaration wrapper never runs on the client (`GET` here, imported from the real `@solidjs/web/server-functions`), a literal export makes `registerServerReference` throw at server boot (rc.17 `server-functions/dist/server.js:1567-1571`), and a re-export is a compiler error. TypeScript types all three without comment; a wrapped server-side export (`withValidation(schema, fn)`) is not a defect and is not here.",
+      "why": "SC7006's module-level arm (ADR 0427): under a module-level directive a module-scope call to a client-side declaration wrapper never runs on the client (`GET` here, imported from the real `@solidjs/web/server-functions`), a literal export makes `registerServerReference` throw at server boot (rc.17 `server-functions/dist/server.js:1567-1571`), and a re-export is a compiler error. TypeScript types all three without comment; a wrapped server-side export (`withValidation(schema, fn)`) is not a defect and is not here.",
       "code": "\"use server\";\nimport { GET } from \"@solidjs/web/server-functions\";\nexport const getUser = GET(async (id: string) => ({ id }));\nexport const LIMIT = 10;\nexport { createSignal } from \"solid-js\";\nexport async function ok() {\n  return 1;\n}\n"
     }
   ]

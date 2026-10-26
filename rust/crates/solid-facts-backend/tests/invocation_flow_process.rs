@@ -1525,7 +1525,7 @@ fn write_kind(
         .map_or_else(|| "clean".to_owned(), |finding| finding.kind.to_string())
 }
 
-/// ADR 0400: a write in a function handed to project code takes the role of the
+/// ADR 0442: a write in a function handed to project code takes the role of the
 /// callee's invocations of it, which another file decides. Runs the edits on
 /// one retained session and checks each generation against a cold build, for
 /// a closed and an open program alike (the answer needs no closed program for

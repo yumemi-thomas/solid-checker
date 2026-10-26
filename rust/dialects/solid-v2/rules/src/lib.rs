@@ -52,7 +52,7 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
 const STRICT_READ_UNTRACKED_WARNS: &str = "Solid warns STRICT_READ_UNTRACKED here in dev.";
 const STRICT_READ_UNTRACKED_MAY_WARN: &str = "If this read executes untracked in dev, Solid warns STRICT_READ_UNTRACKED for it; this finding does not establish that it does, so confirm the read's actual execution and tracking status before relying on that warning.";
 
-/// ADR 0401: the read is untracked in no strict-read window (a `mapArray` or
+/// ADR 0443: the read is untracked in no strict-read window (a `mapArray` or
 /// `repeat` map function, a `runWithOwner` callback inside a tracked
 /// computation), so no warning is promised, and none is denied: a map function
 /// opens a window when the call passes `name`.
@@ -675,7 +675,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectFamily::ComponentReturnsConditionally => Rule::ComponentReturnsConditionally,
         StaticDefectFamily::PackageBehaviorUnavailable => Rule::PackageBehaviorUnavailable,
         StaticDefectFamily::MissingEffectFunction => Rule::MissingEffectFunction,
-        // ADR 0398: the source handed to a package callee is SC9012's
+        // ADR 0440: the source handed to a package callee is SC9012's
         // `package-callee` context, not an identity of its own.
         StaticDefectFamily::ReactiveSourceUncaptured => Rule::ReactiveDispatchUnresolved,
         StaticDefectFamily::ReactiveDispatchUnresolved => Rule::ReactiveDispatchUnresolved,

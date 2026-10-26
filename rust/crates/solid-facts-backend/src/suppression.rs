@@ -1,10 +1,10 @@
-//! Suppression comments (ADR 0387): which findings an `eslint-disable` or
+//! Suppression comments (ADR 0429): which findings an `eslint-disable` or
 //! `solid-checker-disable` comment removes, and the notice for a name that
 //! resolves to nothing.
 //!
 //! solid-facts records only the syntax of a comment (label, names, position).
 //! What a name denotes is decided here, through the dialect catalog, the
-//! former-name table and the group table (ADR 0386), because those are the
+//! former-name table and the group table (ADR 0428), because those are the
 //! backend's. The matching rules are ESLint's (`apply-disable-directives.js`),
 //! so a comment means the same to the checker as to ESLint.
 //!
@@ -28,7 +28,7 @@ use crate::dialect::{self, Dialect};
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum Matcher {
     Rule(String),
-    /// A former name that covered one code of a merged rule (ADR 0384).
+    /// A former name that covered one code of a merged rule (ADR 0426).
     RuleCode {
         rule: String,
         code: String,
@@ -134,7 +134,7 @@ fn checker_name(dialect: &Dialect, name: &str, codes: bool) -> Resolution {
     }
     if codes && (dialect.has_code)(name) {
         // An obligation's code (SC9005, SC9012) resolves, and reaches nothing:
-        // its results are never site violations (ADR 0398).
+        // its results are never site violations (ADR 0440).
         return Resolution::Matchers(vec![Matcher::Code(name.to_owned())]);
     }
     if codes && dialect::retired_code(name) {
@@ -142,7 +142,7 @@ fn checker_name(dialect: &Dialect, name: &str, codes: bool) -> Resolution {
     }
     // A former or retired name is a known identity with nothing left to
     // suppress: a retired rule cannot fire, and a merged one is deliberately
-    // not carried over (ADR 0384).
+    // not carried over (ADR 0426).
     if dialect::rule_alias(name).is_some() || dialect::retired_rule(name).is_some() {
         return Resolution::Inert;
     }

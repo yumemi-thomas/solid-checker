@@ -946,7 +946,7 @@ impl LocalAccessContext<'_, '_> {
                         self.symbol_names,
                         self.lookup,
                     ) {
-                        // ADR 0401: `runWithOwner` clears tracking in a window
+                        // ADR 0443: `runWithOwner` clears tracking in a window
                         // the tracked call does not have.
                         ExecutionRole::TrackedJsx
                             if dialect

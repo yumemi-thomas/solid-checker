@@ -700,7 +700,7 @@ fn the_fresh_stack_list_only_refines_a_standard_deferral() {
     }
 }
 
-/// ADR 0396: a registration function counts only when its declaration lies in
+/// ADR 0438: a registration function counts only when its declaration lies in
 /// an installed reviewed runner package under a registration function's name;
 /// a project path, a runner-looking directory without `node_modules`, and a
 /// helper declared in a runner's file are not one.
@@ -752,7 +752,7 @@ fn a_test_runner_registration_is_a_reviewed_package_declaration() {
     assert!(test_runner_suite_modifier("describe") && !test_runner_suite_modifier("serial"));
 }
 
-/// ADR 0396: each runner's suite-body answer is its own, read on its bytes:
+/// ADR 0438: each runner's suite-body answer is its own, read on its bytes:
 /// vitest collects the body after the file loads, jest-circus, mocha,
 /// `node:test` and playwright call it inside the registration, and `bun:test`
 /// shows no readable bytes.

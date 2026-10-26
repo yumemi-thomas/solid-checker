@@ -1024,7 +1024,7 @@ pub struct EntityFact {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub library_types: Option<Arc<Vec<Arc<str>>>>,
     /// Every property name the type at this span declares, sorted and
-    /// deduplicated (ADR 0394). Present only when the checker proves the set is
+    /// deduplicated (ADR 0436). Present only when the checker proves the set is
     /// complete: each value-carrying constituent is an object type with no
     /// index signature and a fully resolved property list. Absence is the
     /// absence of that proof (not demanded, `any`, an open or generic type, an

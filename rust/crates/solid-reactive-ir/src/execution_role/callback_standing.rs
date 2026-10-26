@@ -779,7 +779,7 @@ pub(super) fn returned_factory_callback_execution_role(
                 factory_call.arguments.len(),
             );
             // A map function runs untracked wherever the returned accessor is
-            // read (ADR 0401), so that use cannot place it.
+            // read (ADR 0443), so that use cannot place it.
             if !semantics.requires_return_invocation
                 || semantics.execution != Some(Execution::Inline)
                 || lookup
@@ -903,7 +903,7 @@ pub(super) fn returned_callback_execution_role(
 
 /// Whether `span` is evaluated as the `value` getter of a resolved context
 /// provider: Solid 1.x's `createContext().Provider`, or Solid 2.0's context
-/// element itself (`<Ctx value={…}>`, ADR 0401).
+/// element itself (`<Ctx value={…}>`, ADR 0443).
 ///
 /// Both halves are semantic proof: the JSX tag (1.x: its member object)
 /// resolves to the binding initialized by the exact Solid `createContext`
@@ -967,7 +967,7 @@ pub(super) fn context_provider_value_role(
     if stores_function && provider_member.is_none() {
         // Solid 2.0: a function stored in the snapshot runs whenever its
         // consumer calls it, so no fact places it. The role stays unproven,
-        // as it was before ADR 0401 (an internal uncertifiable result), and
+        // as it was before ADR 0443 (an internal uncertifiable result), and
         // only a read written directly in `value` is placed.
         return None;
     }

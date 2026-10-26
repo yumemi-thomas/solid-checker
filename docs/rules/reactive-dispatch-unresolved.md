@@ -2,7 +2,7 @@
 
 `SC9012` · **obligation** · uncertifiable · not configurable
 
-An **obligation**, not a rule ([ADR 0398](../decisions.md#adr-0398)): an
+An **obligation**, not a rule ([ADR 0440](../decisions.md#adr-0440)): an
 internal uncertifiable result ([ADR 0328](../decisions.md#adr-0328)), never a
 proven violation. The human formats and ESLint do not show it and `--certify`
 ignores it; `--format json` and `--internal` keep it and the `uncertifiable`
@@ -163,7 +163,7 @@ reports SC9012 instead of silently choosing a candidate or dropping the call.
 No runtime defect is proven here. The finding is internal, so it does not fail
 `--certify` for a user; with `--internal` every uncertifiable result does.
 
-### Context `package-callee` (SC9011 before ADR 0398)
+### Context `package-callee` (SC9011 before ADR 0440)
 
 A reactive source (a signal accessor, a derived function) is passed, as a bare
 reference, to a function **imported from a package** whose reactive behavior no
@@ -200,7 +200,7 @@ functions and arrows, imports resolved by path or alias, a method of an exact
 a parameter, a destructured hook or a call result, a member of a field,
 parameter or element access, an inherited or twice-declared method, a project
 constructor, a reassigned `let` function and a synchronous DOM dispatcher
-(`focus()`, `showModal()`), optional or not (ADR 0397).
+(`focus()`, `showModal()`), optional or not (ADR 0439).
 
 ## How it is proven
 

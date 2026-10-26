@@ -21,43 +21,43 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const FILE_BUDGETS = {
   "AGENTS.md": 8_000,
   "CLAUDE.md": 1_000,
-  // Raised for ADR 0394's open cases: the file stood 6 bytes under 26_300.
-  // And for ADRs 0395-0396's open cases: the file stood at 26_659 bytes against 26_700.
-  // And for ADR 0397's leaf obligations: 27_971 bytes against 27_500.
-  // And for ADR 0396's async and test-helper limits: 28_418 bytes against 28_000.
-  // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 32_000.
-  // And for ADR 0401's untracked-read misses: 32_541 bytes against 32_000: 33_000.
-  // And for ADRs 0402-0403's trades (workspace boundary, exported capitalized components): 33_453 bytes against 33_000: 34_000.
+  // Raised for ADR 0436's open cases: the file stood 6 bytes under 26_300.
+  // And for ADRs 0437-0438's open cases: the file stood at 26_659 bytes against 26_700.
+  // And for ADR 0439's leaf obligations: 27_971 bytes against 27_500.
+  // And for ADR 0438's async and test-helper limits: 28_418 bytes against 28_000.
+  // Raised again for the ADR 0381 and 0424-0441 docs series (catalog renames, ADRs 0440-0441 to come): 32_000.
+  // And for ADR 0443's untracked-read misses: 32_541 bytes against 32_000: 33_000.
+  // And for ADRs 0444-0445's trades (workspace boundary, exported capitalized components): 33_453 bytes against 33_000: 34_000.
   "docs/open-work.md": 34_000,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for the
-  // catalog review's ADRs 0381-0392, 4 bytes under 115_600; and for ADR 0393,
-  // 213 bytes over 127_000; and for ADR 0394, 87 bytes under 127_300;
-  // and for ADRs 0395-0396, 132_568 bytes against 129_100;
-  // and for ADR 0397, 133_476 bytes against 132_700;
-  // and for ADR 0396's async and test-helper extension, 135_756 bytes against 133_600.
-  // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 145_000.
-  // And for the Opus review's fixes to ADRs 0384, 0394, 0396 and 0400: 150_000.
-  // And for ADR 0399: the file stood at 150_325 bytes against 150_000: 151_000.
-  // And for ADR 0398: 152_282 bytes against 151_000: 153_000.
-  // And for ADR 0401: 154_913 bytes against 153_000: 156_000.
-  // And for ADRs 0386-0387's suppression comments: 156_435 bytes against 156_000: 157_000.
-  // And for ADRs 0402-0403 (workspace program boundary, census with no entry): 160_120 bytes against 157_000: 161_000.
-  // And for ADR 0404 (the reproduction set and the pre-release run): 162_517 bytes against 161_000: 163_500.
-  // And for ADR 0405 (veto weight from a veto-off sweep) and ADR 0406 to come (verified coverage): 165_500.
+  // catalog review's ADRs 0381 and 0424-0434, 4 bytes under 115_600; and for ADR 0435,
+  // 213 bytes over 127_000; and for ADR 0436, 87 bytes under 127_300;
+  // and for ADRs 0437-0438, 132_568 bytes against 129_100;
+  // and for ADR 0439, 133_476 bytes against 132_700;
+  // and for ADR 0438's async and test-helper extension, 135_756 bytes against 133_600.
+  // Raised again for the ADR 0381 and 0424-0441 docs series (catalog renames, ADRs 0440-0441 to come): 145_000.
+  // And for the Opus review's fixes to ADRs 0426, 0436, 0438 and 0442: 150_000.
+  // And for ADR 0441: the file stood at 150_325 bytes against 150_000: 151_000.
+  // And for ADR 0440: 152_282 bytes against 151_000: 153_000.
+  // And for ADR 0443: 154_913 bytes against 153_000: 156_000.
+  // And for ADRs 0428-0429's suppression comments: 156_435 bytes against 156_000: 157_000.
+  // And for ADRs 0444-0445 (workspace program boundary, census with no entry): 160_120 bytes against 157_000: 161_000.
+  // And for ADR 0446 (the reproduction set and the pre-release run): 162_517 bytes against 161_000: 163_500.
+  // And for ADR 0447 (veto weight from a veto-off sweep) and ADR 0448 to come (verified coverage): 165_500.
   "docs/decisions.md": 165_500,
 };
 
 export const GROUP_BUDGETS = [
-  // Raised for ADRs 0395-0396 and their rule-page mechanics: docs/ stood at 604_388 bytes.
-  // And for ADR 0397 and its two rule pages: 607_028 bytes against 605_000.
-  // And for ADR 0396's extension (decisions, open work, two rule pages): 610_122 bytes.
-  // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 650_000.
-  // And for ADRs 0398-0401 and their rule pages: 650_087 bytes against 650_000: 656_000.
-  // And for ADRs 0386-0387 (suppression section, SC9016's page): 658_058 bytes against 656_000: 660_000.
-  // And for ADRs 0402-0403 (decisions, open work, fixture READMEs): 662_349 bytes against 660_000: 664_000.
-  // And for ADR 0404 (the reproduction set and the pre-release run): 665_446 bytes against 664_000: 667_000.
-  // And for ADRs 0405-0406 (see above): 669_000.
+  // Raised for ADRs 0437-0438 and their rule-page mechanics: docs/ stood at 604_388 bytes.
+  // And for ADR 0439 and its two rule pages: 607_028 bytes against 605_000.
+  // And for ADR 0438's extension (decisions, open work, two rule pages): 610_122 bytes.
+  // Raised again for the ADR 0381 and 0424-0441 docs series (catalog renames, ADRs 0440-0441 to come): 650_000.
+  // And for ADRs 0440-0443 and their rule pages: 650_087 bytes against 650_000: 656_000.
+  // And for ADRs 0428-0429 (suppression section, SC9016's page): 658_058 bytes against 656_000: 660_000.
+  // And for ADRs 0444-0445 (decisions, open work, fixture READMEs): 662_349 bytes against 660_000: 664_000.
+  // And for ADR 0446 (the reproduction set and the pre-release run): 665_446 bytes against 664_000: 667_000.
+  // And for ADRs 0447-0448 (see above): 669_000.
   { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 669_000 },
   {
     name: "fixture READMEs",
@@ -65,15 +65,15 @@ export const GROUP_BUDGETS = [
     // Raised from 250 KB for the context-read fixtures (ADR 0352): the group was
     // 249.8 KB before they landed, and each case README is a claim the reader needs.
     // Raised again for ADR 0378's fixture: the group stood 1 byte under 256 KB.
-    // And for ADR 0393's nine dispatch fixtures: the group stood 455 bytes under 257 KB.
-    // And for ADR 0394's four spread fixtures: four READMEs took the group 2_395 bytes past 261 KB.
-    // And for ADRs 0395-0396's fixtures (five handler READMEs, three test-runner projects): 271_432 bytes.
-    // And for ADR 0397's fixture: 271_811 bytes against 271_500.
-    // And for ADR 0396's async and helper variants and the vitest 4 project: 275_151 bytes.
-    // Raised again for the ADR 0381-0399 docs series (catalog renames, ADRs 0398-0399 to come): 290_000.
+    // And for ADR 0435's nine dispatch fixtures: the group stood 455 bytes under 257 KB.
+    // And for ADR 0436's four spread fixtures: four READMEs took the group 2_395 bytes past 261 KB.
+    // And for ADRs 0437-0438's fixtures (five handler READMEs, three test-runner projects): 271_432 bytes.
+    // And for ADR 0439's fixture: 271_811 bytes against 271_500.
+    // And for ADR 0438's async and helper variants and the vitest 4 project: 275_151 bytes.
+    // Raised again for the ADR 0381 and 0424-0441 docs series (catalog renames, ADRs 0440-0441 to come): 290_000.
     // And for the Opus review's fixes (suite bodies per runner, after-await and sync-dispatch variants): 295_000.
-    // And for ADRs 0386-0387's fixtures (group key, suppression comments): 297_071 bytes against 295_000: 298_000.
-    // And for ADRs 0402-0403's fixtures (workspace boundary, census with no entry): 298_292 bytes against 298_000: 299_500.
+    // And for ADRs 0428-0429's fixtures (group key, suppression comments): 297_071 bytes against 295_000: 298_000.
+    // And for ADRs 0444-0445's fixtures (workspace boundary, census with no entry): 298_292 bytes against 298_000: 299_500.
     bytes: 299_500,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },

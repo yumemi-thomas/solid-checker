@@ -1021,7 +1021,7 @@ fn spread_event_keys_require_web_rc13() {
     assert_eq!(Solid2::CONSERVATIVE.spread_key_is_event("onClick"), None);
 }
 
-/// ADR 0393: only the web release whose delegated `eventHandler` was read
+/// ADR 0435: only the web release whose delegated `eventHandler` was read
 /// (rc.17) answers that a `document` dispatch reaches no element handler.
 #[test]
 fn document_dispatch_exclusion_needs_the_rc17_event_handler() {

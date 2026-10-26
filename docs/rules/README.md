@@ -3,7 +3,7 @@
 solid-checker ships one dialect-owned catalog: 34 identities for Solid 2.0,
 with unprefixed rule names: 28 rule identities a project configures (SC2004 and
 SC2005 share one name), two obligations
-(SC9005 and SC9012, [ADR 0398](../decisions.md#adr-0398)) and four findings
+(SC9005 and SC9012, [ADR 0440](../decisions.md#adr-0440)) and four findings
 decided before or beside the analysis (SC9013 to SC9016).
 The checker detects the installed `solid-js` major and **refuses** a project
 whose runtime it has no vocabulary for
@@ -77,7 +77,7 @@ redundant.
 
 Renamed configuration keys transfer their setting through `RULE_ALIASES`, and
 retired identities load as no-ops through `RETIRED_RULES`, both in
-`rust/crates/solid-facts-backend/src/dialect.rs` ([ADR 0391](../decisions.md#adr-0391)).
+`rust/crates/solid-facts-backend/src/dialect.rs` ([ADR 0433](../decisions.md#adr-0433)).
 
 ## Solid 2.0 catalog — 28 rule identities and 4 detection findings
 
@@ -117,7 +117,7 @@ retired identities load as no-ops through `RETIRED_RULES`, both in
 
 `http-response-after-flush`, `unsupported-solid-runtime`,
 `unaudited-solid-release`, `compiler-refused-source` (for a refusal it does
-not prove, ADR 0399) and `unknown-suppression-rule` can produce
+not prove, ADR 0441) and `unknown-suppression-rule` can produce
 uncertifiable results. Their pages name the missing evidence and remediation.
 
 ## Obligations
@@ -125,7 +125,7 @@ uncertifiable results. Their pages name the missing evidence and remediation.
 An obligation is an internal uncertifiable result ([ADR 0328](../decisions.md#adr-0328)):
 what the analysis could not establish, never a claim about the user's code. It
 has no rule-options key, no ESLint rule and no switch, so nothing disables it
-([ADR 0398](../decisions.md#adr-0398)). The human formats and ESLint do not
+([ADR 0440](../decisions.md#adr-0440)). The human formats and ESLint do not
 show it and `--certify` ignores it; `--format json` and `--internal` keep it,
 with the `uncertifiable` status it sets.
 
@@ -174,10 +174,10 @@ console.log(doubled());
   `solid/no-destructure` SC1003); a `solid-checker-*` comment also takes the
   bare name and an SC code (`SC1001`). A rule's former name works, and
   `resolve-in-tracked-scope` and `until-in-tracked-scope` reach their own code
-  only. `reactivity` reaches its four members (ADR 0386).
+  only. `reactivity` reaches its four members (ADR 0428).
 - The two families scan independently, as ESLint's comments and a comment it
   does not read do. A name from another plugin or a foreign prefix is not read.
-- An obligation (SC9005, SC9012; [ADR 0398](../decisions.md#adr-0398)) is never
+- An obligation (SC9005, SC9012; [ADR 0440](../decisions.md#adr-0440)) is never
   suppressed. Its rule names, its codes and every retired name or code
   (`package-contract-*`, `reactive-source-uncaptured`, SC9011) are accepted
   without a notice and suppress nothing.
@@ -197,18 +197,18 @@ console.log(doubled());
 
 A rule that maps onto an eslint-plugin-solid rule takes the upstream name
 unless that name no longer describes what the checker proves, and its scope is
-a superset of upstream's ([ADR 0381](../decisions.md#adr-0381)). Shipped renames (each old name is an alias, ADR 0391; the two names of a merged rule are limited to their own code, ADR 0384): SC2001
-`no-write-in-pure-computation` (ADR 0382), SC2003
-`no-store-mutation-outside-setter` (ADR 0383; upstream's array-method and
+a superset of upstream's ([ADR 0381](../decisions.md#adr-0381)). Shipped renames (each old name is an alias, ADR 0433; the two names of a merged rule are limited to their own code, ADR 0426): SC2001
+`no-write-in-pure-computation` (ADR 0424), SC2003
+`no-store-mutation-outside-setter` (ADR 0425; upstream's array-method and
 projection shapes are built, its `delete` is not: TS2790 on a required property), SC2004 and SC2005 together as
-`no-await-primitive-in-tracked-scope` (ADR 0384; one name, two codes), and SC7006
-`valid-use-server` (ADR 0385; upstream's placement checks and `clientWrappers`
+`no-await-primitive-in-tracked-scope` (ADR 0426; one name, two codes), and SC7006
+`valid-use-server` (ADR 0427; upstream's placement checks and `clientWrappers`
 are built, its acceptance of a re-export is not, and its wrapper list matches imports exactly). `reactivity` is a group key over
-SC1001, SC1002, SC1005 and SC1007 ([ADR 0386](../decisions.md#adr-0386)), each
+SC1001, SC1002, SC1005 and SC1007 ([ADR 0428](../decisions.md#adr-0428)), each
 member still configurable alone. SC1003 stays outside it: upstream's `reactivity`
 also reports destructured props, which the checker reports as
 [no-destructure](no-destructure.md). Inline `eslint-disable` comments work
-under both prefixes ([ADR 0387](../decisions.md#adr-0387); below).
+under both prefixes ([ADR 0429](../decisions.md#adr-0429); below).
 
 Formatting, browser-policy, CSS-policy, compatibility-policy, and analyzer
 bookkeeping rules were retired instead of being presented as certified runtime

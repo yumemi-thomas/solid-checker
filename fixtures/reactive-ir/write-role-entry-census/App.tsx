@@ -13,7 +13,7 @@ function keep(callback: () => void) {
 }
 
 // Violation: `reset` is also a prop `RunsInBody` calls in its body, where the
-// rc.17 runtime throws REACTIVE_WRITE_IN_OWNED_SCOPE (ADR 0400 follows the prop
+// rc.17 runtime throws REACTIVE_WRITE_IN_OWNED_SCOPE (ADR 0442 follows the prop
 // into the child). The handler call is one of its entries, not all of them.
 export function EscapedToChild() {
   const [n, setN] = createSignal(0);

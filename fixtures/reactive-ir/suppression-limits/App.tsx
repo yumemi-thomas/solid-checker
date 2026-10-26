@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 
-// What a suppression comment does not do (ADR 0387). Every component holds one
+// What a suppression comment does not do (ADR 0429). Every component holds one
 // untracked read (SC1001) at `console.log(doubled());`, and every one is still
 // reported; the comment above it is not a suppression for that read.
 

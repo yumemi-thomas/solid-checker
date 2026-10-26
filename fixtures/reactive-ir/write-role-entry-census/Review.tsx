@@ -51,7 +51,7 @@ export function RecursiveRender() {
 }
 
 // Violation: the click handler's entries say nothing of the closure it
-// creates and hands to `Child`, which calls it in its body (ADR 0400).
+// creates and hands to `Child`, which calls it in its body (ADR 0442).
 export function NestedEscape() {
   const [n, setN] = createSignal(0);
   const click = () => {

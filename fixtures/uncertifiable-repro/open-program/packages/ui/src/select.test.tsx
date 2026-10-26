@@ -1,5 +1,5 @@
 // kui kernel dialog.test.tsx:46: a test helper dispatches a click. In a
-// closed program the helper is test-only and leaves the veto (ADR 0396); in
+// closed program the helper is test-only and leaves the veto (ADR 0438); in
 // this open one its callers are not enumerable, so every handler's owner and
 // read proofs in the package are withheld (ADR 0356).
 import { describe, expect, it } from "vitest";

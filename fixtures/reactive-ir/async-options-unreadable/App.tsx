@@ -5,7 +5,7 @@ declare const opaqueOptions: { loadingValue?: { name: string } };
 
 // Options the analysis cannot read may declare `loadingValue`, whose first
 // flight serves the declared value and needs no boundary: the bare render is
-// uncertifiable, never a violation (ADR 0388).
+// uncertifiable, never a violation (ADR 0430).
 const variableUser = createMemo(async () => ({ name: "Ada" }), opaqueOptions);
 const spreadUser = createMemo(async () => ({ name: "Grace" }), { ...opaqueOptions });
 

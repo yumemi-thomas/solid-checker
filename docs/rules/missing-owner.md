@@ -79,14 +79,14 @@ visible call selecting the standard-library `EventTarget.dispatchEvent` or
 `HTMLElement.click` declaration, handlers may run on their caller's owned stack
 (ADR 0356). Event-owner proofs then remain uncertifiable across the program,
 including forwarded callbacks. No target-specific dispatch edge is guessed.
-A dispatch site leaves that veto (ADR 0393) when its receiver is the global
+A dispatch site leaves that veto (ADR 0435) when its receiver is the global
 `window`, or the global `document` on web rc.17 (both resolved through their
 `lib.dom.d.ts` declarations, so a binding named `window` keeps the veto), or
 when it is written in a callback handed directly to a reviewed fresh-stack
 scheduler (`setTimeout`), at module top level, in a `runWithOwner(null, …)`
 callback (for owner and write proofs only; its enclosing strict-read window stays
 open), or in a callback handed directly to a reviewed test runner's `test`,
-`it`, `describe`, `suite` or hook (ADR 0396, a suite body only where the runner
+`it`, `describe`, `suite` or hook (ADR 0438, a suite body only where the runner
 defers it, which vitest does and jest, mocha, `node:test` and playwright do not:
 their body runs inside the registration call and takes that position's role,
 and `bun:test`'s is not placed; `vitest` and `@vitest/runner`, `bun:test`, `node:test`,
@@ -104,7 +104,7 @@ call graph accounts for, an `export *` barrel included, and an alias, a value
 use, a re-export specifier, an escaping namespace or an open program refuses; a
 call past an `await` in an async helper counts, a function literal handed to
 such a helper (`fireAndFlush(() => el.dispatchEvent(…))`) is one, and so is a
-helper a factory returns in an object a test destructures; ADR 0400). The
+helper a factory returns in an object a test destructures; ADR 0442). The
 premise is a reading of the runners' published bytes (vitest 5.0.0 and 4.1.11,
 playwright 1.63.0, jest-circus 30.5.2, mocha 11.8.0, Node 24.22.1's `node:test`);
 `bun:test` is native and not placed. A runner configured to wrap tests in
@@ -114,7 +114,7 @@ directly in a function literal that only events invoke (ADR 0327's census, so
 not one also called from a component body, and outside a class element and JSX
 the compiler wraps; an exported function counts in a closed program on the
 terms above, and a literal handed to a helper only handlers call does too, ADR
-0400) leaves it too (ADR 0395): the delivery it makes runs on the stack of a
+0442) leaves it too (ADR 0437): the delivery it makes runs on the stack of a
 delivery. A dispatch in any other function, or one in a
 function nothing places, keeps it. The remaining sites are listed in the
 report's `premises`.
@@ -127,7 +127,7 @@ an uppercase letter does, and `onclick` is an attribute. A spread no exact objec
 is still not a handler site when the compiler gives its declared type a
 complete key set and the dialect lowers none of those keys as a listener
 (`omit(props, "class")` of a `Props` with no `on` key, a project helper's
-declared return type, a union of such types; ADR 0394). The proof reads the
+declared return type, a union of such types; ADR 0436). The proof reads the
 declared type: an index signature, `any`, a generic or open union member, or a
 type the checker cannot enumerate keeps the obligation. A value typed
 `{ class?: string }` may carry more keys at run time (structural subtyping), and

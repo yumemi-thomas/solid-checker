@@ -13,7 +13,7 @@ pub(crate) fn event_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(St
     invoked_literals(lookup, false)
 }
 
-/// ADR 0396: the census of [`event_invoked_literals`] with a reviewed test
+/// ADR 0438: the census of [`event_invoked_literals`] with a reviewed test
 /// runner as the only entry. Every function literal of a closed program whose
 /// invocations, followed forward the same way, are all calls written directly
 /// in a function literal handed to a test runner's registration (or in a
@@ -73,7 +73,7 @@ fn invoked_literals(lookup: &SemanticLookup<'_>, test_entries: bool) -> HashSet<
     literals
 }
 
-/// ADR 0395: whether the call at `call` is written directly in a function
+/// ADR 0437: whether the call at `call` is written directly in a function
 /// whose every invocation the census ([`event_invoked_literals`]) finds is an
 /// event delivery. Such a call runs on the stack of a delivery, so a dispatch
 /// there hands its handler no owner and no strict-read window the delivery did
@@ -89,7 +89,7 @@ pub(crate) fn dispatch_in_event_only_function(
     dispatch_in_census_function(file, call, lookup.event_invoked_literals())
 }
 
-/// ADR 0396: [`dispatch_in_event_only_function`] for the test-only census
+/// ADR 0438: [`dispatch_in_event_only_function`] for the test-only census
 /// ([`test_invoked_literals`]): the call is written directly in a helper every
 /// invocation of which is a call in a test runner's callback (or in another
 /// such helper), so it runs on the runner's stack or a continuation of it.
@@ -272,7 +272,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         role
     }
 
-    /// ADR 0400: [`Self::function_role`] for a write. An invocation in an
+    /// ADR 0442: [`Self::function_role`] for a write. An invocation in an
     /// owned scope is the answer whatever the others are (ADR 0378: one entry
     /// that throws is a violation); otherwise every invocation must be placed,
     /// in one role or, when they differ, in none (`Unreported`, as for reads).
@@ -340,7 +340,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         Some(role)
     }
 
-    /// ADR 0400: the role of the call at `call` for a write, as the write
+    /// ADR 0442: the role of the call at `call` for a write, as the write
     /// classifier places it where it is written, or the one role of every
     /// invocation of the plain function it is written in when no fact places
     /// it there.
@@ -421,14 +421,14 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         frames: Vec<FlowFrame<'a>>,
     ) -> Option<Option<ExecutionRole>> {
         let owner = containing_ast_function(&file.ast, call)?;
-        // ADR 0396: a function literal handed directly to a reviewed test
+        // ADR 0438: a function literal handed directly to a reviewed test
         // runner's registration. Both its prefix up to the first await and
         // every continuation after one run with no owner and no strict-read
         // window (the runner's stack, then no owner at any resumption, ADR
         // 0333), so a call written in it is a satisfied entry past an await
         // as well; an event handler's census refuses past one.
         let registered = self.test_entries && registered_test_callback(file, owner, self.lookup);
-        // ADR 0400: in the test census an async helper's call past a
+        // ADR 0442: in the test census an async helper's call past a
         // suspension is a satisfied entry as a registered callback's is: the
         // resumption runs with no owner and no window (ADR 0333) whoever
         // called the helper, and the part before the first await runs on its
@@ -585,7 +585,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         Some(out)
     }
 
-    /// ADR 0400: the invocations of an exported function declaration in
+    /// ADR 0442: the invocations of an exported function declaration in
     /// another module of a closed program. Every other module's reference to
     /// the declaration's symbol must be a call site the call graph accounts
     /// for (`function_call_site_references`: no alias, re-export, argument,
@@ -752,7 +752,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 out.push(Invocation::Role(role));
                 return Some(());
             }
-            // ADR 0400: a reviewed scheduler's callback (`setTimeout(fn)`) is
+            // ADR 0442: a reviewed scheduler's callback (`setTimeout(fn)`) is
             // run from a fresh stack with no owner and no window: the
             // scheduled role, wherever the call was written. The selected
             // standard-library declaration says so, never the spelling.
@@ -835,7 +835,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 }
                 // A spread hands over every prop of its source, in an order
                 // later attributes can replace, so which function the
-                // component calls is not this value's to claim (ADR 0400).
+                // component calls is not this value's to claim (ADR 0442).
                 if self.write_root_body.is_some() {
                     return None;
                 }
@@ -1000,7 +1000,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 .initializer
                 .is_some_and(|initializer| peel(initializer) == expr)
         }) {
-            // ADR 0400: an object pattern holding the object the value is a
+            // ADR 0442: an object pattern holding the object the value is a
             // member of (`const { add } = renderPanel()`): the tracked member
             // is the one binding the pattern names for its key. A pattern
             // with a rest element or a nested pattern (names and slots
@@ -1157,7 +1157,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         if component.r#async || component.generator {
             return None;
         }
-        // ADR 0400: the prop must be the one the component receives under its
+        // ADR 0442: the prop must be the one the component receives under its
         // name: a spread may carry another function under it, or replace it
         // (`<Child onPress={a} {...rest} />`), and a repeated attribute
         // competes with it. The owned-scope answer is a violation, so a prop

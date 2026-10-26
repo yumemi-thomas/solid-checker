@@ -1,4 +1,4 @@
-//! Callbacks registered with a reviewed test runner (ADR 0396).
+//! Callbacks registered with a reviewed test runner (ADR 0438).
 
 use super::*;
 

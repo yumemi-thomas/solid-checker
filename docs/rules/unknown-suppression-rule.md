@@ -4,7 +4,7 @@
 
 A suppression comment names a `solid-checker/*` rule this checker does not
 have, so it suppresses nothing for that name
-([ADR 0387](../decisions.md#adr-0387)).
+([ADR 0429](../decisions.md#adr-0429)).
 
 ## What it does
 
@@ -26,7 +26,7 @@ unknown name.
   `package-note` and `contract-note`, and every retired or former name (the
   obligations' included: `package-behavior-unavailable`,
   `reactive-dispatch-unresolved`, SC9005, SC9011, SC9012; they suppress
-  nothing, [ADR 0398](../decisions.md#adr-0398)) are accepted silently. `solid/*` names outside that list are not read at all.
+  nothing, [ADR 0440](../decisions.md#adr-0440)) are accepted silently. `solid/*` names outside that list are not read at all.
 - `eslint-disable` separates names with commas: `a b` is one name, `a b`, and
   is reported.
 

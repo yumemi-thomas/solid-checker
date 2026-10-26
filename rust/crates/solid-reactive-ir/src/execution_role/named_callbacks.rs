@@ -33,7 +33,7 @@ pub(super) struct NamedCallbackRole {
     /// compiler facts and the returned-adapter classifiers.
     pub(super) admitted: bool,
     pub(super) untracked_callback: bool,
-    /// The function is a map function: untracked in no window (ADR 0401).
+    /// The function is a map function: untracked in no window (ADR 0443).
     pub(super) untracked_unwindowed: bool,
     pub(super) effect_apply: bool,
     /// Which effect primitive names this function at its apply position, for

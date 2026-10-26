@@ -66,7 +66,7 @@ pub(crate) fn spread_index<'a>(
     spreads
 }
 
-/// ADR 0394: a spread argument that no exact object resolves still holds no
+/// ADR 0436: a spread argument that no exact object resolves still holds no
 /// handler when the compiler gives its declared type a complete key set and the
 /// dialect lowers none of those keys as a listener. A key set the producer did
 /// not prove complete (an index signature, `any`, a union with an open member,

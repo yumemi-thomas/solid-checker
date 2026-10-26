@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Reduces one uncertifiable result of a real project to the few lines that
 // still produce it: the first step of adding a case to the reproduction set
-// (ADR 0404; CONTRIBUTING.md, "Adding a repo to the reproduction set").
+// (ADR 0446; CONTRIBUTING.md, "Adding a repo to the reproduction set").
 //
 //   node scripts/repro-reduce.mjs --source <app root> --out <scratch dir>
 //     --project <tsconfig directory, relative to the app> [--tsconfig tsconfig.json]

@@ -197,11 +197,11 @@ fn compatibility_registry_counts_match_the_catalog_migration() {
     assert_eq!(
         RETIRED_RULES.len(),
         64,
-        "eight pre-existing TypeScript redundancies, 31 catalog-reduction identities, the 18 the 1.x catalog still declared when ADR 0110 deleted it, and the seven names of SC9005, SC9011 and SC9012 (ADR 0398)"
+        "eight pre-existing TypeScript redundancies, 31 catalog-reduction identities, the 18 the 1.x catalog still declared when ADR 0110 deleted it, and the seven names of SC9005, SC9011 and SC9012 (ADR 0440)"
     );
 }
 
-/// ADR 0386: a group is a key over rules, never a rule or a former name, and
+/// ADR 0428: a group is a key over rules, never a rule or a former name, and
 /// each member is a real rule of the one catalog that carries the group.
 #[test]
 fn rule_groups_name_catalog_rules_and_collide_with_no_identity() {
@@ -233,7 +233,7 @@ fn rule_groups_name_catalog_rules_and_collide_with_no_identity() {
             ][..]
         )
     );
-    // SC1003 keeps its own key in upstream (ADR 0386), and SC4001 has no
+    // SC1003 keeps its own key in upstream (ADR 0428), and SC4001 has no
     // upstream counterpart: neither belongs to the group.
     let members = rule_group("reactivity").unwrap();
     assert!(!members.contains(&"no-destructure") && !members.contains(&"missing-owner"));
@@ -244,7 +244,7 @@ fn every_catalog_identity_resolves_to_its_metadata() {
     for dialect in ALL {
         if dialect.id == "solid-v2" {
             for rule in solid_v2_rules::Rule::ALL {
-                // A name is the lookup key (ADR 0384): codes sharing one name
+                // A name is the lookup key (ADR 0426): codes sharing one name
                 // resolve to the first of them, and agree on all else.
                 let found = (dialect.rule_metadata)(rule.metadata().name).unwrap();
                 let expected = rule.metadata();
@@ -1050,7 +1050,7 @@ fn every_release_variant_is_one_its_language_lists() {
     ));
 }
 
-/// ADR 0360, 0399: the refused-file finding's identity is the catalog's. A
+/// ADR 0360, 0441: the refused-file finding's identity is the catalog's. A
 /// proven refusal is the catalog's error, one per file; any other refusal is
 /// the project-level notice quoting the compiler's first line.
 #[cfg(feature = "dialect-v2")]

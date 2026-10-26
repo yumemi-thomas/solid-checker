@@ -114,7 +114,7 @@ fn a_disabled_coverage_rule_returns_its_withheld_obligations_and_an_obligation_c
     .unwrap();
     let withheld =
         retain_enabled(crate::dialect::default_dialect(), &options, &mut findings).unwrap();
-    // The obligations stay (ADR 0398); the disabled rules go.
+    // The obligations stay (ADR 0440); the disabled rules go.
     assert_eq!(
         findings
             .iter()
@@ -133,7 +133,7 @@ fn a_disabled_coverage_rule_returns_its_withheld_obligations_and_an_obligation_c
     );
 }
 
-/// ADR 0386: the `reactivity` key reaches the findings of its four members
+/// ADR 0428: the `reactivity` key reaches the findings of its four members
 /// through the same enablement as any member key, and a member the document
 /// names keeps its own setting.
 #[test]
@@ -203,7 +203,7 @@ fn the_reactivity_group_key_configures_its_members() {
     );
 }
 
-/// ADR 0384: `resolve-in-tracked-scope` and `until-in-tracked-scope` disable
+/// ADR 0426: `resolve-in-tracked-scope` and `until-in-tracked-scope` disable
 /// their own code of the merged rule only; the merged name disables both.
 #[test]
 fn a_former_name_of_a_merged_rule_disables_its_own_code_only() {
@@ -458,7 +458,7 @@ fn compatibility_rule_identities_are_tolerated_and_typos_are_not() {
         let loaded = super::discover_rule_options(&directory)
             .unwrap_or_else(|error| panic!("alias {old:?} must load: {error}"));
         if let Some(code) = crate::dialect::rule_alias_code(old) {
-            // ADR 0384: a name limited to one code of a merged rule disables
+            // ADR 0426: a name limited to one code of a merged rule disables
             // that code alone.
             assert!(
                 !loaded.is_enabled_for_code(current, code, true, &[])
@@ -548,18 +548,18 @@ fn dispatch_premises_name_what_each_site_withholds_or_why_it_is_excluded() {
     };
     assert_eq!(
         dispatch_premise(&site("unknown", None, true, true)),
-        "synchronous dispatch (ADR 0393) at src/a.ts:7 withholds event handler owner and read proofs: receiver unknown"
+        "synchronous dispatch (ADR 0435) at src/a.ts:7 withholds event handler owner and read proofs: receiver unknown"
     );
     assert_eq!(
         dispatch_premise(&site("element", Some("runWithOwner(null)"), false, true)),
-        "synchronous dispatch (ADR 0393) at src/a.ts:7 withholds event handler read proofs: receiver element, caller runWithOwner(null)"
+        "synchronous dispatch (ADR 0435) at src/a.ts:7 withholds event handler read proofs: receiver element, caller runWithOwner(null)"
     );
     assert_eq!(
         dispatch_premise(&site("window", None, false, false)),
-        "synchronous dispatch (ADR 0393) at src/a.ts:7 excluded: receiver window"
+        "synchronous dispatch (ADR 0435) at src/a.ts:7 excluded: receiver window"
     );
     assert_eq!(
         dispatch_premise(&site("element", Some("scheduled callback"), false, false)),
-        "synchronous dispatch (ADR 0393) at src/a.ts:7 excluded: caller scheduled callback"
+        "synchronous dispatch (ADR 0435) at src/a.ts:7 excluded: caller scheduled callback"
     );
 }

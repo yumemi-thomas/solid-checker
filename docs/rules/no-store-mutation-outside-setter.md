@@ -17,7 +17,7 @@ at the write. Store writes are unaffected.
 Flags a write through a proven store's read proxy, or a `createProjection`
 result, without going through its setter. The former name
 `no-direct-mutation` stays an alias, so an existing configuration keeps
-working (ADR 0383). The shapes, each proven at the exact store or projection
+working (ADR 0425). The shapes, each proven at the exact store or projection
 symbol:
 
 - an assignment, compound assignment or update (`store.a.b = x`,

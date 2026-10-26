@@ -35,7 +35,7 @@ re-asks use the normal pending machinery, but by then the reader holds a
 committed value and the boundary question is moot for this warning. If the
 options argument cannot be read statically (a spread, a variable), the source
 may declare either key, so the bare render is **uncertifiable**, never a
-violation (ADR 0388; the same holds for the SSR variant below, and for
+violation (ADR 0430; the same holds for the SSR variant below, and for
 SC5001). Pass the options as an object literal so the checker can read them.
 
 ## Why is this bad?

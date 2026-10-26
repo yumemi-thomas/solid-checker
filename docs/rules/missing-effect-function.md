@@ -40,7 +40,7 @@ does not prove that hidden value callable; optional/rest/array/unequal-union
 shapes have no exact length. Those cases remain **uncertifiable**. An invalid
 spread call remains TypeScript's diagnostic and stays silent.
 
-**Upstream's name (ADR 0390).** eslint-plugin-solid's
+**Upstream's name (ADR 0432).** eslint-plugin-solid's
 `no-single-arg-create-effect` reports the plain one-argument
 `createEffect`/`createRenderEffect` call. On the audited rc.17 typings that call
 is TS2554 (`Expected 2-3 arguments, but got 1`; `fixtures/tsc-oracle/rule-cases.json`,

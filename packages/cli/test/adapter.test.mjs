@@ -359,7 +359,7 @@ test("per-rule surface: every discovered catalog identity is an ESLint rule", ()
   // The dialect config enables exactly its default-enabled catalog, plus the
   // certification switch-off that keeps it composable with `recommended` and
   // the note rule every shipped config carries. An obligation (SC9005, SC9012)
-  // has no manifest entry and so no key (ADR 0398).
+  // has no manifest entry and so no key (ADR 0440).
   assert.equal(
     Object.keys(plugin.configs.v2.rules).length,
     v2.rules.filter(entry => entry.defaultEnabled).length + 2
@@ -533,7 +533,7 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
   plugin._testing.snapshotCache.clear();
 });
 
-test("the rules enabled for a file are forwarded so native skips the comments ESLint applies (ADR 0387)", () => {
+test("the rules enabled for a file are forwarded so native skips the comments ESLint applies (ADR 0429)", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-host-suppresses-"));
   const project = join(root, "tsconfig.json");
   const calls = join(root, "calls.txt");
@@ -587,7 +587,7 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
   }
 });
 
-test("ESLint applies a disable comment to the per-rule id that reported (ADR 0387)", () => {
+test("ESLint applies a disable comment to the per-rule id that reported (ADR 0429)", () => {
   const finding = (rule, code, start, end) => ({
     id: code, rule, kind: "violation", severity: "error", message: `${rule} here`,
     primaryLocation: { path: "App.js", startByte: start, endByte: end, line: 2, column: 1 }
@@ -647,7 +647,7 @@ test("every non-v1 RULE_ALIASES row is a deprecated ESLint key (dialect.rs is th
   assert.equal(keys.size, rows.length, "no ESLint key lacks a native alias");
 });
 
-test("every former name of an obligation in RETIRED_RULES is a retired no-op ESLint key (ADR 0398)", () => {
+test("every former name of an obligation in RETIRED_RULES is a retired no-op ESLint key (ADR 0440)", () => {
   const source = readFileSync(new URL("../../../rust/crates/solid-facts-backend/src/dialect.rs", import.meta.url), "utf8");
   const table = source.slice(
     source.indexOf("pub const RETIRED_RULES"),
@@ -660,7 +660,7 @@ test("every former name of an obligation in RETIRED_RULES is a retired no-op ESL
   assert.deepEqual([...names].sort(), [...plugin._testing.retiredRuleKeys].sort());
 });
 
-test("the reactivity group key is valid in a config and in a disable comment, and reports nothing (ADR 0386)", () => {
+test("the reactivity group key is valid in a config and in a disable comment, and reports nothing (ADR 0428)", () => {
   assert.ok(plugin.rules.reactivity);
   assert.deepEqual(plugin.rules.reactivity.create({}), {});
   const linter = new Linter();
@@ -682,7 +682,7 @@ test("the reactivity group key is valid in a config and in a disable comment, an
   }
 });
 
-test("a former name of a merged rule reports and owns its own code only (ADR 0384)", () => {
+test("a former name of a merged rule reports and owns its own code only (ADR 0426)", () => {
   const merged = "no-await-primitive-in-tracked-scope";
   const findings = [
     finding("SC2004", merged, 0, 2),
@@ -714,7 +714,7 @@ test("a former name of a merged rule reports and owns its own code only (ADR 038
   assert.equal(plugin._testing.ownedRules.size, 0);
 });
 
-test("the keys of SC9005, SC9011 and SC9012 still load and do nothing (ADR 0398)", () => {
+test("the keys of SC9005, SC9011 and SC9012 still load and do nothing (ADR 0440)", () => {
   for (const name of [
     "package-behavior-unavailable",
     "package-contract-incomplete",
@@ -893,7 +893,7 @@ test("a project-scoped finding is reported on every linted file, not matched by 
 
 test("a finding collapsed over a package export is reported in every file holding a site", () => {
   // A finding of a package subject (SC9005's shape, though SC9005 is an
-  // internal obligation and has no rule of its own, ADR 0398) is collapsed over
+  // internal obligation and has no rule of its own, ADR 0440) is collapsed over
   // the whole project: its related locations are further sites, not context.
   // A per-file reporter must still see it in each file that has one, once, at
   // that file's first site.
@@ -968,7 +968,7 @@ test("internal findings are never reported, project notices are", () => {
   assert.match(all[0].data.message, /^\[SC9014\] unaudited release/);
 });
 
-test("a proven compiler refusal is reported in its own file, an unproven one in every file (ADR 0399)", () => {
+test("a proven compiler refusal is reported in its own file, an unproven one in every file (ADR 0441)", () => {
   const text = "0123456789ab";
   const refusal = {
     id: "SC9015",

@@ -4,7 +4,7 @@
 
 The pinned Solid 2 compiler refused one of the project's files, so that file
 has no compiler facts. The rest of the project is analyzed
-([ADR 0360](../decisions.md#adr-0360), [ADR 0399](../decisions.md#adr-0399)).
+([ADR 0360](../decisions.md#adr-0360), [ADR 0441](../decisions.md#adr-0441)).
 
 ## What it does
 

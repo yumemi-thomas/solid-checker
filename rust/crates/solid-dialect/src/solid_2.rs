@@ -1876,7 +1876,7 @@ impl Dialect for Solid2 {
     /// `@solidjs/signals` sets `tracking = false` around the call (see
     /// [`Solid2::runs_callback_deferred`]), so reads inside it register
     /// nothing either. `mapArray`/`repeat` are present for their map function
-    /// (ADR 0401): rc.17 runs it under `runWithOwner`, so it is untracked, not
+    /// (ADR 0443): rc.17 runs it under `runWithOwner`, so it is untracked, not
     /// tracked as this comment used to say (`callback_runs_untracked_without_window`).
     /// `createEffect(compute, apply)` and `createRenderEffect(compute, apply)`
     /// are the two with an apply slot; `createTrackedEffect(compute, options?)`
@@ -1906,7 +1906,7 @@ impl Dialect for Solid2 {
             Primitive::Hydrate | Primitive::Lazy | Primitive::Render | Primitive::CreateReaction
         ) && argument == 0)
             || (primitive == Primitive::RunWithOwner && argument == 1)
-            // ADR 0401: the map function of `mapArray` and `repeat` runs with
+            // ADR 0443: the map function of `mapArray` and `repeat` runs with
             // tracking off (`callback_runs_untracked_without_window`).
             || (matches!(primitive, Primitive::MapArray | Primitive::RepeatMap) && argument == 1)
     }
@@ -1926,7 +1926,7 @@ impl Dialect for Solid2 {
             && matches!(primitive, Primitive::MapArray | Primitive::RepeatMap)
     }
 
-    /// ADR 0401. The map function of `mapArray(list, map, options?)` and
+    /// ADR 0443. The map function of `mapArray(list, map, options?)` and
     /// `repeat(count, map, options?)` runs with tracking off and no strict-read
     /// window of its own unless `options.name` is passed, so a reactive read in
     /// it subscribes nothing and raises nothing: the mapper runs under
@@ -1949,7 +1949,7 @@ impl Dialect for Solid2 {
         argument == 1 && matches!(primitive, Primitive::MapArray | Primitive::RepeatMap)
     }
 
-    /// ADR 0401. `runWithOwner(owner, fn)` sets `tracking = false` around
+    /// ADR 0443. `runWithOwner(owner, fn)` sets `tracking = false` around
     /// `fn()` and leaves `strictRead` as the call had it (`dist/dev-shared.js:5776-5785`
     /// at rc.17, `runWithOwner` and `getObserver`), so `fn` runs in the
     /// window of the call and untracked. Inside a tracked computation (an

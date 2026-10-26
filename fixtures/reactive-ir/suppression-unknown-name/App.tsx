@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 
-// SC9016 (unknown-suppression-rule, ADR 0387): a `solid-checker/*` name nothing
+// SC9016 (unknown-suppression-rule, ADR 0429): a `solid-checker/*` name nothing
 // resolves is a project notice, once per distinct name at its first use, and
 // the finding it was meant to suppress is still reported.
 
@@ -40,7 +40,7 @@ export function UnknownCode() {
 // Accepted silently: the adapter's ids, eslint-plugin-solid's pinned names
 // (with or without a checker rule), retired identities, former names and other
 // plugins' names. The obligations SC9005 and SC9012 and their former names and
-// codes (ADR 0398) are among them (last line of the file): no comment
+// codes (ADR 0440) are among them (last line of the file): no comment
 // suppresses an obligation. None is noticed and none suppresses the read below.
 export function Silent() {
   const [count] = createSignal(0);

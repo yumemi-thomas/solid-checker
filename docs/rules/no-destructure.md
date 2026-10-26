@@ -95,7 +95,7 @@ destructuring inside a tracked memo or effect is safe.
 
 eslint-plugin-solid's `reactivity` rule also reports destructured props
 (`untrackedReactive`); here that claim is this rule's alone, so disabling the
-`reactivity` key ([ADR 0386](../decisions.md#adr-0386)) does not turn it off.
+`reactivity` key ([ADR 0428](../decisions.md#adr-0428)) does not turn it off.
 
 ## Related
 

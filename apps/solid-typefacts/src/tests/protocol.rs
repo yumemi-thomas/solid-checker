@@ -14,7 +14,7 @@ use typefacts::v3::{
 fn handshake_declares_the_operation_sets_protocol() {
     assert_eq!(
         TYPE_FACTS_HANDSHAKE_PROTOCOL, 84,
-        "protocol 84 adds the declaredKeys demand and Wire table schema v23 (ADR 0394)"
+        "protocol 84 adds the declaredKeys demand and Wire table schema v23 (ADR 0436)"
     );
 }
 

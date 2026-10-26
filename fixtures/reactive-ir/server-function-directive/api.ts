@@ -1,5 +1,5 @@
 "use server";
-// SC7006 valid-use-server, module-level directive file (ADR 0385). Each export
+// SC7006 valid-use-server, module-level directive file (ADR 0427). Each export
 // is registered by its evaluated value, so a wrapped export is fine; a
 // re-export is a compile error (rc.8+), and a client-side declaration wrapper
 // called at module scope never runs on the client.
