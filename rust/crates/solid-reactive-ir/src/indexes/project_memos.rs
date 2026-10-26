@@ -80,6 +80,7 @@ project_tables! {
     43 objects_assigned_into: ObjectsAssignedInto,
     44 router_params: RouterParams,
     45 source_texts: SourceTexts,
+    46 dispatch_veto: DispatchVetoAnswer,
 }
 
 /// A whole-program memo: key `()`, computed from the lookup in one
@@ -383,6 +384,21 @@ whole_program! {
             &lookup.router_install,
         )
     }))
+}
+
+whole_program! {
+    /// ADR 0450: the classified dispatch veto (ADR 0356, 0435, 0437, 0438) as
+    /// `(owner proofs, read proofs)`. The veto is a computation over the whole
+    /// lookup (the dispatch sites, the receivers' declarations, the callers'
+    /// positions, the two function censuses), so this memo reads the whole
+    /// program and reruns in every build in which it moved; a reader of the
+    /// veto records this answer, not the program, and reruns only when the two
+    /// bits do (early cutoff: an equal rerun keeps its revision). Fail
+    /// closed on a cycle: both proofs withheld.
+    DispatchVetoAnswer, 46, dispatch_veto, "dispatch_veto", (bool, bool),
+    cycle: (true, true),
+    direct: |lookup| lookup.dispatch_veto(),
+    |ctx| Ok(ctx.project(|lookup| lookup.dispatch_veto()))
 }
 
 impl crate::base::memo::build::ProjectAccess for SemanticLookup<'_> {

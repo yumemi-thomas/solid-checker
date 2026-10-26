@@ -62,8 +62,8 @@ mod project_memos;
 mod test_runner;
 pub(crate) use intrinsics::mentions_word;
 pub(crate) use project_memos::{
-    EffectApplyCalls, EffectApplyRegions, PROJECT_TABLES_FROM, ProjectTables, RouterParams,
-    SourceTexts, StringCodeVeto, TupleIterationVeto,
+    DispatchVetoAnswer, EffectApplyCalls, EffectApplyRegions, PROJECT_TABLES_FROM, ProjectTables,
+    RouterParams, SourceTexts, StringCodeVeto, TupleIterationVeto,
 };
 pub(crate) use test_runner::TestRunnerCallback;
 
@@ -826,8 +826,6 @@ pub(super) struct SemanticLookup<'a> {
         OnceLock<HashMap<crate::execution_role::WriteFlowKey, (crate::ExecutionRole, bool)>>,
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
-    /// ADR 0438: the literals whose every invocation is a test runner's.
-    test_invoked_literals: OnceLock<HashSet<(String, Span)>>,
     /// ADR 0435: every dispatch call with the receiver and caller its own
     /// position decides.
     placed_event_dispatch: OnceLock<Vec<event_delivery::DispatchSite>>,
@@ -1193,7 +1191,6 @@ impl<'a> SemanticLookup<'a> {
             invocation_flow_answers: OnceLock::new(),
             write_flow_answers: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
-            test_invoked_literals: OnceLock::new(),
             placed_event_dispatch: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
             reflective_prototype_write: crate::base::reads::Recorded::new(),
@@ -1650,7 +1647,7 @@ impl<'a> SemanticLookup<'a> {
                 }
                 None => hasher.update([0]),
             },
-            Section::SynchronousDispatch => {
+            Section::SynchronousDispatch | Section::DispatchVeto => {
                 // The hazard itself (a reader of the raw index), then the two
                 // answers the classified sites give.
                 hasher.update([u8::from(
@@ -2120,15 +2117,6 @@ impl<'a> SemanticLookup<'a> {
         crate::base::reads::note(crate::base::reads::Section::EventLiterals);
         self.event_invoked_literals.get_or_init(|| {
             crate::base::reads::suppress(|| crate::execution_role::event_invoked_literals(self))
-        })
-    }
-
-    /// ADR 0438: the helper literals every invocation of which is written in a
-    /// test runner's callback; see [`crate::execution_role::test_invoked_literals`].
-    pub(crate) fn test_invoked_literals(&self) -> &HashSet<(String, Span)> {
-        // Read only by the dispatch veto, whose section binds its value.
-        self.test_invoked_literals.get_or_init(|| {
-            crate::base::reads::suppress(|| crate::execution_role::test_invoked_literals(self))
         })
     }
 

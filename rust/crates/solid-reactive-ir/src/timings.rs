@@ -245,6 +245,8 @@ pub(crate) fn reuse_line(
             "runtimeScan": [timings.runtime_scan_reused_files, timings.runtime_scan_scanned_files],
             "baseIndexChangedFiles": timings.base_index_changed_files,
             "memo": [timings.memo_reused, timings.memo_computed],
+            "flowSiteRole": timings.flow_site_role_answers,
+            "dispatchVeto": timings.dispatch_veto_answers,
             "sourceDiscoveryUnchanged": timings.source_discovery_unchanged_files,
             "sourceDiscoveryIdentityMisses": timings.source_discovery_identity_misses,
             "sourcePostPassRowSets": timings.source_post_pass_row_sets,

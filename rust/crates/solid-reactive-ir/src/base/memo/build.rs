@@ -1941,6 +1941,19 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
                         whole = true;
                     }
                 }
+                // A reader of the veto's two answers records the answers
+                // (ADR 0450): the hazard's probe, and while the hazard is
+                // present the memo that holds the classified veto. A cycle
+                // reads the whole program.
+                crate::base::reads::Section::DispatchVeto => {
+                    if self.hazard(crate::base::Hazard::SynchronousDispatch)
+                        && self
+                            .memo::<crate::indexes::DispatchVetoAnswer>(&())
+                            .is_err()
+                    {
+                        whole = true;
+                    }
+                }
                 crate::base::reads::Section::ReflectiveDefinition => {
                     let _ = self.hazard(crate::base::Hazard::ReflectiveDefinitionSpelling);
                 }

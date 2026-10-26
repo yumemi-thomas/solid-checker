@@ -10,39 +10,12 @@ use super::*;
 /// invocation through a primitive's callback slot refuses: who owns that run
 /// is the owner graph's question, not this walk's.
 pub(crate) fn event_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(String, Span)> {
-    invoked_literals(lookup, false)
+    invoked_literals(lookup)
 }
 
-/// ADR 0438: the census of [`event_invoked_literals`] with a reviewed test
-/// runner as the only entry. Every function literal of a closed program whose
-/// invocations, followed forward the same way, are all calls written directly
-/// in a function literal handed to a test runner's registration (or in a
-/// literal of this set, transitively and within the same bounds): each runs
-/// on the runner's stack or on a continuation of it, with no owner and no
-/// strict-read window. A reference that is an export, an alias, a value passed
-/// on, or a call from anywhere else (a component body, an event handler, a
-/// primitive's callback) refuses, as it does for the event census.
-pub(crate) fn test_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(String, Span)> {
-    invoked_literals(lookup, true)
-}
-
-fn invoked_literals(lookup: &SemanticLookup<'_>, test_entries: bool) -> HashSet<(String, Span)> {
+fn invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(String, Span)> {
     let mut literals = HashSet::default();
     if !lookup.program_closed || lookup.program_has_eval() {
-        return literals;
-    }
-    if test_entries {
-        // The test census is the lookup's own whole-program computation (not a
-        // memo): its only reader is the dispatch veto, whose section binds
-        // its value ([`crate::base::reads::Section::SynchronousDispatch`]).
-        let world = LookupFlow { lookup };
-        for file in lookup.files() {
-            for literal in &file.ast.functions {
-                if literal_test_invoked(&world, file, literal) {
-                    literals.insert((file.path.to_string(), literal.span));
-                }
-            }
-        }
         return literals;
     }
     let files = super::flow_memos::file_keys(lookup);
@@ -80,25 +53,44 @@ pub(crate) fn dispatch_in_event_only_function(
     call: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    dispatch_in_census_function(file, call, lookup.event_invoked_literals())
+    let census = lookup.event_invoked_literals();
+    dispatch_in_census_function(file, call, |function| {
+        census.contains(&(file.path.to_string(), function.span))
+    })
 }
 
-/// ADR 0438: [`dispatch_in_event_only_function`] for the test-only census
-/// ([`test_invoked_literals`]): the call is written directly in a helper every
-/// invocation of which is a call in a test runner's callback (or in another
-/// such helper), so it runs on the runner's stack or a continuation of it.
-pub(crate) fn dispatch_in_test_only_function(
-    file: &solid_facts::FileFacts,
+/// ADR 0438: [`dispatch_in_event_only_function`] for the test-only census:
+/// the call is written directly in a helper every invocation of which is a
+/// call in a test runner's callback (or in another such helper), so it runs on
+/// the runner's stack or a continuation of it. The census is every function
+/// literal of a closed program whose invocations, followed forward the same
+/// way as the event census follows them, are all calls written directly in a
+/// function literal handed to a test runner's registration (or in a literal of
+/// this set, transitively and within the same bounds); a reference that is an
+/// export, an alias, a value passed on, or a call from anywhere else (a
+/// component body, an event handler, a primitive's callback) refuses. Each
+/// literal's answer is walked from an empty context (the walk reads no other
+/// literal's answer), so it is asked of the one function a dispatch is written
+/// in, not computed for every function of the program. The census reads no
+/// dispatch veto.
+pub(crate) fn dispatch_in_test_only_function<'a>(
+    file: &'a solid_facts::FileFacts,
     call: Span,
-    lookup: &SemanticLookup<'_>,
+    lookup: &SemanticLookup<'a>,
 ) -> bool {
-    dispatch_in_census_function(file, call, lookup.test_invoked_literals())
+    if !lookup.program_closed || lookup.program_has_eval() {
+        return false;
+    }
+    let world = LookupFlow { lookup };
+    dispatch_in_census_function(file, call, |function| {
+        literal_test_invoked(&world, file, function)
+    })
 }
 
-fn dispatch_in_census_function(
-    file: &solid_facts::FileFacts,
+fn dispatch_in_census_function<'a>(
+    file: &'a solid_facts::FileFacts,
     call: Span,
-    census: &HashSet<(String, Span)>,
+    census: impl FnOnce(&'a solid_facts::ast::FunctionFact) -> bool,
 ) -> bool {
     if file.compiler.withheld() {
         return false;
@@ -117,7 +109,7 @@ fn dispatch_in_census_function(
             .jsx_fragments
             .iter()
             .any(|fragment| function.body.contains(*fragment) && fragment.contains(call))
-        && census.contains(&(file.path.to_string(), function.span))
+        && census(function)
 }
 
 /// Whether `function` is a literal written directly as an argument of a
