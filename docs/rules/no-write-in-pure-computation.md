@@ -235,7 +235,9 @@ to reject: a write it runs is legal, also in an IIFE, `forEach` or `untrack` it
 runs in place (ADR 0455, `fixtures/reactive-ir/write-detached-owner-layers`). A
 proven owner (`createOwner()`, a component's `getOwner()`) rejects it, and so does
 `untrack` in a function it runs in place or a closure it builds and calls; an
-owner that may be null is uncertifiable. A closure a
+owner that may be null is uncertifiable. A function that calls the callback in
+its own body, in the project or a package's source, runs it in place too (ADR
+0457, `fixtures/reactive-ir/write-detached-owner-helper`). A closure a
 `createRoot` or `untrack` callback builds is built, not run: a default in it is
 uncertifiable (`fixtures/reactive-ir/write-default-in-root-closure`).
 

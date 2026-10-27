@@ -1436,9 +1436,10 @@ fn layers_run_inline(
 
 /// How a function layer is run by the code around it.
 enum LayerRun {
-    /// An IIFE or an argument a standard-library call runs inline
-    /// (`[x].forEach(fn)`): it runs on the stack of the call, which this span
-    /// is.
+    /// An IIFE, an argument a standard-library call runs inline
+    /// (`[x].forEach(fn)`), or one a function calls in its own body
+    /// ([`helper_runs_layer_inline`]): it runs on the stack of the call, which
+    /// this span is.
     InPlace(Span),
     /// An argument a reviewed scheduler runs on a fresh stack (`setTimeout(fn)`),
     /// which no owner reaches wherever it was scheduled from.
@@ -1481,8 +1482,40 @@ fn layer_run(
         (Some((_, RuntimeArgumentBehavior::FreshStackCallback)), _) => LayerRun::FreshStack,
         (Some((call, RuntimeArgumentBehavior::InlineCallback)), _) => LayerRun::InPlace(call),
         (_, Some(call)) => LayerRun::InPlace(call.span),
-        _ => LayerRun::Elsewhere,
+        _ => helper_runs_layer_inline(file, layer, lookup)
+            .map_or(LayerRun::Elsewhere, LayerRun::InPlace),
     }
+}
+
+/// ADR 0457: the call that runs `layer` in place because `layer` is its direct
+/// argument and the exact callee, a project function or a dependency function
+/// read from its source (ADR 0266, 0300), is synchronous and calls that
+/// parameter in its own body on every completion
+/// ([`invokes_parameter_during_call`]), the proof [`callee_callback_timing`]
+/// takes for a read. A call in the callee's own body is on the call's stack
+/// and under its owner: a callee that hands the parameter on (`runWithOwner(o,
+/// cb)`) or calls it in a closure (`createRoot(() => cb())`) proves nothing.
+/// A primitive's callback is the dialect's question, never this one.
+fn helper_runs_layer_inline(
+    file: &solid_facts::FileFacts,
+    layer: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    file.ast
+        .arguments_containing(layer.span)
+        .filter(|(call, index)| {
+            !call.arguments[*index].spread
+                && file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
+        })
+        .find_map(|(call, index)| {
+            if lookup.primitive_at_call(file, call.span).is_some() {
+                return None;
+            }
+            let (callee_file, callee, exact) =
+                project_callee_at_parameter(file, call, index, lookup)?;
+            (exact && invokes_parameter_during_call(callee_file, callee, index, lookup))
+                .then_some(call.span)
+        })
 }
 
 /// Whether the call at `callee` in `caller` is a plain call expression written

@@ -277,16 +277,6 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 11713,
-      "end": 11721,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
       "start": 11921,
       "end": 11929,
       "fixes": 0
