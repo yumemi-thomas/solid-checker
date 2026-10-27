@@ -59,12 +59,17 @@ function render(program, instrument) {
   const pathOf = new Map();
   // A call that is the callee (or the receiver of the member that is the callee) of another call is a link in a chain
   // (`m1()()`, `m1().f()`): only the chain's top is counted, so the checker still sees the chain it would see unmarked.
-  const chainLink = new Set();
+  const uncounted = new Set();
+  // A call in argument position (`h2(h1(() => ...))`, `setK1(m1())`) is not counted on its own: a comma expression there hides
+  // the exact closure or value the checker follows through the callee (the regression found `no-write-in-pure-computation`
+  // turn uncertifiable). The statement that holds it is counted, on the same line.
   for (const { node, path } of walk(program)) {
     pathOf.set(node, path);
+    if (node.k === "call") for (const arg of node.args) if (GLUE_KINDS.includes(arg.k)) uncounted.add(arg);
+    if (node.k === "set" && GLUE_KINDS.includes(node.e.k)) uncounted.add(node.e);
     if (node.k === "call") {
       for (let callee = node.callee; callee; callee = callee.k === "member" ? callee.obj : null) {
-        if (callee.k === "call" || callee.k === "prim" || callee.k === "iife") chainLink.add(callee);
+        if (callee.k === "call" || callee.k === "prim" || callee.k === "iife") uncounted.add(callee);
         if (callee.k !== "member") break;
       }
     }
@@ -104,14 +109,14 @@ function render(program, instrument) {
   // to it: `(__h(8), m1()())` as a statement hides the read the checker reports on `m1()()`).
   const prefixed = new Set();
   const counting = (e, build) => {
-    if (!instrument || !counted(e) || chainLink.has(e)) return build();
+    if (!instrument || !counted(e) || uncounted.has(e)) return build();
     const hit = counterFor(e);
     prefixed.add(e);
     return `__h(${hit}); ${build()}`;
   };
   /** `(__h(N), <print>)` around an emitted call; the id is allocated before its children's. */
   const glue = (node, build) => {
-    if (!instrument || chainLink.has(node) || prefixed.has(node)) return build();
+    if (!instrument || uncounted.has(node) || prefixed.has(node)) return build();
     const hit = allocate("auto", node.k, pathOf.get(node));
     return `(__h(${hit}), ${build()})`;
   };
