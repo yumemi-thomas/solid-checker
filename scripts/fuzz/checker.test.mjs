@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { MAIN_SOURCE, materializeForChecker, parseFindings, runChecker, siteVerdicts } from "./checker.mjs";
+import { MAIN_SOURCE, materializeForChecker, oracleMainSource, parseFindings, runChecker, siteVerdicts } from "./checker.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { DEFAULT_TSC, tsconfigFor, typecheck } from "./typecheck.mjs";
@@ -11,6 +11,14 @@ import { DEFAULT_TSC, tsconfigFor, typecheck } from "./typecheck.mjs";
 const oracle = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../runtime-oracle.mjs"), "utf8");
 
 describe("MAIN_SOURCE", () => {
+  it("is the oracle's whole entry, driver included: the checker reads the synchronous dispatch (ADR 0435), as it does in Chrome's run", () => {
+    expect(MAIN_SOURCE).toContain("async function exercise()");
+    expect(MAIN_SOURCE).toContain("element.dispatchEvent(make(type))");
+    expect(MAIN_SOURCE).toContain('document.getElementById("ready")');
+    expect(MAIN_SOURCE).not.toMatch(/\$\{|behaviourProbe/);
+    expect(oracleMainSource()).toBe(MAIN_SOURCE);
+    expect(() => oracleMainSource("no such template")).toThrow(/no longer defines mainSource/);
+  });
   it("stays the oracle's entry for a case with no observation (every line is still in runtime-oracle.mjs)", () => {
     for (const line of MAIN_SOURCE.split("\n").map((text) => text.trim()).filter(Boolean)) expect(oracle, line).toContain(line);
   });
