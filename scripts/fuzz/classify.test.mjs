@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classify, disturbances, runtimeEvents } from "./classify.mjs";
+import { classify, disturbances, runtimeEvents, unattributedCodes } from "./classify.mjs";
 
 // Hand-written records. Sites: s1 is a write on line 8 (witness shown when it ran), s2 a read on line 20.
 const sites = [
@@ -141,5 +141,21 @@ describe("helpers", () => {
     expect(disturbances(runtime(), plan)).toEqual([]);
     const reasons = disturbances(runtime({ failure: { phase: "render", message: "m" }, errors: [{ kind: "plan", message: "no button b9" }, { kind: "handler", message: "h" }], diagnostics: [diag("REACTIVITY_HALTED")] }), plan);
     expect(reasons.join("|")).toMatch(/runner failure.*threw.*halted.*driving plan/);
+  });
+
+  it("a diagnostic no line can be given for disturbs the run: silence at a finding is not evidence", () => {
+    const unplaced = runtime({ diagnostics: [{ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", message: "m", positions: [] }] });
+    expect(unattributedCodes(unplaced)).toEqual(["REACTIVE_WRITE_IN_OWNED_SCOPE"]);
+    expect(unattributedCodes(runtime({ unattributed: ["A", "A", "B"] }))).toEqual(["A", "B"]);
+    expect(unattributedCodes(runtime({ diagnostics: [diag("REACTIVITY_HALTED")] }))).toEqual(["REACTIVITY_HALTED"]);
+    expect(disturbances(unplaced, plan).join("|")).toMatch(/could not be placed on a line \(REACTIVE_WRITE_IN_OWNED_SCOPE\)/);
+    // Halting is reported once, as halting.
+    expect(disturbances(runtime({ diagnostics: [diag("REACTIVITY_HALTED")] }), plan)).toEqual(["reactivity halted"]);
+    const result = classify({ sites, checker: checker([violation("no-write-in-pure-computation", 8)]), runtime: unplaced, plan });
+    expect(result.verdict).toBe("inconclusive");
+  });
+
+  it("a placed diagnostic is not unattributed", () => {
+    expect(unattributedCodes(runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 20)] }))).toEqual([]);
   });
 });

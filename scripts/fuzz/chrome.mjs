@@ -29,7 +29,9 @@ export function chromeDiagnostics(row) {
  * `checkpoints` are `{ selector, text }` rows from report.execution.checkpoints.
  */
 export function chromeRuntime(row, checkpoints, sites) {
-  const failure = ["harness-error", "type-error"].includes(row.verdict) ? { phase: row.verdict, message: row.error ?? row.failure ?? row.verdict } : null;
+  // A row the oracle marks failed, or carrying an execution failure of its own, is a disturbed run whatever its verdict says.
+  const failure = ["harness-error", "type-error"].includes(row.verdict) ? { phase: row.verdict, message: row.error ?? row.failure ?? row.verdict }
+    : row.failure ? { phase: "execution", message: typeof row.failure === "string" ? row.failure : JSON.stringify(row.failure) } : null;
   const text = (selector) => {
     const found = (checkpoints ?? []).filter((checkpoint) => checkpoint.selector === selector).at(-1);
     return found === undefined ? undefined : (found.text ?? "").trim().replace(/\s+/g, " ");
@@ -38,12 +40,26 @@ export function chromeRuntime(row, checkpoints, sites) {
     failure,
     diagnostics: chromeDiagnostics(row),
     errors: (row.pageErrors ?? []).map((message) => ({ kind: "page-error", message, positions: [] })),
+    // Codes of diagnostics Chrome saw but could not place in the case file (the oracle's `unattributed`). The comparator
+    // treats them as a disturbance: a candidate false positive is never confirmed past one.
+    unattributed: (row.unattributed ?? []).map(String),
     witnesses: sites.map((site) => {
       if (!site.witness) return { siteId: site.id, witness: null, present: false, actual: null, reached: null };
       const actual = text(site.witness.selector);
       return { siteId: site.id, witness: site.witness, present: actual !== undefined, actual: actual ?? null, reached: actual === undefined ? null : actual === site.witness.text };
     }),
   };
+}
+
+/**
+ * What Chrome's judgement of a fast-path false-positive candidate means for it. Only a Chrome run that itself
+ * classifies `candidate-false-positive` confirms; a run that shows the diagnostic (`agree`) refutes; a run that
+ * cannot decide (an unattributed diagnostic, a page error, a failure) is neither: the candidate stays open.
+ */
+export function chromeStatus(judged) {
+  if (!judged) return "unconfirmed";
+  if (judged.verdict === "candidate-false-positive") return "confirmed";
+  return judged.verdict === "inconclusive" ? "chrome-inconclusive" : "refuted-by-chrome";
 }
 
 /** The oracle's findings for the case as the comparator's checker record. */

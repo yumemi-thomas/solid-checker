@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
+import { DEFAULT_ORACLE_INSTALL, chromeStatus, runChrome } from "./chrome.mjs";
 import { classify } from "./classify.mjs";
 import { dedupe } from "./dedupe.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
@@ -113,14 +113,14 @@ async function main(options) {
     for (const value of candidates) {
       const record = chrome.get(value.built.id);
       const judged = record ? classify({ sites: value.built.sites, checker: record.checker, runtime: record.runtime, plan: value.built.plan }) : null;
-      const status = !record ? "unconfirmed" : judged.verdict === "candidate-false-positive" ? "confirmed" : "refuted-by-chrome";
+      const status = chromeStatus(judged);
       if (status === "confirmed") confirmed += 1;
       let minimal = null;
-      if (options.shrink && status !== "refuted-by-chrome") minimal = await shrinkCandidate(value, config, options, out);
+      if (options.shrink && !["refuted-by-chrome", "chrome-inconclusive"].includes(status)) minimal = await shrinkCandidate(value, config, options, out);
       for (const found of signaturesOf(value.program, value.built, judged ?? value.classification)) {
         findings.push({ id: value.built.id, signature: found.signature, status, size: minimal ? minimal.size : value.built.text.split("\n").length, rule: found.item.finding?.rule, reason: found.item.reason, repro: minimal?.dir ?? join(config.casesDir, value.built.id) });
       }
-      if (judged && status === "refuted-by-chrome") findings.push({ id: value.built.id, signature: "-", status, reason: judged.reasons.join("; ") });
+      if (judged && ["refuted-by-chrome", "chrome-inconclusive"].includes(status)) findings.push({ id: value.built.id, signature: "-", status, reason: judged.reasons.join("; ") });
     }
     // Phase 4 hook: false cleans are classified and reported, never shrunk or confirmed in v1.
     for (const value of results.values()) {

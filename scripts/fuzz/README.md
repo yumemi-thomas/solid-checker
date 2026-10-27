@@ -11,7 +11,7 @@ Finds checker violations that the real Solid 2.0.0-rc.17 runtime contradicts (fa
 | `inconclusive` | The evidence cannot decide: the site never ran, nothing shows it ran, the rule has no runtime diagnostic, the program threw or halted reactivity, the checker or the runtime failed. Never counted as agreement. |
 | `agree` | Both say the same at every site, or both are silent. |
 
-A fast-path candidate is a hypothesis. A **confirmed** finding is a fast-path candidate that Chrome (`scripts/runtime-oracle.mjs`) also classifies `candidate-false-positive`. A candidate Chrome refutes is `refuted-by-chrome`: the fast path misled, which is a fast-path bug to note, not a checker bug.
+A fast-path candidate is a hypothesis. A **confirmed** finding is a fast-path candidate that Chrome (`scripts/runtime-oracle.mjs`) also classifies `candidate-false-positive`. A candidate Chrome refutes is `refuted-by-chrome`: the fast path misled, which is a fast-path bug to note, not a checker bug. A candidate Chrome cannot decide (an `unattributed` diagnostic the oracle could not place on a line, a page error, a failed execution) is `chrome-inconclusive`: it is neither confirmed nor refuted, and a diagnostic Chrome could not place is never read as silence.
 
 ### Stop and report
 

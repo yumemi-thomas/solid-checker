@@ -40,13 +40,27 @@ export function runtimeEvents(runtime) {
   });
 }
 
-/** What disturbs the whole run: a throw (any, anywhere), reactivity halted, a harness failure. */
+/**
+ * Codes of the runtime diagnostics no authored line can be given for: the oracle's `unattributed` list
+ * (Chrome saw a diagnostic whose site is not in the case file) and any diagnostic that carries no
+ * App.tsx position. Solid spoke and the comparator cannot tell where, so silence at a finding is not
+ * evidence: it may be the very diagnostic that confirms the violation.
+ */
+export function unattributedCodes(runtime) {
+  const codes = [...(runtime.unattributed ?? []).map(String)];
+  for (const diagnostic of runtime.diagnostics ?? []) if (!(diagnostic.positions ?? []).length) codes.push(String(diagnostic.code));
+  return [...new Set(codes)];
+}
+
+/** What disturbs the whole run: a throw (any, anywhere), reactivity halted, a diagnostic that could not be placed, a harness failure. */
 export function disturbances(runtime, plan) {
   const reasons = [];
   if (runtime.failure) reasons.push(`runner failure in ${runtime.failure.phase}: ${String(runtime.failure.message).slice(0, 120)}`);
   const thrown = (runtime.errors ?? []).filter((error) => !["plan"].includes(error.kind));
   for (const error of thrown.slice(0, 3)) reasons.push(`the program threw (${error.kind}): ${String(error.message).slice(0, 100)}`);
   if ((runtime.diagnostics ?? []).some((diagnostic) => diagnostic.code === "REACTIVITY_HALTED")) reasons.push("reactivity halted");
+  const unplaced = unattributedCodes(runtime).filter((code) => code !== "REACTIVITY_HALTED");
+  if (unplaced.length) reasons.push(`a runtime diagnostic could not be placed on a line (${unplaced.slice(0, 3).join(", ")})`);
   for (const error of (runtime.errors ?? []).filter((e) => e.kind === "plan")) reasons.push(`driving plan: ${error.message}`);
   return reasons;
 }

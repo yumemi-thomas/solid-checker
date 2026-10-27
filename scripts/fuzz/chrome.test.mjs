@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chromeChecker, chromeDiagnostics, chromeRuntime } from "./chrome.mjs";
+import { chromeChecker, chromeDiagnostics, chromeRuntime, chromeStatus } from "./chrome.mjs";
 import { classify } from "./classify.mjs";
 
 // A row as scripts/runtime-oracle.mjs writes it (the fields the fuzzer reads).
@@ -43,5 +43,54 @@ describe("Chrome records", () => {
   it("and Chrome's own diagnostic at the finding settles it as agree", () => {
     const result = classify({ sites, checker: chromeChecker(row()), runtime: chromeRuntime(row(), [{ selector: '[data-probe="w1"]', text: "17" }], sites), plan: { clicks: [] } });
     expect(result.verdict).toBe("agree");
+  });
+});
+
+// A candidate the fast path raised and Chrome re-ran: the checker proves a write (line 8), the page shows its witness.
+const shown = [{ selector: '[data-probe="w1"]', text: "17" }];
+const judge = (over) => {
+  const r = row({ diagnostics: [], ...over });
+  return classify({ sites, checker: chromeChecker(r), runtime: chromeRuntime(r, shown, sites), plan: { clicks: [] } });
+};
+
+describe("a diagnostic Chrome could not place", () => {
+  it("is carried from the oracle row's `unattributed` list", () => {
+    expect(chromeRuntime(row({ unattributed: ["REACTIVE_WRITE_IN_OWNED_SCOPE"] }), [], sites).unattributed).toEqual(["REACTIVE_WRITE_IN_OWNED_SCOPE"]);
+    expect(chromeRuntime(row(), [], sites).unattributed).toEqual([]);
+  });
+
+  it("makes the candidate inconclusive, never a confirmed false positive", () => {
+    expect(judge({}).verdict).toBe("candidate-false-positive");
+    const placed = judge({ unattributed: ["REACTIVE_WRITE_IN_OWNED_SCOPE"] });
+    expect(placed.verdict).toBe("inconclusive");
+    expect(placed.reasons.join(" ")).toMatch(/could not be placed.*REACTIVE_WRITE_IN_OWNED_SCOPE/);
+    expect(chromeStatus(placed)).toBe("chrome-inconclusive");
+  });
+
+  it("holds for any code, not only the finding's", () => {
+    expect(judge({ unattributed: ["STRICT_READ_UNTRACKED"] }).verdict).toBe("inconclusive");
+    expect(judge({ unattributed: ["HUGE_FAN_OUT"] }).verdict).toBe("inconclusive");
+  });
+
+  it("does not hide a diagnostic Chrome did place at the finding (that still agrees)", () => {
+    const r = row({ unattributed: ["HUGE_FAN_OUT"] });
+    expect(classify({ sites, checker: chromeChecker(r), runtime: chromeRuntime(r, shown, sites), plan: { clicks: [] } }).verdict).toBe("agree");
+  });
+});
+
+describe("a page error or a failed execution in Chrome", () => {
+  it("makes the candidate inconclusive", () => {
+    expect(judge({ pageErrors: ["Uncaught TypeError: x is not a function"] }).verdict).toBe("inconclusive");
+    expect(judge({ verdict: "unproven-clean", failure: "the feedback run did not finish" }).verdict).toBe("inconclusive");
+    expect(judge({ verdict: "unproven-clean", failure: { message: "timeout" } }).verdict).toBe("inconclusive");
+  });
+});
+
+describe("chromeStatus", () => {
+  it("confirms only on a Chrome false-positive candidate; agree refutes; anything undecided stays open", () => {
+    expect(chromeStatus(null)).toBe("unconfirmed");
+    expect(chromeStatus({ verdict: "candidate-false-positive" })).toBe("confirmed");
+    expect(chromeStatus({ verdict: "agree" })).toBe("refuted-by-chrome");
+    expect(chromeStatus({ verdict: "inconclusive" })).toBe("chrome-inconclusive");
   });
 });
