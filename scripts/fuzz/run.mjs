@@ -25,8 +25,9 @@ import { DEFAULT_TSC } from "./typecheck.mjs";
 import { isSite, walk } from "./model.mjs";
 import { availableParallelism } from "node:os";
 import { createFastDaemon } from "./fast-daemon.mjs";
+import { cleanupEvidence } from "./disposal.mjs";
 
-const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "help"]);
+const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "hunt-false-cleans", "help"]);
 const VALUES = new Set(["seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components"]);
 
 export function parseArgs(argv, { extraValues = [] } = {}) {
@@ -94,6 +95,8 @@ export function resultRows(results) {
       items: value.classification.items, sites: value.built.sites.length, typeErrors: value.typecheck?.ok === false ? value.typecheck.errors : undefined,
       checkerMs: value.checker?.wallMs, runtimeMs: value.runtime?.wallMs,
       hits: value.runtime ? hitSummary(value.built.ledger, value.runtime.hits ?? null, value.runtime.witnesses, value.runtime.quiescent ?? null) : undefined,
+      cleanup: value.runtime ? cleanupEvidence(value.program, value.built.ledger, value.runtime.hits) ?? undefined : undefined,
+      shape: value.program.components[0]?.shape,
       control: value.control ? { matched: value.control.matched, diffs: value.control.diffs } : undefined,
     });
   }
@@ -108,6 +111,7 @@ const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--
   [--dead-site]       EXPERIMENTAL, off by default: the dead-site false-positive subkind (implies --control)
   [--no-daemon]       one Vitest process per batch instead of the long-lived fast host
   [--no-instrument]   run the clean text with no hit ledger (the baseline of the neutrality regression)
+  [--hunt-false-cleans] also confirm false cleans in Chrome (with --confirm-with-chrome) and shrink them (with --shrink)
   [--generate-only]   write and type-check the programs, run nothing else
   [--keep-work]       keep the materialized checker directories`;
 
@@ -150,8 +154,10 @@ async function sweep(options, config, out) {
   if (!options.generateOnly) {
     // Chrome decides. Without it a candidate stays a candidate.
     let chrome = new Map();
-    if (options.confirmWithChrome && candidates.length) {
-      const chromeCases = candidates.map((value) => ({ id: value.built.id, dir: join(config.casesDir, value.built.id), sites: value.built.sites }));
+    const huntable = options.huntFalseCleans ? [...results.values()].filter((value) => value.classification.items.some((item) => item.kind === "candidate-false-clean")) : [];
+    const toChrome = [...new Set([...candidates, ...huntable])];
+    if (options.confirmWithChrome && toChrome.length) {
+      const chromeCases = toChrome.map((value) => ({ id: value.built.id, dir: join(config.casesDir, value.built.id), sites: value.built.sites }));
       const chromeOptions = { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency };
       // The clean case first, in Chrome: the oracle's own findings on the clean text are what its findings on the twin must equal
       // (the oracle reports kinds the fast checker adapter does not, so the fast pipeline's findings are not the reference).
@@ -176,10 +182,33 @@ async function sweep(options, config, out) {
         findings.push({ id: value.built.id, signature: found.signature, status: "wrong-rule-provisional", reason: found.item.reason, size: value.built.text.split("\n").length, repro: join(config.casesDir, value.built.id) });
       }
     }
-    // Phase 4 hook: false cleans are classified and reported, never shrunk or confirmed in v1.
+    // False cleans: a runtime diagnostic no finding covers. Reported as provisional unless hunted (--hunt-false-cleans): then Chrome
+    // decides and the shrinker reduces what Chrome confirms, the way a false positive is.
+    const shrunk = new Set();
     for (const value of results.values()) {
-      for (const found of signaturesOf(value.program, value.built, { items: value.classification.items.filter((item) => item.kind === "candidate-false-clean") })) {
-        findings.push({ id: value.built.id, signature: found.signature, status: "false-clean-provisional", reason: found.item.reason, size: value.built.text.split("\n").length, repro: join(config.casesDir, value.built.id) });
+      const items = value.classification.items.filter((item) => item.kind === "candidate-false-clean");
+      if (!items.length) continue;
+      const record = options.huntFalseCleans ? chrome.get(value.built.id) : null;
+      const judged = record ? classifyChrome(value, record, config) : null;
+      const chromeItems = judged ? judged.items.filter((item) => item.kind === "candidate-false-clean") : null;
+      const confirmedCodes = chromeItems ? new Set(chromeItems.map((item) => item.diagnostic.code)) : null;
+      for (const item of items) {
+        let status = "false-clean-provisional";
+        if (options.huntFalseCleans) {
+          if (!judged) status = "false-clean-unconfirmed";
+          else if (confirmedCodes.has(item.diagnostic.code)) status = "false-clean-confirmed";
+          else status = judged.verdict === "inconclusive" ? "false-clean-chrome-inconclusive" : "false-clean-refuted-by-chrome";
+        }
+        let minimal = null;
+        const signatureOfItem = signaturesOf(value.program, value.built, { items: [item] })[0]?.signature;
+        // One shrink per signature: the later members of a group add a count, not a reduction.
+        if (options.shrink && options.huntFalseCleans && ["false-clean-confirmed", "false-clean-unconfirmed"].includes(status) && !shrunk.has(signatureOfItem)) {
+          shrunk.add(signatureOfItem);
+          minimal = await shrinkCandidate(value, config, options, out, { kind: "candidate-false-clean", code: item.diagnostic.code });
+        }
+        for (const found of signaturesOf(value.program, value.built, { items: [item] })) {
+          findings.push({ id: value.built.id, signature: found.signature, status, reason: item.reason, size: minimal ? minimal.size : value.built.text.split("\n").length, repro: minimal?.dir ?? join(config.casesDir, value.built.id) });
+        }
       }
     }
   }
@@ -222,19 +251,19 @@ async function typecheckOnly(entries, config) {
 }
 
 /** Shrinks one candidate under the fast path (checker + Happy DOM); writes the minimal case. */
-async function shrinkCandidate(value, config, options, out) {
-  const target = value.classification.items.find((item) => item.kind === "candidate-false-positive");
-  const targetSignature = signaturesOf(value.program, value.built, value.classification)[0]?.signature;
+async function shrinkCandidate(value, config, options, out, { kind = "candidate-false-positive", code } = {}) {
+  const target = value.classification.items.find((item) => item.kind === kind && (!code || item.diagnostic?.code === code));
+  const targetSignature = signaturesOf(value.program, value.built, { items: [target] })[0]?.signature;
   let counter = 0;
   const base = `${value.built.id}-min`;
   const judge = async (program) => {
     counter += 1;
     const built = buildCase(program, { id: `${base}-${counter}` });
     const result = (await evaluate([{ program, built }], { ...config, casesDir: join(out, "shrink") })).get(built.id);
-    const hit = result.classification.items.filter((item) => item.kind === "candidate-false-positive");
+    const hit = result.classification.items.filter((item) => item.kind === kind);
     if (!hit.length) return false;
-    if (options.shrinkMode === "discovery") return hit.some((item) => item.finding.rule === target.finding.rule);
-    return signaturesOf(program, built, result.classification).some((found) => found.signature === targetSignature);
+    if (options.shrinkMode === "discovery") return hit.some((item) => (kind === "candidate-false-clean" ? item.diagnostic.code === target.diagnostic.code : item.finding.rule === target.finding.rule));
+    return signaturesOf(program, built, { items: hit }).some((found) => found.signature === targetSignature);
   };
   const cheap = (program) => [...walk(program)].some(({ node }) => isSite(node));
   const reduced = await shrink(value.program, judge, { budget: options.budget, cheap });

@@ -194,6 +194,8 @@ export function validate(program, { maxNodes = 400 } = {}) {
     const where = component.name;
     const own = new Set([...(program.moduleSignals ?? []).map((s) => s.name), ...component.signals.map((s) => s.name)]);
     const buttons = new Set();
+    // An action's body writes its target signal: removing the target (the shrinker) leaves the action unprintable.
+    for (const sig of component.signals) if (sig.kind === "action" && !own.has(sig.target)) fail(`${where}: action ${sig.name} writes ${sig.target}, which is not in scope`);
     const scopeOf = (parent, extra = {}) => ({ vars: new Map(), parent, async: parent?.async ?? false, ...extra });
     const lookup = (scope, name) => {
       for (let s = scope; s; s = s.parent) if (s.vars.has(name)) return s.vars.get(name);

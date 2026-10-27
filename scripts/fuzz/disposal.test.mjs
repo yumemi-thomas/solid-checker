@@ -62,6 +62,14 @@ describe("the disposal profile", () => {
     expect(controlHandler).toMatch(/onClick=\{\(\) => \{\s+setW1\(17\);/);
   });
 
+  it("rejects an action whose target signal was removed (the shrinker's edit)", () => {
+    const program = disposal(1, { ...SEEDS[8].plan });
+    expect(validate(program)).toEqual([]);
+    const broken = structuredClone(program);
+    broken.components[0].signals = broken.components[0].signals.filter((sig) => sig.kind === "action");
+    expect(validate(broken).some((message) => message.includes("not in scope"))).toBe(true);
+  });
+
   it("finds the cleanup callback's entry counter in the ledger", () => {
     const program = disposal(1, SEEDS[0].plan);
     const built = buildCase(program, { id: "d1" });
