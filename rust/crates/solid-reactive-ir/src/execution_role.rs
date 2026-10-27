@@ -282,12 +282,18 @@ pub(super) fn semantic_execution_role(
 /// dialect says so, directly in a component body
 /// ([`solid_dialect::Dialect::component_body_runs_under_root`]).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(super) enum RootBodyGuard {
+pub(crate) enum RootBodyGuard {
     /// The guard rejects the operation under a root, as under any
     /// children-capable owner: signal setters, `refresh` and action calls on
     /// every Solid 2 release, store setters where the release's guard does not
     /// exempt roots.
     Rejects,
+    /// As [`RootBodyGuard::Rejects`], but the guard also stands down while the
+    /// runtime disposes an owner (`!disposalDepth`): signal and store setters
+    /// and `refresh` (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:5620-5626`,
+    /// `:5801-5806`, `dist/dev.js:5811-5812`), where an action call's guard does not
+    /// ask (`dist/dev.js:1543-1556`).
+    RejectsOutsideDisposal,
     /// The guard exempts a root: store setters on a release whose guard tests
     /// `!context._root` ([`solid_dialect::Dialect::store_setter_guard_exempts_roots`]).
     Exempts,

@@ -214,6 +214,22 @@ pub enum TrackedCallbackTiming {
     AfterCall,
 }
 
+/// What the dev owned-scope write guards (signal and store setters, `refresh`)
+/// do while the runtime disposes an owner, on the resolved release.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum WriteGuardInDisposal {
+    /// The guard still throws there: a read release before rc.17.
+    Rejects,
+    /// The guard tests `!disposalDepth` and stands down: rc.17.
+    StandsDown,
+    /// No release that was read answers: an installation whose signals nobody
+    /// read or that did not resolve, and the conservative vocabulary. Outside
+    /// a disposal the guard throws on every release, so such a write is still
+    /// reported there; one a disposal decides is uncertifiable, never legal.
+    #[default]
+    Unknown,
+}
+
 /// Invocation trigger, not an execution-role or ownership assertion. Except
 /// DuringCall, every variant needs a separate feasible-delivery premise.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]

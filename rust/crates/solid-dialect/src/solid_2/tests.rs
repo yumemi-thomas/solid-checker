@@ -962,3 +962,45 @@ fn on_hydration_end_runs_its_callback_later_with_a_conditional_owner() {
     assert!(!two.reports_untracked_reads_at(primitive, 0, 1));
     assert!(!two.callback_preserves_owner_write_context(primitive));
 }
+
+/// Only an effect's returned cleanup is proven to run outside a disposal.
+#[test]
+fn only_an_effect_returned_cleanup_runs_outside_a_disposal() {
+    let dialect = Solid2::AUDITED;
+    assert!(dialect.returned_cleanup_runs_outside_disposal(Primitive::CreateEffect, 1));
+    assert!(dialect.returned_cleanup_runs_outside_disposal(Primitive::CreateRenderEffect, 1));
+    assert!(dialect.returned_cleanup_runs_outside_disposal(Primitive::CreateTrackedEffect, 0));
+    // A compute's value feeds the apply; it is no cleanup.
+    assert!(!dialect.returned_cleanup_runs_outside_disposal(Primitive::CreateEffect, 0));
+    for primitive in [
+        Primitive::OnSettled,
+        Primitive::CreateReaction,
+        Primitive::OnCleanup,
+    ] {
+        assert!(!dialect.returned_cleanup_runs_outside_disposal(primitive, 0));
+    }
+}
+
+/// Only `onCleanup`'s callback runs solely in a disposal: an effect apply's
+/// returned cleanup is no registration, and no other slot is one.
+#[test]
+fn only_an_on_cleanup_callback_runs_only_in_disposal() {
+    let dialect = Solid2::AUDITED;
+    assert!(dialect.callback_runs_only_in_disposal(Primitive::OnCleanup, 0));
+    assert!(!dialect.callback_runs_only_in_disposal(Primitive::OnCleanup, 1));
+    for primitive in [
+        Primitive::CreateEffect,
+        Primitive::CreateRenderEffect,
+        Primitive::CreateTrackedEffect,
+        Primitive::OnSettled,
+        Primitive::CreateRoot,
+        Primitive::RunWithOwner,
+    ] {
+        for argument in 0..2 {
+            assert!(
+                !dialect.callback_runs_only_in_disposal(primitive, argument),
+                "{primitive:?} {argument}"
+            );
+        }
+    }
+}

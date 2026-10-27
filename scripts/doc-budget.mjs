@@ -37,7 +37,11 @@ export const FILE_BUDGETS = {
   // And for the pinned SC2001 false positive and the L1 line (40_194 bytes): 40_500.
   // And for ADR 0454's SC4001/SC3001 follow-up and the moves it lists: 41,187 bytes against 40,500: 41_500.
   // And the reachability/summary-graph follow-up (41,549 bytes): 42_000.
-  "docs/open-work.md": 42_000,
+  // And for ADR 0455's recall costs and silences (42,194 bytes against 42,000): 42_500.
+  // And ADR 0455's cleanup amendment (42,543 bytes against 42,500): 43_000.
+  // And its third-review amendment (43,189 bytes): 43_500.
+  // And the fourth-review returned-cleanup loss (43,508 bytes): 43_750.
+  "docs/open-work.md": 43_750,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for the
   // catalog review's ADRs 0381 and 0424-0434, 4 bytes under 115_600; and for ADR 0435,
@@ -75,7 +79,13 @@ export const FILE_BUDGETS = {
   // And for ADR 0454 (a site in a parameter list; the file stood 241,944 bytes before its entry): 246,068 bytes: 246_500.
   // And ADR 0454's owner-graph follow-up: 247,354 bytes: 247_500.
   // And ADR 0454's reachability/summary-graph follow-up (248,060 bytes): 248_500.
-  "docs/decisions.md": 248_500,
+  // And for ADR 0455 (the file stood 248,060 bytes before its entry): 250,959 bytes: 251_000.
+  // And ADR 0455's owner and untrack follow-up: 251,652 bytes: 252_000.
+  // And ADR 0455's named-closure follow-up: 252,614 bytes: 253_000.
+  // And ADR 0455's cleanup amendment: 253,681 bytes: 254_000.
+  // And its third-review amendment: 254,425 bytes: 254_500.
+  // And the fourth-review returned-cleanup note (254,712 bytes): 254_900.
+  "docs/decisions.md": 254_900,
 };
 
 export const GROUP_BUDGETS = [
@@ -109,7 +119,8 @@ export const GROUP_BUDGETS = [
   // All three (ADRs 0450, 0452, 0453): 752,031 bytes: 753_000.
   // With main's ADR 0451 (PR #119) merged in: 753,780 bytes: 754_500.
   // And for ADR 0454 (its entry, the open-work lines, a rule-page paragraph): 758,425 bytes against 754,500: 759_000; its owner-graph follow-up: 760,511 bytes: 761_000; its reachability follow-up: 761,579 bytes: 762_500.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 762_500 },
+  // And for ADR 0455 (its entry, one open-work line, a rule-page paragraph): 765,586 bytes against 762,500: 766_000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 771_500 }, // ADR 0455 fourth-review amendment: 771,408 bytes. // ADR 0455 third-review amendment: 770,819 bytes. // ADR 0455 cleanup amendment: 769,241 bytes. // ADR 0455 named-closure follow-up: 767,101 bytes. // ADR 0455 follow-up: 766,106 bytes against 766,000.
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
@@ -130,7 +141,14 @@ export const GROUP_BUDGETS = [
     // And the pinned false positive's fixture: 303_850 bytes against 303_000: 304_500.
     // And ADR 0454's fixture: 305,605 bytes against 304,500: 306_000.
     // And the owner-graph cases of the same fixture: 306,455 bytes: 307_000.
-    bytes: 307_000,
+    // And ADR 0455's two fixtures: 309,348 bytes against 307,000: 309_500.
+    // And ADR 0455's follow-up cases: 309,906 bytes: 310_000.
+    // And its named-closure cases: 310,410 bytes: 310_500.
+    // And the cleanup-disposal fixture (ADR 0455 amendment): 311,225 bytes: 311_500.
+    // And the cleanup-disposal release and await cases (ADR 0455 amendment): 312,992 bytes: 313_000.
+    // And the third review's cleanup cases (ADR 0455 amendment): 313,739 bytes: 314_000.
+    // And the fourth review's returned-cleanup cases: 314,169 bytes: 314_500.
+    bytes: 314_500,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

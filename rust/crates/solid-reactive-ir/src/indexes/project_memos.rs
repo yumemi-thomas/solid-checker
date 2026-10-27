@@ -34,6 +34,7 @@ use crate::effect_execution::{ApplyCallRows, ApplyRegionRows};
 pub(crate) const PROJECT_TABLES_FROM: u16 = 32;
 
 impl Canonical for crate::router_params::RouterParamsStatus {}
+impl Canonical for crate::execution_role::RootBodyGuard {}
 
 macro_rules! project_tables {
     ($($id:literal $field:ident: $memo:ident),* $(,)?) => {
@@ -403,14 +404,14 @@ whole_program! {
 }
 
 /// ADR 0442, per function and guard (ADR 0450): the write-flow answer of the
-/// function at `(path, span)`, `exempts_root` the guard of the write. Read
+/// function at `(path, span)`, `guard` the write's [`RootBodyGuard`]. Read
 /// through the lookup, so it reruns in every build in which the program moved
 /// and keeps its revision when its answer is equal; a reader of the answer
 /// records this one, and only the functions it asks about are computed.
 pub(crate) struct WriteFlowAnswer;
 
 impl Memo<BuildSchema> for WriteFlowAnswer {
-    type Key = (String, Span, bool);
+    type Key = (String, Span, crate::execution_role::RootBodyGuard);
     type Value = Option<(crate::ExecutionRole, bool)>;
     const NAME: &'static str = "write_flow_answer";
     const ID: TableId = TableId(47);
@@ -421,14 +422,14 @@ impl Memo<BuildSchema> for WriteFlowAnswer {
 
     fn compute(
         ctx: &Ctx<'_, '_, BuildSchema>,
-        (path, span, exempts_root): &(String, Span, bool),
+        (path, span, guard): &(String, Span, crate::execution_role::RootBodyGuard),
     ) -> Result<Self::Value, Cycle> {
         Ok(ctx.project(|lookup| {
-            crate::execution_role::write_flow_answer(lookup, path, *span, *exempts_root)
+            crate::execution_role::write_flow_answer(lookup, path, *span, *guard)
         }))
     }
 
-    fn on_cycle(_: &(String, Span, bool)) -> Self::Value {
+    fn on_cycle(_: &(String, Span, crate::execution_role::RootBodyGuard)) -> Self::Value {
         None
     }
 }

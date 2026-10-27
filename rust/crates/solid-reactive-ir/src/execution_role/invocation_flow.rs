@@ -543,18 +543,13 @@ pub(crate) fn write_flow_answer(
     lookup: &SemanticLookup<'_>,
     path: &str,
     span: Span,
-    exempts_root: bool,
+    guard: RootBodyGuard,
 ) -> Option<(ExecutionRole, bool)> {
     let file = lookup.file_by_path(path)?;
     let literal = file.ast.function_at(span)?;
     if !write_flow_candidate(file, literal) {
         return None;
     }
-    let guard = if exempts_root {
-        RootBodyGuard::Exempts
-    } else {
-        RootBodyGuard::Rejects
-    };
     let outer = COMPUTING_WRITE_FLOW.with(|computing| computing.replace(true));
     let answer = literal_write_flow_role(file, literal, guard, lookup);
     COMPUTING_WRITE_FLOW.with(|computing| computing.set(outer));
@@ -722,11 +717,8 @@ pub(super) fn write_flow_role(
         }
         position = function.span;
         if write_flow_candidate(file, function)
-            && let Some((role, _)) = lookup.write_flow_answer_at(
-                file.path.as_str(),
-                function.span,
-                root_body == RootBodyGuard::Exempts,
-            )
+            && let Some((role, _)) =
+                lookup.write_flow_answer_at(file.path.as_str(), function.span, root_body)
         {
             return Some(role);
         }

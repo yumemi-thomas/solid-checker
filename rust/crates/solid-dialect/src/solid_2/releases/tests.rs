@@ -547,7 +547,7 @@ fn the_optimistic_store_setter_guard_follows_the_resolved_signals() {
     assert_eq!(
         rc0.key(),
         Some(
-            "optimistic-store-setter-unguarded+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
+            "optimistic-store-setter-unguarded+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes"
         )
     );
     assert!(Solid2::RC3.optimistic_store_setter_guarded());
@@ -729,7 +729,7 @@ fn every_variant_has_its_own_key() {
     assert_eq!(
         Solid2::RC9.key(),
         Some(
-            "store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
+            "store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes"
         )
     );
 }
@@ -802,7 +802,7 @@ fn the_conservative_answers_do_not_depend_on_the_audited_release() {
     assert_eq!(
         Solid2::RC3.key(),
         Some(
-            "flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
+            "flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes"
         )
     );
     assert!(Solid2::RC9.key().is_some());
@@ -1072,6 +1072,78 @@ fn rc17_answers_follow_their_owners() {
     let unread = analyzed(&same("2.0.0-rc.16")).0;
     assert!(!unread.optimistic_signal_setter_guarded());
     assert!(unread.callback_handles_pending_accessor_read(Primitive::Latest, 0));
+}
+
+/// The rc.17 review's C4: `!disposalDepth` joined the write guards on rc.17
+/// signals only. Every release read before it keeps the guard rejecting; a
+/// release nobody read, the conservative vocabulary and a mixed installation
+/// whose signals did not resolve answer nothing.
+#[test]
+fn the_write_guards_stand_down_in_disposal_only_on_rc17_signals() {
+    for release in ["2.0.0-rc.0", "2.0.0-rc.3", "2.0.0-rc.9", "2.0.0-rc.13"] {
+        let (vocabulary, _) = analyzed(&same(release));
+        assert_eq!(
+            vocabulary.write_guard_in_disposal(),
+            WriteGuardInDisposal::Rejects,
+            "{release}"
+        );
+    }
+    let (audited, _) = analyzed(&same("2.0.0-rc.17"));
+    assert_eq!(
+        audited.write_guard_in_disposal(),
+        WriteGuardInDisposal::StandsDown
+    );
+    let (mixed, _) = analyzed(&triple(
+        Some("2.0.0-rc.13"),
+        Some("2.0.0-rc.17"),
+        Some("2.0.0-rc.13"),
+    ));
+    assert_eq!(
+        mixed.write_guard_in_disposal(),
+        WriteGuardInDisposal::StandsDown
+    );
+    for signals in [None, Some("2.0.0-rc.15")] {
+        let (unread, _) = analyzed(&triple(Some("2.0.0-rc.17"), signals, Some("2.0.0-rc.17")));
+        assert_eq!(
+            unread.write_guard_in_disposal(),
+            WriteGuardInDisposal::Unknown,
+            "{signals:?}"
+        );
+    }
+    assert_eq!(
+        Solid2::CONSERVATIVE.write_guard_in_disposal(),
+        WriteGuardInDisposal::Unknown
+    );
+}
+
+/// A dialect id keys caches and retained sessions, so the token that names the
+/// disposal answer changed with the answer. An id spelled before the answer
+/// was three-valued says nothing about it, and decodes to `Unknown`, never to
+/// rc.17's `StandsDown`; rc.17's own id now names it.
+#[test]
+fn a_dialect_id_without_the_disposal_token_decodes_to_unknown() {
+    let (rc13, _) = analyzed(&same("2.0.0-rc.13"));
+    let rc13_key = rc13.key().expect("rc.13 is a reviewed variant");
+    assert!(rc13_key.ends_with("disposal-rejects-writes"));
+    let old_key = rc13_key
+        .strip_suffix("+disposal-rejects-writes")
+        .expect("the token is last");
+    let old = Solid2::of_key(old_key).expect("the old spelling still decodes");
+    assert_eq!(old.write_guard_in_disposal(), WriteGuardInDisposal::Unknown);
+    assert_ne!(old.key(), rc13.key());
+
+    let (rc17, _) = analyzed(&same("2.0.0-rc.17"));
+    let rc17_key = rc17.key().expect("rc.17 is a reviewed variant");
+    assert!(rc17_key.ends_with("+disposal-stands-down"), "{rc17_key}");
+    let old_key = rc17_key
+        .strip_suffix("+disposal-stands-down")
+        .expect("the token is last");
+    let old = Solid2::of_key(old_key).expect("the old spelling still decodes");
+    assert_eq!(old.write_guard_in_disposal(), WriteGuardInDisposal::Unknown);
+    assert_eq!(
+        Solid2::of_key(rc17_key).map(|v| v.write_guard_in_disposal()),
+        Some(WriteGuardInDisposal::StandsDown)
+    );
 }
 
 /// The rc.17 review's new callback-taking exports: `dynamicComponent`,

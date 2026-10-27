@@ -153,6 +153,13 @@ pub struct Solid2 {
     /// so no inline execution is stated there, though its root still is
     /// (`render_creates_root`); read releases through rc.13 keep `true`.
     hydrate_code_inline: bool,
+    /// From `@solidjs/signals`: what the dev owned-scope write guards do while
+    /// the runtime disposes an owner ([`Dialect::write_guard_in_disposal`]).
+    /// rc.17 adds `!disposalDepth` to `setSignal`, `markRefresh` and
+    /// `devGuardStoreSetterWrite` (the rc.17 review C4): `Rejects` on read
+    /// releases through rc.13, `StandsDown` on rc.17, `Unknown` for signals
+    /// nobody read or that did not resolve.
+    disposal_write_guard: crate::WriteGuardInDisposal,
     /// From all three packages: whether rc.17's callback-taking exports
     /// `dynamicComponent`, `dispatchAsInteraction`, `createDeferred`,
     /// `lazyModule` and `onHydrationEnd` are exports, modelled as read on rc.17
@@ -671,8 +678,9 @@ impl Dialect for Solid2 {
         true
     }
 
-    /// Source: rc.0 `untrack` (`dev.js:2928-2942`) clears `tracking` but not
-    /// `context`, and the write guard keys on `context`. Probed: a setter,
+    /// Source: `untrack` clears `tracking` but not `context`
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:5099-5115`, rc.0
+    /// `dev.js:2928-2942`), and the write guard keys on `context`. Probed: a setter,
     /// `refresh`, or action call inside `untrack(...)` within a memo,
     /// component body, or effect compute throws
     /// `REACTIVE_WRITE_IN_OWNED_SCOPE` / `ACTION_CALLED_IN_OWNED_SCOPE`,
@@ -682,13 +690,15 @@ impl Dialect for Solid2 {
     /// runtime contradicts it — the runtime wins.)
     ///
     /// `dynamic(source, { static: true })` runs its source through that same
-    /// `untrack` (`@solidjs/web@2.0.0-rc.9` `dist/web.dev.js:2199`), with no
-    /// owner of its own, so a write in a static source is exactly as legal as
+    /// `untrack` (`solid-js@2.0.0-rc.17` `dist/solid.dev.js:1445`, in
+    /// `dynamicCore`: `staticDynamic(untrack(source), tagArm)`; rc.9
+    /// `@solidjs/web` `dist/web.dev.js:2199`), with no owner of its own, so a write in a static source is exactly as legal as
     /// at the `dynamic` call.
     ///
     /// `flush(fn)` runs `fn()` inline between a `syncDepth` increment and the
     /// drain, touching neither `context` nor the listener
-    /// (`@solidjs/signals@2.0.0-rc.0` `dist/dev.js:1085-1099`, rc.3
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:2646-2668`, rc.0
+    /// `dist/dev.js:1085-1099`, rc.3
     /// `dist/dev.js:1788-1802`, rc.9 `dist/dev-shared.js:2202-2230`). Probed
     /// on every published rc.0-rc.9 dev client build: `getOwner()`
     /// inside `flush(fn)` is the caller's owner, and a signal setter inside
@@ -717,6 +727,46 @@ impl Dialect for Solid2 {
                 | Primitive::Flush
                 | Primitive::DispatchAsInteraction
         )
+    }
+
+    /// Source: `onCleanup(fn)` pushes `fn` on the current owner's `_disposal`
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:1415-1421`), and
+    /// the engine calls that list only from `runDisposal` (`:1302-1330`) with
+    /// `enterDisposal()` around it (`:1314`), on the owner's disposal and on a
+    /// computation's rerun alike. An effect apply's returned cleanup is no
+    /// registration: a rerun calls it outside that bracket (probed: a signal
+    /// setter in it throws), and only the final teardown raises the depth for
+    /// it (`:1290`).
+    fn callback_runs_only_in_disposal(&self, primitive: Primitive, argument: usize) -> bool {
+        primitive == Primitive::OnCleanup && argument == 0
+    }
+
+    /// Source: a rerun of an effect calls the cleanup its apply returned
+    /// outside `runDisposal`'s bracket (probed on rc.17: a signal setter in it
+    /// throws), and only the final teardown raises the depth for it
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:1290`). The
+    /// settled and reaction primitives' cleanups are not read for this.
+    fn returned_cleanup_runs_outside_disposal(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        matches!(
+            (primitive, argument),
+            (Primitive::CreateEffect | Primitive::CreateRenderEffect, 1)
+                | (Primitive::CreateTrackedEffect, 0)
+        )
+    }
+
+    /// Answered from the resolved `@solidjs/signals` (`releases.rs`): rc.17
+    /// adds `!disposalDepth` to `setSignal` (`dist/dev-shared.js:5620-5626`),
+    /// `markRefresh` (`:5801-5806`) and `devGuardStoreSetterWrite`
+    /// (`dist/dev.js:5811-5812`); rc.13 and every earlier read release have no
+    /// such test (the rc.17 review C4: a setter in a cleanup throws on rc.13,
+    /// is legal on rc.17). A signals release nobody read, or that did not
+    /// resolve, answers `Unknown`.
+    fn write_guard_in_disposal(&self) -> crate::WriteGuardInDisposal {
+        self.disposal_write_guard
     }
 
     /// Source: `createRoot(init)` is `createOwner()` then `runWithOwner(owner,
