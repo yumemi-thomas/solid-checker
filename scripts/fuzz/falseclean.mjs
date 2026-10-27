@@ -74,15 +74,19 @@ export function stackShape(lineTable, frames) {
   return kinds.length ? kinds.join("<") : "-";
 }
 
+/** The call a diagnostic at `line` is about: an owner call or a payload read/write there beats a deeper node that is only its argument. */
+export function callAtLine(lineTable, line) {
+  const rows = nodesAtLine(lineTable, line);
+  return rows.find((row) => /^(own:|read$|write$)/.test(row.label)) ?? rows[0] ?? null;
+}
+
 /**
  * The coarse key of a false clean: code, primitive chain, stack shape. `diagnostic` is a classification item's
  * (`code`, `line`, `frames`). An unplaced diagnostic (no App line) has no chain and no shape.
  */
 export function coarseKey({ diagnostic, program, lineTable }) {
   if (diagnostic.line === null || diagnostic.line === undefined) return `${diagnostic.code}|-|unplaced`;
-  // The call the diagnostic is about: an owner call or a payload read/write on the line beats a deeper node that is only its argument.
-  const rows = nodesAtLine(lineTable, diagnostic.line);
-  const node = rows.find((row) => /^(own:|read$|write$)/.test(row.label)) ?? rows[0];
+  const node = callAtLine(lineTable, diagnostic.line);
   const chain = node ? primChain(program, node.path) : "?";
   return `${diagnostic.code}|${chain}|${stackShape(lineTable, diagnostic.frames?.length ? diagnostic.frames : [diagnostic.line])}`;
 }
@@ -142,13 +146,13 @@ export function loadLedger(path = LEDGER_PATH, targets) {
 }
 
 /**
- * Turns the false-clean items the ledger accepts into `known-open` (with the entry's ref and reason) and recomputes the
- * program's verdict. Returns the entries that fired. Mutates `value.classification`.
+ * Gives every false-clean item its coarse key, turns the ones the ledger accepts into `known-open` (with the entry's ref and
+ * reason) and recomputes the program's verdict. Returns the entries that fired. Mutates `value.classification`.
  */
 export function applyLedger(value, ledger, rank) {
   const fired = [];
   const items = value.classification?.items;
-  if (!items?.length || !ledger.length) return fired;
+  if (!items?.length) return fired;
   for (const { item, key } of falseCleanItems(value)) {
     item.coarseKey = key;
     const entry = ledger.find((candidate) => candidate.code === item.diagnostic.code && candidate.coarseKey === key);
