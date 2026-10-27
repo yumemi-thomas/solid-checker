@@ -378,6 +378,12 @@ async function sweep(options, config, out) {
       const chunk = pick.slice(at, at + 40);
       const records = await chromeRecords(chunk.map((row) => values.get(row.id)), config, options, out);
       for (const row of chunk) row.chrome = judgeChrome(row, records.get(row.id));
+      // A browser that would not close in time or a clean run that did not report is the machine's, not the program's: once more.
+      const retry = chunk.filter((row) => row.chrome.status === "chrome-inconclusive" && /browser close|no clean reference|no record/.test(String(row.chrome.why)));
+      if (retry.length) {
+        const again = await chromeRecords(retry.map((row) => values.get(row.id)), config, options, out);
+        for (const row of retry) { const next = judgeChrome(row, again.get(row.id)); if (next.status !== "chrome-inconclusive") row.chrome = { ...next, retried: true }; }
+      }
       console.error(`matrix: Chrome ${Math.min(at + 40, pick.length)}/${pick.length}`);
     }
   }
