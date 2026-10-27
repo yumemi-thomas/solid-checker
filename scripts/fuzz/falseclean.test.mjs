@@ -182,11 +182,15 @@ describe("Chrome's confirmation", () => {
   });
   it("does not confirm a different line, a covering finding, or silence", () => {
     expect(status(item(6), [fc(9)])).toBe("line-differs");
-    expect(status(item(6), [{ kind: "recall-gap", diagnostic: { code: "NO_OWNER_CLEANUP", line: 6 } }])).toBe("covered-in-chrome");
+    expect(status(item(6), [{ kind: "recall-gap", diagnostic: { code: "NO_OWNER_CLEANUP", line: 6 } }], record({ runtime: { diagnostics: [{ code: "NO_OWNER_CLEANUP", positions: [{ file: "App.tsx", line: 6 }] }] } }))).toBe("covered-in-chrome");
+    // A violation covers the diagnostic in Chrome: an agree item carries no diagnostic, the run's own events say Chrome reported it.
+    expect(status(item(6), [{ kind: "agree", finding: {} }], record({ runtime: { diagnostics: [{ code: "NO_OWNER_CLEANUP", positions: [{ file: "App.tsx", line: 6 }] }] } }))).toBe("covered-in-chrome");
     expect(status(item(6), [])).toBe("refuted-by-chrome");
   });
   it("counts a diagnostic Chrome could not place as Solid speaking, for a false clean", () => {
     expect(status(item(6), [], record({ runtime: { unattributed: ["NO_OWNER_CLEANUP"] } }))).toBe("confirmed-unplaced");
+    // ... unless a finding that could claim it exists somewhere in the file.
+    expect(status(item(6), [], record({ runtime: { unattributed: ["NO_OWNER_CLEANUP"] }, checker: { findings: [{ rule: "missing-owner", kind: "uncertifiable", line: 2, endLine: 2 }] } }))).toBe("refuted-by-chrome");
     expect(status(item(null), [{ kind: "candidate-false-clean", diagnostic: { code: "NO_OWNER_CLEANUP", line: null } }])).toBe("confirmed-unplaced");
     expect(isConfirmed("confirmed-unplaced") && isConfirmed("confirmed") && !isConfirmed("line-differs")).toBe(true);
   });

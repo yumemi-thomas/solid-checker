@@ -12,7 +12,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runtimeEvents } from "./classify.mjs";
-import { isDefectCode, policyOf, severityRank } from "./codes.mjs";
+import { codeRules, isDefectCode, policyOf, severityRank, withholdingRules } from "./codes.mjs";
 import { clone, getAt, isSite, isValid, num, slotsOf, walk } from "./model.mjs";
 import { nodesAtLine } from "./print.mjs";
 
@@ -217,15 +217,19 @@ export function rankRecallGaps(rows) {
 export function confirmFalseClean({ item, judged, record }) {
   const { code, line } = item.diagnostic;
   if (!judged || !record || record.runtime?.failure || !record.checker?.ok || record.checker.perturbed?.length) return { status: "chrome-inconclusive", reason: judged?.reasons?.[0] ?? "no usable Chrome run" };
+  const events = runtimeEvents(record.runtime).filter((event) => event.code === code);
   const chromeItems = judged.items.filter((candidate) => candidate.diagnostic?.code === code);
   const placed = chromeItems.filter((candidate) => candidate.kind === "candidate-false-clean" && candidate.diagnostic.line !== null);
   if (line !== null && placed.some((candidate) => candidate.diagnostic.line === line)) return { status: "confirmed", placed: true };
-  if (chromeItems.some((candidate) => ["recall-gap", "agree"].includes(candidate.kind) && (line === null || candidate.diagnostic.line === line))) return { status: "covered-in-chrome" };
   if (placed.length) return { status: "line-differs", chromeLines: placed.map((candidate) => candidate.diagnostic.line) };
-  const claims = (record.checker.findings ?? []).length;
+  // Solid spoke but Chrome could not place it: with no finding anywhere that could claim it, the checker was silent.
+  const rules = codeRules[code] ?? [];
+  const claimed = (record.checker.findings ?? []).some((finding) => rules.includes(finding.rule) || withholdingRules.includes(finding.rule));
   const unplaced = chromeItems.some((candidate) => candidate.kind === "candidate-false-clean" && candidate.diagnostic.line === null)
-    || ((record.runtime.unattributed ?? []).map(String).includes(code) && !runtimeEvents(record.runtime).some((event) => event.code === code && event.positions.length));
-  if (unplaced && !(claims && chromeItems.some((candidate) => candidate.kind !== "candidate-false-clean"))) return { status: "confirmed-unplaced", placed: false };
+    || ((record.runtime.unattributed ?? []).map(String).includes(code) && !events.some((event) => event.positions.length) && !claimed);
+  if (unplaced) return { status: "confirmed-unplaced", placed: false };
+  // Chrome reports the code and a finding covers it there (the fast path's frames, an IIFE's call line say, missed the line): the checker is not silent.
+  if (events.length) return { status: "covered-in-chrome" };
   return { status: "refuted-by-chrome" };
 }
 export const isConfirmed = (status) => ["confirmed", "confirmed-unplaced"].includes(status);
