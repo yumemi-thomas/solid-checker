@@ -110,6 +110,36 @@
       "start": 4143,
       "end": 4151,
       "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 5734,
+      "end": 5741,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 5943,
+      "end": 5950,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 6172,
+      "end": 6179,
+      "fixes": 0
     }
   ]
 }

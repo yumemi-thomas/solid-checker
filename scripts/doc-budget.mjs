@@ -165,7 +165,8 @@ export const GROUP_BUDGETS = [
     // And ADR 0458's fixture (namespace-destructured-api) and flush-fixture lines: 318,351 bytes: 318_500.
     // And its review nits (the fixture's added cases): 318,612 bytes: 318_700.
     // And ADR 0459's fixture (write-render-apply-row-layers): 320,112 bytes: 320_500.
-    bytes: 320_500,
+    // And its review's await cases: 320,562 bytes: 321_000.
+    bytes: 321_000,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

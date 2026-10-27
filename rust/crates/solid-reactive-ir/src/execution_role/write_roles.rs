@@ -222,6 +222,8 @@ fn detached_in_place(
     // or keeps it ([`LayerRun::InPlaceAmongOthers`]): the callback has runs this
     // climb does not follow, so only a run that proves a violation is read.
     let mut among_others = false;
+    // Whether a layer on the way holds the site past an await.
+    let mut suspended = false;
     // Bounded: each step moves to the call that holds the previous function.
     for _ in 0..16 {
         let Some(function) = crate::owners::owning_function(&file.ast, at) else {
@@ -231,6 +233,11 @@ fn detached_in_place(
             break;
         }
         in_list |= !function.body.contains(at);
+        // An await before the site in a layer: the rest of that layer runs
+        // later, on a stack the apply's first run is not on (ADR 0459).
+        suspended |= follows_dominating_await(file, at)
+            || follows_try_head_await(file, at, lookup)
+            || may_follow_suspension(file, at);
         let primitive_call = file
             .ast
             .arguments_containing(function.span)
@@ -281,6 +288,9 @@ fn detached_in_place(
                 && callback_owner_at_call(file, call, primitive, index, lookup)
                     == Some(solid_dialect::CallbackOwner::InheritsFirstRun)
             {
+                if suspended {
+                    return None;
+                }
                 if in_list || among_others {
                     return Some(WriteRegionAdjustment::OwnerUnknown);
                 }
@@ -877,13 +887,21 @@ fn control_flow_nested_layers(
         if function.generator || !function.body.contains(at) {
             return Some(ControlFlowLayers::Unrun);
         }
-        let primitive_argument = file
-            .ast
-            .arguments_containing(function.span)
-            .any(|(call, index)| {
-                file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
-                    && lookup.primitive_at_call(file, call.span).is_some()
-            });
+        // Past an await the rest of the layer runs as a continuation with no
+        // owner, where a write is legal; past a possible suspension, unplaced.
+        if follows_dominating_await(file, at) || follows_try_head_await(file, at, lookup) {
+            return None;
+        }
+        if may_follow_suspension(file, at) {
+            return Some(ControlFlowLayers::Unrun);
+        }
+        let primitive_argument =
+            file.ast
+                .arguments_containing(function.span)
+                .any(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                        && lookup.primitive_at_call(file, call.span).is_some()
+                });
         if primitive_argument || jsx_attribute_value_function(file, function.span) {
             return None;
         }

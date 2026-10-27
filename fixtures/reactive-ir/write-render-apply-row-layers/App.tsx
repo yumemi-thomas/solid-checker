@@ -283,3 +283,63 @@ export function RowEffect() {
     </ul>
   );
 }
+
+// Uncertifiable (legal at run time): past an await the rest of the layer runs as
+// a continuation with no owner; the row's placement is withheld there (review of
+// ADR 0459), and the continuation is not proven.
+export function RowAsyncAwait() {
+  const [w, setW] = createSignal(0);
+  const load = () => Promise.resolve(1);
+  return (
+    <ul>
+      <For each={[1]}>
+        {() => {
+          void (async () => {
+            await load();
+            setW(7);
+          })();
+          return <li>{w()}</li>;
+        }}
+      </For>
+      <For each={[2]}>
+        {() => (
+          <li>
+            {h1(async () => {
+              await load();
+              setW(8);
+            })}
+          </li>
+        )}
+      </For>
+      <For each={[3]}>
+        {() => (
+          <li>
+            {(() => {
+              void (async () => {
+                await load();
+                (() => setW(9))();
+              })();
+              return 1;
+            })()}
+          </li>
+        )}
+      </For>
+    </ul>
+  );
+}
+
+// Silent, as before ADR 0459: the layer past an await in a render effect's apply.
+export function RenderApplyAsyncAwait() {
+  const [, setW] = createSignal(0);
+  const load = () => Promise.resolve(1);
+  createRenderEffect(
+    () => 1,
+    () => {
+      void (async () => {
+        await load();
+        setW(1);
+      })();
+    },
+  );
+  return <p />;
+}
