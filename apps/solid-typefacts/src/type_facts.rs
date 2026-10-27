@@ -760,8 +760,10 @@ pub fn declared_keys_at(checker: &mut Checker, node: P<Node>) -> Option<Vec<Arc<
 
 /// ADR 0460: whether `node` is a property access whose property symbol the
 /// checker marks optional and not readonly, the condition under which `delete
-/// node` raises neither TS2704 (readonly operand) nor TS2790 (non-optional
-/// operand) under any compiler option. The symbol is the one `checkDeleteExpression`
+/// node` (or `delete (node)`) raises neither TS2704 (readonly operand) nor
+/// TS2790 (non-optional operand) under any compiler option; a type assertion
+/// around it is TS2703, and a nullable object below it TS18047/TS18048, which
+/// the consumer checks. The symbol is the one `checkDeleteExpression`
 /// reads: the access's resolved symbol. An element access, a private name, an
 /// unresolved access (`any`, a missing property) and an index signature (its
 /// symbol is a signature, not a property) answer `false`, which is no claim.

@@ -7,8 +7,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 475,
-      "end": 482,
+      "start": 613,
+      "end": 620,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete/App.tsx",
+      "start": 631,
+      "end": 640,
       "fixes": 0
     },
     {
@@ -17,8 +27,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 493,
-      "end": 502,
+      "start": 807,
+      "end": 814,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete/App.tsx",
+      "start": 839,
+      "end": 848,
       "fixes": 0
     },
     {
@@ -27,8 +47,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 650,
-      "end": 657,
+      "start": 1028,
+      "end": 1035,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete/App.tsx",
+      "start": 1084,
+      "end": 1093,
       "fixes": 0
     },
     {
@@ -37,18 +67,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 706,
-      "end": 715,
-      "fixes": 0
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 840,
-      "end": 847,
+      "start": 1218,
+      "end": 1225,
       "fixes": 0
     },
     {
@@ -57,8 +77,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 967,
-      "end": 1008,
+      "start": 1345,
+      "end": 1386,
       "fixes": 0
     },
     {
@@ -67,8 +87,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 995,
-      "end": 1002,
+      "start": 1373,
+      "end": 1380,
       "fixes": 0
     },
     {
@@ -77,8 +97,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 1195,
-      "end": 1205,
+      "start": 1573,
+      "end": 1583,
       "fixes": 0
     },
     {
@@ -87,8 +107,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 1358,
-      "end": 1399,
+      "start": 1736,
+      "end": 1777,
       "fixes": 0
     },
     {
@@ -97,8 +117,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 1403,
-      "end": 1471,
+      "start": 1781,
+      "end": 1849,
       "fixes": 0
     },
     {

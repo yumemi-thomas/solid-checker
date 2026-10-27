@@ -31,7 +31,8 @@ Write in an owned scope (`no-write-in-pure-computation`, SC2001):
 
 Store write outside a setter (`no-store-mutation-outside-setter`, SC2003; ADR 0425):
 
-- `delete store.path` (ADR 0460) is reported only for a static member path whose property Type Facts proves optional and not readonly: an element access (`delete store.rec[k]`, an index signature), an optional chain, a cast root, a `const` alias, and a non-optional property typed `T | undefined` (TS2790 under `exactOptionalPropertyTypes`) stay silent. `Object.assign`/`Reflect.deleteProperty` on a store are not built.
+- `delete store.path` (ADR 0460) is reported only for a bare or parenthesized static member path whose property Type Facts proves optional and not readonly and whose links past the root it proves never nullish (a link without a served domain is uncertifiable): a type assertion on the operand (TS2703), an element access (`delete store.rec[k]`, an index signature), an optional chain, a cast root, a `const` alias, and a non-optional property typed `T | undefined` (TS2790 under `exactOptionalPropertyTypes`) stay silent. `Object.assign`/`Reflect.deleteProperty` on a store are not built.
+- The own-setter exemption is lexical, for the delete form too: a closure defined outside `setStore(…)` and called inside its callback commits on rc.17 but is reported.
 - The path proof stops at the root identifier: a mutator or assignment through an intermediate the store does not wrap (a frozen object, a `Map`) is reported although it lands. `createOptimisticStore` results are treated as stores (unprobed on rc.17; upstream ignores them).
 - Type-correct rebinding (`count = otherAccessor`, `store = { … }` on a `let`) is silent: the accessor-binding and accessor-member (`memo.a = 1`) arms are deleted, and the cast and same-type spellings are no proven defect.
 
@@ -148,6 +149,8 @@ SC6001 root lifetime (ADR 0355): explicit roots in ref apply remain uncertifiabl
 Recall trade (ADR 0354): first-iteration reads before a loop await and reads after an awaiting switch case remain uncertifiable.
 
 Known false-positive shapes left open (fire today, wanted gone):
+
+- `no-store-mutation-outside-setter` (SC2003), tsc overlap: an assignment through an optional link (`createStore<{ a?: { b?: number } }>({})`, `store.a.b = 1`) is TS18048 under strictNullChecks and is reported. The delete form checks each link's primitive value domain (ADR 0460); the assignment form does not yet.
 
 - `no-write-in-pure-computation` (SC2001) and `strict-read-untracked` (SC1001), ADR 0445: an exported capitalized JSX-returning function nothing in the program renders is a component by module surface, so unseen code that calls it plainly makes its body findings wrong. Recall trade: a dead, unexported or lowercase one, or one bound to a call's result, is uncertifiable even when a framework renders it.
 - `strict-read-untracked` (SC1001): a function rendered by a tag the program never reaches (`<Show when={false}><Row/></Show>`) and also called plainly (`items().map(Row)`) keeps its component proof.

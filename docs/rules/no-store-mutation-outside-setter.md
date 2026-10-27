@@ -22,8 +22,10 @@ symbol:
 
 - an assignment, compound assignment or update (`store.a.b = x`,
   `store.n++`);
-- a `delete` of a static member path (`delete store.a.b`) whose property
-  Type Facts proves optional and not readonly (ADR 0460);
+- a `delete` of a bare or parenthesized static member path (`delete
+  store.a.b`) whose property Type Facts proves optional and not readonly, and
+  whose objects past the root (`store.a`) it proves never `null` or
+  `undefined` (ADR 0460); a missing fact makes it uncertifiable;
 - a call of one of the nine in-place `Array.prototype` methods (`push`, `pop`,
   `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`) on a
   path of the store. The callee must resolve through Type Facts to the
@@ -69,9 +71,13 @@ Not reported, deliberately:
   strictNullChecks) or TS2704. A non-optional property typed `T | undefined`
   stays silent too (TS2790 under `exactOptionalPropertyTypes`). Only a property
   the checker marks optional and not readonly (`v?: T`, `Partial<T>`) is
-  reported, through the Type Fact `writableOptionalProperty`. An element
-  access, an optional chain, a cast root and a `const` alias of the store are
-  refused. Pinned in the tsc oracle and ownership cases
+  reported, through the Type Fact `writableOptionalProperty`. A type
+  assertion on the operand (`delete store.v!`, `delete (store.v as T)`) is
+  TS2703, and a link that may be `undefined` or `null` (`store.o.b` with `o?:`)
+  is TS18048/TS18047: both silent. Any other chain past the root
+  (`store.a.b`) is uncertifiable: without `strictNullChecks` a link's type
+  proves nothing at run time. An element access, an optional chain, a
+  cast root and a `const` alias of the store are refused. Pinned in the tsc oracle and ownership cases
   `…/delete-required-property/001`, `…/delete-optional-property/001`; fixture
   `store-delete`.
 - Reassigning an accessor binding (`count = 2`, this rule's former

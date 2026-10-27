@@ -511,7 +511,8 @@ fn declared_key_demands_are_limited_to_intrinsic_element_spreads() {
 
 #[test]
 fn writable_optional_property_demands_are_static_delete_operands() {
-    let source = "delete store.a.b; delete (store.v); delete store[key]; delete value; store.w;";
+    let source = "delete store.a.b; delete (store.v); delete store[key]; delete value; store.w; \
+                  delete store.x!; delete (store.y as T);";
     let file = test_file_facts("src/deletes.ts", source);
     let span_of = |needle: &str| {
         let start = source.find(needle).unwrap();
@@ -542,6 +543,14 @@ fn writable_optional_property_demands_are_static_delete_operands() {
         asked.contains(&location("store.v")),
         "the parenthesized operand asks at its member"
     );
+    // The chain's member objects past the root ask for their primitive value
+    // domain.
+    let links: Vec<_> = demands
+        .iter()
+        .filter(|demand| demand.primitive_value_domain)
+        .filter(|demand| demand.location == location("store.a"))
+        .collect();
+    assert_eq!(links.len(), 1, "the link `store.a` asks its domain");
 }
 
 #[test]

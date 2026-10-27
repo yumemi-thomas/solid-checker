@@ -3,6 +3,7 @@ import { createEffect, createProjection, createStore } from "solid-js";
 type State = {
   v?: number;
   a: { b?: number };
+  o?: { b?: number };
   nick: string | undefined;
   rec: Record<string, number>;
 };
@@ -10,14 +11,23 @@ type State = {
 const [store, setStore] = createStore<State>({ v: 0, a: { b: 1 }, nick: undefined, rec: {} });
 const [other, setOther] = createStore({ n: 0 });
 
-// Positive: an optional property of the store, and of a nested store path,
-// deleted in the component body.
+// Positive: an optional property of the store deleted in the component body.
+// Uncertifiable: one on a nested store path (a link's type proves nothing at
+// run time without strictNullChecks, which the facts do not record).
 export function Body() {
   delete store.v;
   delete store.a.b;
 }
 
-// Positive: in an effect's apply function and an event handler.
+// Positive: a parenthesized operand. Uncertifiable: an optional link narrowed
+// to its object (TypeScript accepts both).
+export function Narrowed() {
+  delete (store.v);
+  if (store.o) delete store.o.b;
+}
+
+// Positive: in an effect's apply function; uncertifiable: a nested path in an
+// event handler.
 export function Deferred() {
   createEffect(() => other.n, () => {
     delete store.v;

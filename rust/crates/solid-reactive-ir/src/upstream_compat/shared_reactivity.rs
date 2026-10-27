@@ -1453,19 +1453,32 @@ fn no_store_mutator_call(
 /// assignment (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5761-5767`), with
 /// the same exemptions ([`store_write_is_exempt`]).
 ///
-/// TypeScript reports `delete` of a required property (TS2790 under
-/// strictNullChecks) and of a readonly one (TS2704), so the operand must carry
-/// Type Facts' `writable_optional_property`: the property symbol is optional and
-/// not readonly, which type-checks under every compiler option. A computed key,
-/// an optional chain, a root that is not a bare identifier and a props object
-/// stay silent.
+/// The rule never reports what TypeScript reports on the same delete:
+/// - the operand must be a bare or parenthesized member: `delete store.v!` and
+///   `delete (store.v as T)` are TS2703, so a type assertion is silent;
+/// - its property must carry Type Facts' `writable_optional_property`
+///   (optional, not readonly): a required one is TS2790 under
+///   strictNullChecks, a readonly one TS2704;
+/// - every member object the chain reads past the root (`store.a` in
+///   `delete store.a.b`) must have a primitive value domain without `null` or
+///   `undefined`: one that may hold either is TS18047/TS18048 under
+///   strictNullChecks, so it is silent; one that excludes both is still no
+///   runtime proof without strictNullChecks (unrecorded), so a chain past the
+///   root is at most uncertifiable.
+///
+/// A proven store delete whose facts were not served (no entity at the
+/// operand, no domain or an unknown one at a link) is uncertifiable: the write
+/// is proven, the TypeScript question is open. A computed key, an optional
+/// chain, a root that is not a bare identifier and a props object stay silent.
 fn no_store_delete(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
     defects: &mut Vec<StaticDefect>,
 ) {
     for &target in &file.ast.deleted_targets {
-        let member = file.ast.peel_ts_sugar_span(target);
+        let Some(member) = file.peel_parentheses(target) else {
+            continue;
+        };
         if file.ast.member_at(member).is_none()
             || file.ast.computed_members.binary_search(&member).is_ok()
         {
@@ -1476,12 +1489,17 @@ fn no_store_delete(
         };
         // Every link from the operand down to the root is a plain member read:
         // no `?.` (which may skip the delete) and no wrapper between links.
+        // The objects past the root are collected for the nullability check.
         let mut link = member;
         let mut plain = true;
+        let mut objects = Vec::new();
         while let Some(current) = file.ast.member_at(link) {
             if file.ast.optional_members.binary_search(&link).is_ok() {
                 plain = false;
                 break;
+            }
+            if link != member {
+                objects.push(link);
             }
             link = current.object;
         }
@@ -1504,13 +1522,6 @@ fn no_store_delete(
         let Some((name, _)) = context.accessors.get(symbol) else {
             continue;
         };
-        if !context
-            .lookup
-            .entity_at(file.path.as_str(), member)
-            .is_some_and(|entity| entity.writable_optional_property)
-        {
-            continue;
-        }
         if store_write_is_exempt(
             file,
             context,
@@ -1523,6 +1534,35 @@ fn no_store_delete(
         ) {
             continue;
         }
+        let path = file.path.as_str();
+        let uncertain = match context.lookup.entity_at(path, member) {
+            None => true,
+            Some(entity) if !entity.writable_optional_property => continue,
+            Some(_) => {
+                let mut open = false;
+                let mut nullable = false;
+                for &object in &objects {
+                    match context
+                        .lookup
+                        .entity_at(path, object)
+                        .and_then(|entity| entity.primitive_value_domain.present())
+                    {
+                        Some(domain) if !domain.unknown() => {
+                            nullable |= domain.may_be_null() || domain.may_be_undefined();
+                        }
+                        _ => open = true,
+                    }
+                }
+                if nullable {
+                    continue;
+                }
+                // A type says nothing about runtime nullishness without
+                // `strictNullChecks`, which these facts do not record: a link
+                // may hold `undefined`, and then the delete throws before any
+                // write. So a chain past the root is never a proof.
+                open || !objects.is_empty()
+            }
+        };
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {
                 name: name.as_str().to_owned(),
@@ -1531,7 +1571,7 @@ fn no_store_delete(
             location: location(file.path.shared(), member),
             analysis_context: String::new(),
             fixes: vec![],
-            uncertain: false,
+            uncertain,
         });
     }
 }

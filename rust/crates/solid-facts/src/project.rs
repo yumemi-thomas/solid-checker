@@ -580,6 +580,32 @@ impl FileFacts {
         self.source.get(span.start as usize..span.end as usize)
     }
 
+    /// The expression inside any parentheses around `span`; `None` when a type
+    /// assertion (`as`, `<T>`, `!`, `satisfies`) wraps it on the way. Unlike
+    /// [`AstFacts::peel_ts_sugar_span`], which peels both, this is the operand
+    /// TypeScript itself sees through (`skipParentheses`).
+    #[must_use]
+    pub fn peel_parentheses(&self, span: Span) -> Option<Span> {
+        let mut value = span;
+        while let Ok(index) = self
+            .ast
+            .transparent_wrappers
+            .binary_search_by_key(&value, |wrapper| wrapper.span)
+        {
+            let wrapper = &self.ast.transparent_wrappers[index];
+            if wrapper.inner == value {
+                break;
+            }
+            let parenthesized = wrapper.inner.start > value.start
+                && self.source.as_bytes().get(value.start as usize) == Some(&b'(');
+            if !parenthesized {
+                return None;
+            }
+            value = wrapper.inner;
+        }
+        Some(value)
+    }
+
     /// The spans of this file's calls whose callee, past transparent
     /// TypeScript wrappers, is spelled `eval`. Computed once per file.
     #[must_use]

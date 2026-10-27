@@ -42,6 +42,9 @@ struct DemandSpans {
     library_type_spans: HashSet<Span>,
     declared_key_spans: HashSet<Span>,
     writable_optional_property_spans: HashSet<Span>,
+    /// The member objects a `delete` operand's chain reads (ADR 0460), asked
+    /// for their primitive value domain without a symbol observation.
+    delete_object_spans: HashSet<Span>,
     async_symbol_spans: HashSet<Span>,
     async_value_spans: Vec<Span>,
 }
@@ -103,18 +106,33 @@ fn plan_file(
 }
 
 /// ADR 0460: whether a `delete` operand that is a static member names a
-/// property TypeScript lets it delete (optional, not readonly), which
+/// property TypeScript lets it delete (optional, not readonly), and whether
+/// each object the member chain reads on the way may be `null` or `undefined`
+/// (TS18047/TS18048 under strictNullChecks), which
 /// `no-store-mutation-outside-setter` asks before reporting a store delete.
+/// TypeScript sees through parentheses only: `delete store.v!` and `delete
+/// (store.v as T)` are TS2703, so a type assertion on the operand asks nothing.
 fn collect_delete_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut DemandSpans) {
     if !dialect.semantic_demands.delete_operand_optionality {
         return;
     }
     for &target in &file.ast.deleted_targets {
-        let member = file.ast.peel_ts_sugar_span(target);
-        if file.ast.member_at(member).is_some()
-            && file.ast.computed_members.binary_search(&member).is_err()
-        {
-            spans.writable_optional_property_spans.insert(member);
+        let Some(member) = file.peel_parentheses(target) else {
+            continue;
+        };
+        let Some(access) = file.ast.member_at(member) else {
+            continue;
+        };
+        if file.ast.computed_members.binary_search(&member).is_ok() {
+            continue;
+        }
+        spans.writable_optional_property_spans.insert(member);
+        // The intermediate links: every member object below the operand that
+        // is itself a member read (the chain's root is not one).
+        let mut object = access.object;
+        while let Some(link) = file.ast.member_at(object) {
+            spans.delete_object_spans.insert(object);
+            object = link.object;
         }
     }
 }
@@ -840,6 +858,7 @@ fn emit_span_demands(
         library_type_spans,
         declared_key_spans,
         writable_optional_property_spans,
+        delete_object_spans,
         async_symbol_spans,
         async_value_spans,
     } = spans;
@@ -898,6 +917,11 @@ fn emit_span_demands(
     for span in writable_optional_property_spans {
         let mut planned = demand(file_location(path, span));
         planned.writable_optional_property = true;
+        demands.push(planned);
+    }
+    for span in delete_object_spans {
+        let mut planned = demand(file_location(path, span));
+        planned.primitive_value_domain = true;
         demands.push(planned);
     }
 

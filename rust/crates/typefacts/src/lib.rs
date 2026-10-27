@@ -1034,9 +1034,11 @@ pub struct EntityFact {
     pub declared_keys: Option<Arc<Vec<Arc<str>>>>,
     /// The demanded expression is a property access (`o.p`) whose property
     /// symbol the checker marks optional (`p?:`) and not readonly (ADR 0460).
-    /// Such an operand is legal for `delete` under every compiler option:
-    /// TS2704 needs a readonly symbol, and TS2790 a non-optional one (with or
-    /// without `exactOptionalPropertyTypes`). `false` is the absence of that
+    /// As a bare or parenthesized `delete` operand it raises neither TS2704
+    /// (a readonly symbol) nor TS2790 (a non-optional one, with or without
+    /// `exactOptionalPropertyTypes`) under any compiler option; a type
+    /// assertion around it (TS2703) and a nullable object below it
+    /// (TS18047/TS18048) are the consumer's to rule out. `false` is the absence of that
     /// proof (not demanded, an element access, an index signature, `any`, a
     /// required or readonly property), never evidence that `delete` errors.
     #[serde(default, skip_serializing_if = "is_false")]

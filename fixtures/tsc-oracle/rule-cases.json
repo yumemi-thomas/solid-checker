@@ -1174,11 +1174,23 @@
       "rule": "no-store-mutation-outside-setter",
       "dialect": "v2",
       "sourceExtension": "ts",
+      "expect": "removed-because-redundant",
+      "checker": "silent",
+      "allow": [
+        2703
+      ],
+      "why": "SC2003's delete arm (ADR 0460) on an optional property TypeScript still rejects: it sees through parentheses only, so a type assertion on the operand (`delete store.v!`, `delete (store.v as number | undefined)`) is TS2703 (\"must be a property reference\"). The checker peels parentheses only and stays silent on both. A link that may be nullish (TS18047/TS18048 under strictNullChecks) is silent too and pinned in the `store-delete` fixture's `Rejected.tsx`; without strictNullChecks a deeper chain is uncertifiable.",
+      "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore<{ v?: number }>({ v: 0 });\nexport function Remove() {\n  delete store.v!;\n  delete (store.v as number | undefined);\n}\n"
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "sourceExtension": "ts",
       "expect": "silent",
       "checker": "reports",
-      "checkerCount": 2,
+      "checkerCount": 1,
       "why": "SC2003's delete arm (ADR 0460). `delete` of an optional, non-readonly property of a store path type-checks under every compiler option (TS2790 needs a non-optional operand, TS2704 a readonly one), and rc.17's `deleteProperty` trap drops it outside a setter with `STORE_WRITE_OUTSIDE_SETTER` (`dist/dev.js:5761-5767`, the `set` trap's `inDraft` gate). The Type Fact `writableOptionalProperty` carries the optionality the checker reads.",
-      "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore<{ v?: number; a: { b?: number } }>({ v: 0, a: {} });\nexport function Remove() {\n  delete store.v;\n  delete store.a.b;\n}\n"
+      "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore<{ v?: number }>({ v: 0 });\nexport function Remove() {\n  delete store.v;\n}\n"
     },
     {
       "rule": "valid-use-server",
