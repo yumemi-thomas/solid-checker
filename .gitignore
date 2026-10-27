@@ -646,3 +646,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/program-boundary-pnpm/node_modules/**
 !fixtures/reactive-ir/program-boundary-standalone/node_modules/
 !fixtures/reactive-ir/program-boundary-standalone/node_modules/**
+# The runtime oracle writes each case here (scripts/runtime-oracle.mjs).
+/scripts/runtime-oracle-install/.solid-checker-runtime-oracle/

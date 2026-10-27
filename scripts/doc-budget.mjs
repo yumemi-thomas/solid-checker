@@ -66,7 +66,9 @@ export const FILE_BUDGETS = {
   // And for ADR 0450 (edits on a project with dispatch sites): 235,494 bytes against 232,000: 236_000.
   // And for ADR 0452 (the file stood 231,443 bytes before its entry; 233_295 with its read extension, 234_022 with the default-value case): 235_000.
   // Both together after merging the two branches (ADRs 0450 and 0452): 239,324 bytes: 240_000.
-  "docs/decisions.md": 240_000,
+  // And for ADR 0453 (the file stood 231,598 bytes before its entry): 233_000.
+  // All three (ADRs 0450, 0452, 0453): 240,224 bytes: 241_000.
+  "docs/decisions.md": 241_000,
 };
 
 export const GROUP_BUDGETS = [
@@ -95,7 +97,9 @@ export const GROUP_BUDGETS = [
   // And for ADR 0450: 744,869 bytes against 741,000: 745_500.
   // And for ADR 0452 (its entry and rule-page paragraphs): 743_600 bytes against 741_000: 744_500.
   // Both together (ADRs 0450 and 0452): 751,131 bytes: 752_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 752_000 },
+  // And for ADR 0453 (the group stood 740,735 bytes before its entry): 742_000.
+  // All three (ADRs 0450, 0452, 0453): 752,031 bytes: 753_000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 753_000 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
