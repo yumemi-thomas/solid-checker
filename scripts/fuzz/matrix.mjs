@@ -367,7 +367,7 @@ async function sweep(options, config, out) {
     // Per cell: up to --chrome-sample agree programs, up to --chrome-false-clean false-clean programs (the smallest first: they are the
     // ones the shrinker takes), every wrong-rule program. Every cell with a false clean or a wrong rule is thereby confirmed in Chrome.
     const limits = { agree: options.chromeSample ?? 3, "false-clean": options.chromeFalseClean ?? 4, "wrong-rule": Infinity };
-    for (const row of [...rows].sort((a, b) => a.lines - b.lines || a.index - b.index)) {
+    for (const row of [...rows].sort((a, b) => (a.binding === "destructured") - (b.binding === "destructured") || a.lines - b.lines || a.index - b.index)) {
       if (!(row.outcome in limits)) continue;
       const key = `${row.code}|${row.context}|${row.outcome}`;
       const n = bySample.get(key) ?? 0;
@@ -385,9 +385,13 @@ async function sweep(options, config, out) {
   // Shrink one representative per false-clean cell (the smallest program that Chrome did not refute).
   if (options.shrink) {
     const cellsWithFalseClean = new Map();
+    // A destructured binding is the commonest cause of a false clean by far; a cell's representative avoids it when the cell has another
+    // (then the minimum shows the next cause), and otherwise is the smallest program.
+    const smaller = (a, b) => (a.binding === "destructured") !== (b.binding === "destructured") ? b.binding === "destructured" : a.lines < b.lines;
     for (const row of rows.filter((r) => r.outcome === "false-clean" && (!r.chrome || r.chrome.status === "same"))) {
       const key = `${row.code}|${row.context}`;
-      if (!cellsWithFalseClean.has(key) || row.lines < cellsWithFalseClean.get(key).lines) cellsWithFalseClean.set(key, row);
+      const best = cellsWithFalseClean.get(key);
+      if (!best || smaller(row, best)) cellsWithFalseClean.set(key, row);
     }
     for (const [key, row] of cellsWithFalseClean) {
       try {
