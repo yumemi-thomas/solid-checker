@@ -248,6 +248,16 @@ owner is disposed (a memo rerun, a `Show` turned off), where the write is legal,
 and nothing orders that against a rerun: uncertifiable. Earlier releases throw
 (ADR 0455, `fixtures/reactive-ir/write-owner-in-cleanup`).
 
+rc.17's `onCleanup` returns its callback, so calling the handle runs the
+callback at that call, outside the disposal. A write in the callback is judged
+at each call too: `const h = onCleanup(() => setV(1)); h();` in a memo, effect
+compute, root or component body (or `onCleanup(...)()`) is a violation, as is an
+action call there; a handle never called, called in another cleanup or from a
+handler is legal. A handle stored, passed, returned or aliased, and a write in a
+member the callback builds, are uncertifiable, and so is every called handle on
+a release whose `onCleanup` was not read (ADR 0456,
+`fixtures/reactive-ir/write-cleanup-handle-call`).
+
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.
 

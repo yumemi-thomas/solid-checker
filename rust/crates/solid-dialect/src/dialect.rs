@@ -473,6 +473,20 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// What the call returns for the disposal callback at `argument`
+    /// ([`Dialect::callback_runs_only_in_disposal`]): the callback itself, so
+    /// code that calls the result runs the callback at that call, outside the
+    /// disposal; something else; or unknown, for a release nobody read. Asked
+    /// only of a disposal callback. The default is the fail-closed `Unknown`.
+    fn disposal_callback_returned(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> DisposalCallbackReturn {
+        let _ = (primitive, argument);
+        DisposalCallbackReturn::Unknown
+    }
+
     /// Whether the cleanup the callback at `argument` of `primitive` returns
     /// (an effect's apply, not its compute, whose value feeds the apply) is called
     /// outside a disposal: a rerun of the effect calls it without the disposal

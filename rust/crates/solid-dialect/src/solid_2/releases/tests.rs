@@ -1116,6 +1116,40 @@ fn the_write_guards_stand_down_in_disposal_only_on_rc17_signals() {
     );
 }
 
+/// rc.17's `onCleanup` returns its callback; only rc.17's bytes were read for
+/// that, so every other signals release, read for other questions or not, and
+/// the conservative vocabulary answer `Unknown`. No other slot is a returned
+/// disposal callback.
+#[test]
+fn only_rc17_on_cleanup_returns_its_callback() {
+    use crate::DisposalCallbackReturn as Return;
+    let (audited, _) = analyzed(&same("2.0.0-rc.17"));
+    assert_eq!(
+        audited.disposal_callback_returned(Primitive::OnCleanup, 0),
+        Return::Returned
+    );
+    assert_eq!(
+        audited.disposal_callback_returned(Primitive::OnCleanup, 1),
+        Return::Unknown
+    );
+    assert_eq!(
+        audited.disposal_callback_returned(Primitive::OnSettled, 0),
+        Return::Unknown
+    );
+    for release in ["2.0.0-rc.0", "2.0.0-rc.9", "2.0.0-rc.13", "2.0.0-rc.15"] {
+        let (vocabulary, _) = analyzed(&same(release));
+        assert_eq!(
+            vocabulary.disposal_callback_returned(Primitive::OnCleanup, 0),
+            Return::Unknown,
+            "{release}"
+        );
+    }
+    assert_eq!(
+        Solid2::CONSERVATIVE.disposal_callback_returned(Primitive::OnCleanup, 0),
+        Return::Unknown
+    );
+}
+
 /// A dialect id keys caches and retained sessions, so the token that names the
 /// disposal answer changed with the answer. An id spelled before the answer
 /// was three-valued says nothing about it, and decodes to `Unknown`, never to

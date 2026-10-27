@@ -365,10 +365,11 @@ export function CleanupMicrotask() {
   return <div>{v()}</div>;
 }
 
-// --- Uncertifiable: the callback is reachable outside the disposal ---------
+// --- Violations: the handle runs the callback outside the disposal --------
 
-// rc.17's `onCleanup` returns the callback it registered, so a result that is
-// used may call it at any time.
+// rc.17's `onCleanup` returns the callback it registered, so calling the handle
+// in the body runs the write there, under the owner, with no disposal around
+// it (ADR 0456).
 export function CleanupHandleCalled() {
   const [v, setV] = createSignal(0);
   const o = getOwner();
