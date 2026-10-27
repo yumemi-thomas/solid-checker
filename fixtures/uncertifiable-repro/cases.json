@@ -3,9 +3,9 @@
  "note": "The reproduction set's one table (ADR 0446). A case is one cause or shape of a kind: uncertifiable (it stands for `causes`, keys of scripts/uncertifiable-causes.mjs, and `weight` is how many results of the rc.17 corpus sweep it stands for), violation or clean (from the pre-release run). `expect` is what its files produce today; `source` is the corpus site it was reduced from. `notReproduced` is the long tail of the same sweep.",
  "corpus": {
   "manifest": "scripts/corpus/rc17-manifest.json",
-  "sweep": "release checker at 5d54b30ff (origin/main merged in; its findings, messages and labels equal those of f405f2cff, the spread fix), browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui); veto attribution from a veto-off sweep (ADR 0447)",
-  "results": 6717,
-  "reproduced": 4831
+  "sweep": "release checker at 83d99796d (#118 and the tracked-scope closure fix of ADR 0452 merged in; against 5d54b30ff's sweeps: 0 findings removed, 17 uncertifiable added, no violation moved), browser/development/csr, 34 projects; open-program counterfactual with --program-boundary closed (kui); veto attribution from a veto-off sweep (ADR 0447)",
+  "results": 6734,
+  "reproduced": 4834
  },
  "cases": [
   {
@@ -624,8 +624,8 @@
     "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
    },
    "status": "uncertifiable",
-   "labelWeight": 10,
-   "sites": 10,
+   "labelWeight": 11,
+   "sites": 11,
    "verification": {
     "samples": [
      {
@@ -675,7 +675,7 @@
      }
     ]
    },
-   "verifiedWeight": 10
+   "verifiedWeight": 11
   },
   {
    "id": "param-use-primitive",
@@ -1130,8 +1130,8 @@
     "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
    },
    "status": "uncertifiable",
-   "labelWeight": 133,
-   "sites": 122,
+   "labelWeight": 135,
+   "sites": 124,
    "verification": {
     "samples": [
      {
@@ -14760,6 +14760,11 @@
    "why": "7 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/called-in-bound-helper",
+   "weight": 7,
+   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC1001/direct-read/component-body:member",
    "weight": 7,
    "why": "6 distinct corpus sites, under ADR 0448's 10 for a case of its own"
@@ -14803,11 +14808,6 @@
    "cause": "SC1001/callback-to-unproven-consumer/object-member:argument-of:project/object-spread",
    "weight": 6,
    "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/called-in-bound-helper",
-   "weight": 6,
-   "why": "5 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC1001/callback-to-unproven-consumer/project-function-argument/called-in-project-callback",
@@ -15170,6 +15170,11 @@
    "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC1001/unplaced-read/project-function-argument/no-such-parameter",
+   "weight": 4,
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
    "cause": "SC2001/unplaced-write/component-prop>component-prop/package-component",
    "weight": 4,
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
@@ -15338,6 +15343,11 @@
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/forwarded:project-callable-read",
    "weight": 4,
    "why": "4 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/binding",
+   "weight": 4,
+   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/parameter",
@@ -15600,9 +15610,9 @@
    "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/binding",
+   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/call-package",
    "weight": 3,
-   "why": "3 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/object-literal",
@@ -15795,14 +15805,24 @@
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC1001/unplaced-read/listener-callback",
+   "weight": 2,
+   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC1001/unplaced-read/object-member:options-thunk:package",
+   "weight": 2,
+   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
+  },
+  {
    "cause": "SC1001/unplaced-read/project-function-argument/callee-destructured-binding",
    "weight": 2,
    "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
-   "cause": "SC1001/unplaced-read/project-function-argument/no-such-parameter",
+   "cause": "SC1001/unplaced-read/via-callers:mixed",
    "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
+   "why": "2 distinct corpus sites, under ADR 0406's 10 for a case of its own"
   },
   {
    "cause": "SC2001/unplaced-call/component-prop>after-await/sibling-called:prop/array-binding:package",
@@ -16113,11 +16133,6 @@
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/forwarded:lib-es-data-read",
    "weight": 2,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
-  },
-  {
-   "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/call-package",
-   "weight": 2,
-   "why": "2 distinct corpus sites, under ADR 0448's 10 for a case of its own"
   },
   {
    "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/unresolved",
@@ -16485,6 +16500,11 @@
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
   },
   {
+   "cause": "SC1001/unplaced-read/condition/listener-callback",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+  },
+  {
    "cause": "SC1001/unplaced-read/condition/project-function-argument/called-in-bound-helper",
    "weight": 1,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
@@ -16518,6 +16538,16 @@
    "cause": "SC1001/unplaced-read/object-member:argument-of:project/object-handed-to-project",
    "weight": 1,
    "why": "1 distinct corpus site, under ADR 0448's 10 for a case of its own"
+  },
+  {
+   "cause": "SC1001/unplaced-read/object-member:assigned",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
+  },
+  {
+   "cause": "SC1001/unplaced-read/returned-closure",
+   "weight": 1,
+   "why": "1 distinct corpus site, under ADR 0406's 10 for a case of its own"
   },
   {
    "cause": "SC1001/unplaced-read/via-callers:component-body",
