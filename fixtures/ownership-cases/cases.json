@@ -1907,7 +1907,57 @@
     ],
     "absent": []
    },
-   "note": "Upstream's `delete store.path` shape (test case 4) is not adopted where TypeScript speaks (ADR 0381): for a required property under strictNullChecks the published rc.17 typings give TS2790 (\"The operand of a 'delete' operator must be optional\") at the operand, and the checker is silent. The proxy does drop the delete outside a setter (`deleteProperty` trap `dist/dev.js:5761-5767`; probed). A property whose type includes `undefined` or an optional one type-checks, and no Type Fact says that at a delete operand, so it stays unreported (docs/open-work.md)."
+   "note": "Upstream's `delete store.path` shape (test case 4) is not reported where TypeScript speaks (ADR 0381, 0460): for a required property under strictNullChecks the published rc.17 typings give TS2790 (\"The operand of a 'delete' operator must be optional\") at the operand, and the checker is silent. The proxy does drop the delete outside a setter (`deleteProperty` trap `dist/dev.js:5761-5767`; probed). An optional, non-readonly property is reported (`delete-optional-property/001`); a non-optional one whose type includes `undefined` stays silent (TS2790 under `exactOptionalPropertyTypes`)."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/delete-optional-property/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [store] = createStore<{ v?: number; a: { b?: number } }>({ v: 0, a: {} });\nexport function Remove() {\n  delete store.v;\n  delete store.a.b;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "store.v"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "store.a.b"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream eslint-plugin-solid 0.18.1's `delete store.path` shape (test case 4), adopted where TypeScript accepts it (ADR 0460): an optional, non-readonly property, which the Type Fact `writableOptionalProperty` proves at the operand. rc.17's `deleteProperty` trap drops it outside a setter behind the `set` trap's `inDraft` gate (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5761-5767`), so the own-setter and compute-function exemptions apply unchanged (fixtures/reactive-ir/store-delete)."
   },
   {
    "id": "valid-use-server/placement/001",

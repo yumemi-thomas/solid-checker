@@ -65,9 +65,9 @@ export function Shadowed(store: { items: number[] }) {
   store.items.push(1);
 }
 
-// Negative: `delete` is TS2790 on a required property, and nothing says
-// whether `nick` is optional here (type includes `undefined`), so it stays
-// unreported.
+// Negative: `nick` is not optional (its type includes `undefined`), which is
+// TS2790 under `exactOptionalPropertyTypes`, so the delete stays unreported
+// (ADR 0460; fixture store-delete).
 export function Delete() {
   delete store.user.nick;
 }

@@ -202,6 +202,7 @@ fn demands_for(path: &str, source: &[u8]) -> Vec<EntityDemand> {
             reference_space: true,
             runtime_identity: true,
             declared_keys: false,
+            writable_optional_property: false,
             ..EntityDemand::default()
         };
         let word = std::str::from_utf8(&source[start..index]).unwrap_or("");

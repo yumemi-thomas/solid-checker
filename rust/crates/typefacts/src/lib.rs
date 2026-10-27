@@ -1032,6 +1032,15 @@ pub struct EntityFact {
     /// declared type's; a value of that type may hold more keys at run time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared_keys: Option<Arc<Vec<Arc<str>>>>,
+    /// The demanded expression is a property access (`o.p`) whose property
+    /// symbol the checker marks optional (`p?:`) and not readonly (ADR 0460).
+    /// Such an operand is legal for `delete` under every compiler option:
+    /// TS2704 needs a readonly symbol, and TS2790 a non-optional one (with or
+    /// without `exactOptionalPropertyTypes`). `false` is the absence of that
+    /// proof (not demanded, an element access, an index signature, `any`, a
+    /// required or readonly property), never evidence that `delete` errors.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub writable_optional_property: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_space: Option<ReferenceSpace>,
     #[serde(default, skip_serializing_if = "str::is_empty")]

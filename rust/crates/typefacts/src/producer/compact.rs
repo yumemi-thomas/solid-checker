@@ -11,7 +11,7 @@ use crate::v3::{
     DEMAND_FLAG_PRIMITIVE_VALUE_DOMAIN, DEMAND_FLAG_REFERENCE_SPACE, DEMAND_FLAG_REFERENCES,
     DEMAND_FLAG_RESOLVED_CALL, DEMAND_FLAG_RUNTIME_IDENTITY, DEMAND_FLAG_RUNTIME_VALUE_DOMAIN,
     DEMAND_FLAG_STRUCTURAL_ACCESSOR, DEMAND_FLAG_SYMBOL, DEMAND_FLAG_TUPLE_SHAPE,
-    DEMAND_FLAG_TYPE_DESCRIPTOR, EntityDemand,
+    DEMAND_FLAG_TYPE_DESCRIPTOR, DEMAND_FLAG_WRITABLE_OPTIONAL_PROPERTY, EntityDemand,
 };
 
 /// Reads an unsigned LEB128 value and the bytes after it.
@@ -97,6 +97,7 @@ fn plain_demand(location: Location, flags: u64) -> EntityDemand {
         parameter_object_shape: has(DEMAND_FLAG_PARAMETER_OBJECT_SHAPE),
         constructability: has(DEMAND_FLAG_CONSTRUCTABILITY),
         declared_keys: has(DEMAND_FLAG_DECLARED_KEYS),
+        writable_optional_property: has(DEMAND_FLAG_WRITABLE_OPTIONAL_PROPERTY),
         query_location: None,
     }
 }

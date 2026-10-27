@@ -41,6 +41,7 @@ struct DemandSpans {
     tuple_shape_spans: HashSet<Span>,
     library_type_spans: HashSet<Span>,
     declared_key_spans: HashSet<Span>,
+    writable_optional_property_spans: HashSet<Span>,
     async_symbol_spans: HashSet<Span>,
     async_value_spans: Vec<Span>,
 }
@@ -89,6 +90,7 @@ fn plan_file(
     collect_return_spans(file, &mut spans, demands, (&path, &returned_callees));
     collect_argument_spans(dialect, file, &mut spans);
     collect_member_spans(file, &mut spans);
+    collect_delete_spans(dialect, file, &mut spans);
     emit_span_demands(
         file,
         spans,
@@ -98,6 +100,23 @@ fn plan_file(
     )?;
     plan_call_demands(dialect, file, demands, (&path, &returned_callees));
     Ok(())
+}
+
+/// ADR 0460: whether a `delete` operand that is a static member names a
+/// property TypeScript lets it delete (optional, not readonly), which
+/// `no-store-mutation-outside-setter` asks before reporting a store delete.
+fn collect_delete_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut DemandSpans) {
+    if !dialect.semantic_demands.delete_operand_optionality {
+        return;
+    }
+    for &target in &file.ast.deleted_targets {
+        let member = file.ast.peel_ts_sugar_span(target);
+        if file.ast.member_at(member).is_some()
+            && file.ast.computed_members.binary_search(&member).is_err()
+        {
+            spans.writable_optional_property_spans.insert(member);
+        }
+    }
 }
 
 fn collect_symbol_spans(
@@ -820,6 +839,7 @@ fn emit_span_demands(
         tuple_shape_spans,
         library_type_spans,
         declared_key_spans,
+        writable_optional_property_spans,
         async_symbol_spans,
         async_value_spans,
     } = spans;
@@ -873,6 +893,11 @@ fn emit_span_demands(
     for span in declared_key_spans {
         let mut planned = demand(file_location(path, span));
         planned.declared_keys = true;
+        demands.push(planned);
+    }
+    for span in writable_optional_property_spans {
+        let mut planned = demand(file_location(path, span));
+        planned.writable_optional_property = true;
         demands.push(planned);
     }
 
@@ -1275,6 +1300,7 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         reference_space: false,
         runtime_identity: false,
         declared_keys: false,
+        writable_optional_property: false,
     }
 }
 
@@ -1342,6 +1368,7 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.reference_space |= demand.reference_space;
             current.runtime_identity |= demand.runtime_identity;
             current.declared_keys |= demand.declared_keys;
+            current.writable_optional_property |= demand.writable_optional_property;
         } else {
             merged.push(demand);
         }

@@ -31,7 +31,7 @@ Write in an owned scope (`no-write-in-pure-computation`, SC2001):
 
 Store write outside a setter (`no-store-mutation-outside-setter`, SC2003; ADR 0425):
 
-- `delete store.path` is dropped (rc.17 `dist/dev.js:5761-5767`) but not reported: a required property is TS2790 under strictNullChecks, and a property whose type includes `undefined` or is optional type-checks, with no Type Fact at a delete operand saying which (a demand would be a producer, wire and protocol change). Pinned: tsc-oracle and ownership case `delete-required-property`. Reopen with a Type Facts "type includes undefined at this operand" demand.
+- `delete store.path` (ADR 0460) is reported only for a static member path whose property Type Facts proves optional and not readonly: an element access (`delete store.rec[k]`, an index signature), an optional chain, a cast root, a `const` alias, and a non-optional property typed `T | undefined` (TS2790 under `exactOptionalPropertyTypes`) stay silent. `Object.assign`/`Reflect.deleteProperty` on a store are not built.
 - The path proof stops at the root identifier: a mutator or assignment through an intermediate the store does not wrap (a frozen object, a `Map`) is reported although it lands. `createOptimisticStore` results are treated as stores (unprobed on rc.17; upstream ignores them).
 - Type-correct rebinding (`count = otherAccessor`, `store = { … }` on a `let`) is silent: the accessor-binding and accessor-member (`memo.a = 1`) arms are deleted, and the cast and same-type spellings are no proven defect.
 

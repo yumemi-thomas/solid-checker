@@ -18,6 +18,7 @@ fn binding_demand(location: typefacts::Location) -> EntityDemand {
         constructability: true,
         runtime_identity: true,
         declared_keys: false,
+        writable_optional_property: false,
         ..EntityDemand::default()
     }
 }
@@ -203,6 +204,7 @@ Shared();\n";
             reference_space: true,
             runtime_identity: true,
             declared_keys: false,
+            writable_optional_property: false,
             ..EntityDemand::default()
         })
         .collect();

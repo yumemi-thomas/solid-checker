@@ -944,6 +944,7 @@ fn rust_client_consumes_compiler_semantic_facts_across_retained_updates() {
         reference_space: true,
         runtime_identity: true,
         declared_keys: false,
+        writable_optional_property: false,
         ..EntityDemand::default()
     };
     let mut session = Session::open(

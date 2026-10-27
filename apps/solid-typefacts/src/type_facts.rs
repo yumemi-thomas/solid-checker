@@ -15,7 +15,8 @@ use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tsrs_ast::{
-    Node, Symbol, get_source_file_of_node, is_module_block, is_module_declaration, is_source_file,
+    Node, Symbol, SymbolFlags, get_source_file_of_node, is_module_block, is_module_declaration,
+    is_private_identifier, is_property_access_expression, is_source_file,
 };
 use tsrs_checker::types::{
     ElementFlags, LiteralValue, ObjectFlags, SignatureKind, Type, TypeExt, TypeFlags,
@@ -755,6 +756,32 @@ pub fn declared_keys_at(checker: &mut Checker, node: P<Node>) -> Option<Vec<Arc<
         return None;
     }
     Some(names.into_iter().map(Arc::from).collect())
+}
+
+/// ADR 0460: whether `node` is a property access whose property symbol the
+/// checker marks optional and not readonly, the condition under which `delete
+/// node` raises neither TS2704 (readonly operand) nor TS2790 (non-optional
+/// operand) under any compiler option. The symbol is the one `checkDeleteExpression`
+/// reads: the access's resolved symbol. An element access, a private name, an
+/// unresolved access (`any`, a missing property) and an index signature (its
+/// symbol is a signature, not a property) answer `false`, which is no claim.
+pub fn writable_optional_property_at(checker: &mut Checker, node: P<Node>) -> bool {
+    if !is_property_access_expression(node) {
+        return false;
+    }
+    let Some(name) = node.name() else {
+        return false;
+    };
+    if is_private_identifier(name) {
+        return false;
+    }
+    let Some(symbol) = checker.get_symbol_at_location_exported(name) else {
+        return false;
+    };
+    symbol
+        .flags()
+        .contains(SymbolFlags::Property | SymbolFlags::Optional)
+        && !checker.is_readonly_symbol_exported(symbol)
 }
 
 /// Whether `value` is an instantiation of a top-level type alias whose type

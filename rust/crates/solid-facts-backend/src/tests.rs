@@ -510,6 +510,41 @@ fn declared_key_demands_are_limited_to_intrinsic_element_spreads() {
 }
 
 #[test]
+fn writable_optional_property_demands_are_static_delete_operands() {
+    let source = "delete store.a.b; delete (store.v); delete store[key]; delete value; store.w;";
+    let file = test_file_facts("src/deletes.ts", source);
+    let span_of = |needle: &str| {
+        let start = source.find(needle).unwrap();
+        solid_facts::core::Span {
+            start: u32::try_from(start).unwrap(),
+            end: u32::try_from(start + needle.len()).unwrap(),
+        }
+    };
+    let demands = semantic_demands(
+        dialect::default_dialect(),
+        std::slice::from_ref(&file),
+        SemanticDemandOptions::NONE,
+    )
+    .unwrap();
+    let asked: Vec<_> = demands
+        .iter()
+        .filter(|demand| demand.writable_optional_property)
+        .map(|demand| demand.location.clone())
+        .collect();
+    let location = |needle: &str| typefacts_location(file.path.as_str(), span_of(needle));
+    assert_eq!(
+        asked.len(),
+        2,
+        "only the static member operands ask: {asked:?}"
+    );
+    assert!(asked.contains(&location("store.a.b")));
+    assert!(
+        asked.contains(&location("store.v")),
+        "the parenthesized operand asks at its member"
+    );
+}
+
+#[test]
 fn returned_member_calls_combine_symbol_and_resolved_call_demands() {
     let file = test_file_facts(
         "src/cleanup.ts",
