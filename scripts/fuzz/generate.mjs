@@ -74,11 +74,14 @@ const CONTAINER_BASES = [
   [5, "disposal"], [3, "owner-cleanup"], [1, "owner-effect"], [1, "owner-settled"], [1, "owner"], [2, "mixed"], [1, "closure-escape"], [1, "in-place"], [1, "async"],
 ];
 
-/** A disposal plan that keeps the cleanup handle in play (called now or later), the host a memo, a Show or a root. */
+/** A disposal plan that keeps the cleanup handle in play (called now or later), the host a memo, a Show or a root; the write bare in the cleanup two times in five. */
 function handlePlan(rng) {
   const where = rng.weighted([[4, "memo"], [3, "show"], [2, "rootd"], [1, "effect"]]);
   const later = where === "memo" || where === "rootd";
-  return { where, cleanupVia: "onCleanup", handleMode: rng.weighted([[5, "call-now"], [later ? 3 : 0, "call-later"], [2, "discard"], [1, "keep"]]) };
+  return {
+    where, cleanupVia: "onCleanup", handleMode: rng.weighted([[5, "call-now"], [later ? 3 : 0, "call-later"], [2, "discard"], [1, "keep"]]),
+    ...(rng.chance(0.4) ? { wrappers: [] } : {}),
+  };
 }
 
 export function generateProgram(seed, options = {}) {

@@ -34,7 +34,7 @@ describe("the containers profile", () => {
   });
 
   it("passes callbacks by name to the primitives the generator uses", () => {
-    const text = seeds.map((seed) => printProgram(containers(seed)).text).join("\n");
+    const text = Array.from({ length: 1500 }, (_, i) => printProgram(containers(i + 1)).text).join("\n");
     const forms = {
       memo: /createMemo\(cb\d+\)/, effectCompute: /createEffect\(cb\d+, /, effectApply: /createEffect\(.*, cb\d+\)/, root: /createRoot\(cb\d+\)/,
       owner: /runWithOwner\((owner|null|createOwner\(\)), cb\d+\)/, untrack: /untrack\(cb\d+\)/, cleanup: /onCleanup\(cb\d+\)/, settled: /onSettled\(cb\d+\)/,
