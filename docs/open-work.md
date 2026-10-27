@@ -22,7 +22,7 @@ Write in an owned scope (`no-write-in-pure-computation`, SC2001):
 
 - A named handler both attached as `onClick` and called directly in the component body hides the write in a helper it calls; the runtime warns at that call.
 - A setter call in a component's default parameter initializer runs in the owned component scope; the write rule places nothing there.
-- An `onCleanup` handle that is stored, passed, aliased or returned, or a write in a member the callback builds (`const api = { f: () => setV(1) }; api.f()`), is uncertifiable where rc.17 throws at the call (ADR 0456, `write-cleanup-handle-call`). On releases other than rc.17 every called handle is uncertifiable: their `onCleanup` return was not read.
+- An `onCleanup` handle that is stored, passed, aliased or returned, or a write in a member the callback builds (`const api = { f: () => setV(1) }; api.f()`), is uncertifiable where rc.17 throws at the call (ADR 0456, `write-cleanup-handle-call`). An alias of a named callback is not followed. On releases other than rc.17 every called handle is uncertifiable: their `onCleanup` return was not read.
 - A closure named in an `onCleanup` callback and passed by name to `createRoot` there takes the callback's lexical role: an action it calls throws (no disposal exemption; fuzzer 8a3b250077, Chrome-confirmed) and is silent. An action written directly in a cleanup did not throw in the two rc.17 triggers probed (a memo rerun, a root disposed at top level: no ambient owner).
 - SC2001 in `render`/`hydrate` `code` off web rc.13/17: uncertifiable (ADR 0353). Signals rc.17: a typed-only or `let`-aliased setter is unclaimed: `createOptimistic`'s unguarded one shares its type.
 

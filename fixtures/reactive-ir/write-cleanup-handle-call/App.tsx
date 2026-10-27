@@ -7,6 +7,7 @@ import {
   getOwner,
   onCleanup,
   runWithOwner,
+  Show,
 } from "solid-js";
 
 // rc.17's `onCleanup(fn)` returns `fn` (@solidjs/signals@2.0.0-rc.17
@@ -225,4 +226,207 @@ export function HandleObjectMember() {
     return 1;
   });
   return <div>{v()}</div>;
+}
+
+// --- A callback registered by name is judged like an inline one -------------
+
+// Violation: `fn` is a `const` arrow nothing else reads, so `h()` runs it.
+export function HandleByNameInMemo() {
+  const [v, setV] = createSignal(0);
+  const m = createMemo(() => {
+    const fn = () => {
+      setV(30);
+    };
+    const h = onCleanup(fn);
+    h();
+    return 1;
+  });
+  return <div>{m() + v()}</div>;
+}
+// Uncertifiable: a `let` may hold another function at the registration.
+export function HandleByNameMutable() {
+  const [v, setV] = createSignal(0);
+  const m = createMemo(() => {
+    let fn = () => {
+      setV(31);
+    };
+    const h = onCleanup(fn);
+    h();
+    return 1;
+  });
+  return <div>{m() + v()}</div>;
+}
+// Uncertifiable: the registered value is one of two functions.
+export function HandleByNameChoice(props: { flag: boolean }) {
+  const [v, setV] = createSignal(0);
+  const m = createMemo(() => {
+    const fn = () => {
+      setV(32);
+    };
+    const other = () => {};
+    const h = onCleanup(props.flag ? fn : other);
+    h();
+    return 1;
+  });
+  return <div>{m() + v()}</div>;
+}
+
+// --- Uncertifiable: the handle is called where the run is not proven --------
+
+// A function that returns JSX and is not rendered: nothing proves it runs as
+// a component. At runtime the callback runs only in the disposal.
+export function HandleInUnrenderedChild() {
+  const [v, setV] = createSignal(0);
+  const h = onCleanup(() => {
+    setV(40);
+  });
+  function Child() {
+    h();
+    return <span />;
+  }
+  return <div>{v()}</div>;
+}
+export function OwnerHandleInUnrenderedChild() {
+  const [v, setV] = createSignal(0);
+  const o = getOwner();
+  const c = onCleanup(() => runWithOwner(o, () => setV(41)));
+  function Child() {
+    c();
+    return <span />;
+  }
+  return <div>{v()}</div>;
+}
+export function ActionHandleInUnrenderedChild() {
+  const h = onCleanup(() => {
+    act();
+  });
+  function Child() {
+    h();
+    return <span />;
+  }
+  return <div />;
+}
+// The child is handed to code that may call it as a plain function.
+export function HandleInChildPassedOpaque(props: {
+  slot: (child: () => unknown) => unknown;
+}) {
+  const [v, setV] = createSignal(0);
+  const h = onCleanup(() => {
+    setV(42);
+  });
+  function Child() {
+    h();
+    return <span />;
+  }
+  return (
+    <div>
+      {props.slot(Child) as any}
+      {v()}
+    </div>
+  );
+}
+// An instance field initializer runs when an instance is constructed.
+export function HandleInInstanceField() {
+  const [v, setV] = createSignal(0);
+  createMemo(() => {
+    const h = onCleanup(() => {
+      setV(43);
+    });
+    class K {
+      f = h();
+    }
+    return 1;
+  });
+  return <div>{v()}</div>;
+}
+// Legal control: a child the component renders is a component, so the call
+// in it is one a render makes under the component's owner.
+export function HandleInRenderedChild() {
+  const [v, setV] = createSignal(0);
+  const h = onCleanup(() => {
+    setV(44);
+  });
+  function Child() {
+    h();
+    return <span />;
+  }
+  return (
+    <div>
+      <Child />
+      {v()}
+    </div>
+  );
+}
+
+// --- A write after an await runs on a later task, with no owner ------------
+
+// Legal: the await precedes the write on every path, so the callback's call
+// at `h()` returns before the write runs (rc.17: no throw).
+export function HandleWriteAfterAwait() {
+  const [v, setV] = createSignal(0);
+  const m = createMemo(() => {
+    const h = onCleanup(() => {
+      const f = async () => {
+        await Promise.resolve();
+        setV(50);
+      };
+      f();
+    });
+    h();
+    return 1;
+  });
+  return <div>{m() + v()}</div>;
+}
+// Uncertifiable: inside a JSX expression the await is not proven to precede
+// the write (a tracked region), so the write is not placed at `h()`. Both of
+// the fuzzer's repros (an action call, and a signal write behind two awaits).
+export function HandleActionAfterAwaitInJsx() {
+  const [o] = createSignal(1);
+  return (
+    <div>
+      <Show when={o()}>
+        <p>
+          {(() => {
+            const h1 = onCleanup(() => {
+              const f1 = async () => {
+                await Promise.resolve();
+                act();
+              };
+              f1();
+            });
+            h1();
+            return 1;
+          })()}
+        </p>
+      </Show>
+    </div>
+  );
+}
+export function HandleWriteAfterTwoAwaitsInJsx() {
+  const [w, setW] = createSignal(0);
+  const [o] = createSignal(1);
+  return (
+    <div>
+      <output>{w()}</output>
+      <Show when={o()}>
+        <p>
+          {(() => {
+            const h1 = onCleanup(() => {
+              const f2 = async () => {
+                await Promise.resolve();
+                const f1 = async () => {
+                  await Promise.resolve();
+                  setW(51);
+                };
+                f1();
+              };
+              f2();
+            });
+            h1();
+            return 1;
+          })()}
+        </p>
+      </Show>
+    </div>
+  );
 }

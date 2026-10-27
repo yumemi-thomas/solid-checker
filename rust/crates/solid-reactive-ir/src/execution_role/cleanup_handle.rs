@@ -112,6 +112,97 @@ pub(super) enum HandleClimb {
     /// callback gives it, and the callback's handle is not
     /// [`CleanupHandle::DisposalOnly`]: its lexical role is no proof.
     Unrun,
+    /// The site, or a call on the way to the callback, follows an await (or a
+    /// generator step) that may suspend the run before it: it runs on a later
+    /// task with no owner, whoever calls the callback, so no call of the
+    /// handle places it, and the callback's handle is not
+    /// [`CleanupHandle::DisposalOnly`]. The same questions the write walk and
+    /// [`runs_in_disposal`] ask (`may_follow_suspension`).
+    Suspended,
+}
+
+/// How a function is registered as a disposal callback by name
+/// ([`named_disposal_registration`]).
+enum NamedRegistration<'f> {
+    /// No reference of the function's name is handed to a disposal callback
+    /// position.
+    None,
+    /// Exactly one reference is, as the whole argument, of a binding that
+    /// always holds this function (a `function` declaration nothing writes, a
+    /// `const` initialized with it).
+    One(&'f solid_facts::ast::CallFact, usize, Primitive),
+    /// A reference is handed there but the binding is not exact (a `let`, a
+    /// written declaration), the argument is more than the name (`a ? fn : g`),
+    /// or several references register it: which calls the handle runs is not
+    /// read.
+    Unplaced,
+}
+
+/// The disposal registration of `function` by the name it is bound to
+/// (`const fn = () => …; const h = onCleanup(fn)`), found by exact
+/// resolution of each reference in the file. A function nothing names, or
+/// whose name no disposal callback position receives, is [`NamedRegistration::None`].
+fn named_disposal_registration<'f>(
+    file: &'f solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> NamedRegistration<'f> {
+    let ast = &file.ast;
+    let declaration = if function.kind == solid_facts::ast::FunctionKind::Declaration {
+        function.name.as_ref().map(|name| name.span)
+    } else {
+        ast.bindings
+            .iter()
+            .find(|binding| {
+                binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.initializer.is_some_and(|initializer| {
+                        ast.peel_ts_sugar_span(initializer) == function.span
+                    })
+            })
+            .and_then(|binding| binding.names.first().map(|name| name.span))
+    };
+    let Some(declaration) = declaration else {
+        return NamedRegistration::None;
+    };
+    let mut found = None;
+    let mut unplaced = false;
+    for reference in ast.identifiers.iter().filter(|identifier| {
+        identifier.role == solid_facts::ast::IdentifierRole::Reference
+            && ast.reference_declaration(identifier.span) == Some(declaration)
+    }) {
+        for (call, index) in ast.arguments_containing(reference.span) {
+            let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+                continue;
+            };
+            if !lookup
+                .dialect
+                .callback_runs_only_in_disposal(primitive, index)
+            {
+                continue;
+            }
+            let argument = ast.peel_ts_sugar_span(call.arguments[index].span);
+            if argument == reference.span {
+                if found.replace((call, index, primitive)).is_some() {
+                    unplaced = true;
+                }
+            } else if !ast
+                .functions
+                .iter()
+                .any(|inner| argument.contains(inner.span) && inner.span.contains(reference.span))
+            {
+                unplaced = true;
+            }
+        }
+    }
+    match found {
+        None if !unplaced => NamedRegistration::None,
+        Some((call, index, primitive))
+            if !unplaced && lookup.function_value_is_current(file, function) =>
+        {
+            NamedRegistration::One(call, index, primitive)
+        }
+        _ => NamedRegistration::Unplaced,
+    }
 }
 
 /// The disposal callback around `span` whose handle may run it outside the
@@ -126,6 +217,7 @@ pub(super) fn disposal_handle_climb(
 ) -> Option<HandleClimb> {
     let mut at = span;
     let mut unrun = false;
+    let mut suspended = false;
     // Bounded: each step moves to the call or function that holds the
     // previous one.
     for _ in 0..16 {
@@ -137,7 +229,7 @@ pub(super) fn disposal_handle_climb(
                 return None;
             }
             if may_follow_suspension(file, at) || function.generator {
-                unrun = true;
+                suspended = true;
             }
         }
         if lookup.function_component_status(file, function) != ComponentStatus::No {
@@ -154,6 +246,22 @@ pub(super) fn disposal_handle_climb(
                     .primitive_at_call(file, call.span)
                     .map(|primitive| (call, index, primitive))
             });
+        // A function registered by the name it is bound to runs in the
+        // disposal as the inline callback does, and at its handle's calls.
+        let primitive_call = match primitive_call {
+            Some(found) => Some(found),
+            None => match named_disposal_registration(file, function, lookup) {
+                NamedRegistration::None => None,
+                NamedRegistration::One(call, index, primitive) => Some((call, index, primitive)),
+                NamedRegistration::Unplaced => {
+                    return Some(if unrun {
+                        HandleClimb::Unrun
+                    } else {
+                        HandleClimb::Reached(CleanupHandle::Unplaced)
+                    });
+                }
+            },
+        };
         if let Some((call, index, primitive)) = primitive_call {
             if lookup
                 .dialect
@@ -163,6 +271,7 @@ pub(super) fn disposal_handle_climb(
                 return match handle {
                     CleanupHandle::DisposalOnly => None,
                     _ if unrun => Some(HandleClimb::Unrun),
+                    _ if suspended => Some(HandleClimb::Suspended),
                     handle => Some(HandleClimb::Reached(handle)),
                 };
             }
@@ -195,6 +304,26 @@ pub(super) fn disposal_handle_climb(
         }
     }
     None
+}
+
+/// Whether a handle call at `site` is unplaced: it sits where the backend
+/// withdraws a violation to an obligation, whatever rule claims it
+/// (`solid-facts-backend` `diagnostics.rs`): a file the compiler refused, an
+/// instance field initializer ([`inside_instance_field`]), a function that may
+/// be a component without being proven one ([`SemanticLookup::inside_possible_component`])
+/// or that is analyzed as one without its identity being proven
+/// ([`SemanticLookup::site_in_undecided_component`]). The finding is reported
+/// at the write, inside the callback, so the backend never sees this site; a
+/// rejecting role here must not become a proof there.
+pub(super) fn handle_site_unplaced(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.compiler.refusal().is_some()
+        || inside_instance_field(file, site)
+        || lookup.inside_possible_component(file, site)
+        || lookup.site_in_undecided_component(file, site)
 }
 
 /// The marker under which [`cleanup_handle_write_role`] is deriving the role
@@ -244,6 +373,7 @@ pub(super) fn cleanup_handle_write_role(
             return Some(HandleRole::Decided(ExecutionRole::Unknown));
         }
         HandleClimb::Unrun => return Some(HandleRole::Unrun),
+        HandleClimb::Suspended => return Some(HandleRole::Decided(ExecutionRole::Unknown)),
     };
     let marker = handle_marker(file, &sites);
     if !visiting.insert(marker.clone()) {
@@ -262,11 +392,12 @@ pub(super) fn cleanup_handle_write_role(
             root_body,
             visiting,
         );
-        if role.reports_disallowed_write() {
+        if role.reports_disallowed_write() && handle_site_unplaced(file, site, lookup) {
+            unplaced = true;
+        } else if role.reports_disallowed_write() {
             rejected = Some(role);
             break;
-        }
-        if role == ExecutionRole::Unknown {
+        } else if role == ExecutionRole::Unknown {
             unplaced = true;
         }
     }

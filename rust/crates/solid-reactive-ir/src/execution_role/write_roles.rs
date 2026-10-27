@@ -396,6 +396,13 @@ fn runs_in_disposal_within(
                         let mut reach = DisposalReach::Only;
                         for site in sites {
                             match runs_in_disposal_within(file, site, lookup, depth + 1) {
+                                // Where the backend withdraws a violation, a
+                                // call outside a disposal proves nothing.
+                                DisposalReach::NotIn
+                                    if handle_site_unplaced(file, site, lookup) =>
+                                {
+                                    reach = DisposalReach::Unplaced;
+                                }
                                 DisposalReach::NotIn => return DisposalReach::NotIn,
                                 DisposalReach::Only => {}
                                 DisposalReach::Unplaced => reach = DisposalReach::Unplaced,
@@ -1209,6 +1216,12 @@ fn write_role_walk(
                     *decided = true;
                 }
                 return role;
+            }
+            // The entries of the layer decide, but none of them places a write
+            // that follows a suspension (as above).
+            Some(HandleRole::Unrun) if may_follow_suspension(file, span) => {
+                *decided = true;
+                return unknown;
             }
             Some(HandleRole::Unrun) => ExecutionRole::Unknown,
             None => direct,
