@@ -5,8 +5,8 @@ use crate::cache::{CachedLateStages, same_compiler_semantics};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_slice_results};
 use crate::{
     BuildTimings, ExecutionRole, Fix, FunctionBoundary, OwnerRequirement,
-    OwnerRequirementOperation, PrimitiveName, TextEdit, containing_function_indexed,
-    function_indices_by_path, jsx_primitive_name, known_primitive, location,
+    OwnerRequirementOperation, PrimitiveName, TextEdit, function_indices_by_path,
+    jsx_primitive_name, known_primitive, location,
 };
 
 use crate::{HashMap, HashSet};

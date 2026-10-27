@@ -1,0 +1,3 @@
+{
+  "note": "ADR 0454: an onSettled callback is called with no arguments in rc.17, so a default in its own parameter list runs in the leaf scope and its onCleanup throws CLEANUP_IN_FORBIDDEN_SCOPE like one in the body. The checker was silent for the default (direct_callback_contains excludes the callback's own list); it is uncertifiable now (no dialect fact states the arguments a primitive passes)."
+}

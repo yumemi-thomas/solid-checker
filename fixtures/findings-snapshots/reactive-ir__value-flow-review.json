@@ -174,8 +174,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/value-flow-review/Leaf.tsx",
       "start": 1000,
       "end": 1009,
@@ -254,8 +254,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/value-flow-review/Leaf2.tsx",
       "start": 1047,
       "end": 1056,
@@ -264,8 +264,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/value-flow-review/Leaf2.tsx",
       "start": 1135,
       "end": 1144,

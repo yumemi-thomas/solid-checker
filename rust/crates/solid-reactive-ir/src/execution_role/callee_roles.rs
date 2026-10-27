@@ -443,7 +443,12 @@ pub(super) fn semantic_role_before_awaits(
     // Module initialization is an AST-proven one-shot execution context. It
     // is not a compiler-fact gap: no reactive owner or subscriber can be
     // active before a containing function is invoked.
-    if !file.ast.any_function_body_containing(span) {
+    // ADR 0454: a site in the parameter list of a function written at module
+    // level lies in no body, yet it is no module initialization: it runs when
+    // that function is called.
+    if !file.ast.any_function_body_containing(span)
+        && !crate::owners::in_parameter_list(&file.ast, span)
+    {
         return ExecutionRole::ModuleInitialization;
     }
     ExecutionRole::Unknown

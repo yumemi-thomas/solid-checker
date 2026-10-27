@@ -200,6 +200,146 @@
       "start": 6820,
       "end": 6827,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 569,
+      "end": 578,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 775,
+      "end": 787,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 961,
+      "end": 970,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 1165,
+      "end": 1174,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 1408,
+      "end": 1417,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 1626,
+      "end": 1635,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 1829,
+      "end": 1839,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 1949,
+      "end": 1958,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 2022,
+      "end": 2031,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 2275,
+      "end": 2284,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 2761,
+      "end": 2770,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 3377,
+      "end": 3386,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 3752,
+      "end": 3761,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 3869,
+      "end": 3878,
+      "fixes": 1
     }
   ]
 }

@@ -52,6 +52,7 @@ const STUB: &str = r#"declare module "solid-js" {
   export function createReaction(onInvalidate: () => void): (tracking: () => void) => void;
   export function createEffect<T>(compute: () => T, apply: (value: T) => void, options?: { defer?: boolean }): void;
   export function onSettled(callback: () => void | (() => void)): void;
+  export function onCleanup(cleanup: () => void): void;
 }
 
 declare namespace JSX {
@@ -1174,5 +1175,32 @@ fn a_call_that_moves_between_a_body_and_a_parameter_list_moves_the_unedited_call
         [moved[0], moved[1], moved[3], moved[4]],
         [true; 4],
         "body against a closure's list must move the caller's answer: {moved:?}"
+    );
+}
+
+/// ADR 0454, the owner graph: a cleanup that moves between a helper's body and
+/// a parameter list in an unedited file moves the caller's `missing-owner`
+/// answer (a violation in the body, uncertifiable in the list), and the kept
+/// graph follows in both directions.
+const OWNER_CALLER: &str = "import { make } from \"./helper\";\nexport function H() {\n  return <button onClick={() => make()}>x</button>;\n}\n";
+const OWNER_BODY_HELPER: &str = "import { onCleanup } from \"solid-js\";\nexport function make(): void {\n  onCleanup(() => {});\n}\n";
+const OWNER_LIST_HELPER: &str = "import { onCleanup } from \"solid-js\";\nexport function make(m: unknown = onCleanup(() => {})): void {\n  void m;\n}\n";
+
+#[test]
+fn a_cleanup_that_moves_between_a_body_and_a_parameter_list_moves_the_owner_answer() {
+    let Some(moved) = retained_through_edits(
+        "parameter-list-owner-graph",
+        &[("helper.ts", OWNER_BODY_HELPER), ("App.tsx", OWNER_CALLER)],
+        &[
+            ("helper.ts", OWNER_LIST_HELPER),
+            ("helper.ts", OWNER_BODY_HELPER),
+            ("helper.ts", OWNER_LIST_HELPER),
+        ],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        moved, [true; 3],
+        "a cleanup in a list is no unowned call of the handler's"
     );
 }

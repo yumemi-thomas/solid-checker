@@ -3,6 +3,7 @@ declare namespace JSX {
     button: { onClick?: () => void };
     div: {};
     p: {};
+    span: {};
   }
 }
 
@@ -12,4 +13,8 @@ declare module "solid-js" {
   export function createEffect<T>(compute: () => T, apply: (value: T) => void): void;
   export function onSettled(callback: () => void): void;
   export function onCleanup(cleanup: () => void): void;
+  export function createRoot<T>(init: (dispose: () => void) => T): T;
+  export interface Context<T> { id: symbol; defaultValue: T }
+  export function createContext<T>(defaultValue: T): Context<T>;
+  export function useContext<T>(context: Context<T>): T;
 }
