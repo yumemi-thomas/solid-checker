@@ -227,3 +227,22 @@ describe("classify: the hit ledger", () => {
     expect(result.items[0]).toMatchObject({ why: "perturbed-checker" });
   });
 });
+
+describe("classify: a real defect named by the wrong rule", () => {
+  it("is candidate-wrong-rule when the runtime's code belongs to the finding's defect family", () => {
+    // The checker says the cleanup has no owner (missing-owner); the runtime says the scope forbids it (leaf-owner-forbidden-call).
+    const result = classify({ sites, checker: checker([violation("missing-owner", 8, 8, "SC3001")]), runtime: runtime({ diagnostics: [diag("CLEANUP_IN_FORBIDDEN_SCOPE", 8)] }), plan });
+    expect(result.verdict).toBe("candidate-wrong-rule");
+    expect(result.items[0]).toMatchObject({ kind: "candidate-wrong-rule", diagnostic: { code: "CLEANUP_IN_FORBIDDEN_SCOPE", line: 8 }, runtimeRules: ["leaf-owner-forbidden-call"] });
+    expect(result.reasons[0]).toMatch(/missing-owner/);
+  });
+  it("is not claimed across families: a read diagnostic at a write finding stays inconclusive", () => {
+    const result = classify({ sites, checker: checker([violation("no-write-in-pure-computation", 8)]), runtime: runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 8)] }), plan });
+    expect(result.items.some((item) => item.kind === "candidate-wrong-rule")).toBe(false);
+  });
+  it("a diagnostic whose rule the finding has agrees, and a consequence code at the finding is ignored", () => {
+    expect(classify({ sites, checker: checker([violation("missing-owner", 8)]), runtime: runtime({ diagnostics: [diag("NO_OWNER_CLEANUP", 8)] }), plan }).verdict).toBe("agree");
+    const halted = classify({ sites, checker: checker([violation("missing-owner", 8)]), runtime: runtime({ diagnostics: [diag("NO_OWNER_CLEANUP", 8), diag("REACTIVITY_HALTED", 8)] }), plan });
+    expect(halted.verdict).toBe("agree");
+  });
+});

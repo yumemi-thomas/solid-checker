@@ -13,7 +13,10 @@
 //   statements:  expr decl return await
 //   view items:  probe button child attr show for
 //
-// A `read` or `write` with `site: true` is a *site of interest*: the checker and
+// An `own` node (`{ k: "own", op, fn?, apply? }`) is an owner-requiring call: `onCleanup`, `createEffect`,
+// `onSettled` or `useContext`. It is a site like a read or a write; what it shows is a hit, not page text.
+//
+// A `read`, `write` or `own` with `site: true` is a *site of interest*: the checker and
 // the runtime are compared at its line. `witness: { selector, text }` says what
 // the page shows when the site ran and landed (null when nothing shows it).
 
@@ -27,6 +30,19 @@ export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "
 export const num = (n) => ({ k: "num", n });
 export const read = (sig, extra = {}) => ({ k: "read", sig, ...extra });
 export const write = (sig, value, extra = {}) => ({ k: "write", sig, value, ...extra });
+/** Owner ops: the Solid calls that need an owner (`NO_OWNER_*`, `SETTLED_CLEANUP_UNOWNED`). */
+export const OWN_OPS = ["cleanup", "effect", "settled", "context"];
+/**
+ * `onCleanup(() => {})`, `createEffect(() => 1, () => {})`, `onSettled(() => {})`, `useContext(Ctx)`.
+ * Each has callbacks as real `fn` nodes (so they are counted), except `context`.
+ */
+export const own = (op, extra = {}) => ({
+  k: "own", op,
+  ...(op === "effect" ? { fn: fn([ret(num(1))]), apply: fn([]) } : op === "context" ? {} : { fn: fn([]) }),
+  ...extra,
+});
+/** True for a node that is a site of interest. */
+export const isSite = (node) => (node.k === "read" || node.k === "write" || node.k === "own") && Boolean(node.site);
 export const ref = (name) => ({ k: "ref", name });
 export const member = (obj, key) => ({ k: "member", obj, key });
 export const obj = (fields) => ({ k: "obj", fields: fields.map(([key, e]) => ({ k: "field", key, e })) });
@@ -260,6 +276,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
         case "num": return T.num;
         case "read": sigCheck(e.sig, "read"); return T.num;
         case "write": sigCheck(e.sig, "write"); return T.num;
+        case "own": return ownType(e, scope);
         case "ref": {
           const type = lookup(scope, e.name);
           if (!type) { fail(`${where}: ${e.name} is not declared before use`); return null; }
@@ -306,6 +323,21 @@ export function validate(program, { maxNodes = 400 } = {}) {
       }
     }
 
+    function ownType(e, scope) {
+      switch (e.op) {
+        // onCleanup returns a Disposable in the published typings, not void.
+        case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return T.unknown;
+        case "settled": fnTypeChecked(e.fn, scope, RETURNS.settled); return T.void;
+        case "effect": {
+          const compute = fnTypeChecked(e.fn, scope, RETURNS.effect);
+          fnTypeChecked(e.apply, scope, RETURNS.applyFn, [["v", compute.ret]]);
+          return T.void;
+        }
+        case "context": return T.num;
+        default: fail(`${where}: unknown owner op ${e.op}`); return null;
+      }
+    }
+
     function primType(e, scope) {
       switch (e.name) {
         case "memo": return T.acc(fnTypeChecked(e.fn, scope, RETURNS.memo).ret);
@@ -320,7 +352,8 @@ export function validate(program, { maxNodes = 400 } = {}) {
           if (e.ownerArg === "owner" && !lookup(scope, "owner")) fail(`${where}: owner is not captured`);
           return fnTypeChecked(e.fn, scope, "free").ret;
         case "settled": fnTypeChecked(e.fn, scope, RETURNS.settled); return T.void;
-        case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return T.void;
+        // onCleanup returns a Disposable in the published typings, not void.
+        case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return T.unknown;
         case "timer": case "then": fnTypeChecked(e.fn, scope, "free"); return T.void;
         default: fail(`${where}: unknown prim ${e.name}`); return null;
       }
@@ -340,6 +373,7 @@ export function paramTsType(p) {
 export function exprTsType(e) {
   if (e.k === "set") return "number";
   switch (e.k) {
+    case "own": return e.op === "context" ? "number" : e.op === "cleanup" ? "unknown" : "void";
     case "num": case "read": case "write": return "number";
     case "iter": return e.method === "map" ? "unknown" : "void";
     default: return "unknown";

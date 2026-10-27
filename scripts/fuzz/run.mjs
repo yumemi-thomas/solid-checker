@@ -22,7 +22,7 @@ import { classifyChrome, evaluate, signaturesOf } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { DEFAULT_TSC } from "./typecheck.mjs";
-import { walk } from "./model.mjs";
+import { isSite, walk } from "./model.mjs";
 import { availableParallelism } from "node:os";
 import { createFastDaemon } from "./fast-daemon.mjs";
 
@@ -170,6 +170,12 @@ async function sweep(options, config, out) {
       }
       if (judged && ["refuted-by-chrome", "chrome-inconclusive"].includes(status)) findings.push({ id: value.built.id, signature: "-", status, reason: judged.reasons.join("; ") });
     }
+    // A real defect named by the wrong rule is reported, not confirmed or shrunk.
+    for (const value of results.values()) {
+      for (const found of signaturesOf(value.program, value.built, { items: value.classification.items.filter((item) => item.kind === "candidate-wrong-rule") })) {
+        findings.push({ id: value.built.id, signature: found.signature, status: "wrong-rule-provisional", reason: found.item.reason, size: value.built.text.split("\n").length, repro: join(config.casesDir, value.built.id) });
+      }
+    }
     // Phase 4 hook: false cleans are classified and reported, never shrunk or confirmed in v1.
     for (const value of results.values()) {
       for (const found of signaturesOf(value.program, value.built, { items: value.classification.items.filter((item) => item.kind === "candidate-false-clean") })) {
@@ -230,7 +236,7 @@ async function shrinkCandidate(value, config, options, out) {
     if (options.shrinkMode === "discovery") return hit.some((item) => item.finding.rule === target.finding.rule);
     return signaturesOf(program, built, result.classification).some((found) => found.signature === targetSignature);
   };
-  const cheap = (program) => [...walk(program)].some(({ node }) => (node.k === "read" || node.k === "write") && node.site);
+  const cheap = (program) => [...walk(program)].some(({ node }) => isSite(node));
   const reduced = await shrink(value.program, judge, { budget: options.budget, cheap });
   const finalBuilt = buildCase(reduced.program, { id: `${value.built.id}-min`, note: `shrunk from fuzz seed ${value.program.seed} (${reduced.accepted} reductions, ${reduced.attempts} runs)` });
   const dir = writeCase(join(out, "repros", createHash("sha1").update(finalBuilt.text).digest("hex").slice(0, 10)), finalBuilt);

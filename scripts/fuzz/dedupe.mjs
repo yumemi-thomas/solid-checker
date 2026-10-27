@@ -88,6 +88,7 @@ export function constructPath(program, path) {
     if (token) chain.push(token);
     else if (ancestor.k === "component") chain.push(`component.${path[2]}`);
     else if (ancestor.k === "read" || ancestor.k === "write") chain.push(`site:${ancestor.k}`);
+    else if (ancestor.k === "own") chain.push(`site:own:${ancestor.op}`);
     // Names bound by a declaration: how does the rest of the component use them?
     const link = up.get(ancestor);
     if (link?.parent.k === "decl" && link.key === "e") {

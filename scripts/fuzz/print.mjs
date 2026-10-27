@@ -13,7 +13,7 @@
 // is counted by `__h(N); <statement>`), and the counter's definition appended after
 // the last line, so no line moves. The type check, the fast path and Chrome run `runText`.
 import { INSTRUMENT_PRELUDE } from "./hits.mjs";
-import { paramTsType, signalTable, walk } from "./model.mjs";
+import { isSite, paramTsType, signalTable, walk } from "./model.mjs";
 
 const MARK_OPEN = "\u0001";
 const MARK_CLOSE = "\u0002";
@@ -73,7 +73,7 @@ function render(program, instrument) {
         if (callee.k !== "member") break;
       }
     }
-    if ((node.k === "read" || node.k === "write") && node.site) {
+    if (isSite(node)) {
       siteIndex.set(node, sitePaths.length);
       sitePaths.push({ node, path });
     }
@@ -173,6 +173,7 @@ function render(program, instrument) {
       case "num": return String(e.n);
       case "read": return siteCall(e, `${e.sig}()`);
       case "write": return siteCall(e, `${signals.get(e.sig).setter}(${e.value})`);
+      case "own": return siteCall(e, ownText(e, depth));
       case "ref": return e.name;
       case "member": return `${expr(e.obj, depth)}.${e.key}`;
       case "obj": return e.fields.length ? `{ ${e.fields.map((f) => (f.e.k === "ref" && f.e.name === f.key ? f.key : `${f.key}: ${expr(f.e, depth)}`)).join(", ")} }` : "{}";
@@ -184,6 +185,15 @@ function render(program, instrument) {
       case "iter": return glue(e, () => (e.method === "map" ? `[1].map(${expr(e.fn, depth)})[0]` : `[1].forEach(${expr(e.fn, depth)})`));
       case "prim": return glue(e, () => primText(e, depth));
       default: throw new Error(`cannot print expression ${e.k}`);
+    }
+  }
+  function ownText(e, depth) {
+    switch (e.op) {
+      case "cleanup": used.add("onCleanup"); return `onCleanup(${expr(e.fn, depth)})`;
+      case "settled": used.add("onSettled"); return `onSettled(${expr(e.fn, depth)})`;
+      case "effect": used.add("createEffect"); return `createEffect(${expr(e.fn, depth)}, ${fnText(e.apply, depth, { header: "(v)" })})`;
+      case "context": used.add("useContext"); return "useContext(Ctx)";
+      default: throw new Error(`cannot print owner op ${e.op}`);
     }
   }
   function primText(e, depth) {
@@ -227,6 +237,9 @@ function render(program, instrument) {
 
   const signalLine = (sig) => `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
   const out = [];
+  // `useContext(Ctx)`: one module-level context with a default value (a read with no provider is then not an error; no owner is).
+  const usesContext = [...walk(program)].some(({ node }) => node.k === "own" && node.op === "context");
+  if (usesContext) { used.add("createContext"); out.push("const Ctx = createContext(7);", ""); }
   const moduleSignals = program.moduleSignals ?? [];
   moduleSignals.forEach((sig) => out.push(signalLine(sig)));
   if (moduleSignals.length) out.push("");
@@ -260,7 +273,7 @@ function render(program, instrument) {
   });
   const text = full.replace(markPattern, "");
   const sites = sitePaths.map(({ node, path }, index) => ({
-    id: `s${index + 1}`, kind: node.k, sig: node.sig, value: node.k === "write" ? node.value : undefined,
+    id: `s${index + 1}`, kind: node.k, sig: node.sig, op: node.k === "own" ? node.op : undefined, value: node.k === "write" ? node.value : undefined,
     line: siteLines.get(index), path, witness: node.witness ?? null,
   }));
   for (const row of ledger) row.line = hitLines.get(row.hit);

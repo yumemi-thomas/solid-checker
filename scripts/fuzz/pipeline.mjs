@@ -126,6 +126,9 @@ export function signaturesOf(program, built, classification) {
     if (item.kind === "candidate-false-positive") {
       const site = known.find((s) => s.id === item.siteIds?.[0]);
       if (site) out.push({ item, site, signature: findingSignature({ rule: item.finding.rule, kind: item.kind, program, path: site.path, outcome: item.subkind ?? "silent" }) });
+    } else if (item.kind === "candidate-wrong-rule") {
+      const site = known.find((candidate) => candidate.line === item.finding.line) ?? known.find((candidate) => Math.abs(candidate.line - item.finding.line) <= 1);
+      if (site) out.push({ item, site, signature: findingSignature({ rule: item.finding.rule, kind: item.kind, program, path: site.path, outcome: item.diagnostic.code }) });
     } else if (item.kind === "candidate-false-clean") {
       const site = built.sites.find((s) => s.line === item.diagnostic.line) ?? built.sites.reduce((best, s) => (best && Math.abs(best.line - item.diagnostic.line) <= Math.abs(s.line - item.diagnostic.line) ? best : s), null);
       if (site) out.push({ item, site, signature: findingSignature({ rule: item.diagnostic.code, kind: item.kind, program, path: site.path, outcome: "diagnosed" }) });

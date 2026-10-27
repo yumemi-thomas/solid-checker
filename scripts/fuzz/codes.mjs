@@ -42,6 +42,17 @@ export const thrownCodes = [
   [/^Context(?: "[^"]*")? (?:has no provider above this read|was provided with `undefined`)/, "CONTEXT_NOT_FOUND"],
 ];
 
+/** Codes that are an engine's consequence of an earlier failure, not a defect of their own: they never count as "a diagnostic at the finding". */
+export const consequenceCodes = ["REACTIVITY_HALTED", "INVARIANT_VIOLATION", "SETTLE_WALK_UNINITIALIZED_SOURCE"];
+
+/**
+ * Rules that name the same kind of defect under different ids: a finding of one and a diagnostic claimed by another
+ * are one real defect named wrongly (`candidate-wrong-rule`), not two defects. Only listed families count.
+ * Owner calls: no owner (SC3001) versus a call the host forbids (SC4001) versus an apply-phase primitive.
+ */
+export const defectFamilies = [["missing-owner", "leaf-owner-forbidden-call", "primitive-in-directive-application"]];
+export const sameDefectFamily = (a, b) => defectFamilies.some((family) => family.includes(a) && family.includes(b));
+
 /** Findings of these rules cover any runtime diagnostic at their site (the checker withheld an answer). */
 export const withholdingRules = ["reactive-dispatch-unresolved"];
 /** Violations the oracle never holds against the runtime (style rules with no dev diagnostic). */

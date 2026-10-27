@@ -8,6 +8,8 @@
 //                             claims a certain failure. Chrome decides (the authority).
 //   candidate-false-clean     the runtime reports a defect at a site no checker finding covers.
 //                             (Phase 4: classified and reported, not yet hunted or shrunk.)
+//   candidate-wrong-rule      the runtime reports a defect at the finding, but under a code a different rule
+//                             claims: the checker saw a real defect and named it wrongly (SC3001 for SC4001).
 //   inconclusive              the evidence cannot decide: the site never ran, nothing shows it ran,
 //                             the rule has no runtime counterpart, the program threw, the
 //                             checker or the runtime failed. "Unresolved" is not evidence (invariant 2).
@@ -22,11 +24,11 @@
 //
 // An uncertifiable finding is never a claim; at a runtime diagnostic it counts as covering it
 // (the checker said it could not prove), the way the runtime oracle's `covered-uncertifiable` does.
-import { codeOfThrown, codeRules, codesForRule, ignoredRules, ruleHasRuntimeCounterpart, withholdingRules } from "./codes.mjs";
+import { codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, sameDefectFamily, ruleHasRuntimeCounterpart, withholdingRules } from "./codes.mjs";
 import { deadSiteConditions } from "./deadsite.mjs";
 import { hitCount } from "./hits.mjs";
 
-export const VERDICTS = ["candidate-false-positive", "candidate-false-clean", "inconclusive", "agree"];
+export const VERDICTS = ["candidate-false-positive", "candidate-false-clean", "candidate-wrong-rule", "inconclusive", "agree"];
 const rank = (verdict) => VERDICTS.indexOf(verdict);
 
 const inSpan = (finding, line) => finding.line <= line && line <= finding.endLine;
@@ -110,8 +112,16 @@ export function classify({ sites, glue = [], checker, runtime, plan, flags = {},
     if (!ruleHasRuntimeCounterpart(finding.rule)) { add("inconclusive", `no runtime diagnostic claims rule ${finding.rule}`, { finding: label, why: "no-counterpart" }); continue; }
     if (!covered.length) { add("inconclusive", "the finding spans no site of interest", { finding: label, why: "no-site" }); continue; }
     const codes = codesForRule(finding.rule);
-    const here = events.filter((event) => lines(event.positions).some((line) => inSpan(finding, line)));
+    // A consequence code (the engine halting after a throw) is not a diagnostic of this site.
+    const here = events.filter((event) => !consequenceCodes.includes(event.code) && lines(event.positions).some((line) => inSpan(finding, line)));
     if (here.some((event) => codes.includes(event.code))) { add("agree", `runtime ${here.find((e) => codes.includes(e.code)).code} at the finding`, { finding: label, siteIds: covered.map((s) => s.id) }); continue; }
+    const elsewhere = here.filter((event) => (codeRules[event.code] ?? []).some((rule) => sameDefectFamily(rule, finding.rule)));
+    if (elsewhere.length) {
+      const [event] = elsewhere;
+      add("candidate-wrong-rule", `runtime ${event.code} at the finding: the same kind of defect, claimed by ${codeRules[event.code].join(" or ")}, not ${finding.rule}`,
+        { finding: label, diagnostic: { code: event.code, line: lines(event.positions).find((line) => inSpan(finding, line)) }, runtimeRules: codeRules[event.code] });
+      continue;
+    }
     if (here.length) { add("inconclusive", `runtime reports ${[...new Set(here.map((e) => e.code))].join(", ")} at the finding, not a code that claims ${finding.rule}`, { finding: label, why: "other-code" }); continue; }
     if (disturbed.length) { add("inconclusive", `the run was disturbed: ${disturbed[0]}`, { finding: label, why: "disturbed" }); continue; }
     const states = covered.map((site) => ({ site, landed: reached.get(site.id) ?? null, count: hitCount(hits, site.hit) }));
@@ -156,6 +166,8 @@ export function classify({ sites, glue = [], checker, runtime, plan, flags = {},
     const covering = spans.filter((finding) => attributed.some((position) => inSpan(finding, position.line))
       && (rules.includes(finding.rule) || withholdingRules.includes(finding.rule)));
     if (covering.some((finding) => finding.kind === "violation")) continue; // already an agree through the finding above
+    // A violation of the same defect family at the diagnostic is a wrong-rule item above, not a missing finding.
+    if (!covering.length && spans.some((finding) => finding.kind === "violation" && attributed.some((position) => inSpan(finding, position.line)) && rules.some((rule) => sameDefectFamily(rule, finding.rule)))) continue;
     if (covering.length) { add("agree", `${event.code}: the checker declines (uncertifiable) at line ${attributed[0].line}`, { diagnostic: { code: event.code, line: attributed[0].line } }); continue; }
     add("candidate-false-clean", `${event.code} at line ${attributed[0].line} has no finding of a rule that claims it`, { diagnostic: { code: event.code, line: attributed[0].line, message: event.message }, provisional: true });
   }
