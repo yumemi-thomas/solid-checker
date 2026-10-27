@@ -6,10 +6,14 @@
 //                             diagnostic, a throw, or any disturbance, and the page shows the
 //                             site ran (its witness). The runtime is silent where the checker
 //                             claims a certain failure. Chrome decides (the authority).
-//   candidate-false-clean     the runtime reports a defect at a site no checker finding covers.
-//                             (Phase 4: classified and reported, not yet hunted or shrunk.)
+//   candidate-false-clean     Solid reports a defect (a code the policy table calls a defect, codes.mjs) where no checker
+//                             finding covers it. Chrome confirms, falseclean.mjs shrinks and dedupes.
 //   candidate-wrong-rule      the runtime reports a defect at the finding, but under a code a different rule
 //                             claims: the checker saw a real defect and named it wrongly (SC3001 for SC4001).
+//   known-open                a false clean the ledger (known-open.json) accepts, by code and coarse key, with a reference.
+//                             Assigned after classification (falseclean.mjs), never here.
+//   recall-gap                Solid reports a defect and the checker declines (an uncertifiable finding at the
+//                             diagnostic): counted and ranked as a roadmap metric, never a failure.
 //   inconclusive              the evidence cannot decide: the site never ran, nothing shows it ran,
 //                             the rule has no runtime counterpart, the program threw, the
 //                             checker or the runtime failed. "Unresolved" is not evidence (invariant 2).
@@ -24,11 +28,11 @@
 //
 // An uncertifiable finding is never a claim; at a runtime diagnostic it counts as covering it
 // (the checker said it could not prove), the way the runtime oracle's `covered-uncertifiable` does.
-import { codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, sameDefectFamily, ruleHasRuntimeCounterpart, withholdingRules } from "./codes.mjs";
+import { codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, withholdingRules } from "./codes.mjs";
 import { deadSiteConditions } from "./deadsite.mjs";
 import { hitCount } from "./hits.mjs";
 
-export const VERDICTS = ["candidate-false-positive", "candidate-false-clean", "candidate-wrong-rule", "inconclusive", "agree"];
+export const VERDICTS = ["candidate-false-positive", "candidate-false-clean", "candidate-wrong-rule", "known-open", "recall-gap", "inconclusive", "agree"];
 const rank = (verdict) => VERDICTS.indexOf(verdict);
 
 const inSpan = (finding, line) => finding.line <= line && line <= finding.endLine;
@@ -156,21 +160,7 @@ export function classify({ sites, glue = [], checker, runtime, plan, flags = {},
     }
   }
 
-  // An uncertifiable finding at a runtime diagnostic is the checker declining; it covers.
-  const spans = findings;
-  // A runtime diagnostic against the checker (phase 4).
-  for (const event of events) {
-    const rules = codeRules[event.code];
-    const attributed = event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined);
-    if (!rules || !attributed.length) continue;
-    const covering = spans.filter((finding) => attributed.some((position) => inSpan(finding, position.line))
-      && (rules.includes(finding.rule) || withholdingRules.includes(finding.rule)));
-    if (covering.some((finding) => finding.kind === "violation")) continue; // already an agree through the finding above
-    // A violation of the same defect family at the diagnostic is a wrong-rule item above, not a missing finding.
-    if (!covering.length && spans.some((finding) => finding.kind === "violation" && attributed.some((position) => inSpan(finding, position.line)) && rules.some((rule) => sameDefectFamily(rule, finding.rule)))) continue;
-    if (covering.length) { add("agree", `${event.code}: the checker declines (uncertifiable) at line ${attributed[0].line}`, { diagnostic: { code: event.code, line: attributed[0].line } }); continue; }
-    add("candidate-false-clean", `${event.code} at line ${attributed[0].line} has no finding of a rule that claims it`, { diagnostic: { code: event.code, line: attributed[0].line, message: event.message }, provisional: true });
-  }
+  items.push(...diagnosticItems(events, findings));
 
   if (!items.length) add("agree", disturbed.length ? `no claims to compare (${disturbed[0]})` : "the checker and the runtime are both silent");
   return result(items);
@@ -180,4 +170,43 @@ export function classify({ sites, glue = [], checker, runtime, plan, flags = {},
     const reasons = [...new Set(rows.filter((row) => row.kind === verdict).map((row) => row.reason))];
     return { verdict, reasons, items: rows };
   }
+}
+
+
+/**
+ * The runtime diagnostics against the checker's findings (the verdict tiers of the owner's policy).
+ * A diagnostic of a defect code (the policy table) at a line:
+ *   a checker violation there         agree (already an item from the finding above);
+ *   an uncertifiable finding there    `recall-gap`: the checker declined; counted, never a failure;
+ *   nothing, or no finding that could claim it    `candidate-false-clean`.
+ * A diagnostic with no authored line (Solid spoke, the harness could not place it) is a false clean only when the checker has
+ * no finding of a claiming rule anywhere in the file; with one it is left alone (nothing says which line it was).
+ */
+export function diagnosticItems(events, findings) {
+  const items = [];
+  for (const event of events) {
+    if (!isDefectCode(event.code)) continue;
+    const rules = codeRules[event.code] ?? [];
+    const severity = policyOf(event.code).severity;
+    const attributed = event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined);
+    const claims = (finding) => rules.includes(finding.rule) || withholdingRules.includes(finding.rule);
+    if (!attributed.length) {
+      if (event.positions.length || findings.some(claims)) continue;
+      items.push({ kind: "candidate-false-clean", reason: `${event.code} (no line could be given) has no finding of a rule that claims it`,
+        diagnostic: { code: event.code, line: null, message: event.message, severity, source: event.source, unplaced: true, frames: [] } });
+      continue;
+    }
+    const covering = findings.filter((finding) => attributed.some((position) => inSpan(finding, position.line)) && claims(finding));
+    if (covering.some((finding) => finding.kind === "violation")) continue; // already an agree through the finding
+    // A violation of the same defect family at the diagnostic is a wrong-rule item from the finding, not a missing finding.
+    if (!covering.length && findings.some((finding) => finding.kind === "violation" && attributed.some((position) => inSpan(finding, position.line)) && rules.some((rule) => sameDefectFamily(rule, finding.rule)))) continue;
+    // `frames`: the App lines of the diagnostic's stack, innermost first (the dynamic stack shape of the coarse key reads them).
+    const diagnostic = { code: event.code, line: attributed[0].line, message: event.message, severity, source: event.source, frames: attributed.map((position) => position.line) };
+    if (covering.length) {
+      items.push({ kind: "recall-gap", reason: `${event.code}: the checker declines (uncertifiable ${covering[0].rule}) at line ${diagnostic.line}`, diagnostic: { ...diagnostic, rule: covering[0].rule } });
+      continue;
+    }
+    items.push({ kind: "candidate-false-clean", reason: `${event.code} at line ${diagnostic.line} has no finding of a rule that claims it`, diagnostic });
+  }
+  return items;
 }
