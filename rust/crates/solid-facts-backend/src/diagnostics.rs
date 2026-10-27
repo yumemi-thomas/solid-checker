@@ -490,6 +490,28 @@ impl DiagnosticSession {
                 );
             }
         }
+        // ADR 0458: a violation at a site no execution reaches claims what
+        // happens where nothing happens. Style rules claim nothing about
+        // execution, and SC2008 claims a no-op wherever it runs.
+        for finding in &mut findings {
+            if finding.kind == "violation"
+                && !finding.id.starts_with("SC80")
+                && finding.id != "SC2008"
+                && let Some(site) = solid_reactive_ir::site_unreached(
+                    &program,
+                    finding.primary_location.path.as_ref(),
+                    finding.primary_location.start_byte,
+                    finding.primary_location.end_byte,
+                )
+            {
+                finding.kind = "uncertifiable".into();
+                finding.message.push_str(if site.dead_code {
+                    "; no execution reaches this code (it follows an unconditional return, throw, break or continue, or sits in a branch a literal condition rules out), so this is not proven"
+                } else {
+                    "; this code is in a function no execution enters (nothing that runs calls, renders or keeps a reference to it, or it is never created), so this is not proven"
+                });
+            }
+        }
         // ADR 0360: a file the compiler refused carries no compiler facts, so
         // nothing about it is proven, and neither is anything a finding
         // elsewhere reaches through it. Its sites are unplaced in the IR; a

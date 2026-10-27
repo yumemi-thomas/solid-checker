@@ -395,6 +395,14 @@ pub struct AstFacts {
     /// Every other comment is absent.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub suppression_comments: Vec<SuppressionCommentFact>,
+    /// Code no execution reaches, from the syntax alone (facts schema 77, ADR
+    /// 0458): every statement after one that never completes normally in the
+    /// same list (a `function` declaration excepted, it is hoisted), and every
+    /// arm a literal test rules out (`if`, `?:`, `while`, `for`, the right of
+    /// `&&`, `||`, `??`). Sorted; regions may nest. Everything written inside
+    /// one, nested functions and classes included, never runs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unreachable_regions: Vec<Span>,
     /// Every tagged template, with its substitutions in order (facts schema
     /// 61, ADR 0309). The template calls its tag with the template object
     /// as argument 0 and substitution `i` as argument `i + 1`; no call fact
@@ -1685,6 +1693,19 @@ impl AstFacts {
         Self::at_span(&self.array_literal_elements, span, |fact| fact.span)
     }
 
+    /// Whether `span` lies in one of [`Self::unreachable_regions`]: no
+    /// execution runs it.
+    #[must_use]
+    pub fn unreachable_contains(&self, span: Span) -> bool {
+        // Sorted by start: only a region starting at or before `span` can hold it.
+        let end = self
+            .unreachable_regions
+            .partition_point(|region| region.start <= span.start);
+        self.unreachable_regions[..end]
+            .iter()
+            .any(|region| region.contains(span))
+    }
+
     /// The declaration the binder resolved the reference at `span` to.
     ///
     /// `None` when `span` is not an identifier reference, or when the binder
@@ -1933,6 +1954,7 @@ impl AstFacts {
             module_directives: Vec::new(),
             stray_directives: Vec::new(),
             suppression_comments: Vec::new(),
+            unreachable_regions: Vec::new(),
             tagged_templates: Vec::new(),
             array_literal_elements: Vec::new(),
             pattern_elements: Vec::new(),

@@ -18,6 +18,7 @@
 //! | `argument_completion`, `completion_call_cover`, `primitive_completion` | Completion standings for arguments, calls and primitives. |
 //! | `component_value_flow`, `proxy_get_forward`, `literal_array` | Component value flow, proxy Get forwarding, literal array elements. |
 //! | `unconditional_calls`, `module_requests`, `inert_javascript` | Synchronously unconditional calls, static module requests, inert JavaScript modules. |
+//! | `unreachable` | Code no execution reaches, from the syntax alone. |
 //!
 //! `mod.rs` keeps the submodule list and re-exports; fact types live in
 //! `types.rs`, and unit tests in `tests.rs` and per-module `tests.rs` files.
@@ -47,7 +48,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 76;
+pub const AST_FACTS_SCHEMA: u32 = 77;
 
 mod argument_completion;
 mod completion_call_cover;
@@ -64,6 +65,7 @@ mod proxy_get_forward;
 mod span_index;
 mod suppression;
 mod unconditional_calls;
+mod unreachable;
 
 mod types;
 pub use types::*;
