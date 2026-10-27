@@ -642,6 +642,9 @@ struct State {
     /// ([`ResolutionWitness`]); a difference rebuilds the program from a new
     /// Type Facts session. `None` until the first analysis observes it.
     resolution: Option<ResolutionWitness>,
+    /// The default program boundary kept while the manifests and workspace
+    /// listings it read are as they were (ADR 0444).
+    boundary: solid_facts_backend::BoundaryCache,
 }
 
 /// What a retained dependency-source program (ADR 0296) holds beside the
@@ -987,6 +990,7 @@ impl State {
             dependency,
             modules: None,
             resolution: None,
+            boundary: solid_facts_backend::BoundaryCache::default(),
         })
     }
 
@@ -1756,8 +1760,13 @@ fn answer_with(
         }
         Sync::Ready(changes) => changes,
     };
+    // ADR 0444: the default program boundary and the digest of what deciding
+    // it read, from one read of the disk for this request: the cached-answer
+    // check, the analysis' options and the answer's recorded inputs all take
+    // this one.
+    let default_boundary = state.boundary.decide(&state.project);
     if changes.is_empty()
-        && let Some(cached) = cached_answer(state, check)?
+        && let Some(cached) = cached_answer(state, check, default_boundary.digest)?
     {
         return Ok(Answer {
             status: cached.0,
@@ -1787,6 +1796,7 @@ fn answer_with(
                 runtime: check.runtime.clone(),
                 feedback_facts: false,
                 host_suppressions: &check.host_suppressions,
+                default_program_boundary: None,
             },
         )?;
         state.session.set_semantic_demand_options(options);
@@ -2019,6 +2029,7 @@ fn answer_with(
                 runtime: check.runtime.clone(),
                 feedback_facts: false,
                 host_suppressions: &check.host_suppressions,
+                default_program_boundary: Some(default_boundary.boundary),
             },
         )?;
     phases.mark("analyze");
@@ -2042,7 +2053,7 @@ fn answer_with(
     state.last = match inference_inputs.filter(|inputs| inference_inputs_current(inputs)) {
         Some(inference_inputs) => Some(CachedAnswer {
             generation: state.session.generation(),
-            input_files: input_files(state, &modules, &router_roots)?,
+            input_files: input_files(state, &modules, &router_roots, default_boundary.digest)?,
             inference_inputs,
             notice: Arc::clone(&notice),
             presets: check.presets.clone(),
@@ -2083,6 +2094,7 @@ fn answer_with(
 fn cached_answer(
     state: &State,
     check: &CheckRequest,
+    boundary_digest: [u8; 32],
 ) -> Result<Option<CachedSnapshot>, Box<dyn Error>> {
     let Some(cached) = &state.last else {
         return Ok(None);
@@ -2096,7 +2108,12 @@ fn cached_answer(
     {
         return Ok(None);
     }
-    let current = input_files(state, &cached.modules, &cached.router_roots)?;
+    let current = input_files(
+        state,
+        &cached.modules,
+        &cached.router_roots,
+        boundary_digest,
+    )?;
     Ok(cached.snapshot_if_current(
         state.session.generation(),
         &current,
@@ -2173,6 +2190,7 @@ fn input_files(
     state: &State,
     modules: &[String],
     router_roots: &[PathBuf],
+    boundary_digest: [u8; 32],
 ) -> Result<Vec<InputFile>, Box<dyn Error>> {
     let directory = state
         .project
@@ -2250,7 +2268,7 @@ fn input_files(
     // so a sibling that starts depending on the project reopens it.
     files.push((
         directory.join(".solid-checker-program-boundary"),
-        solid_facts_backend::program_boundary_digest(&state.project),
+        boundary_digest,
     ));
     // ADR 0324: the premise reads the installed router's bytes, which no
     // tracked source holds (`dist/index.js` is no program file), so each

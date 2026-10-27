@@ -1412,6 +1412,11 @@ pub struct BuildTimings {
     /// The returned-invocation memo's files (one answer per file, ADR
     /// 0392): reused, recomputed, and recomputed to a new answer.
     pub returned_invocation_files: [u64; 3],
+    /// The call-site role memo's answers ([`execution_role`]'s `FlowSiteRole`,
+    /// the reader of the dispatch veto) and the veto's own memo (ADR 0450),
+    /// each as `[reused, computed, changed]`.
+    pub flow_site_role_answers: [u64; 3],
+    pub dispatch_veto_answers: [u64; 3],
     pub reused: bool,
     /// Files whose identity (source hash and Type Facts delta) is the last
     /// build's: the build's `unchanged_paths`.
@@ -1696,6 +1701,14 @@ impl IncrementalBuilder {
     /// Overrides `SOLID_CHECKER_IR_SHADOW` for this builder.
     pub fn set_shadow_mode(&mut self, mode: shadow::ShadowMode) {
         self.shadow = Some(mode);
+    }
+
+    /// Starts this builder's memo store empty with verify-reused mode set to
+    /// `verify` (every reused answer is recomputed and compared with the kept
+    /// one, a difference named by table and key), whatever
+    /// `SOLID_CHECKER_IR_VERIFY_REUSED` says. Call before the first build.
+    pub fn verify_reused_memos(&mut self, verify: bool) {
+        self.caches.set_verify_reused(verify);
     }
 
     /// Whether a build leaves the memo store's end-of-build sweep (the

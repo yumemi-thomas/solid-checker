@@ -56,9 +56,6 @@ pub(crate) enum Section {
     LiteralReceivers,
     /// The invocation-flow answer of every literal (ADR 0319, 0391).
     FlowAnswers,
-    /// The write-flow answer of every function handed to project code
-    /// (ADR 0442).
-    WriteFlowAnswers,
     /// The literals every invocation of which is an event delivery (ADR 0327).
     EventLiterals,
     /// The calls that never return normally (ADR 0278, 0279).
@@ -68,9 +65,13 @@ pub(crate) enum Section {
     ReturnedSources,
     /// The returned-callback invocations and their sites (ADR 0390, 0392).
     ReturnedCallbacks,
-    /// The synchronous event-dispatch veto (ADR 0356, narrowed by ADR 0435,
-    /// 0437, 0438): the hazard, and the two answers the classified sites give.
+    /// The synchronous event-dispatch hazard (ADR 0356) read as the raw base
+    /// index of hazards: the hazard alone.
     SynchronousDispatch,
+    /// The classified dispatch veto (ADR 0356, narrowed by ADR 0435, 0437,
+    /// 0438), read through its two answers, owner proofs and read proofs
+    /// (ADR 0450).
+    DispatchVeto,
     /// The reflective-definition hazard (ADR 0293, 0314).
     ReflectiveDefinition,
     /// A reflective write through a `prototype` (ADR 0292).
@@ -93,12 +94,12 @@ impl Section {
         Self::SpreadTargets,
         Self::LiteralReceivers,
         Self::FlowAnswers,
-        Self::WriteFlowAnswers,
         Self::EventLiterals,
         Self::NeverReturning,
         Self::ReturnedSources,
         Self::ReturnedCallbacks,
         Self::SynchronousDispatch,
+        Self::DispatchVeto,
         Self::ReflectiveDefinition,
         Self::ReflectivePrototypeWrite,
         Self::RouteComponents,

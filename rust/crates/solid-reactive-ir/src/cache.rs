@@ -87,6 +87,9 @@ pub(crate) struct IncrementalCacheState {
     /// [`IncrementalCacheState::finish_deferred_end`] (a daemon sweeps after
     /// it has answered).
     defer_memo_end: bool,
+    /// Verify-reused mode for every memo store this state opens, over
+    /// `SOLID_CHECKER_IR_VERIFY_REUSED` ([`Self::set_verify_reused`]).
+    verify_reused: Option<bool>,
     domain: Option<SourceDiscoveryDomain>,
 }
 
@@ -141,6 +144,7 @@ impl IncrementalCacheState {
     /// The caches one build uses. With shadow mode on, the build also checks
     /// the retained base indexes ([`crate::base::retained`]).
     pub(crate) fn for_build(&mut self, shadow: crate::shadow::ShadowMode) -> BuildCaches<'_> {
+        let verify_reused = self.verify_reused;
         BuildCaches {
             base_check: (shadow != crate::shadow::ShadowMode::Off)
                 .then_some((&mut self.base_indexes, shadow)),
@@ -151,16 +155,25 @@ impl IncrementalCacheState {
             typescript_indexes: Some(&mut self.typescript_indexes),
             reachability: Some(&mut self.reachability),
             late_stages: Some(&mut self.late_stages),
-            memos: Some(
-                self.memos
-                    .get_or_insert_with(crate::base::memo::build::MemoStore::from_env),
-            ),
+            memos: Some(self.memos.get_or_insert_with(|| match verify_reused {
+                Some(verify) => crate::base::memo::build::MemoStore::new(verify, verify),
+                None => crate::base::memo::build::MemoStore::from_env(),
+            })),
             defer_memo_end: self.defer_memo_end,
         }
     }
 
     pub(crate) fn set_defer_memo_end(&mut self, defer: bool) {
         self.defer_memo_end = defer;
+    }
+
+    /// Opens every memo store of this state (from the next build, and after
+    /// every reset) with verify-reused mode (each reused answer recomputed
+    /// and compared) set to `verify`, whatever `SOLID_CHECKER_IR_VERIFY_REUSED`
+    /// says.
+    pub(crate) fn set_verify_reused(&mut self, verify: bool) {
+        self.verify_reused = Some(verify);
+        self.memos = None;
     }
 
     /// Runs the memo sweep a build deferred, if one is due.

@@ -148,7 +148,7 @@ impl SemanticLookup<'_> {
     /// guessed handler edge. A project method with the same spelling does not
     /// select either library declaration.
     pub(crate) fn synchronous_event_dispatch_present(&self) -> bool {
-        crate::base::reads::note(crate::base::reads::Section::SynchronousDispatch);
+        crate::base::reads::note(crate::base::reads::Section::DispatchVeto);
         self.dispatch_veto().0
     }
 
@@ -156,14 +156,16 @@ impl SemanticLookup<'_> {
     /// handler, whose proof also needs the delivery outside a strict-read
     /// window.
     pub(crate) fn synchronous_event_read_dispatch_present(&self) -> bool {
-        crate::base::reads::note(crate::base::reads::Section::SynchronousDispatch);
+        crate::base::reads::note(crate::base::reads::Section::DispatchVeto);
         self.dispatch_veto().1
     }
 
     /// The two veto answers, owner proofs and read proofs
     /// ([`Self::synchronous_event_dispatch_present`],
     /// [`Self::synchronous_event_read_dispatch_present`]): the section
-    /// [`crate::base::reads::Section::SynchronousDispatch`] binds them. With no
+    /// [`crate::base::reads::Section::DispatchVeto`] binds them, and the memo
+    /// [`super::project_memos::DispatchVetoAnswer`] keeps them between builds
+    /// (ADR 0450). With no
     /// call anywhere that resolves to a dispatch (the hazard
     /// [`crate::base::Hazard::SynchronousDispatch`]) neither holds, whatever
     /// the censuses say, and they are not computed.
@@ -257,8 +259,16 @@ impl SemanticLookup<'_> {
     fn placed_dispatch_sites(&self) -> &[DispatchSite] {
         self.placed_event_dispatch.get_or_init(|| {
             let mut sites = Vec::new();
-            for file in self.files() {
-                for call in &file.ast.calls {
+            // The calls the base index lists as dispatches, per file in file
+            // order ([`crate::base::Hazard::SynchronousDispatch`], the same
+            // resolution of each call's callee), not every call of the
+            // program.
+            for (file, entries) in self.slot_entries(self.base_hazards()) {
+                for call in entries
+                    .iter()
+                    .filter(|(hazard, _)| *hazard == crate::base::Hazard::SynchronousDispatch)
+                    .filter_map(|(_, ordinal)| file.ast.calls.get(*ordinal as usize))
+                {
                     let Some(name) = self
                         .resolved_callee_call(file, call.callee)
                         .and_then(crate::runtime_semantics::standard_call_name)
