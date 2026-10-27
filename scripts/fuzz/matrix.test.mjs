@@ -13,6 +13,20 @@ describe("judge", () => {
   it("agree: a violation of a rule that claims the code covers the site", () => {
     expect(verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation", 9, 11)] } }).outcome).toBe("agree");
   });
+  it("agree when the claiming finding sits at the call that runs the misuse, away from its line (remote)", () => {
+    const result = verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation", 30)] } });
+    expect(result).toMatchObject({ outcome: "agree", detail: { remote: "flush-in-effect-callback@30" } });
+  });
+  it("recall-gap when only an uncertifiable claiming finding sits away from the site", () => {
+    expect(verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "uncertifiable", 30)] } }).outcome).toBe("recall-gap");
+  });
+  it("a coded error the page threw is an event even when the table has no pattern for it (Chrome)", () => {
+    const thrown = run([], { errors: [{ kind: "page-error", message: "[SETTLED_CLEANUP_UNOWNED] onSettled returned a cleanup in an unowned scope", positions: [] }] });
+    expect(judge({ code: "SETTLED_CLEANUP_UNOWNED", site, typecheck: { ok: true }, checker: ok, runtime: thrown }).outcome).toBe("false-clean");
+  });
+  it("an unattributed code counts as an unplaced diagnostic", () => {
+    expect(judge({ code: "SETTLED_CLEANUP_UNOWNED", site, typecheck: { ok: true }, checker: ok, runtime: run([], { unattributed: ["SETTLED_CLEANUP_UNOWNED"] }) }).outcome).toBe("false-clean");
+  });
   it("agree through the wrapper's line", () => {
     expect(verdict({ runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", 4)]), checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation", 10)] } }).outcome).toBe("agree");
   });
@@ -22,8 +36,9 @@ describe("judge", () => {
   it("recall-gap: only an uncertifiable finding covers the site", () => {
     expect(verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "uncertifiable")] } }).outcome).toBe("recall-gap");
   });
-  it("false-clean: no finding covers the site", () => {
-    expect(verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation", 30)] } }).outcome).toBe("false-clean");
+  it("false-clean: no claiming finding anywhere, and none covers the site", () => {
+    expect(verdict({ checker: { ok: true, findings: [finding("missing-owner", "violation", 30)] } }).outcome).toBe("false-clean");
+    expect(verdict().outcome).toBe("false-clean");
   });
   it("a style rule the oracle ignores does not hide a false clean", () => {
     expect(verdict({ checker: { ok: true, findings: [finding("prefer-show", "violation")] } }).outcome).toBe("false-clean");
@@ -35,7 +50,7 @@ describe("judge", () => {
   });
   it("an unplaced diagnostic is confirmed, and covered by a claiming finding anywhere", () => {
     expect(verdict({ runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", null)]) }).outcome).toBe("false-clean");
-    expect(verdict({ runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", null)]), checker: { ok: true, findings: [finding("flush-in-effect-callback", "violation", 50)] } }).outcome).toBe("recall-gap");
+    expect(verdict({ runtime: run([event("FLUSH_IN_EFFECT_CALLBACK", null)]), checker: { ok: true, findings: [finding("flush-in-effect-callback", "uncertifiable", 50)] } }).outcome).toBe("recall-gap");
   });
   it("a thrown coded error is a runtime event", () => {
     const thrown = run([], { errors: [{ kind: "page-error", message: "[FLUSH_IN_ACTION] flush() inside an action body is not allowed.", positions: [{ file: "App.tsx", line: 10 }] }] });

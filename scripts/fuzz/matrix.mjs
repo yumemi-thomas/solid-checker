@@ -22,7 +22,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { codeRules, ignoredRules } from "./codes.mjs";
+import { codeRules, ignoredRules, withholdingRules } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
@@ -57,29 +57,41 @@ export function judge({ code, site, typecheck: typed, checker, runtime }) {
   if (!checker?.ok) return { outcome: "harness", detail: { why: `checker: ${String(checker?.error ?? "not run").slice(0, 120)}` } };
   if (!runtime) return { outcome: "harness", detail: { why: "no runtime record" } };
   const region = regionOf(site);
-  const events = runtimeEvents(runtime).filter((event) => event.code === code);
+  // The coded errors the page threw: `[CODE] message` is the dev build's own tag (Chrome reports some codes only this way).
+  const thrownTags = (runtime.errors ?? []).flatMap((error) => {
+    const tag = /^\[([A-Z][A-Z_]+)\]/.exec(String(error.message ?? ""));
+    return tag ? [{ code: tag[1], source: "thrown", positions: error.positions ?? [] }] : [];
+  });
+  const known = runtimeEvents(runtime);
+  const events = [...known, ...thrownTags.filter((tag) => !known.some((event) => event.code === tag.code && event.source === "thrown"))].filter((event) => event.code === code);
   const attributed = (event) => event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined);
   const atSite = events.filter((event) => attributed(event).some((position) => region.includes(position.line)));
-  // A diagnostic with no authored position at all: Solid spoke and the harness cannot say where. With one site in the file that is this site.
-  // A code whose runtime position is the render root, not the user's line (placeless in the spec), counts wherever it is reported.
+  // A diagnostic with no authored position at all (or, for a placeless code, any position): Solid spoke and the harness cannot say
+  // where. With one site in the file that is this site. Chrome lists such codes in `unattributed`.
   const unplaced = events.filter((event) => SPEC[code].placeless || !attributed(event).length);
-  if (!atSite.length && !unplaced.length) {
+  const unattributed = (runtime.unattributed ?? []).map(String).includes(code);
+  if (!atSite.length && !unplaced.length && !unattributed) {
     if (runtime.failure && !events.length) return { outcome: "harness", detail: { why: `runtime: ${String(runtime.failure.message).slice(0, 120)}` } };
     return { outcome: "not-fired", detail: { reported: [...new Set(runtimeEvents(runtime).map((event) => event.code))], misplaced: events.map((event) => attributed(event).map((p) => p.line)) } };
   }
   const placed = atSite.length ? "placed" : "unplaced";
   const rules = codeRules[code] ?? [];
-  const covering = checker.findings.filter((finding) => !ignoredRules.includes(finding.rule) && inLines(finding, region));
-  const claiming = covering.filter((finding) => rules.includes(finding.rule));
+  const relevant = checker.findings.filter((finding) => !ignoredRules.includes(finding.rule));
+  const claims = (finding) => rules.includes(finding.rule) || withholdingRules.includes(finding.rule);
+  const covering = relevant.filter((finding) => inLines(finding, region));
+  // The checker anchors a finding at the call that runs the misuse (a closure's call, a helper's call), not always at the misuse
+  // line itself. In a one-site program a claiming finding anywhere is this misuse's: it is an agree (or a gap) with `remote` set.
+  const claimingViolation = relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule) && inLines(finding, region))
+    ?? relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule));
+  const remote = Boolean(claimingViolation) && !inLines(claimingViolation, region);
   const violations = covering.filter((finding) => finding.kind === "violation");
-  // A violation that does not cover the site: in a one-site program it is either a second defect of the template or a false positive.
-  const stray = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && !inLines(finding, region));
-  const detail = { placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}) };
-  if (claiming.some((finding) => finding.kind === "violation")) return { outcome: "agree", detail };
+  const stray = relevant.filter((finding) => finding.kind === "violation" && !rules.includes(finding.rule) && !inLines(finding, region));
+  const detail = { placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}) };
+  if (claimingViolation) return { outcome: "agree", detail };
   if (violations.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(violations.map((finding) => finding.rule))] } };
   if (covering.length) return { outcome: "recall-gap", detail };
-  // An unplaced diagnostic is covered by any claiming finding anywhere in the file (nothing says which line it was).
-  if (placed === "unplaced" && checker.findings.some((finding) => rules.includes(finding.rule))) return { outcome: "recall-gap", detail: { ...detail, why: "unplaced diagnostic, claiming finding elsewhere" } };
+  const claimingElsewhere = relevant.find((finding) => claims(finding));
+  if (claimingElsewhere) return { outcome: "recall-gap", detail: { ...detail, remote: `${claimingElsewhere.rule}/${claimingElsewhere.kind}@${claimingElsewhere.line}` } };
   return { outcome: "false-clean", detail };
 }
 
@@ -180,6 +192,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
     const by = (field) => Object.fromEntries([...new Set(cell.rows.map((row) => row[field]))].sort().map((value) => [value, tally(cell.rows.filter((row) => row[field] === value))]));
     out[key] = {
       code: cell.code, context: cell.context, programs: cell.rows.length, ...counts, confirmed,
+      agreeRemote: cell.rows.filter((row) => row.outcome === "agree" && row.detail?.remote).length,
       byBinding: by("binding"), byLayer: by("layer"),
       chrome: chromeSummary(cell.rows),
       verdicts: Object.fromEntries(cell.rows.map((row) => [String(row.seed), row.outcome])),
@@ -214,14 +227,16 @@ export function markdown(matrix, statuses) {
   const lines = [];
   lines.push(`# Misuse recall matrix`, "");
   lines.push(`Generator ${matrix.generator}, seed ${matrix.seed}, ${matrix.perCell} programs per cell. Checker: ${matrix.checker.label ?? "?"}${matrix.checker.bin ? ` (${matrix.checker.bin})` : ""}.`, "");
-  lines.push(`Each cell: \`agree/confirmed\`; then \`W\` wrong-rule, \`G\` recall-gap, \`F\` false-clean, \`n\` not-fired, \`t\` typed-away, \`h\` harness. Blank: not a context of that code. Only runtime-confirmed programs count (confirmed = the runtime reported the code at the site).`, "");
+  lines.push(`Each cell: \`agree/confirmed\`; then \`W\` wrong-rule, \`G\` recall-gap, \`F\` false-clean, \`n\` not-fired, \`t\` typed-away, \`h\` harness. \`†\`: Chrome reproduced none of the sampled programs of the cell. Blank: not a context of that code. Only runtime-confirmed programs count (confirmed = the runtime reported the code at the site).`, "");
   lines.push(`| code | ${contexts.join(" | ")} |`, `| --- | ${contexts.map(() => "---").join(" | ")} |`);
   for (const code of codes) {
     const cells = contexts.map((context) => {
       const cell = matrix.cells[`${code}|${context}`];
       if (!cell) return "";
       const extras = [["W", cell["wrong-rule"]], ["G", cell["recall-gap"]], ["F", cell["false-clean"]], ["n", cell["not-fired"]], ["t", cell["typed-away"]], ["h", cell.harness]].filter(([, n]) => n).map(([k, n]) => `${k}${n}`).join(" ");
-      return `${cell.agree}/${cell.confirmed}${extras ? ` ${extras}` : ""}`;
+      // A dagger: Chrome did not reproduce any of the sampled programs of this cell (the fast path's evidence stands alone).
+      const unconfirmed = cell.chrome && cell.chrome.checked > 0 && cell.chrome.same === 0 ? " †" : "";
+      return `${cell.agree}/${cell.confirmed}${extras ? ` ${extras}` : ""}${unconfirmed}`;
     });
     lines.push(`| ${code} | ${cells.join(" | ")} |`);
   }
