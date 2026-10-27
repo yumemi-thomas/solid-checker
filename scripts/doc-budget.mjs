@@ -61,7 +61,8 @@ export const FILE_BUDGETS = {
   // 178,593 bytes before its entry, which removes the CI performance workflow); and for
   // ADR 0423 (the file stood 179,066 bytes before its entry, which adds the real-project gate).
   // Merging origin/main (the incremental-daemon track, ADRs 0382-0423) into the catalog-review branch (ADRs 0381, 0424-0448), with ADR 0449: the two sides' raises combine; the merged tree stood at 231,107 bytes: 232_000.
-  "docs/decisions.md": 232_000,
+  // And for ADR 0453 (the file stood 231,598 bytes before its entry): 233_000.
+  "docs/decisions.md": 233_000,
 };
 
 export const GROUP_BUDGETS = [
@@ -87,7 +88,8 @@ export const GROUP_BUDGETS = [
   // And for ADR 0446 (the reproduction set and the pre-release run): 665_446 bytes against 664_000: 667_000.
   // And for ADRs 0447-0448 (see above): 669_000.
   // Merging origin/main (the incremental-daemon track, ADRs 0382-0423) into the catalog-review branch (ADRs 0381, 0424-0448), with ADR 0449: the two sides' raises combine; the merged tree stood at 739,773 bytes: 741_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 741_000 },
+  // And for ADR 0453 (the group stood 740,735 bytes before its entry): 742_000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 742_000 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),

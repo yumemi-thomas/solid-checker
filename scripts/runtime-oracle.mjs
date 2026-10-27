@@ -6,7 +6,7 @@
 // corpus comparison can see.
 //
 //   node scripts/runtime-oracle.mjs --cases fixtures/runtime-oracle --out <fresh.json>
-//     [--only id,...] [--install <app with solid-js 2.x node_modules>]
+//     [--only id,...] [--install <directory with solid-js 2.x node_modules>]
 //     [--browser <chromium>] [--concurrency <n>] [--cache <directory>|off]
 //   env: SOLID_CHECKER_NATIVE_BIN, SOLID_TYPEFACTS_BIN
 //
@@ -15,8 +15,7 @@
 // component in its own root. The entry then drives the page itself: two passes
 // dispatch a fixed set of DOM events on every element (the second reaches
 // elements the first one revealed), so a case needs no per-site steps. An
-// optional `oracle.json` adds a note, further feedback scenario steps, an
-// `install` corpus app name (relative to the parent of --install), and the
+// optional `oracle.json` adds a note, further feedback scenario steps, and the
 // case's known open sites (each an unproven clean claim with its reason):
 //   { "note": "what the case pins", "steps": [ ... ],
 //     "open": [{ "code": "NO_OWNER_CLEANUP", "site": "App.tsx:13", "reason": "..." }] }
@@ -36,6 +35,16 @@
 // Files named *.d.ts and node_modules directories are not copied: the case
 // runs against the real packages of `--install`, never against a stub.
 //
+// The install is committed: scripts/runtime-oracle-install holds the manifest and
+// lockfile of the pinned Solid 2.0.0-rc.17 install (solid-js, @solidjs/web,
+// @solidjs/signals, and the rc.17 @solidjs/compiler and @solidjs/babel-plugin that
+// the plugin's `^2.0.0-rc.16` ranges would otherwise resolve to rc.18; ADR 0453).
+// `make runtime-oracle-install` runs `npm ci` there. The default `--install` is that
+// directory, and a run on it asserts the compiler is the same version as solid-js.
+// `--install` takes another directory to compare against (a corpus app, say); that
+// run records the compiler version but does not assert it. Cases are written to
+// `<install>/.solid-checker-runtime-oracle/<id>`, so the install must be writable.
+//
 // Each case runs once through `solid-checker feedback run`, which records the
 // dev diagnostics the runtime attributed to an authored site and the native
 // findings for the same files. Per runtime diagnostic in a case file:
@@ -49,7 +58,8 @@
 // `static-only`: either a false positive or a site the steps did not reach.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { recommendedConcurrency } from "./lib/pool.mjs";
@@ -57,7 +67,7 @@ import { recommendedConcurrency } from "./lib/pool.mjs";
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const options = {
   cases: join(repo, "fixtures/runtime-oracle"),
-  install: resolve(repo, "../solid-checker-rc17-corpus/apps/helge-dev"),
+  install: join(repo, "scripts/runtime-oracle-install"),
   browser: null,
   tooling: null,
   // The gates' default (cores, at most 8). Each worker is a CLI, a Vite server
@@ -84,11 +94,21 @@ assert(!existsSync(output), "use a fresh output path");
 assert(process.env.SOLID_CHECKER_NATIVE_BIN && process.env.SOLID_TYPEFACTS_BIN, "set SOLID_CHECKER_NATIVE_BIN and SOLID_TYPEFACTS_BIN");
 
 const install = resolve(options.install);
-const appsRoot = dirname(install);
+const pinnedInstall = install === join(repo, "scripts/runtime-oracle-install");
 const tooling = resolve(options.tooling ?? install);
 const browser = options.browser ? resolve(options.browser) : defaultChromium();
-const solidVersion = JSON.parse(readFileSync(join(install, "node_modules/solid-js/package.json"), "utf8")).version;
+assert(existsSync(join(install, "node_modules/solid-js/package.json")), `${install} has no node_modules/solid-js${pinnedInstall ? ": run `make runtime-oracle-install`" : ""}`);
+const installedVersion = (name) => JSON.parse(readFileSync(realpathSync(join(install, "node_modules", name, "package.json")), "utf8")).version;
+const solidVersion = installedVersion("solid-js");
 assert(solidVersion.startsWith("2."), `--install resolves solid-js ${solidVersion}, not 2.x`);
+// The compiler the Solid plugin loads, resolved from the plugin the way Node does it.
+const compilers = Object.fromEntries(["@solidjs/compiler", "@solidjs/babel-plugin"].map((name) => {
+  const from = createRequire(join(realpathSync(join(install, "node_modules/@solidjs/vite-plugin")), "package.json"));
+  let directory = dirname(from.resolve(name));
+  while (!existsSync(join(directory, "package.json")) || JSON.parse(readFileSync(join(directory, "package.json"), "utf8")).name !== name) directory = dirname(directory);
+  return [name, JSON.parse(readFileSync(join(directory, "package.json"), "utf8")).version];
+}));
+if (pinnedInstall) for (const [name, version] of Object.entries(compilers)) assert(version === solidVersion, `the pinned install resolves ${name} ${version}, not ${solidVersion}: run \`make runtime-oracle-install\``);
 // Cases run inside the install so its node_modules is their ancestor.
 
 // Playwright's headless shell: the same Chromium build (Blink, V8) without the
@@ -482,10 +502,8 @@ async function runCase(id) {
   const source = join(resolve(options.cases), id);
   const specPath = join(source, "oracle.json");
   const spec = existsSync(specPath) ? JSON.parse(readFileSync(specPath, "utf8")) : {};
-  const caseInstall = spec.install ? resolve(appsRoot, spec.install) : install;
-  const caseSolid = JSON.parse(readFileSync(join(caseInstall, "node_modules/solid-js/package.json"), "utf8")).version;
-  assert(caseSolid === solidVersion, `${id}: install has solid-js ${caseSolid}, expected ${solidVersion}`);
-  const dir = join(caseInstall, ".solid-checker-runtime-oracle", id);
+  assert(!("install" in spec), `${id}: oracle.json "install" is gone: every case runs in the oracle's one install (ADR 0453)`);
+  const dir = join(install, ".solid-checker-runtime-oracle", id);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   const files = sourceFiles(source);
@@ -496,7 +514,7 @@ async function runCase(id) {
   writeFileSync(join(dir, "index.html"), html);
   writeFileSync(join(dir, "scenario.json"), JSON.stringify({ schemaVersion: 1, steps: [settle, ...(observations.length ? [probeStep] : []), ...(spec.steps ?? [])] }));
   writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions, files: ["main.tsx", ...files] }, null, 2));
-  // The checker's program boundary follows the nearest manifest, which is the corpus app's: it publishes
+  // The checker's program boundary follows the nearest manifest, which is the install's: it publishes
   // nothing, so the boundary is closed. `programBoundary` writes this case's own manifest: a publishing one
   // (an entry field) is open, a private one is closed.
   if (spec.programBoundary !== undefined) {
@@ -675,7 +693,7 @@ await Promise.all(Array.from({ length: Number(options.concurrency) }, worker));
 results.sort((left, right) => left.id.localeCompare(right.id));
 const tally = results.reduce((counts, row) => ({ ...counts, [row.verdict]: (counts[row.verdict] ?? 0) + 1 }), {});
 const executionCache = results.reduce((counts, row) => (row.executionCache ? { ...counts, [row.executionCache]: (counts[row.executionCache] ?? 0) + 1 } : counts), {});
-writeFileSync(output, `${JSON.stringify({ solid: solidVersion, install, browser, cases: results.length, tally, executionCache, results }, null, 2)}\n`);
+writeFileSync(output, `${JSON.stringify({ solid: solidVersion, compilers, install, browser, cases: results.length, tally, executionCache, results }, null, 2)}\n`);
 console.log(JSON.stringify(tally));
 console.error(`browser halves: ${JSON.stringify(executionCache)}`);
 const failing = results.filter((row) => ["unproven-clean", "stale-open", "type-error", "harness-error"].includes(row.verdict));

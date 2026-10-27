@@ -16,7 +16,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus
+.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus
 
 build: build-rust
 
@@ -169,6 +169,12 @@ compiler-facts-identity:
 # plan without running it.
 verify-delta:
 	$(BUN) scripts/verify-delta.mjs $(if $(BASE),--base $(BASE))
+
+# The runtime oracle's pinned Solid 2.0.0-rc.17 install (ADR 0453): the committed
+# manifest and lockfile in scripts/runtime-oracle-install, reproduced by `npm ci`.
+# scripts/runtime-oracle.mjs defaults --install to it.
+runtime-oracle-install:
+	cd scripts/runtime-oracle-install && npm ci
 
 # "Does TypeScript already report this?", as a checkable claim. Provisioning
 # installs the audited Solid versions into rust/target/tsc-oracle and refuses

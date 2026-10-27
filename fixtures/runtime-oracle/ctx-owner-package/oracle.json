@@ -1,6 +1,5 @@
 {
   "note": "ADR 0352: a package hook (kobalte useDialogContext) that reads its context in an event handler throws NoOwnerError. The control reads the hook under the dialog's own provider and throws nothing.",
-  "install": "probus-hk",
   "open": [
     {
       "code": "NO_OWNER_CONTEXT",
