@@ -4,7 +4,7 @@ import { buildCase, scenarioSteps } from "./emit.mjs";
 import { validate } from "./model.mjs";
 import { printProgram } from "./print.mjs";
 
-const SEEDS = Array.from({ length: 400 }, (_, i) => i + 1);
+const SEEDS = Array.from({ length: 600 }, (_, i) => i + 1);
 
 describe("generateProgram", () => {
   it("is a pure function of the seed", () => {
@@ -71,6 +71,12 @@ describe("generateProgram", () => {
       "read": /createSignal\(10\d\d\)/,
     };
     for (const [name, pattern] of Object.entries(required)) expect(seen(pattern), name).toBeGreaterThan(0);
+  });
+
+  it("body-call: the component body calls what a memo returned (m()())", () => {
+    const texts = SEEDS.slice(0, 100).map((seed) => printProgram(generateProgram(seed, { profile: "body-call" })).text);
+    expect(texts.filter((text) => /^  (?:const n\d = )?m\d\(\)(?:\(\)|\.f\(\))/m.test(text)).length).toBeGreaterThan(5);
+    for (const seed of SEEDS.slice(0, 100)) expect(validate(generateProgram(seed, { profile: "body-call" })), `seed ${seed}`).toEqual([]);
   });
 
   it("honours the profile and component count options", () => {

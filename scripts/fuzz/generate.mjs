@@ -20,11 +20,11 @@ import {
   awaitStmt, probe, button, child, attr, show, forEach, set, exprTsType, getOwner, helper, component, program as makeProgram,
 } from "./model.mjs";
 
-export const GENERATOR_VERSION = 1;
+export const GENERATOR_VERSION = 2;
 
 const PROFILES = [
   // [weight, name]
-  [3, "closure-escape"], [3, "default-param"], [2, "helper-closure"], [2, "in-place"], [1, "async"], [2, "mixed"],
+  [3, "closure-escape"], [3, "default-param"], [2, "helper-closure"], [2, "in-place"], [1, "async"], [2, "mixed"], [2, "body-call"],
 ];
 
 const HOSTS = ["memo", "effect", "untrack", "root", "owner", "body", "apply", "settled", "cleanup", "timer", "then", "handler", "jsx", "async"];
@@ -38,6 +38,8 @@ const hostWeights = {
   "in-place": { memo: 4, effect: 3, untrack: 2, root: 2, owner: 2, body: 2, apply: 3, settled: 2, cleanup: 1, timer: 1, then: 1, handler: 2, jsx: 2, async: 0 },
   async: { memo: 1, effect: 2, untrack: 0, root: 0, owner: 0, body: 1, apply: 1, settled: 1, cleanup: 0, timer: 2, then: 3, handler: 1, jsx: 0, async: 5 },
   mixed: Object.fromEntries(HOSTS.map((host) => [host, 1])),
+  // A memo that builds a closure the component body then calls (`m()()`): the read is untracked there (rc.17 warns).
+  "body-call": { memo: 8, effect: 1, untrack: 0, root: 1, owner: 0, body: 1, apply: 0, settled: 0, cleanup: 0, timer: 0, then: 0, handler: 0, jsx: 1, async: 0 },
 };
 
 const layerWeights = (profile) => ({
@@ -47,6 +49,7 @@ const layerWeights = (profile) => ({
   "in-place": { closure: 1, default: 0, iife: 4, iter: 4, helper: 1 },
   async: { closure: 3, default: 0, iife: 1, iter: 1, helper: 1 },
   mixed: { closure: 3, default: 3, iife: 2, iter: 2, helper: 2 },
+  "body-call": { closure: 6, default: 1, iife: 1, iter: 1, helper: 2 },
 })[profile];
 
 export function generateProgram(seed, options = {}) {
@@ -278,7 +281,17 @@ function place(ctx, host, cur0, pre, disp, route) {
       else if (route.needsValue) inner.push(ret(ranValue()));
       else inner.push(expr(ranValue()), ret(num(1)));
       out.body.push(decl(api, prim("memo", fn(inner))));
-      if (disp === "return" || disp === "store") handlerFor(escape(cur, call(ref(api))), null);
+      if ((disp === "return" || disp === "store") && ctx.profile === "body-call" && ctx.rng.chance(0.8)) {
+        // The component body calls what the memo returned.
+        const callExpr = invoke(escape(cur, call(ref(api))), supply);
+        if (route.needsValue) {
+          const id = name(ctx, "n");
+          out.body.push(decl(id, callExpr));
+          const vid = viewId();
+          out.view.push(child(vid, ref(id)));
+          withWitness(vid);
+        } else out.body.push(expr(callExpr));
+      } else if (disp === "return" || disp === "store") handlerFor(escape(cur, call(ref(api))), null);
       else { const id = viewId(); out.view.push(child(id, call(ref(api)))); withWitness(id); }
       return out;
     }
