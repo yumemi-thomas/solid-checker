@@ -265,7 +265,9 @@ pub(super) fn callback_chain_reaches_owner_body(
     crate::execution_role::functions_around(file, chain.outermost)
         .into_iter()
         .min_by_key(|function| function.span.end - function.span.start)
-        .is_some_and(|innermost| innermost.body == owner.body)
+        .is_some_and(|innermost| {
+            innermost.body == owner.body && owner.body.contains(chain.outermost)
+        })
 }
 
 /// The execution word a callback carries when it runs synchronously at the

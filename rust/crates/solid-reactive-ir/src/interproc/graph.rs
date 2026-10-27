@@ -711,7 +711,13 @@ fn record_invoked_parameter_callback(
     let call_in_owner_body = crate::execution_role::functions_around(file, call.span)
         .into_iter()
         .min_by_key(|function| function.span.end - function.span.start)
-        .is_some_and(|innermost| innermost.body == nodes[callback_owner].body);
+        // A call in the owner's own parameter list runs only when the caller
+        // leaves that argument out, so it is no call "in the body": the body
+        // must hold the call, not just belong to the function that does.
+        .is_some_and(|innermost| {
+            innermost.body == nodes[callback_owner].body
+                && nodes[callback_owner].body.contains(call.span)
+        });
     // Every primitive callback position between this call and the
     // declaring function's body, composed. This rung outranks the
     // lexical role below it because the lexical role answers a
