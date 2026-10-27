@@ -37,7 +37,14 @@
 //! - `SOLID_CHECKER_IDLE_SHADOW_TRACE`: also log each check's outcome.
 //! - debug builds only (test hooks): `SOLID_CHECKER_IDLE_SHADOW_FAULT` adds a
 //!   spurious finding to the first materialized answer, and
-//!   `SOLID_CHECKER_IDLE_SHADOW_DELAY_MS` delays each check's fresh build.
+//!   `SOLID_CHECKER_IDLE_SHADOW_DELAY_MS` delays each check's fresh build;
+//!   `SOLID_CHECKER_IDLE_SHADOW_HOLD_FIRST=1` holds the daemon's first check
+//!   before its fresh build until a request cancels it (30 s at most) and
+//!   traces `holding` when it does, so a test sends that request at a known
+//!   point, whatever the machine's load; `SOLID_CHECKER_IDLE_SHADOW_NORMAL_PRIORITY=1`
+//!   leaves the check thread at normal priority, which background priority
+//!   starves on a busy machine (a test waiting for a verdict would wait on
+//!   the load, not on the check).
 
 use std::{
     collections::BTreeMap,
@@ -302,7 +309,14 @@ impl IdleShadow {
         let spawned = std::thread::Builder::new()
             .name("idle-shadow".into())
             .spawn(move || {
-                unsafe_boundary::lower_thread_priority();
+                #[cfg(debug_assertions)]
+                let normal =
+                    std::env::var_os("SOLID_CHECKER_IDLE_SHADOW_NORMAL_PRIORITY").is_some();
+                #[cfg(not(debug_assertions))]
+                let normal = false;
+                if !normal {
+                    unsafe_boundary::lower_thread_priority();
+                }
                 this.run(&request, &room);
             });
         if let Err(error) = spawned {
@@ -439,6 +453,10 @@ fn verify(request: &Request, served: &Served, cancel: &AtomicBool) -> Outcome {
             return Outcome::Cancelled;
         }
     }
+    #[cfg(debug_assertions)]
+    if hold_first(cancel) {
+        return Outcome::Cancelled;
+    }
     let mut fresh = match State::open(request) {
         Ok(fresh) => fresh,
         Err(error) => {
@@ -553,6 +571,33 @@ fn body_difference(retained: &[u8], fresh: &[u8]) -> String {
         clip(retained.lines().nth(line).unwrap_or_default().to_owned()),
         clip(fresh.lines().nth(line).unwrap_or_default().to_owned()),
     )
+}
+
+/// The test hold hook: the first check of the process waits, cancellable,
+/// before its fresh build, after writing a `holding` line to the check log
+/// (the same file the daemon's other lines go to). Returns whether it was
+/// cancelled while held.
+#[cfg(debug_assertions)]
+fn hold_first(cancel: &AtomicBool) -> bool {
+    static HELD: AtomicBool = AtomicBool::new(false);
+    if std::env::var_os("SOLID_CHECKER_IDLE_SHADOW_HOLD_FIRST").is_none()
+        || HELD.swap(true, Ordering::Relaxed)
+    {
+        return false;
+    }
+    if let Some(log) = std::env::var_os("SOLID_CHECKER_IDLE_SHADOW_LOG")
+        && let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log)
+    {
+        let _ = writeln!(file, "idle shadow: holding the first check");
+    }
+    let until = Instant::now() + Duration::from_secs(30);
+    while Instant::now() < until && !cancel.load(Ordering::Relaxed) {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    cancel.load(Ordering::Relaxed)
 }
 
 /// The test fault hook: perturbs the first materialized answer of a debug
