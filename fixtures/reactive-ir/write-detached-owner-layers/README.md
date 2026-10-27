@@ -1,0 +1,5 @@
+# write-detached-owner-layers
+
+**Claim.** `runWithOwner(null, fn)` runs `fn` with no owner, so a write it runs on its own stack is legal directly (`NullDirect`), in an IIFE (`NullIife`), an inline standard-library callback (`NullForEach`), through several layers (`NullNestedLayers`), or through `untrack` (`NullUntrackIife`), whatever scope surrounds the call (`NullIifeInMemo`, `NullIifeInEffect`); a named closure is judged by its call (`NullNamedClosure`). Before ADR 0455 only the direct write took the callback's role and `SC2001` reported the layers.
+
+Controls. A memo created inside the callback owns its compute (`NullMemoInside`), an owner the call creates (`CreatedOwnerIife`) or a component's `getOwner()` (`ComponentOwnerIife`) is real, and the component body is not detached (`BodyIife`): violations. An owner that may be null (`MaybeNullOwnerIife`) or a bound `createOwner()` result not proven non-null (`BoundOwnerIife`, a cost: rc.17 throws) is uncertifiable. Runtime evidence: `oracle-behaviour-detached-owner-layers`. Stub: rc.17 shapes.

@@ -1,0 +1,61 @@
+{
+  "note": "ADR 0455: a closure createRoot or untrack builds runs nothing there, and a default value in its parameter list runs when a call omits the argument. A click calls the closure: the write lands (the counters bumped after it are 1) and rc.17 throws nothing. SC2001 reported the write as a violation; it is uncertifiable. RootCallsDefault and UntrackIifeDefault run the default in the root or untrack body, where rc.17 throws: covered by an uncertifiable result (cost).",
+  "behaviour": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:23",
+      "act": [
+        {
+          "click": "[data-act=root]"
+        }
+      ],
+      "observe": {
+        "window": "landedRootApi"
+      },
+      "defect": 0,
+      "correct": 1
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:30",
+      "act": [
+        {
+          "click": "[data-act=rootchain]"
+        }
+      ],
+      "observe": {
+        "window": "landedRootChain"
+      },
+      "defect": 0,
+      "correct": 1
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:42",
+      "act": [
+        {
+          "click": "[data-act=untrack]"
+        }
+      ],
+      "observe": {
+        "window": "landedUntrackApi"
+      },
+      "defect": 0,
+      "correct": 1
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:49",
+      "act": [
+        {
+          "click": "[data-act=untrackchain]"
+        }
+      ],
+      "observe": {
+        "window": "landedUntrackChain"
+      },
+      "defect": 0,
+      "correct": 1
+    }
+  ]
+}

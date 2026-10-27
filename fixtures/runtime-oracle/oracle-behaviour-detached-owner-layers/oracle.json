@@ -1,0 +1,68 @@
+{
+  "note": "ADR 0455: runWithOwner(null, fn) runs fn with no owner, so a write it runs lands whatever function it sits in (an IIFE, forEach, untrack, a memo or effect compute around the call). SC2001 reported the in-place layers; rc.17 throws nothing and the counters, bumped after the write, are 1. The controls (a created owner, a component's getOwner(), a bound createOwner() result) throw REACTIVE_WRITE_IN_OWNED_SCOPE and their dev diagnostics are covered.",
+  "behaviour": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:37",
+      "observe": {
+        "window": "landedIife"
+      },
+      "defect": 0,
+      "correct": 1
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:47",
+      "observe": {
+        "window": "landedForEach"
+      },
+      "defect": 0,
+      "correct": 1
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:58",
+      "observe": {
+        "window": "landedUntrack"
+      },
+      "defect": 0,
+      "correct": 1
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:70",
+      "observe": {
+        "window": "landedMemo"
+      },
+      "defect": 0,
+      "correct": 1
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:84",
+      "observe": {
+        "window": "landedEffect"
+      },
+      "defect": 0,
+      "correct": 1
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:100",
+      "observe": {
+        "window": "landedNested"
+      },
+      "defect": 0,
+      "correct": 1
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:111",
+      "observe": {
+        "window": "landedDirect"
+      },
+      "defect": 0,
+      "correct": 1
+    }
+  ]
+}

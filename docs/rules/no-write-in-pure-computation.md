@@ -230,6 +230,13 @@ write is uncertifiable, also in an anonymous callback's list
 argument (a known miss: nothing proves the omission)
 (`fixtures/reactive-ir/parameter-list-owner`).
 
+A callback run with no owner (`runWithOwner(null, fn)`) leaves the guard nothing
+to reject: a write it runs is legal, also in an IIFE, `forEach` or `untrack` it
+runs in place (ADR 0455, `fixtures/reactive-ir/write-detached-owner-layers`); an
+owner that may be null leaves those layers uncertifiable. A closure a
+`createRoot` or `untrack` callback builds is built, not run: a default in it is
+uncertifiable (`fixtures/reactive-ir/write-default-in-root-closure`).
+
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.
 

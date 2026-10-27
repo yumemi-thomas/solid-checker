@@ -103,6 +103,18 @@ pub(super) enum WriteRegionAdjustment {
     /// ([`solid_dialect::Dialect::callback_root_is_unaudited`]). Whether it runs
     /// under a root is unknown, so the write is unplaced.
     UnauditedRoot,
+    /// The write runs in a callback the call runs with no owner at all
+    /// ([`solid_dialect::CallbackOwner::None`]: `runWithOwner(null, fn)`), or in
+    /// a function that callback runs in place (an IIFE, an inline
+    /// standard-library callback) or hands to a call that keeps its owner
+    /// (`untrack`). The guard keys on the owner, and there is none, so the write
+    /// is legal wherever the call is written (ADR 0455).
+    Detached,
+    /// The write runs in a function a `runWithOwner` callback runs in place,
+    /// and the call's owner is data the call site does not settle
+    /// ([`solid_dialect::CallbackOwner::Conditional`]): null detaches it, an
+    /// owner does not. Neither is proven, so the write is unplaced (ADR 0455).
+    OwnerUnknown,
 }
 
 /// The write-legality adjustment for the innermost callback directly
@@ -128,6 +140,15 @@ pub(super) fn write_region_adjustment(
                     == Some(solid_dialect::CallbackOwner::Leaf)
             {
                 return Some(WriteRegionAdjustment::LeafScope);
+            }
+            // The adjustments below place the callback's own body. A site in
+            // the parameter list of a function the callback builds
+            // (`createRoot(() => ({ f: (x = set(1)) => {} }))`) lies lexically
+            // in the callback, but runs when that function is called without
+            // the argument, wherever that is (ADR 0455, 0454): no adjustment
+            // places it, and the write guard leaves it unplaced.
+            if !direct_callback_runs(file, call.arguments[index].span, span) {
+                return None;
             }
             // The root is the owner whenever the callback runs, so its
             // timing is not asked (rc.17 `hydrate` states none).
@@ -157,7 +178,77 @@ pub(super) fn write_region_adjustment(
             }
             None
         })
+        .or_else(|| detached_in_place(file, span, lookup))
         .or_else(|| nested_in_leaf_scope(file, span, lookup))
+}
+
+/// What a callback that runs `span` in place says about its owner when it is
+/// written in a function the callback runs in place or hands to a call that
+/// keeps its owner and runs it during the call (`untrack`): the callback is one
+/// its call runs with no owner (`runWithOwner(null, fn)`, [`WriteRegionAdjustment::Detached`]),
+/// or with an owner that is data ([`WriteRegionAdjustment::OwnerUnknown`]).
+/// Every layer between must run on the callback's stack ([`layer_run`]: an
+/// IIFE, an inline standard-library callback), so the owner the call gives
+/// reaches the write; a layer that stores the function, hands it to an unknown
+/// call or runs it on a fresh stack ends the climb. A write directly in the
+/// callback is the role pipeline's (ADR 0455).
+fn detached_in_place(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<WriteRegionAdjustment> {
+    let mut at = span;
+    let mut layered = false;
+    // Bounded: each step moves to the call that holds the previous function.
+    for _ in 0..16 {
+        let function = crate::owners::owning_function(&file.ast, at)?;
+        if function.generator {
+            return None;
+        }
+        let primitive_call = file
+            .ast
+            .arguments_containing(function.span)
+            .filter(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+            })
+            .find_map(|(call, index)| {
+                lookup
+                    .primitive_at_call(file, call.span)
+                    .map(|primitive| (call, index, primitive))
+            });
+        if let Some((call, index, primitive)) = primitive_call {
+            let execution = callback_execution_at_call(file, call, primitive, index, lookup);
+            if execution == Some(Execution::Inline) {
+                match callback_owner_at_call(file, call, primitive, index, lookup) {
+                    Some(solid_dialect::CallbackOwner::None) => {
+                        return Some(WriteRegionAdjustment::Detached);
+                    }
+                    Some(solid_dialect::CallbackOwner::Conditional)
+                        if layered && primitive == Primitive::RunWithOwner && index == 1 =>
+                    {
+                        return Some(WriteRegionAdjustment::OwnerUnknown);
+                    }
+                    _ => {}
+                }
+            }
+            if execution.is_some()
+                && lookup
+                    .dialect
+                    .callback_preserves_owner_write_context(primitive)
+            {
+                at = call.span;
+                layered = true;
+                continue;
+            }
+            return None;
+        }
+        match layer_run(file, function, lookup) {
+            LayerRun::InPlace(call) => at = call,
+            LayerRun::FreshStack | LayerRun::Elsewhere => return None,
+        }
+        layered = true;
+    }
+    None
 }
 
 /// A closure nested in a leaf callback (`createTrackedEffect`, `onSettled`):
@@ -282,6 +373,9 @@ pub(super) fn semantic_write_role_walk(
             // Whether a root wraps this callback is not audited on this
             // release, so the write has no placement the checker can prove.
             Some(WriteRegionAdjustment::UnauditedRoot) => return ExecutionRole::Unknown,
+            // No owner reaches the write: the guard has nothing to reject.
+            Some(WriteRegionAdjustment::Detached) => return ExecutionRole::UntrackedCallback,
+            Some(WriteRegionAdjustment::OwnerUnknown) => return ExecutionRole::Unknown,
             Some(WriteRegionAdjustment::FirstRunAtCallSite(call)) => {
                 // Where the call site forbids the write, the first run throws
                 // exactly when it runs during the call -- which needs the
@@ -696,40 +790,15 @@ fn layers_run_inline(
     lookup: &SemanticLookup<'_>,
     fresh_stack_ok: bool,
 ) -> bool {
-    use crate::runtime_semantics::RuntimeArgumentBehavior;
     let mut layer = inner;
     while layer.span != outer.span {
         if layer.generator || !outer.span.contains(layer.span) {
             return false;
         }
-        let iife = file
-            .ast
-            .calls
-            .iter()
-            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == layer.span);
-        let behavior = file
-            .ast
-            .arguments_containing(layer.span)
-            .filter(|(call, index)| {
-                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
-            })
-            .find_map(|(call, index)| {
-                let resolved = lookup.resolved_callee_call(file, call.callee)?;
-                resolved
-                    .declaration
-                    .as_ref()
-                    .is_some_and(|declaration| declaration.standard_library)
-                    .then_some(())?;
-                let callability = lookup
-                    .entity_at(file.path.as_str(), call.arguments[index].span)
-                    .and_then(|entity| entity.callability);
-                crate::runtime_semantics::argument_behavior(resolved, callability, index)
-            });
-        match behavior {
-            Some(RuntimeArgumentBehavior::FreshStackCallback) => return fresh_stack_ok,
-            Some(RuntimeArgumentBehavior::InlineCallback) => {}
-            _ if iife => {}
-            _ => return false,
+        match layer_run(file, layer, lookup) {
+            LayerRun::FreshStack => return fresh_stack_ok,
+            LayerRun::InPlace(_) => {}
+            LayerRun::Elsewhere => return false,
         }
         // The layer's own span is outside its body, so the function that owns
         // it is the enclosing function, or the function whose parameter list
@@ -741,6 +810,57 @@ fn layers_run_inline(
         layer = next;
     }
     true
+}
+
+/// How a function layer is run by the code around it.
+enum LayerRun {
+    /// An IIFE or an argument a standard-library call runs inline
+    /// (`[x].forEach(fn)`): it runs on the stack of the call, which this span
+    /// is.
+    InPlace(Span),
+    /// An argument a reviewed scheduler runs on a fresh stack (`setTimeout(fn)`),
+    /// which no owner reaches wherever it was scheduled from.
+    FreshStack,
+    /// Anything else: stored, handed on, or run by a call this does not know.
+    Elsewhere,
+}
+
+fn layer_run(
+    file: &solid_facts::FileFacts,
+    layer: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> LayerRun {
+    use crate::runtime_semantics::RuntimeArgumentBehavior;
+    let iife = file
+        .ast
+        .calls
+        .iter()
+        .find(|call| file.ast.peel_ts_sugar_span(call.callee) == layer.span);
+    let behavior = file
+        .ast
+        .arguments_containing(layer.span)
+        .filter(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
+        })
+        .find_map(|(call, index)| {
+            let resolved = lookup.resolved_callee_call(file, call.callee)?;
+            resolved
+                .declaration
+                .as_ref()
+                .is_some_and(|declaration| declaration.standard_library)
+                .then_some(())?;
+            let callability = lookup
+                .entity_at(file.path.as_str(), call.arguments[index].span)
+                .and_then(|entity| entity.callability);
+            crate::runtime_semantics::argument_behavior(resolved, callability, index)
+                .map(|behavior| (call.span, behavior))
+        });
+    match (behavior, iife) {
+        (Some((_, RuntimeArgumentBehavior::FreshStackCallback)), _) => LayerRun::FreshStack,
+        (Some((call, RuntimeArgumentBehavior::InlineCallback)), _) => LayerRun::InPlace(call),
+        (_, Some(call)) => LayerRun::InPlace(call.span),
+        _ => LayerRun::Elsewhere,
+    }
 }
 
 /// Whether the call at `callee` in `caller` is a plain call expression written
