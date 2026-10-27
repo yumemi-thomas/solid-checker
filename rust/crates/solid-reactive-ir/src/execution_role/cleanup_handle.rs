@@ -297,7 +297,11 @@ pub(super) fn disposal_handle_climb(
         match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) => at = call,
             LayerRun::FreshStack => return None,
-            LayerRun::Elsewhere => {
+            // A helper that also hands the callback on or keeps it runs it in
+            // place once among other runs this climb does not follow (ADR
+            // 0457): the role at a handle call is no proof for the write, so
+            // it is a layer the callback does not run in place.
+            LayerRun::Elsewhere | LayerRun::InPlaceAmongOthers(_) => {
                 unrun = true;
                 at = function.span;
             }
