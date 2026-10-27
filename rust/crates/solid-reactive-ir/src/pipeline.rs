@@ -813,6 +813,20 @@ fn report_memos(
     for (name, stats) in &report.tables {
         timings.memo_reused += stats.reused + stats.verified;
         timings.memo_computed += stats.fresh + stats.unchanged + stats.changed;
+        if *name == "flow_site_role" {
+            timings.flow_site_role_answers = [
+                stats.reused + stats.verified,
+                stats.fresh + stats.unchanged + stats.changed,
+                stats.changed,
+            ];
+        }
+        if *name == "dispatch_veto" {
+            timings.dispatch_veto_answers = [
+                stats.reused + stats.verified,
+                stats.fresh + stats.unchanged + stats.changed,
+                stats.changed,
+            ];
+        }
         if *name == "returned_primitive_invocations" {
             timings.returned_invocation_files = [
                 stats.reused + stats.verified,

@@ -203,6 +203,7 @@ pub fn run(
         runtime: options.runtime.clone(),
         feedback_facts: options.feedback_facts,
         host_suppressions: &options.host_suppressions,
+        default_program_boundary: None,
     };
     let semantic_demand_options = crate::semantic_demand_options_for_enablement(
         options.dialect,

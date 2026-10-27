@@ -80,8 +80,7 @@
     "hashmap-iteration": 1
   },
   "rust/crates/solid-reactive-ir/src/execution_role/invocation_flow.rs": {
-    "files()": 1,
-    "file_by_path": 3,
+    "file_by_path": 4,
     "hashmap-iteration": 1
   },
   "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs": {
@@ -129,7 +128,6 @@
     "typescript-table": 1
   },
   "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs": {
-    "files()": 1,
     "file_by_path": 4
   },
   "rust/crates/solid-reactive-ir/src/indexes/initialization.rs": {

@@ -80,6 +80,8 @@ project_tables! {
     43 objects_assigned_into: ObjectsAssignedInto,
     44 router_params: RouterParams,
     45 source_texts: SourceTexts,
+    46 dispatch_veto: DispatchVetoAnswer,
+    47 write_flow_answers: WriteFlowAnswer,
 }
 
 /// A whole-program memo: key `()`, computed from the lookup in one
@@ -383,6 +385,52 @@ whole_program! {
             &lookup.router_install,
         )
     }))
+}
+
+whole_program! {
+    /// ADR 0450: the classified dispatch veto (ADR 0356, 0435, 0437, 0438) as
+    /// `(owner proofs, read proofs)`. The veto is a computation over the whole
+    /// lookup (the dispatch sites, the receivers' declarations, the callers'
+    /// positions, the two function censuses), so this memo reads the whole
+    /// program and reruns in every build in which it moved; a reader of the
+    /// veto records this answer, not the program, and reruns only when the two
+    /// bits do (early cutoff: an equal rerun keeps its revision). Fail
+    /// closed on a cycle: both proofs withheld.
+    DispatchVetoAnswer, 46, dispatch_veto, "dispatch_veto", (bool, bool),
+    cycle: (true, true),
+    direct: |lookup| lookup.dispatch_veto(),
+    |ctx| Ok(ctx.project(|lookup| lookup.dispatch_veto()))
+}
+
+/// ADR 0442, per function and guard (ADR 0450): the write-flow answer of the
+/// function at `(path, span)`, `exempts_root` the guard of the write. Read
+/// through the lookup, so it reruns in every build in which the program moved
+/// and keeps its revision when its answer is equal; a reader of the answer
+/// records this one, and only the functions it asks about are computed.
+pub(crate) struct WriteFlowAnswer;
+
+impl Memo<BuildSchema> for WriteFlowAnswer {
+    type Key = (String, Span, bool);
+    type Value = Option<(crate::ExecutionRole, bool)>;
+    const NAME: &'static str = "write_flow_answer";
+    const ID: TableId = TableId(47);
+
+    fn table(tables: &BuildTables) -> &Table<BuildSchema, Self> {
+        tables.project().write_flow_answers()
+    }
+
+    fn compute(
+        ctx: &Ctx<'_, '_, BuildSchema>,
+        (path, span, exempts_root): &(String, Span, bool),
+    ) -> Result<Self::Value, Cycle> {
+        Ok(ctx.project(|lookup| {
+            crate::execution_role::write_flow_answer(lookup, path, *span, *exempts_root)
+        }))
+    }
+
+    fn on_cycle(_: &(String, Span, bool)) -> Self::Value {
+        None
+    }
 }
 
 impl crate::base::memo::build::ProjectAccess for SemanticLookup<'_> {
