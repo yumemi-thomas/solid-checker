@@ -217,10 +217,10 @@ function render(program, instrument) {
     return `${f.async ? "async " : ""}${head} => ${body}`;
   }
   /** A block; `entry` (a hit id) plants the function-entry counter on the opening line and scopes the statements under it. */
-  function block(stmts, depth, entry = null) {
+  function block(stmts, depth, entry = null, lead = []) {
     const hit = entry === null ? "" : `__h(${entry});`;
-    if (!stmts.length) return hit ? `{ ${hit} }` : "{}";
-    const inner = () => stmts.map((stmt) => `${ind(depth + 1)}${stmtText(stmt, depth + 1)}`).join("\n");
+    if (!stmts.length && !lead.length) return hit ? `{ ${hit} }` : "{}";
+    const inner = () => [...lead.map((line) => `${ind(depth + 1)}${line}`), ...stmts.map((stmt) => `${ind(depth + 1)}${stmtText(stmt, depth + 1)}`)].join("\n");
     const text = entry === null ? inner() : within({ entry, inDefault: false }, inner);
     return `{${hit ? ` ${hit}` : ""}\n${text}\n${ind(depth)}}`;
   }
@@ -233,10 +233,11 @@ function render(program, instrument) {
           const { head, body } = fnParts(stmt.e, depth, null);
           return `${stmt.e.async ? "async " : ""}function ${stmt.name}${head} ${body}`;
         }
-        return counting(stmt.e, () => `const ${stmt.name} = ${expr(stmt.e, depth)};`);
+        return counting(stmt.e, () => `${stmt.kw ?? "const"} ${stmt.name} = ${expr(stmt.e, depth)};`);
       case "return": return counting(stmt.e, () => `return ${expr(stmt.e, depth)};`);
       case "await": return "await Promise.resolve();";
       case "try": return `try ${block(stmt.body, depth)} finally ${block(stmt.fin, depth)}`;
+      case "contain": return containText(stmt, depth);
       default: throw new Error(`cannot print statement ${stmt.k}`);
     }
   }
@@ -256,7 +257,9 @@ function render(program, instrument) {
         return `${f.key}: ${expr(f.e, depth)}`;
       }).join(", ")} }` : "{}";
       case "fn": return fnText(e, depth);
-      case "call": return glue(e, () => `${e.callee.k === "fn" || e.callee.k === "prim" ? `(${expr(e.callee, depth)})` : expr(e.callee, depth)}(${e.args.map((a) => expr(a, depth)).join(", ")})`);
+      case "call": return glue(e, () => callText(e, depth));
+      case "nul": return "null";
+      case "jsx": return "<span />";
       case "set": return glue(e, () => `${signals.get(e.sig).setter}(${expr(e.e, depth)})`);
       case "getOwner": used.add("getOwner"); return glue(e, () => "getOwner()");
       case "flush": used.add("flush"); return "flush()";
@@ -266,6 +269,62 @@ function render(program, instrument) {
       default: throw new Error(`cannot print expression ${e.k}`);
     }
   }
+  /** A callee that is a name or a member chain of names: the forms a `via` can rewrite without changing what is called. */
+  const plainCallee = (callee) => callee.k === "ref" || (callee.k === "member" && plainCallee(callee.obj));
+  function callText(e, depth) {
+    const callee = e.callee.k === "fn" || e.callee.k === "prim" ? `(${expr(e.callee, depth)})` : expr(e.callee, depth);
+    const args = e.args.map((a) => expr(a, depth)).join(", ");
+    if (e.via && plainCallee(e.callee)) {
+      switch (e.via) {
+        case "optional": return `${callee}?.(${args})`;
+        case "as": return `(${callee} as typeof ${callee})(${args})`;
+        case "comma": return `(void 0, ${callee})(${args})`;
+        case "and": return `(true && ${callee})(${args})`;
+        case "paren": return `(${callee})(${args})`;
+        default: throw new Error(`unknown call form ${e.via}`);
+      }
+    }
+    return `${callee}(${args})`;
+  }
+  /** An effect's apply: a function literal with the value as its parameter, or a declared name. */
+  const applyText = (apply, depth) => (apply.k === "ref" ? apply.name : fnText(apply, depth, { header: "(v)" }));
+
+  /** A container (model.mjs CONTAINER_KINDS): statements written where they run elsewhere, later, or not at all. */
+  function containText(c, depth) {
+    const name = c.kind.startsWith("comp") ? `Child${c.id}` : c.kind.startsWith("class") ? `K${c.id}` : `dead${c.id}`;
+    const open = () => entryFor(c, "contain");
+    const asyncKw = c.async ? "async " : "";
+    const direct = c.body.length === 1 && c.body[0].k === "expr";
+    const funcDecl = (at) => `${asyncKw}function ${name}() ${block(c.body, at, open())}`;
+    const line = (text) => `\n${ind(depth)}${text}`;
+    switch (c.kind) {
+      case "comp-never": return funcDecl(depth);
+      case "comp-rendered": return `${funcDecl(depth)}${line(`<${name} />;`)}`;
+      case "comp-slot": return `${funcDecl(depth)}${line(`({ slot: (c: () => unknown) => c() }).slot(${name});`)}`;
+      case "comp-prop": return `${funcDecl(depth)}${line(`props.slot?.(${name});`)}`;
+      case "comp-returned": {
+        const inner = funcDecl(depth + 1);
+        return `(() => {\n${ind(depth + 1)}${inner}\n${ind(depth + 1)}return ${name};\n${ind(depth)}})()${c.use === "call" ? "()" : ""};`;
+      }
+      case "class-field": case "class-static": {
+        const init = direct ? expr(c.body[0].e, depth + 1) : `(() => ${block(c.body, depth + 1, open())})()`;
+        const member = `${c.kind === "class-static" ? "static " : ""}f = ${init};`;
+        return `class ${name} {\n${ind(depth + 1)}${member}\n${ind(depth)}}${c.kind === "class-field" && c.use === "new" ? line(`new ${name}();`) : ""}`;
+      }
+      case "class-sblock": return `class ${name} {\n${ind(depth + 1)}static ${block(c.body, depth + 1, open())}\n${ind(depth)}}`;
+      case "class-method": return `class ${name} {\n${ind(depth + 1)}${asyncKw}m() ${block(c.body, depth + 1, open())}\n${ind(depth)}}${c.use === "call" ? line(`new ${name}().m();`) : c.use === "new" ? line(`new ${name}();`) : ""}`;
+      case "class-ctor": return `class ${name} {\n${ind(depth + 1)}constructor() ${block(c.body, depth + 1, open())}\n${ind(depth)}}${c.use === "new" ? line(`new ${name}();`) : ""}`;
+      case "dead-if": return `if (false) ${block(c.body, depth, open())}`;
+      case "dead-after-return": return `(${asyncKw}() => ${block(c.body, depth, open(), ["return;"])})();`;
+      case "dead-fn": return funcDecl(depth);
+      case "and-true": case "and-false": {
+        const cond = c.kind === "and-true" ? "true" : "false";
+        return direct ? `${cond} && ${expr(c.body[0].e, depth)};` : `${cond} && (() => ${block(c.body, depth, open())})();`;
+      }
+      default: throw new Error(`cannot print container ${c.kind}`);
+    }
+  }
+
   /** A write by its target's kind (model.mjs storeSignal, memoSignal, actionSignal); a plain signal is `setX(value)`. */
   function writeText(e) {
     const sig = signals.get(e.sig);
@@ -280,7 +339,7 @@ function render(program, instrument) {
     switch (e.op) {
       case "cleanup": used.add("onCleanup"); return `onCleanup(${expr(e.fn, depth)})`;
       case "settled": used.add("onSettled"); return `onSettled(${expr(e.fn, depth)})`;
-      case "effect": used.add("createEffect"); return `createEffect(${expr(e.fn, depth)}, ${fnText(e.apply, depth, { header: "(v)" })})`;
+      case "effect": used.add("createEffect"); return `createEffect(${expr(e.fn, depth)}, ${applyText(e.apply, depth)})`;
       case "context": used.add("useContext"); return "useContext(Ctx)";
       default: throw new Error(`cannot print owner op ${e.op}`);
     }
@@ -289,7 +348,7 @@ function render(program, instrument) {
     const f = e.name === "rootd" || e.name === "action" ? null : expr(e.fn, depth);
     switch (e.name) {
       case "memo": used.add("createMemo"); return `createMemo(${f})`;
-      case "effect": used.add("createEffect"); return `createEffect(${f}, ${fnText(e.apply, depth, { header: "(v)" })})`;
+      case "effect": used.add("createEffect"); return `createEffect(${f}, ${applyText(e.apply, depth)})`;
       case "untrack": used.add("untrack"); return `untrack(${f})`;
       case "root": used.add("createRoot"); return `createRoot(${f})`;
       case "owner": {
@@ -371,7 +430,8 @@ function render(program, instrument) {
   }
   for (const component of program.components) {
     const entry = entryFor(component, "component");
-    out.push(`export function ${component.name}() {${entry === null ? "" : ` __h(${entry});`}`);
+    const usesProps = [...walk(component)].some(({ node }) => node.k === "contain" && node.kind === "comp-prop");
+    out.push(`export function ${component.name}(${usesProps ? "props: { slot?: (c: () => unknown) => unknown }" : ""}) {${entry === null ? "" : ` __h(${entry});`}`);
     within({ entry, inDefault: false }, () => {
       for (const sig of component.signals) out.push(`${INDENT}${signalLine(sig)}`);
       for (const [node, described] of useList) for (const line of described.preludeLines) out.push(`${INDENT}${auxLine(node, line)}`);

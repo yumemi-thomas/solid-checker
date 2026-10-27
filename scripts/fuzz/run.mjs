@@ -30,8 +30,9 @@ import { availableParallelism } from "node:os";
 import { createFastDaemon } from "./fast-daemon.mjs";
 import { mapPoolSettled } from "../lib/pool.mjs";
 import { cleanupEvidence } from "./disposal.mjs";
+import { containerEvidence } from "./container.mjs";
 
-const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "help"]);
+const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "containers", "help"]);
 const VALUES = new Set(["seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch", "ledger", "code", "context", "binding", "layer", "variant"]);
 
 export function parseArgs(argv, { extraValues = [], extraFlags = [] } = {}) {
@@ -86,11 +87,16 @@ export function generateEntries(options) {
   for (let index = 0; index < options.count; index += 1) {
     const seed = programSeed(options.seed, index);
     const misusePlan = options.profile === "misuse" ? Object.fromEntries(["code", "context", "binding", "layer", "variant"].filter((key) => options[key] !== undefined).map((key) => [key, options[key]])) : undefined;
-    const program = generateProgram(seed, { profile: options.profile, components: options.components, misusePlan });
+    const program = generateProgram(seed, { profile: options.profile, components: options.components, containers: options.containers, misusePlan });
     entries.push({ program, built: buildCase(program, { id: `fuzz-${seed}` }) });
   }
   return entries;
 }
+
+const containerRows = (value) => {
+  const rows = containerEvidence(value.program, value.built.ledger, value.runtime?.hits ?? null);
+  return rows.length ? rows : undefined;
+};
 
 /** One results.jsonl row per evaluated program. */
 export function resultRows(results) {
@@ -103,6 +109,7 @@ export function resultRows(results) {
       hits: value.runtime ? hitSummary(value.built.ledger, value.runtime.hits ?? null, value.runtime.witnesses, value.runtime.quiescent ?? null) : undefined,
       cleanup: value.runtime ? cleanupEvidence(value.program, value.built.ledger, value.runtime.hits) ?? undefined : undefined,
       shape: value.program.components[0]?.shape,
+      containers: containerRows(value),
       control: value.control ? { matched: value.control.matched, diffs: value.control.diffs } : undefined,
     });
   }
@@ -116,6 +123,7 @@ const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--
   [--ledger <known-open.json>] [--no-ledger]   the accepted false cleans (default scripts/fuzz/known-open.json)
   [--control]         neutrality control: also run the clean twin and the checker on the instrumented text, and compare
   [--dead-site]       EXPERIMENTAL, off by default: the dead-site false-positive subkind (implies --control)
+  [--containers]      wrap statements in containers (container.mjs) on top of any profile; --profile containers draws the base profile too
   [--all-cores]       every core for the concurrency and the Vitest workers (the default is half the cores)
   [--shrink-jobs N]   shrink N signature groups at once (default 4); [--shrink-batch N] candidates judged per round (default 8)
   [--no-daemon]       one Vitest process per batch instead of the long-lived fast host

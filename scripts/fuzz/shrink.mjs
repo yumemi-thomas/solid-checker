@@ -98,6 +98,23 @@ function* inlineScopes(program) {
     yield copy;
   }
 }
+/** Replace a container by the statements it holds (an `await` and a trailing `return null` go with the container's function). */
+function* uncontain(program) {
+  const found = [];
+  for (const { node, path } of walk(program)) {
+    for (const [key, isList] of slotsOf(node)) {
+      if (!isList) continue;
+      node[key].forEach((stmt, index) => { if (stmt.k === "contain") found.push({ path, key, index }); });
+    }
+  }
+  for (const { path, key, index } of found) {
+    const copy = clone(program);
+    const list = getAt(copy, path)[key];
+    const body = list[index].body.filter((s) => s.k !== "await" && s.k !== "return");
+    list.splice(index, 1, ...body);
+    yield copy;
+  }
+}
 /** Replace one expression slot by a literal. The site-bearing slots fail the cheap filter and cost nothing. */
 function* simplifyExpressions(program) {
   const slots = [];
@@ -158,12 +175,13 @@ function* directBinding(program) {
 export const families = {
   lists: listChunks,
   inline: inlineScopes,
+  uncontain,
   unreturn,
   simplify: simplifyExpressions,
   unwrap: unwrapView,
   direct: directBinding,
 };
-export const familyOrder = ["lists", "inline", "unwrap", "unreturn", "simplify", "direct"];
+export const familyOrder = ["lists", "inline", "uncontain", "unwrap", "unreturn", "simplify", "direct"];
 
 // ---------------------------------------------------------------------------
 

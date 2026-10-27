@@ -18,6 +18,7 @@ import { createRng } from "./rng.mjs";
 import { buildDisposal } from "./disposal.mjs";
 import { buildMisuse } from "./misuse.mjs";
 import { chooseLayersPackages, ensurePkgHelper, firePlacement, packagePayloadKind, PACKAGE_HOSTS } from "./packages.mjs";
+import { applyContainers, containerRng } from "./container.mjs";
 import {
   validate, signal, num, read, write, ref, member, obj, call, iife, iter, fn, param, prim, expr, decl, ret,
   awaitStmt, probe, button, child, attr, show, forEach, set, exprTsType, getOwner, helper, component, program as makeProgram,
@@ -69,13 +70,40 @@ const layerWeights = (profile) => ({
   ...Object.fromEntries(Object.keys(OWNER_PROFILES).map((name) => [name, { closure: 4, default: 1, iife: 2, iter: 1, helper: 2 }])),
 })[profile];
 
+/**
+ * The containers profile (container.mjs): any other profile with containers on. Not drawn at random (ask for it with
+ * `--profile containers`); the base profile and, for the disposal base, the cleanup handle's shape come from a stream of their own.
+ */
+const CONTAINER_BASES = [
+  [10, "disposal"], [3, "owner-cleanup"], [1, "owner-effect"], [1, "owner-settled"], [1, "owner"], [2, "mixed"], [1, "closure-escape"], [1, "in-place"], [1, "async"],
+];
+
+/** A disposal plan that keeps the cleanup handle in play (called now or later), the host a memo, a Show or a root; the write bare in the cleanup two times in five. */
+function handlePlan(rng) {
+  const where = rng.weighted([[4, "memo"], [3, "show"], [2, "rootd"], [1, "effect"]]);
+  const later = where === "memo" || where === "rootd";
+  return {
+    where, cleanupVia: "onCleanup", handleMode: rng.weighted([[5, "call-now"], [later ? 3 : 0, "call-later"], [2, "discard"], [1, "keep"]]),
+    ...(rng.chance(0.4) ? { wrappers: [] } : {}),
+  };
+}
+
 export function generateProgram(seed, options = {}) {
   const rng = createRng(seed);
-  const profile = options.profile ?? rng.weighted(PROFILES);
+  let { profile } = options;
+  let containers = Boolean(options.containers);
+  let disposalPlan = options.disposalPlan;
+  if (profile === "containers") {
+    const side = containerRng(seed ^ 0x5eed);
+    profile = side.weighted(CONTAINER_BASES);
+    containers = true;
+    if (profile === "disposal" && !disposalPlan && side.chance(0.9)) disposalPlan = handlePlan(side);
+  }
+  profile ??= rng.weighted(PROFILES);
   // One component per page: a thrown dev error halts reactivity for every root on the page, so a second
   // component would hide or fake the first one's behaviour. More than one is for experiments only.
   const count = options.components ?? 1;
-  const ctx = { rng, profile, plan: options.disposalPlan ?? options.packagePlan, misusePlan: options.misusePlan, counters: {}, helpers: new Map(), moduleSignals: [] };
+  const ctx = { rng, profile, plan: disposalPlan ?? options.packagePlan, misusePlan: options.misusePlan, counters: {}, helpers: new Map(), moduleSignals: [], containers: containers ? containerRng(seed) : null, focus: options.profile === "containers" };
   const components = [];
   for (let index = 0; index < count; index += 1) {
     const control = index > 0 && rng.chance(0.5);
@@ -89,6 +117,7 @@ function buildValidComponent(ctx, index, control) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const snapshot = { counters: { ...ctx.counters }, helpers: new Map(ctx.helpers), moduleSignals: [...ctx.moduleSignals] };
     const candidate = buildComponent(ctx, index, control);
+    if (ctx.containers) applyContainers(ctx, candidate, { rng: ctx.containers, focus: ctx.focus && ctx.profile === "disposal" });
     const trial = makeProgram({ seed: 0, helpers: [...ctx.helpers.values()], moduleSignals: ctx.moduleSignals, components: [candidate] });
     if (validate(trial).length === 0) return candidate;
     // A drawn component that failed validation consumed names; restore them so a retry is stable.
@@ -117,7 +146,8 @@ const viewWitness = (id, value) => ({ selector: `[data-view="${id}"]`, text: Str
 
 function ensureHelper(ctx, form) {
   for (const existing of ctx.helpers.values()) if (existing.form === form) return existing.name;
-  const added = helper(`h${ctx.helpers.size + 1}`, form);
+  // With containers the helpers are `hfN`: a cleanup handle is `hN`, and a helper of the same name would shadow it (a type error).
+  const added = helper(`${ctx.containers ? "hf" : "h"}${ctx.helpers.size + 1}`, form);
   ctx.helpers.set(added.name, added);
   return added.name;
 }

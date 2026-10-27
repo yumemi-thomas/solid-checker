@@ -76,6 +76,7 @@ node scripts/fuzz/matrix.mjs --gate <baseline.json> <current.json>      # compar
 | `model.mjs` | the construct tree and its validator (a small type checker for the node language) |
 | `generate.mjs` | seed -> program: a payload (write or read) in layers (closures, defaults, IIFE, forEach/map, helpers), a host scope, a disposition |
 | `print.mjs`, `emit.mjs` | tree -> the clean `App.tsx` and its instrumented twin `App.run.txt`, with the site table, glue (auto-sites) and hit ledger; an oracle case directory (`App.tsx`, `oracle.json` steps, `program.json`, `sites.json`, and the twin's files) |
+| `container.mjs` | the containers dimension: wraps statements in places that run elsewhere or not at all (components, classes, dead code), passes callbacks by name, rewrites call forms; the ran/not-ran evidence per container |
 | `hits.mjs` | the hit ledger: the counter's source, the strip, the readout parser, the per-site record, and the pure comparisons of the neutrality gate |
 | `neutrality.mjs` | the regression: a seed range with and without instrumentation, verdict by verdict (`--profiles`, `--chunk`, `--order failing-first`, `--stop-on-mismatch`) |
 | `fast-daemon.mjs`, `fast/serve.mjs` | the long-lived fast host: one Vitest process (Vite server, Solid plugin, transform cache) serving every batch; `--no-daemon` gives one process per batch |
@@ -92,6 +93,10 @@ node scripts/fuzz/matrix.mjs --gate <baseline.json> <current.json>      # compar
 | `matrix.mjs` | the recall matrix (code x context), its Chrome sample, the false-clean shrink and the baseline gate |
 | `package.mjs`, `packages.mjs`, `packages-seeds.mjs`, `packages-check.mjs` | the `packages` profile: generated dependency packages (below) |
 | `run.mjs` | the command line |
+
+## Containers
+
+`--profile containers` (or `--containers` on top of any profile, `disposal` and `owner-cleanup` among them) wraps expression statements of a generated component in a *container*, a place where code is written but runs elsewhere, later or not at all: an uppercase inner function never rendered, rendered as `<Child />`, handed to a slot (`props.slot?.(Child)`, a local object's method) or returned; a class instance field, static field, static block, method or constructor (constructed or not); dead code (`if (false)`, after `return`, a function never called, `false && f()`, with `true && f()` as the live twin). It also passes the callback of every primitive by name (`const`, `let` or a function declaration), rewrites calls as `f?.()`, `(f as typeof f)()`, `(void 0, f)()`, `(true && f)()` or `(f)()`, and puts an `await` before or after the payload of an async container. Every program type-checks with tsrs. A function-like container has an entry counter and a direct form (`f = h();`, `false && h();`) the glue counter of its call, so the ledger tells ran from not-ran (`containers` in `results.jsonl`: kind, use, `entered`); a site in a container that never ran is `inconclusive: never-ran`. The profile draws its base profile (mostly `disposal` with the cleanup handle called now or later) from a stream of its own, so every other profile's seeds are unchanged. Not built: a callback imported from another generated file (a case is one `App.tsx`), event handlers passed by name.
 
 ## Install
 
