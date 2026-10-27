@@ -144,7 +144,8 @@ export const GROUP_BUDGETS = [
     // And its named-closure cases: 310,410 bytes: 310_500.
     // And the cleanup-disposal fixture (ADR 0455 amendment): 311,225 bytes: 311_500.
     // And the cleanup-disposal release and await cases (ADR 0455 amendment): 312,992 bytes: 313_000.
-    bytes: 313_000,
+    // And the third review's cleanup cases (ADR 0455 amendment): 313,739 bytes: 314_000.
+    bytes: 314_000,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];
