@@ -150,6 +150,86 @@
       "start": 6336,
       "end": 6343,
       "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 6962,
+      "end": 6969,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 7152,
+      "end": 7159,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 7414,
+      "end": 7421,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 8329,
+      "end": 8336,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 8545,
+      "end": 8552,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 8726,
+      "end": 8733,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 8900,
+      "end": 8907,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 9115,
+      "end": 9122,
+      "fixes": 0
     }
   ]
 }

@@ -273,3 +273,115 @@ export function CreatedOwnerIifeDefaultSupplied() {
   });
   return <div>{v()}</div>;
 }
+
+// A closure bound to a name inside an `untrack` callback is built there, not
+// run: it runs where it is called, under the owner `untrack` keeps (ADR 0455).
+// Called in the callback's own pass under an owned scope it is a violation,
+// also through layers that run in place and in a memo; called only on a fresh
+// stack, in a handler or under a detached owner it is legal; only returned, or
+// stored or handed on in a literal, it is uncertifiable.
+export function UntrackClosureCalled() {
+  const [v, setV] = createSignal(0);
+  untrack(() => {
+    const bump = () => setV(1);
+    bump();
+  });
+  return <div>{v()}</div>;
+}
+export function UntrackClosureViaMap() {
+  const [v, setV] = createSignal(0);
+  untrack(() => {
+    const bump = () => {
+      return setV(1);
+    };
+    [1].map(() => {
+      return bump();
+    });
+  });
+  return <div>{v()}</div>;
+}
+export function UntrackFunctionInMemo() {
+  const [v, setV] = createSignal(0);
+  const m = createMemo(() => {
+    untrack(() => {
+      function bump() {
+        setV(1);
+      }
+      bump();
+    });
+    return 1;
+  });
+  return <div>{v()}{m()}</div>;
+}
+export function UntrackClosureInHandler() {
+  const [v, setV] = createSignal(0);
+  return (
+    <button
+      onClick={() => {
+        untrack(() => {
+          const bump = () => setV(1);
+          bump();
+        });
+      }}
+    >
+      {v()}
+    </button>
+  );
+}
+export function UntrackClosureUnderNullOwner() {
+  const [v, setV] = createSignal(0);
+  runWithOwner(null, () => {
+    untrack(() => {
+      const bump = () => setV(1);
+      bump();
+    });
+  });
+  return <div>{v()}</div>;
+}
+export function UntrackClosureInTimeout() {
+  const [v, setV] = createSignal(0);
+  untrack(() => {
+    const bump = () => setV(1);
+    setTimeout(() => bump());
+  });
+  return <div>{v()}</div>;
+}
+export function UntrackClosureReturned() {
+  const [v, setV] = createSignal(0);
+  const run = untrack(() => {
+    const bump = () => setV(1);
+    return bump;
+  });
+  return <button onClick={() => run()}>{v()}</button>;
+}
+export function UntrackClosureDefault() {
+  const [v, setV] = createSignal(0);
+  untrack(() => {
+    const bump = (p: number = setV(1)) => p;
+    bump();
+  });
+  return <div>{v()}</div>;
+}
+export function UntrackClosureByName() {
+  const [v, setV] = createSignal(0);
+  untrack(() => {
+    const bump = () => setV(1);
+    [1].forEach(bump);
+  });
+  return <div>{v()}</div>;
+}
+export function UntrackLiteralStored() {
+  const [v, setV] = createSignal(0);
+  untrack(() => ({ go: () => setV(1) }));
+  return <div>{v()}</div>;
+}
+function callNow(callback: () => void) {
+  callback();
+}
+export function UntrackLiteralToHelper() {
+  const [v, setV] = createSignal(0);
+  untrack(() => {
+    callNow(() => setV(1));
+  });
+  return <div>{v()}</div>;
+}

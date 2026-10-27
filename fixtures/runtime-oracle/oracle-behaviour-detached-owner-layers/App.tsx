@@ -17,6 +17,7 @@ declare global {
     landedEffect: number;
     landedNested: number;
     landedDirect: number;
+    landedUntrackNull: number;
   }
 }
 window.landedIife = 0;
@@ -26,6 +27,7 @@ window.landedMemo = 0;
 window.landedEffect = 0;
 window.landedNested = 0;
 window.landedDirect = 0;
+window.landedUntrackNull = 0;
 
 // `runWithOwner(null, fn)` runs `fn` with no owner: the write lands, whatever
 // function it sits in (ADR 0455). Each counter is bumped after the write, so it
@@ -192,4 +194,74 @@ export function UntrackForEachInMemo() {
     return 1;
   });
   return <p>{v()}{m()}</p>;
+}
+
+// A closure bound to a name inside an `untrack` callback runs where it is
+// called (ADR 0455): under a detached owner the write lands; in the callback's
+// own pass under the component's owner rc.17 throws, so the lexical deferred
+// role of the callback was no proof. Handed by name to `forEach`, or to a
+// helper, the callback runs in the pass too.
+export function UntrackClosureUnderNullOwner() {
+  const [v, setV] = createSignal(0);
+  runWithOwner(null, () => {
+    untrack(() => {
+      const bump = () => {
+        setV(1);
+        window.landedUntrackNull++;
+      };
+      bump();
+    });
+  });
+  return <p>{v()}</p>;
+}
+export function UntrackClosureCalled() {
+  const [v, setV] = createSignal(0);
+  untrack(() => {
+    const bump = () => setV(1);
+    bump();
+  });
+  return <p>{v()}</p>;
+}
+export function UntrackClosureViaMap() {
+  const [v, setV] = createSignal(0);
+  untrack(() => {
+    const bump = () => {
+      return setV(1);
+    };
+    [1].map(() => {
+      return bump();
+    });
+  });
+  return <p>{v()}</p>;
+}
+export function UntrackFunctionInMemo() {
+  const [v, setV] = createSignal(0);
+  const m = createMemo(() => {
+    untrack(() => {
+      function bump() {
+        setV(1);
+      }
+      bump();
+    });
+    return 1;
+  });
+  return <p>{v()}{m()}</p>;
+}
+export function UntrackClosureByName() {
+  const [v, setV] = createSignal(0);
+  untrack(() => {
+    const bump = () => setV(1);
+    [1].forEach(bump);
+  });
+  return <p>{v()}</p>;
+}
+function callNow(callback: () => void) {
+  callback();
+}
+export function UntrackLiteralToHelper() {
+  const [v, setV] = createSignal(0);
+  untrack(() => {
+    callNow(() => setV(1));
+  });
+  return <p>{v()}</p>;
 }

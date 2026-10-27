@@ -1,5 +1,5 @@
 {
-  "note": "ADR 0455: runWithOwner(null, fn) runs fn with no owner, so a write it runs lands whatever function it sits in (an IIFE, forEach, untrack, a memo or effect compute around the call). SC2001 reported the in-place layers; rc.17 throws nothing and the counters, bumped after the write, are 1. The controls (a created owner, a component's getOwner() and a bound createOwner() result, an IIFE or direct write; an IIFE or forEach in an untrack callback) throw REACTIVE_WRITE_IN_OWNED_SCOPE and their dev diagnostics are covered, by a violation where the owner is proven and an uncertifiable result where it is not.",
+  "note": "ADR 0455: runWithOwner(null, fn) runs fn with no owner, so a write it runs lands whatever function it sits in (an IIFE, forEach, untrack, a memo or effect compute around the call). SC2001 reported the in-place layers; rc.17 throws nothing and the counters, bumped after the write, are 1. The controls (a created owner, a component's getOwner() and a bound createOwner() result, an IIFE or direct write; an IIFE or forEach in an untrack callback) throw REACTIVE_WRITE_IN_OWNED_SCOPE and their dev diagnostics are covered, by a violation where the owner is proven and an uncertifiable result where it is not. ADR 0455, named closures: a closure bound to a name inside an untrack callback runs where it is called; under a detached owner its write lands (a behaviour row), in the callback's own pass under an owned scope rc.17 throws (called, through map, in a memo, handed to forEach or a helper), which the checker now covers.",
   "behaviour": [
     {
       "rule": "no-write-in-pure-computation",
@@ -60,6 +60,15 @@
       "site": "App.tsx:111",
       "observe": {
         "window": "landedDirect"
+      },
+      "defect": 0,
+      "correct": 1
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:209",
+      "observe": {
+        "window": "landedUntrackNull"
       },
       "defect": 0,
       "correct": 1

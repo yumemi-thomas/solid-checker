@@ -283,6 +283,100 @@ fn detached_in_place(
         .map(WriteRegionAdjustment::CallSite)
 }
 
+/// ADR 0455: the innermost function around `span` that is bound to a name and
+/// written in a callback that keeps its call's owner and runs it during the call
+/// (`untrack`, [`solid_dialect::Dialect::callback_preserves_owner_write_context`]).
+/// The callback's lexical role covers the closure's body (`allowed`), but
+/// constructing the closure runs nothing: it runs where it is called, and the
+/// write follows its call sites, as for a closure in a tracked scope
+/// ([`named_closure_in_tracked_scope`]). The innermost primitive callback around
+/// the closure decides; an anonymous function is judged by the layers
+/// ([`runs_in_place_within`]) the caller proves.
+fn named_closure_in_owner_keeping_callback<'a>(
+    file: &'a solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'a solid_facts::ast::FunctionFact> {
+    functions_around(file, span)
+        .into_iter()
+        .filter(|function| {
+            function.method_name.is_none()
+                && function_binding_name(file, function).is_some()
+                && lookup.function_component_status(file, function) == ComponentStatus::No
+                && file
+                    .ast
+                    .arguments_containing(function.span)
+                    .filter(|(call, index)| {
+                        call.arguments[*index].span != function.span
+                            && lookup.primitive_at_call(file, call.span).is_some()
+                    })
+                    .min_by_key(|(call, index)| {
+                        let argument = call.arguments[*index].span;
+                        argument.end - argument.start
+                    })
+                    .is_some_and(|(call, index)| {
+                        lookup
+                            .primitive_at_call(file, call.span)
+                            .is_some_and(|primitive| {
+                                lookup
+                                    .dialect
+                                    .callback_preserves_owner_write_context(primitive)
+                                    && callback_execution_at_call(
+                                        file, call, primitive, index, lookup,
+                                    )
+                                    .is_some()
+                            })
+                    })
+        })
+        .min_by_key(|function| function.body.end - function.body.start)
+}
+
+/// ADR 0455: whether `span` is written in a function that a callback keeping
+/// its call's owner (`untrack`) neither runs in place nor on a fresh stack: a
+/// literal it returns, stores or hands to a call this does not know. The
+/// callback's lexical role says nothing about when that function runs, or under
+/// which owner.
+fn unrun_layer_in_owner_keeping_callback(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let mut at = span;
+    let mut unrun = false;
+    for _ in 0..16 {
+        let Some(function) = crate::owners::owning_function(&file.ast, at) else {
+            return false;
+        };
+        let primitive_call = file
+            .ast
+            .arguments_containing(function.span)
+            .filter(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+            })
+            .find_map(|(call, index)| {
+                lookup
+                    .primitive_at_call(file, call.span)
+                    .map(|primitive| (call, index, primitive))
+            });
+        if let Some((call, index, primitive)) = primitive_call {
+            return unrun
+                && lookup
+                    .dialect
+                    .callback_preserves_owner_write_context(primitive)
+                && callback_execution_at_call(file, call, primitive, index, lookup).is_some();
+        }
+        match layer_run(file, function, lookup) {
+            LayerRun::InPlace(call) => at = call,
+            LayerRun::FreshStack => return false,
+            LayerRun::Elsewhere => {
+                unrun = true;
+                at = function.span;
+            }
+        }
+    }
+    false
+}
+
 /// A closure nested in a leaf callback (`createTrackedEffect`, `onSettled`):
 /// a timer, a listener, a continuation, a helper the callback defines. It runs
 /// later (deferred) or inside the leaf, and the runtime's write guard exempts
@@ -527,6 +621,11 @@ pub(super) fn semantic_write_role_walk(
     // own invocations decide, through the walk below.
     let tracked_named = if direct == ExecutionRole::TrackedJsx {
         named_closure_in_tracked_scope(file, span, allowed, entities, symbol_names, lookup)
+    } else if direct == ExecutionRole::DeferredCallback {
+        // ADR 0455: the same for a closure bound to a name inside a callback that
+        // keeps its call's owner (`untrack`): the lexical deferred role is no
+        // proof for a closure that runs where it is called.
+        named_closure_in_owner_keeping_callback(file, span, lookup)
     } else {
         None
     };
@@ -535,6 +634,13 @@ pub(super) fn semantic_write_role_walk(
     } else {
         direct
     };
+    // ADR 0455: an anonymous function stored or handed on inside such a
+    // callback runs where its holder calls it, not in the callback's pass.
+    if direct == ExecutionRole::DeferredCallback
+        && unrun_layer_in_owner_keeping_callback(file, span, lookup)
+    {
+        return ExecutionRole::Unknown;
+    }
     // Past an await that dominates it, the write runs on a later task with no
     // owner, whatever its lexical role or its function's callers: legal, and
     // proven so, though in no single role.

@@ -78,7 +78,8 @@ export const FILE_BUDGETS = {
   // And ADR 0454's reachability/summary-graph follow-up (248,060 bytes): 248_500.
   // And for ADR 0455 (the file stood 248,060 bytes before its entry): 250,959 bytes: 251_000.
   // And ADR 0455's owner and untrack follow-up: 251,652 bytes: 252_000.
-  "docs/decisions.md": 252_000,
+  // And ADR 0455's named-closure follow-up: 252,614 bytes: 253_000.
+  "docs/decisions.md": 253_000,
 };
 
 export const GROUP_BUDGETS = [
@@ -113,7 +114,7 @@ export const GROUP_BUDGETS = [
   // With main's ADR 0451 (PR #119) merged in: 753,780 bytes: 754_500.
   // And for ADR 0454 (its entry, the open-work lines, a rule-page paragraph): 758,425 bytes against 754,500: 759_000; its owner-graph follow-up: 760,511 bytes: 761_000; its reachability follow-up: 761,579 bytes: 762_500.
   // And for ADR 0455 (its entry, one open-work line, a rule-page paragraph): 765,586 bytes against 762,500: 766_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 766_500 }, // ADR 0455 follow-up: 766,106 bytes against 766,000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 767_500 }, // ADR 0455 named-closure follow-up: 767,101 bytes. // ADR 0455 follow-up: 766,106 bytes against 766,000.
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
@@ -136,7 +137,8 @@ export const GROUP_BUDGETS = [
     // And the owner-graph cases of the same fixture: 306,455 bytes: 307_000.
     // And ADR 0455's two fixtures: 309,348 bytes against 307,000: 309_500.
     // And ADR 0455's follow-up cases: 309,906 bytes: 310_000.
-    bytes: 310_000,
+    // And its named-closure cases: 310,410 bytes: 310_500.
+    bytes: 310_500,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];
