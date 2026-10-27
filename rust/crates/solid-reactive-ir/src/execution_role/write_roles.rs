@@ -456,7 +456,16 @@ pub(super) fn semantic_write_role_walk(
     // calls, and the write runs with it only through layers that run in place
     // (an IIFE, an inline standard-library callback). Any other layer keeps or
     // schedules the write's function, whose entries are not the closure's.
+    //
+    // A site in a parameter list (a default value) runs when its function is
+    // called without that argument. Such a function holds a call or a read, so
+    // its parameter list is not inert and the call graph withholds its call
+    // sites (ADR 0339): nothing places the write, which stays unplaced.
+    let in_default = functions_around(file, span)
+        .into_iter()
+        .any(|function| parameter_slot(function, span).is_some());
     let entry = match tracked_named {
+        Some(_) if in_default => return unknown,
         Some(closure) if closure.span == innermost.span => Some(closure),
         Some(closure) if runs_in_place_within(file, innermost, closure, lookup) => Some(closure),
         Some(_) => return unknown,
@@ -806,8 +815,8 @@ pub(super) fn enclosed_by_jsx_attribute_function(
     file: &solid_facts::FileFacts,
     span: Span,
 ) -> bool {
-    file.ast
-        .functions_body_containing(span)
+    functions_around(file, span)
+        .into_iter()
         .any(|function| jsx_attribute_value_function(file, function.span))
 }
 
@@ -822,7 +831,7 @@ pub(super) fn attribute_function_within(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    file.ast.functions_body_containing(span).any(|function| {
+    functions_around(file, span).into_iter().any(|function| {
         region.contains(function.span)
             && region != function.span
             && (jsx_attribute_value_function(file, function.span)

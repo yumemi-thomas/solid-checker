@@ -170,6 +170,66 @@
       "start": 5695,
       "end": 5708,
       "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-tracked-scope/App.tsx",
+      "start": 6263,
+      "end": 6276,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-tracked-scope/App.tsx",
+      "start": 6508,
+      "end": 6521,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-tracked-scope/App.tsx",
+      "start": 6756,
+      "end": 6769,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-tracked-scope/App.tsx",
+      "start": 7238,
+      "end": 7251,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-tracked-scope/App.tsx",
+      "start": 7594,
+      "end": 7608,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-tracked-scope/App.tsx",
+      "start": 7923,
+      "end": 7937,
+      "fixes": 0
     }
   ]
 }

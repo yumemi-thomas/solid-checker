@@ -80,6 +80,66 @@
       "start": 2112,
       "end": 2119,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-closure-in-tracked-scope/App.tsx",
+      "start": 2527,
+      "end": 2534,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-closure-in-tracked-scope/App.tsx",
+      "start": 2574,
+      "end": 2577,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-closure-in-tracked-scope/App.tsx",
+      "start": 2727,
+      "end": 2734,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-closure-in-tracked-scope/App.tsx",
+      "start": 2755,
+      "end": 2758,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-closure-in-tracked-scope/App.tsx",
+      "start": 2930,
+      "end": 2937,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-closure-in-tracked-scope/App.tsx",
+      "start": 2995,
+      "end": 2998,
+      "fixes": 0
     }
   ]
 }

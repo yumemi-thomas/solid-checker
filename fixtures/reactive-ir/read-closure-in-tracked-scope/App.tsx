@@ -80,3 +80,41 @@ export function RecursiveNamedClosure() {
   });
   return <div>{m()}</div>;
 }
+
+// ---- A default value is read when the function is called without the
+// argument, not where the function is built. rc.17 warns at `count()` of each
+// of these three (probed: two STRICT_READ_UNTRACKED, the control one).
+
+export function ReturnedDefaultRead() {
+  const [count] = createSignal(1);
+  const m = createMemo(() => {
+    const f = (x = count()) => x;
+    return f;
+  });
+  const v = m()();
+  return <div>{v}</div>;
+}
+
+export function ReturnedAnonymousDefaultRead() {
+  const [count] = createSignal(1);
+  const m = createMemo(() => (x = count()) => x);
+  const v = m()();
+  return <div>{v}</div>;
+}
+
+export function ReturnedDestructuringDefaultRead() {
+  const [count] = createSignal(1);
+  const m = createMemo(() => {
+    const f = ({ a = count() }: { a?: number }) => a;
+    return f;
+  });
+  const v = m()({});
+  return <div>{v}</div>;
+}
+
+// Tracked: a default of a callback the scope runs in place.
+export function InlineCallbackDefaultRead() {
+  const [count] = createSignal(1);
+  const m = createMemo(() => [undefined].map((x = count()) => x)[0]);
+  return <div>{m()}</div>;
+}

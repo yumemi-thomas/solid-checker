@@ -212,3 +212,67 @@ export function ReturnedJsxClosure() {
   });
   return <button onClick={() => api()}>{String(open())}</button>;
 }
+
+// ---- A default value runs when the function is called without the argument:
+// the write in it is legal from a click (rc.17: nothing throws, the text
+// becomes "open"), so a closure only returned or stored is unplaced, named or
+// not, and so is a default inside a destructuring pattern.
+
+export function ReturnedDefaultWrite() {
+  const [open, setOpen] = createSignal(false);
+  const api = createMemo(() => {
+    const f = (x = setOpen(true)) => x;
+    return f;
+  });
+  return <button onClick={() => api()()}>{String(open())}</button>;
+}
+
+export function ReturnedAnonymousDefaultWrite() {
+  const [open, setOpen] = createSignal(false);
+  const api = createMemo(() => (x = setOpen(true)) => x);
+  return <button onClick={() => api()()}>{String(open())}</button>;
+}
+
+export function ReturnedDestructuringDefaultWrite() {
+  const [open, setOpen] = createSignal(false);
+  const api = createMemo(() => {
+    const f = ({ a = setOpen(true) }: { a?: void }) => a;
+    return f;
+  });
+  return <button onClick={() => api()({})}>{String(open())}</button>;
+}
+
+// Known miss: called in the compute with the argument left out this throws, but
+// a function whose parameter list runs code has no call sites in the graph
+// (ADR 0339), so nothing places the write.
+export function CalledInComputeDefaultWrite() {
+  const [open, setOpen] = createSignal(false);
+  const doubled = createMemo(() => {
+    const f = (x = setOpen(true)) => x;
+    f();
+    return open();
+  });
+  return <div>{String(doubled())}</div>;
+}
+
+// The same limit for a write in the body of a closure with a non-literal default.
+export function CalledInComputeNonLiteralDefault() {
+  const [open, setOpen] = createSignal(false);
+  const doubled = createMemo(() => {
+    const f = (x = Math.random()) => setOpen(x > 0);
+    f();
+    return open();
+  });
+  return <div>{String(doubled())}</div>;
+}
+
+// A literal default leaves the call sites in the graph: still a violation.
+export function CalledInComputeLiteralDefault() {
+  const [open, setOpen] = createSignal(false);
+  const doubled = createMemo(() => {
+    const f = (x = 1) => setOpen(x > 0);
+    f();
+    return open();
+  });
+  return <div>{String(doubled())}</div>;
+}

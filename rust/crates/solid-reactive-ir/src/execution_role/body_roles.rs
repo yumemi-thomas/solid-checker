@@ -69,6 +69,43 @@ pub(super) fn call_argument_invocation_unproven(
     true
 }
 
+/// ADR 0450: the functions whose body or parameter list contains `span`. A
+/// default value (`(x = set(1)) => x`, `({ a = count() }) => a`) lies outside
+/// its function's body but runs only when that function is called, so for
+/// every question about the closure around a site it is inside it.
+pub(super) fn functions_around(
+    file: &solid_facts::FileFacts,
+    span: Span,
+) -> Vec<&solid_facts::ast::FunctionFact> {
+    let region = containing_ast_function(&file.ast, span)
+        .map_or_else(|| Span::new(0, u32::MAX), |function| function.body);
+    let mut around: Vec<_> = file.ast.functions_body_containing(span).collect();
+    around.extend(file.ast.functions_within(region).filter(|function| {
+        function.span.contains(span)
+            && !function.body.contains(span)
+            && span.end <= function.body.start
+    }));
+    around
+}
+
+/// Where `span` sits in `function`: `None` in its body, `Some(Some(index))` in
+/// the default value of parameter `index`, `Some(None)` elsewhere in the
+/// parameter list (a default inside a destructuring pattern, which no call
+/// argument decides).
+pub(super) fn parameter_slot(
+    function: &solid_facts::ast::FunctionFact,
+    span: Span,
+) -> Option<Option<usize>> {
+    if function.body.contains(span) {
+        return None;
+    }
+    Some(function.parameters.iter().position(|parameter| {
+        parameter
+            .initializer
+            .is_some_and(|value| value.contains(span))
+    }))
+}
+
 /// Whether `span` sits in a function literal that is merely *stored* where it
 /// is written -- an object property, a getter, an array element, a returned
 /// closure -- or in a function nested inside one. Constructing such a literal
@@ -83,8 +120,8 @@ pub(super) fn enclosed_by_stored_function(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    file.ast
-        .functions_body_containing(span)
+    functions_around(file, span)
+        .into_iter()
         .any(|literal| stored_function(file, literal, entities, symbol_names, lookup))
 }
 
@@ -137,11 +174,17 @@ pub(super) fn unrun_closure_within(
         /// placed asks again, and a closure already in progress is unproven.
         static IN_PROGRESS: std::cell::RefCell<HashSet<(String, Span)>> = std::cell::RefCell::default();
     }
-    file.ast.functions_body_containing(span).any(|function| {
+    functions_around(file, span).into_iter().any(|function| {
         region.contains(function.span)
             && region != function.span
             && if function.method_name.is_none() && function_binding_name(file, function).is_some()
             {
+                // A default value runs when a call omits its argument. Its
+                // function's parameter list is not inert, so the call graph
+                // withholds its call sites (ADR 0339) and nothing places it.
+                if parameter_slot(function, span).is_some() {
+                    return true;
+                }
                 let key = (file.path.to_string(), function.span);
                 lookup.function_component_status(file, function) == ComponentStatus::No
                     && (!IN_PROGRESS.with(|seen| seen.borrow_mut().insert(key.clone())) || {
@@ -183,8 +226,8 @@ pub(super) fn named_closure_in_tracked_scope<'a>(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> Option<&'a solid_facts::ast::FunctionFact> {
-    file.ast
-        .functions_body_containing(span)
+    functions_around(file, span)
+        .into_iter()
         .filter(|function| {
             function.method_name.is_none()
                 && function_binding_name(file, function).is_some()
