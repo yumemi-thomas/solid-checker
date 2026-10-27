@@ -171,15 +171,44 @@ test("freeing generations on wasm: updates and rebuilds keep linear memory bound
   assert.ok(mebibytes < 200, `linear memory is ${mebibytes} MiB after ${updates} updates`);
 }, 120_000);
 
-test("the high-water mark is flat: five times the updates add no memory", () => {
-  // Linear memory never shrinks, so a leak per update or per rebuild shows as
-  // growth. Before the Rust reactor freed edited file versions and parsed
+// Linear memory only grows, and a healthy reactor still grows in occasional
+// one-time steps (a larger peak allocation, a rebuild needing a bigger arena):
+// 12 MiB at one update and nothing for the next 200, measured on this churn. A
+// leak grows in every window. So the verdict is the smallest growth over equal
+// consecutive windows: a step lands in one window and the others stay flat,
+// while a per-update leak shows in all of them.
+const LEAK_WINDOW_UPDATES = 500;
+const LEAK_WINDOWS = 3;
+const FLAT_WINDOW_MEBIBYTES = 8;
+function leakedMebibytes(readings) {
+  const growth = readings.slice(1).map((reading, index) => reading - readings[index]);
+  return Math.min(...growth);
+}
+
+test("a leak per update grows every window; a one-time step grows only one", () => {
+  // The regression this guards grew about 0.26 MiB per update.
+  const leaking = Array.from({ length: LEAK_WINDOWS + 1 }, (_, window) => 150 + window * LEAK_WINDOW_UPDATES * 0.26);
+  assert.ok(leakedMebibytes(leaking) > 10 * FLAT_WINDOW_MEBIBYTES);
+  // Even a tenth of it fails.
+  const slow = Array.from({ length: LEAK_WINDOWS + 1 }, (_, window) => 150 + window * LEAK_WINDOW_UPDATES * 0.026);
+  assert.ok(leakedMebibytes(slow) > FLAT_WINDOW_MEBIBYTES);
+  const stepped = [158.1, 158.1, 174.9, 174.9];
+  assert.ok(leakedMebibytes(stepped) < FLAT_WINDOW_MEBIBYTES);
+});
+
+test("the high-water mark is flat: later windows of updates add no memory", () => {
+  // Before the Rust reactor freed edited file versions and parsed
   // configurations it grew about 0.26 MiB per update on this churn.
   const instance = reactor;
   churn(instance, "flat-warmup", 300);
-  const warm = instance.exports.memory.buffer.byteLength / 2 ** 20;
-  const after = churn(instance, "flat-long", 1500);
-  assert.ok(after - warm < 12, `linear memory grew from ${warm} to ${after} MiB over 1500 more updates`);
+  const readings = [instance.exports.memory.buffer.byteLength / 2 ** 20];
+  for (let window = 0; window < LEAK_WINDOWS; window++) {
+    readings.push(churn(instance, `flat-window-${window}`, LEAK_WINDOW_UPDATES));
+  }
+  assert.ok(
+    leakedMebibytes(readings) < FLAT_WINDOW_MEBIBYTES,
+    `linear memory grew in every window of ${LEAK_WINDOW_UPDATES} updates: ${readings.map(reading => reading.toFixed(1)).join(" -> ")} MiB`,
+  );
 }, 300_000);
 
 test("freed generations are never read: the same churn with TSRS_ARENA_POISON=1", async () => {
