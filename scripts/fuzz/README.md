@@ -78,6 +78,8 @@ Any case directory is also runnable by the oracle directly: `node scripts/runtim
 | `--shrink`, `--shrink-mode discovery\|focused`, `--budget N`, `--shrink-jobs N`, `--shrink-batch N` | reduce one representative per signature |
 | `--control` | neutrality control on the clean twin (always on for `--profile packages`) |
 | `--ledger <file>`, `--no-ledger` | the accepted false cleans (default `known-open.json`, currently empty) |
+| `--virtual-clock` | the fast path's timers and waits run on a virtual clock (see Speed) |
+| `--shrink-control accepted\|each` | with `--control`, the neutrality control runs on each accepted reduction (default) or on every candidate a shrink tries |
 | `--no-instrument`, `--no-daemon`, `--no-cache`, `--keep-work`, `--generate-only`, `--dead-site` | the baseline text with no ledger, one Vitest process per batch, no neutrality cache, keep the checker directories, type-check only, the experimental subkind |
 
 Exit status: 0 clean; 3 Chrome confirmed a false positive (stop and report); 4 Chrome confirmed a false clean the ledger does not know (the sweep ran to the end); 2 a usage or setup error.
@@ -188,7 +190,9 @@ Observation: the checker reports nothing on `(f(), m1()())` as a statement in a 
 
 ### Speed
 
-Nothing here changes a verdict (the acceptance run compares them): the fast path runs in one long-lived Vitest host, whose per-file environment is the isolation (`fast-daemon.test.mjs` has a program leave a global, a document attribute, a prototype property and a halted signal runtime, and the next must find none); `--concurrency` and `--workers` default to half the cores; the neutrality baseline is cached under `--cache-dir` (default `$TMPDIR/solid-checker-fuzz-cache`) keyed by generator version, program, checker and type-facts sha256, the fast install's lockfiles and the hash of this directory's judging sources, so a later round re-runs only the instrumented pass (`--no-cache` to disable); `--order failing-first` puts what mismatched last time first and `--stop-on-mismatch` ends a round at the first mismatching chunk.
+Nothing here changes a verdict (the acceptance run compares them): the fast path runs in one long-lived Vitest host, whose per-file environment is the isolation (`fast-daemon.test.mjs` has a program leave a global, a document attribute, a prototype property and a halted signal runtime, and the next must find none); `--concurrency` (checker and type check) defaults to half the cores and `--workers` (Vitest) to twice the cores, since a program mostly sleeps on timers (`--virtual-clock`: one a core); the neutrality baseline is cached under `--cache-dir` (default `$TMPDIR/solid-checker-fuzz-cache`) keyed by generator version, program, checker and type-facts sha256, the fast install's lockfiles and the hash of this directory's judging sources, so a later round re-runs only the instrumented pass (`--no-cache` to disable); `--order failing-first` puts what mismatched last time first and `--stop-on-mismatch` ends a round at the first mismatching chunk.
+
+A shrink with `--control` asks for the neutrality control of each reduction it accepts, not of every candidate it tries (the control can only turn a verdict into `inconclusive`, so the answers are the same; `--shrink-control each` restores the old rule), shrinks its false-clean groups in a pool (`--shrink-jobs`) and reconfirms their minima in Chrome in one call. Chrome runs a case's clean control beside its twin in one oracle call, and runs a case that ended in `browser close timed out after N ms` once more. `--virtual-clock` runs the program's timers and the runner's waits on a virtual clock (`fast/virtual-clock.mjs`: Node's delay rules and timer order, microtasks drained between callbacks, a throwing callback reported as an uncaught exception): the waits keep their lengths in virtual time and cost none of the wall time. `node scripts/fuzz/compare-runs.mjs <run A> <run B>` is the equality check for any of the above (every row but the wall times, the findings, the summary counts and the shrunk minima byte for byte).
 
 ### dead-site (off by default)
 
@@ -229,6 +233,7 @@ Nothing here changes a verdict (the acceptance run compares them): the fast path
 | `misuse.mjs` | the misuse profile: a template per claimed code, the contexts, layers and binding forms |
 | `matrix.mjs` | the recall matrix (code x context), its Chrome sample, the false-clean shrink and the baseline gate |
 | `package.mjs`, `packages.mjs`, `packages-seeds.mjs`, `packages-check.mjs` | the `packages` profile: generated dependency packages (below) |
+| `compare-runs.mjs` | equality of two runs (rows, findings, summary, minima), the evidence that a speed change moved nothing |
 | `run.mjs` | the command line |
 
 ## Phases

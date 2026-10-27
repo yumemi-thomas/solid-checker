@@ -75,10 +75,10 @@ export async function evaluate(entries, config, deps = {}) {
   // 2. Run everything the checker answered in one Vitest batch (the twin), and, as a control, the clean twin in a second.
   const variant = instrument ? "run" : "clean";
   const records = live.length
-    ? await fast(live.map(({ built, caseDir }) => ({ id: built.id, dir: caseDir, variant })), { install: config.fastInstall, workers: config.workers })
+    ? await fast(live.map(({ built, caseDir }) => ({ id: built.id, dir: caseDir, variant })), { install: config.fastInstall, workers: config.workers, virtualClock: config.virtualClock })
     : new Map();
   const controls = control && live.length
-    ? await fast(live.map(({ built, caseDir }) => ({ id: `${built.id}-clean`, dir: caseDir, variant: "clean" })), { install: config.fastInstall, workers: config.workers })
+    ? await fast(live.map(({ built, caseDir }) => ({ id: `${built.id}-clean`, dir: caseDir, variant: "clean" })), { install: config.fastInstall, workers: config.workers, virtualClock: config.virtualClock })
     : new Map();
 
   // 3. Classify.

@@ -15,8 +15,12 @@ import { render } from '@solidjs/web';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { appFrames } from './frames.mjs';
+import { installVirtualClock } from './virtual-clock.mjs';
 
-const pause = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+// `--virtual-clock` (FUZZ_VIRTUAL_CLOCK=1): the program's timers and the runner's own waits run on a virtual clock (virtual-clock.mjs),
+// so a 60 ms wait costs no time. The waits are the same lengths in virtual time, so what a timer can do before the next event is the same.
+let clock: ReturnType<typeof installVirtualClock> | null = null;
+const pause = (ms: number) => (clock ? clock.advance(ms) : new Promise<void>(resolve => setTimeout(resolve, ms)));
 const describeError = (e: any) => ({
   message: String(e?.message ?? e),
   stack: String(e?.stack ?? ''),
@@ -66,6 +70,8 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
     event.preventDefault();
   };
   const onProcessError = (e: any) => errors.push({ phase, kind: 'node-uncaught', ...describeError(e) });
+  // A timer callback that throws is an uncaught exception in Node; the virtual clock reports it the same way.
+  if (process.env.FUZZ_VIRTUAL_CLOCK === '1') clock = installVirtualClock({ onError: onProcessError });
   const onProcessRejection = (e: any) => errors.push({ phase, kind: 'node-unhandled-rejection', ...describeError(e) });
   process.on('uncaughtException', onProcessError);
   process.on('unhandledRejection', onProcessRejection);
@@ -125,6 +131,7 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
     artifactCount = captured.artifact?.diagnostics?.length ?? null;
   } catch (e) { failure = { phase, ...describeError(e) }; }
   finally {
+    clock?.restore(); clock = null;
     stop();
     for (const dispose of disposers) try { dispose(); } catch (e) { errors.push({ phase: 'dispose', kind: 'dispose', ...describeError(e) }); }
     window.removeEventListener('error', onError);

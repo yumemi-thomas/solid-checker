@@ -57,7 +57,7 @@ export function prepareWork(root, label = `${Date.now()}-${process.pid}`) {
   const work = join(root, ".solid-checker-fuzz-fast", label);
   mkdirSync(join(work, "tests"), { recursive: true });
   const fast = join(here, "fast");
-  for (const file of ["runner.tsx", "shims.ts", "frames.mjs", "vitest.config.mjs", "serve.mjs"]) cpSync(join(fast, file), join(work, file));
+  for (const file of ["runner.tsx", "shims.ts", "frames.mjs", "virtual-clock.mjs", "vitest.config.mjs", "serve.mjs"]) cpSync(join(fast, file), join(work, file));
   return work;
 }
 
@@ -96,7 +96,7 @@ export function collectRecords(cases, out, run) {
  * @param {{ id: string, dir: string, variant?: "run"|"clean" }[]} cases each `dir` holds App.tsx and sites.json (and App.run.txt,
  *   the instrumented twin). `variant: "clean"` runs App.tsx (the clean-twin control); the default runs the twin when the case has one.
  */
-export async function runFast(cases, { install = DEFAULT_FAST_INSTALL, workers = 4, keep = false, timeoutMs = 600000, pauseMs, finalMs } = {}) {
+export async function runFast(cases, { install = DEFAULT_FAST_INSTALL, workers = 4, keep = false, timeoutMs = 600000, pauseMs, finalMs, virtualClock = false } = {}) {
   for (const { id } of cases) if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new Error(`unsafe case id ${id}`);
   const root = resolve(install);
   const problems = pinnedProblems(installedVersions(root));
@@ -112,6 +112,7 @@ export async function runFast(cases, { install = DEFAULT_FAST_INSTALL, workers =
       env: {
         ...process.env, NODE_ENV: "development", FUZZ_FAST_OUT: out, FUZZ_FAST_WORKERS: String(workers),
         ...(pauseMs === undefined ? {} : { FUZZ_PAUSE_MS: String(pauseMs) }), ...(finalMs === undefined ? {} : { FUZZ_FINAL_MS: String(finalMs) }),
+        ...(virtualClock ? { FUZZ_VIRTUAL_CLOCK: "1" } : {}),
       },
     });
     let log = "";
