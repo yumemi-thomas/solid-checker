@@ -25,7 +25,7 @@ export const VERSION = 1;
 /** Helper forms: a same-file function taking `cb: () => unknown`. */
 export const HELPER_FORMS = ["call", "defaultCall", "returnClosure", "returnCb", "storeCb", "timerCb"];
 /** `prim` names: the Solid primitive or host API a function expression is handed to. */
-export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then"];
+export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro"];
 
 export const num = (n) => ({ k: "num", n });
 export const read = (sig, extra = {}) => ({ k: "read", sig, ...extra });
@@ -59,6 +59,10 @@ export const expr = (e) => ({ k: "expr", e });
 export const decl = (name, e) => ({ k: "decl", name, e });
 export const ret = (e) => ({ k: "return", e });
 export const awaitStmt = () => ({ k: "await" });
+/** `try { <body> } finally { <fin> }` (the disposal profile). */
+export const tryStmt = (body, fin = []) => ({ k: "try", body, fin });
+/** `flush()` (the disposal profile). */
+export const flush = () => ({ k: "flush" });
 
 export const probe = (sig) => ({ k: "probe", sig });
 export const button = (id, handler) => ({ k: "button", id, handler });
@@ -70,6 +74,14 @@ export const forEach = (children) => ({ k: "for", children });
 export const signal = (name, init, role = "src", scope = "component") => ({
   k: "signal", name, setter: `set${name[0].toUpperCase()}${name.slice(1)}`, init, role, scope,
 });
+/**
+ * Write targets of the disposal profile (a `write` node names one by `sig`; the printer reads `kind`):
+ * a store (`createStore({ v })`, written by its setter), a memo (written by `refresh(m)`), an action (written by calling it;
+ * its body writes the probe signal `target` to `value`). A plain `signal` has no `kind`.
+ */
+export const storeSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store" });
+export const memoSignal = (name) => ({ ...signal(name, 0, "src"), kind: "memo" });
+export const actionSignal = (name, target, value) => ({ ...signal(name, 0, "src"), kind: "action", target, value });
 
 // ---------------------------------------------------------------------------
 // Generic traversal
@@ -238,6 +250,10 @@ export function validate(program, { maxNodes = 400 } = {}) {
           case "await":
             if (!scope.async) fail(`${where}: await outside an async function`);
             break;
+          case "try":
+            checkBlock(stmt.body, scopeOf(scope, { async: scope.async }), "free");
+            checkBlock(stmt.fin, scopeOf(scope, { async: scope.async }), "free");
+            break;
           default: fail(`${where}: unknown statement ${stmt.k}`);
         }
       });
@@ -306,6 +322,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
           return null;
         }
         case "getOwner": return { t: "owner" };
+        case "flush": return T.void;
         case "set": {
           sigCheck(e.sig, "set");
           const type = typeOf(e.e, scope);
@@ -326,7 +343,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
     function ownType(e, scope) {
       switch (e.op) {
         // onCleanup returns a Disposable in the published typings, not void.
-        case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return T.unknown;
+        case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return e.handle ? T.fn(T.void) : T.unknown;
         case "settled": fnTypeChecked(e.fn, scope, RETURNS.settled); return T.void;
         case "effect": {
           const compute = fnTypeChecked(e.fn, scope, RETURNS.effect);
@@ -351,6 +368,13 @@ export function validate(program, { maxNodes = 400 } = {}) {
         case "owner":
           if (e.ownerArg === "owner" && !lookup(scope, "owner")) fail(`${where}: owner is not captured`);
           return fnTypeChecked(e.fn, scope, "free").ret;
+        // createRoot((dispose) => ...): the callback returns what the root hands back (the disposer, here).
+        case "rootd": {
+          const result = fnTypeChecked(e.fn, scope, "free", [["dispose", T.fn(T.void)]]);
+          if (result.ret.t !== "fn") fail(`${where}: a rootd callback returns a function`);
+          return T.fn(T.void);
+        }
+        case "micro": fnTypeChecked(e.fn, scope, "free"); return T.void;
         case "settled": fnTypeChecked(e.fn, scope, RETURNS.settled); return T.void;
         // onCleanup returns a Disposable in the published typings, not void.
         case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return T.unknown;

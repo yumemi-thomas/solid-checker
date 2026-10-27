@@ -32,6 +32,8 @@ function describe(node, helperForms) {
     case "prim": return `prim:${node.name}${node.name === "owner" ? `:${node.ownerArg ?? "null"}` : ""}`;
     case "iter": return `iter:${node.method}`;
     case "call": return node.callee.k === "ref" && helperForms.has(node.callee.name) ? `call:helper:${helperForms.get(node.callee.name)}` : "call";
+    case "own": return node.site ? null : `own:${node.op}${node.handle ? ":handle" : ""}`;
+    case "try": case "flush": return node.k;
     case "iife": case "obj": case "field": case "button": case "child": case "attr": case "show": case "for": case "return": return node.k;
     default: return null;
   }
@@ -87,7 +89,7 @@ export function constructPath(program, path) {
     const token = describe(ancestor, helperForms);
     if (token) chain.push(token);
     else if (ancestor.k === "component") chain.push(`component.${path[2]}`);
-    else if (ancestor.k === "read" || ancestor.k === "write") chain.push(`site:${ancestor.k}`);
+    else if (ancestor.k === "read" || ancestor.k === "write") chain.push(`site:${ancestor.k}${ancestor.via ? `:${ancestor.via}` : ""}`);
     else if (ancestor.k === "own") chain.push(`site:own:${ancestor.op}`);
     // Names bound by a declaration: how does the rest of the component use them?
     const link = up.get(ancestor);

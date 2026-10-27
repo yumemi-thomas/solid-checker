@@ -165,6 +165,7 @@ function render(program, instrument) {
         return counting(stmt.e, () => `const ${stmt.name} = ${expr(stmt.e, depth)};`);
       case "return": return counting(stmt.e, () => `return ${expr(stmt.e, depth)};`);
       case "await": return "await Promise.resolve();";
+      case "try": return `try ${block(stmt.body, depth)} finally ${block(stmt.fin, depth)}`;
       default: throw new Error(`cannot print statement ${stmt.k}`);
     }
   }
@@ -172,19 +173,34 @@ function render(program, instrument) {
     switch (e.k) {
       case "num": return String(e.n);
       case "read": return siteCall(e, `${e.sig}()`);
-      case "write": return siteCall(e, `${signals.get(e.sig).setter}(${e.value})`);
+      case "write": return siteCall(e, writeText(e));
       case "own": return siteCall(e, ownText(e, depth));
       case "ref": return e.name;
       case "member": return `${expr(e.obj, depth)}.${e.key}`;
-      case "obj": return e.fields.length ? `{ ${e.fields.map((f) => (f.e.k === "ref" && f.e.name === f.key ? f.key : `${f.key}: ${expr(f.e, depth)}`)).join(", ")} }` : "{}";
+      case "obj": return e.fields.length ? `{ ${e.fields.map((f) => {
+        if (f.e.k === "ref" && f.e.name === f.key) return f.key;
+        if (f.e.k === "fn" && f.e.form === "method") { const { head, body } = fnParts(f.e, depth, null); return `${f.e.async ? "async " : ""}${f.key}${head} ${body}`; }
+        return `${f.key}: ${expr(f.e, depth)}`;
+      }).join(", ")} }` : "{}";
       case "fn": return fnText(e, depth);
       case "call": return glue(e, () => `${e.callee.k === "fn" || e.callee.k === "prim" ? `(${expr(e.callee, depth)})` : expr(e.callee, depth)}(${e.args.map((a) => expr(a, depth)).join(", ")})`);
       case "set": return glue(e, () => `${signals.get(e.sig).setter}(${expr(e.e, depth)})`);
       case "getOwner": used.add("getOwner"); return glue(e, () => "getOwner()");
+      case "flush": used.add("flush"); return "flush()";
       case "iife": return glue(e, () => `(${expr(e.fn, depth)})()`);
       case "iter": return glue(e, () => (e.method === "map" ? `[1].map(${expr(e.fn, depth)})[0]` : `[1].forEach(${expr(e.fn, depth)})`));
       case "prim": return glue(e, () => primText(e, depth));
       default: throw new Error(`cannot print expression ${e.k}`);
+    }
+  }
+  /** A write by its target's kind (model.mjs storeSignal, memoSignal, actionSignal); a plain signal is `setX(value)`. */
+  function writeText(e) {
+    const sig = signals.get(e.sig);
+    switch (sig.kind) {
+      case "store": used.add("createStore"); return `${sig.setter}((s) => { s.v = ${e.value}; })`;
+      case "memo": used.add("refresh"); return `refresh(${sig.name})`;
+      case "action": return `${sig.name}()`;
+      default: return `${sig.setter}(${e.value})`;
     }
   }
   function ownText(e, depth) {
@@ -197,13 +213,19 @@ function render(program, instrument) {
     }
   }
   function primText(e, depth) {
-    const f = expr(e.fn, depth);
+    const f = e.name === "rootd" ? null : expr(e.fn, depth);
     switch (e.name) {
       case "memo": used.add("createMemo"); return `createMemo(${f})`;
       case "effect": used.add("createEffect"); return `createEffect(${f}, ${fnText(e.apply, depth, { header: "(v)" })})`;
       case "untrack": used.add("untrack"); return `untrack(${f})`;
       case "root": used.add("createRoot"); return `createRoot(${f})`;
-      case "owner": used.add("runWithOwner"); return `runWithOwner(${e.ownerArg === "owner" ? "owner" : "null"}, ${f})`;
+      case "owner": {
+        used.add("runWithOwner");
+        if (e.ownerArg === "create") used.add("createOwner");
+        return `runWithOwner(${e.ownerArg === "owner" ? "owner" : e.ownerArg === "create" ? "createOwner()" : "null"}, ${f})`;
+      }
+      case "rootd": used.add("createRoot"); return `createRoot(${fnText(e.fn, depth, { header: "(dispose)" })})`;
+      case "micro": return `queueMicrotask(${f})`;
       case "settled": used.add("onSettled"); return `onSettled(${f})`;
       case "cleanup": used.add("onCleanup"); return `onCleanup(${f})`;
       case "timer": return `setTimeout(${f}, 0)`;
@@ -214,7 +236,7 @@ function render(program, instrument) {
 
   function viewText(item, depth) {
     switch (item.k) {
-      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${item.sig}()}</output>`];
+      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${signals.get(item.sig)?.kind === "store" ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
       case "button": {
         const lines = [`${ind(depth)}<button data-act="${item.id}" onClick={() => ${block(item.handler, depth, entryFor(item, "handler"))}}>go</button>`];
         return lines;
@@ -235,7 +257,14 @@ function render(program, instrument) {
     }
   }
 
-  const signalLine = (sig) => `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
+  const signalLine = (sig) => {
+    switch (sig.kind) {
+      case "store": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init} });`;
+      case "memo": used.add("createMemo"); return `const ${sig.name} = createMemo(() => 1);`;
+      case "action": used.add("action"); return `const ${sig.name} = action(function* () { ${signals.get(sig.target).setter}(${sig.value}); });`;
+      default: return `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
+    }
+  };
   const out = [];
   // `useContext(Ctx)`: one module-level context with a default value (a read with no provider is then not an error; no owner is).
   const usesContext = [...walk(program)].some(({ node }) => node.k === "own" && node.op === "context");
