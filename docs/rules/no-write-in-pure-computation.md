@@ -220,6 +220,16 @@ violation, a call only in a leaf scope or handler is not, and one the compute on
 returns or stores is uncertifiable, as the anonymous form is
 (`fixtures/reactive-ir/write-named-closure-in-tracked-scope`).
 
+A write in a parameter list (a default value, a pattern, a function written in
+one) runs only when its function is called without the argument, and it belongs
+to that function, never to the helper or compute around it (ADR 0454): a helper
+that builds `(x = cb()) => x` and never calls it, calls it with the argument or
+only returns it does not run the callback, and rc.17 throws nothing. Such a
+write is uncertifiable, also in an anonymous callback's list
+(`forEach((item, i = setV(1)) => …)`) and for a closure called without the
+argument (a known miss: nothing proves the omission)
+(`fixtures/reactive-ir/parameter-list-owner`).
+
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.
 

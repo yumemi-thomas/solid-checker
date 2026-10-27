@@ -552,7 +552,7 @@ fn resolve_tracked_scope(
         file.ast
             .arguments_containing(call.span)
             .find(|(container, index)| {
-                crate::execution_role::direct_callback_contains(
+                crate::execution_role::direct_callback_runs(
                     file,
                     container.arguments[*index].span,
                     call.span,
@@ -622,7 +622,7 @@ fn resolve_scope_unplaced(
         .ast
         .arguments_containing(call.span)
         .any(|(container, index)| {
-            crate::execution_role::direct_callback_contains(
+            crate::execution_role::direct_callback_runs(
                 file,
                 container.arguments[index].span,
                 call.span,
@@ -785,7 +785,7 @@ fn action_step_body(
         file.ast
             .arguments_containing(call.span)
             .find(|(container, index)| {
-                crate::execution_role::direct_callback_contains(
+                crate::execution_role::direct_callback_runs(
                     file,
                     container.arguments[*index].span,
                     call.span,
@@ -807,7 +807,9 @@ fn action_step_body(
     // most): `action(wrap(function* () { … }))` steps whatever `wrap`
     // returns.
     let written = argument.value_span.unwrap_or(argument.span);
-    let body = crate::owners::containing_ast_function(&file.ast, call.span)
+    // ADR 0454: a call in the generator's parameter list runs when the
+    // generator is created, before its first step.
+    let body = crate::owners::containing_body_function(&file.ast, call.span)
         .filter(|function| function.span == written && function.generator)?;
     if !body.r#async {
         return Some("sync generator");

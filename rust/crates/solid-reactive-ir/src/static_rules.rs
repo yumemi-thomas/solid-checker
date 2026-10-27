@@ -995,8 +995,7 @@ fn member_reads_after_await(
     for member in &file.ast.members {
         if member.span.start < boundary
             || !ast_function.body.contains(member.span)
-            || containing_ast_function(&file.ast, member.span)
-                .is_none_or(|owner| owner.span != ast_function.span)
+            || !crate::owners::owned_by_body(&file.ast, ast_function, member.span)
         {
             continue;
         }

@@ -335,6 +335,18 @@ impl AstSpanIndex {
     }
 }
 
+/// Whether `function` owns `span`: the body holds it, or it lies in the
+/// parameter list ([`FunctionFact::parameter_list_start`] to the body). The
+/// function's name and type parameters are bound in the scope around it and
+/// run nothing, so they are not its list.
+fn function_owns(function: &FunctionFact, span: Span) -> bool {
+    function.body.contains(span)
+        || (span.end <= function.body.start
+            && function
+                .parameter_list_start()
+                .is_some_and(|start| start <= span.start))
+}
+
 fn within<T>(elements: &[T], region: Span, span_of: fn(&T) -> Span) -> impl Iterator<Item = &T> {
     let start = elements.partition_point(move |element| span_of(element).start < region.start);
     elements[start..]
@@ -376,9 +388,44 @@ impl AstFacts {
             .map(|index| &self.functions[index as usize])
     }
 
+    /// Functions that own `span` (ADR 0454): the body holds it, or it is
+    /// written in the function's parameter list (a default value, a pattern, a
+    /// function written inside either), which runs only when the function is
+    /// called without that argument. The list ends where the body begins.
+    pub fn functions_owning(&self, span: Span) -> impl Iterator<Item = &FunctionFact> {
+        self.span_index()
+            .functions_by_span
+            .containing(span)
+            .into_iter()
+            .map(|index| &self.functions[index as usize])
+            .filter(move |function| function_owns(function, span))
+    }
+
+    /// The innermost function that owns `span` (ADR 0454, [`Self::functions_owning`]):
+    /// the shortest span among the owners, the first in array order among
+    /// equals. A site in a parameter list belongs to the function whose list it
+    /// is, not to the function around that function.
+    pub fn innermost_function_owning(&self, span: Span) -> Option<&FunctionFact> {
+        let functions = &self.functions;
+        self.span_index()
+            .functions_by_span
+            .containing_least_by(span, |index| {
+                let function = &functions[index as usize];
+                let length = function.span.end - function.span.start;
+                // Owners sort before non-owners; no owner is no answer.
+                (!function_owns(function, span), length)
+            })
+            .map(|index| &self.functions[index as usize])
+            .filter(|function| function_owns(function, span))
+    }
+
     /// The function with the shortest body containing `span` (the first in
     /// array order among equals): `functions_body_containing(span)
     /// .min_by_key(body length)` without collecting the candidates.
+    ///
+    /// A site in a parameter list is in no body, so this names the function
+    /// around the function whose list holds it: ask
+    /// [`Self::innermost_function_owning`] for the function a site belongs to.
     pub fn innermost_function_body_containing(&self, span: Span) -> Option<&FunctionFact> {
         self.span_index()
             .functions_by_body

@@ -1,0 +1,59 @@
+{
+  "note": "ADR 0454: a call in the parameter list of a closure runs only when the closure is called without the argument. Four helpers build a closure whose default calls the callback and never call it, one calls it with the argument and an anonymous forEach callback is supplied its index: rc.17 runs no default and throws nothing (counters stay 0). The checker made SC2001 violations of them; they are uncertifiable. CalledOmitted runs the default in the memo: the dev REACTIVE_WRITE_IN_OWNED_SCOPE diagnostic is covered by an uncertifiable result (ADR 0452 known miss).",
+  "behaviour": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:58",
+      "observe": {
+        "window": "ranNested"
+      },
+      "defect": 1,
+      "correct": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:66",
+      "observe": {
+        "window": "ranForward"
+      },
+      "defect": 1,
+      "correct": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:74",
+      "observe": {
+        "window": "ranConditional"
+      },
+      "defect": 1,
+      "correct": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:82",
+      "observe": {
+        "window": "ranDirect"
+      },
+      "defect": 1,
+      "correct": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:100",
+      "observe": {
+        "window": "ranSupplied"
+      },
+      "defect": 1,
+      "correct": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "site": "App.tsx:109",
+      "observe": {
+        "window": "ranForEach"
+      },
+      "defect": 1,
+      "correct": 0
+    }
+  ]
+}

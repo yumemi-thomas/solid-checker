@@ -1934,9 +1934,7 @@ fn export_parameter_member_dispatch_obligations(
         // syntactic ones run first: the role (and the file's allowed
         // callback spans it reads) is asked only of a parameter's member.
         let direct_member = file.ast.calls_within(function.body).find_map(|call| {
-            if !containing_ast_function(&file.ast, call.span)
-                .is_some_and(|owner| owner.span == function.span)
-            {
+            if !crate::owners::owned_by_body(&file.ast, function, call.span) {
                 return None;
             }
             let (receiver, path) = context.lookup.member_callee_receiver(file, call.callee)?;

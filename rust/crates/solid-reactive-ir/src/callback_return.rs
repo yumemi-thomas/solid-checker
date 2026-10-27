@@ -203,8 +203,7 @@ fn resolve_with_iteration_veto<'a>(
         .and_then(|declaration| {
             file.ast.bindings.iter().find(|binding| {
                 binding.names.iter().any(|name| name.span == declaration)
-                    && containing_ast_function(&file.ast, binding.declaration)
-                        .is_some_and(|owner| owner.span == function.span)
+                    && crate::owners::owned_by_body(&file.ast, function, binding.declaration)
             })
         });
     let created_span = match local {
@@ -225,8 +224,7 @@ fn resolve_with_iteration_veto<'a>(
         || lookup
             .resolved_callee_call(file, created.callee)
             .is_some_and(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Recovery)
-        || !containing_ast_function(&file.ast, created.span)
-            .is_some_and(|owner| owner.span == function.span)
+        || !crate::owners::owned_by_body(&file.ast, function, created.span)
     {
         return None;
     }

@@ -1027,7 +1027,9 @@ pub(super) fn forwarded_tracked_compute_role(
             .calls
             .iter()
             .any(|inner| wrapper_file.ast.peel_ts_sugar_span(inner.callee) == reference);
-        let owner = containing_ast_function(&wrapper_file.ast, reference)?;
+        // ADR 0454: the function that runs the call, also for a call in a
+        // parameter list.
+        let owner = crate::owners::owning_function(&wrapper_file.ast, reference)?;
         if !invoked || owner.span == wrapper.span || compute.is_some_and(|seen| seen != owner.span)
         {
             return None;
@@ -1044,9 +1046,7 @@ pub(super) fn forwarded_tracked_compute_role(
             let argument = &outer.arguments[*slot];
             !argument.spread && wrapper_file.ast.peel_ts_sugar_span(argument.span) == compute
         })?;
-    if containing_ast_function(&wrapper_file.ast, outer.span)
-        .is_none_or(|function| function.span != wrapper.span)
-    {
+    if !crate::owners::owned_by_body(&wrapper_file.ast, wrapper, outer.span) {
         return None;
     }
     let tracked = match lookup.primitive_at_call(wrapper_file, outer.span) {

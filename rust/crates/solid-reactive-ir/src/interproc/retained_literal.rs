@@ -134,25 +134,24 @@ pub(super) fn object_retention_witnesses(
         &solid_facts::ast::ObjectPropertyFact,
     ),
 > {
-    file.ast
-        .functions_body_containing(span)
-        .flat_map(move |function| {
-            let binding = function_binding_name(file, function).map(|name| name.span);
-            file.ast
-                .object_properties
-                .iter()
-                .filter(move |property| {
-                    let value = file
-                        .ast
-                        .peel_ts_sugar_span(property.shorthand_binding.unwrap_or(property.value));
-                    value == function.span
-                        || binding.is_some_and(|binding| {
-                            value == binding
-                                || file.ast.reference_declaration(value) == Some(binding)
-                        })
-                })
-                .map(move |property| (function, property))
-        })
+    // ADR 0454: also the functions whose parameter list holds the site, as
+    // `functions_around` finds them.
+    file.ast.functions_owning(span).flat_map(move |function| {
+        let binding = function_binding_name(file, function).map(|name| name.span);
+        file.ast
+            .object_properties
+            .iter()
+            .filter(move |property| {
+                let value = file
+                    .ast
+                    .peel_ts_sugar_span(property.shorthand_binding.unwrap_or(property.value));
+                value == function.span
+                    || binding.is_some_and(|binding| {
+                        value == binding || file.ast.reference_declaration(value) == Some(binding)
+                    })
+            })
+            .map(move |property| (function, property))
+    })
 }
 
 /// [`runs_in_object_callable`] less two dispositions (ADR 0292, 0342): a

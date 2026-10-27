@@ -426,19 +426,20 @@ pub(super) fn semantic_write_role_walk(
     {
         return unknown;
     }
-    // A site in a parameter list (a default value) of a closure bound to a name
-    // runs when that closure is called without the argument. The function
-    // around the closure (the body that holds the list) does not run it, and
-    // the closure has no call sites: its parameter list is not inert, so the
-    // call graph withholds them (ADR 0339). Nothing places the write (ADR
-    // 0452); a lexical tracked or rendering role, or the surrounding function's
-    // calls, would claim a run the closure's own calls decide.
-    if functions_around(file, span).into_iter().any(|function| {
-        parameter_slot(function, span).is_some()
-            && function.method_name.is_none()
-            && function_binding_name(file, function).is_some()
-            && lookup.function_component_status(file, function) == ComponentStatus::No
-    }) {
+    // A site in a parameter list (a default value, a pattern, a function written
+    // inside either) runs when its function is called without the argument:
+    // for a closure bound to a name, whatever its calls omit; for an anonymous
+    // callback, whatever the code that invokes it supplies. The function around
+    // it (the body that holds the list) does not run it, and nothing here
+    // proves an omission: a closure bound to a name has no call sites (its
+    // parameter list is not inert, ADR 0339), a lexical tracked or rendering
+    // role would claim a run the function's own calls decide, and an invoker
+    // such as `forEach` supplies the argument. Nothing places the write (ADR
+    // 0452, 0454).
+    if functions_around(file, span)
+        .into_iter()
+        .any(|function| parameter_slot(function, span).is_some())
+    {
         return unknown;
     }
     let innermost = crate::owners::containing_ast_function(&file.ast, span);
@@ -517,7 +518,7 @@ pub(super) fn semantic_write_role_walk(
         // component owner, and JSX the compiler wraps runs in a render
         // effect: such a re-entry has a role of its own the walk cannot
         // derive here.
-        if let Some(caller) = crate::owners::containing_ast_function(&caller_file.ast, callee)
+        if let Some(caller) = crate::owners::containing_body_function(&caller_file.ast, callee)
             .filter(|caller| visiting.contains(&(caller_file.path.to_string(), caller.span)))
         {
             if !plain_call_outside_jsx(caller_file, caller, callee) {
@@ -730,9 +731,11 @@ fn layers_run_inline(
             _ if iife => {}
             _ => return false,
         }
-        // The layer's own span is outside its body, so the innermost body
-        // containing it is the enclosing function's.
-        let Some(next) = file.ast.innermost_function_body_containing(layer.span) else {
+        // The layer's own span is outside its body, so the function that owns
+        // it is the enclosing function, or the function whose parameter list
+        // the layer is written in (ADR 0454: a layer in a default value runs
+        // only when that function is called without the argument).
+        let Some(next) = crate::owners::owning_function(&file.ast, layer.span) else {
             return false;
         };
         layer = next;

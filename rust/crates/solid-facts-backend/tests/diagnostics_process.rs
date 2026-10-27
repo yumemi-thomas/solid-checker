@@ -137,8 +137,11 @@ fn immediate_leaf_helpers_follow_bodies_and_async_prefixes() {
             })
             .collect::<Vec<_>>();
         if let Some((code, kind)) = expected {
-            let count = if name == "DefaultImmediate" { 2 } else { 1 };
-            assert_eq!(rows.len(), count, "{name}: {rows:#?}");
+            // ADR 0454: the call in the IIFE's parameter list belongs to the
+            // IIFE, so the leaf callback's walk no longer counts it as its own
+            // call and the one obligation is the IIFE's, anchored at its callee
+            // (it was two: that and one at `unknown()`).
+            assert_eq!(rows.len(), 1, "{name}: {rows:#?}");
             assert_eq!(rows[0]["id"], code, "{name}");
             assert_eq!(rows[0]["kind"], kind, "{name}");
             if name == "WrappedImmediate" {
@@ -146,14 +149,6 @@ fn immediate_leaf_helpers_follow_bodies_and_async_prefixes() {
                 let end = rows[0]["primaryLocation"]["endByte"].as_u64().unwrap() as usize;
                 assert!(source[begin..end].contains("as () => void"));
                 continue;
-            }
-            if name == "DefaultImmediate" {
-                assert_eq!(rows[1]["id"], "SC9012");
-                assert_eq!(rows[1]["kind"], "uncertifiable");
-                assert_eq!(
-                    rows[1]["primaryLocation"]["startByte"],
-                    (start + source[start..end].find("unknown()").unwrap()) as u64
-                );
             }
             let callee = match name {
                 "StableTransportFalse" | "StableTransportTrue" | "StableTransportSpread" => {

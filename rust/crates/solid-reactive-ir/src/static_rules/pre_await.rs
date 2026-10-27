@@ -326,11 +326,8 @@ impl<'f, 'a> PreAwait<'f, 'a> {
         // which is the feasible path the finding stands on (ADR 0195 exempts
         // only a read made on every run). A straight-line one is judged by
         // the caller (`tracked_before_first_suspension`, the store paths).
-        let is_own = |span: Span| {
-            own.is_some_and(|own| {
-                containing_ast_function(&file.ast, span).is_some_and(|owner| owner.span == own.span)
-            })
-        };
+        let is_own =
+            |span: Span| own.is_some_and(|own| crate::owners::owned_by_body(&file.ast, own, span));
         let identifiers = &file.ast.identifiers;
         let first = identifiers.partition_point(|identifier| identifier.span.start < region.start);
         for identifier in identifiers[first..]

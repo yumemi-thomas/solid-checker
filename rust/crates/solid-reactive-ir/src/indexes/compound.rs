@@ -568,7 +568,7 @@ fn references_at(
 /// Whether `span` is written at module top level: inside no function, class
 /// body (a static block) or namespace.
 fn module_top_level(file: &FileFacts, span: Span) -> bool {
-    crate::owners::containing_ast_function(&file.ast, span).is_none()
+    crate::owners::owning_function(&file.ast, span).is_none()
         && !file
             .ast
             .classes

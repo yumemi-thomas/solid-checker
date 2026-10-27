@@ -302,7 +302,9 @@ fn discover_call_graph(
     }
     let owner_span = nodes[owner].span;
     let call_completes = site_on_every_completion(lookup, file, owner_span, call.span);
-    let in_owner_body = containing_ast_function(&file.ast, call.span)
+    // ADR 0454: a call in the owner's own parameter list, or in a closure's,
+    // is no call in the owner's body.
+    let in_owner_body = crate::owners::containing_body_function(&file.ast, call.span)
         .is_some_and(|function| function.body == nodes[owner].body);
     // Read propagation is relative to this owner's call. Keep unknown
     // callback timing, but exclude proven tracked/deferred callbacks,

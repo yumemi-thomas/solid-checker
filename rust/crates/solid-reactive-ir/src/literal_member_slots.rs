@@ -464,8 +464,7 @@ fn factory_returns_literal(
         } else {
             let Some(binding) = const_binding_at(file, argument).filter(|binding| {
                 binding.initializer_value_kind == RuntimeValueKind::Object
-                    && containing_ast_function(&file.ast, binding.declaration)
-                        .is_some_and(|owner| owner.span == factory.span)
+                    && crate::owners::owned_by_body(&file.ast, factory, binding.declaration)
             }) else {
                 return Receiver::Unknown;
             };

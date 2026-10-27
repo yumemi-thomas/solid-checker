@@ -22,7 +22,7 @@ use solid_facts::core::Span;
 use typefacts::{ResolvedCallValidity, RuntimeValueDomain};
 
 use super::{Fix, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId, TextEdit, location};
-use crate::execution_role::direct_callback_contains;
+use crate::execution_role::direct_callback_runs;
 use crate::owners::{callback_owner_at_call, containing_ast_function};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
 
@@ -245,7 +245,7 @@ pub(super) fn leaf_owner_operations_for_file(
             // extent: a call inside a nested function (an event handler built
             // in the callback) runs later, in that function's scope, where
             // the leaf scope is no longer live.
-            if !direct_callback_contains(callback_file, leaf_callback.span, call.span) {
+            if !direct_callback_runs(callback_file, leaf_callback.span, call.span) {
                 continue;
             }
             let primitive = crate::call_primitive_name_cached(

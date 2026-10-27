@@ -1077,6 +1077,36 @@ fn parameter_completion_calls_are_a_memo_view() {
 }
 
 #[test]
+fn parameter_completion_calls_skip_calls_in_a_parameter_list() {
+    // ADR 0454: a call of the parameter in a parameter list runs only when a
+    // caller omits the argument, in the owner's own list (`own`) or a
+    // closure's (`nested`, `built`); it is no call "on every completion" of
+    // the owner's body. `body` is the control.
+    let source = "function body(cb) { cb(); }\n\
+        function own(cb, x = cb()) { return x; }\n\
+        function nested(cb) { const g = (x = cb()) => x; return g; }\n\
+        function built(cb) { return ({ a = cb() }) => a; }\n";
+    let spans = [
+        "s:body", "s:body", "s:own", "s:own", "s:nested", "s:nested", "s:built", "s:built",
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(index, symbol)| (span_of(source, "cb", index), symbol))
+    .collect::<Vec<_>>();
+    let facts = project(source);
+    let store = crate::base::memo::build::MemoStore::new(true, true);
+    let (calls, _) = memo_build(&facts, &store, &spans, |lookup| {
+        lookup
+            .parameter_completion_calls()
+            .iter()
+            .map(|(path, span, index)| ((*path).to_owned(), *span, *index))
+            .collect::<HashSet<_>>()
+    });
+    let body = span_of(source, "function body(cb) { cb(); }", 0);
+    assert_eq!(calls, HashSet::from_iter([(PATH.to_owned(), body, 0)]));
+}
+
+#[test]
 fn project_memos_are_reused_until_the_program_moves() {
     let source = "declare function guard(message: string): never;\nfunction f() { guard(\"x\"); work(); }\nexport const label = \"x\";\n";
     let entities = || vec![never_returning_entity(span_of(source, "guard", 1))];

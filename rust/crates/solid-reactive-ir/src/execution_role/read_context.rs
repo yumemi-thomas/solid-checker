@@ -91,7 +91,9 @@ pub(crate) fn apply_compute_reads(
             u32::try_from(read.location.start_byte).ok()?,
             u32::try_from(read.location.end_byte).ok()?,
         );
-        containing_ast_function(&file.ast, span)
+        // ADR 0454: the body that runs the read; a read in a parameter list
+        // runs when its function is called without the argument.
+        crate::owners::containing_body_function(&file.ast, span)
             .map(|function| (file.path.to_string(), function.span))
     };
     // A declaration site can allocate several sources (two calls of a
@@ -206,7 +208,8 @@ pub(crate) fn apply_compute_reads(
             .iter()
             .filter(|call| !call.construct && call.arguments.is_empty())
         {
-            let Some(function) = containing_ast_function(&file.ast, call.span) else {
+            let Some(function) = crate::owners::containing_body_function(&file.ast, call.span)
+            else {
                 continue;
             };
             if !computes.contains(&(file.path.to_string(), function.span))

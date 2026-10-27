@@ -1035,7 +1035,7 @@ impl Memo<BuildSchema> for ForwardedFromIn {
                 let Some(declaration) = argument.binding_declaration else {
                     continue;
                 };
-                for function in file.ast.functions_body_containing(call.span) {
+                for function in file.ast.functions_owning(call.span) {
                     let Some(parameter) = function.parameters.iter().position(|binding| {
                         binding.names.len() == 1 && binding.names[0].span == declaration
                     }) else {
@@ -1394,14 +1394,13 @@ fn local_identity(
 /// directly holds JSX.
 fn directly_returns_jsx(file: &FileFacts, function: &solid_facts::ast::FunctionFact) -> bool {
     let directly_contains_jsx = |span: Span| {
-        file.ast.jsx_within(span).any(|element| {
-            crate::owners::containing_ast_function(&file.ast, element.span)
-                .is_some_and(|owner| owner.span == function.span)
-        }) || file.ast.jsx_fragments.iter().any(|fragment| {
-            span.contains(*fragment)
-                && crate::owners::containing_ast_function(&file.ast, *fragment)
-                    .is_some_and(|owner| owner.span == function.span)
-        })
+        file.ast
+            .jsx_within(span)
+            .any(|element| crate::owners::owned_by_body(&file.ast, function, element.span))
+            || file.ast.jsx_fragments.iter().any(|fragment| {
+                span.contains(*fragment)
+                    && crate::owners::owned_by_body(&file.ast, function, *fragment)
+            })
     };
     function
         .expression_return

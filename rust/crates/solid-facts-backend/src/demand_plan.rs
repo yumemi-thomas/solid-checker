@@ -1021,8 +1021,11 @@ fn plan_call_demands(
             && callee_rooted_at_global(file, call.callee)
             && file
                 .ast
-                .innermost_function_body_containing(call.span)
-                .is_some_and(|function| {
+                // ADR 0454: any function that owns the call, one whose
+                // parameter list holds it included: a superset of the
+                // innermost body, as a demand only requests a fact.
+                .functions_owning(call.span)
+                .any(|function| {
                     function.r#async
                         && file
                             .ast

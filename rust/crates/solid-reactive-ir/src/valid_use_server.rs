@@ -101,7 +101,7 @@ fn violation(
 /// directive (the compiler extracts the outermost one only).
 fn inside_server_function(file: &FileFacts, function: &FunctionFact) -> bool {
     file.ast
-        .functions_body_containing(function.span)
+        .functions_owning(function.span)
         .any(|outer| outer.span != function.span && outer.has_directive(USE_SERVER))
 }
 

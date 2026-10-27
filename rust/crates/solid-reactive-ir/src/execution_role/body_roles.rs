@@ -77,17 +77,7 @@ pub(crate) fn functions_around(
     file: &solid_facts::FileFacts,
     span: Span,
 ) -> Vec<&solid_facts::ast::FunctionFact> {
-    // A function written inside a default value (an IIFE, an inline callback)
-    // sits outside the body of the function owning the default, so the
-    // parameter-list owners are found by their whole span, wherever the site
-    // is nested.
-    let mut around: Vec<_> = file.ast.functions_body_containing(span).collect();
-    around.extend(
-        file.ast
-            .functions_containing(span)
-            .filter(|function| !function.body.contains(span) && span.end <= function.body.start),
-    );
-    around
+    file.ast.functions_owning(span).collect()
 }
 
 /// Where `span` sits in `function`: `None` in its body, `Some(Some(index))` in

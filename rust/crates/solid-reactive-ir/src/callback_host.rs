@@ -174,7 +174,9 @@ fn disposal_registration_owned(
     call: &CallFact,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    let Some(function) = crate::owners::containing_ast_function(&file.ast, call.span) else {
+    // ADR 0454: a registration in a parameter list runs when the callback is
+    // called without the argument, not as the callback's own disposal.
+    let Some(function) = crate::owners::containing_body_function(&file.ast, call.span) else {
         return false;
     };
     if file.ast.awaits.iter().any(|span| {

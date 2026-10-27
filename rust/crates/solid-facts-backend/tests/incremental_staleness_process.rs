@@ -1142,3 +1142,37 @@ fn the_first_returned_callback_primitive_in_another_file_reruns_early_exits() {
         "whether `track` is a tracker must move `B`'s answer"
     );
 }
+
+/// ADR 0454: whether a call of the helper's parameter is in its body, in a
+/// closure's parameter list, or in its own parameter list decides the helper's
+/// summary row (`calls_parameter_in_body`, `calls_parameter_in_parameter_list`)
+/// and the callback's write role in another file. The caller is unedited and
+/// reads the helper's rows: a retained build must follow every move between
+/// the three placements, in both directions.
+const LIST_CALLER: &str = "import { createMemo, createSignal } from \"solid-js\";\nimport { build } from \"./helper\";\nexport function Write() {\n  const [n, setN] = createSignal(0);\n  const m = createMemo(() => {\n    build(() => setN(1));\n    return 1;\n  });\n  return <div>{m()}{n()}</div>;\n}\nexport function Read() {\n  const [c] = createSignal(0);\n  build(c);\n  return <div />;\n}\n";
+const NESTED_LIST_HELPER: &str = "export function build(cb: () => void) {\n  const g = (x: unknown = cb()) => x;\n  return g;\n}\n";
+const BODY_HELPER: &str = "export function build(cb: () => void) {\n  cb();\n  return 1;\n}\n";
+const OWN_LIST_HELPER: &str =
+    "export function build(cb: () => void, x: unknown = cb()) {\n  return x;\n}\n";
+
+#[test]
+fn a_call_that_moves_between_a_body_and_a_parameter_list_moves_the_unedited_caller() {
+    let Some(moved) = retained_through_edits(
+        "parameter-list-owner",
+        &[("helper.ts", NESTED_LIST_HELPER), ("App.tsx", LIST_CALLER)],
+        &[
+            ("helper.ts", BODY_HELPER),
+            ("helper.ts", NESTED_LIST_HELPER),
+            ("helper.ts", OWN_LIST_HELPER),
+            ("helper.ts", NESTED_LIST_HELPER),
+            ("helper.ts", BODY_HELPER),
+        ],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        [moved[0], moved[1], moved[3], moved[4]],
+        [true; 4],
+        "body against a closure's list must move the caller's answer: {moved:?}"
+    );
+}

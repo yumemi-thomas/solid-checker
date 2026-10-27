@@ -17,7 +17,7 @@ use solid_facts::core::Span;
 use typefacts::{ConstantValueKind, EntityFact, ResolvedCallValidity};
 
 use crate::execution_role::semantic_execution_role;
-use crate::owners::{containing_ast_function, jsx_element_is_loading};
+use crate::owners::jsx_element_is_loading;
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_balanced_results};
 use crate::{
     ExecutionRole, RichArgumentTransport, StaticDefect, StaticDefectKind, StaticViolation, location,
@@ -123,11 +123,13 @@ fn http_response_in_file<'a>(
         // boundary's `fallback` renders *with* the shell and its writes
         // apply, so only the children subtree is post-flush material.
         let dominated = call_under_loading_children(ctx, file, call.span)
-            || containing_ast_function(&file.ast, call.span).is_some_and(|function| {
-                loading_hosts
-                    .get_or_init(|| loading_wrapped_components(ctx))
-                    .contains(&(file.path.as_str(), function.span))
-            });
+            || crate::owners::containing_body_function(&file.ast, call.span).is_some_and(
+                |function| {
+                    loading_hosts
+                        .get_or_init(|| loading_wrapped_components(ctx))
+                        .contains(&(file.path.as_str(), function.span))
+                },
+            );
         if !dominated {
             continue;
         }

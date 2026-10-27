@@ -293,30 +293,17 @@ pub(super) fn named_helper_runs_during_body(
     proven
 }
 
-/// The innermost function whose default-parameter initializer contains `span`.
-///
-/// A parameter initializer lies outside its function's *body*, so the
-/// body-based containment queries place a read in it in the surrounding
-/// function. Only functions nested in the span's own enclosing body (or any
-/// function, at module level) can own it, which bounds the scan.
+/// The function whose parameter list holds `span` directly (ADR 0454): the
+/// owner of the site when the site is in its default value or pattern. A site
+/// inside a function written in a default belongs to that function, not to the
+/// list, and answers `None`. It runs when the function is called without the
+/// argument, which no position around the function proves happens while the
+/// function around it runs.
 pub(super) fn parameter_default_owner(
     file: &solid_facts::FileFacts,
     span: Span,
 ) -> Option<&solid_facts::ast::FunctionFact> {
-    let region = containing_ast_function(&file.ast, span)
-        .map_or_else(|| Span::new(0, u32::MAX), |function| function.body);
-    file.ast
-        .functions_within(region)
-        .filter(|function| {
-            function.span.contains(span)
-                && !function.body.contains(span)
-                && function.parameters.iter().any(|parameter| {
-                    parameter
-                        .initializer
-                        .is_some_and(|value| value.contains(span))
-                })
-        })
-        .min_by_key(|function| function.span.end - function.span.start)
+    crate::owners::owning_function(&file.ast, span).filter(|function| !function.body.contains(span))
 }
 
 /// ADR 0278: the project function `call` runs, resolved as the call sites
@@ -641,9 +628,44 @@ pub(crate) fn calls_parameter_in_body(
     else {
         return false;
     };
+    // ADR 0454: a call in the function's own parameter list runs only when a
+    // caller omits the argument, and one in a closure's parameter list only
+    // when that closure is called without it: neither is a call in this body.
     file.ast.calls.iter().any(|call| {
-        containing_ast_function(&file.ast, call.span)
-            .is_some_and(|owner| owner.span == function.span)
+        crate::owners::owned_by_body(&file.ast, function, call.span)
+            && lookup.callee_symbol(file, call.callee) == Some(symbol.as_str())
+    })
+}
+
+/// ADR 0454: whether `function` calls its parameter `index` in a parameter
+/// list written in it: its own (`run(cb, x = cb())`), or a closure's inside its
+/// body (`const g = (x = cb()) => x`). Such a call runs only when a caller omits
+/// the argument, so it is no call in the body ([`calls_parameter_in_body`]); it
+/// is not nothing either, and a caller keeps it as a call that may be made.
+pub(crate) fn calls_parameter_in_parameter_list(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if function.r#async || function.generator {
+        return false;
+    }
+    let Some(parameter) = function.parameters.get(index) else {
+        return false;
+    };
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier {
+        return false;
+    }
+    let Some(symbol) = parameter
+        .names
+        .first()
+        .and_then(|name| lookup.entities().at(file.path.as_str(), name.span))
+    else {
+        return false;
+    };
+    file.ast.calls_within(function.span).any(|call| {
+        crate::owners::in_parameter_list(&file.ast, call.span)
             && lookup.callee_symbol(file, call.callee) == Some(symbol.as_str())
     })
 }

@@ -282,7 +282,7 @@ pub(super) fn parameter_rows<'w, W: World<'w>>(w: &W, file: &'w FileFacts) -> Pa
         .filter(|id| id.role == ast::IdentifierRole::Reference)
     {
         if matches!(file.source_text(id.span), Some("arguments" | "eval")) {
-            for function in file.ast.functions_body_containing(id.span) {
+            for function in file.ast.functions_owning(id.span) {
                 argument_observers.insert(function.span);
             }
         }

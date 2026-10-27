@@ -526,7 +526,7 @@ pub(super) fn member_reaches_only_events(
             // that itself reaches only event dispatch.
             let literals = file
                 .ast
-                .functions_body_containing(member)
+                .functions_owning(member)
                 .map(|literal| literal.span)
                 .collect::<Vec<_>>();
             for literal in literals {

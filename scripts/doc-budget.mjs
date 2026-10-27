@@ -70,7 +70,8 @@ export const FILE_BUDGETS = {
   // And for ADR 0453 (the file stood 231,598 bytes before its entry): 233_000.
   // All three (ADRs 0450, 0452, 0453): 240,224 bytes: 241_000.
   // With main's ADR 0451 (PR #119) merged in: 241,944 bytes: 242_500.
-  "docs/decisions.md": 242_500,
+  // And for ADR 0454 (a site in a parameter list; the file stood 241,944 bytes before its entry): 246,068 bytes: 246_500.
+  "docs/decisions.md": 246_500,
 };
 
 export const GROUP_BUDGETS = [
@@ -103,7 +104,8 @@ export const GROUP_BUDGETS = [
   // And for ADR 0453 (the group stood 740,735 bytes before its entry): 742_000.
   // All three (ADRs 0450, 0452, 0453): 752,031 bytes: 753_000.
   // With main's ADR 0451 (PR #119) merged in: 753,780 bytes: 754_500.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 754_500 },
+  // And for ADR 0454 (its entry, the open-work lines, a rule-page paragraph): 758,425 bytes against 754,500: 759_000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 759_000 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
@@ -122,7 +124,8 @@ export const GROUP_BUDGETS = [
     // And for ADR 0452's two fixtures: 301_497 bytes against 299_500: 302_000.
     // And ADR 0452's default-value cases: 302_229 bytes against 302_000: 303_000.
     // And the pinned false positive's fixture: 303_850 bytes against 303_000: 304_500.
-    bytes: 304_500,
+    // And ADR 0454's fixture: 305,605 bytes against 304,500: 306_000.
+    bytes: 306_000,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

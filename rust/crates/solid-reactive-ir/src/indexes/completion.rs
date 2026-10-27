@@ -230,7 +230,9 @@ impl<'a> SemanticLookup<'a> {
             else {
                 continue;
             };
-            if crate::owners::containing_ast_function(&file.ast, call.span)
+            // ADR 0454: the body of `function` runs the call, and no closure's
+            // parameter list or `function`'s own holds it.
+            if crate::owners::containing_body_function(&file.ast, call.span)
                 .is_some_and(|owner| owner.span == function)
                 && crate::interproc::site_on_every_completion(self, file, function, call.span)
             {
@@ -256,7 +258,7 @@ impl<'a> SemanticLookup<'a> {
                 else {
                     continue;
                 };
-                if crate::owners::containing_ast_function(&file.ast, call.span)
+                if crate::owners::containing_body_function(&file.ast, call.span)
                     .is_some_and(|owner| owner.span == function)
                     && crate::interproc::site_on_every_completion(self, file, function, call.span)
                 {

@@ -47,7 +47,7 @@ use crate::HashSet;
 use crate::cleanup::callback_argument_literal;
 use crate::identity::SymbolId;
 use crate::indexes::mentions_word;
-use crate::owners::{containing_ast_function, written_directly_in};
+use crate::owners::written_directly_in;
 use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::runtime_semantics::{is_inline_standard_callback, is_timer_call, standard_call_name};
 use crate::{StaticDefect, StaticDefectKind, location};
@@ -648,8 +648,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             let (file, ast_function, boundary) = site;
             for call in file.ast.calls_within(ast_function.body) {
                 if call.span.start >= boundary
-                    && containing_ast_function(&file.ast, call.span)
-                        .is_some_and(|owner| owner.span == ast_function.span)
+                    && crate::owners::owned_by_body(&file.ast, ast_function, call.span)
                 {
                     after_await_calls.push((file, call));
                 }

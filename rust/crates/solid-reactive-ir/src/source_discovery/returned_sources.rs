@@ -263,8 +263,7 @@ pub(super) fn returned_source_through<'a>(
     if !binding.immutable
         || crate::indexes::binding_written(file, name.span)
         || crate::value_identity::binding_has_write(file, entities, source)
-        || !containing_ast_function(&file.ast, binding.declaration)
-            .is_some_and(|owner| owner.span == function.span)
+        || !crate::owners::owned_by_body(&file.ast, function, binding.declaration)
     {
         return None;
     }

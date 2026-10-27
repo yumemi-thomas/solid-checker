@@ -395,6 +395,56 @@ fn parameter_initializers_survive_function_and_arrow_normalization() {
     assert_eq!(initializers, vec![None, Some("1"), Some("2")]);
 }
 
+/// ADR 0454: the function that owns a site is the innermost one whose body
+/// holds it or in whose parameter list it is written, at any depth.
+#[test]
+fn a_site_in_a_parameter_list_belongs_to_the_function_whose_list_it_is() {
+    let source = "function outer(cb) {\n\
+  const g = (x = cb()) => x;\n\
+  const h = ({ a = cb() }) => a;\n\
+  const i = (x = (() => cb())()) => x;\n\
+  return cb();\n\
+}\n\
+function own(cb, y = cb()) { return y; }\n\
+function none() { return 1; }\n";
+    let facts = extract("/project/owner.ts", source).unwrap();
+    let call = |text: &str, index: usize| -> Span {
+        let start = source.match_indices(text).nth(index).unwrap().0;
+        Span::new(start as u32, (start + text.len()) as u32)
+    };
+    let owner_of = |span: Span| -> Option<&str> {
+        facts
+            .innermost_function_owning(span)
+            .map(|function| &source[function.span.start as usize..function.span.end as usize])
+    };
+    // In a body.
+    assert!(owner_of(call("cb()", 3)).is_some_and(|f| f.starts_with("function outer(cb) {")));
+    // In the list of an arrow (default value), of an arrow (pattern default).
+    assert_eq!(owner_of(call("cb()", 0)), Some("(x = cb()) => x"));
+    assert_eq!(owner_of(call("cb()", 1)), Some("({ a = cb() }) => a"));
+    // A function written in a default is the owner of what it holds; the
+    // function it is written in the list of owns the function itself.
+    assert_eq!(owner_of(call("cb()", 2)), Some("() => cb()"));
+    let iife = call("() => cb()", 0);
+    assert_eq!(owner_of(iife), Some("(x = (() => cb())()) => x"));
+    // A function's own list.
+    assert_eq!(
+        owner_of(call("cb()", 4)),
+        Some("function own(cb, y = cb()) { return y; }")
+    );
+    // A name is bound around the function; no site in no function has an owner.
+    assert_eq!(owner_of(call("own", 0)), None);
+    let all = facts
+        .functions_owning(call("cb()", 0))
+        .map(|f| f.span)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        all.len(),
+        2,
+        "the arrow whose list holds it, and outer's body"
+    );
+}
+
 /// Suppression comments (facts schema 76): both families, both comment forms,
 /// inside JSX and after a hashbang, and nothing else.
 #[test]

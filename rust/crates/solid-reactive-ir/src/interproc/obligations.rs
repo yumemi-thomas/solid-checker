@@ -548,7 +548,7 @@ pub(super) fn direct_protocol_parameters(
             return None;
         }
         let (owner, index, body) = parameters[&declaration];
-        crate::owners::containing_ast_function(ast, used_at)
+        crate::owners::containing_body_function(ast, used_at)
             .is_some_and(|innermost| innermost.body == body)
             .then_some((owner, index))
     };

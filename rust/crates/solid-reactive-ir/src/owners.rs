@@ -202,11 +202,70 @@ pub(crate) fn component_props_parameter_fix(
     })
 }
 
+/// The function whose *body* is written around `span`: the innermost one whose
+/// body holds it, so a site in a parameter list (a default value, a pattern) is
+/// the function around the function whose list it is. That is where the role
+/// lookups place a site (the surrounding code's role), and the lookups that
+/// withhold such a site from a run (`parameter_default_owner`,
+/// `unrun_closure_within`, the write guard) then keep it unplaced. A question
+/// about what *runs* a site asks [`owning_function`], [`containing_body_function`]
+/// or [`owned_by_body`] instead.
 pub(crate) fn containing_ast_function(
     ast: &solid_facts::ast::AstFacts,
     span: Span,
 ) -> Option<&solid_facts::ast::FunctionFact> {
     ast.innermost_function_body_containing(span)
+}
+
+/// ADR 0454: the function that owns `span`, the innermost one whose body holds
+/// it or in whose parameter list it is written. A default value
+/// (`(x = cb()) => x`, `({ a = count() }) => a`), also a function written inside
+/// one, runs only when its function is called without that argument, so it
+/// belongs to that function, never to the function around it. The owner of a
+/// site in its own parameter list is that function: a caller that treats the
+/// owner's body as running the site asks [`owned_by_body`] or
+/// [`containing_body_function`], and a site in the list "runs" only when a
+/// caller omits the argument.
+pub(crate) fn owning_function(
+    ast: &solid_facts::ast::AstFacts,
+    span: Span,
+) -> Option<&solid_facts::ast::FunctionFact> {
+    ast.innermost_function_owning(span)
+}
+
+/// ADR 0454: the function whose *body* runs `span`: the owner
+/// ([`owning_function`]) when its body holds the site, `None` when the site is
+/// in a parameter list or in no function. For a caller that treats the function
+/// as running the site whenever it is called (a call it makes, a use of its
+/// parameter); a site in a parameter list runs only when the caller omits the
+/// argument, which such a caller does not prove.
+pub(crate) fn containing_body_function(
+    ast: &solid_facts::ast::AstFacts,
+    span: Span,
+) -> Option<&solid_facts::ast::FunctionFact> {
+    owning_function(ast, span).filter(|function| function.body.contains(span))
+}
+
+/// ADR 0454: whether `function`'s body runs `span` and no function written
+/// inside `function` owns it: the owner of a site in the body. A site in
+/// `function`'s own parameter list is not its body's, and neither is one in a
+/// nested function's list (that list belongs to the nested function).
+pub(crate) fn owned_by_body(
+    ast: &solid_facts::ast::AstFacts,
+    function: &solid_facts::ast::FunctionFact,
+    span: Span,
+) -> bool {
+    function.body.contains(span)
+        && owning_function(ast, span).is_some_and(|owner| owner.span == function.span)
+}
+
+/// ADR 0454: whether `span` is written in the parameter list of some function,
+/// at any depth (a default value, a destructuring pattern, a function written
+/// inside either): code that runs only when that function is called without
+/// the argument, which no position around it places.
+pub(crate) fn in_parameter_list(ast: &solid_facts::ast::AstFacts, span: Span) -> bool {
+    ast.functions_owning(span)
+        .any(|function| !function.body.contains(span))
 }
 
 /// Whether `span` is written directly in `function`'s own body: inside the
