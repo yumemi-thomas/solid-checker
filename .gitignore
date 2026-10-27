@@ -109,6 +109,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/write-detached-owner-helper/node_modules/**
 !fixtures/reactive-ir/write-cleanup-handle-call/node_modules/
 !fixtures/reactive-ir/write-cleanup-handle-call/node_modules/**
+!fixtures/reactive-ir/write-render-apply-row-layers/node_modules/
+!fixtures/reactive-ir/write-render-apply-row-layers/node_modules/**
 !fixtures/reactive-ir/rc17-callback-exports-mixed/node_modules/
 !fixtures/reactive-ir/rc17-callback-exports-mixed/node_modules/**
 !fixtures/reactive-ir/rc17-create-deferred/node_modules/
