@@ -1,0 +1,26 @@
+{
+  "name": "solid-checker-fuzz-install",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The differential fuzzer's fast-path install: the same pinned Solid 2.0.0-rc.17 packages and overrides as scripts/runtime-oracle-install (ADR 0453), plus vitest, happy-dom and @solidjs/diagnostics. Provision with `npm install` here, then commit package-lock.json (see scripts/fuzz/README.md).",
+  "dependencies": {
+    "@solidjs/babel-plugin": "2.0.0-rc.17",
+    "@solidjs/compiler": "2.0.0-rc.17",
+    "@solidjs/diagnostics": "2.0.0-rc.17",
+    "@solidjs/signals": "2.0.0-rc.17",
+    "@solidjs/vite-plugin": "3.0.0-next.51",
+    "@solidjs/web": "2.0.0-rc.17",
+    "happy-dom": "21.0.4",
+    "solid-js": "2.0.0-rc.17",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  },
+  "overrides": {
+    "@solidjs/babel-plugin": "2.0.0-rc.17",
+    "@solidjs/compiler": "2.0.0-rc.17",
+    "@solidjs/signals": "2.0.0-rc.17",
+    "@solidjs/web": "2.0.0-rc.17",
+    "solid-js": "2.0.0-rc.17"
+  }
+}

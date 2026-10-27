@@ -196,6 +196,8 @@ const codeRules = {
   CONTEXT_NOT_FOUND: ["missing-context-provider"],
   SETTLED_CLEANUP_UNOWNED: ["missing-owner"],
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["no-write-in-pure-computation"],
+  // A write through a store's read proxy is ignored with this warning (`@solidjs/signals` rc.17 dev.js, `warnWriteOutsideSetter`); SC2003.
+  STORE_WRITE_OUTSIDE_SETTER: ["no-store-mutation-outside-setter"],
   CLEANUP_IN_FORBIDDEN_SCOPE: ["leaf-owner-forbidden-call"],
   PRIMITIVE_IN_FORBIDDEN_SCOPE: ["leaf-owner-forbidden-call"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["async-outside-loading-boundary"],

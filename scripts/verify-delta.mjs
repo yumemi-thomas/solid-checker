@@ -366,6 +366,14 @@ export const ROWS = [
     owner: "the IR incrementality tools (lint and random-edit harness)",
     checks: ["ir-tools-test", "ir-read-lint", "ir-edit-fuzz"],
   })),
+  // The differential fuzzer is operator tooling, deliberately outside `make verify`
+  // (scripts/fuzz/README.md): its pure modules have vitest tests the author runs, and nothing the
+  // checker, the gates or a package reads depends on it.
+  {
+    prefix: "scripts/fuzz/",
+    owner: "the differential fuzzer (operator tooling outside make verify)",
+    checks: [],
+  },
   { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
   { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm", "wasm-parity"] },
   // Prose that no build, test, or gate reads: the universal set only. Only

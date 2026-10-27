@@ -648,3 +648,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/program-boundary-standalone/node_modules/**
 # The runtime oracle writes each case here (scripts/runtime-oracle.mjs).
 /scripts/runtime-oracle-install/.solid-checker-runtime-oracle/
+# The differential fuzzer's work areas (scripts/fuzz): checker and type-check directories beside the
+# oracle's, and its own install with the Vitest work directories it creates.
+/scripts/runtime-oracle-install/.solid-checker-fuzz/
+/scripts/fuzz/install/.solid-checker-fuzz-fast/
