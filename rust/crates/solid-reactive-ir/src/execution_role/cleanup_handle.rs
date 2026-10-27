@@ -138,17 +138,15 @@ enum NamedRegistration<'f> {
     Unplaced,
 }
 
-/// The disposal registration of `function` by the name it is bound to
-/// (`const fn = () => …; const h = onCleanup(fn)`), found by exact
-/// resolution of each reference in the file. A function nothing names, or
-/// whose name no disposal callback position receives, is [`NamedRegistration::None`].
-fn named_disposal_registration<'f>(
-    file: &'f solid_facts::FileFacts,
+/// The declaration of the name `function` is bound to: a `function`
+/// declaration's name, or the name of an identifier binding whose initializer
+/// is the function.
+fn function_declaration_span(
+    file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
-    lookup: &SemanticLookup<'_>,
-) -> NamedRegistration<'f> {
+) -> Option<Span> {
     let ast = &file.ast;
-    let declaration = if function.kind == solid_facts::ast::FunctionKind::Declaration {
+    if function.kind == solid_facts::ast::FunctionKind::Declaration {
         function.name.as_ref().map(|name| name.span)
     } else {
         ast.bindings
@@ -160,7 +158,20 @@ fn named_disposal_registration<'f>(
                     })
             })
             .and_then(|binding| binding.names.first().map(|name| name.span))
-    };
+    }
+}
+
+/// The disposal registration of `function` by the name it is bound to
+/// (`const fn = () => …; const h = onCleanup(fn)`), found by exact
+/// resolution of each reference in the file. A function nothing names, or
+/// whose name no disposal callback position receives, is [`NamedRegistration::None`].
+fn named_disposal_registration<'f>(
+    file: &'f solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> NamedRegistration<'f> {
+    let ast = &file.ast;
+    let declaration = function_declaration_span(file, function);
     let Some(declaration) = declaration else {
         return NamedRegistration::None;
     };
@@ -325,9 +336,130 @@ pub(super) fn handle_site_unplaced(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     file.compiler.refusal().is_some()
+        || !handle_call_reached(file, site, &mut HashSet::default(), lookup)
         || inside_instance_field(file, site)
         || lookup.inside_possible_component(file, site)
         || lookup.site_in_undecided_component(file, site)
+}
+
+/// Whether a handle call at `site` may run on the host's execution: no
+/// branch that cannot run, no code after a `return`, and no function that is
+/// never entered stands between the host and it. `false` is a proof the call
+/// does not run, so it judges no write; `true` is no proof that it does, the
+/// call site's role decides. A function's run is proven absent only for a
+/// named function nothing references, or whose every call and render is
+/// itself not reached (`inside_possible_component` is the caller's question).
+/// `visiting` holds the functions being derived: a cycle adds no entry.
+fn handle_call_reached(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    visiting: &mut HashSet<(String, Span)>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_facts::ast::SiteStanding;
+    let Some(function) = crate::owners::owning_function(&file.ast, site) else {
+        return true;
+    };
+    // Where the source does not parse or the walk refuses, the position is no
+    // proof of anything, so the call keeps the role the site gives it.
+    let standing = solid_facts::ast::argument_site_standings(
+        std::path::Path::new(file.path.as_str()),
+        &file.source,
+        function.span,
+        &[],
+        &lookup.never_returning_calls_within(file, function),
+        &[site],
+    )
+    .and_then(|standings| standings.first().copied());
+    if standing == Some(SiteStanding::Unreachable) {
+        return false;
+    }
+    handle_function_runs(file, function, visiting, lookup)
+}
+
+/// Whether `function` may run ([`handle_call_reached`]).
+fn handle_function_runs(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    visiting: &mut HashSet<(String, Span)>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let key = (file.path.to_string(), function.span);
+    if !visiting.insert(key.clone()) {
+        return false;
+    }
+    let runs = handle_function_runs_unguarded(file, function, visiting, lookup);
+    visiting.remove(&key);
+    runs
+}
+
+fn handle_function_runs_unguarded(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    visiting: &mut HashSet<(String, Span)>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    // A function at module scope is entered by modules this does not follow.
+    if crate::owners::owning_function(&file.ast, function.span).is_none() {
+        return true;
+    }
+    let any_entry_reached = |visiting: &mut HashSet<(String, Span)>| {
+        lookup
+            .function_call_sites(file.path.as_str(), function.span)
+            .into_iter()
+            .any(|(caller_file, callee)| handle_call_reached(caller_file, callee, visiting, lookup))
+    };
+    let has_entries = || {
+        !lookup
+            .function_call_sites(file.path.as_str(), function.span)
+            .is_empty()
+    };
+    // A function nothing calls or renders is proven never entered only when
+    // it is named and nothing refers to it at all (not as a value either).
+    let never_referenced = || {
+        let Some(declaration) = function_declaration_span(file, function) else {
+            return false;
+        };
+        !file.ast.identifiers.iter().any(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && file.ast.reference_declaration(identifier.span) == Some(declaration)
+        }) && !lookup.program_has_eval()
+    };
+    if lookup.function_is_component(file, function) {
+        // Rendered where a renderer that runs renders it. One nothing renders
+        // is entered by a reference this does not follow, unless it has none.
+        return if has_entries() {
+            any_entry_reached(visiting)
+        } else {
+            !never_referenced()
+        };
+    }
+    match layer_run(file, function, lookup) {
+        LayerRun::InPlace(call) | LayerRun::InPlaceAmongOthers(call) => {
+            handle_call_reached(file, call, visiting, lookup)
+        }
+        LayerRun::FreshStack => true,
+        LayerRun::Elsewhere => {
+            if function_placed_by_dialect(file, function.span, lookup)
+                || function_runs_inline(file, function.span, lookup)
+                || jsx_attribute_value_function(file, function.span)
+                || callback_argument_of_call(file, function.span)
+            {
+                return true;
+            }
+            if has_entries() {
+                return any_entry_reached(visiting);
+            }
+            !never_referenced()
+        }
+    }
+}
+
+/// Whether the function at `function` is a direct argument of a call.
+fn callback_argument_of_call(file: &solid_facts::FileFacts, function: Span) -> bool {
+    file.ast
+        .arguments_containing(function)
+        .any(|(call, index)| file.ast.peel_ts_sugar_span(call.arguments[index].span) == function)
 }
 
 /// The marker under which [`cleanup_handle_write_role`] is deriving the role

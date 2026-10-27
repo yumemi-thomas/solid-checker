@@ -250,6 +250,126 @@
       "start": 9964,
       "end": 9972,
       "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 10734,
+      "end": 10742,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 11081,
+      "end": 11089,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 11332,
+      "end": 11340,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 11555,
+      "end": 11563,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 11834,
+      "end": 11842,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 12217,
+      "end": 12225,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 12614,
+      "end": 12622,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 13025,
+      "end": 13030,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 13384,
+      "end": 13392,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 13800,
+      "end": 13808,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 14084,
+      "end": 14092,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 14399,
+      "end": 14407,
+      "fixes": 0
     }
   ]
 }
