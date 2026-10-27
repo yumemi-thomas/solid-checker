@@ -22,6 +22,11 @@ import * as Solid from "solid-js";
 import { flush as signalsFlush } from "@solidjs/signals";
 import { commitFromOtherFile } from "./commit";
 
+// ADR 0458: a `const` destructuring of the namespace binds the export itself;
+// a `let` one may be reassigned, so it binds nothing this proof names.
+const { flush: destructuredFlush } = Solid;
+let { flush: reassignableFlush } = Solid;
+
 // The cases sit in a root so each effect has an owner.
 createRoot(() => {
   const [value, setValue] = createSignal(1);
@@ -53,6 +58,14 @@ createRoot(() => {
   });
   createEffect(value, () => {
     Solid.flush();
+  });
+  createEffect(value, () => {
+    destructuredFlush();
+  });
+
+  // Negative: the `let` slot names nothing.
+  createEffect(value, () => {
+    reassignableFlush();
   });
 
   // Negative: `flush` imported from `@solidjs/signals` itself resolves to a

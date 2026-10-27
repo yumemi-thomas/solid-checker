@@ -3031,3 +3031,57 @@ async function* body(items: AsyncIterable<number>, inner: () => AsyncGenerator<n
         ["await 0"]
     );
 }
+
+/// Facts schema 77: a `const` destructuring slot of a namespace import binding
+/// names one export; every other form names nothing.
+#[test]
+fn namespace_member_bindings_record_only_exact_const_slots_of_an_import_namespace() {
+    let source = concat!(
+        "import * as S from \"solid-js\";\n",
+        "import type * as T from \"solid-js\";\n",
+        "import { flush } from \"solid-js\";\n",
+        "const { onCleanup: a, \"flush\": b, createMemo, [\"x\"]: c, d = 1, e: { f }, ...rest } = S;\n",
+        "const { createEffect: g } = (S as typeof S);\n",
+        "let { onSettled: h } = S;\n",
+        "var { onSettled: i } = S;\n",
+        "const { onSettled: j } = flush as any;\n",
+        "const { onSettled: k } = T;\n",
+        "function body() { const { useContext: l } = S; return l; }\n",
+        "function shadow(S: any) { const { onCleanup: m } = S; return m; }\n",
+        "declare const { n }: typeof S;\n",
+        "export const { onCleanup: o } = S;\n",
+        "const { onCleanup: p } = S;\n",
+        "export { p };\n",
+        "const { onCleanup: q } = S;\n",
+        "export default q;\n",
+        "export function inside() { const { onCleanup: r } = S; return r; }\n",
+        "const { onCleanup: t } = S;\n",
+        "export function usesT() { return t; }\n",
+    );
+    let facts = extract("namespace.ts", source).unwrap();
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let recorded = facts
+        .namespace_member_bindings
+        .iter()
+        .map(|fact| (text(fact.local), fact.key.as_str(), text(fact.namespace)))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        recorded,
+        [
+            ("a", "onCleanup", "S"),
+            ("b", "flush", "S"),
+            ("createMemo", "createMemo", "S"),
+            ("g", "createEffect", "S"),
+            ("l", "useContext", "S"),
+            ("r", "onCleanup", "S"),
+            ("t", "onCleanup", "S"),
+        ]
+    );
+    let local = facts.namespace_member_bindings[0].local;
+    assert_eq!(
+        facts
+            .namespace_member_binding(local)
+            .map(|fact| fact.key.as_str()),
+        Some("onCleanup")
+    );
+}

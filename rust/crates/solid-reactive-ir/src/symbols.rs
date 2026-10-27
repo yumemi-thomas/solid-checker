@@ -59,6 +59,31 @@ pub(super) fn add_solid_import_names(
                 }
             }
         }
+        // `const { onCleanup: cleanup } = Solid` (ADR 0458): the slot holds
+        // the namespace's member, so it names what `Solid.onCleanup` does.
+        for member in &file.ast.namespace_member_bindings {
+            let Some(import) = file.ast.imports.iter().find(|import| {
+                import
+                    .bindings
+                    .iter()
+                    .any(|binding| binding.local.span == member.namespace)
+            }) else {
+                continue;
+            };
+            let primitives = dialect.namespace_import_primitives(import.module.as_str());
+            let Some(primitive) = primitives
+                .iter()
+                .find(|primitive| **primitive == member.key.as_str())
+            else {
+                continue;
+            };
+            let location = location(file.path.shared(), member.local);
+            if let Some(symbol) = entities.get(&location)
+                && !undeclared(facts, symbol)
+            {
+                names.insert(symbol.clone(), (*primitive).into());
+            }
+        }
         for export in &file.ast.exports {
             let Some(module) = export.module.as_deref() else {
                 continue;

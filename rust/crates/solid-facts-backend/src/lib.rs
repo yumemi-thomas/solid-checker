@@ -1927,7 +1927,8 @@ fn semantic_demands(
 
 /// The dialect primitives a file imports, by the spelling a static callee names
 /// them with: a named import from a module the vocabulary owns and exports the
-/// primitive from, or a member of a namespace import of one.
+/// primitive from, a member of a namespace import of one, or a `const`
+/// destructuring slot of such a namespace (ADR 0458).
 ///
 /// Syntax only, so it decides *demands* and never what a callee is: a local that
 /// shadows the import answers too, which costs the producer one more question
@@ -1972,6 +1973,32 @@ impl<'a> PrimitiveImports<'a> {
                     }
                     _ => {}
                 }
+            }
+        }
+        for member in &file.ast.namespace_member_bindings {
+            let Some(module) = file
+                .ast
+                .imports
+                .iter()
+                .find(|import| {
+                    import
+                        .bindings
+                        .iter()
+                        .any(|binding| binding.local.span == member.namespace)
+                })
+                .map(|import| import.module.as_str())
+            else {
+                continue;
+            };
+            let key = member.key.as_str();
+            if vocabulary.owns_module(module)
+                && vocabulary
+                    .namespace_import_primitives(module)
+                    .contains(&key)
+                && let Some(primitive) = vocabulary.primitive(key)
+                && let Some(local) = file.source_text(member.local)
+            {
+                named.insert(local, primitive);
             }
         }
         Self {

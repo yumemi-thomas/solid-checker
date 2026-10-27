@@ -147,7 +147,9 @@ impl<'a> SemanticLookup<'a> {
                 for ((start, end), resolution) in references {
                     let declaring = &self.facts.files[resolution.file];
                     let binding = &declaring.ast.bindings[resolution.binding];
-                    if !function_valued(binding) {
+                    if !function_valued(binding)
+                        && !self.names_namespace_primitive(declaring, binding)
+                    {
                         continue;
                     }
                     let (Ok(start), Ok(end)) = (u32::try_from(*start), u32::try_from(*end)) else {
@@ -195,6 +197,34 @@ impl<'a> SemanticLookup<'a> {
             answer.sort_unstable();
             answer
         }
+    }
+
+    /// Whether a slot of `binding` holds a dialect primitive read from a
+    /// namespace import (ADR 0458): a mention of it before the declarator
+    /// ran throws rather than calling the primitive.
+    fn names_namespace_primitive(&self, file: &FileFacts, binding: &BindingFact) -> bool {
+        binding.names.iter().any(|name| {
+            file.ast.namespace_member_binding(name.span).is_some()
+                && self
+                    .entities
+                    .at(file.path.as_str(), name.span)
+                    .is_some_and(|symbol| self.symbol_names.contains_key(symbol))
+        })
+    }
+
+    /// Whether the mention `span` of a namespace member slot (ADR 0458) may
+    /// run before the slot's declarator: a call or tag there throws rather
+    /// than reaching the primitive, so it names none. Every mention of a slot
+    /// is in its own file (exported slots are not facts).
+    pub(crate) fn namespace_slot_mention_withheld(&self, file: &FileFacts, span: Span) -> bool {
+        if file.ast.namespace_member_bindings.is_empty() {
+            return false;
+        }
+        let span = file.ast.peel_ts_sugar_span(span);
+        file.ast
+            .reference_declaration(span)
+            .is_some_and(|declaration| file.ast.namespace_member_binding(declaration).is_some())
+            && self.may_precede_initialization(file.path.as_str(), span)
     }
 
     fn files_by_path_index(&self, path: &str) -> Option<usize> {
