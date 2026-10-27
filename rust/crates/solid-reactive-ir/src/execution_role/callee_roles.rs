@@ -360,9 +360,19 @@ pub(super) fn semantic_role_before_awaits(
             // callback prop) is handed to the element and runs when something
             // calls it, not in the region's tracking pass; JSX written inside
             // such a function is a region of its own, which still tracks.
-            return if regions
-                .any(|region| !attribute_function_within(file, region.span, span, lookup))
-            {
+            let reads = !classifying.contains(&write_classification_marker());
+            return if regions.any(|region| {
+                !attribute_function_within(file, region.span, span, lookup)
+                    && !(reads
+                        && unrun_closure_within(
+                            file,
+                            region.span,
+                            span,
+                            entities,
+                            symbol_names,
+                            lookup,
+                        ))
+            }) {
                 ExecutionRole::TrackedJsx
             } else {
                 ExecutionRole::Unknown
@@ -390,7 +400,11 @@ pub(super) fn semantic_role_before_awaits(
         // callback to a call not proven to invoke it there, or written as an
         // attribute value, runs when something calls it, not in the
         // callback's tracking pass (`client.subscribe(() => setX(..))`).
-        return if attribute_function_within(file, call.arguments[index].span, span, lookup) {
+        let argument = call.arguments[index].span;
+        return if attribute_function_within(file, argument, span, lookup)
+            || (!classifying.contains(&write_classification_marker())
+                && unrun_closure_within(file, argument, span, entities, symbol_names, lookup))
+        {
             ExecutionRole::Unknown
         } else {
             ExecutionRole::TrackedJsx
@@ -1311,6 +1325,7 @@ pub(super) fn callee_callback_timing_within(
                     file,
                     function,
                     Some(index),
+                    ExecutionRole::UntrackedRendering,
                     execution,
                     lookup,
                     following,

@@ -1,0 +1,3 @@
+# read-closure-in-tracked-scope
+
+**Claim.** A read in a closure a tracked scope (a memo or effect compute, a tracked JSX expression) builds takes the scope's `Tracked` role only where the closure runs in the scope's own pass: an IIFE, or a name every reference of which is a call in a tracked position. A closure returned, stored in an object, or named and referenced otherwise (`Named`, `Anonymous`, `Stored`, `NamedNeverCalled`) has no placement, so its `SC1001` read is uncertifiable instead of silently certified tracked; rc.17 warns `STRICT_READ_UNTRACKED` at that read when the component body calls the closure through the memo's value (ADR 0450; the same rule for writes: `write-named-closure-in-tracked-scope`). Stub: `createSignal` and `createMemo` shapes of rc.17.

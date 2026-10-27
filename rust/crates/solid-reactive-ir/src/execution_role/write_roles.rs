@@ -399,15 +399,12 @@ pub(super) fn semantic_write_role_walk(
     // The same holds for a closure bound to a name inside the tracked scope
     // (ADR 0450): the scope runs its construction, not its body. The closure's
     // own invocations decide, through the walk below.
-    let direct = if direct == ExecutionRole::TrackedJsx
-        && enclosed_by_named_closure_in_tracked_scope(
-            file,
-            span,
-            allowed,
-            entities,
-            symbol_names,
-            lookup,
-        ) {
+    let tracked_named = if direct == ExecutionRole::TrackedJsx {
+        named_closure_in_tracked_scope(file, span, allowed, entities, symbol_names, lookup)
+    } else {
+        None
+    };
+    let direct = if tracked_named.is_some() {
         ExecutionRole::Unknown
     } else {
         direct
@@ -455,18 +452,28 @@ pub(super) fn semantic_write_role_walk(
     let Some(innermost) = innermost else {
         return unknown;
     };
+    // ADR 0450: the named closure built in a tracked scope is entered by its
+    // calls, and the write runs with it only through layers that run in place
+    // (an IIFE, an inline standard-library callback). Any other layer keeps or
+    // schedules the write's function, whose entries are not the closure's.
+    let entry = match tracked_named {
+        Some(closure) if closure.span == innermost.span => Some(closure),
+        Some(closure) if runs_in_place_within(file, innermost, closure, lookup) => Some(closure),
+        Some(_) => return unknown,
+        None => None,
+    };
     // ADR 0327: every invocation of the writing function, followed forward
     // through the closed program, is an event delivery. No other entry exists.
-    if event_only_entries(file, innermost, lookup) {
+    if event_only_entries(file, entry.unwrap_or(innermost), lookup) {
         return ExecutionRole::EventCallback;
     }
     if visiting.contains(&lexical_only_marker()) {
         return unknown;
     }
-    let function = named.unwrap_or(innermost);
+    let function = named.or(entry).unwrap_or(innermost);
     // The write is in a closure nested in the named callback: a call of the
     // callback does not run it, so a disallowed entry proves nothing here.
-    let nested = function.span != innermost.span;
+    let nested = entry.is_none() && function.span != innermost.span;
     // A binding that may hold another function (`let reset = …; reset = …`)
     // names more than this one at its positions and calls, so none of them is
     // proof that this function runs in an owned scope.

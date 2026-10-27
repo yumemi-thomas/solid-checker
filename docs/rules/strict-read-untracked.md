@@ -97,6 +97,13 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   file); a function value is stored, not run, and stays unplaced. A prop in
   `value` follows its component's callers like any prop read
   (`fixtures/reactive-ir/provider-value-untracked`).
+- **A closure a tracked scope builds is not run by it.** A read in a closure a
+  memo or effect compute, or a tracked JSX expression, returns, stores or names
+  (`const f = () => count(); return f`) is tracked only where a call runs the
+  closure in the scope's own pass; rc.17 warns when the component body calls it
+  through the memo's value. Such a read is uncertifiable, and an IIFE or a name
+  every reference of which is a tracked call keeps the tracked role (ADR 0450;
+  `fixtures/reactive-ir/read-closure-in-tracked-scope`).
 - **`runWithOwner` clears tracking inside a computation.** It sets `tracking =
   false` around its callback and keeps the window the call had, so in an effect
   or memo compute, or a JSX expression, a read in the callback subscribes nothing
