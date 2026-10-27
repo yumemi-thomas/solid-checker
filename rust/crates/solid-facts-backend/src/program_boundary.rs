@@ -106,17 +106,20 @@ impl Seen {
         match self {
             Self::Absent(path) => fs::symlink_metadata(path).is_err(),
             Self::Stamp(path, stamp) => fs::symlink_metadata(path).is_ok_and(|metadata| {
-                !metadata.file_type().is_symlink() && stamp_of(&metadata) == *stamp
+                !metadata.file_type().is_symlink() && stamp_of(&metadata) == Some(*stamp)
             }),
             Self::Canonical(path, real) => fs::canonicalize(path).is_ok_and(|now| now == *real),
         }
     }
 }
 
+/// The daemon's file stamp of `metadata`; `None` where the platform has no
+/// change time to stamp with (a decision is then never kept).
+#[cfg(unix)]
 #[allow(clippy::cast_possible_wrap)]
-fn stamp_of(metadata: &fs::Metadata) -> [i64; 7] {
+fn stamp_of(metadata: &fs::Metadata) -> Option<[i64; 7]> {
     use std::os::unix::fs::MetadataExt;
-    [
+    Some([
         metadata.dev() as i64,
         metadata.ino() as i64,
         metadata.len() as i64,
@@ -124,7 +127,12 @@ fn stamp_of(metadata: &fs::Metadata) -> [i64; 7] {
         metadata.mtime_nsec(),
         metadata.ctime(),
         metadata.ctime_nsec(),
-    ]
+    ])
+}
+
+#[cfg(not(unix))]
+fn stamp_of(_: &fs::Metadata) -> Option<[i64; 7]> {
+    None
 }
 
 /// The decision a daemon keeps between requests while the disk still shows
@@ -604,9 +612,10 @@ impl Reads {
         match fs::symlink_metadata(path) {
             Err(_) => self.seen.push(Seen::Absent(path.to_path_buf())),
             Ok(metadata) if metadata.file_type().is_symlink() => self.cacheable = false,
-            Ok(metadata) => self
-                .seen
-                .push(Seen::Stamp(path.to_path_buf(), stamp_of(&metadata))),
+            Ok(metadata) => match stamp_of(&metadata) {
+                Some(stamp) => self.seen.push(Seen::Stamp(path.to_path_buf(), stamp)),
+                None => self.cacheable = false,
+            },
         }
     }
 
