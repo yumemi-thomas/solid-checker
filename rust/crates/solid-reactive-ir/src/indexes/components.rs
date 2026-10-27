@@ -287,35 +287,59 @@ impl<'a> SemanticLookup<'a> {
         let mut regions = self
             .escaped_component_functions()
             .iter()
-            .filter_map(|(path, span)| {
-                let file = self.file_by_path(path)?;
-                let function = file.ast.function_at(*span)?;
-                Some(crate::UndecidedRegion {
-                    body: crate::location(*path, function.body),
-                    placed_callbacks: file
-                        .ast
-                        .functions_within(function.body)
-                        .filter(|inner| {
-                            (crate::execution_role::function_placed_by_dialect(
-                                file, inner.span, self,
-                            ) && !crate::execution_role::function_runs_inline(
-                                file, inner.span, self,
-                            ))
-                                // A nested component a tag renders is a
-                                // component however this body is entered.
-                                || (self.jsx_call_site_loading(path, inner.span).any
-                                    && !self
-                                        .component_statuses_of(path)
-                                        .1
-                                        .contains(&(*path, inner.span)))
-                        })
-                        .map(|inner| crate::location(*path, inner.span))
-                        .collect(),
-                })
-            })
+            .filter_map(|(path, span)| self.undecided_region(path, *span))
             .collect::<Vec<_>>();
         regions.sort_by(|left, right| crate::location_order(&left.body, &right.body));
         regions
+    }
+
+    /// The [`crate::UndecidedRegion`] of the escaped component function at
+    /// `span` of `path`.
+    fn undecided_region(&self, path: &str, span: Span) -> Option<crate::UndecidedRegion> {
+        let file = self.file_by_path(path)?;
+        let function = file.ast.function_at(span)?;
+        Some(crate::UndecidedRegion {
+            body: crate::location(path, function.body),
+            placed_callbacks: file
+                .ast
+                .functions_within(function.body)
+                .filter(|inner| {
+                    (crate::execution_role::function_placed_by_dialect(file, inner.span, self)
+                        && !crate::execution_role::function_runs_inline(file, inner.span, self))
+                        // A nested component a tag renders is a component
+                        // however this body is entered.
+                        || (self.jsx_call_site_loading(path, inner.span).any
+                            && !self
+                                .component_statuses_of(path)
+                                .1
+                                .contains(&(path, inner.span)))
+                })
+                .map(|inner| crate::location(path, inner.span))
+                .collect(),
+        })
+    }
+
+    /// Whether `span` lies in one of [`Self::undecided_component_regions`]:
+    /// the question the backend asks of a finding's location
+    /// ([`crate::site_in_undecided_component`]), asked of a site here.
+    pub(crate) fn site_in_undecided_component(&self, file: &FileFacts, span: Span) -> bool {
+        self.escaped_component_functions()
+            .iter()
+            .filter(|(path, function)| {
+                *path == file.path.as_str()
+                    && file
+                        .ast
+                        .function_at(*function)
+                        .is_some_and(|function| function.body.contains(span))
+            })
+            .filter_map(|(path, function)| self.undecided_region(path, *function))
+            .any(|region| {
+                region.contains(
+                    file.path.as_str(),
+                    u64::from(span.start),
+                    u64::from(span.end),
+                )
+            })
     }
 
     /// Compiler-derived callability at `span`, falling back to the smallest

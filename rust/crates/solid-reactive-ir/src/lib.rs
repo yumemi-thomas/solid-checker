@@ -1333,16 +1333,27 @@ pub struct UndecidedRegion {
     pub placed_callbacks: Vec<Location>,
 }
 
+impl UndecidedRegion {
+    /// Whether the byte range `start..end` of `path` lies in the body and in
+    /// none of the placed callbacks.
+    #[must_use]
+    pub fn contains(&self, path: &str, start: u64, end: u64) -> bool {
+        let within = |location: &Location| {
+            location.path.as_ref() == path
+                && location.start_byte <= start
+                && end <= location.end_byte
+        };
+        within(&self.body) && !self.placed_callbacks.iter().any(within)
+    }
+}
+
 /// Whether the byte range `start..end` of `path` lies in one of `program`'s
 /// [`UndecidedRegion`]s: no violation claimed there is proven.
 pub fn site_in_undecided_component(program: &Program, path: &str, start: u64, end: u64) -> bool {
-    let within = |location: &Location| {
-        location.path.as_ref() == path && location.start_byte <= start && end <= location.end_byte
-    };
     program
         .undecided_component_regions
         .iter()
-        .any(|region| within(&region.body) && !region.placed_callbacks.iter().any(within))
+        .any(|region| region.contains(path, start, end))
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]

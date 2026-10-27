@@ -230,6 +230,21 @@ pub enum WriteGuardInDisposal {
     Unknown,
 }
 
+/// What a call that registers a disposal callback returns
+/// ([`Dialect::disposal_callback_returned`]).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum DisposalCallbackReturn {
+    /// The callback itself: calling the result runs it there and then, outside
+    /// the disposal (rc.17 `onCleanup`).
+    Returned,
+    /// Something that does not run the callback.
+    NotReturned,
+    /// No release that was read answers. A result the code uses may then run
+    /// the callback anywhere it is called.
+    #[default]
+    Unknown,
+}
+
 /// Invocation trigger, not an execution-role or ownership assertion. Except
 /// DuringCall, every variant needs a separate feasible-delivery premise.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]

@@ -49,3 +49,14 @@ export function EffectReturnedCleanup() {
   );
   return <div>{v()}</div>;
 }
+
+// A called handle (ADR 0456): only rc.17's bytes were read for `onCleanup`
+// returning its callback, so on this release the write is uncertifiable.
+export function CleanupHandleCalledInBody() {
+  const [v, setV] = createSignal(0);
+  const h = onCleanup(() => {
+    setV(9);
+  });
+  h();
+  return <div>{v()}</div>;
+}

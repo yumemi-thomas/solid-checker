@@ -741,6 +741,34 @@ impl Dialect for Solid2 {
         primitive == Primitive::OnCleanup && argument == 0
     }
 
+    /// Source: rc.17's `onCleanup` returns `cleanup(fn)` (`@solidjs/signals@2.0.0-rc.17`
+    /// `dist/dev.js:2377-2405`, `dist/prod/signals.js:65-67`), and `cleanup`
+    /// returns `fn` with or without an owner (`dist/dev-shared.js:1415-1421`,
+    /// `dist/prod/core/owner.js:252-256`); `solid-js` re-exports it
+    /// (`dist/solid.dev.js:2`) and its server builds return `fn` too
+    /// (`dist/server.dev.js:229-234`). Probed: `const h = onCleanup(() =>
+    /// setV(1)); h();` in a memo throws `REACTIVE_WRITE_IN_OWNED_SCOPE`.
+    ///
+    /// Only rc.17's bytes were read for this, so the answer keys on the same
+    /// read `@solidjs/signals` release as `write_guard_in_disposal`: its
+    /// `StandsDown` is exactly `Release::Read(RC17)` (`releases.rs`). Every
+    /// other release, read for other questions or not, answers `Unknown`. No
+    /// vocabulary digit of its own: one would double the variant table.
+    fn disposal_callback_returned(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> crate::DisposalCallbackReturn {
+        if primitive == Primitive::OnCleanup
+            && argument == 0
+            && self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown
+        {
+            crate::DisposalCallbackReturn::Returned
+        } else {
+            crate::DisposalCallbackReturn::Unknown
+        }
+    }
+
     /// Source: a rerun of an effect calls the cleanup its apply returned
     /// outside `runDisposal`'s bracket (probed on rc.17: a signal setter in it
     /// throws), and only the final teardown raises the depth for it

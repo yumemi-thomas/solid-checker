@@ -1001,7 +1001,9 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
         hydrate_code_inline: matches!(web, Release::Read(n) if n < RC17),
         // rc.17 added `!disposalDepth` to the three write guards (the rc.17
         // review C4); the read releases before it have none. A release nobody
-        // read answers nothing.
+        // read answers nothing. `disposal_callback_returned` keys on this
+        // digit too (rc.17's `onCleanup` returns its callback): a newly read
+        // release that stands down must re-read `onCleanup`'s return.
         disposal_write_guard: match signals {
             Release::Read(RC17) => WriteGuardInDisposal::StandsDown,
             Release::Read(_) => WriteGuardInDisposal::Rejects,
