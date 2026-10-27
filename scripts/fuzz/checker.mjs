@@ -7,36 +7,28 @@
 // Uncertifiable is an internal result (ADR 0328); here it means "the checker said
 // nothing it can prove", which is never evidence either way.
 import { spawn } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ignoredRules } from "./codes.mjs";
 import { tsconfigFor } from "./typecheck.mjs";
 
-/** The oracle's entry for a case with no behavioural observation (scripts/runtime-oracle.mjs `mainSource([])`). */
-export const MAIN_SOURCE = `import { render } from "@solidjs/web";
-import * as mod from "./App";
-
-// Each exported component is rendered as a component, so Solid creates it the
-// way an application does, with the component's strict-read window open, and
-// in its own root, so one component's failure does not hide the others.
-const root = document.getElementById("root")!;
-for (const [name, value] of Object.entries(mod as Record<string, unknown>)) {
-  if (typeof value !== "function" || !(name === "default" || /^[A-Z]/.test(name))) continue;
-  const Component = value as (props: {}) => any;
-  const host = document.createElement("section");
-  host.dataset.export = name;
-  root.append(host);
-  try {
-    render(() => <Component />, host);
-  } catch (error) {
-    console.error("render failed", name, error);
-    // Rethrown from a timer, so the uncaught error reaches the feedback run's
-    // source mapping as a runtime exception (ADR 0352); the others still render.
-    setTimeout(() => { throw error; });
-  }
+/**
+ * The oracle's entry for a case with no behavioural observation: `mainSource([])` of scripts/runtime-oracle.mjs, read from
+ * that file so it cannot drift. It renders every exported component and then drives the page with synchronous DOM events;
+ * the checker reads that driver (ADR 0435: a synchronous dispatch withholds event-handler owner proofs), so a verdict
+ * computed without it is not the verdict Chrome's run sees.
+ */
+export function oracleMainSource(oracleText = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../runtime-oracle.mjs"), "utf8")) {
+  const open = "const mainSource = ";
+  const start = oracleText.indexOf(open);
+  const end = oracleText.indexOf("\n`;", start);
+  if (start < 0 || end < 0) throw new Error("scripts/runtime-oracle.mjs no longer defines mainSource as a template literal");
+  // eslint-disable-next-line no-new-func
+  // `behaviourProbe` is "" without observations (scripts/runtime-oracle.mjs: `if (!observations.length) return ""`).
+  return new Function("behaviourProbe", `return (${oracleText.slice(start + open.length, end + 2)});`)(() => "")([]);
 }
-`;
+export const MAIN_SOURCE = oracleMainSource();
 
 /** Where checker cases live: inside the install, which the oracle's own cases also use. */
 export const checkerWorkDir = (install, id) => join(resolve(install), ".solid-checker-fuzz", id);
