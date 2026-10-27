@@ -39,7 +39,7 @@ export function scenarioSteps(plan, sites, { hits = false } = {}) {
 }
 
 export function buildCase(program, { id = `fuzz-${program.seed}`, note } = {}) {
-  const { text, runText, sites, glue, ledger } = printProgram(program);
+  const { text, runText, sites, glue, ledger, lineTable } = printProgram(program);
   const plan = drivingPlan(program);
   const steps = scenarioSteps(plan, sites);
   const runSteps = scenarioSteps(plan, sites, { hits: true });
@@ -47,7 +47,7 @@ export function buildCase(program, { id = `fuzz-${program.seed}`, note } = {}) {
   const neutral = stripInstrumentation(runText) === text;
   const description = note ?? `differential fuzzer, generator ${GENERATOR_VERSION}, seed ${program.seed}`;
   return {
-    id, text, runText, sites, glue, ledger, plan, neutral,
+    id, text, runText, sites, glue, ledger, lineTable, plan, neutral,
     files: {
       "App.tsx": text,
       "App.run.txt": runText,
