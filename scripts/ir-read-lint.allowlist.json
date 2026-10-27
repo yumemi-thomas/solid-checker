@@ -254,7 +254,7 @@
   },
   "rust/crates/solid-reactive-ir/src/reachability.rs": {
     "facts.files": 8,
-    "hashmap-iteration": 3
+    "hashmap-iteration": 2
   },
   "rust/crates/solid-reactive-ir/src/reactive_analysis.rs": {
     "facts.files": 1,

@@ -144,6 +144,11 @@ export function BodyCallsOmitted() {
 export function ComponentOwnDefault(props: {}, m: unknown = onCleanup(() => {})) {
   return <div>{String(m)}</div>;
 }
+// A function literal invoked in the component's own list is legal (owned) and
+// uncertifiable all the same, a cost: the invocation is an edge with no source.
+export function ComponentOwnIifeDefault(props: {}, m: unknown = (() => onCleanup(() => {}))()) {
+  return <div>{String(m)}</div>;
+}
 // Positive control: a cleanup directly in a handler body has no owner.
 export function HandlerBody() {
   return (

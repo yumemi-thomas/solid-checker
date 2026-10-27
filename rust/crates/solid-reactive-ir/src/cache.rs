@@ -581,6 +581,10 @@ pub(crate) struct CachedReachabilityFile {
     pub(crate) callback_edges: Vec<(Option<Span>, Vec<ReachabilityTarget>)>,
     pub(crate) call_owners: Vec<Option<Span>>,
     pub(crate) call_owner_indices: Vec<Option<usize>>,
+    /// The function whose parameter list holds each call, when it is not the
+    /// call's body owner (ADR 0454); its reach is added to the body owner's.
+    pub(crate) list_call_owners: Vec<Option<Span>>,
+    pub(crate) list_call_owner_indices: Vec<Option<usize>>,
     pub(crate) topology: ReachabilityTopology,
 }
 

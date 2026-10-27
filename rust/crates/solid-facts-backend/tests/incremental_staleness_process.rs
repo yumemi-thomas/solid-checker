@@ -1172,9 +1172,12 @@ fn a_call_that_moves_between_a_body_and_a_parameter_list_moves_the_unedited_call
         return;
     };
     assert_eq!(
-        [moved[0], moved[1], moved[3], moved[4]],
-        [true; 4],
-        "body against a closure's list must move the caller's answer: {moved:?}"
+        // The own list and the closure's list are both uncertifiable now
+        // (the own list's read was silent), so only the moves to and from the
+        // body are asserted.
+        [moved[0], moved[1], moved[4]],
+        [true; 3],
+        "body against a list must move the caller's answer: {moved:?}"
     );
 }
 
@@ -1202,5 +1205,33 @@ fn a_cleanup_that_moves_between_a_body_and_a_parameter_list_moves_the_owner_answ
     assert_eq!(
         moved, [true; 3],
         "a cleanup in a list is no unowned call of the handler's"
+    );
+}
+
+/// ADR 0454, reachability and the summary graph: a write that moves between a
+/// module function's body and its parameter list, called from a memo in an
+/// unedited file, moves the caller's answer (a violation in the body,
+/// uncertifiable in the list; the list's was silent), and the kept
+/// reachability follows in both directions.
+const REACH_CALLER: &str = "import { createMemo } from \"solid-js\";\nimport { listWrite } from \"./helper\";\nexport function M() {\n  const m = createMemo(() => {\n    listWrite();\n    return 1;\n  });\n  return <div>{m()}</div>;\n}\n";
+const REACH_BODY_HELPER: &str = "import { createSignal } from \"solid-js\";\nconst [, setCount] = createSignal(0);\nexport function listWrite(x: unknown = 0) {\n  setCount(1);\n  return x;\n}\n";
+const REACH_LIST_HELPER: &str = "import { createSignal } from \"solid-js\";\nconst [, setCount] = createSignal(0);\nexport function listWrite(x: unknown = setCount(1)) {\n  return x;\n}\n";
+
+#[test]
+fn a_write_that_moves_between_a_module_functions_body_and_list_moves_the_caller() {
+    let Some(moved) = retained_through_edits(
+        "parameter-list-owner-reach",
+        &[("helper.ts", REACH_BODY_HELPER), ("App.tsx", REACH_CALLER)],
+        &[
+            ("helper.ts", REACH_LIST_HELPER),
+            ("helper.ts", REACH_BODY_HELPER),
+            ("helper.ts", REACH_LIST_HELPER),
+        ],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        moved, [true; 3],
+        "a write in a list is no write in the body"
     );
 }

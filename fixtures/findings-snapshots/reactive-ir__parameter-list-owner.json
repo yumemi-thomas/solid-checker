@@ -172,6 +172,26 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-list-owner/App.tsx",
+      "start": 5920,
+      "end": 5937,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-list-owner/App.tsx",
+      "start": 6035,
+      "end": 6055,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -199,6 +219,96 @@
       "path": "fixtures/reactive-ir/parameter-list-owner/App.tsx",
       "start": 6820,
       "end": 6827,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Module.tsx",
+      "start": 493,
+      "end": 504,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Module.tsx",
+      "start": 657,
+      "end": 668,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Module.tsx",
+      "start": 862,
+      "end": 873,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Module.tsx",
+      "start": 1092,
+      "end": 1103,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Module.tsx",
+      "start": 1301,
+      "end": 1311,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Module.tsx",
+      "start": 1443,
+      "end": 1452,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Module.tsx",
+      "start": 1583,
+      "end": 1587,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Module.tsx",
+      "start": 1778,
+      "end": 1788,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Module.tsx",
+      "start": 1988,
+      "end": 1995,
       "fixes": 0
     },
     {
@@ -314,11 +424,21 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 3450,
+      "end": 3459,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
-      "start": 3377,
-      "end": 3386,
+      "start": 3669,
+      "end": 3678,
       "fixes": 0
     },
     {
@@ -327,8 +447,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
-      "start": 3752,
-      "end": 3761,
+      "start": 4044,
+      "end": 4053,
       "fixes": 0
     },
     {
@@ -337,8 +457,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
-      "start": 3869,
-      "end": 3878,
+      "start": 4161,
+      "end": 4170,
       "fixes": 1
     }
   ]
