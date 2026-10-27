@@ -1,5 +1,5 @@
 {
-  "note": "ADR 0455: runWithOwner(null, fn) runs fn with no owner, so a write it runs lands whatever function it sits in (an IIFE, forEach, untrack, a memo or effect compute around the call). SC2001 reported the in-place layers; rc.17 throws nothing and the counters, bumped after the write, are 1. The controls (a created owner, a component's getOwner(), a bound createOwner() result) throw REACTIVE_WRITE_IN_OWNED_SCOPE and their dev diagnostics are covered.",
+  "note": "ADR 0455: runWithOwner(null, fn) runs fn with no owner, so a write it runs lands whatever function it sits in (an IIFE, forEach, untrack, a memo or effect compute around the call). SC2001 reported the in-place layers; rc.17 throws nothing and the counters, bumped after the write, are 1. The controls (a created owner, a component's getOwner() and a bound createOwner() result, an IIFE or direct write; an IIFE or forEach in an untrack callback) throw REACTIVE_WRITE_IN_OWNED_SCOPE and their dev diagnostics are covered, by a violation where the owner is proven and an uncertifiable result where it is not.",
   "behaviour": [
     {
       "rule": "no-write-in-pure-computation",

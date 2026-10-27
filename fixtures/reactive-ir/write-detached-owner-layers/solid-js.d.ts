@@ -1,5 +1,6 @@
 declare namespace JSX {
   interface IntrinsicElements {
+    button: { onClick?: () => void };
     div: {};
   }
 }

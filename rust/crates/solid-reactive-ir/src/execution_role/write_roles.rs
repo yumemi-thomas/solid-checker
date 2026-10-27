@@ -182,16 +182,26 @@ pub(super) fn write_region_adjustment(
         .or_else(|| nested_in_leaf_scope(file, span, lookup))
 }
 
-/// What a callback that runs `span` in place says about its owner when it is
-/// written in a function the callback runs in place or hands to a call that
-/// keeps its owner and runs it during the call (`untrack`): the callback is one
-/// its call runs with no owner (`runWithOwner(null, fn)`, [`WriteRegionAdjustment::Detached`]),
-/// or with an owner that is data ([`WriteRegionAdjustment::OwnerUnknown`]).
-/// Every layer between must run on the callback's stack ([`layer_run`]: an
-/// IIFE, an inline standard-library callback), so the owner the call gives
-/// reaches the write; a layer that stores the function, hands it to an unknown
-/// call or runs it on a fresh stack ends the climb. A write directly in the
-/// callback is the role pipeline's (ADR 0455).
+/// What the owner of the callback that runs `span` says about the write, when
+/// the callback is one its call runs during the call, with the call's window
+/// ([`solid_dialect::Dialect::callback_inherits_calling_window`]: `runWithOwner`)
+/// and `span` is written in it, in a function it runs in place, or in one it
+/// hands to a call that keeps the owner and runs it during the call (`untrack`).
+/// Every layer between must run on the callback's stack ([`layer_run`]: an IIFE,
+/// an inline standard-library callback), so the owner the call gives reaches the
+/// write; a layer that stores the function, hands it to an unknown call or runs
+/// it on a fresh stack ends the climb.
+///
+/// - owner `None` (`runWithOwner(null, fn)`): [`WriteRegionAdjustment::Detached`];
+/// - owner `Creates` (`createOwner()`, a component's `getOwner()`): the owner is
+///   a root whenever the callback runs, as in a created root
+///   ([`WriteRegionAdjustment::CreatedRoot`]);
+/// - owner `Conditional` (may be null, or not proven non-null):
+///   [`WriteRegionAdjustment::OwnerUnknown`].
+///
+/// When the climb ends at no such callback after crossing a layer and then a
+/// call that keeps the owner, the write is as legal as at that call
+/// ([`WriteRegionAdjustment::CallSite`]), as it is directly in the callback.
 fn detached_in_place(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -199,12 +209,20 @@ fn detached_in_place(
 ) -> Option<WriteRegionAdjustment> {
     let mut at = span;
     let mut layered = false;
+    // Whether a layer on the way holds the site in its parameter list: it runs
+    // only when its call omits the argument, which nothing here proves.
+    let mut in_list = false;
+    // The innermost owner-keeping call, when a layer lies between it and `span`.
+    let mut first_hop = None;
     // Bounded: each step moves to the call that holds the previous function.
     for _ in 0..16 {
-        let function = crate::owners::owning_function(&file.ast, at)?;
+        let Some(function) = crate::owners::owning_function(&file.ast, at) else {
+            break;
+        };
         if function.generator {
-            return None;
+            break;
         }
+        in_list |= !function.body.contains(at);
         let primitive_call = file
             .ast
             .arguments_containing(function.span)
@@ -218,14 +236,21 @@ fn detached_in_place(
             });
         if let Some((call, index, primitive)) = primitive_call {
             let execution = callback_execution_at_call(file, call, primitive, index, lookup);
-            if execution == Some(Execution::Inline) {
+            if execution == Some(Execution::Inline)
+                && lookup
+                    .dialect
+                    .callback_inherits_calling_window(primitive, index)
+            {
                 match callback_owner_at_call(file, call, primitive, index, lookup) {
                     Some(solid_dialect::CallbackOwner::None) => {
                         return Some(WriteRegionAdjustment::Detached);
                     }
-                    Some(solid_dialect::CallbackOwner::Conditional)
-                        if layered && primitive == Primitive::RunWithOwner && index == 1 =>
-                    {
+                    // A site in a list is no proof the write runs under the root.
+                    Some(solid_dialect::CallbackOwner::Creates) if !in_list => {
+                        return Some(WriteRegionAdjustment::CreatedRoot);
+                    }
+                    Some(solid_dialect::CallbackOwner::Creates) => return None,
+                    Some(solid_dialect::CallbackOwner::Conditional) => {
                         return Some(WriteRegionAdjustment::OwnerUnknown);
                     }
                     _ => {}
@@ -236,19 +261,26 @@ fn detached_in_place(
                     .dialect
                     .callback_preserves_owner_write_context(primitive)
             {
+                // A write directly in the owner-keeping callback is
+                // `write_region_adjustment`'s own question, asked at the call.
+                if !layered {
+                    break;
+                }
+                first_hop.get_or_insert(call.span);
                 at = call.span;
-                layered = true;
                 continue;
             }
-            return None;
+            break;
         }
         match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) => at = call,
-            LayerRun::FreshStack | LayerRun::Elsewhere => return None,
+            LayerRun::FreshStack | LayerRun::Elsewhere => break,
         }
         layered = true;
     }
-    None
+    first_hop
+        .filter(|_| !in_list)
+        .map(WriteRegionAdjustment::CallSite)
 }
 
 /// A closure nested in a leaf callback (`createTrackedEffect`, `onSettled`):

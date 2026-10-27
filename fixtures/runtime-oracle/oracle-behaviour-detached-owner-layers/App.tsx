@@ -146,3 +146,50 @@ export function BoundOwnerIife() {
   });
   return <p>{v()}</p>;
 }
+
+// Controls, continued: the same owners reach a write directly in the callback,
+// and `untrack` keeps the component's owner for a function it runs in place.
+export function ComponentOwnerDirect() {
+  const [v, setV] = createSignal(0);
+  const owner = getOwner();
+  runWithOwner(owner, () => {
+    setV(1);
+  });
+  return <p>{v()}</p>;
+}
+export function CreatedOwnerDirect() {
+  const [v, setV] = createSignal(0);
+  runWithOwner(createOwner(), () => {
+    setV(1);
+  });
+  return <p>{v()}</p>;
+}
+export function BoundOwnerDirect() {
+  const [v, setV] = createSignal(0);
+  const owner = createOwner();
+  runWithOwner(owner, () => {
+    setV(1);
+  });
+  return <p>{v()}</p>;
+}
+export function UntrackIife() {
+  const [v, setV] = createSignal(0);
+  untrack(() => {
+    (() => {
+      setV(1);
+    })();
+  });
+  return <p>{v()}</p>;
+}
+export function UntrackForEachInMemo() {
+  const [v, setV] = createSignal(0);
+  const m = createMemo(() => {
+    untrack(() => {
+      [1].forEach(() => {
+        setV(1);
+      });
+    });
+    return 1;
+  });
+  return <p>{v()}{m()}</p>;
+}
