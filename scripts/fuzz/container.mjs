@@ -42,6 +42,19 @@ const statementLists = (root) => {
 
 const plainCallee = (callee) => callee.k === "ref" || (callee.k === "member" && plainCallee(callee.obj));
 
+/** The kinds a container around a cleanup handle's call is drawn from: the places the handle's callback is called from, or never. */
+export const HANDLE_KIND_WEIGHTS = [
+  [3, "comp-never"], [1, "comp-rendered"], [1, "comp-slot"], [2, "comp-prop"], [1, "comp-returned"],
+  [5, "class-field"], [1, "class-static"], [1, "class-sblock"], [2, "class-method"], [2, "class-ctor"],
+  [1, "dead-if"], [1, "dead-after-return"], [1, "dead-fn"], [1, "and-true"], [1, "and-false"],
+];
+
+/** The statements that call a cleanup handle (`const h = onCleanup(...)`, then `h()`). */
+function handleCalls(component) {
+  const handles = new Set([...walk(component)].filter(({ node }) => node.k === "decl" && node.e.k === "own" && node.e.op === "cleanup" && node.e.handle).map(({ node }) => node.name));
+  return (stmt) => stmt.k === "expr" && stmt.e.k === "call" && stmt.e.callee.k === "ref" && handles.has(stmt.e.callee.name);
+}
+
 /** How interesting a statement is to wrap: a call of a name (a cleanup handle) and the scopes it opens first. */
 function interest(stmt) {
   const e = stmt.e;
@@ -55,17 +68,21 @@ function interest(stmt) {
  * a program without containers is the program it always was.
  * @param {{ counters: object }} ctx
  * @param {object} component
- * @param {{ rng: object, kinds?: [number, string][], count?: [number, number][] }} options
+ * @param {{ rng: object, kinds?: [number, string][], count?: [number, number][], focus?: boolean }} options
  */
-export function applyContainers(ctx, component, { rng, kinds = KIND_WEIGHTS, count = [[2, 0], [5, 1], [3, 2]] } = {}) {
+export function applyContainers(ctx, component, { rng, kinds = KIND_WEIGHTS, count = [[2, 0], [5, 1], [3, 2]], focus = false } = {}) {
   const next = (key) => { ctx.counters[key] = (ctx.counters[key] ?? 0) + 1; return ctx.counters[key]; };
   const wanted = rng.weighted(count);
   for (let made = 0; made < wanted; made += 1) {
     const candidates = [];
     for (const list of statementLists(component)) list.forEach((stmt, index) => { if (stmt.k === "expr") candidates.push({ list, stmt, index, weight: interest(stmt) }); });
     if (!candidates.length) break;
-    const chosen = rng.weighted(candidates.map((entry) => [entry.weight, entry]));
-    const kind = rng.weighted(kinds);
+    // `focus`: the first container goes around a cleanup handle's call when there is one, six times in ten.
+    const isHandleCall = focus ? handleCalls(component) : () => false;
+    const focused = made === 0 && candidates.filter((entry) => isHandleCall(entry.stmt));
+    const aimed = focused && focused.length && rng.chance(0.6);
+    const chosen = aimed ? rng.pick(focused) : rng.weighted(candidates.map((entry) => [entry.weight, entry]));
+    const kind = rng.weighted(aimed ? HANDLE_KIND_WEIGHTS : kinds);
     wrapAt(chosen.list, chosen.index, kind, next("container"), {
       take: list2(chosen.list, chosen.index) && rng.chance(0.2) ? 2 : 1,
       async: ASYNC_KINDS.has(kind) && rng.chance(0.35), gap: rng.chance(0.5) ? "before" : "after", returns: rng.chance(0.25) ? "null" : "jsx", use: USES[kind] ? rng.pick(USES[kind]) : null,

@@ -38,7 +38,7 @@ describe("the containers profile", () => {
     const forms = {
       memo: /createMemo\(cb\d+\)/, effectCompute: /createEffect\(cb\d+, /, effectApply: /createEffect\(.*, cb\d+\)/, root: /createRoot\(cb\d+\)/,
       owner: /runWithOwner\((owner|null|createOwner\(\)), cb\d+\)/, untrack: /untrack\(cb\d+\)/, cleanup: /onCleanup\(cb\d+\)/, settled: /onSettled\(cb\d+\)/,
-      timer: /setTimeout\(cb\d+, 0\)/, then: /\.then\(cb\d+\)/, micro: /queueMicrotask\(cb\d+\)/, forEach: /\.forEach\(cb\d+\)/, helper: /\bh\d+\(cb\d+\)/,
+      timer: /setTimeout\(cb\d+, 0\)/, then: /\.then\(cb\d+\)/, micro: /queueMicrotask\(cb\d+\)/, forEach: /\.forEach\(cb\d+\)/, helper: /\bhf\d+\(cb\d+\)/,
       let: /^\s+let cb\d+ = /m, declaration: /^\s+function cb\d+\(\) /m,
     };
     for (const [name, pattern] of Object.entries(forms)) expect(pattern.test(text), name).toBe(true);
