@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { configFrom, defaultParallelism, parseArgs } from "./run.mjs";
+import { configFrom, defaultParallelism, defaultWorkers, parseArgs } from "./run.mjs";
 
 describe("parseArgs", () => {
   it("has defaults", () => {
@@ -28,5 +28,11 @@ describe("parallelism", () => {
     const half = configFrom(parseArgs([]), "out");
     expect(all.concurrency).toBeGreaterThanOrEqual(half.concurrency);
     expect(configFrom(parseArgs(["--all-cores", "--workers", "2"]), "out").workers).toBe(2);
+  });
+  it("gives the Vitest workers twice the cores while programs sleep on timers, one a core on the virtual clock", () => {
+    expect(defaultWorkers(14)).toBe(28);
+    expect(defaultWorkers(14, { virtualClock: true })).toBe(14);
+    expect(defaultWorkers(1, { virtualClock: true })).toBe(1);
+    expect(configFrom(parseArgs(["--workers", "5"]), "out").workers).toBe(5);
   });
 });
