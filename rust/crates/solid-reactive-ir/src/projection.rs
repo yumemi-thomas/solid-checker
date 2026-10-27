@@ -572,12 +572,7 @@ pub fn project_findings(
         program
             .reads
             .iter()
-            .filter(|read| {
-                (read.execution.reports_untracked_read() || read.execution.reports_unplaced())
-                    && !read.project_consumer_non_strict
-                    && (capabilities.module_scope_strict_reads
-                        || read.execution != crate::ExecutionRole::ModuleInitialization)
-            })
+            .filter(|read| read_reported(read, capabilities))
             .map(|read| {
                 project_finding(
                     FindingSeed::StrictRead {
@@ -592,13 +587,7 @@ pub fn project_findings(
         program
             .writes
             .iter()
-            .filter(|write| {
-                write.owned_write != crate::OwnedWriteOption::On
-                    && (write.execution.reports_disallowed_write()
-                        || write.execution.reports_unplaced())
-                    && (capabilities.untracked_rendering_writes
-                        || write.execution != crate::ExecutionRole::UntrackedRendering)
-            })
+            .filter(|write| write_reported(write, capabilities))
             .map(|write| project_finding(FindingSeed::OwnedWrite(write), catalog)),
     );
     if capabilities.leaf_operations {
@@ -641,50 +630,7 @@ pub fn project_findings(
             program
                 .async_reads
                 .iter()
-                .filter(|read| {
-                    // Deletion first, ahead of the leaf-owner short-circuit
-                    // below. Every clause after this one is a claim about a
-                    // read that happens -- "a pending read here throws at
-                    // runtime", "this read needs a Loading boundary" -- and a
-                    // read the compiler deleted happens in neither compiler's
-                    // output. Ordered rather than merged into the clauses
-                    // because `read.leaf_owner.is_some()` short-circuits ahead
-                    // of every role test: a leaf-owned async read inside a
-                    // deleted value would have been reported on the strength of
-                    // the leaf owner alone, with reachability unproven.
-                    //
-                    // Defensive as much as reachable: with the leaf-owner pass
-                    // itself now gated on discarded regions (`cleanup.rs`), the
-                    // `leaf_owner.is_some()` route into this is not known to be
-                    // constructible from a fixture. The gate stays because the
-                    // ordering, not the reachability, is what was wrong.
-                    if read.execution == crate::ExecutionRole::DiscardedRendering {
-                        return false;
-                    }
-                    // Pending-read rules (SC5001/SC5002) need proven async
-                    // provenance; they stay reported for loadingValue-declared
-                    // sources because the declared window ends at the first
-                    // real answer (probed, rc.0) — the catalog words them
-                    // conditionally.
-                    if read.async_provenance
-                        && (read.leaf_owner.is_some()
-                            || read.execution == crate::ExecutionRole::ModuleInitialization
-                            || read.execution == crate::ExecutionRole::UntrackedRendering)
-                    {
-                        return true;
-                    }
-                    // Tracked JSX outside a Loading boundary: the SSR client
-                    // hole (SC5005, error — it subsumes the SC5003 warning on
-                    // the same read), or the informational boundary warning
-                    // (SC5003) — suppressed for declared-first-paint sources,
-                    // whose whole point is to not need a boundary.
-                    read.leaf_owner.is_none()
-                        && read.execution == crate::ExecutionRole::TrackedJsx
-                        && !read.under_loading
-                        && (read.ssr_client_hole
-                            || read.server_rendering_unresolved
-                            || (read.async_provenance && !read.declared_loading))
-                })
+                .filter(|read| async_read_reported(read))
                 .map(|read| project_finding(FindingSeed::AsyncRead(read), catalog)),
         );
     }
@@ -693,10 +639,7 @@ pub fn project_findings(
             program
                 .actions
                 .iter()
-                .filter(|action| {
-                    action.execution.reports_disallowed_write()
-                        || action.execution.reports_unplaced()
-                })
+                .filter(|action| action_reported(action))
                 .map(|action| project_finding(FindingSeed::Action(action), catalog)),
         );
     }
@@ -707,6 +650,125 @@ pub fn project_findings(
         }
     }
     finish_findings(findings, total_started, construction_started)
+}
+
+fn read_reported(read: &crate::ReactiveRead, capabilities: CatalogCapabilities) -> bool {
+    (read.execution.reports_untracked_read() || read.execution.reports_unplaced())
+        && !read.project_consumer_non_strict
+        && (capabilities.module_scope_strict_reads
+            || read.execution != crate::ExecutionRole::ModuleInitialization)
+}
+
+fn write_reported(write: &crate::ReactiveWrite, capabilities: CatalogCapabilities) -> bool {
+    write.owned_write != crate::OwnedWriteOption::On
+        && (write.execution.reports_disallowed_write() || write.execution.reports_unplaced())
+        && (capabilities.untracked_rendering_writes
+            || write.execution != crate::ExecutionRole::UntrackedRendering)
+}
+
+fn action_reported(action: &crate::ActionInvocation) -> bool {
+    action.execution.reports_disallowed_write() || action.execution.reports_unplaced()
+}
+
+fn async_read_reported(read: &crate::AsyncRead) -> bool {
+    // Deletion first, ahead of the leaf-owner short-circuit
+    // below. Every clause after this one is a claim about a
+    // read that happens -- "a pending read here throws at
+    // runtime", "this read needs a Loading boundary" -- and a
+    // read the compiler deleted happens in neither compiler's
+    // output. Ordered rather than merged into the clauses
+    // because `read.leaf_owner.is_some()` short-circuits ahead
+    // of every role test: a leaf-owned async read inside a
+    // deleted value would have been reported on the strength of
+    // the leaf owner alone, with reachability unproven.
+    //
+    // Defensive as much as reachable: with the leaf-owner pass
+    // itself now gated on discarded regions (`cleanup.rs`), the
+    // `leaf_owner.is_some()` route into this is not known to be
+    // constructible from a fixture. The gate stays because the
+    // ordering, not the reachability, is what was wrong.
+    if read.execution == crate::ExecutionRole::DiscardedRendering {
+        return false;
+    }
+    // Pending-read rules (SC5001/SC5002) need proven async
+    // provenance; they stay reported for loadingValue-declared
+    // sources because the declared window ends at the first
+    // real answer (probed, rc.0) — the catalog words them
+    // conditionally.
+    if read.async_provenance
+        && (read.leaf_owner.is_some()
+            || read.execution == crate::ExecutionRole::ModuleInitialization
+            || read.execution == crate::ExecutionRole::UntrackedRendering)
+    {
+        return true;
+    }
+    // Tracked JSX outside a Loading boundary: the SSR client
+    // hole (SC5005, error — it subsumes the SC5003 warning on
+    // the same read), or the informational boundary warning
+    // (SC5003) — suppressed for declared-first-paint sources,
+    // whose whole point is to not need a boundary.
+    read.leaf_owner.is_none()
+        && read.execution == crate::ExecutionRole::TrackedJsx
+        && !read.under_loading
+        && (read.ssr_client_hole
+            || read.server_rendering_unresolved
+            || (read.async_provenance && !read.declared_loading))
+}
+
+/// The primary location of every row [`project_findings`] may turn into a
+/// finding, under any catalog's capabilities (the union of what each one
+/// reports): the sites ADR 0458's reachability is asked of.
+pub(crate) fn reported_locations(program: &Program) -> Vec<&Location> {
+    let every = CatalogCapabilities {
+        actions: true,
+        async_reads: true,
+        leaf_operations: true,
+        directive_creations: true,
+        untracked_rendering_writes: true,
+        module_scope_strict_reads: true,
+        handler_expression_owns_strict_read: true,
+    };
+    let mut locations = Vec::new();
+    locations.extend(
+        program
+            .reads
+            .iter()
+            .filter(|read| read_reported(read, every))
+            .map(|read| &read.location),
+    );
+    locations.extend(
+        program
+            .writes
+            .iter()
+            .filter(|write| write_reported(write, every))
+            .map(|write| &write.location),
+    );
+    locations.extend(program.leaf_operations.iter().map(|row| &row.location));
+    locations.extend(program.static_defects.iter().map(|row| &row.location));
+    locations.extend(program.static_violations.iter().map(|row| &row.location));
+    locations.extend(program.directive_creations.iter().map(|row| &row.location));
+    locations.extend(
+        program
+            .missing_owners
+            .iter()
+            .filter(|requirement| requirement.report)
+            .map(|requirement| &requirement.location),
+    );
+    locations.extend(
+        program
+            .async_reads
+            .iter()
+            .filter(|read| async_read_reported(read))
+            .map(|read| &read.location),
+    );
+    locations.extend(
+        program
+            .actions
+            .iter()
+            .filter(|action| action_reported(action))
+            .map(|action| &action.location),
+    );
+    locations
 }
 
 /// Removes SC1001 findings already owned by a more specific finding that

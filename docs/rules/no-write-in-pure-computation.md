@@ -260,6 +260,10 @@ member the callback builds, are uncertifiable, and so is every called handle on
 a release whose `onCleanup` was not read (ADR 0456,
 `fixtures/reactive-ir/write-cleanup-handle-call`).
 
+A write no execution reaches (`false && setV(1)`, after a `return`, in a
+closure only an unreferenced child calls) is uncertifiable (ADR 0458,
+`fixtures/reactive-ir/dead-code-sites`).
+
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.
 

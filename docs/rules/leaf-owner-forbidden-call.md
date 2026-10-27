@@ -51,6 +51,10 @@ also reported as `missing-owner` (SC4001), which claims only a cleanup that neve
 runs: one in an `onSettled` callback queued with no owner, or with an owner that
 may be absent (ADR 0347).
 
+A site no execution reaches is uncertifiable (ADR 0458). Not yet: a site in a
+tracked-effect body whose every creation is inside an owned leaf body, where
+the creation itself throws first (`docs/open-work.md`).
+
 ## Examples
 
 Incorrect:

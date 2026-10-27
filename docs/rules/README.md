@@ -120,6 +120,16 @@ retired identities load as no-ops through `RETIRED_RULES`, both in
 not prove, ADR 0441) and `unknown-suppression-rule` can produce
 uncertifiable results. Their pages name the missing evidence and remediation.
 
+## Code no execution reaches
+
+A violation at a site no execution reaches is uncertifiable, whatever the rule
+([ADR 0458](../decisions.md#adr-0458)): the right of `false &&`, an
+`if (false)` arm, code after a `return` or `throw` in the same block, or a
+function nothing that runs calls, renders or names (also one an IIFE returns
+into a discarded result, and a method of a class nothing names). A function at
+module scope, and any value handed on, may run. Style rules (SC80xx) and
+`flush-in-effect-callback` (SC2008) are unaffected.
+
 ## Obligations
 
 An obligation is an internal uncertifiable result ([ADR 0328](../decisions.md#adr-0328)):
