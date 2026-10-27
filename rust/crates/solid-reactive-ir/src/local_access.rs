@@ -1466,11 +1466,11 @@ impl LocalAccessContext<'_, '_> {
             // dropped the root exemption (rc.9). In dev a component body
             // runs under a root too, so the same answer covers it.
             let root_body = match source_kind {
-                ReactiveSourceKind::Accessor => RootBodyGuard::Rejects,
+                ReactiveSourceKind::Accessor => RootBodyGuard::RejectsOutsideDisposal,
                 ReactiveSourceKind::Store
                     if !self.lookup.dialect.store_setter_guard_exempts_roots() =>
                 {
-                    RootBodyGuard::Rejects
+                    RootBodyGuard::RejectsOutsideDisposal
                 }
                 ReactiveSourceKind::Store => RootBodyGuard::Exempts,
             };

@@ -462,6 +462,27 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the callback at `argument` runs only while the runtime disposes
+    /// an owner: a cleanup registrar's callback (`onCleanup`), which the
+    /// engine's `runDisposal` calls with its disposal depth raised. A callback
+    /// that also runs outside a disposal (an effect's returned cleanup, which a
+    /// rerun calls outside `runDisposal`'s bracket) is not one. 1.x has no such
+    /// question, so the default is `false`.
+    fn callback_runs_only_in_disposal(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// Whether the dev owned-scope write guards (signal and store setters,
+    /// `refresh`) still throw while the runtime disposes an owner. `true` is the
+    /// answer that keeps a write reported there; a release whose guards test
+    /// `!disposalDepth` answers `false`, and so does one the dialect has not
+    /// read, which reports nothing. An action call's guard is no such guard and
+    /// never stands down.
+    fn write_guard_rejects_in_disposal(&self) -> bool {
+        true
+    }
+
     /// Whether the callback at `argument`, whenever it runs, runs directly
     /// under a **root** owner the call creates for it, so that the ambient
     /// owner a write guard reads there is that root.

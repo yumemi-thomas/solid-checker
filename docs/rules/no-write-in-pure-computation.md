@@ -239,6 +239,13 @@ owner that may be null is uncertifiable. A closure a
 `createRoot` or `untrack` callback builds is built, not run: a default in it is
 uncertifiable (`fixtures/reactive-ir/write-default-in-root-closure`).
 
+On rc.17 the guard stands down while an owner is disposed, so a write an
+`onCleanup` callback runs under a proven owner (`runWithOwner(getOwner(), …)`,
+`createOwner()`, `createRoot`), also in an inline layer, is legal; a named
+function a cleanup calls is uncertifiable, and an effect's returned cleanup (a
+rerun throws) and an action call stay violations. Earlier releases throw
+(ADR 0455, `fixtures/reactive-ir/write-owner-in-cleanup`).
+
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.
 

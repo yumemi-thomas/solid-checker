@@ -830,7 +830,9 @@ pub(super) fn named_callback_write_role(
                 .dialect
                 .callback_runs_in_created_root(primitive, index)
             {
-                (root_body == RootBodyGuard::Rejects).then_some(ExecutionRole::UntrackedRendering)
+                root_body
+                    .rejects()
+                    .then_some(ExecutionRole::UntrackedRendering)
             } else if lookup
                 .dialect
                 .callback_preserves_owner_write_context(primitive)

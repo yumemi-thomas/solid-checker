@@ -711,7 +711,7 @@ fn detection_classifies_the_installed_triple() {
             RC3,
             RC3,
             RC3,
-            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes",
             true,
         ),
         // rc.0's optimistic-store setter meets no owned-scope guard (N5),
@@ -721,35 +721,35 @@ fn detection_classifies_the_installed_triple() {
             Some("2.0.0-rc.0"),
             Some("2.0.0-rc.0"),
             None,
-            "solid-v2@optimistic-store-setter-unguarded+optimistic-setter-guarded+latest-rejects-pending",
+            "solid-v2@optimistic-store-setter-unguarded+optimistic-setter-guarded+latest-rejects-pending+disposal-rejects-writes",
             true,
         ),
         (
             Some("2.0.0-rc.1"),
             Some("2.0.0-rc.1"),
             Some("2.0.0-rc.1"),
-            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes",
             true,
         ),
         (
             Some("2.0.0-rc.2"),
             Some("2.0.0-rc.2"),
             Some("2.0.0-rc.2"),
-            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes",
             true,
         ),
         (
             RC3,
             RC3,
             None,
-            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+disposal-rejects-writes",
             true,
         ),
         (
             RC9,
             RC9,
             RC9,
-            "solid-v2@store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
+            "solid-v2@store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes",
             true,
         ),
         // A fresh install of the audited solid-js today (the rc.1-rc.8
@@ -758,28 +758,28 @@ fn detection_classifies_the_installed_triple() {
             RC3,
             RC9,
             RC3,
-            "solid-v2@store-root-mutable+omit-predicate+flush-in-action+flush-in-effect-callback+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
+            "solid-v2@store-root-mutable+omit-predicate+flush-in-action+flush-in-effect-callback+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes",
             true,
         ),
         (
             Some("2.0.0-rc.4"),
             Some("2.0.0-rc.4"),
             Some("2.0.0-rc.4"),
-            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes",
             true,
         ),
         (
             Some("2.0.0-rc.6"),
             Some("2.0.0-rc.6"),
             Some("2.0.0-rc.6"),
-            "solid-v2@until+flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
+            "solid-v2@until+flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes",
             true,
         ),
         (
             Some("2.0.0-rc.7"),
             Some("2.0.0-rc.7"),
             Some("2.0.0-rc.7"),
-            "solid-v2@store-root-mutable+until+flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
+            "solid-v2@store-root-mutable+until+flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes",
             true,
         ),
         // No signals beside solid-js: the conservative answers, and the
@@ -803,14 +803,14 @@ fn detection_classifies_the_installed_triple() {
             Some("2.0.0-beta.19"),
             RC3,
             RC3,
-            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes",
             true,
         ),
         (
             Some("2.0.0"),
             RC3,
             RC3,
-            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes",
             true,
         ),
     ];
@@ -880,7 +880,7 @@ fn signals_resolves_from_the_installed_solid_js() {
     };
     assert_eq!(
         reviewed.id,
-        "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
+        "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes"
     );
     let notice = release_notice(reviewed, &project).expect("rc.3 is older than audited");
     assert_eq!(notice.gaps.len(), 1, "{notice:?}");
@@ -899,7 +899,7 @@ fn signals_resolves_from_the_installed_solid_js() {
     };
     assert_eq!(
         dialect.id,
-        "solid-v2@store-root-mutable+omit-predicate+flush-in-action+flush-in-effect-callback+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
+        "solid-v2@store-root-mutable+omit-predicate+flush-in-action+flush-in-effect-callback+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes"
     );
     assert_eq!(releases[1].version.as_deref(), Some("2.0.0-rc.9"));
     let nested_manifest = "node_modules/solid-js/node_modules/@solidjs/signals/package.json";

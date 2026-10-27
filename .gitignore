@@ -99,6 +99,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/rc17-dynamic-component/node_modules/**
 !fixtures/reactive-ir/rc17-dispatch-as-interaction/node_modules/
 !fixtures/reactive-ir/rc17-dispatch-as-interaction/node_modules/**
+!fixtures/reactive-ir/write-owner-in-cleanup/node_modules/
+!fixtures/reactive-ir/write-owner-in-cleanup/node_modules/**
 !fixtures/reactive-ir/rc17-callback-exports-mixed/node_modules/
 !fixtures/reactive-ir/rc17-callback-exports-mixed/node_modules/**
 !fixtures/reactive-ir/rc17-create-deferred/node_modules/

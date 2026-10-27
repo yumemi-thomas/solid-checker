@@ -1,0 +1,85 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
+      "start": 1842,
+      "end": 1850,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
+      "start": 2043,
+      "end": 2051,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
+      "start": 2222,
+      "end": 2230,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
+      "start": 2663,
+      "end": 2670,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
+      "start": 2946,
+      "end": 2953,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
+      "start": 3212,
+      "end": 3219,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
+      "start": 3525,
+      "end": 3532,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
+      "start": 3808,
+      "end": 3813,
+      "fixes": 0
+    }
+  ]
+}

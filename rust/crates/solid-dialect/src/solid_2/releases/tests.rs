@@ -547,7 +547,7 @@ fn the_optimistic_store_setter_guard_follows_the_resolved_signals() {
     assert_eq!(
         rc0.key(),
         Some(
-            "optimistic-store-setter-unguarded+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
+            "optimistic-store-setter-unguarded+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes"
         )
     );
     assert!(Solid2::RC3.optimistic_store_setter_guarded());
@@ -729,7 +729,7 @@ fn every_variant_has_its_own_key() {
     assert_eq!(
         Solid2::RC9.key(),
         Some(
-            "store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
+            "store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes"
         )
     );
 }
@@ -802,7 +802,7 @@ fn the_conservative_answers_do_not_depend_on_the_audited_release() {
     assert_eq!(
         Solid2::RC3.key(),
         Some(
-            "flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
+            "flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline+disposal-rejects-writes"
         )
     );
     assert!(Solid2::RC9.key().is_some());
@@ -1072,6 +1072,27 @@ fn rc17_answers_follow_their_owners() {
     let unread = analyzed(&same("2.0.0-rc.16")).0;
     assert!(!unread.optimistic_signal_setter_guarded());
     assert!(unread.callback_handles_pending_accessor_read(Primitive::Latest, 0));
+}
+
+/// The rc.17 review's C4: `!disposalDepth` joined the write guards on rc.17
+/// signals only. Every release read before it keeps the guard rejecting, and
+/// so does a release nobody read, as the conservative vocabulary does not:
+/// it claims nothing.
+#[test]
+fn the_write_guards_stand_down_in_disposal_only_on_rc17_signals() {
+    for release in ["2.0.0-rc.0", "2.0.0-rc.3", "2.0.0-rc.9", "2.0.0-rc.13"] {
+        let (vocabulary, _) = analyzed(&same(release));
+        assert!(vocabulary.write_guard_rejects_in_disposal(), "{release}");
+    }
+    let (audited, _) = analyzed(&same("2.0.0-rc.17"));
+    assert!(!audited.write_guard_rejects_in_disposal());
+    let (mixed, _) = analyzed(&triple(
+        Some("2.0.0-rc.13"),
+        Some("2.0.0-rc.17"),
+        Some("2.0.0-rc.13"),
+    ));
+    assert!(!mixed.write_guard_rejects_in_disposal());
+    assert!(!Solid2::CONSERVATIVE.write_guard_rejects_in_disposal());
 }
 
 /// The rc.17 review's new callback-taking exports: `dynamicComponent`,

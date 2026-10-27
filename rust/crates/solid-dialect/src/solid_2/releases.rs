@@ -382,6 +382,7 @@ impl Solid2 {
         latest_rejects_pending_read: true,
         hydrate_code_inline: true,
         rc17_callback_exports: false,
+        disposal_rejects_writes: true,
     };
 
     /// The vocabulary of the audited triple, [`AUDITED_INSTALLATION`]: what
@@ -416,6 +417,7 @@ impl Solid2 {
         latest_rejects_pending_read: true,
         hydrate_code_inline: true,
         rc17_callback_exports: false,
+        disposal_rejects_writes: true,
     };
 
     /// rc.13 adds one audited strict store-key premise; older reviews
@@ -439,6 +441,7 @@ impl Solid2 {
     pub const RC17: Self = Self {
         spread_event_keys: SpreadEventKeys::OnUppercase,
         rc17_callback_exports: true,
+        disposal_rejects_writes: false,
         optimistic_signal_setter_guarded: false,
         latest_rejects_pending_read: false,
         hydrate_code_inline: false,
@@ -448,7 +451,7 @@ impl Solid2 {
     /// How many distinct vocabularies the answers above combine into: every
     /// combination is reachable, because the three owners install
     /// independently.
-    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2;
+    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2;
 
     /// The vocabulary at one mixed-radix index, [`Solid2::CONSERVATIVE`] at
     /// `0`: digit `0` of every answer is its conservative one. A new
@@ -469,6 +472,7 @@ impl Solid2 {
             latest_rejects_pending_read: (index / 18432) % 2 == 1,
             hydrate_code_inline: (index / 36864) % 2 == 1,
             rc17_callback_exports: (index / 73728) % 2 == 1,
+            disposal_rejects_writes: (index / 147456) % 2 == 1,
             store_root: if index % 2 == 1 {
                 StoreRootTyping::Mutable
             } else {
@@ -547,6 +551,7 @@ impl Solid2 {
                 })
             + 36864 * (if self.hydrate_code_inline { 1 } else { 0 })
             + 73728 * (if self.rc17_callback_exports { 1 } else { 0 })
+            + 147456 * (if self.disposal_rejects_writes { 1 } else { 0 })
     }
 
     /// The one `'static` value per vocabulary, which is what an analysis holds.
@@ -602,6 +607,7 @@ impl Solid2 {
                 "latest-rejects-pending" => vocabulary.latest_rejects_pending_read = true,
                 "hydrate-inline" => vocabulary.hydrate_code_inline = true,
                 "rc17-callback-exports" => vocabulary.rc17_callback_exports = true,
+                "disposal-rejects-writes" => vocabulary.disposal_rejects_writes = true,
                 _ => return None,
             }
         }
@@ -697,6 +703,9 @@ fn variant_key(vocabulary: Solid2) -> Option<String> {
     }
     if vocabulary.rc17_callback_exports {
         tokens.push("rc17-callback-exports");
+    }
+    if vocabulary.disposal_rejects_writes {
+        tokens.push("disposal-rejects-writes");
     }
     (!tokens.is_empty()).then(|| tokens.join("+"))
 }
@@ -974,6 +983,9 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
         optimistic_signal_setter_guarded: matches!(signals, Release::Read(n) if n < RC17),
         latest_rejects_pending_read: matches!(signals, Release::Read(n) if n < RC17),
         hydrate_code_inline: matches!(web, Release::Read(n) if n < RC17),
+        // rc.17 added `!disposalDepth` to the three write guards (the rc.17
+        // review C4); the read releases before it have none.
+        disposal_rejects_writes: matches!(signals, Release::Read(n) if n < RC17),
         // `dynamicComponent` is `solid-js`'s `dynamicCore` with no tag arm
         // (`dist/solid.dev.js:1545`), which `@solidjs/web` re-exports
         // (`dist/web.dev.js:2`); `dispatchAsInteraction` is web's, and its dev

@@ -504,7 +504,7 @@ impl StaticApiContext<'_> {
                         self.entities,
                         self.symbol_names,
                         self.lookup,
-                        RootBodyGuard::Rejects,
+                        RootBodyGuard::RejectsOutsideDisposal,
                     ),
                     owned_write: self
                         .source_owned_write

@@ -283,6 +283,87 @@ fn detached_in_place(
         .map(WriteRegionAdjustment::CallSite)
 }
 
+/// Whether a write under a proven owner runs in a disposal, for the release
+/// whose write guards stand down there ([`runs_in_disposal`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DisposalReach {
+    /// Written in a callback that runs only while an owner is disposed.
+    Only,
+    /// Written in a function bound to a name: it runs where it is called, which
+    /// may be a cleanup, and no call site is read here.
+    Unplaced,
+    /// Anywhere else: the write is judged as in any owned scope.
+    Elsewhere,
+}
+
+/// Where `span` is written relative to a disposal
+/// ([`solid_dialect::Dialect::callback_runs_only_in_disposal`]: `onCleanup`'s
+/// callback), directly or through functions that run on that callback's stack:
+/// a call that runs its callback during the call (`runWithOwner`, `createRoot`,
+/// `untrack`), an IIFE, an inline standard-library callback ([`layer_run`]). A
+/// function that is stored, handed to an unknown call or run on a fresh stack
+/// ends the climb at [`DisposalReach::Elsewhere`]: the write is then judged as
+/// anywhere else, never exempted by a cleanup it may not run in. A named
+/// function ends it at [`DisposalReach::Unplaced`]: a cleanup may be its caller.
+fn runs_in_disposal(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> DisposalReach {
+    let mut at = span;
+    // Bounded: each step moves to the call that holds the previous function.
+    for _ in 0..16 {
+        let Some(function) = crate::owners::owning_function(&file.ast, at) else {
+            return DisposalReach::Elsewhere;
+        };
+        // A site in a parameter list runs when its call omits the argument.
+        if function.generator || !function.body.contains(at) {
+            return DisposalReach::Elsewhere;
+        }
+        let primitive_call = file
+            .ast
+            .arguments_containing(function.span)
+            .filter(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+            })
+            .find_map(|(call, index)| {
+                lookup
+                    .primitive_at_call(file, call.span)
+                    .map(|primitive| (call, index, primitive))
+            });
+        if let Some((call, index, primitive)) = primitive_call {
+            if lookup
+                .dialect
+                .callback_runs_only_in_disposal(primitive, index)
+            {
+                return DisposalReach::Only;
+            }
+            if callback_execution_at_call(file, call, primitive, index, lookup)
+                != Some(Execution::Inline)
+            {
+                return DisposalReach::Elsewhere;
+            }
+            at = call.span;
+            continue;
+        }
+        match layer_run(file, function, lookup) {
+            LayerRun::InPlace(call) => at = call,
+            LayerRun::FreshStack => return DisposalReach::Elsewhere,
+            LayerRun::Elsewhere => {
+                let named = crate::owners::function_binding_name(file, function).is_some()
+                    && function.method_name.is_none()
+                    && lookup.function_component_status(file, function) == ComponentStatus::No;
+                return if named {
+                    DisposalReach::Unplaced
+                } else {
+                    DisposalReach::Elsewhere
+                };
+            }
+        }
+    }
+    DisposalReach::Elsewhere
+}
+
 /// ADR 0455: the innermost function around `span` that is bound to a name and
 /// written in a callback that keeps its call's owner and runs it during the call
 /// (`untrack`, [`solid_dialect::Dialect::callback_preserves_owner_write_context`]).
@@ -494,6 +575,19 @@ pub(super) fn semantic_write_role_walk(
                 match root_body {
                     RootBodyGuard::Rejects => return ExecutionRole::UntrackedRendering,
                     RootBodyGuard::Exempts => return ExecutionRole::UntrackedCallback,
+                    // The guard stands down while an owner is disposed, on the
+                    // release that says so, and the write is written in a
+                    // callback that runs only then (ADR 0455 amendment).
+                    RootBodyGuard::RejectsOutsideDisposal => {
+                        if lookup.dialect.write_guard_rejects_in_disposal() {
+                            return ExecutionRole::UntrackedRendering;
+                        }
+                        return match runs_in_disposal(file, span, lookup) {
+                            DisposalReach::Only => ExecutionRole::UntrackedCallback,
+                            DisposalReach::Unplaced => ExecutionRole::Unknown,
+                            DisposalReach::Elsewhere => ExecutionRole::UntrackedRendering,
+                        };
+                    }
                 }
             }
             // Whether a root wraps this callback is not audited on this
