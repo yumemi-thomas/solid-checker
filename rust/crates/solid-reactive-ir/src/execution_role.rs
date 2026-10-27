@@ -282,7 +282,7 @@ pub(super) fn semantic_execution_role(
 /// dialect says so, directly in a component body
 /// ([`solid_dialect::Dialect::component_body_runs_under_root`]).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(super) enum RootBodyGuard {
+pub(crate) enum RootBodyGuard {
     /// The guard rejects the operation under a root, as under any
     /// children-capable owner: signal setters, `refresh` and action calls on
     /// every Solid 2 release, store setters where the release's guard does not
@@ -302,7 +302,7 @@ pub(super) enum RootBodyGuard {
 impl RootBodyGuard {
     /// Whether the guard rejects the operation under a root owner when no
     /// disposal is running.
-    pub(super) fn rejects(self) -> bool {
+    pub(crate) fn rejects(self) -> bool {
         self != Self::Exempts
     }
 }

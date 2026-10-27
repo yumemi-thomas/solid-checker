@@ -287,38 +287,70 @@ fn detached_in_place(
 /// whose write guards stand down there ([`runs_in_disposal`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DisposalReach {
-    /// Written in a callback that runs only while an owner is disposed.
+    /// Written in a callback that runs only while an owner is disposed, on a
+    /// stack no await has left.
     Only,
-    /// Written in a function bound to a name: it runs where it is called, which
-    /// may be a cleanup, and no call site is read here.
+    /// Proven to run outside any disposal: a component body, a fresh stack, a
+    /// callback the engine runs on its own schedule, an effect's returned
+    /// cleanup (a rerun calls it outside), a function only events invoke, or a
+    /// continuation past an await. The guard throws there on every release.
+    NotIn,
+    /// Neither proven: a function that is named, stored or handed to a call
+    /// this does not read may be run by a cleanup, and so may a possible
+    /// component or a site in a parameter list.
     Unplaced,
-    /// Anywhere else: the write is judged as in any owned scope.
-    Elsewhere,
 }
 
 /// Where `span` is written relative to a disposal
 /// ([`solid_dialect::Dialect::callback_runs_only_in_disposal`]: `onCleanup`'s
 /// callback), directly or through functions that run on that callback's stack:
 /// a call that runs its callback during the call (`runWithOwner`, `createRoot`,
-/// `untrack`), an IIFE, an inline standard-library callback ([`layer_run`]). A
-/// function that is stored, handed to an unknown call or run on a fresh stack
-/// ends the climb at [`DisposalReach::Elsewhere`]: the write is then judged as
-/// anywhere else, never exempted by a cleanup it may not run in. A named
-/// function ends it at [`DisposalReach::Unplaced`]: a cleanup may be its caller.
+/// `untrack`), an IIFE, an inline standard-library callback ([`layer_run`]).
+/// Only that is [`DisposalReach::Only`], and only when the `onCleanup` call's
+/// result is discarded: rc.17 returns the callback itself, which user code may
+/// call outside a disposal. A layer that runs on a fresh stack, is a proven
+/// component, a callback the engine schedules, or an effect's returned cleanup
+/// is [`DisposalReach::NotIn`]; every other layer is
+/// [`DisposalReach::Unplaced`], since a cleanup may be its caller.
+///
+/// An await that precedes the site in a layer suspends the run past the
+/// disposal bracket once the climb has left the callback that gave the write
+/// its owner; inside that callback the owner is gone with it, which is not
+/// this question's, so the site is unplaced.
 fn runs_in_disposal(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> DisposalReach {
     let mut at = span;
+    // Whether the climb has left the callback of the call that gave the write
+    // its owner (`runWithOwner`, `createRoot`).
+    let mut owner_given = false;
+    // Whether a callback on the way runs at a time its call does not state: it
+    // runs during the call or later, and only the call's place can say that it
+    // is not in a disposal.
+    let mut timing_unknown = false;
     // Bounded: each step moves to the call that holds the previous function.
     for _ in 0..16 {
         let Some(function) = crate::owners::owning_function(&file.ast, at) else {
-            return DisposalReach::Elsewhere;
+            // Module code runs when the module is evaluated, never on the stack
+            // of a cleanup.
+            return DisposalReach::NotIn;
         };
-        // A site in a parameter list runs when its call omits the argument.
+        // A site in a parameter list runs when its call omits the argument; a
+        // generator runs at each `next`.
         if function.generator || !function.body.contains(at) {
-            return DisposalReach::Elsewhere;
+            return DisposalReach::Unplaced;
+        }
+        if follows_dominating_await(file, at) || follows_try_head_await(file, at, lookup) {
+            return if owner_given {
+                DisposalReach::NotIn
+            } else {
+                DisposalReach::Unplaced
+            };
+        }
+        if may_follow_suspension(file, at) {
+            return DisposalReach::Unplaced;
         }
         let primitive_call = file
             .ast
@@ -336,32 +368,178 @@ fn runs_in_disposal(
                 .dialect
                 .callback_runs_only_in_disposal(primitive, index)
             {
-                return DisposalReach::Only;
+                return if call.result_discarded && !timing_unknown {
+                    DisposalReach::Only
+                } else {
+                    DisposalReach::Unplaced
+                };
             }
-            if callback_execution_at_call(file, call, primitive, index, lookup)
-                != Some(Execution::Inline)
-            {
-                return DisposalReach::Elsewhere;
+            match callback_execution_at_call(file, call, primitive, index, lookup) {
+                Some(Execution::Inline) => {}
+                Some(_) => return DisposalReach::NotIn,
+                None => timing_unknown = true,
             }
+            owner_given |= lookup
+                .dialect
+                .callback_runs_in_created_root(primitive, index)
+                || lookup
+                    .dialect
+                    .callback_inherits_calling_window(primitive, index);
             at = call.span;
             continue;
         }
         match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) => at = call,
-            LayerRun::FreshStack => return DisposalReach::Elsewhere,
+            LayerRun::FreshStack => return DisposalReach::NotIn,
             LayerRun::Elsewhere => {
-                let named = crate::owners::function_binding_name(file, function).is_some()
-                    && function.method_name.is_none()
-                    && lookup.function_component_status(file, function) == ComponentStatus::No;
-                return if named {
-                    DisposalReach::Unplaced
-                } else {
-                    DisposalReach::Elsewhere
+                return match lookup.function_component_status(file, function) {
+                    ComponentStatus::Proven => DisposalReach::NotIn,
+                    ComponentStatus::Uncertain => DisposalReach::Unplaced,
+                    ComponentStatus::No
+                        if returned_by_rerunning_effect(file, function, lookup)
+                            || event_only_entries(file, function, lookup)
+                            || is_event_handler_literal(file, function, lookup)
+                            || stored_function_called_only_by_events(file, function, lookup) =>
+                    {
+                        DisposalReach::NotIn
+                    }
+                    ComponentStatus::No => DisposalReach::Unplaced,
                 };
             }
         }
     }
-    DisposalReach::Elsewhere
+    DisposalReach::Unplaced
+}
+
+/// Whether `function` is a literal the compiler reads as an event handler (a
+/// JSX attribute's value on an element): the event delivers it, and no
+/// synchronous dispatch can deliver it inside a cleanup.
+fn is_event_handler_literal(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    !lookup.synchronous_event_dispatch_present()
+        && file.compiler.callback_roles.iter().any(|callback| {
+            callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                && callback.span == function.span
+        })
+}
+
+/// Whether `function` is stored in one local variable and every use of that
+/// variable is a call inside an event handler: a function a cleanup stores for
+/// a handler to call runs in no disposal. Any other use of the variable (an
+/// alias, an argument, a return, a call anywhere else), an export, an `eval`
+/// or a synchronous event dispatch answers nothing.
+fn stored_function_called_only_by_events(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_facts::ast::IdentifierRole;
+    if lookup.synchronous_event_dispatch_present() || lookup.program_has_eval() {
+        return false;
+    }
+    // The variable: assigned this literal, or declared with it.
+    let declaration = file
+        .ast
+        .assignments
+        .iter()
+        .find(|assignment| {
+            !assignment.reads_target
+                && file.ast.peel_ts_sugar_span(assignment.value_span) == function.span
+        })
+        .and_then(|assignment| file.ast.reference_declaration(assignment.target))
+        .or_else(|| function_binding_name(file, function).map(|binding| binding.span));
+    let Some(declaration) = declaration else {
+        return false;
+    };
+    if flow_binding_exported(file, declaration) {
+        return false;
+    }
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), declaration) else {
+        return false;
+    };
+    // A reference from another file is a use this census does not read.
+    if lookup
+        .symbol_references(symbol.as_str())
+        .iter()
+        .any(|reference| reference.path.as_ref() != file.path.as_str())
+    {
+        return false;
+    }
+    let references = file
+        .ast
+        .identifiers
+        .iter()
+        .filter(|id| {
+            id.role == IdentifierRole::Reference
+                && file.ast.reference_declaration(id.span) == Some(declaration)
+        })
+        .map(|id| id.span)
+        .collect::<Vec<_>>();
+    !references.is_empty()
+        && references.into_iter().all(|reference| {
+            if file.ast.write_targets.contains(&reference) {
+                return true;
+            }
+            file.ast.calls.iter().any(|call| {
+                !call.construct && file.ast.peel_ts_sugar_span(call.callee) == reference
+            }) && crate::owners::owning_function(&file.ast, reference).is_some_and(|caller| {
+                file.compiler.callback_roles.iter().any(|callback| {
+                    callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                        && callback.span == caller.span
+                })
+            })
+        })
+}
+
+/// Whether `function` is the cleanup an effect's apply returns, which a rerun
+/// calls outside a disposal ([`solid_dialect::Dialect::returned_cleanup_runs_outside_disposal`]).
+fn returned_by_rerunning_effect(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(outer) = crate::owners::owning_function(&file.ast, function.span) else {
+        return false;
+    };
+    if !outer.body.contains(function.span) {
+        return false;
+    }
+    let returned = outer
+        .expression_return
+        .as_ref()
+        .into_iter()
+        .chain(
+            file.ast
+                .returns
+                .iter()
+                .filter(|ret| outer.body.contains(ret.span)),
+        )
+        .any(|ret| {
+            ret.argument.is_some_and(|argument| {
+                file.ast.peel_ts_sugar_span(argument) == function.span
+                    && crate::owners::owning_function(&file.ast, ret.span)
+                        .is_some_and(|owner| owner.span == outer.span)
+            })
+        });
+    returned
+        && file
+            .ast
+            .arguments_containing(outer.span)
+            .filter(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == outer.span
+            })
+            .any(|(call, index)| {
+                lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup
+                            .dialect
+                            .returned_cleanup_runs_outside_disposal(primitive, index)
+                    })
+            })
 }
 
 /// ADR 0455: the innermost function around `span` that is bound to a name and
@@ -503,7 +681,8 @@ pub(super) fn semantic_write_execution_role_within(
     root_body: RootBodyGuard,
     visiting: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
-    let role = semantic_write_role_walk(
+    let mut decided = false;
+    let role = write_role_walk(
         file,
         span,
         allowed,
@@ -512,8 +691,9 @@ pub(super) fn semantic_write_execution_role_within(
         lookup,
         root_body,
         visiting,
+        &mut decided,
     );
-    if role != ExecutionRole::Unknown || file.compiler.withheld() {
+    if role != ExecutionRole::Unknown || decided || file.compiler.withheld() {
         return role;
     }
     // A write that follows an await that may be skipped has no placement its
@@ -543,6 +723,34 @@ pub(super) fn semantic_write_role_walk(
     lookup: &SemanticLookup<'_>,
     root_body: RootBodyGuard,
     visiting: &mut HashSet<(String, Span)>,
+) -> ExecutionRole {
+    write_role_walk(
+        file,
+        span,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+        root_body,
+        visiting,
+        &mut false,
+    )
+}
+
+/// [`semantic_write_role_walk`], and whether its `Unknown` is final: the write
+/// runs under an owner the call gave it, so what its function's other callers
+/// run it under places nothing (`decided`).
+#[allow(clippy::too_many_arguments)]
+fn write_role_walk(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    visiting: &mut HashSet<(String, Span)>,
+    decided: &mut bool,
 ) -> ExecutionRole {
     // ADR 0360: a file the compiler refused places no write.
     if file.compiler.withheld() {
@@ -577,15 +785,29 @@ pub(super) fn semantic_write_role_walk(
                     RootBodyGuard::Exempts => return ExecutionRole::UntrackedCallback,
                     // The guard stands down while an owner is disposed, on the
                     // release that says so, and the write is written in a
-                    // callback that runs only then (ADR 0455 amendment).
+                    // callback that runs only then (ADR 0455 amendment). A
+                    // release nobody read leaves a write that a disposal
+                    // decides unplaced; outside a disposal the guard throws on
+                    // every release.
                     RootBodyGuard::RejectsOutsideDisposal => {
-                        if lookup.dialect.write_guard_rejects_in_disposal() {
+                        use solid_dialect::WriteGuardInDisposal as Guard;
+                        let guard = lookup.dialect.write_guard_in_disposal();
+                        if guard == Guard::Rejects {
                             return ExecutionRole::UntrackedRendering;
                         }
+                        // A violation needs the proof that the write is not in a
+                        // disposal; a legal write needs the release to say so.
+                        // Neither is the call sites' to give: the owner is the
+                        // call's, whatever runs the function.
                         return match runs_in_disposal(file, span, lookup) {
-                            DisposalReach::Only => ExecutionRole::UntrackedCallback,
-                            DisposalReach::Unplaced => ExecutionRole::Unknown,
-                            DisposalReach::Elsewhere => ExecutionRole::UntrackedRendering,
+                            DisposalReach::NotIn => ExecutionRole::UntrackedRendering,
+                            DisposalReach::Only if guard == Guard::StandsDown => {
+                                ExecutionRole::UntrackedCallback
+                            }
+                            DisposalReach::Only | DisposalReach::Unplaced => {
+                                *decided = true;
+                                ExecutionRole::Unknown
+                            }
                         };
                     }
                 }

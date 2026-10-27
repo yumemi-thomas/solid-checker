@@ -2085,10 +2085,10 @@ impl<'a> SemanticLookup<'a> {
         &self,
         path: &str,
         span: Span,
-        exempts_root: bool,
+        guard: crate::execution_role::RootBodyGuard,
     ) -> Option<(crate::ExecutionRole, bool)> {
         self.memo_world()
-            .answer::<project_memos::WriteFlowAnswer>(&(path.to_owned(), span, exempts_root))
+            .answer::<project_memos::WriteFlowAnswer>(&(path.to_owned(), span, guard))
     }
 
     /// The literals whose every invocation comes through event delivery, for the

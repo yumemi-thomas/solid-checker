@@ -153,14 +153,13 @@ pub struct Solid2 {
     /// so no inline execution is stated there, though its root still is
     /// (`render_creates_root`); read releases through rc.13 keep `true`.
     hydrate_code_inline: bool,
-    /// From `@solidjs/signals`: whether the dev owned-scope write guards still
-    /// throw while the runtime disposes an owner
-    /// ([`Dialect::write_guard_rejects_in_disposal`]). rc.17 adds
-    /// `!disposalDepth` to `setSignal`, `markRefresh` and
-    /// `devGuardStoreSetterWrite` (the rc.17 review C4). `true` on read
-    /// releases through rc.13; rc.17, unread and unresolved keep `false`,
-    /// which reports nothing.
-    disposal_rejects_writes: bool,
+    /// From `@solidjs/signals`: what the dev owned-scope write guards do while
+    /// the runtime disposes an owner ([`Dialect::write_guard_in_disposal`]).
+    /// rc.17 adds `!disposalDepth` to `setSignal`, `markRefresh` and
+    /// `devGuardStoreSetterWrite` (the rc.17 review C4): `Rejects` on read
+    /// releases through rc.13, `StandsDown` on rc.17, `Unknown` for signals
+    /// nobody read or that did not resolve.
+    disposal_write_guard: crate::WriteGuardInDisposal,
     /// From all three packages: whether rc.17's callback-taking exports
     /// `dynamicComponent`, `dispatchAsInteraction`, `createDeferred`,
     /// `lazyModule` and `onHydrationEnd` are exports, modelled as read on rc.17
@@ -742,14 +741,32 @@ impl Dialect for Solid2 {
         primitive == Primitive::OnCleanup && argument == 0
     }
 
+    /// Source: a rerun of an effect calls the cleanup its apply returned
+    /// outside `runDisposal`'s bracket (probed on rc.17: a signal setter in it
+    /// throws), and only the final teardown raises the depth for it
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:1290`). The
+    /// settled and reaction primitives' cleanups are not read for this.
+    fn returned_cleanup_runs_outside_disposal(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        matches!(
+            (primitive, argument),
+            (Primitive::CreateEffect | Primitive::CreateRenderEffect, 1)
+                | (Primitive::CreateTrackedEffect, 0)
+        )
+    }
+
     /// Answered from the resolved `@solidjs/signals` (`releases.rs`): rc.17
     /// adds `!disposalDepth` to `setSignal` (`dist/dev-shared.js:5620-5626`),
     /// `markRefresh` (`:5801-5806`) and `devGuardStoreSetterWrite`
     /// (`dist/dev.js:5811-5812`); rc.13 and every earlier read release have no
     /// such test (the rc.17 review C4: a setter in a cleanup throws on rc.13,
-    /// is legal on rc.17).
-    fn write_guard_rejects_in_disposal(&self) -> bool {
-        self.disposal_rejects_writes
+    /// is legal on rc.17). A signals release nobody read, or that did not
+    /// resolve, answers `Unknown`.
+    fn write_guard_in_disposal(&self) -> crate::WriteGuardInDisposal {
+        self.disposal_write_guard
     }
 
     /// Source: `createRoot(init)` is `createOwner()` then `runWithOwner(owner,

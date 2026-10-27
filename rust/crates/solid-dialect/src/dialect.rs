@@ -473,14 +473,31 @@ pub trait Dialect: Sync {
         false
     }
 
-    /// Whether the dev owned-scope write guards (signal and store setters,
-    /// `refresh`) still throw while the runtime disposes an owner. `true` is the
-    /// answer that keeps a write reported there; a release whose guards test
-    /// `!disposalDepth` answers `false`, and so does one the dialect has not
-    /// read, which reports nothing. An action call's guard is no such guard and
-    /// never stands down.
-    fn write_guard_rejects_in_disposal(&self) -> bool {
-        true
+    /// Whether the cleanup the callback at `argument` of `primitive` returns
+    /// (an effect's apply, not its compute, whose value feeds the apply) is called
+    /// outside a disposal: a rerun of the effect calls it without the disposal
+    /// bracket `callback_runs_only_in_disposal` names. Only a proven `true`
+    /// places a write in such a cleanup outside a disposal; the default is
+    /// `false`, the fail-closed answer.
+    fn returned_cleanup_runs_outside_disposal(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// What the dev owned-scope write guards (signal and store setters,
+    /// `refresh`) do while the runtime disposes an owner
+    /// ([`WriteGuardInDisposal`]): throw (a release before the `!disposalDepth`
+    /// test), stand down, or unknown, for a release nobody read. An action
+    /// call's guard is no such guard and never stands down. The default is the
+    /// fail-closed `Unknown`: a dialect that does not read the release leaves a
+    /// write that only a disposal decides uncertifiable, not legal and not
+    /// reported.
+    fn write_guard_in_disposal(&self) -> WriteGuardInDisposal {
+        WriteGuardInDisposal::Unknown
     }
 
     /// Whether the callback at `argument`, whenever it runs, runs directly
