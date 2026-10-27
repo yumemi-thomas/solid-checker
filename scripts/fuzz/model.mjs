@@ -13,7 +13,10 @@
 //   statements:  expr decl return await
 //   view items:  probe button child attr show for
 //
-// A `read` or `write` with `site: true` is a *site of interest*: the checker and
+// An `own` node (`{ k: "own", op, fn?, apply? }`) is an owner-requiring call: `onCleanup`, `createEffect`,
+// `onSettled` or `useContext`. It is a site like a read or a write; what it shows is a hit, not page text.
+//
+// A `read`, `write` or `own` with `site: true` is a *site of interest*: the checker and
 // the runtime are compared at its line. `witness: { selector, text }` says what
 // the page shows when the site ran and landed (null when nothing shows it).
 
@@ -22,11 +25,30 @@ export const VERSION = 1;
 /** Helper forms: a same-file function taking `cb: () => unknown`. */
 export const HELPER_FORMS = ["call", "defaultCall", "returnClosure", "returnCb", "storeCb", "timerCb"];
 /** `prim` names: the Solid primitive or host API a function expression is handed to. */
-export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then"];
+export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro", "render", "tracked", "action"];
 
 export const num = (n) => ({ k: "num", n });
 export const read = (sig, extra = {}) => ({ k: "read", sig, ...extra });
 export const write = (sig, value, extra = {}) => ({ k: "write", sig, value, ...extra });
+/** Owner ops: the Solid calls that need an owner (`NO_OWNER_*`, `SETTLED_CLEANUP_UNOWNED`). */
+export const OWN_OPS = ["cleanup", "effect", "settled", "context"];
+/**
+ * `onCleanup(() => {})`, `createEffect(() => 1, () => {})`, `onSettled(() => {})`, `useContext(Ctx)`.
+ * Each has callbacks as real `fn` nodes (so they are counted), except `context`.
+ */
+export const own = (op, extra = {}) => ({
+  k: "own", op,
+  ...(op === "effect" ? { fn: fn([ret(num(1))]), apply: fn([]) } : op === "context" ? {} : { fn: fn([]) }),
+  ...extra,
+});
+/**
+ * `{ k: "use", code, variant, bind, sig?, ... }`: the call a misuse program is about (the misuse profile, misuse.mjs): one Solid API
+ * call or reactive access that the runtime diagnoses under `code`, bound by a direct import, a namespace, an alias, a destructuring or
+ * a wrapper (`bind`). misuse.mjs prints it and types it.
+ */
+export const use = (code, extra = {}) => ({ k: "use", code, variant: null, bind: "direct", ...extra });
+/** True for a node that is a site of interest. */
+export const isSite = (node) => (node.k === "read" || node.k === "write" || node.k === "own" || node.k === "use") && Boolean(node.site);
 export const ref = (name) => ({ k: "ref", name });
 export const member = (obj, key) => ({ k: "member", obj, key });
 export const obj = (fields) => ({ k: "obj", fields: fields.map(([key, e]) => ({ k: "field", key, e })) });
@@ -43,6 +65,10 @@ export const expr = (e) => ({ k: "expr", e });
 export const decl = (name, e) => ({ k: "decl", name, e });
 export const ret = (e) => ({ k: "return", e });
 export const awaitStmt = () => ({ k: "await" });
+/** `try { <body> } finally { <fin> }` (the disposal profile). */
+export const tryStmt = (body, fin = []) => ({ k: "try", body, fin });
+/** `flush()` (the disposal profile). */
+export const flush = () => ({ k: "flush" });
 
 export const probe = (sig) => ({ k: "probe", sig });
 export const button = (id, handler) => ({ k: "button", id, handler });
@@ -54,6 +80,18 @@ export const forEach = (children) => ({ k: "for", children });
 export const signal = (name, init, role = "src", scope = "component") => ({
   k: "signal", name, setter: `set${name[0].toUpperCase()}${name.slice(1)}`, init, role, scope,
 });
+/**
+ * Write targets of the disposal profile (a `write` node names one by `sig`; the printer reads `kind`):
+ * a store (`createStore({ v })`, written by its setter), a memo (written by `refresh(m)`), an action (written by calling it;
+ * its body writes the probe signal `target` to `value`). A plain `signal` has no `kind`.
+ */
+export const storeSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store" });
+export const memoSignal = (name) => ({ ...signal(name, 0, "src"), kind: "memo" });
+/** An async memo (`createMemo(async () => 1)`): reading it is pending until the promise settles. */
+/** A store whose property may be deleted (`createStore<{ v?: number }>`). */
+export const storeOptSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-opt" });
+export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
+export const actionSignal = (name, target, value) => ({ ...signal(name, 0, "src"), kind: "action", target, value });
 
 // ---------------------------------------------------------------------------
 // Generic traversal
@@ -166,6 +204,8 @@ export function validate(program, { maxNodes = 400 } = {}) {
     const where = component.name;
     const own = new Set([...(program.moduleSignals ?? []).map((s) => s.name), ...component.signals.map((s) => s.name)]);
     const buttons = new Set();
+    // An action's body writes its target signal: removing the target (the shrinker) leaves the action unprintable.
+    for (const sig of component.signals) if (sig.kind === "action" && !own.has(sig.target)) fail(`${where}: action ${sig.name} writes ${sig.target}, which is not in scope`);
     const scopeOf = (parent, extra = {}) => ({ vars: new Map(), parent, async: parent?.async ?? false, ...extra });
     const lookup = (scope, name) => {
       for (let s = scope; s; s = s.parent) if (s.vars.has(name)) return s.vars.get(name);
@@ -222,6 +262,10 @@ export function validate(program, { maxNodes = 400 } = {}) {
           case "await":
             if (!scope.async) fail(`${where}: await outside an async function`);
             break;
+          case "try":
+            checkBlock(stmt.body, scopeOf(scope, { async: scope.async }), "free");
+            checkBlock(stmt.fin, scopeOf(scope, { async: scope.async }), "free");
+            break;
           default: fail(`${where}: unknown statement ${stmt.k}`);
         }
       });
@@ -260,6 +304,11 @@ export function validate(program, { maxNodes = 400 } = {}) {
         case "num": return T.num;
         case "read": sigCheck(e.sig, "read"); return T.num;
         case "write": sigCheck(e.sig, "write"); return T.num;
+        case "own": return ownType(e, scope);
+        case "use": {
+          for (const name of e.sigs ?? []) sigCheck(name, "use");
+          return T.unknown;
+        }
         case "ref": {
           const type = lookup(scope, e.name);
           if (!type) { fail(`${where}: ${e.name} is not declared before use`); return null; }
@@ -289,6 +338,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
           return null;
         }
         case "getOwner": return { t: "owner" };
+        case "flush": return T.void;
         case "set": {
           sigCheck(e.sig, "set");
           const type = typeOf(e.e, scope);
@@ -306,6 +356,21 @@ export function validate(program, { maxNodes = 400 } = {}) {
       }
     }
 
+    function ownType(e, scope) {
+      switch (e.op) {
+        // onCleanup returns a Disposable in the published typings, not void.
+        case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return e.handle ? T.fn(T.void) : T.unknown;
+        case "settled": fnTypeChecked(e.fn, scope, RETURNS.settled); return T.void;
+        case "effect": {
+          const compute = fnTypeChecked(e.fn, scope, RETURNS.effect);
+          fnTypeChecked(e.apply, scope, RETURNS.applyFn, [["v", compute.ret]]);
+          return T.void;
+        }
+        case "context": return T.num;
+        default: fail(`${where}: unknown owner op ${e.op}`); return null;
+      }
+    }
+
     function primType(e, scope) {
       switch (e.name) {
         case "memo": return T.acc(fnTypeChecked(e.fn, scope, RETURNS.memo).ret);
@@ -319,8 +384,26 @@ export function validate(program, { maxNodes = 400 } = {}) {
         case "owner":
           if (e.ownerArg === "owner" && !lookup(scope, "owner")) fail(`${where}: owner is not captured`);
           return fnTypeChecked(e.fn, scope, "free").ret;
+        // createRoot((dispose) => ...): the callback returns what the root hands back (the disposer, here).
+        case "rootd": {
+          const result = fnTypeChecked(e.fn, scope, "free", [["dispose", T.fn(T.void)]]);
+          if (result.ret.t !== "fn") fail(`${where}: a rootd callback returns a function`);
+          return T.fn(T.void);
+        }
+        case "micro": fnTypeChecked(e.fn, scope, "free"); return T.void;
+        // createRenderEffect(compute, apply): like createEffect, its apply returns void | (() => void).
+        case "render": {
+          const compute = fnTypeChecked(e.fn, scope, RETURNS.effect);
+          if (!e.apply) fail(`${where}: render effect without an apply`);
+          else fnTypeChecked(e.apply, scope, RETURNS.applyFn, [["v", compute.ret]]);
+          return T.void;
+        }
+        case "tracked": fnTypeChecked(e.fn, scope, "free"); return T.void;
+        // action(function* () { ... }): the generator body is a block; its result is the action function.
+        case "action": fnTypeChecked(e.fn, scope, "free"); return T.fn(T.unknown);
         case "settled": fnTypeChecked(e.fn, scope, RETURNS.settled); return T.void;
-        case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return T.void;
+        // onCleanup returns a Disposable in the published typings, not void.
+        case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return T.unknown;
         case "timer": case "then": fnTypeChecked(e.fn, scope, "free"); return T.void;
         default: fail(`${where}: unknown prim ${e.name}`); return null;
       }
@@ -340,6 +423,7 @@ export function paramTsType(p) {
 export function exprTsType(e) {
   if (e.k === "set") return "number";
   switch (e.k) {
+    case "own": return e.op === "context" ? "number" : e.op === "cleanup" ? "unknown" : "void";
     case "num": case "read": case "write": return "number";
     case "iter": return e.method === "map" ? "unknown" : "void";
     default: return "unknown";

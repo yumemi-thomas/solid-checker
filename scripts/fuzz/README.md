@@ -7,7 +7,10 @@ Finds checker violations that the real Solid 2.0.0-rc.17 runtime contradicts (fa
 | verdict | meaning |
 | --- | --- |
 | `candidate-false-positive` | The checker proves a defect at a site. The runtime ran the site (the page shows its witness), with no diagnostic that claims the rule and no throw. Chrome decides. |
-| `candidate-false-clean` | The runtime reports a defect no finding covers. Classified and reported, not hunted: phase 4. |
+| `candidate-false-clean` | Solid reports a defect (a code the policy table calls a defect) where no checker finding covers it. Grouped by coarse key, confirmed in Chrome, shrunk: see False cleans. |
+| `candidate-wrong-rule` | The runtime reports the defect at the finding under a code another rule of the same family claims: the checker named a real defect wrongly. |
+| `known-open` | A false clean the ledger (`known-open.json`) accepts, by code and exact coarse key, with a cited reference. Not a failure. |
+| `recall-gap` | Solid reports a defect and the checker declines (an uncertifiable finding at the diagnostic). Counted and ranked, never a failure. |
 | `inconclusive` | The evidence cannot decide: the site never ran, nothing shows it ran, the rule has no runtime diagnostic, the program threw or halted reactivity, the checker or the runtime failed. Never counted as agreement. |
 | `agree` | Both say the same at every site, or both are silent. |
 
@@ -16,6 +19,55 @@ A fast-path candidate is a hypothesis. A **confirmed** finding is a fast-path ca
 ### Stop and report
 
 When a run confirms a false positive (exit status 3), stop the sweep. Do not change the checker from inside a fuzzing session. Report the shrunk repro directory (`repros/<hash>/`, an oracle case: `App.tsx`, `oracle.json`), the rule and finding id, the signature, and the Chrome row. The owner decides whether it is a checker bug, a witness that does not prove what it should, or a runtime behaviour the rule should respect (invariants 1 and 2 of AGENTS.md).
+
+### False cleans (phase D)
+
+A **false clean** is a runtime diagnostic of a defect code with no checker finding that covers it. Which codes are defects is the policy table in `codes.mjs`: every rc.17 dev code has `{ rules, disposition, severity }`, and `codes.test.mjs` greps `code: "X"` across the pinned dev dists of the fast install and fails on a code the table does not classify (so a Solid bump cannot add noise silently) or a severity that differs from the dist. Dispositions: `defect-claimed` (a rule claims it), `defect-unclaimed` (a recall gap by "never quieter than Solid"), `consequence` (the engine's reaction to an earlier failure), `advisory`, `out-of-scope` (SSR, host attribute checks, codes the published typings already reject).
+
+Per runtime diagnostic of a defect code: a checker violation there is `agree`; an uncertifiable finding is a `recall-gap`; nothing that could claim it is a `candidate-false-clean`. A diagnostic no line could be given for is a false clean only when the checker has no claiming finding anywhere in the file.
+
+The pipeline (`falseclean.mjs`, `falseclean-run.mjs`):
+
+1. **Coarse key** = the code, the chain of primitives above the owner call (`root>untrack`, `memo`), and the dynamic stack shape (the roles of the diagnostic's frames: a primitive, a handler, JSX; wrapper functions and calls are left out). Closure layers, helpers and decoys do not change it; the fine signature (`dedupe.mjs`) keeps them apart. The frames are read through `print.mjs`'s `lineTable` (line to node path), not the nearest site by line. On the 179 Chrome-confirmed owner diagnostics of phase C the key gives 55 groups (15 to 18 per code).
+2. **Ledger** `known-open.json`: `{ code, coarseKey, ref, reason }`, one exact key each, no wildcards. `ref` is `open-work.md#<anchor>` of a heading that exists, or `ADR nnnn` of a decision that exists; a bad ledger stops the run before it starts. A false clean matching an entry is `known-open`. A run reports the entries that did not fire (`stale-open` when the run covered the profile the entry came from). `--ledger <path>` or `--no-ledger`.
+3. **Confirm**: with `--confirm-with-chrome`, one representative per new group (the smallest program) is run in Chrome. Confirmed means Chrome reports the same code at the same innermost App line with no covering finding. A diagnostic Chrome reports but could not place counts too (`confirmed-unplaced`): for a false clean, Solid spoke. Other outcomes: `line-differs`, `covered-in-chrome`, `refuted-by-chrome`, `chrome-inconclusive`.
+4. **Shrink** (`--shrink`): the predicate is the same code, the same coarse key and no covering finding; the control is the legal twin, the program with its payload replaced by a literal, which must report no diagnostic of the code. The minimum is run in Chrome again and its status is reported (`minimum confirmed`); the fast path alone can drift.
+5. **Exit status 4**: a confirmed false clean with a coarse key the ledger does not know. The sweep still runs to the end (exit 3, a confirmed false positive, stays the stop).
+
+`findings.json` has a `falseClean` section (groups worst severity first, `knownOpen`, `staleOpen`, ranked `recallGaps`); `summary.json` carries the counts.
+
+### The misuse profile and the recall matrix
+
+The fuzzer above hunts a checker that is too loud (false positives) or silent where Solid speaks (false cleans) in programs it draws at random. The **misuse profile** (`--profile misuse`, `misuse.mjs`) asks the other question on purpose: for every code a rule claims (the `defect-claimed` rows of the policy table), does the checker report a violation when the primitive is misused? Each program targets one code at one marked site (a `use` node), so a matrix cell is unambiguous.
+
+* **Context** (the matrix column): component body, memo, effect compute or apply, render-effect compute or apply, `createTrackedEffect`, `onSettled`, `untrack`, `createRoot`, `runWithOwner(null)`, event handler, timer, promise callback, microtask, after an `await`, a JSX child (plain, under `Show`, in a `For` row), an `action` body, an async memo or effect compute. A code's list (`SPEC[code].contexts`) holds only the contexts where the call is a defect and the runtime reports it; `misuse-fire.test.mjs` fires every cell in the fast runtime.
+* **Layer** (random per program): none, a named closure called in place, a same-file helper taking the callback, an IIFE, or two of them.
+* **Binding** (random per program): the API reached by a direct import, `import * as S`, an alias (`flush as flushAlias`), a destructuring (`const { flush } = S`), or a wrapper function (the wrapper's inner call line belongs to the site, `aux` in `sites.json`).
+* **typed-away**: a code whose every misuse the published typings reject has no template (`MISSING_EFFECT_FN`: `createEffect(fn)` is TS2554). It is recorded with the type checker's error, never counted as a gap (invariant 1).
+
+`matrix.mjs` runs `--per-cell N` programs per (code, context) and judges each at its site:
+
+| column | meaning |
+| --- | --- |
+| typed-away | tsc rejects the program; not evidence |
+| harness | the checker or runtime run failed; not evidence |
+| not-fired | the program type-checks and the runtime did not report the code at the site: a generator problem |
+| agree | runtime-confirmed, and a violation of a rule that claims the code covers the site |
+| wrong-rule | runtime-confirmed, and only another rule's violation covers the site |
+| recall-gap | runtime-confirmed, and only an uncertifiable finding covers the site |
+| false-clean | runtime-confirmed, and no finding covers the site |
+
+Only runtime-confirmed programs (agree + wrong-rule + recall-gap + false-clean) count in the checker columns. `ASYNC_OUTSIDE_LOADING_BOUNDARY` is `placeless`: Solid reports it from the render root, at a line that is not an authored one, so it counts wherever the program reports it.
+
+```sh
+node scripts/fuzz/matrix.mjs --out <fresh dir> --seed 1 --per-cell 20 --confirm-with-chrome --shrink --checker-label <commit>
+node scripts/fuzz/matrix.mjs ... --baseline <saved matrix.json>         # gate: exit 1 on a regression
+node scripts/fuzz/matrix.mjs --gate <baseline.json> <current.json>      # compare two recorded matrices
+```
+
+`--confirm-with-chrome` runs, per cell, up to `--chrome-sample` (3) agree programs, up to `--chrome-false-clean` (4) false-clean programs and every wrong-rule program in Chrome and records `same`, `differs`, `not-fired-in-chrome` or `chrome-inconclusive` beside the fast verdict. `--shrink` reduces the smallest Chrome-confirmed false-clean program of each cell (the control is the legal twin) and reconfirms the minimum in Chrome. Output: `matrix.json` (per cell counts, per binding and layer counts, per-seed verdicts, Chrome summary, minimum), `matrix.md`, `programs.jsonl`, `repros/`.
+
+**Gate.** A cell's program seeds depend on the run seed, the code, the context and the index only (`cellSeed`), so a baseline and a later run with the same `--seed` and `--per-cell` judge the same programs. The gate fails (exit 1) when a cell's agree count drops or its false-clean count rises, or a baseline cell is missing; it names the seeds that moved. Different seeds, per-cell counts or generator versions are refused (exit 2). A cell where the checker improved is reported, not failed.
 
 ## Layout
 
@@ -32,9 +84,12 @@ When a run confirms a false positive (exit status 3), stop the sweep. Do not cha
 | `typecheck.mjs` | `tsrs -p ... --noEmit` against the published typings; a program that does not type-check is dropped |
 | `checker.mjs` | materializes a case as the oracle does and runs the native checker; per-site verdicts |
 | `fast.mjs`, `fast/` | the Happy DOM + `@solidjs/diagnostics` runtime path (Vitest) |
-| `classify.mjs`, `codes.mjs` | the comparator; the oracle's code/rule tables (a test fails when they drift) |
+| `classify.mjs`, `codes.mjs` | the comparator; the policy table per rc.17 code and the oracle's code/rule tables (tests fail when they drift) |
+| `falseclean.mjs`, `falseclean-run.mjs`, `known-open.json` | the false-clean stream: coarse key, ledger, Chrome confirmation, focused shrink with a control |
 | `shrink.mjs`, `dedupe.mjs` | delta debugging over the tree; signatures by construct path |
 | `chrome.mjs` | Chrome confirmation through `scripts/runtime-oracle.mjs` |
+| `misuse.mjs` | the misuse profile: a template per claimed code, the contexts, layers and binding forms |
+| `matrix.mjs` | the recall matrix (code x context), its Chrome sample, the false-clean shrink and the baseline gate |
 | `run.mjs` | the command line |
 
 ## Install
@@ -73,7 +128,7 @@ Any case directory is also runnable by the oracle directly: `node scripts/runtim
 1. Generator, type-check, classifier, shrinker, dedupe, CLI. Unit tests: `packages/cli/node_modules/.bin/vitest run --config packages/cli/vitest.config.mjs scripts/fuzz`.
 2. Rediscover this week's false positives on the pre-fix checker (ADR 0452 families), then confirm the fix clears them.
 3. Sweeps on the current checker; confirmed findings go to the owner.
-4. False cleans: a runtime diagnostic no finding covers is already classified (`candidate-false-clean`, provisional); hunting, confirming and shrinking them is not built.
+4. False cleans (phase D): the policy table and its drift test, the verdict tiers, the ledger, coarse dedupe, Chrome confirmation, focused shrink, exit status 4.
 5. The hit ledger (phase A): the twin, ran/landed, glue sites, the neutrality gate. The `dead-site` subkind is written and off.
 
 ## How the evidence works

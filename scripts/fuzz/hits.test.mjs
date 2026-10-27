@@ -7,7 +7,7 @@ import {
 import { printProgram } from "./print.mjs";
 
 const SEEDS = Array.from({ length: 400 }, (_, i) => i + 1);
-const PROFILES = [undefined, "body-call", "default-param", "helper-closure", "async", "in-place"];
+const PROFILES = [undefined, "body-call", "default-param", "helper-closure", "async", "in-place", "owner", "owner-context", "owner-effect"];
 
 describe("the instrumented twin (neutrality, part a)", () => {
   it("strip(runText) equals the clean text, line for line, on every seed and profile", () => {

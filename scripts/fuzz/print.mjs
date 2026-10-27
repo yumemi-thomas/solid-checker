@@ -13,10 +13,35 @@
 // is counted by `__h(N); <statement>`), and the counter's definition appended after
 // the last line, so no line moves. The type check, the fast path and Chrome run `runText`.
 import { INSTRUMENT_PRELUDE } from "./hits.mjs";
-import { paramTsType, signalTable, walk } from "./model.mjs";
+import { isSite, paramTsType, signalTable, walk } from "./model.mjs";
+import { AUX, MODULE, describeUse } from "./misuse.mjs";
 
 const MARK_OPEN = "\u0001";
 const MARK_CLOSE = "\u0002";
+// Span markers for the line table: `\u0003N\u0004` opens node N's text and `\u0005N\u0006` closes it. They are
+// removed with the site markers, so they move nothing.
+const SPAN_OPEN = "\u0003";
+const SPAN_OPEN_END = "\u0004";
+const SPAN_CLOSE = "\u0005";
+const SPAN_CLOSE_END = "\u0006";
+// The aux marker: the line of a wrapper's inner call (the misuse profile), found like a site marker and removed with it.
+const AUX_OPEN = "\u0007";
+const AUX_CLOSE = "\u0008";
+/** Node kinds the line table records: statements, view items, and every expression that is a call or a function. */
+const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "child", "attr", "show", "for",
+  "read", "write", "own", "use", "fn", "call", "set", "getOwner", "iife", "iter", "prim"]);
+
+/** A node's label in the line table and in the coarse dedupe key: its kind and, where it matters, what it is. */
+export function nodeLabel(node) {
+  switch (node.k) {
+    case "prim": return `prim:${node.name}`;
+    case "own": return `own:${node.op}`;
+    case "use": return `use:${node.code}`;
+    case "fn": return `fn:${node.form}${node.async ? ":async" : ""}`;
+    case "iter": return `iter:${node.method}`;
+    default: return node.k;
+  }
+}
 const INDENT = "  ";
 
 /** Node kinds whose print is a call the runtime executes: each is an auto-site (glue) in the twin. */
@@ -25,16 +50,18 @@ export const GLUE_KINDS = ["call", "set", "iife", "iter", "prim", "getOwner"];
 /**
  * @param {object} program
  * @param {{ instrument?: boolean }} [options] `instrument: false` skips the twin (`runText` is `text`, the ledger empty)
- * @returns {{ text: string, runText: string, sites: object[], glue: object[], ledger: object[] }}
+ * @returns {{ text: string, runText: string, sites: object[], glue: object[], ledger: object[], lineTable: object[] }}
  *   `sites`: the payload sites, each with its `hit` id in the twin.
  *   `glue`: one auto-site per emitted call, `{ id: "aN", hit, kind, line, path }`.
  *   `ledger`: every counter `{ hit, kind: site|auto|entry, ref, node, line, path, enclosing, inDefault }`;
  *   `enclosing` is the hit id of the nearest enclosing function entry (null for a component's own entry);
  *   `inDefault` marks a counter inside a parameter default (run only when the caller passes no argument).
+ *   `lineTable`: `{ line, endLine, path, label }` for every statement, view item, call and function: the node (its path in the
+ *   tree, its `nodeLabel`) whose text starts on `line` and ends on `endLine`. `nodeAtLine` reads it. Clean and twin share it.
  */
 export function printProgram(program, { instrument = true } = {}) {
   const clean = render(program, false);
-  if (!instrument) return { text: clean.text, runText: clean.text, sites: clean.sites, glue: [], ledger: [] };
+  if (!instrument) return { text: clean.text, runText: clean.text, sites: clean.sites, glue: [], ledger: [], lineTable: clean.lineTable };
   const run = render(program, true);
   const sites = clean.sites.map((site, index) => ({ ...site, hit: run.siteHits[index] }));
   const bySiteHit = new Map(sites.map((site) => [site.hit, site.id]));
@@ -49,8 +76,18 @@ export function printProgram(program, { instrument = true } = {}) {
     }
     return { ...base, ref: `e${row.hit}` };
   });
-  return { text: clean.text, runText: `${run.text}${INSTRUMENT_PRELUDE}`, sites, glue, ledger };
+  return { text: clean.text, runText: `${run.text}${INSTRUMENT_PRELUDE}`, sites, glue, ledger, lineTable: clean.lineTable };
 }
+
+/**
+ * The nodes of the line table that cover `line`, innermost first (deepest path, then the narrowest span).
+ * A runtime frame's line lands inside the call it is running; the first row is the innermost node there.
+ */
+export function nodesAtLine(lineTable, line) {
+  return (lineTable ?? []).filter((row) => row.line <= line && line <= row.endLine)
+    .sort((a, b) => b.path.length - a.path.length || (a.endLine - a.line) - (b.endLine - b.line));
+}
+export const nodeAtLine = (lineTable, line) => nodesAtLine(lineTable, line)[0] ?? null;
 
 function render(program, instrument) {
   // Site numbering follows the tree walk, which is the order sites appear in the file.
@@ -73,7 +110,7 @@ function render(program, instrument) {
         if (callee.k !== "member") break;
       }
     }
-    if ((node.k === "read" || node.k === "write") && node.site) {
+    if (isSite(node)) {
       siteIndex.set(node, sitePaths.length);
       sitePaths.push({ node, path });
     }
@@ -81,6 +118,10 @@ function render(program, instrument) {
   const used = new Set(["createSignal"]);
   const signals = signalTable(program);
   const helpers = new Map((program.helpers ?? []).map((helper) => [helper.name, helper]));
+  // The misuse profile: what each `use` node prints and needs (imports, wrapper functions, aliases).
+  const uses = new Map();
+  for (const { node } of walk(program)) if (node.k === "use") uses.set(node, describeUse(node, signals));
+  const auxLine = (node, line) => line.replace(AUX, siteIndex.has(node) ? `${AUX_OPEN}${siteIndex.get(node)}${AUX_CLOSE}` : "");
 
   // The hit ledger: one id per counter, allocated in print order (a function of the tree alone).
   const ledger = [];
@@ -128,6 +169,14 @@ function render(program, instrument) {
     return `${mark(node)}(__h(${hit}), ${text})`;
   };
   const ind = (depth) => INDENT.repeat(depth);
+  // The line table: every lineable node's text is wrapped in span markers, read back (and stripped) below.
+  const spans = [];
+  const span = (node, text) => {
+    if (!LINE_KINDS.has(node.k)) return text;
+    spans.push({ node, path: pathOf.get(node) });
+    const id = spans.length - 1;
+    return `${SPAN_OPEN}${id}${SPAN_OPEN_END}${text}${SPAN_CLOSE}${id}${SPAN_CLOSE_END}`;
+  };
 
   function params(f, depth) {
     return f.params.map((p, index) => {
@@ -154,7 +203,8 @@ function render(program, instrument) {
     const text = entry === null ? inner() : within({ entry, inDefault: false }, inner);
     return `{${hit ? ` ${hit}` : ""}\n${text}\n${ind(depth)}}`;
   }
-  function stmtText(stmt, depth) {
+  function stmtText(stmt, depth) { return span(stmt, statement(stmt, depth)); }
+  function statement(stmt, depth) {
     switch (stmt.k) {
       case "expr": return counting(stmt.e, () => `${expr(stmt.e, depth)};`);
       case "decl":
@@ -165,46 +215,94 @@ function render(program, instrument) {
         return counting(stmt.e, () => `const ${stmt.name} = ${expr(stmt.e, depth)};`);
       case "return": return counting(stmt.e, () => `return ${expr(stmt.e, depth)};`);
       case "await": return "await Promise.resolve();";
+      case "try": return `try ${block(stmt.body, depth)} finally ${block(stmt.fin, depth)}`;
       default: throw new Error(`cannot print statement ${stmt.k}`);
     }
   }
-  function expr(e, depth) {
+  function expr(e, depth) { return span(e, expression(e, depth)); }
+  function expression(e, depth) {
     switch (e.k) {
       case "num": return String(e.n);
       case "read": return siteCall(e, `${e.sig}()`);
-      case "write": return siteCall(e, `${signals.get(e.sig).setter}(${e.value})`);
+      case "write": return siteCall(e, writeText(e));
+      case "own": return siteCall(e, ownText(e, depth));
+      case "use": return siteCall(e, uses.get(e).text);
       case "ref": return e.name;
       case "member": return `${expr(e.obj, depth)}.${e.key}`;
-      case "obj": return e.fields.length ? `{ ${e.fields.map((f) => (f.e.k === "ref" && f.e.name === f.key ? f.key : `${f.key}: ${expr(f.e, depth)}`)).join(", ")} }` : "{}";
+      case "obj": return e.fields.length ? `{ ${e.fields.map((f) => {
+        if (f.e.k === "ref" && f.e.name === f.key) return f.key;
+        if (f.e.k === "fn" && f.e.form === "method") { const { head, body } = fnParts(f.e, depth, null); return `${f.e.async ? "async " : ""}${f.key}${head} ${body}`; }
+        return `${f.key}: ${expr(f.e, depth)}`;
+      }).join(", ")} }` : "{}";
       case "fn": return fnText(e, depth);
       case "call": return glue(e, () => `${e.callee.k === "fn" || e.callee.k === "prim" ? `(${expr(e.callee, depth)})` : expr(e.callee, depth)}(${e.args.map((a) => expr(a, depth)).join(", ")})`);
       case "set": return glue(e, () => `${signals.get(e.sig).setter}(${expr(e.e, depth)})`);
       case "getOwner": used.add("getOwner"); return glue(e, () => "getOwner()");
+      case "flush": used.add("flush"); return "flush()";
       case "iife": return glue(e, () => `(${expr(e.fn, depth)})()`);
       case "iter": return glue(e, () => (e.method === "map" ? `[1].map(${expr(e.fn, depth)})[0]` : `[1].forEach(${expr(e.fn, depth)})`));
       case "prim": return glue(e, () => primText(e, depth));
       default: throw new Error(`cannot print expression ${e.k}`);
     }
   }
+  /** A write by its target's kind (model.mjs storeSignal, memoSignal, actionSignal); a plain signal is `setX(value)`. */
+  function writeText(e) {
+    const sig = signals.get(e.sig);
+    switch (sig.kind) {
+      case "store": used.add("createStore"); return `${sig.setter}((s) => { s.v = ${e.value}; })`;
+      case "memo": used.add("refresh"); return `refresh(${sig.name})`;
+      case "action": return `${sig.name}()`;
+      default: return `${sig.setter}(${e.value})`;
+    }
+  }
+  function ownText(e, depth) {
+    switch (e.op) {
+      case "cleanup": used.add("onCleanup"); return `onCleanup(${expr(e.fn, depth)})`;
+      case "settled": used.add("onSettled"); return `onSettled(${expr(e.fn, depth)})`;
+      case "effect": used.add("createEffect"); return `createEffect(${expr(e.fn, depth)}, ${fnText(e.apply, depth, { header: "(v)" })})`;
+      case "context": used.add("useContext"); return "useContext(Ctx)";
+      default: throw new Error(`cannot print owner op ${e.op}`);
+    }
+  }
   function primText(e, depth) {
-    const f = expr(e.fn, depth);
+    const f = e.name === "rootd" || e.name === "action" ? null : expr(e.fn, depth);
     switch (e.name) {
       case "memo": used.add("createMemo"); return `createMemo(${f})`;
       case "effect": used.add("createEffect"); return `createEffect(${f}, ${fnText(e.apply, depth, { header: "(v)" })})`;
       case "untrack": used.add("untrack"); return `untrack(${f})`;
       case "root": used.add("createRoot"); return `createRoot(${f})`;
-      case "owner": used.add("runWithOwner"); return `runWithOwner(${e.ownerArg === "owner" ? "owner" : "null"}, ${f})`;
+      case "owner": {
+        used.add("runWithOwner");
+        if (e.ownerArg === "create") used.add("createOwner");
+        return `runWithOwner(${e.ownerArg === "owner" ? "owner" : e.ownerArg === "create" ? "createOwner()" : "null"}, ${f})`;
+      }
+      case "rootd": used.add("createRoot"); return `createRoot(${fnText(e.fn, depth, { header: "(dispose)" })})`;
+      case "micro": return `queueMicrotask(${f})`;
       case "settled": used.add("onSettled"); return `onSettled(${f})`;
       case "cleanup": used.add("onCleanup"); return `onCleanup(${f})`;
       case "timer": return `setTimeout(${f}, 0)`;
       case "then": return `Promise.resolve().then(${f})`;
+      case "render": used.add("createRenderEffect"); return `createRenderEffect(${f}, ${fnText(e.apply, depth, { header: "(v)" })})`;
+      case "tracked": used.add("createTrackedEffect"); return `createTrackedEffect(${f})`;
+      case "action": {
+        used.add("action");
+        const { head, body } = fnParts(e.fn, depth, "()");
+        return `action(function* ${head} ${body})`;
+      }
       default: throw new Error(`cannot print prim ${e.name}`);
     }
   }
 
   function viewText(item, depth) {
+    const lines = view(item, depth);
+    if (!LINE_KINDS.has(item.k)) return lines;
+    spans.push({ node: item, path: pathOf.get(item) });
+    const id = spans.length - 1;
+    return [`${SPAN_OPEN}${id}${SPAN_OPEN_END}${lines[0]}`, ...lines.slice(1)].map((line, index, all) => (index === all.length - 1 ? `${line}${SPAN_CLOSE}${id}${SPAN_CLOSE_END}` : line));
+  }
+  function view(item, depth) {
     switch (item.k) {
-      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${item.sig}()}</output>`];
+      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${signals.get(item.sig)?.kind === "store" ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
       case "button": {
         const lines = [`${ind(depth)}<button data-act="${item.id}" onClick={() => ${block(item.handler, depth, entryFor(item, "handler"))}}>go</button>`];
         return lines;
@@ -225,8 +323,25 @@ function render(program, instrument) {
     }
   }
 
-  const signalLine = (sig) => `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
+  const signalLine = (sig) => {
+    switch (sig.kind) {
+      case "store": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init} });`;
+      case "memo": used.add("createMemo"); return `const ${sig.name} = createMemo(() => 1);`;
+      case "action": used.add("action"); return `const ${sig.name} = action(function* () { ${signals.get(sig.target).setter}(${sig.value}); });`;
+      case "async": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => 1);`;
+      case "store-opt": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({ v: ${sig.init} });`;
+      default: return `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
+    }
+  };
   const out = [];
+  // `useContext(Ctx)`: one module-level context with a default value (a read with no provider is then not an error; no owner is).
+  const usesContext = [...walk(program)].some(({ node }) => node.k === "own" && node.op === "context");
+  if (usesContext) { used.add("createContext"); out.push("const Ctx = createContext(7);", ""); }
+  const useList = [...uses.entries()];
+  for (const [node, described] of useList) {
+    if (described.contextLine) { used.add("createContext"); out.push(described.contextLine, ""); }
+    for (const line of described.moduleLines) out.push(auxLine(node, line), "");
+  }
   const moduleSignals = program.moduleSignals ?? [];
   moduleSignals.forEach((sig) => out.push(signalLine(sig)));
   if (moduleSignals.length) out.push("");
@@ -238,14 +353,17 @@ function render(program, instrument) {
     out.push(`export function ${component.name}() {${entry === null ? "" : ` __h(${entry});`}`);
     within({ entry, inDefault: false }, () => {
       for (const sig of component.signals) out.push(`${INDENT}${signalLine(sig)}`);
+      for (const [node, described] of useList) for (const line of described.preludeLines) out.push(`${INDENT}${auxLine(node, line)}`);
       for (const stmt of component.body) out.push(`${INDENT}${stmtText(stmt, 1)}`);
       out.push(`${INDENT}return (`, `${INDENT}${INDENT}<div>`);
       for (const item of component.view) out.push(...viewText(item, 3));
     });
     out.push(`${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
-  const importNames = [...used].sort();
-  const header = `import { ${importNames.join(", ")} } from "solid-js";\n\n`;
+  const importNames = [...new Set([...used, ...useList.flatMap(([, described]) => described.solid)])].sort();
+  const webNames = [...new Set(useList.flatMap(([, described]) => described.web))].sort();
+  const namespaces = [...new Set(useList.flatMap(([, described]) => described.namespaces))].sort();
+  const header = `import { ${importNames.join(", ")} } from "solid-js";\n${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}\n`;
   // Printing the body filled `used`; the header goes first, so line numbers shift by its height.
   const body = out.join("\n");
   const full = `${header}${body}`.replace(/\n+$/, "\n");
@@ -254,17 +372,30 @@ function render(program, instrument) {
   const siteLines = new Map();
   const markPattern = new RegExp(`${MARK_OPEN}(\\d+)${MARK_CLOSE}`, "g");
   const hitLines = new Map();
+  const auxPattern = new RegExp(`${AUX_OPEN}(\\d+)${AUX_CLOSE}`, "g");
+  const auxLines = new Map();
   lines.forEach((line, row) => {
+    for (const match of line.matchAll(auxPattern)) auxLines.set(Number(match[1]), [...(auxLines.get(Number(match[1])) ?? []), row + 1]);
     for (const match of line.matchAll(markPattern)) siteLines.set(Number(match[1]), row + 1);
     if (instrument) for (const match of line.matchAll(/__h\((\d+)\)/g)) hitLines.set(Number(match[1]), row + 1);
   });
-  const text = full.replace(markPattern, "");
+  const spanOpen = new RegExp(`${SPAN_OPEN}(\\d+)${SPAN_OPEN_END}`, "g");
+  const spanClose = new RegExp(`${SPAN_CLOSE}(\\d+)${SPAN_CLOSE_END}`, "g");
+  const starts = new Map(); const ends = new Map();
+  lines.forEach((line, row) => {
+    for (const match of line.matchAll(spanOpen)) starts.set(Number(match[1]), row + 1);
+    for (const match of line.matchAll(spanClose)) ends.set(Number(match[1]), row + 1);
+  });
+  const lineTable = spans.map(({ node, path }, id) => ({ line: starts.get(id), endLine: ends.get(id), path, label: nodeLabel(node) }))
+    .filter((row) => row.line !== undefined && row.endLine !== undefined && row.path);
+  const text = full.replace(markPattern, "").replace(auxPattern, "").replace(spanOpen, "").replace(spanClose, "");
   const sites = sitePaths.map(({ node, path }, index) => ({
-    id: `s${index + 1}`, kind: node.k, sig: node.sig, value: node.k === "write" ? node.value : undefined,
+    id: `s${index + 1}`, kind: node.k, sig: node.sig, op: node.k === "own" ? node.op : undefined, value: node.k === "write" ? node.value : undefined,
     line: siteLines.get(index), path, witness: node.witness ?? null,
+    ...(node.k === "use" ? { code: node.code, bind: node.bind, aux: auxLines.get(index) ?? [] } : {}),
   }));
   for (const row of ledger) row.line = hitLines.get(row.hit);
-  return { text, sites, siteHits, ledger };
+  return { text, sites, siteHits, ledger, lineTable };
 
   function helperText(helper) {
     switch (helper.form) {

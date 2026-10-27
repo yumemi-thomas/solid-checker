@@ -15,9 +15,12 @@
 // cases a construction can still hit (a `forEach` result routed into a JSX child) are
 // removed by validating the finished component and drawing again, up to a bound.
 import { createRng } from "./rng.mjs";
+import { buildDisposal } from "./disposal.mjs";
+import { buildMisuse } from "./misuse.mjs";
 import {
   validate, signal, num, read, write, ref, member, obj, call, iife, iter, fn, param, prim, expr, decl, ret,
   awaitStmt, probe, button, child, attr, show, forEach, set, exprTsType, getOwner, helper, component, program as makeProgram,
+  own, isSite, OWN_OPS,
 } from "./model.mjs";
 
 export const GENERATOR_VERSION = 2;
@@ -26,6 +29,14 @@ const PROFILES = [
   // [weight, name]
   [3, "closure-escape"], [3, "default-param"], [2, "helper-closure"], [2, "in-place"], [1, "async"], [2, "mixed"], [2, "body-call"],
 ];
+
+/**
+ * Owner profiles (not drawn at random: ask for them with `--profile`, so the seeds of the other profiles are unchanged).
+ * The payload is an owner-requiring call (`onCleanup`, `createEffect`, `onSettled`, `useContext`) in any host: the runtime
+ * warns or throws when no owner is current (NO_OWNER_*, SETTLED_CLEANUP_UNOWNED), or when the host forbids the call
+ * (CLEANUP_IN_FORBIDDEN_SCOPE). A site shows nothing on the page; the hit ledger says it ran.
+ */
+export const OWNER_PROFILES = { "owner-cleanup": "cleanup", "owner-effect": "effect", "owner-settled": "settled", "owner-context": "context", owner: null };
 
 const HOSTS = ["memo", "effect", "untrack", "root", "owner", "body", "apply", "settled", "cleanup", "timer", "then", "handler", "jsx", "async"];
 /** Hosts a control subject uses: a leaf scope where a write or read is legal. */
@@ -40,6 +51,8 @@ const hostWeights = {
   mixed: Object.fromEntries(HOSTS.map((host) => [host, 1])),
   // A memo that builds a closure the component body then calls (`m()()`): the read is untracked there (rc.17 warns).
   "body-call": { memo: 8, effect: 1, untrack: 0, root: 1, owner: 0, body: 1, apply: 0, settled: 0, cleanup: 0, timer: 0, then: 0, handler: 0, jsx: 1, async: 0 },
+  // Owner payloads: ownerless hosts (handler, timer, promise, runWithOwner(null), untrack) and owned ones (body, memo, effect, root) both.
+  ...Object.fromEntries(Object.keys(OWNER_PROFILES).map((name) => [name, { memo: 3, effect: 3, untrack: 3, root: 3, owner: 4, body: 3, apply: 3, settled: 3, cleanup: 2, timer: 3, then: 3, handler: 3, jsx: 0, async: 2 }])),
 };
 
 const layerWeights = (profile) => ({
@@ -50,6 +63,7 @@ const layerWeights = (profile) => ({
   async: { closure: 3, default: 0, iife: 1, iter: 1, helper: 1 },
   mixed: { closure: 3, default: 3, iife: 2, iter: 2, helper: 2 },
   "body-call": { closure: 6, default: 1, iife: 1, iter: 1, helper: 2 },
+  ...Object.fromEntries(Object.keys(OWNER_PROFILES).map((name) => [name, { closure: 4, default: 1, iife: 2, iter: 1, helper: 2 }])),
 })[profile];
 
 export function generateProgram(seed, options = {}) {
@@ -58,7 +72,7 @@ export function generateProgram(seed, options = {}) {
   // One component per page: a thrown dev error halts reactivity for every root on the page, so a second
   // component would hide or fake the first one's behaviour. More than one is for experiments only.
   const count = options.components ?? 1;
-  const ctx = { rng, profile, counters: {}, helpers: new Map(), moduleSignals: [] };
+  const ctx = { rng, profile, plan: options.disposalPlan, misusePlan: options.misusePlan, counters: {}, helpers: new Map(), moduleSignals: [] };
   const components = [];
   for (let index = 0; index < count; index += 1) {
     const control = index > 0 && rng.chance(0.5);
@@ -77,6 +91,8 @@ function buildValidComponent(ctx, index, control) {
     // A drawn component that failed validation consumed names; restore them so a retry is stable.
     ctx.counters = snapshot.counters; ctx.helpers = snapshot.helpers; ctx.moduleSignals = snapshot.moduleSignals;
   }
+  // A misuse program is its template: a fallback would hide a broken one.
+  if (ctx.profile === "misuse") throw new Error(`misuse template for seed ${ctx.seed ?? "?"} failed validation: ${validate(makeProgram({ seed: 0, helpers: [...ctx.helpers.values()], moduleSignals: ctx.moduleSignals, components: [buildComponent(ctx, index, control)] })).join("; ")}`);
   return fallbackComponent(ctx, index);
 }
 
@@ -105,6 +121,16 @@ function ensureHelper(ctx, form) {
 
 function buildComponent(ctx, index, control) {
   const { rng, profile } = ctx;
+  if (profile === "disposal") {
+    // Writes that run while an owner is disposed (disposal.mjs). Asked for with `--profile disposal`, never drawn at random.
+    const built = buildDisposal({ rng, name: (prefix) => name(ctx, prefix), counter: (key) => counter(ctx, key), ensureHelper: (form) => ensureHelper(ctx, form) }, ctx.plan);
+    return { ...component(`C${index + 1}`, built.sigs, built.body, built.view), shape: built.shape };
+  }
+  if (profile === "misuse") {
+    // Provokes one claimed diagnostic code at one marked site (misuse.mjs). Asked for with `--profile misuse`, never drawn at random.
+    const built = buildMisuse({ rng, name: (prefix) => name(ctx, prefix), ensureHelper: (form) => ensureHelper(ctx, form) }, ctx.misusePlan);
+    return { ...component(`C${index + 1}`, built.sigs, built.body, built.view), shape: built.shape, misuse: built.misuse };
+  }
   const sigs = [];
   const view = [];
   const body = [];
@@ -114,7 +140,10 @@ function buildComponent(ctx, index, control) {
 
   // The payload and where its effect is shown.
   let payload; let route = { needsValue };
-  if (needsValue) {
+  if (profile in OWNER_PROFILES) {
+    payload = own(OWNER_PROFILES[profile] ?? rng.pick(OWN_OPS), { site: true, witness: null });
+    route = { needsValue: false };
+  } else if (needsValue) {
     const init = 1000 + 7 * counter(ctx, "value");
     const src = mkSig("r", init, "src");
     const sink = mkSig("k", 0, "sink");
@@ -394,7 +423,7 @@ function findPayload(nodes) {
   while (stack.length) {
     const node = stack.pop();
     if (!node || typeof node !== "object") continue;
-    if ((node.k === "read" || node.k === "write") && node.site) return node;
+    if (isSite(node)) return node;
     for (const value of Object.values(node)) {
       if (Array.isArray(value)) stack.push(...value);
       else if (value && typeof value === "object") stack.push(value);
