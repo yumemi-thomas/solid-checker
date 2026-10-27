@@ -813,6 +813,8 @@ pub(super) fn named_callback_write_role(
         return None;
     }
     let mut rejected = None;
+    // A site the disposal leaves unplaced: neither a throw nor legal.
+    let mut unplaced = false;
     'calls: for call in &file.ast.calls {
         for (index, argument) in call.arguments.iter().enumerate() {
             if argument.value != solid_facts::ast::ArgumentValueKind::Identifier
@@ -830,9 +832,30 @@ pub(super) fn named_callback_write_role(
                 .dialect
                 .callback_runs_in_created_root(primitive, index)
             {
-                root_body
-                    .rejects()
-                    .then_some(ExecutionRole::UntrackedRendering)
+                match root_body {
+                    RootBodyGuard::Rejects => Some(ExecutionRole::UntrackedRendering),
+                    RootBodyGuard::Exempts => None,
+                    // The guard stands down in a disposal on the release that
+                    // says so, as for the same call written inline: a root
+                    // created in a cleanup runs its body there. Only the
+                    // proof that the call is outside a disposal rejects.
+                    RootBodyGuard::RejectsOutsideDisposal => {
+                        use solid_dialect::WriteGuardInDisposal as Guard;
+                        let guard = lookup.dialect.write_guard_in_disposal();
+                        if guard == Guard::Rejects {
+                            Some(ExecutionRole::UntrackedRendering)
+                        } else {
+                            match runs_in_disposal(file, call.span, lookup) {
+                                DisposalReach::NotIn => Some(ExecutionRole::UntrackedRendering),
+                                DisposalReach::Only if guard == Guard::StandsDown => None,
+                                DisposalReach::Only | DisposalReach::Unplaced => {
+                                    unplaced = true;
+                                    None
+                                }
+                            }
+                        }
+                    }
+                }
             } else if lookup
                 .dialect
                 .callback_preserves_owner_write_context(primitive)
@@ -859,7 +882,9 @@ pub(super) fn named_callback_write_role(
         }
     }
     visiting.remove(&key);
-    rejected
+    // A site that throws is a violation whatever the others do; otherwise a
+    // site the disposal leaves unplaced keeps the write unplaced.
+    rejected.or_else(|| unplaced.then_some(ExecutionRole::Unknown))
 }
 
 /// `classifying` is the stack of spans whose role is currently being derived

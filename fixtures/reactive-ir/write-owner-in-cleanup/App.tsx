@@ -1,12 +1,17 @@
 import {
   action,
   createEffect,
+  createMemo,
   createOwner,
+  createRenderEffect,
   createRoot,
   createSignal,
+  createTrackedEffect,
+  flush,
   getOwner,
   onCleanup,
   runWithOwner,
+  untrack,
   type Owner,
 } from "solid-js";
 
@@ -73,14 +78,58 @@ export function CleanupCallsRootHelper() {
 // --- Violations: the same owner outside a disposal --------------------------
 
 // An effect apply's returned cleanup is no registration: a rerun calls it
-// outside `runDisposal`, and the write throws.
+// outside `runDisposal`, and the write throws. The effect tracks `n`, which a
+// button changes, so it can rerun.
 export function EffectReturnedCleanup() {
+  const [v, setV] = createSignal(0);
+  const [n, setN] = createSignal(0);
+  const o = getOwner();
+  createEffect(
+    () => n(),
+    () => () => runWithOwner(o, () => setV(6))
+  );
+  return <button onClick={() => setN(n() + 1)}>{v()}</button>;
+}
+export function RenderEffectReturnedCleanup() {
+  const [v, setV] = createSignal(0);
+  const [n, setN] = createSignal(0);
+  const o = getOwner();
+  createRenderEffect(
+    () => n(),
+    () => () => runWithOwner(o, () => setV(40))
+  );
+  return <button onClick={() => setN(n() + 1)}>{v()}</button>;
+}
+export function TrackedEffectReturnedCleanup() {
+  const [v, setV] = createSignal(0);
+  const [n, setN] = createSignal(0);
+  const o = getOwner();
+  createTrackedEffect(() => {
+    n();
+    return () => runWithOwner(o, () => setV(41));
+  });
+  return <button onClick={() => setN(n() + 1)}>{v()}</button>;
+}
+// An effect apply that runs on a flush outside every cleanup runs outside a
+// disposal.
+export function EffectApplyUnderOwner() {
   const [v, setV] = createSignal(0);
   const o = getOwner();
   createEffect(
-    () => v(),
-    () => () => runWithOwner(o, () => setV(6))
+    () => 0,
+    () => {
+      runWithOwner(o, () => setV(42));
+    }
   );
+  return <div>{v()}</div>;
+}
+// A named function the body hands to `createRoot` runs in the body.
+export function NamedRootBodyInComponent() {
+  const [v, setV] = createSignal(0);
+  function init() {
+    setV(43);
+  }
+  createRoot(init);
   return <div>{v()}</div>;
 }
 // A cleanup that schedules the write runs it after the disposal is over.
@@ -100,15 +149,27 @@ export function CleanupRegisteredWriteInBody() {
   runWithOwner(o, () => setV(8));
   return <div>{v()}</div>;
 }
-// A cleanup that only builds the function: it runs where it is called.
+// A cleanup that only builds the function: it runs where it is called. The
+// memo reruns when `n` changes, its cleanup then defines `later`, and a click
+// calls it with the disposal over.
 export function CleanupStoresFunction() {
   const [v, setV] = createSignal(0);
+  const [n, setN] = createSignal(0);
   const o = getOwner();
   let later: (() => void) | undefined;
-  onCleanup(() => {
-    later = () => runWithOwner(o, () => setV(9));
+  const m = createMemo(() => {
+    n();
+    onCleanup(() => {
+      later = () => runWithOwner(o, () => setV(9));
+    });
+    return v();
   });
-  return <button onClick={() => later?.()}>{v()}</button>;
+  return (
+    <div>
+      <button onClick={() => setN(n() + 1)}>{m()}</button>
+      <button onClick={() => later?.()} />
+    </div>
+  );
 }
 // An action call's guard does not stand down in a disposal.
 const act = action(function* () {});
@@ -250,6 +311,105 @@ export function DeclaredHelperFromCleanup() {
   const o = getOwner();
   onCleanup(() => writeUnder(o));
   return <div>{shared()}</div>;
+}
+
+// --- Legal: a function passed by name to a root the cleanup creates --------
+
+// `createRoot(init)` runs `init` as the root body, here inside the cleanup.
+export function CleanupNamedRootBody() {
+  const [v, setV] = createSignal(0);
+  function init() {
+    setV(44);
+  }
+  onCleanup(() => createRoot(init));
+  return <div>{v()}</div>;
+}
+export function CleanupConstRootBody() {
+  const [v, setV] = createSignal(0);
+  const init = () => setV(45);
+  onCleanup(() => createRoot(init));
+  return <div>{v()}</div>;
+}
+
+// --- Uncertifiable: an effect that may never rerun ---------------------------
+
+// A rerun calls the returned cleanup outside a disposal, but an effect that
+// tracks nothing it can see change never reruns: the cleanup runs once, in the
+// final teardown (inside a disposal, where rc.17 lets the write land).
+export function EffectCleanupConstantCompute() {
+  const [v, setV] = createSignal(0);
+  const o = getOwner();
+  createEffect(
+    () => 0,
+    () => () => runWithOwner(o, () => setV(46))
+  );
+  return <div>{v()}</div>;
+}
+export function RenderEffectCleanupConstantCompute() {
+  const [v, setV] = createSignal(0);
+  const o = getOwner();
+  createRenderEffect(
+    () => 0,
+    () => () => runWithOwner(o, () => setV(47))
+  );
+  return <div>{v()}</div>;
+}
+export function TrackedEffectCleanupNoReads() {
+  const [v, setV] = createSignal(0);
+  const o = getOwner();
+  createTrackedEffect(() => () => runWithOwner(o, () => setV(48)));
+  return <div>{v()}</div>;
+}
+// The only write of the tracked signal is the cleanup's own: the cleanup runs
+// only after a rerun, which only the cleanup can cause.
+export function EffectCleanupTracksItsOwnTarget() {
+  const [v, setV] = createSignal(0);
+  const o = getOwner();
+  createEffect(
+    () => v(),
+    () => () => runWithOwner(o, () => setV(49))
+  );
+  return <div>{v()}</div>;
+}
+// An untracked read subscribes to nothing.
+export function EffectCleanupUntrackedRead() {
+  const [v, setV] = createSignal(0);
+  const [n, setN] = createSignal(0);
+  const o = getOwner();
+  createEffect(
+    () => untrack(n),
+    () => () => runWithOwner(o, () => setV(50))
+  );
+  return <button onClick={() => setN(n() + 1)}>{v()}</button>;
+}
+// A signal nothing writes never changes.
+export function EffectCleanupReadsConstantSignal() {
+  const [v, setV] = createSignal(0);
+  const [n] = createSignal(0);
+  const o = getOwner();
+  createEffect(
+    () => n(),
+    () => () => runWithOwner(o, () => setV(51))
+  );
+  return <div>{v()}</div>;
+}
+
+// --- Uncertifiable: an effect created and flushed in a cleanup -------------
+
+// The apply runs inside the disposal.
+export function CleanupFlushesEffect() {
+  const [v, setV] = createSignal(0);
+  const o = getOwner();
+  onCleanup(() => {
+    createEffect(
+      () => 0,
+      () => {
+        runWithOwner(o, () => setV(52));
+      }
+    );
+    flush();
+  });
+  return <div>{v()}</div>;
 }
 
 // --- Legal: a root the cleanup creates, with an inline layer in it ---------

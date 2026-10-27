@@ -286,7 +286,7 @@ fn detached_in_place(
 /// Whether a write under a proven owner runs in a disposal, for the release
 /// whose write guards stand down there ([`runs_in_disposal`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum DisposalReach {
+pub(super) enum DisposalReach {
     /// Written in a callback that runs only while an owner is disposed, on a
     /// stack no await has left.
     Only,
@@ -317,7 +317,7 @@ enum DisposalReach {
 /// disposal bracket once the climb has left the callback that gave the write
 /// its owner; inside that callback the owner is gone with it, which is not
 /// this question's, so the site is unplaced.
-fn runs_in_disposal(
+pub(super) fn runs_in_disposal(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
@@ -376,6 +376,12 @@ fn runs_in_disposal(
             }
             match callback_execution_at_call(file, call, primitive, index, lookup) {
                 Some(Execution::Inline) => {}
+                // The engine runs the callback on its own schedule, which a
+                // flush inside a cleanup may put in that cleanup: only a
+                // callback created outside every cleanup is proven outside.
+                Some(_) if inside_disposal_callback(file, call.span, lookup) => {
+                    return DisposalReach::Unplaced;
+                }
                 Some(_) => return DisposalReach::NotIn,
                 None => timing_unknown = true,
             }
@@ -409,6 +415,25 @@ fn runs_in_disposal(
         }
     }
     DisposalReach::Unplaced
+}
+
+/// Whether `span` is written inside a callback that runs only in a disposal
+/// ([`solid_dialect::Dialect::callback_runs_only_in_disposal`]). An effect
+/// created there and flushed there applies inside that disposal.
+fn inside_disposal_callback(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast.arguments_containing(span).any(|(call, index)| {
+        lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| {
+                lookup
+                    .dialect
+                    .callback_runs_only_in_disposal(primitive, index)
+            })
+    })
 }
 
 /// Whether `function` is a literal the compiler reads as an event handler (a
@@ -538,8 +563,103 @@ fn returned_by_rerunning_effect(
                         lookup
                             .dialect
                             .returned_cleanup_runs_outside_disposal(primitive, index)
+                            && effect_provably_reruns(file, call, index, outer, function, lookup)
                     })
             })
+}
+
+/// Whether the effect whose apply (or tracked body) is `outer` provably tracks
+/// a source that can change, so that its returned cleanup `cleanup` is called
+/// by a rerun and not only by the final teardown (which runs it inside a
+/// disposal). The function that tracks (the compute of `createEffect` and
+/// `createRenderEffect`, the body of `createTrackedEffect`) must call, on
+/// every completion, the accessor of a `createSignal` declared in this file
+/// whose setter is referenced outside `cleanup` or exported. An effect that
+/// reads nothing, reads under a condition or `untrack`, reads another kind of
+/// source, or reads a signal nothing writes may never rerun: unplaced.
+fn effect_provably_reruns(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    outer: &solid_facts::ast::FunctionFact,
+    cleanup: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_facts::ast::IdentifierRole;
+    let tracked = if index == 0 {
+        Some(outer)
+    } else {
+        call.arguments
+            .first()
+            .filter(|compute| !compute.spread)
+            .and_then(|compute| crate::cleanup::callback_argument_literal(file, compute.span))
+    };
+    let Some(tracked) = tracked else {
+        return false;
+    };
+    if tracked.r#async || tracked.generator {
+        return false;
+    }
+    let Some(unconditional) = solid_facts::ast::synchronously_unconditional_calls(
+        std::path::Path::new(file.path.as_str()),
+        &file.source,
+        tracked.span,
+        &[],
+    ) else {
+        return false;
+    };
+    file.ast.calls.iter().any(|read| {
+        if read.construct
+            || !read.arguments.is_empty()
+            || !unconditional.contains(&read.span)
+            || crate::owners::owning_function(&file.ast, read.span)
+                .is_none_or(|owner| owner.span != tracked.span)
+        {
+            return false;
+        }
+        let callee = file.ast.peel_ts_sugar_span(read.callee);
+        let Some(declaration) = file.ast.reference_declaration(callee) else {
+            return false;
+        };
+        let Some((binding_file, binding, _)) =
+            lookup.binding_at_reference(file.path.as_str(), callee)
+        else {
+            return false;
+        };
+        if binding_file.path != file.path
+            || !binding.immutable
+            || binding.shape != solid_facts::ast::BindingShape::Array
+            || binding
+                .array_slots
+                .first()
+                .and_then(Option::as_ref)
+                .is_none_or(|accessor| accessor.span != declaration)
+        {
+            return false;
+        }
+        let Some(initializer) = binding
+            .call_initializer
+            .map(|span| file.ast.peel_ts_sugar_span(span))
+            .and_then(|span| file.ast.call_at(span))
+        else {
+            return false;
+        };
+        if initializer.construct
+            || lookup.primitive_at_call(file, initializer.span)
+                != Some(solid_dialect::Primitive::CreateSignal)
+        {
+            return false;
+        }
+        let Some(Some(setter)) = binding.array_slots.get(1) else {
+            return false;
+        };
+        flow_binding_exported(file, setter.span)
+            || file.ast.identifiers.iter().any(|id| {
+                id.role == IdentifierRole::Reference
+                    && file.ast.reference_declaration(id.span) == Some(setter.span)
+                    && !cleanup.span.contains(id.span)
+            })
+    })
 }
 
 /// ADR 0455: the innermost function around `span` that is bound to a name and
@@ -861,6 +981,11 @@ fn write_role_walk(
                         && let Some(suspended) = suspended_write_role(file, span, lookup)
                     {
                         return suspended;
+                    }
+                    // A call a disposal leaves unplaced is final: no other
+                    // entry of the function places what its owner decides.
+                    if role == ExecutionRole::Unknown {
+                        *decided = true;
                     }
                     return role;
                 }

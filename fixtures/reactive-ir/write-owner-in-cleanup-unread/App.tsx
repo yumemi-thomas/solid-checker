@@ -42,12 +42,14 @@ export function AwaitedCleanup() {
   });
   return <div>{v()}</div>;
 }
+// The effect tracks `n`, which a button changes, so a rerun calls the cleanup.
 export function EffectReturnedCleanup() {
   const [v, setV] = createSignal(0);
+  const [n, setN] = createSignal(0);
   const o = getOwner();
   createEffect(
-    () => v(),
+    () => n(),
     () => () => runWithOwner(o, () => setV(5))
   );
-  return <div>{v()}</div>;
+  return <button onClick={() => setN(n() + 1)}>{v()}</button>;
 }

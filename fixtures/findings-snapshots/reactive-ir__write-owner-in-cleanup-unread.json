@@ -47,8 +47,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup-unread/App.tsx",
-      "start": 1386,
-      "end": 1393,
+      "start": 1503,
+      "end": 1510,
       "fixes": 0
     },
     {

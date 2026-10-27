@@ -299,13 +299,5 @@ pub(crate) enum RootBodyGuard {
     Exempts,
 }
 
-impl RootBodyGuard {
-    /// Whether the guard rejects the operation under a root owner when no
-    /// disposal is running.
-    pub(crate) fn rejects(self) -> bool {
-        self != Self::Exempts
-    }
-}
-
 #[cfg(test)]
 mod tests;

@@ -9,9 +9,11 @@
 //
 // Reduced, with no claim reading them back: `Owner` and `Root` to the
 // interfaces' names (`dist/types/core/types.d.ts:153`, `:208`), `createSignal`
-// to its value overload, and `createEffect` to its two-function shape
-// (`dist/types/signals.d.ts:427`) whose apply returns `(() => void) | void`, as
-// the package says.
+// to its value overload, and `createEffect` and `createRenderEffect` to their
+// two-function shape (`dist/types/signals.d.ts:427`, `:457`) whose apply returns
+// `(() => void) | void`, as the package says; `createTrackedEffect`
+// (`:503`), `createMemo` (`:358`), `untrack` (`core.d.ts:167`) and `flush`
+// (`scheduler.d.ts:384`) to the overloads this fixture calls.
 
 declare namespace JSX {
   interface IntrinsicElements {
@@ -32,6 +34,19 @@ declare module "solid-js" {
     effect: (value: Next, prev?: Next) => (() => void) | void,
     options?: object
   ): void;
+  export function createRenderEffect<Next, Init = Next>(
+    compute: (prev: Init | Next) => Next,
+    effect: (value: Next, prev?: Next) => (() => void) | void,
+    options?: object
+  ): void;
+  export function createTrackedEffect(
+    compute: () => void | (() => void),
+    options?: object
+  ): void;
+  export function createMemo<T>(compute: (prev: T | undefined) => T): Accessor<T>;
+  export function untrack<T>(fn: () => T): T;
+  export function flush(): void;
+  export function flush<T>(fn: () => T): T;
   export function getOwner(): Owner | null;
   export function createOwner(options?: {
     id?: string;
