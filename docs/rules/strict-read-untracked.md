@@ -102,7 +102,7 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   (`const f = () => count(); return f`) is tracked only where a call runs the
   closure in the scope's own pass; rc.17 warns when the component body calls it
   through the memo's value. Such a read is uncertifiable, and an IIFE or a name
-  every reference of which is a tracked call keeps the tracked role (ADR 0450;
+  every reference of which is a tracked call keeps the tracked role (ADR 0452;
   `fixtures/reactive-ir/read-closure-in-tracked-scope`).
 - **`runWithOwner` clears tracking inside a computation.** It sets `tracking =
   false` around its callback and keeps the window the call had, so in an effect

@@ -19,7 +19,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         // Review round 4: two zero-parameter `Show` children are tracked
         // inserts, not strict-read callbacks.
         // Two of them are uncertifiable reads in the closures the two `nested`
-        // memos return (ADR 0450), pinned below.
+        // memos return (ADR 0452), pinned below.
         ("strict-read-untracked", 20),
         ("reactive-read-after-await", 19),
         // ADR 0294: the exported `install(read: Accessor<number>)` shapes.
@@ -144,7 +144,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             "component-return-valid.tsx",
             [("strict-read-untracked", 1)].as_slice(),
         ),
-        // ADR 0450: the closure an async memo returns is built in the memo, so
+        // ADR 0452: the closure an async memo returns is built in the memo, so
         // its read has no placement (an uncertifiable result, no violation).
         (
             "after-await-extended-valid.tsx",

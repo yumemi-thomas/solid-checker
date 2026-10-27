@@ -216,7 +216,7 @@ pub(super) fn stored_literal_invocation_unproven(
 /// unproven by the same walk, so the helper is too; a call cycle is unproven.
 ///
 /// `expected` is the role every call must have (`UntrackedRendering` for a body
-/// helper; `TrackedJsx` for a closure a tracked scope builds, ADR 0450).
+/// helper; `TrackedJsx` for a closure a tracked scope builds, ADR 0452).
 ///
 /// With `default_parameter` the question is about that parameter's default
 /// initializer, which runs only when a call leaves the argument out: every call

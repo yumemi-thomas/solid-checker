@@ -215,7 +215,7 @@ prove an owned-scope write.
 - a closure the compute only returns.
 
 A closure bound to a name inside the compute (`const openFn = () => setOpen(true)`)
-is built there, not run there (ADR 0450): a call in the compute's own pass is a
+is built there, not run there (ADR 0452): a call in the compute's own pass is a
 violation, a call only in a leaf scope or handler is not, and one the compute only
 returns or stores is uncertifiable, as the anonymous form is
 (`fixtures/reactive-ir/write-named-closure-in-tracked-scope`).

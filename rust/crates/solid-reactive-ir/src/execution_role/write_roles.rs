@@ -397,7 +397,7 @@ pub(super) fn semantic_write_role_walk(
         return unknown;
     }
     // The same holds for a closure bound to a name inside the tracked scope
-    // (ADR 0450): the scope runs its construction, not its body. The closure's
+    // (ADR 0452): the scope runs its construction, not its body. The closure's
     // own invocations decide, through the walk below.
     let tracked_named = if direct == ExecutionRole::TrackedJsx {
         named_closure_in_tracked_scope(file, span, allowed, entities, symbol_names, lookup)
@@ -431,7 +431,7 @@ pub(super) fn semantic_write_role_walk(
     // around the closure (the body that holds the list) does not run it, and
     // the closure has no call sites: its parameter list is not inert, so the
     // call graph withholds them (ADR 0339). Nothing places the write (ADR
-    // 0450); a lexical tracked or rendering role, or the surrounding function's
+    // 0452); a lexical tracked or rendering role, or the surrounding function's
     // calls, would claim a run the closure's own calls decide.
     if functions_around(file, span).into_iter().any(|function| {
         parameter_slot(function, span).is_some()
@@ -467,7 +467,7 @@ pub(super) fn semantic_write_role_walk(
     let Some(innermost) = innermost else {
         return unknown;
     };
-    // ADR 0450: the named closure built in a tracked scope is entered by its
+    // ADR 0452: the named closure built in a tracked scope is entered by its
     // calls, and the write runs with it only through layers that run in place
     // (an IIFE, an inline standard-library callback). Any other layer keeps or
     // schedules the write's function, whose entries are not the closure's.

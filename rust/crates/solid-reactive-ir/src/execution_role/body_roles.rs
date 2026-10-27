@@ -69,7 +69,7 @@ pub(super) fn call_argument_invocation_unproven(
     true
 }
 
-/// ADR 0450: the functions whose body or parameter list contains `span`. A
+/// ADR 0452: the functions whose body or parameter list contains `span`. A
 /// default value (`(x = set(1)) => x`, `({ a = count() }) => a`) lies outside
 /// its function's body but runs only when that function is called, so for
 /// every question about the closure around a site it is inside it.
@@ -154,7 +154,7 @@ fn stored_function(
             .is_none()
 }
 
-/// ADR 0450, reads: whether `span` sits in a function written strictly inside
+/// ADR 0452, reads: whether `span` sits in a function written strictly inside
 /// the tracked `region` that the region's tracking pass does not run: a
 /// function stored where it is written (a returned closure, an object member,
 /// [`stored_function`]), or a closure bound to a name that is not entered only
@@ -208,7 +208,7 @@ pub(super) fn unrun_closure_within(
     })
 }
 
-/// ADR 0450: the innermost function around `span` that is bound to a name
+/// ADR 0452: the innermost function around `span` that is bound to a name
 /// (`const openFn = () => …`, `function openFn() {…}`) and constructed inside the
 /// tracked scope whose role the lexical position gave `span`. A tracked scope
 /// runs what is written in it, but constructing a named closure runs nothing:
