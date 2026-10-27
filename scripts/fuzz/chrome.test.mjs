@@ -94,3 +94,44 @@ describe("chromeStatus", () => {
     expect(chromeStatus({ verdict: "inconclusive" })).toBe("chrome-inconclusive");
   });
 });
+
+describe("the hit readout from Chrome's checkpoints", () => {
+  const hitsText = '{"h":{"4":1,"7":3},"o":[4,7,7,7]}';
+  it("reads the last #sc-hits checkpoint, and quiescence from two equal reads", () => {
+    const still = chromeRuntime(row(), [{ selector: "#sc-hits", text: hitsText }, { selector: "#sc-hits", text: hitsText }], sites);
+    expect(still.hits).toEqual({ 4: 1, 7: 3 });
+    expect(still.order).toEqual([4, 7, 7, 7]);
+    expect(still.quiescent).toBe(true);
+    const moving = chromeRuntime(row(), [{ selector: "#sc-hits", text: "{}" }, { selector: "#sc-hits", text: hitsText }], sites);
+    expect(moving.quiescent).toBe(false);
+  });
+  it("is null without a readout (a clean control run, or an unreadable checkpoint)", () => {
+    expect(chromeRuntime(row(), [], sites)).toMatchObject({ hits: null, quiescent: null });
+    expect(chromeRuntime(row(), [{ selector: "#sc-hits", text: "garbage" }], sites).hits).toBeNull();
+  });
+  it("the counter decides 'ran' in Chrome too: a void site that ran, with Chrome silent, is a candidate", () => {
+    const void1 = [{ id: "s1", line: 8, kind: "write", hit: 4, witness: null }];
+    const quiet = row({ diagnostics: [] });
+    const cps = [{ selector: "#sc-hits", text: hitsText }, { selector: "#sc-hits", text: hitsText }];
+    expect(classify({ sites: void1, checker: chromeChecker(quiet), runtime: chromeRuntime(quiet, cps, void1), plan: { clicks: [] } }).verdict).toBe("candidate-false-positive");
+  });
+});
+
+describe("the checker on the instrumented text must give the clean findings", () => {
+  const finding = (rule, line, kind = "violation") => ({ file: "App.tsx", rule, id: "SC", kind, line, endLine: line });
+  it("equal findings are not perturbed; a different (rule, kind, line) set is", () => {
+    const r = row({ diagnostics: [], findings: [finding("no-write-in-pure-computation", 8)] });
+    expect(chromeChecker(r, [finding("no-write-in-pure-computation", 8)]).perturbed).toEqual([]);
+    expect(chromeChecker(r).perturbed).toEqual([]);
+    const moved = chromeChecker(r, [finding("no-write-in-pure-computation", 8), finding("strict-read-untracked", 12)]);
+    expect(moved.perturbed).toEqual(["missing on the instrumented text: strict-read-untracked|violation|12"]);
+  });
+  it("a perturbed checker makes the candidate inconclusive, never confirmed", () => {
+    const r = row({ diagnostics: [], findings: [finding("no-write-in-pure-computation", 8)] });
+    const checker = chromeChecker(r, [finding("no-write-in-pure-computation", 8), finding("strict-read-untracked", 12, "uncertifiable")]);
+    const judged = classify({ sites, checker, runtime: chromeRuntime(r, shown, sites), plan: { clicks: [] } });
+    expect(judged.verdict).toBe("inconclusive");
+    expect(judged.reasons[0]).toMatch(/instrumentation-perturbed-checker/);
+    expect(chromeStatus(judged)).toBe("chrome-inconclusive");
+  });
+});

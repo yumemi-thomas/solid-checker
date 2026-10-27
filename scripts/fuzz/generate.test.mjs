@@ -90,7 +90,7 @@ describe("generateProgram", () => {
 describe("buildCase", () => {
   it("emits an oracle case: App.tsx, oracle.json steps, program.json, sites.json", () => {
     const built = buildCase(generateProgram(2802362291), { id: "fuzz-x" });
-    expect(Object.keys(built.files).sort()).toEqual(["App.tsx", "oracle.json", "program.json", "sites.json"]);
+    expect(Object.keys(built.files).sort()).toEqual(["App.run.txt", "App.tsx", "oracle.json", "oracle.run.json", "program.json", "sites.json"]);
     const oracle = JSON.parse(built.files["oracle.json"]);
     expect(oracle.steps.length).toBeLessThanOrEqual(60);
     for (const step of oracle.steps) expect(["click", "wait-for-selector"]).toContain(step.action);

@@ -53,7 +53,8 @@ test('${id}', () => runCase('${id}', ${JSON.stringify(caseDir)}, () => import('.
 
 /**
  * Runs the cases under Happy DOM and returns `Map<id, record>`.
- * @param {{ id: string, dir: string }[]} cases each `dir` holds App.tsx and sites.json
+ * @param {{ id: string, dir: string, variant?: "run"|"clean" }[]} cases each `dir` holds App.tsx and sites.json (and App.run.txt,
+ *   the instrumented twin). `variant: "clean"` runs App.tsx (the clean-twin control); the default runs the twin when the case has one.
  */
 export async function runFast(cases, { install = DEFAULT_FAST_INSTALL, workers = 4, keep = false, timeoutMs = 600000, pauseMs, finalMs } = {}) {
   for (const { id } of cases) if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new Error(`unsafe case id ${id}`);
@@ -66,10 +67,12 @@ export async function runFast(cases, { install = DEFAULT_FAST_INSTALL, workers =
   mkdirSync(join(work, "tests"), { recursive: true });
   const fast = join(here, "fast");
   for (const file of ["runner.tsx", "shims.ts", "frames.mjs", "vitest.config.mjs"]) cpSync(join(fast, file), join(work, file));
-  for (const { id, dir } of cases) {
+  for (const { id, dir, variant } of cases) {
     const target = join(work, "cases", id);
     mkdirSync(target, { recursive: true });
     for (const file of ["App.tsx", "sites.json", "oracle.json"]) if (existsSync(join(dir, file))) cpSync(join(dir, file), join(target, file));
+    // The twin runs as App.tsx, so stack frames still name App.tsx and no line moves.
+    if (variant !== "clean" && existsSync(join(dir, "App.run.txt"))) cpSync(join(dir, "App.run.txt"), join(target, "App.tsx"));
     writeFileSync(join(work, "tests", `${id}.test.ts`), testSource(id, target));
   }
   const out = join(work, "out");

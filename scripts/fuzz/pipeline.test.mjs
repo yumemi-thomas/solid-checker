@@ -53,3 +53,110 @@ describe("evaluate", () => {
     expect(found.signature).toMatch(/^(no-write-in-pure-computation|strict-read-untracked)\|candidate-false-positive\|silent\|component\.body/);
   });
 });
+
+// The hit ledger in the wiring: the twin is type-checked and run, the checker reads the clean text, the controls compare.
+describe("evaluate: the instrumented twin", () => {
+  const records = (e, over = {}) => async (cases) => new Map(cases.map((c) => [c.id, {
+    diagnostics: [], errors: [], witnesses: e.built.sites.map((s) => ({ siteId: s.id, reached: true, actual: s.witness?.text })), hits: Object.fromEntries(e.built.ledger.map((r) => [r.hit, 1])), quiescent: true, ...over,
+  }]));
+
+  it("runs the twin in the fast batch, type-checks both texts, and gives the checker only the clean text", async () => {
+    const e = entry(6);
+    const typed = []; const checked = []; let batch;
+    await evaluate([e], config(), {
+      typecheck: async (dir) => { typed.push(dir); return { ok: true, errors: [] }; },
+      runChecker: async (dir) => { checked.push(dir); return { ok: true, findings: [] }; },
+      runFast: async (cases) => { batch = cases; return records(e)(cases); },
+    });
+    expect(typed.map((d) => d.split("/").at(-1))).toEqual([e.built.id, `${e.built.id}-run`]);
+    expect(checked.map((d) => d.split("/").at(-1))).toEqual([e.built.id]);
+    expect(batch).toEqual([{ id: e.built.id, dir: expect.any(String), variant: "run" }]);
+  });
+
+  it("a twin that does not type-check is inconclusive, never a verdict", async () => {
+    const e = entry(7);
+    const results = await evaluate([e], config(), {
+      typecheck: async (dir) => (dir.endsWith("-run") ? { ok: false, errors: ["App.tsx(3,1): error TS2695"] } : { ok: true, errors: [] }),
+      runChecker: async () => ({ ok: true, findings: [] }),
+      runFast: async () => { throw new Error("must not run"); },
+    });
+    expect(results.get(e.built.id).classification.items[0]).toMatchObject({ kind: "inconclusive", why: "twin-type-error" });
+  });
+
+  it("a non-neutral twin is refused before it runs", async () => {
+    const e = entry(8);
+    e.built.neutral = false;
+    const results = await evaluate([e], config(), { typecheck: okTypes, runChecker: async () => ({ ok: true, findings: [] }), runFast: async () => { throw new Error("must not run"); } });
+    expect(results.get(e.built.id).classification.items[0]).toMatchObject({ why: "not-neutral" });
+  });
+
+  it("the baseline mode runs the clean text with no ledger and classifies as before", async () => {
+    const e = entry(9);
+    const [site] = e.built.sites;
+    let batch;
+    const results = await evaluate([e], { ...config(), instrument: false }, {
+      typecheck: okTypes,
+      runChecker: async () => ({ ok: true, findings: [{ file: "App.tsx", rule: "strict-read-untracked", id: "SC", kind: "violation", line: site.line, endLine: site.line }] }),
+      runFast: async (cases) => { batch = cases; return new Map(cases.map((c) => [c.id, { diagnostics: [], errors: [], witnesses: e.built.sites.map((s) => ({ siteId: s.id, reached: true })) }])); },
+    });
+    expect(batch[0].variant).toBe("clean");
+    expect(results.get(e.built.id).classification.verdict).toBe("candidate-false-positive");
+  });
+
+  it("the control run compares the clean twin; a moved outcome makes the program inconclusive", async () => {
+    const e = entry(10);
+    const same = records(e);
+    const ids = [];
+    const ok = await evaluate([e], { ...config(), control: true }, {
+      typecheck: okTypes, runChecker: async () => ({ ok: true, findings: [] }),
+      runFast: async (cases) => { ids.push(cases.map((c) => `${c.id}:${c.variant}`)); return same(cases); },
+    });
+    expect(ids).toEqual([[`${e.built.id}:run`], [`${e.built.id}-clean:clean`]]);
+    expect(ok.get(e.built.id).control).toMatchObject({ matched: true, diffs: [] });
+    const moved = await evaluate([e], { ...config(), control: true }, {
+      typecheck: okTypes, runChecker: async () => ({ ok: true, findings: [] }),
+      runFast: async (cases) => records(e, cases[0].id.endsWith("-clean") ? { diagnostics: [{ code: "STRICT_READ_UNTRACKED", positions: [{ line: 5 }] }] } : {})(cases),
+    });
+    expect(moved.get(e.built.id).classification.items[0]).toMatchObject({ kind: "inconclusive", why: "perturbed-run" });
+  });
+
+  it("the control also compares the checker on the twin's text with the clean findings", async () => {
+    const e = entry(11);
+    const f = (rule, line) => ({ file: "App.tsx", rule, id: "SC", kind: "violation", line, endLine: line });
+    const results = await evaluate([e], { ...config(), control: true }, {
+      typecheck: okTypes,
+      runChecker: async (dir) => ({ ok: true, findings: dir.endsWith("-run") ? [f("strict-read-untracked", 9)] : [f("strict-read-untracked", 8)] }),
+      runFast: records(e),
+    });
+    expect(results.get(e.built.id).control.diffs.join()).toMatch(/checker missing on the instrumented text/);
+    expect(results.get(e.built.id).classification.items[0].why).toBe("perturbed-run");
+  });
+
+  it("dead-site stays off unless asked: a never-run site is inconclusive, and a dead-site needs every condition", async () => {
+    const e = entry(12);
+    const [site] = e.built.sites;
+    const finding = { file: "App.tsx", rule: site.kind === "write" ? "no-write-in-pure-computation" : "strict-read-untracked", id: "SC", kind: "violation", line: site.line, endLine: site.line };
+    const none = async (cases) => new Map(cases.map((c) => [c.id, { diagnostics: [], errors: [], witnesses: e.built.sites.map((s) => ({ siteId: s.id, reached: null })), hits: {}, quiescent: true }]));
+    const off = await evaluate([e], config(), { typecheck: okTypes, runChecker: async () => ({ ok: true, findings: [finding] }), runFast: none });
+    expect(off.get(e.built.id).classification.items.find((i) => i.finding)).toMatchObject({ kind: "inconclusive", why: "never-ran" });
+    const on = await evaluate([e], { ...config(), deadSite: true }, { typecheck: okTypes, runChecker: async () => ({ ok: true, findings: [finding] }), runFast: none });
+    // hits {} means not even the component ran: a harness fault, never a dead site.
+    expect(on.get(e.built.id).classification.items.find((i) => i.finding)).toMatchObject({ kind: "inconclusive", why: "never-ran", unmet: expect.arrayContaining(["host-ran"]) });
+  });
+
+  it("signatures: a glue-only candidate has one too", async () => {
+    const e = entry(13);
+    const glueLine = e.built.glue[0];
+    const results = await evaluate([e], config(), {
+      typecheck: okTypes,
+      runChecker: async () => ({ ok: true, findings: [{ file: "App.tsx", rule: "strict-read-untracked", id: "SC", kind: "violation", line: glueLine.line, endLine: glueLine.line }] }),
+      runFast: records(e, { witnesses: [] }),
+    });
+    const result = results.get(e.built.id);
+    const candidates = result.classification.items.filter((i) => i.kind === "candidate-false-positive");
+    if (!e.built.sites.some((s) => s.line === glueLine.line)) {
+      expect(candidates.length).toBe(1);
+      expect(signaturesOf(e.program, e.built, result.classification)).toHaveLength(1);
+    }
+  });
+});

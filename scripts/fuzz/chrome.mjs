@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { HITS_SELECTOR, findingsDiff, parseHitsText } from "./hits.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const ORACLE = join(repo, "scripts/runtime-oracle.mjs");
@@ -36,8 +37,14 @@ export function chromeRuntime(row, checkpoints, sites) {
     const found = (checkpoints ?? []).filter((checkpoint) => checkpoint.selector === selector).at(-1);
     return found === undefined ? undefined : (found.text ?? "").trim().replace(/\s+/g, " ");
   };
+  // The hit readout: the last two reads of #sc-hits (equal texts: nothing moved between them).
+  const reads = (checkpoints ?? []).filter((checkpoint) => checkpoint.selector === HITS_SELECTOR);
+  const counted = parseHitsText(reads.at(-1)?.text);
   return {
     failure,
+    hits: counted?.hits ?? null,
+    order: counted?.order ?? [],
+    quiescent: counted && reads.length >= 2 ? reads.at(-1).text === reads.at(-2).text : null,
     diagnostics: chromeDiagnostics(row),
     errors: (row.pageErrors ?? []).map((message) => ({ kind: "page-error", message, positions: [] })),
     // Codes of diagnostics Chrome saw but could not place in the case file (the oracle's `unattributed`). The comparator
@@ -63,7 +70,13 @@ export function chromeStatus(judged) {
 }
 
 /** The oracle's findings for the case as the comparator's checker record. */
-export const chromeChecker = (row) => ({ ok: !["harness-error", "type-error"].includes(row.verdict), error: row.error, findings: row.findings ?? [] });
+export const chromeChecker = (row, cleanFindings) => {
+  const findings = row.findings ?? [];
+  // The oracle checks whatever App.tsx it is given, which here is the instrumented twin. Its findings must be the ones
+  // the clean text got (rule, kind, line); a difference means the counters perturbed the checker, and nothing it says counts.
+  const perturbed = cleanFindings === undefined ? [] : findingsDiff(cleanFindings, findings);
+  return { ok: !["harness-error", "type-error"].includes(row.verdict), error: row.error, findings, perturbed };
+};
 
 function spawnOracle(args, env) {
   return new Promise((done) => {
@@ -78,14 +91,25 @@ function spawnOracle(args, env) {
 /**
  * Runs the cases through scripts/runtime-oracle.mjs and returns `Map<id, { row, runtime, checker }>`.
  * Exit status 1 from the oracle (a finding it reports as unproven-clean, say) is not a failure here.
- * @param {{ id: string, dir: string, sites: object[] }[]} cases
+ * Each case runs its instrumented twin (App.run.txt as App.tsx, oracle.run.json as oracle.json) so the hit ledger is read
+ * back; `control: true` runs the clean case unchanged instead. `findings` (the fast pipeline's, on the clean text) are
+ * compared with the oracle's on the twin.
+ * @param {{ id: string, dir: string, sites: object[], findings?: object[] }[]} cases
  */
-export async function runChrome(cases, { out, install = DEFAULT_ORACLE_INSTALL, bin, typefacts, browser, concurrency, env = process.env }) {
+export async function runChrome(cases, { out, install = DEFAULT_ORACLE_INSTALL, bin, typefacts, browser, concurrency, control = false, env = process.env }) {
   if (!bin || !typefacts) throw new Error("Chrome confirmation needs the checker binary and typefacts (--checker-bin, --typefacts)");
   const root = join(resolve(out), "chrome-cases");
   rmSync(root, { recursive: true, force: true });
   mkdirSync(root, { recursive: true });
-  for (const { id, dir } of cases) cpSync(dir, join(root, id), { recursive: true });
+  for (const { id, dir } of cases) {
+    cpSync(dir, join(root, id), { recursive: true });
+    if (control) continue;
+    const twin = join(root, id, "App.run.txt");
+    if (existsSync(twin)) {
+      cpSync(twin, join(root, id, "App.tsx"));
+      cpSync(join(root, id, "oracle.run.json"), join(root, id, "oracle.json"));
+    }
+  }
   const result = join(resolve(out), `chrome-${Date.now()}.json`);
   const args = ["--cases", root, "--out", result, "--install", resolve(install), "--cache", "off",
     ...(browser ? ["--browser", browser] : []), ...(concurrency ? ["--concurrency", String(concurrency)] : [])];
@@ -94,12 +118,12 @@ export async function runChrome(cases, { out, install = DEFAULT_ORACLE_INSTALL, 
   const report = JSON.parse(readFileSync(result, "utf8"));
   const rows = new Map(report.results.map((row) => [row.id, row]));
   const records = new Map();
-  for (const { id, sites } of cases) {
+  for (const { id, sites, findings } of cases) {
     const row = rows.get(id);
     if (!row) { records.set(id, { row: null, runtime: { failure: { phase: "chrome", message: "no row" }, diagnostics: [], errors: [], witnesses: [] }, checker: { ok: false, error: "no oracle row", findings: [] } }); continue; }
     const reportPath = join(resolve(install), ".solid-checker-runtime-oracle", id, "report.json");
     const checkpoints = existsSync(reportPath) ? (JSON.parse(readFileSync(reportPath, "utf8")).execution?.checkpoints ?? []) : [];
-    records.set(id, { row, runtime: chromeRuntime(row, checkpoints, sites), checker: chromeChecker(row) });
+    records.set(id, { row, runtime: chromeRuntime(row, checkpoints, sites), checker: chromeChecker(row, control ? undefined : findings) });
   }
   return records;
 }

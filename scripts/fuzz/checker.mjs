@@ -41,12 +41,15 @@ for (const [name, value] of Object.entries(mod as Record<string, unknown>)) {
 /** Where checker cases live: inside the install, which the oracle's own cases also use. */
 export const checkerWorkDir = (install, id) => join(resolve(install), ".solid-checker-fuzz", id);
 
-/** Writes App.tsx, main.tsx and tsconfig.json for `id` under the install; returns the directory. */
-export function materializeForChecker(built, install, id = built.id) {
+/**
+ * Writes App.tsx, main.tsx and tsconfig.json for `id` under the install; returns the directory.
+ * `twin: true` writes the instrumented twin (hits.mjs) as App.tsx instead of the clean text.
+ */
+export function materializeForChecker(built, install, id = built.id, { twin = false } = {}) {
   const dir = checkerWorkDir(install, id);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "App.tsx"), built.files["App.tsx"]);
+  writeFileSync(join(dir, "App.tsx"), twin ? built.files["App.run.txt"] : built.files["App.tsx"]);
   writeFileSync(join(dir, "main.tsx"), MAIN_SOURCE);
   writeFileSync(join(dir, "tsconfig.json"), tsconfigFor(["main.tsx", "App.tsx"]));
   return dir;
@@ -123,6 +126,7 @@ export function parseFindings(analysis, dir) {
  * A style rule the oracle never holds against the runtime (`ignoredRules`) is left out.
  */
 export function siteVerdicts(sites, findings) {
+  // `sites` may include the glue (auto-sites); a finding on a plumbing line then has a verdict of its own.
   const relevant = findings.filter((finding) => !ignoredRules.includes(finding.rule));
   return sites.map((site) => {
     const covering = relevant.filter((finding) => finding.line <= site.line && site.line <= finding.endLine);

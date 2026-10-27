@@ -159,3 +159,71 @@ describe("helpers", () => {
     expect(unattributedCodes(runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 20)] }))).toEqual([]);
   });
 });
+
+// The hit ledger: `ran` (the counter) and `landed` (the witness text) are separate facts.
+describe("classify: the hit ledger", () => {
+  const witnessed = [{ id: "s1", line: 8, kind: "write", hit: 4, witness: { selector: '[data-probe="w1"]', text: "17" } }];
+  const void1 = [{ id: "s1", line: 8, kind: "write", hit: 4, witness: null }];
+  const glue = [{ id: "a1", hit: 9, kind: "call", line: 30 }, { id: "a2", hit: 10, kind: "call", line: 30 }];
+  const finding = (line = 8) => violation("no-write-in-pure-computation", line);
+  const run = (over) => classify({ sites: witnessed, glue, checker: checker([finding()]), plan, runtime: runtime({ witnesses: [{ siteId: "s1", reached: null }], hits: {}, ...over }) });
+
+  it("a site that ran and landed is a candidate, as before", () => {
+    const result = run({ witnesses: [{ siteId: "s1", reached: true }], hits: { 4: 1 } });
+    expect(result.verdict).toBe("candidate-false-positive");
+    expect(result.reasons[0]).toMatch(/witness shown/);
+  });
+
+  it("a void payload (no witness) that ran is classifiable: judged by its counter", () => {
+    const result = classify({ sites: void1, checker: checker([finding()]), plan, runtime: runtime({ witnesses: [{ siteId: "s1", reached: null }], hits: { 4: 2 } }) });
+    expect(result.verdict).toBe("candidate-false-positive");
+    expect(result.reasons[0]).toMatch(/its counter ran/);
+    expect(classify({ sites: void1, checker: checker([finding()]), plan, runtime: runtime({ witnesses: [{ siteId: "s1", reached: null }], hits: { 4: 0 } }) }).items[0]).toMatchObject({ kind: "inconclusive", why: "never-ran" });
+  });
+
+  it("a site with a witness that ran but did not land is inconclusive, not silence", () => {
+    for (const reached of [false, null]) {
+      const result = run({ witnesses: [{ siteId: "s1", reached }], hits: { 4: 1 } });
+      expect(result.items[0]).toMatchObject({ kind: "inconclusive", why: "ran-not-landed" });
+    }
+  });
+
+  it("a site that never ran is inconclusive 'never-ran' (dead-site is off)", () => {
+    expect(run({ hits: { 1: 1 } }).items[0]).toMatchObject({ kind: "inconclusive", why: "never-ran" });
+  });
+
+  it("a witness shown while the counter says zero distrusts the readout", () => {
+    expect(run({ witnesses: [{ siteId: "s1", reached: true }], hits: { 1: 1 } }).items[0]).toMatchObject({ kind: "inconclusive", why: "readout-mismatch" });
+  });
+
+  it("without a readout (hits null) the old rules hold exactly", () => {
+    expect(run({ witnesses: [{ siteId: "s1", reached: null }], hits: null }).items[0].why).toBe("no-witness");
+    expect(run({ witnesses: [{ siteId: "s1", reached: false }], hits: null }).items[0].why).toBe("witness-absent");
+    expect(run({ witnesses: [{ siteId: "s1", reached: true }], hits: null }).verdict).toBe("candidate-false-positive");
+  });
+
+  it("a runtime diagnostic at the finding still agrees, hits or no hits", () => {
+    expect(run({ diagnostics: [diag("REACTIVE_WRITE_IN_OWNED_SCOPE", 8)], hits: { 4: 1 } }).verdict).toBe("agree");
+  });
+
+  it("a finding on a plumbing line maps to the glue calls there instead of 'spans no site'", () => {
+    const onGlue = (hits) => classify({ sites: witnessed, glue, checker: checker([violation("strict-read-untracked", 30)]), plan, runtime: runtime({ witnesses: [{ siteId: "s1", reached: null }], hits }) });
+    expect(onGlue({ 9: 1, 10: 1 }).verdict).toBe("candidate-false-positive");
+    expect(onGlue({ 9: 1, 10: 1 }).items[0].siteIds).toEqual(["a1", "a2"]);
+    expect(onGlue({ 9: 0, 10: 0 }).items[0]).toMatchObject({ kind: "inconclusive", why: "never-ran" });
+    // with no readout the glue proves nothing; and with no glue given the finding is blind, as before
+    expect(onGlue(null).items[0]).toMatchObject({ kind: "inconclusive", why: "no-witness" });
+    expect(classify({ sites: witnessed, checker: checker([violation("strict-read-untracked", 30)]), plan, runtime: runtime() }).items[0].reason).toBe("the finding spans no site of interest");
+  });
+
+  it("payload sites win over glue: a finding covering a payload site is judged by it alone", () => {
+    const both = classify({ sites: witnessed, glue: [{ id: "a3", hit: 11, kind: "call", line: 8 }], checker: checker([finding()]), plan, runtime: runtime({ witnesses: [{ siteId: "s1", reached: null }], hits: { 11: 5 } }) });
+    expect(both.items[0]).toMatchObject({ kind: "inconclusive", why: "never-ran" });
+  });
+
+  it("an instrumentation-perturbed checker makes the program inconclusive", () => {
+    const result = classify({ sites, checker: { ...checker([violation("no-write-in-pure-computation", 8)]), perturbed: ["new on the instrumented text: x|violation|9"] }, runtime: runtime(), plan });
+    expect(result.verdict).toBe("inconclusive");
+    expect(result.items[0]).toMatchObject({ why: "perturbed-checker" });
+  });
+});

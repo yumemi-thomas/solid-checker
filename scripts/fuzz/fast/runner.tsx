@@ -34,12 +34,28 @@ function events() {
   ];
 }
 
+// The hit ledger (scripts/fuzz/hits.mjs): the instrumented twin counts on globalThis and mirrors the counts into #sc-hits.
+// Polls until the counters stay unchanged over two 50 ms ticks (2 s at most): the page is still, or it is not.
+async function settleHits(): Promise<boolean | null> {
+  const g = globalThis as any;
+  if (!g.__scHits) return null;
+  let last = JSON.stringify(g.__scHits), still = 0;
+  for (let waited = 0; waited < 2000; waited += 50) {
+    await pause(50);
+    const now = JSON.stringify(g.__scHits);
+    if (now === last) { still += 1; if (still >= 2) return true; } else { still = 0; last = now; }
+  }
+  return false;
+}
+
 export async function runCase(id: string, caseDir: string, load: () => Promise<any>) {
   const started = performance.now();
   const outDir = process.env.FUZZ_FAST_OUT as string;
   const settings = { eventPasses: 2, pauseMs: Number(process.env.FUZZ_PAUSE_MS ?? 60), finalMs: Number(process.env.FUZZ_FINAL_MS ?? 150) };
   const diagnostics: any[] = [], errors: any[] = [], consoleErrors: string[] = [], disposers: (() => void)[] = [];
   let witnesses: any[] = [], failure: any = null, phase = 'import', artifactCount: number | null = null;
+  let hits: Record<string, number> | null = null, order: number[] = [], hitsDom: string | null = null, quiescent: boolean | null = null;
+  (globalThis as any).__scHits = undefined; (globalThis as any).__scOrder = undefined;
   Error.stackTraceLimit = 80;
 
   const onError = (event: ErrorEvent) => {
@@ -95,7 +111,11 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
         else errors.push({ phase, kind: 'plan', message: `no button ${buttonId}`, stack: '' });
       }
       await pause(settings.finalMs);
+      quiescent = await settleHits();
       phase = 'witness';
+      const counted = (globalThis as any).__scHits;
+      if (counted) { hits = { ...counted }; order = ((globalThis as any).__scOrder ?? []).slice(); }
+      hitsDom = document.getElementById('sc-hits')?.textContent ?? null;
       witnesses = plan.sites.map((site: any) => {
         if (!site.witness) return { siteId: site.id, witness: null, present: false, actual: null, reached: null };
         const element = document.querySelector(site.witness.selector);
@@ -114,7 +134,7 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
     process.off('unhandledRejection', onProcessRejection);
     console.error = oldError; console.warn = oldWarn;
     const record = {
-      id, wallMs: Math.round(performance.now() - started), failure, witnesses,
+      id, wallMs: Math.round(performance.now() - started), failure, witnesses, hits, order, hitsDom, quiescent,
       diagnostics: diagnostics.map(d => ({ code: d.code, message: d.message, loc: d.loc, siteKind: d.siteKind, phase: d.phase, positions: appFrames(id, d.stack) })),
       errors: errors.filter(e => e.phase !== 'dispose').map(e => ({ phase: e.phase, kind: e.kind, message: e.message, cause: e.cause?.message ?? null,
         positions: [...appFrames(id, e.stack), ...appFrames(id, e.cause?.stack)] })),

@@ -353,3 +353,56 @@ export const component = (name, signals, body, view) => ({ k: "component", name,
 export const program = ({ seed = 0, helpers = [], moduleSignals = [], components }) => ({
   k: "program", version: VERSION, seed, helpers, moduleSignals, components,
 });
+
+// ---------------------------------------------------------------------------
+// The closed grammar: the programs whose executed set is fixed by the driver.
+
+/**
+ * Whether a program is closed and branch-free, the first condition of the `dead-site` verdict (deadsite.mjs).
+ * In such a program a re-run executes the same statements as the first run, so what the driver (render, every
+ * button, timers of delay 0, microtasks, effect applies) did not enter, nothing will. It holds when:
+ * no conditional or loop beyond `forEach`/`map` over `[1]`, `Show when={<nonzero literal>}` and `For each={[1]}`;
+ * no recursion; no call whose callee is not declared in the file; helper forms from the table only; at most one
+ * `await` per async function (bounded microtask depth); no props and no exports but the rendered components
+ * (every component takes none, and the printer exports nothing else).
+ * A future `Show when={sig()}` or any new construct clears the flag until this function says otherwise.
+ * @returns {{ closed: boolean, reasons: string[] }}
+ */
+export function closedGrammar(program) {
+  const reasons = [];
+  const fail = (message) => { if (!reasons.includes(message)) reasons.push(message); };
+  const declared = new Set(["owner", "v", ...(program.helpers ?? []).map((h) => h.name)]);
+  for (const helper of program.helpers ?? []) if (!HELPER_FORMS.includes(helper.form)) fail(`helper form ${helper.form} is not in the table`);
+  for (const { node } of walk(program)) {
+    if (node.k === "decl") declared.add(node.name);
+    if (node.k === "fn") node.params.forEach((_, index) => declared.add(`p${index}`));
+  }
+  for (const { node } of walk(program)) {
+    switch (node.k) {
+      case "show":
+        if (!(node.when?.k === "num" && node.when.n !== 0)) fail("Show when is not a nonzero literal");
+        if (node.fallback?.length) fail("Show has a fallback");
+        break;
+      case "iter": if (!["map", "forEach"].includes(node.method)) fail(`iteration ${node.method}`); break;
+      case "prim": if (!PRIMS.includes(node.name)) fail(`primitive ${node.name} is not in the table`); break;
+      case "fn": {
+        const awaits = node.body.filter((stmt) => stmt.k === "await").length;
+        if (awaits > 1) fail("more than one await in a function");
+        if (awaits && !node.async) fail("await outside an async function");
+        break;
+      }
+      case "call": {
+        const root = (callee) => (callee.k === "member" ? root(callee.obj) : callee);
+        const base = root(node.callee);
+        if (base.k === "ref" && !declared.has(base.name)) fail(`call of undeclared ${base.name}`);
+        else if (!["ref", "call", "fn", "prim", "iife", "iter", "getOwner", "obj"].includes(base.k)) fail(`call of an unknown ${base.k}`);
+        break;
+      }
+      case "decl":
+        if (node.e.k === "fn") for (const { node: inner } of walk(node.e)) if (inner.k === "ref" && inner.name === node.name) fail(`${node.name} calls itself`);
+        break;
+      default: break;
+    }
+  }
+  return { closed: reasons.length === 0, reasons };
+}

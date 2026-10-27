@@ -13,22 +13,22 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_ORACLE_INSTALL, chromeStatus, runChrome } from "./chrome.mjs";
-import { classify } from "./classify.mjs";
 import { dedupe } from "./dedupe.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { DEFAULT_FAST_INSTALL } from "./fast.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
-import { evaluate, signaturesOf } from "./pipeline.mjs";
+import { hitSummary } from "./hits.mjs";
+import { classifyChrome, evaluate, signaturesOf } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { DEFAULT_TSC } from "./typecheck.mjs";
 import { walk } from "./model.mjs";
 import { recommendedConcurrency } from "../lib/pool.mjs";
 
-const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "help"]);
+const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "help"]);
 const VALUES = new Set(["seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components"]);
 
-export function parseArgs(argv) {
+export function parseArgs(argv, { extraValues = [] } = {}) {
   const options = { seed: 1, count: 20, shrinkMode: "discovery", budget: 120 };
   for (let index = 0; index < argv.length; index += 1) {
     const raw = argv[index];
@@ -36,7 +36,7 @@ export function parseArgs(argv) {
     const key = raw.slice(2);
     const camel = key.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
     if (FLAGS.has(key)) { options[camel] = true; continue; }
-    if (!VALUES.has(key)) throw new Error(`unknown option ${raw}`);
+    if (!VALUES.has(key) && !extraValues.includes(key)) throw new Error(`unknown option ${raw}`);
     if (argv[index + 1] === undefined) throw new Error(`${raw} needs a value`);
     index += 1;
     options[camel] = argv[index];
@@ -47,10 +47,57 @@ export function parseArgs(argv) {
   return options;
 }
 
+/** The run's configuration from parsed options (`out` is the fresh output directory). */
+export function configFrom(options, out) {
+  return {
+    install: resolve(options.install ?? DEFAULT_ORACLE_INSTALL),
+    fastInstall: resolve(options.fastInstall ?? DEFAULT_FAST_INSTALL),
+    bin: options.checkerBin ? resolve(options.checkerBin) : process.env.SOLID_CHECKER_NATIVE_BIN,
+    typefacts: options.typefacts ? resolve(options.typefacts) : process.env.SOLID_TYPEFACTS_BIN,
+    tsc: options.tsc ?? process.env.FUZZ_TSC ?? DEFAULT_TSC,
+    casesDir: join(out, "cases"),
+    concurrency: options.concurrency ?? recommendedConcurrency(),
+    workers: options.workers ?? 4,
+    keepWork: Boolean(options.keepWork),
+    control: Boolean(options.control),
+    deadSite: Boolean(options.deadSite),
+    instrument: !options.noInstrument,
+  };
+}
+
+/** The programs of a seed range, built as cases. */
+export function generateEntries(options) {
+  const entries = [];
+  for (let index = 0; index < options.count; index += 1) {
+    const seed = programSeed(options.seed, index);
+    const program = generateProgram(seed, { profile: options.profile, components: options.components });
+    entries.push({ program, built: buildCase(program, { id: `fuzz-${seed}` }) });
+  }
+  return entries;
+}
+
+/** One results.jsonl row per evaluated program. */
+export function resultRows(results) {
+  const rows = [];
+  for (const [id, value] of results) {
+    rows.push({
+      id, seed: value.program.seed, verdict: value.classification.verdict, reasons: value.classification.reasons,
+      items: value.classification.items, sites: value.built.sites.length, typeErrors: value.typecheck?.ok === false ? value.typecheck.errors : undefined,
+      checkerMs: value.checker?.wallMs, runtimeMs: value.runtime?.wallMs,
+      hits: value.runtime ? hitSummary(value.built.ledger, value.runtime.hits ?? null, value.runtime.witnesses, value.runtime.quiescent ?? null) : undefined,
+      control: value.control ? { matched: value.control.matched, diffs: value.control.diffs } : undefined,
+    });
+  }
+  return rows;
+}
+
 const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--count N] [--profile name] [--components N]
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>]   (or SOLID_CHECKER_NATIVE_BIN, SOLID_TYPEFACTS_BIN)
   [--install <oracle install>] [--fast-install <fuzz install>] [--tsc <tsrs>] [--workers N] [--concurrency N]
   [--confirm-with-chrome [--browser <chromium>]] [--shrink [--shrink-mode discovery|focused] [--budget N]]
+  [--control]         neutrality control: also run the clean twin and the checker on the instrumented text, and compare
+  [--dead-site]       EXPERIMENTAL, off by default: the dead-site false-positive subkind (implies --control)
+  [--no-instrument]   run the clean text with no hit ledger (the baseline of the neutrality regression)
   [--generate-only]   write and type-check the programs, run nothing else
   [--keep-work]       keep the materialized checker directories`;
 
@@ -61,40 +108,19 @@ async function main(options) {
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
   mkdirSync(out, { recursive: true });
 
-  const config = {
-    install: resolve(options.install ?? DEFAULT_ORACLE_INSTALL),
-    fastInstall: resolve(options.fastInstall ?? DEFAULT_FAST_INSTALL),
-    bin: options.checkerBin ? resolve(options.checkerBin) : process.env.SOLID_CHECKER_NATIVE_BIN,
-    typefacts: options.typefacts ? resolve(options.typefacts) : process.env.SOLID_TYPEFACTS_BIN,
-    tsc: options.tsc ?? process.env.FUZZ_TSC ?? DEFAULT_TSC,
-    casesDir: join(out, "cases"),
-    concurrency: options.concurrency ?? recommendedConcurrency(),
-    workers: options.workers ?? 4,
-    keepWork: Boolean(options.keepWork),
-  };
+  const config = configFrom(options, out);
   if (!existsSync(join(config.install, "node_modules/solid-js/package.json"))) {
     throw new Error(`${config.install} has no node_modules/solid-js: run \`make runtime-oracle-install\``);
   }
 
-  const entries = [];
-  for (let index = 0; index < options.count; index += 1) {
-    const seed = programSeed(options.seed, index);
-    const program = generateProgram(seed, { profile: options.profile, components: options.components });
-    entries.push({ program, built: buildCase(program, { id: `fuzz-${seed}` }) });
-  }
+  if (options.noInstrument && options.confirmWithChrome) throw new Error("--no-instrument runs the clean text; Chrome confirmation reads the hit ledger, so the two do not combine");
+  const entries = generateEntries(options);
   if (options.generateOnly) {
     for (const { built } of entries) writeCase(join(config.casesDir, built.id), built);
   }
 
   const results = options.generateOnly ? await typecheckOnly(entries, config) : await evaluate(entries, config);
-  const rows = [];
-  for (const [id, value] of results) {
-    rows.push({
-      id, seed: value.program.seed, verdict: value.classification.verdict, reasons: value.classification.reasons,
-      items: value.classification.items, sites: value.built.sites.length, typeErrors: value.typecheck?.ok === false ? value.typecheck.errors : undefined,
-      checkerMs: value.checker?.wallMs, runtimeMs: value.runtime?.wallMs,
-    });
-  }
+  const rows = resultRows(results);
   writeFileSync(join(out, "results.jsonl"), rows.map((row) => JSON.stringify(row)).join("\n") + "\n");
   const tally = (key) => rows.reduce((counts, row) => ({ ...counts, [row[key]]: (counts[row[key]] ?? 0) + 1 }), {});
   const itemTally = rows.flatMap((row) => row.items).reduce((counts, item) => ({ ...counts, [item.kind]: (counts[item.kind] ?? 0) + 1 }), {});
@@ -107,12 +133,12 @@ async function main(options) {
     // Chrome decides. Without it a candidate stays a candidate.
     let chrome = new Map();
     if (options.confirmWithChrome && candidates.length) {
-      chrome = await runChrome(candidates.map((value) => ({ id: value.built.id, dir: join(config.casesDir, value.built.id), sites: value.built.sites })),
+      chrome = await runChrome(candidates.map((value) => ({ id: value.built.id, dir: join(config.casesDir, value.built.id), sites: value.built.sites, findings: value.checker.findings })),
         { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency });
     }
     for (const value of candidates) {
       const record = chrome.get(value.built.id);
-      const judged = record ? classify({ sites: value.built.sites, checker: record.checker, runtime: record.runtime, plan: value.built.plan }) : null;
+      const judged = record ? classifyChrome(value, record, config) : null;
       const status = chromeStatus(judged);
       if (status === "confirmed") confirmed += 1;
       let minimal = null;
@@ -150,6 +176,13 @@ async function typecheckOnly(entries, config) {
   const settled = await mapPoolSettled(entries, async ({ built }) => {
     const dir = materializeForChecker(built, config.install, built.id);
     const types = await typecheck(dir, { tsc: config.tsc });
+    // The instrumented twin is what runs: it must type-check whenever the clean text does.
+    if (types.ok && config.instrument !== false) {
+      const twin = materializeForChecker(built, config.install, `${built.id}-run`, { twin: true });
+      const twinTypes = await typecheck(twin, { tsc: config.tsc });
+      if (!config.keepWork) rmSync(twin, { recursive: true, force: true });
+      if (!twinTypes.ok) types.errors = [`the instrumented twin does not type-check: ${twinTypes.errors[0]}`], types.ok = false;
+    }
     if (!config.keepWork) rmSync(dir, { recursive: true, force: true });
     return types;
   }, { concurrency: config.concurrency });
