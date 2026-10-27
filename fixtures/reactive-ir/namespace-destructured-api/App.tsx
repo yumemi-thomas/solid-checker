@@ -7,7 +7,9 @@ import * as S from "solid-js";
 type Theme = "light" | "dark";
 const ThemeContext = S.createContext<Theme>();
 
-const { onCleanup: cleanup, "useContext": readContext, createEffect } = S;
+const { onCleanup: cleanup, "useContext": readContext, createEffect, Show: ShowD } = S;
+// A TypeScript wrapper around the initializer is the same namespace.
+const { onCleanup: wrappedCleanup } = S as typeof S;
 
 // Uncertifiable, not a violation: `early` runs before the declarator below,
 // so this mention throws instead of calling `onCleanup`.
@@ -42,12 +44,36 @@ export function BodyDestructuring() {
   return <i>body</i>;
 }
 
-// Negative: the same slots in a component body, which has an owner.
+// Positive: the wrapped initializer's slot in a timer.
+export function WrappedTimer() {
+  setTimeout(() => wrappedCleanup(() => {}), 0);
+  return <i>wrapped</i>;
+}
+
+// Uncertifiable, then a violation: inside a timer callback, `early` runs
+// before the body's declarator (the read throws); the call after it runs
+// with no owner.
+export function BodyTdz() {
+  setTimeout(() => {
+    function early() {
+      bodyLate(() => {});
+    }
+    try {
+      early();
+    } catch {}
+    const { onCleanup: bodyLate } = S;
+    bodyLate(() => {});
+  }, 0);
+  return <i>body tdz</i>;
+}
+
+// Negative: the same slots in a component body, which has an owner, and a
+// destructured `Show` tag whose children callback reads the narrowed value.
 export function Owned() {
   cleanup(() => {});
   createEffect(() => 1, () => {});
   const theme = readContext(ThemeContext);
-  return <i>{theme}</i>;
+  return <ShowD when={theme}>{(current: () => Theme) => <i>{current()}</i>}</ShowD>;
 }
 
 // Negative: a parameter named `S` shadows the namespace.
@@ -80,9 +106,18 @@ export function Refused() {
   return <i>refused</i>;
 }
 
-// Negative: an exported slot is read from other modules too; it is not resolved.
+// Negative: a slot the module exports (a declaration, a specifier, the default)
+// is referenced from other modules too; it is not resolved.
 export const { onCleanup: exportedCleanup } = S;
+const { onCleanup: specifiedCleanup } = S;
+const { onCleanup: defaultCleanup } = S;
+export { specifiedCleanup };
+export default defaultCleanup;
 export function ExportedSlot() {
-  setTimeout(() => exportedCleanup(() => {}), 0);
+  setTimeout(() => {
+    exportedCleanup(() => {});
+    specifiedCleanup(() => {});
+    defaultCleanup(() => {});
+  }, 0);
   return <i>exported</i>;
 }

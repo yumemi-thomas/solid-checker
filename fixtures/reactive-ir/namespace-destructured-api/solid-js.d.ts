@@ -18,7 +18,9 @@ declare namespace JSX {
 // `until`, `onSettled` and `runWithOwner` from `@solidjs/signals/dist/types/signals.d.ts`,
 // `action` from `core/action.d.ts`, `$REFRESH`/`Refreshable` from
 // `core/constants.d.ts`, and `onCleanup` (`signals.d.ts:47`) and `flush`
-// (`core/scheduler.d.ts:365-366`). `UntilOptions.signal` is narrowed to the DOM
+// (`core/scheduler.d.ts:365-366`); `Show` (its two non-keyed overloads, the
+// same text in the published rc.9 and rc.17 `types/client/flow.d.ts`).
+// `UntilOptions.signal` is narrowed to the DOM
 // `AbortSignal` the published conditional type selects under the DOM lib.
 declare module "solid-js" {
   const $REFRESH: unique symbol;
@@ -89,6 +91,21 @@ declare module "solid-js" {
   export function onCleanup(fn: Disposable): Disposable;
   export function flush(): void;
   export function flush<T>(fn: () => T): T;
+  type SolidElement = JSX.Element;
+  type NonZeroParams<T extends (...args: any[]) => any> = Parameters<T>["length"] extends 0 ? never : T;
+  type ConditionalRenderCallback<T> = (item: Accessor<NonNullable<T>>) => SolidElement;
+  export function Show<T>(props: {
+    when: T | undefined | null | false;
+    keyed?: false;
+    fallback?: SolidElement;
+    children: SolidElement;
+  }): SolidElement;
+  export function Show<T, F extends ConditionalRenderCallback<T>>(props: {
+    when: T | undefined | null | false;
+    keyed?: false;
+    fallback?: SolidElement;
+    children: NonZeroParams<F>;
+  }): SolidElement;
   // Copied from the published 2.0.0-rc.13 `types/client/core.d.ts`, the
   // provider shape simplified to the JSX children the cases use.
   export type ContextProviderComponent<T> = (props: { value: T; children: JSX.Element }) => JSX.Element;

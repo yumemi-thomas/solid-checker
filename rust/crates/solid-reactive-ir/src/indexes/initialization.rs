@@ -214,8 +214,9 @@ impl<'a> SemanticLookup<'a> {
 
     /// Whether the mention `span` of a namespace member slot (ADR 0458) may
     /// run before the slot's declarator: a call or tag there throws rather
-    /// than reaching the primitive, so it names none. Every mention of a slot
-    /// is in its own file (exported slots are not facts).
+    /// than reaching the primitive, so it names none. Every reference to a
+    /// slot is in its own file: a directly exported slot is not a fact, and a
+    /// value that escapes otherwise is no reference to the slot's symbol.
     pub(crate) fn namespace_slot_mention_withheld(&self, file: &FileFacts, span: Span) -> bool {
         if file.ast.namespace_member_bindings.is_empty() {
             return false;

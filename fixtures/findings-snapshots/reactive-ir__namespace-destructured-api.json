@@ -7,8 +7,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
-      "start": 625,
-      "end": 636,
+      "start": 761,
+      "end": 772,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
-      "start": 819,
-      "end": 826,
+      "start": 955,
+      "end": 962,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
-      "start": 979,
-      "end": 990,
+      "start": 1115,
+      "end": 1126,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
-      "start": 1156,
-      "end": 1168,
+      "start": 1292,
+      "end": 1304,
       "fixes": 0
     },
     {
@@ -47,8 +47,38 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
-      "start": 1375,
-      "end": 1387,
+      "start": 1511,
+      "end": 1523,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
+      "start": 1672,
+      "end": 1686,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
+      "start": 1974,
+      "end": 1982,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
+      "start": 2083,
+      "end": 2091,
       "fixes": 0
     }
   ]

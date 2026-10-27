@@ -1154,8 +1154,11 @@ pub struct TypeImportFact {
 /// computed key, a default value, a rest element, a nested pattern, and a
 /// `let` or `var` are absent, and so is a slot the module exports (`export
 /// const { … } = S`, `export { local }`, `export default local`, `export =
-/// local`), so every mention of `local` is in this file. Absence is not a
-/// fact about the slot. A read of `local` before the declarator ran throws;
+/// local`), so no other module imports the binding itself: every reference
+/// to `local` is in this file. Only a direct export of the binding is
+/// excluded; its value may still escape (`export default { local }`, an
+/// argument, a store), and such a slot is recorded. Absence is not a fact
+/// about the slot. A read of `local` before the declarator ran throws;
 /// whether one may is the consumer's question.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

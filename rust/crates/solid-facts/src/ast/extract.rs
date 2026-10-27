@@ -500,8 +500,10 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             .filter(|binding| binding.kind == ImportKind::Namespace && !binding.type_only)
             .map(|binding| binding.local.span)
             .collect::<std::collections::HashSet<_>>();
-        // An exported slot is mentioned from other modules too; only a slot
-        // every mention of which is in this file is recorded.
+        // A binding the module exports directly (`export const`, `export { x }`,
+        // `export default x`, `export = x`) is referenced from other modules;
+        // such a slot is not recorded. A value that escapes otherwise
+        // (`export default { x }`) is not a reference to the binding.
         let exported = self
             .exported_declarations
             .iter()
