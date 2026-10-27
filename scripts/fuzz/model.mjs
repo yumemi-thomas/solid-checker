@@ -65,6 +65,8 @@ export const tryStmt = (body, fin = []) => ({ k: "try", body, fin });
 export const flush = () => ({ k: "flush" });
 /** `null` (a component's return). */
 export const nul = () => ({ k: "nul" });
+/** `<span />` (a component's return: the checker reads a function that returns JSX as a component). */
+export const jsx = () => ({ k: "jsx" });
 
 /**
  * Containers (the containers dimension, container.mjs): a statement that wraps statements in a place where code is written but
@@ -366,7 +368,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
           return null;
         }
         case "getOwner": return { t: "owner" };
-        case "nul": return T.unknown;
+        case "nul": case "jsx": return T.unknown;
         case "flush": return T.void;
         case "set": {
           sigCheck(e.sig, "set");

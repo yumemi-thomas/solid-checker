@@ -186,6 +186,7 @@ function render(program, instrument) {
       case "fn": return fnText(e, depth);
       case "call": return glue(e, () => callText(e, depth));
       case "nul": return "null";
+      case "jsx": return "<span />";
       case "set": return glue(e, () => `${signals.get(e.sig).setter}(${expr(e.e, depth)})`);
       case "getOwner": used.add("getOwner"); return glue(e, () => "getOwner()");
       case "flush": used.add("flush"); return "flush()";

@@ -18,7 +18,7 @@
 //
 // Every container is valid TypeScript (the type check is the authority) and the hit ledger still tells ran from not-ran: a
 // function-like container has an entry counter, a direct form (`f = h();`, `false && h();`) has the glue counter of its call.
-import { contain, awaitStmt, ret, nul, decl, ref, walk, slotsOf, ASYNC_KINDS, USES } from "./model.mjs";
+import { contain, awaitStmt, ret, nul, jsx, decl, ref, walk, slotsOf, ASYNC_KINDS, USES } from "./model.mjs";
 import { createRng } from "./rng.mjs";
 
 const STATEMENTS = new Set(["expr", "decl", "return", "await", "try", "contain"]);
@@ -68,7 +68,7 @@ export function applyContainers(ctx, component, { rng, kinds = KIND_WEIGHTS, cou
     const kind = rng.weighted(kinds);
     wrapAt(chosen.list, chosen.index, kind, next("container"), {
       take: list2(chosen.list, chosen.index) && rng.chance(0.2) ? 2 : 1,
-      async: ASYNC_KINDS.has(kind) && rng.chance(0.35), gap: rng.chance(0.5) ? "before" : "after", use: USES[kind] ? rng.pick(USES[kind]) : null,
+      async: ASYNC_KINDS.has(kind) && rng.chance(0.35), gap: rng.chance(0.5) ? "before" : "after", returns: rng.chance(0.25) ? "null" : "jsx", use: USES[kind] ? rng.pick(USES[kind]) : null,
     });
   }
   // Rewrites run on the lists as they stand now (a container's body is a list too).
@@ -83,12 +83,12 @@ const list2 = (list, index) => list[index + 1]?.k === "expr";
 
 /**
  * Replaces `take` statements of `list` from `index` by one container of `kind`. A function-like container may be async, with its `await`
- * `before` or `after` the statements; a component returns `null`. Exported for the pinned shapes of the tests.
+ * `before` or `after` the statements; a component returns `<span />` (or `null`, `returns: "null"`: the checker reads a function that returns JSX as a component). Exported for the pinned shapes of the tests.
  */
-export function wrapAt(list, index, kind, id, { take = 1, async: isAsync = false, gap = "before", use = USES[kind]?.[0] ?? null } = {}) {
+export function wrapAt(list, index, kind, id, { take = 1, async: isAsync = false, gap = "before", use = USES[kind]?.[0] ?? null, returns = "jsx" } = {}) {
   const body = list.slice(index, index + take);
   const inner = isAsync ? (gap === "before" ? [awaitStmt(), ...body] : [...body, awaitStmt()]) : body;
-  const full = kind.startsWith("comp") ? [...inner, ret(nul())] : inner;
+  const full = kind.startsWith("comp") ? [...inner, ret(returns === "null" ? nul() : jsx())] : inner;
   const made = contain(kind, id, full, { async: isAsync, use });
   list.splice(index, take, made);
   return made;

@@ -78,7 +78,7 @@ const handleCall = (program) => {
 
 describe("one container around a cleanup handle's call", () => {
   const shapes = {
-    "comp-never": [/^ {4}function Child1\(\) \{\n {6}h1\(\);\n {6}return null;\n {4}\}$/m],
+    "comp-never": [/^ {4}function Child1\(\) \{\n {6}h1\(\);\n {6}return <span \/>;\n {4}\}$/m],
     "comp-rendered": [/function Child1\(\) \{/, /^ {4}<Child1 \/>;$/m],
     "comp-slot": [/function Child1\(\) \{/, /^ {4}\(\{ slot: \(c: \(\) => unknown\) => c\(\) \}\)\.slot\(Child1\);$/m],
     "comp-prop": [/export function C1\(props: \{ slot\?: /, /^ {4}props\.slot\?\.\(Child1\);$/m],
@@ -109,7 +109,7 @@ describe("one container around a cleanup handle's call", () => {
   }
 
   it("puts an await before or after the payload of an async container", () => {
-    for (const [gap, pattern] of [["before", /async function Child1\(\) \{\n {6}await Promise\.resolve\(\);\n {6}h1\(\);/], ["after", /h1\(\);\n {6}await Promise\.resolve\(\);\n {6}return null;/]]) {
+    for (const [gap, pattern] of [["before", /async function Child1\(\) \{\n {6}await Promise\.resolve\(\);\n {6}h1\(\);/], ["after", /h1\(\);\n {6}await Promise\.resolve\(\);\n {6}return <span \/>;/]]) {
       const program = handleCalledInMemo();
       const { list, index } = handleCall(program);
       wrapAt(list, index, "comp-never", 1, { async: true, gap });
