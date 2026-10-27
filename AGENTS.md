@@ -89,6 +89,8 @@ and docs/decisions.md (live decisions by ADR number).
 - `make` targets rebuild `bin/solid-typefacts` when its source stamp is stale;
   bare `cargo` does not. If a gate result looks impossible, rerun it with
   `SOLID_CHECKER_GATE_CACHE=0`.
+- A time-only failure under load is rerun alone; limits are never changed to
+  pass.
 - Sweeps and timing use the release binary (`make build-checker-release`); the
   debug binary inflates certification about 19x. Pass the previous sweep's
   report as `--order-from` so the slowest projects start first.
