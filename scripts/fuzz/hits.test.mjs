@@ -149,6 +149,11 @@ describe("outcomes and findings the twin must not move (parts b and chrome)", ()
     expect(outcomeDiff(runtime({ failure: { phase: "render" } }), runtime()).join()).toMatch(/failure/);
     expect(outcomeOf(runtime()).diagnostics).toEqual({ "STRICT_READ_UNTRACKED@8": 1 });
   });
+  it("a halted engine's diagnostic is compared by code, not by its (compiled-module) line", () => {
+    const halted = (line) => runtime({ diagnostics: [{ code: "REACTIVITY_HALTED", positions: [{ line }] }] });
+    expect(outcomeDiff(halted(54), halted(44))).toEqual([]);
+    expect(outcomeDiff(halted(54), runtime({ diagnostics: [] })).join()).toMatch(/diagnostics/);
+  });
   it("compares findings as (rule, kind, line) sets", () => {
     const f = (rule, line, kind = "violation") => ({ rule, kind, line, endLine: line + 3 });
     expect(findingsDiff([f("a", 1), f("b", 2)], [f("b", 2), f("a", 1)])).toEqual([]);

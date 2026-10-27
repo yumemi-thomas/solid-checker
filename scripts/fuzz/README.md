@@ -23,7 +23,10 @@ When a run confirms a false positive (exit status 3), stop the sweep. Do not cha
 | --- | --- |
 | `model.mjs` | the construct tree and its validator (a small type checker for the node language) |
 | `generate.mjs` | seed -> program: a payload (write or read) in layers (closures, defaults, IIFE, forEach/map, helpers), a host scope, a disposition |
-| `print.mjs`, `emit.mjs` | tree -> `App.tsx` with a site table; an oracle case directory (`App.tsx`, `oracle.json` steps, `program.json`, `sites.json`) |
+| `print.mjs`, `emit.mjs` | tree -> the clean `App.tsx` and its instrumented twin `App.run.txt`, with the site table, glue (auto-sites) and hit ledger; an oracle case directory (`App.tsx`, `oracle.json` steps, `program.json`, `sites.json`, and the twin's files) |
+| `hits.mjs` | the hit ledger: the counter's source, the strip, the readout parser, the per-site record, and the pure comparisons of the neutrality gate |
+| `neutrality.mjs` | the regression: a seed range with and without instrumentation, verdict by verdict |
+| `deadsite.mjs` | the `dead-site` conditions as code (off by default, `--dead-site`) |
 | `typecheck.mjs` | `tsrs -p ... --noEmit` against the published typings; a program that does not type-check is dropped |
 | `checker.mjs` | materializes a case as the oracle does and runs the native checker; per-site verdicts |
 | `fast.mjs`, `fast/` | the Happy DOM + `@solidjs/diagnostics` runtime path (Vitest) |
@@ -65,10 +68,11 @@ Any case directory is also runnable by the oracle directly: `node scripts/runtim
 
 ## Phases
 
-1. Generator, type-check, classifier, shrinker, dedupe, CLI (this slice). Unit tests: `packages/cli/node_modules/.bin/vitest run --config packages/cli/vitest.config.mjs scripts/fuzz`.
+1. Generator, type-check, classifier, shrinker, dedupe, CLI. Unit tests: `packages/cli/node_modules/.bin/vitest run --config packages/cli/vitest.config.mjs scripts/fuzz`.
 2. Rediscover this week's false positives on the pre-fix checker (ADR 0452 families), then confirm the fix clears them.
 3. Sweeps on the current checker; confirmed findings go to the owner.
 4. False cleans: a runtime diagnostic no finding covers is already classified (`candidate-false-clean`, provisional); hunting, confirming and shrinking them is not built.
+5. The hit ledger (phase A): the twin, ran/landed, glue sites, the neutrality gate. The `dead-site` subkind is written and off.
 
 ## How the evidence works
 
@@ -78,6 +82,27 @@ Any case directory is also runnable by the oracle directly: `node scripts/runtim
 * **Disturbance.** Any throw, `REACTIVITY_HALTED`, or runner failure makes the other findings of that program inconclusive.
 * **Same driver both sides.** The fast runner repeats the oracle's two passes of DOM events on every element, then clicks the plan's buttons and reads the witnesses; the oracle runs the same events and the same plan as scenario steps (`oracle.json`).
 * **Signature.** The identity of a finding is its rule plus the construct path from the component to the site (host, closure forms, defaults, helper form, IIFE/forEach/map) and what the program does with each closure on that chain (called, returned, stored, passed to a helper of some form, called from a handler). Names, values and the rest of the file are ignored.
+
+## The hit ledger
+
+Every place the runtime can execute is counted. `print.mjs` emits two texts from one tree: `text` (clean, what the checker reads and what an owner reads in a repro) and `runText` (the twin: type check, Happy DOM, Chrome). The twin has `(__h(N), expr)` on each payload site and each *glue* call (every other emitted call: `m1()()`, sinks, memo accessors, primitives; only the top of a call chain is counted), `__h(N); ` before a statement that is itself a counted call, `{ __h(N);` at every function entry, and the counter's source after the last line, so no line moves. The counter touches no Solid state: it increments `globalThis.__scHits` and mirrors the counts as JSON into a plain-DOM `<output id="sc-hits">` outside `#root` (one pixel, transparent: the oracle's `wait-for-selector` needs it visible). The fast runner reads the global and polls until it is still (quiescence); Chrome reads the last two `#sc-hits` checkpoints, which the twin's `oracle.run.json` adds as steps.
+
+A site is judged by two separate facts: `ran` (its counter is above zero) and `landed` (its witness text is on the page). A payload with a witness needs `landed`; a site with none (a glue call, a void payload) is judged by `ran`; a site that ran and did not land is inconclusive. A finding on a plumbing line (no payload site on its lines) is judged by the glue calls on them, replacing "the finding spans no site of interest". Every inconclusive item carries a `why` (`never-ran`, `ran-not-landed`, `no-witness`, `disturbed`, `perturbed-run`, ...). `results.jsonl` rows carry a `hits` summary per program.
+
+### Neutrality
+
+The counters must not move anything the fuzzer judges. Four checks, none needing Chrome except the last:
+
+1. `strip(runText) == text` (`hits.mjs stripInstrumentation`, checked when the case is built; a failing program is inconclusive `not-neutral`).
+2. `--control`: the clean text runs in the same engine and the (code, line) diagnostics, throws, witness texts and failure phase must match; the checker also runs on the twin's text and its (rule, kind, line) findings must equal the clean ones. A difference makes the program inconclusive `perturbed-run`.
+3. `node scripts/fuzz/neutrality.mjs --seed 1 --count 300 --profile <p> --control --out <fresh>`: the same seed range with and without instrumentation (`--no-instrument` is the baseline mode of `run.mjs`). Only an `inconclusive` verdict may move, and only to a resolved one; any other change exits 1. It also reports how many findings that used to span no site now map to one. `--baseline <results.jsonl>` reuses a recorded baseline from the same checker; `--baseline a --candidate b` compares two recorded runs.
+4. Chrome: the oracle runs the checker on the twin; its findings must equal the fast pipeline's clean ones, else `instrumentation-perturbed-checker` (inconclusive, `chrome-inconclusive`).
+
+Observation: the checker reports nothing on `(f(), m1()())` as a statement in a component body where it reports `m1()()` written plainly (the comma expression hides the read). The counters avoid the form for that reason (statement counters); the gap is the checker's, and is recorded in the report that added the ledger.
+
+### dead-site (off by default)
+
+`--dead-site` enables the `dead-site` false-positive subkind: a violation of an execution-claim rule at a site no execution entered. It needs, all at once: a closed branch-free program (`model.mjs closedGrammar`), a quiescent page, a neutral twin (build strip and clean-twin control), no disturbance and no unplaced diagnostic, a nearest enclosing function never entered while an enclosing function ran, no parameter default, and the same in Chrome. See `deadsite.mjs`; each unmet condition is a typed `inconclusive`. Do not enable it until the neutrality evidence has been reviewed.
 
 ## Provenance
 

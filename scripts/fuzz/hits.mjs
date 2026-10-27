@@ -134,6 +134,9 @@ export function hitSummary(ledger, hits, witnesses = [], quiescent = null) {
 // ---------------------------------------------------------------------------
 // The neutrality gate's comparisons (pure; the engines that feed them are in pipeline.mjs and neutrality.mjs).
 
+/** Diagnostics whose position says nothing about the program (see `outcomeOf`). */
+const CONSEQUENCE_CODES = ["REACTIVITY_HALTED"];
+
 const multiset = (rows) => rows.reduce((counts, key) => ({ ...counts, [key]: (counts[key] ?? 0) + 1 }), {});
 
 /**
@@ -141,7 +144,9 @@ const multiset = (rows) => rows.reduce((counts, key) => ({ ...counts, [key]: (co
  * diagnostics, the set of thrown errors, the witness texts, and the failure phase.
  */
 export function outcomeOf(runtime) {
-  const diagnostics = (runtime.diagnostics ?? []).map((d) => `${d.code}@${d.positions?.[0]?.line ?? "-"}`).sort();
+  // REACTIVITY_HALTED is the engine's consequence of an earlier throw, raised wherever the next operation happens; its
+  // frame is a position in the compiled module (past the end of the file), which shifts with the text. Its code counts, its line does not.
+  const diagnostics = (runtime.diagnostics ?? []).map((d) => `${d.code}@${CONSEQUENCE_CODES.includes(d.code) ? "-" : d.positions?.[0]?.line ?? "-"}`).sort();
   const errors = (runtime.errors ?? []).map((e) => `${e.kind}:${String(e.message).slice(0, 100)}`).sort();
   const witnesses = Object.fromEntries((runtime.witnesses ?? []).map((w) => [w.siteId, w.actual ?? null]));
   return { diagnostics: multiset(diagnostics), errors: multiset(errors), witnesses, failure: runtime.failure?.phase ?? null };
