@@ -25,10 +25,11 @@ import { DEFAULT_TSC } from "./typecheck.mjs";
 import { isSite, walk } from "./model.mjs";
 import { availableParallelism } from "node:os";
 import { createFastDaemon } from "./fast-daemon.mjs";
+import { mapPoolSettled } from "../lib/pool.mjs";
 import { cleanupEvidence } from "./disposal.mjs";
 
-const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "hunt-false-cleans", "help"]);
-const VALUES = new Set(["seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components"]);
+const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "hunt-false-cleans", "all-cores", "help"]);
+const VALUES = new Set(["seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch"]);
 
 export function parseArgs(argv, { extraValues = [] } = {}) {
   const options = { seed: 1, count: 20, shrinkMode: "discovery", budget: 120 };
@@ -43,14 +44,14 @@ export function parseArgs(argv, { extraValues = [] } = {}) {
     index += 1;
     options[camel] = argv[index];
   }
-  for (const key of ["seed", "count", "workers", "concurrency", "budget", "components"]) if (options[key] !== undefined) options[key] = Number(options[key]);
+  for (const key of ["seed", "count", "workers", "concurrency", "budget", "components", "shrinkJobs", "shrinkBatch"]) if (options[key] !== undefined) options[key] = Number(options[key]);
   for (const key of ["seed", "count", "budget"]) if (!Number.isInteger(options[key]) || options[key] < 0) throw new Error(`--${key} needs a non-negative integer`);
   if (!["discovery", "focused"].includes(options.shrinkMode)) throw new Error("--shrink-mode is discovery or focused");
   return options;
 }
 
 /** Half the cores: every unit starts a checker and a type checker, and the runtime path sleeps on timers, so more than this only queues. */
-export const defaultParallelism = (cores = availableParallelism()) => Math.max(1, Math.floor(cores / 2));
+export const defaultParallelism = (cores = availableParallelism(), { allCores = false } = {}) => (allCores ? Math.max(1, cores) : Math.max(1, Math.floor(cores / 2)));
 
 /** Starts the long-lived fast host unless `--no-daemon`; the caller closes it (`config.fast?.close()`). */
 export function attachDaemon(config, options) {
@@ -66,8 +67,8 @@ export function configFrom(options, out) {
     typefacts: options.typefacts ? resolve(options.typefacts) : process.env.SOLID_TYPEFACTS_BIN,
     tsc: options.tsc ?? process.env.FUZZ_TSC ?? DEFAULT_TSC,
     casesDir: join(out, "cases"),
-    concurrency: options.concurrency ?? defaultParallelism(),
-    workers: options.workers ?? defaultParallelism(),
+    concurrency: options.concurrency ?? defaultParallelism(undefined, { allCores: options.allCores }),
+    workers: options.workers ?? defaultParallelism(undefined, { allCores: options.allCores }),
     keepWork: Boolean(options.keepWork),
     control: Boolean(options.control),
     deadSite: Boolean(options.deadSite),
@@ -109,6 +110,8 @@ const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--
   [--confirm-with-chrome [--browser <chromium>]] [--shrink [--shrink-mode discovery|focused] [--budget N]]
   [--control]         neutrality control: also run the clean twin and the checker on the instrumented text, and compare
   [--dead-site]       EXPERIMENTAL, off by default: the dead-site false-positive subkind (implies --control)
+  [--all-cores]       every core for the concurrency and the Vitest workers (the default is half the cores)
+  [--shrink-jobs N]   shrink N signature groups at once (default 4); [--shrink-batch N] candidates judged per round (default 8)
   [--no-daemon]       one Vitest process per batch instead of the long-lived fast host
   [--no-instrument]   run the clean text with no hit ledger (the baseline of the neutrality regression)
   [--hunt-false-cleans] also confirm false cleans in Chrome (with --confirm-with-chrome) and shrink them (with --shrink)
@@ -151,6 +154,13 @@ async function sweep(options, config, out) {
   const candidates = [...results.values()].filter((value) => value.classification.verdict === "candidate-false-positive");
   const findings = [];
   let confirmed = 0;
+  // Reductions asked for, one per (kind, signature): the first program of each signature is its representative.
+  const wanted = new Map();
+  const wantShrink = (value, spec) => {
+    const key = `${spec.kind}|${spec.signature}`;
+    if (!wanted.has(key)) wanted.set(key, { value, ...spec });
+    return key;
+  };
   if (!options.generateOnly) {
     // Chrome decides. Without it a candidate stays a candidate.
     let chrome = new Map();
@@ -169,10 +179,10 @@ async function sweep(options, config, out) {
       const judged = record ? classifyChrome(value, record, config) : null;
       const status = chromeStatus(judged);
       if (status === "confirmed") confirmed += 1;
-      let minimal = null;
-      if (options.shrink && !["refuted-by-chrome", "chrome-inconclusive"].includes(status)) minimal = await shrinkCandidate(value, config, options, out);
+      const reducible = options.shrink && !["refuted-by-chrome", "chrome-inconclusive"].includes(status);
       for (const found of signaturesOf(value.program, value.built, judged ?? value.classification)) {
-        findings.push({ id: value.built.id, signature: found.signature, status, size: minimal ? minimal.size : value.built.text.split("\n").length, rule: found.item.finding?.rule, reason: found.item.reason, repro: minimal?.dir ?? join(config.casesDir, value.built.id) });
+        findings.push({ id: value.built.id, signature: found.signature, status, size: value.built.text.split("\n").length, rule: found.item.finding?.rule, reason: found.item.reason, repro: join(config.casesDir, value.built.id),
+          ...(reducible ? { shrinkKey: wantShrink(value, { kind: "candidate-false-positive", signature: found.signature }) } : {}) });
       }
       if (judged && ["refuted-by-chrome", "chrome-inconclusive"].includes(status)) findings.push({ id: value.built.id, signature: "-", status, reason: judged.reasons.join("; ") });
     }
@@ -184,7 +194,6 @@ async function sweep(options, config, out) {
     }
     // False cleans: a runtime diagnostic no finding covers. Reported as provisional unless hunted (--hunt-false-cleans): then Chrome
     // decides and the shrinker reduces what Chrome confirms, the way a false positive is.
-    const shrunk = new Set();
     for (const value of results.values()) {
       const items = value.classification.items.filter((item) => item.kind === "candidate-false-clean");
       if (!items.length) continue;
@@ -199,17 +208,25 @@ async function sweep(options, config, out) {
           else if (confirmedCodes.has(item.diagnostic.code)) status = "false-clean-confirmed";
           else status = judged.verdict === "inconclusive" ? "false-clean-chrome-inconclusive" : "false-clean-refuted-by-chrome";
         }
-        let minimal = null;
-        const signatureOfItem = signaturesOf(value.program, value.built, { items: [item] })[0]?.signature;
-        // One shrink per signature: the later members of a group add a count, not a reduction.
-        if (options.shrink && options.huntFalseCleans && ["false-clean-confirmed", "false-clean-unconfirmed"].includes(status) && !shrunk.has(signatureOfItem)) {
-          shrunk.add(signatureOfItem);
-          minimal = await shrinkCandidate(value, config, options, out, { kind: "candidate-false-clean", code: item.diagnostic.code });
-        }
-        for (const found of signaturesOf(value.program, value.built, { items: [item] })) {
-          findings.push({ id: value.built.id, signature: found.signature, status, reason: item.reason, size: minimal ? minimal.size : value.built.text.split("\n").length, repro: minimal?.dir ?? join(config.casesDir, value.built.id) });
+        const [found] = signaturesOf(value.program, value.built, { items: [item] });
+        const reducible = options.shrink && options.huntFalseCleans && ["false-clean-confirmed", "false-clean-unconfirmed"].includes(status);
+        if (found) {
+          findings.push({ id: value.built.id, signature: found.signature, status, reason: item.reason, size: value.built.text.split("\n").length, repro: join(config.casesDir, value.built.id),
+            ...(reducible ? { shrinkKey: wantShrink(value, { kind: "candidate-false-clean", code: item.diagnostic.code, signature: found.signature }) } : {}) });
         }
       }
+    }
+    // The reductions: one representative per signature (the later members of a group add a count, not a reduction), run in a
+    // bounded pool across groups. Each reduction batches its candidates (shrinkCandidate).
+    const keys = [...wanted.keys()];
+    const reduced = await mapPoolSettled(keys, async (key) => shrinkCandidate(wanted.get(key).value, config, options, out, wanted.get(key)), { concurrency: options.shrinkJobs ?? Math.min(4, keys.length || 1) });
+    const minimals = new Map(keys.map((key, index) => [key, reduced[index].value ?? null]));
+    for (const [key, outcome] of keys.map((key, index) => [key, reduced[index]])) if (outcome.error) console.error(`shrink ${key} failed: ${outcome.error.message ?? outcome.error}`);
+    for (const finding of findings) {
+      if (!finding.shrinkKey) continue;
+      const minimal = minimals.get(finding.shrinkKey);
+      if (minimal) { finding.size = minimal.size; finding.repro = minimal.dir; }
+      delete finding.shrinkKey;
     }
   }
   const groups = dedupe(findings.filter((f) => f.signature !== "-").map((f) => ({ ...f })));
@@ -250,26 +267,31 @@ async function typecheckOnly(entries, config) {
   return results;
 }
 
-/** Shrinks one candidate under the fast path (checker + Happy DOM); writes the minimal case. */
+/**
+ * Shrinks one candidate under the fast path (checker + Happy DOM); writes the minimal case.
+ * Each round of candidates is judged in one `evaluate` (one fast-path run for the lot, the checker and type check in a pool).
+ */
 async function shrinkCandidate(value, config, options, out, { kind = "candidate-false-positive", code } = {}) {
   const target = value.classification.items.find((item) => item.kind === kind && (!code || item.diagnostic?.code === code));
   const targetSignature = signaturesOf(value.program, value.built, { items: [target] })[0]?.signature;
   let counter = 0;
-  const base = `${value.built.id}-min`;
-  const judge = async (program) => {
-    counter += 1;
-    const built = buildCase(program, { id: `${base}-${counter}` });
-    const result = (await evaluate([{ program, built }], { ...config, casesDir: join(out, "shrink") })).get(built.id);
+  const base = `${value.built.id}-${kind === "candidate-false-clean" ? "fc" : "fp"}`;
+  const holds = (program, built, result) => {
     const hit = result.classification.items.filter((item) => item.kind === kind);
     if (!hit.length) return false;
     if (options.shrinkMode === "discovery") return hit.some((item) => (kind === "candidate-false-clean" ? item.diagnostic.code === target.diagnostic.code : item.finding.rule === target.finding.rule));
     return signaturesOf(program, built, { items: hit }).some((found) => found.signature === targetSignature);
   };
+  const judgeBatch = async (programs) => {
+    const entries = programs.map((program) => { counter += 1; return { program, built: buildCase(program, { id: `${base}-${counter}` }) }; });
+    const results = await evaluate(entries, { ...config, casesDir: join(out, "shrink") });
+    return entries.map(({ program, built }) => holds(program, built, results.get(built.id)));
+  };
   const cheap = (program) => [...walk(program)].some(({ node }) => isSite(node));
-  const reduced = await shrink(value.program, judge, { budget: options.budget, cheap });
+  const reduced = await shrink(value.program, async (program) => (await judgeBatch([program]))[0], { budget: options.budget, cheap, judgeBatch, batchSize: options.shrinkBatch ?? 8 });
   const finalBuilt = buildCase(reduced.program, { id: `${value.built.id}-min`, note: `shrunk from fuzz seed ${value.program.seed} (${reduced.accepted} reductions, ${reduced.attempts} runs)` });
   const dir = writeCase(join(out, "repros", createHash("sha1").update(finalBuilt.text).digest("hex").slice(0, 10)), finalBuilt);
-  console.error(`shrunk ${value.built.id}: ${reduced.attempts} runs, ${reduced.accepted} accepted, ${finalBuilt.text.split("\n").length} lines -> ${dir}`);
+  console.error(`shrunk ${value.built.id}: ${reduced.attempts} runs in ${reduced.rounds} batches, ${reduced.accepted} accepted, ${finalBuilt.text.split("\n").length} lines -> ${dir}`);
   return { dir, size: finalBuilt.text.split("\n").length };
 }
 
