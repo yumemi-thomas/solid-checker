@@ -329,9 +329,10 @@ pub(super) enum DisposalReach {
 /// callback), directly or through functions that run on that callback's stack:
 /// a call that runs its callback during the call (`runWithOwner`, `createRoot`,
 /// `untrack`), an IIFE, an inline standard-library callback ([`layer_run`]).
-/// Only that is [`DisposalReach::Only`], and only when the `onCleanup` call's
-/// result is discarded: rc.17 returns the callback itself, which user code may
-/// call outside a disposal. A layer that runs on a fresh stack, is a proven
+/// Only that is [`DisposalReach::Only`], and only when nothing else calls the
+/// callback: rc.17 returns it, so each call of the handle runs it too, and the
+/// handle's calls answer as well ([`cleanup_handle`], ADR 0456): one outside a
+/// disposal is [`DisposalReach::NotIn`], an unread use unplaced. A layer that runs on a fresh stack, is a proven
 /// component, a callback the engine schedules, or an effect's returned cleanup
 /// is [`DisposalReach::NotIn`]; every other layer is
 /// [`DisposalReach::Unplaced`], since a cleanup may be its caller.
@@ -344,6 +345,17 @@ pub(super) fn runs_in_disposal(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
+) -> DisposalReach {
+    runs_in_disposal_within(file, span, lookup, 0)
+}
+
+/// [`runs_in_disposal`], `depth` handle calls deep (ADR 0456): a call of a
+/// cleanup's handle written in another cleanup asks the question again there.
+fn runs_in_disposal_within(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
 ) -> DisposalReach {
     let mut at = span;
     // Whether the climb has left the callback of the call that gave the write
@@ -394,10 +406,40 @@ pub(super) fn runs_in_disposal(
                 .dialect
                 .callback_runs_only_in_disposal(primitive, index)
             {
-                return if call.result_discarded && !timing_unknown && !among_others {
-                    DisposalReach::Only
-                } else {
-                    DisposalReach::Unplaced
+                // A callback on the way that may run after its call returns
+                // places nothing at the cleanup's call or its handle's, and
+                // neither does one a helper also hands on or keeps
+                // ([`LayerRun::InPlaceAmongOthers`], ADR 0457): `Only` needs
+                // every run inside the disposal, and the handle's calls are
+                // not followed through a callback with runs this does not see.
+                if timing_unknown || among_others {
+                    return DisposalReach::Unplaced;
+                }
+                // ADR 0456: rc.17 returns the callback, so each call of the
+                // handle also runs it there. One such call outside a disposal
+                // runs the write outside one.
+                return match cleanup_handle(file, call, primitive, index, lookup) {
+                    CleanupHandle::DisposalOnly => DisposalReach::Only,
+                    CleanupHandle::Unplaced => DisposalReach::Unplaced,
+                    CleanupHandle::Called(_) if depth >= 4 => DisposalReach::Unplaced,
+                    CleanupHandle::Called(sites) => {
+                        let mut reach = DisposalReach::Only;
+                        for site in sites {
+                            match runs_in_disposal_within(file, site, lookup, depth + 1) {
+                                // Where the backend withdraws a violation, a
+                                // call outside a disposal proves nothing.
+                                DisposalReach::NotIn
+                                    if handle_site_unplaced(file, site, lookup) =>
+                                {
+                                    reach = DisposalReach::Unplaced;
+                                }
+                                DisposalReach::NotIn => return DisposalReach::NotIn,
+                                DisposalReach::Only => {}
+                                DisposalReach::Unplaced => reach = DisposalReach::Unplaced,
+                            }
+                        }
+                        reach
+                    }
                 };
             }
             match callback_execution_at_call(file, call, primitive, index, lookup) {
@@ -1201,6 +1243,37 @@ fn write_role_walk(
     {
         return unknown;
     }
+    // ADR 0456: a disposal callback whose handle the code calls also runs at
+    // those calls, outside the disposal, so its lexical role is no proof there.
+    let direct = if direct.reports_disallowed_write() {
+        direct
+    } else {
+        match cleanup_handle_write_role(
+            file,
+            span,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            root_body,
+            visiting,
+        ) {
+            Some(HandleRole::Decided(role)) => {
+                if role == ExecutionRole::Unknown {
+                    *decided = true;
+                }
+                return role;
+            }
+            // The entries of the layer decide, but none of them places a write
+            // that follows a suspension (as above).
+            Some(HandleRole::Unrun) if may_follow_suspension(file, span) => {
+                *decided = true;
+                return unknown;
+            }
+            Some(HandleRole::Unrun) => ExecutionRole::Unknown,
+            None => direct,
+        }
+    };
     let innermost = crate::owners::containing_ast_function(&file.ast, span);
     // A permissive role read off the positions that name the function as a
     // callback (`onClick={reset}`) describes those entries only. Its calls and
@@ -1478,7 +1551,7 @@ fn layers_run_inline(
 }
 
 /// How a function layer is run by the code around it.
-enum LayerRun {
+pub(super) enum LayerRun {
     /// An IIFE, an argument a standard-library call runs inline
     /// (`[x].forEach(fn)`), or one a function calls in its own body
     /// ([`helper_runs_layer_inline`]): it runs on the stack of the call, which
@@ -1498,7 +1571,7 @@ enum LayerRun {
     Elsewhere,
 }
 
-fn layer_run(
+pub(super) fn layer_run(
     file: &solid_facts::FileFacts,
     layer: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
