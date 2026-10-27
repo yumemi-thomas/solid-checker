@@ -300,7 +300,7 @@ function reportGate(result) {
 
 const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] [--per-cell N] [--codes A,B] [--contexts a,b]
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--checker-label <commit>] [--tsc <tsrs>] [--all-cores]
-  [--confirm-with-chrome [--chrome-sample 3] [--browser <chromium>]] [--shrink [--budget N]]
+  [--confirm-with-chrome [--chrome-sample 3] [--chrome-false-clean 4] [--browser <chromium>]] [--shrink [--budget N]]
   [--baseline <matrix.json>]            fail when a cell's agree count drops or its false-clean count rises (same seeds)
   node scripts/fuzz/matrix.mjs --gate <baseline.json> <current.json>`;
 
@@ -343,13 +343,14 @@ async function sweep(options, config, out) {
   if (options.confirmWithChrome) {
     const pick = [];
     const bySample = new Map();
-    for (const row of rows) {
-      if (row.outcome === "wrong-rule" || row.outcome === "false-clean") pick.push(row);
-      else if (row.outcome === "agree") {
-        const key = `${row.code}|${row.context}`;
-        const n = bySample.get(key) ?? 0;
-        if (n < (options.chromeSample ?? 3)) { bySample.set(key, n + 1); pick.push(row); }
-      }
+    // Per cell: up to --chrome-sample agree programs, up to --chrome-false-clean false-clean programs (the smallest first: they are the
+    // ones the shrinker takes), every wrong-rule program. Every cell with a false clean or a wrong rule is thereby confirmed in Chrome.
+    const limits = { agree: options.chromeSample ?? 3, "false-clean": options.chromeFalseClean ?? 4, "wrong-rule": Infinity };
+    for (const row of [...rows].sort((a, b) => a.lines - b.lines || a.index - b.index)) {
+      if (!(row.outcome in limits)) continue;
+      const key = `${row.code}|${row.context}|${row.outcome}`;
+      const n = bySample.get(key) ?? 0;
+      if (n < limits[row.outcome]) { bySample.set(key, n + 1); pick.push(row); }
     }
     console.error(`matrix: Chrome confirmation of ${pick.length} programs`);
     for (let at = 0; at < pick.length; at += 40) {
@@ -411,8 +412,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "baseline", "checker-label"] });
-      for (const key of ["perCell", "chromeSample"]) if (options[key] !== undefined) options[key] = Number(options[key]);
+      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "baseline", "checker-label"] });
+      for (const key of ["perCell", "chromeSample", "chromeFalseClean"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }
       else process.exitCode = await runMatrix(options);

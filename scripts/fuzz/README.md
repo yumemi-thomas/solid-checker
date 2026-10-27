@@ -36,6 +36,39 @@ The pipeline (`falseclean.mjs`, `falseclean-run.mjs`):
 
 `findings.json` has a `falseClean` section (groups worst severity first, `knownOpen`, `staleOpen`, ranked `recallGaps`); `summary.json` carries the counts.
 
+### The misuse profile and the recall matrix
+
+The fuzzer above hunts a checker that is too loud (false positives) or silent where Solid speaks (false cleans) in programs it draws at random. The **misuse profile** (`--profile misuse`, `misuse.mjs`) asks the other question on purpose: for every code a rule claims (the `defect-claimed` rows of the policy table), does the checker report a violation when the primitive is misused? Each program targets one code at one marked site (a `use` node), so a matrix cell is unambiguous.
+
+* **Context** (the matrix column): component body, memo, effect compute or apply, render-effect compute or apply, `createTrackedEffect`, `onSettled`, `untrack`, `createRoot`, `runWithOwner(null)`, event handler, timer, promise callback, microtask, after an `await`, a JSX child (plain, under `Show`, in a `For` row), an `action` body, an async memo or effect compute. A code's list (`SPEC[code].contexts`) holds only the contexts where the call is a defect and the runtime reports it; `misuse-fire.test.mjs` fires every cell in the fast runtime.
+* **Layer** (random per program): none, a named closure called in place, a same-file helper taking the callback, an IIFE, or two of them.
+* **Binding** (random per program): the API reached by a direct import, `import * as S`, an alias (`flush as flushAlias`), a destructuring (`const { flush } = S`), or a wrapper function (the wrapper's inner call line belongs to the site, `aux` in `sites.json`).
+* **typed-away**: a code whose every misuse the published typings reject has no template (`MISSING_EFFECT_FN`: `createEffect(fn)` is TS2554). It is recorded with the type checker's error, never counted as a gap (invariant 1).
+
+`matrix.mjs` runs `--per-cell N` programs per (code, context) and judges each at its site:
+
+| column | meaning |
+| --- | --- |
+| typed-away | tsc rejects the program; not evidence |
+| harness | the checker or runtime run failed; not evidence |
+| not-fired | the program type-checks and the runtime did not report the code at the site: a generator problem |
+| agree | runtime-confirmed, and a violation of a rule that claims the code covers the site |
+| wrong-rule | runtime-confirmed, and only another rule's violation covers the site |
+| recall-gap | runtime-confirmed, and only an uncertifiable finding covers the site |
+| false-clean | runtime-confirmed, and no finding covers the site |
+
+Only runtime-confirmed programs (agree + wrong-rule + recall-gap + false-clean) count in the checker columns. `ASYNC_OUTSIDE_LOADING_BOUNDARY` is `placeless`: Solid reports it from the render root, at a line that is not an authored one, so it counts wherever the program reports it.
+
+```sh
+node scripts/fuzz/matrix.mjs --out <fresh dir> --seed 1 --per-cell 20 --confirm-with-chrome --shrink --checker-label <commit>
+node scripts/fuzz/matrix.mjs ... --baseline <saved matrix.json>         # gate: exit 1 on a regression
+node scripts/fuzz/matrix.mjs --gate <baseline.json> <current.json>      # compare two recorded matrices
+```
+
+`--confirm-with-chrome` runs, per cell, up to `--chrome-sample` (3) agree programs, up to `--chrome-false-clean` (4) false-clean programs and every wrong-rule program in Chrome and records `same`, `differs`, `not-fired-in-chrome` or `chrome-inconclusive` beside the fast verdict. `--shrink` reduces the smallest Chrome-confirmed false-clean program of each cell (the control is the legal twin) and reconfirms the minimum in Chrome. Output: `matrix.json` (per cell counts, per binding and layer counts, per-seed verdicts, Chrome summary, minimum), `matrix.md`, `programs.jsonl`, `repros/`.
+
+**Gate.** A cell's program seeds depend on the run seed, the code, the context and the index only (`cellSeed`), so a baseline and a later run with the same `--seed` and `--per-cell` judge the same programs. The gate fails (exit 1) when a cell's agree count drops or its false-clean count rises, or a baseline cell is missing; it names the seeds that moved. Different seeds, per-cell counts or generator versions are refused (exit 2). A cell where the checker improved is reported, not failed.
+
 ## Layout
 
 | file | role |
@@ -55,6 +88,8 @@ The pipeline (`falseclean.mjs`, `falseclean-run.mjs`):
 | `falseclean.mjs`, `falseclean-run.mjs`, `known-open.json` | the false-clean stream: coarse key, ledger, Chrome confirmation, focused shrink with a control |
 | `shrink.mjs`, `dedupe.mjs` | delta debugging over the tree; signatures by construct path |
 | `chrome.mjs` | Chrome confirmation through `scripts/runtime-oracle.mjs` |
+| `misuse.mjs` | the misuse profile: a template per claimed code, the contexts, layers and binding forms |
+| `matrix.mjs` | the recall matrix (code x context), its Chrome sample, the false-clean shrink and the baseline gate |
 | `run.mjs` | the command line |
 
 ## Install
