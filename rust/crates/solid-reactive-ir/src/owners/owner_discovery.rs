@@ -21,10 +21,21 @@ pub(crate) fn discover_owner_file(
         .map(|function| owner_node(file, indexes, entities, function, lookup))
         .collect::<Vec<_>>();
     let nodes_by_path = function_indices_by_path(&nodes);
+    // ADR 0454: the function that owns the site. A call in a parameter list is
+    // the activation of the function whose list it is, not of the function
+    // around it (`containing_function_indexed` is body-only). Every function
+    // has a node, so the owner's span names one.
     let owner_at = |span| {
-        containing_function_indexed(&nodes, &nodes_by_path, file.path.as_str(), span)
-            .map(|index| nodes[index].span)
+        file.ast
+            .innermost_function_owning(span)
+            .map(|function| function.span)
     };
+    // Whether the site runs only when its function is called without the
+    // argument. Nothing here proves a call omits it, so the site has no proven
+    // owner context: an edge it makes is a root that may be unowned
+    // ([`OwnerEdgeKind::MayBeUnowned`]), and a requirement it holds is
+    // uncertifiable, never a violation and never silent.
+    let list_site = |span| crate::owners::in_parameter_list(&file.ast, span);
     // Keyed by function span: the emission pass resolves it to the node whose
     // propagated context it reads, as it does `owner`.
     let region_chain = |span| {
@@ -111,14 +122,19 @@ pub(crate) fn discover_owner_file(
                     .cloned()
                     .map(OwnerTarget::Symbol)
             });
+        let in_list = list_site(call.span);
         if let Some(target) = target {
             edges.push(SymbolicOwnerEdge {
-                source: owner.map(|span| OwnerSource {
+                source: owner.filter(|_| !in_list).map(|span| OwnerSource {
                     path: file.path.to_string(),
                     span,
                 }),
                 target,
-                kind: call_owner_edge(file, call.callee),
+                kind: if in_list {
+                    OwnerEdgeKind::MayBeUnowned
+                } else {
+                    call_owner_edge(file, call.callee)
+                },
             });
         }
         // ADR 0347: an invoked function literal runs in the call, under the
@@ -129,12 +145,16 @@ pub(crate) fn discover_owner_file(
             if invocation_runs_under_owner(file, call.span, invoker.map(|index| nodes[index].span))
             {
                 edges.push(SymbolicOwnerEdge {
-                    source: invoker.map(|index| OwnerSource {
+                    source: invoker.filter(|_| !in_list).map(|index| OwnerSource {
                         path: file.path.to_string(),
                         span: nodes[index].span,
                     }),
                     target: OwnerTarget::LocalSpan(function.span),
-                    kind: call_owner_edge(file, call.callee),
+                    kind: if in_list {
+                        OwnerEdgeKind::MayBeUnowned
+                    } else {
+                        call_owner_edge(file, call.callee)
+                    },
                 });
             }
         }
@@ -157,6 +177,21 @@ pub(crate) fn discover_owner_file(
                             }
                         })
                     });
+                // A callback created in a parameter list exists only if the
+                // default runs: it is owned where its primitive owns it, and
+                // otherwise may be unowned.
+                let (source, kind) = if list_site(call.span) {
+                    (
+                        None,
+                        if kind == OwnerEdgeKind::Owned {
+                            kind
+                        } else {
+                            OwnerEdgeKind::MayBeUnowned
+                        },
+                    )
+                } else {
+                    (source, kind)
+                };
                 edges.push(SymbolicOwnerEdge {
                     source,
                     target,
@@ -237,6 +272,7 @@ pub(crate) fn discover_owner_file(
                 settled_gate,
                 providing_region_chain,
                 context_argument,
+                in_parameter_list: in_list,
             });
         }
     }
@@ -323,6 +359,7 @@ pub(crate) fn discover_owner_file(
                 settled_gate: None,
                 providing_region_chain: region_chain(element.span),
                 context_argument: None,
+                in_parameter_list: list_site(element.span),
             });
         }
     }

@@ -292,7 +292,7 @@ pub(crate) fn attribute_dependency_requirements(
                     .calls
                     .iter()
                     .filter(|call| {
-                        containing_ast_function(&file.ast, call.span)
+                        crate::owners::containing_body_function(&file.ast, call.span)
                             .is_some_and(|function| function.span == nodes[caller].span)
                             && enters(file, call, node)
                     })
@@ -371,7 +371,8 @@ pub(crate) fn attribute_dependency_requirements(
                     continue;
                 }
                 for call in &file.ast.calls {
-                    if containing_ast_function(&file.ast, call.span).is_some()
+                    // ADR 0454: a call in a parameter list is in a function.
+                    if crate::owners::owning_function(&file.ast, call.span).is_some()
                         || !enters(file, call, node)
                         || first_hop(file, call, node_file, node_function, sites)
                             == Some(solid_facts::ast::SiteStanding::Unreachable)

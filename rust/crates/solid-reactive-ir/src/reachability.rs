@@ -216,19 +216,35 @@ fn discover_reachability_file(
         })
         .collect::<Vec<_>>();
     let functions_by_path = function_indices_by_path(&functions);
+    let body_owner = |span: Span| {
+        containing_function_indexed(&functions, &functions_by_path, file.path.as_str(), span)
+            .map(|index| functions[index].span)
+    };
+    // ADR 0454: a call in a parameter list runs in the activation of the
+    // function whose list it is, when that function is called without the
+    // argument. Placed by body alone it has no function at module level (its
+    // owner of `None` never enters `reachable_calls`, so a write there was
+    // silent) and belongs to the function around the list's function
+    // otherwise. The body owner stays (a site there is reached as before:
+    // nothing already reached is dropped), and the owning function is added:
+    // the call is reached whenever either is, and its edges leave from both.
+    let list_owner = |span: Span| {
+        file.ast
+            .innermost_function_owning(span)
+            .map(|function| function.span)
+            .filter(|owner| Some(*owner) != body_owner(span))
+    };
     let call_owners = file
         .ast
         .calls
         .iter()
-        .map(|call| {
-            containing_function_indexed(
-                &functions,
-                &functions_by_path,
-                file.path.as_str(),
-                call.span,
-            )
-            .map(|index| functions[index].span)
-        })
+        .map(|call| body_owner(call.span))
+        .collect::<Vec<_>>();
+    let list_call_owners = file
+        .ast
+        .calls
+        .iter()
+        .map(|call| list_owner(call.span))
         .collect::<Vec<_>>();
     let exported_bodies = indexes
         .typescript_file(file.path.as_str())
@@ -296,6 +312,7 @@ fn discover_reachability_file(
     let mut edges = Vec::new();
     for (call_index, call) in file.ast.calls.iter().enumerate() {
         let owner = call_owners[call_index];
+        let edges_before = edges.len();
         let callee = location(file.path.shared(), call.callee);
         // ADR 0339: a mention that may run before its function-valued
         // binding's declarator reaches nothing; the same holds for each edge
@@ -407,16 +424,20 @@ fn discover_reachability_file(
                 }
             }
         }
+        if let Some(owner) = list_call_owners[call_index] {
+            let added = edges[edges_before..]
+                .iter()
+                .map(|edge| ReachabilityEdge {
+                    owner: Some(owner),
+                    target: edge.target.clone(),
+                })
+                .collect::<Vec<_>>();
+            edges.extend(added);
+        }
     }
     let mut callback_edges = Vec::new();
     for callback in &file.compiler.callback_roles {
-        let owner = containing_function_indexed(
-            &functions,
-            &functions_by_path,
-            file.path.as_str(),
-            callback.span,
-        )
-        .map(|index| functions[index].span);
+        let owner = body_owner(callback.span);
         let mut targets = functions
             .iter()
             .filter(|function| callback.span.contains(function.span))
@@ -426,6 +447,9 @@ fn discover_reachability_file(
             && !lookup.may_precede_initialization(file.path.as_str(), callback.span)
         {
             targets.push(ReachabilityTarget::Symbol(symbol.clone()));
+        }
+        if let Some(listed) = list_owner(callback.span) {
+            callback_edges.push((Some(listed), targets.clone()));
         }
         callback_edges.push((owner, targets));
     }
@@ -441,6 +465,10 @@ fn discover_reachability_file(
         .iter()
         .map(|owner| owner.and_then(|span| function_indices_by_span.get(&span).copied()))
         .collect();
+    let list_call_owner_indices = list_call_owners
+        .iter()
+        .map(|owner| owner.and_then(|span| function_indices_by_span.get(&span).copied()))
+        .collect();
     let topology = reachability_topology(&functions, &roots, &edges, &callback_edges);
     CachedReachabilityFile {
         identity: source_discovery_identity(file, indexes),
@@ -452,6 +480,8 @@ fn discover_reachability_file(
         callback_edges,
         call_owners,
         call_owner_indices,
+        list_call_owners,
+        list_call_owner_indices,
         topology,
     }
 }
@@ -648,22 +678,25 @@ pub(super) fn reachable_call_multiplicity_incremental(
                 topology_unchanged = false;
                 break;
             };
-            for ((call, owner), owner_index) in file
+            for (((call, owner), owner_index), listed) in file
                 .ast
                 .calls
                 .iter()
                 .zip(&cached.call_owners)
                 .zip(&cached.call_owner_indices)
+                .zip(&cached.list_call_owner_indices)
             {
+                let reach = |index: &usize| multiplicity.get(*index).copied().unwrap_or(0);
+                let total = owner_index
+                    .as_ref()
+                    .map_or(0, reach)
+                    .max(listed.as_ref().map_or(0, reach));
+                if total != 0 {
+                    calls.insert(location(file.path.shared(), call.callee), total);
+                }
                 let Some(owner_index) = owner_index else {
                     continue;
                 };
-                if multiplicity.get(*owner_index).copied().unwrap_or(0) != 0 {
-                    calls.insert(
-                        location(file.path.shared(), call.callee),
-                        multiplicity[*owner_index],
-                    );
-                }
                 debug_assert_eq!(
                     owner.and_then(|span| {
                         cached
@@ -770,14 +803,21 @@ pub(super) fn reachable_call_multiplicity_incremental(
         let Some(cached) = cache.get(file.path.as_str()) else {
             continue;
         };
-        for (call, owner) in file.ast.calls.iter().zip(&cached.call_owners) {
-            if let Some(function) = owner.and_then(|span| local_target(file.path.as_str(), span))
-                && multiplicity[function] != 0
-            {
-                calls.insert(
-                    location(file.path.shared(), call.callee),
-                    multiplicity[function],
-                );
+        for ((call, owner), listed) in file
+            .ast
+            .calls
+            .iter()
+            .zip(&cached.call_owners)
+            .zip(&cached.list_call_owners)
+        {
+            let reach = |owner: &Option<Span>| {
+                owner
+                    .and_then(|span| local_target(file.path.as_str(), span))
+                    .map_or(0, |function| multiplicity[function])
+            };
+            let total = reach(owner).max(reach(listed));
+            if total != 0 {
+                calls.insert(location(file.path.shared(), call.callee), total);
             }
         }
     }

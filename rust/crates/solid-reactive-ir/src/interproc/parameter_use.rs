@@ -92,7 +92,8 @@ pub(super) fn unmodeled_parameter_uses(
                 // the graph records: a use inside a function proven to run
                 // as an event, a deferred callback or a tracked
                 // computation is not reported through the callers.
-                let nested = containing_ast_function(&file.ast, site)
+                // ADR 0454: a use in a closure's parameter list is the closure's.
+                let nested = crate::owners::owning_function(&file.ast, site)
                     .is_some_and(|inner| inner.span != function.span);
                 let entry = ParameterMemberInvocation {
                     parameter: index,
@@ -675,7 +676,7 @@ pub(super) fn forward_edges(
             if !exact {
                 continue;
             }
-            let in_owner_body = containing_ast_function(&file.ast, call.span)
+            let in_owner_body = crate::owners::containing_body_function(&file.ast, call.span)
                 .is_some_and(|function| function.body == nodes[owner].body);
             let Some(owner) = owners.iter().position(|candidate| *candidate == owner) else {
                 continue;

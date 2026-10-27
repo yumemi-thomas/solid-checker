@@ -34,11 +34,11 @@
     {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-default-in-helper-closure/App.tsx",
-      "start": 1790,
-      "end": 1797,
+      "start": 1692,
+      "end": 1699,
       "fixes": 0
     }
   ]

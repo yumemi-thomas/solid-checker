@@ -260,6 +260,19 @@ impl<'a> SemanticLookup<'a> {
     pub(crate) fn inside_possible_component(&self, file: &FileFacts, span: Span) -> bool {
         file.ast.functions_body_containing(span).any(|function| {
             self.function_component_status(file, function) == ComponentStatus::Uncertain
+        }) || self.in_component_parameter_list(file, span)
+    }
+
+    /// ADR 0454: whether `span` is written in the parameter list of a function
+    /// with a component identity (proven or not). The list is no part of the
+    /// body [`Self::inside_component`] asks, and no module initialization
+    /// either: it runs when the component is called without the argument,
+    /// which the renderer does for every parameter after `props`. Not proven
+    /// here, so it is possible, never certain.
+    pub(crate) fn in_component_parameter_list(&self, file: &FileFacts, span: Span) -> bool {
+        file.ast.functions_owning(span).any(|function| {
+            !function.body.contains(span)
+                && self.function_component_status(file, function) != ComponentStatus::No
         })
     }
 

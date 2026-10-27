@@ -76,8 +76,9 @@ pub(super) fn loading_cover_at(
     // project calls (a `<For>` row callback, a render prop) is part of the
     // function around it; the first function the project does render or call
     // is the one whose call sites decide.
-    let mut enclosing = file.ast.functions_body_containing(span).collect::<Vec<_>>();
-    enclosing.sort_by_key(|function| function.body.end - function.body.start);
+    // ADR 0454: a site in a parameter list is first the list's function's.
+    let mut enclosing = file.ast.functions_owning(span).collect::<Vec<_>>();
+    enclosing.sort_by_key(|function| function.span.end - function.span.start);
     for function in enclosing {
         if !visited.insert((file.path.as_str().to_owned(), function.span)) {
             // Already being resolved on this chain: it adds no information.
@@ -194,7 +195,7 @@ pub(crate) fn async_read_role(
     // prop) runs when something calls it, not while the JSX renders. Nothing
     // proves a read inside it is rendered, so it is not a render read. A
     // `children` attribute is the element's own children and keeps its role.
-    if file.ast.functions_body_containing(span).any(|function| {
+    if file.ast.functions_owning(span).any(|function| {
         file.ast.jsx_containing(function.span).any(|element| {
             element.attributes.iter().any(|attribute| {
                 attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression

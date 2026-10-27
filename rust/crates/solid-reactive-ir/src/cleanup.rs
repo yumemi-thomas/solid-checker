@@ -22,7 +22,7 @@ use solid_facts::core::Span;
 use typefacts::{ResolvedCallValidity, RuntimeValueDomain};
 
 use super::{Fix, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId, TextEdit, location};
-use crate::execution_role::direct_callback_contains;
+use crate::execution_role::direct_callback_runs;
 use crate::owners::{callback_owner_at_call, containing_ast_function};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
 
@@ -245,7 +245,16 @@ pub(super) fn leaf_owner_operations_for_file(
             // extent: a call inside a nested function (an event handler built
             // in the callback) runs later, in that function's scope, where
             // the leaf scope is no longer live.
-            if !direct_callback_contains(callback_file, leaf_callback.span, call.span) {
+            // ADR 0454: a call in the callback's own parameter list runs in
+            // the leaf scope when the owner calls it without the argument
+            // (rc.17 calls `onSettled`'s callback with none), which nothing
+            // here proves for every owner: it is judged like a call in the
+            // body and kept uncertifiable below.
+            let own_list = crate::owners::owning_function(&callback_file.ast, call.span)
+                .is_some_and(|owner| {
+                    owner.span == leaf_callback.span && !owner.body.contains(call.span)
+                });
+            if !own_list && !direct_callback_runs(callback_file, leaf_callback.span, call.span) {
                 continue;
             }
             let primitive = crate::call_primitive_name_cached(
@@ -336,18 +345,20 @@ pub(super) fn leaf_owner_operations_for_file(
     // constructed, not while the leaf callback the class is written in runs
     // (review round 2): no proven forbidden call.
     for operation in &mut operations {
-        if lookup
-            .file_by_path(operation.location.path.as_ref())
-            .is_some_and(|operation_file| {
-                crate::execution_role::inside_instance_field(
-                    operation_file,
-                    Span::new(
-                        u32::try_from(operation.location.start_byte).unwrap_or(u32::MAX),
-                        u32::try_from(operation.location.end_byte).unwrap_or(u32::MAX),
-                    ),
-                )
-            })
-        {
+        let Some(operation_file) = lookup.file_by_path(operation.location.path.as_ref()) else {
+            continue;
+        };
+        let at = Span::new(
+            u32::try_from(operation.location.start_byte).unwrap_or(u32::MAX),
+            u32::try_from(operation.location.end_byte).unwrap_or(u32::MAX),
+        );
+        // ADR 0454: written in a parameter list, so it runs only when its
+        // function is called without the argument.
+        if crate::owners::in_parameter_list(&operation_file.ast, at) {
+            operation.uncertain = true;
+            operation.possible = false;
+        }
+        if crate::execution_role::inside_instance_field(operation_file, at) {
             operation.uncertain = true;
         }
     }

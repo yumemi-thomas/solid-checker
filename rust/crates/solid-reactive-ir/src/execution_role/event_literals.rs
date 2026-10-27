@@ -296,7 +296,9 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
         if let Some(here) = self.world.site_role(file, call, self.classifying) {
             return Some(Some(here));
         }
-        let owner = containing_ast_function(&file.ast, call)?;
+        // ADR 0454: the function that owns the call; a call in a parameter list
+        // is its function's, and is not in the body that handed it a parameter.
+        let owner = crate::owners::owning_function(&file.ast, call)?;
         if !owner.body.contains(call)
             || (owner.r#async && may_follow_suspension(file, call))
             || owner.generator
@@ -428,7 +430,9 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
         if here != ExecutionRole::Unknown {
             return Some(Some(here));
         }
-        let owner = containing_ast_function(&file.ast, call)?;
+        // ADR 0454: the function that owns the call; a call in a parameter list
+        // is its function's, and is not in the body that handed it a parameter.
+        let owner = crate::owners::owning_function(&file.ast, call)?;
         if !owner.body.contains(call)
             || (owner.r#async && may_follow_suspension(file, call))
             || owner.generator
@@ -469,7 +473,9 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
         call: Span,
         frames: Vec<FlowFrame<'a>>,
     ) -> Option<Option<ExecutionRole>> {
-        let owner = containing_ast_function(&file.ast, call)?;
+        // ADR 0454: the function that owns the call; a call in a parameter list
+        // is its function's, and is not in the body that handed it a parameter.
+        let owner = crate::owners::owning_function(&file.ast, call)?;
         // ADR 0438: a function literal handed directly to a reviewed test
         // runner's registration. Both its prefix up to the first await and
         // every continuation after one run with no owner and no strict-read

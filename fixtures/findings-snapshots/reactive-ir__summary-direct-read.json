@@ -50,6 +50,16 @@
       "start": 865,
       "end": 884,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/summary-direct-read/helpers.ts",
+      "start": 625,
+      "end": 632,
+      "fixes": 0
     }
   ]
 }

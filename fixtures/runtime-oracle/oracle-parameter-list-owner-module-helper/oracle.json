@@ -1,0 +1,1 @@
+{ "note": "ADR 0454: a call in a module function's own parameter list runs when a caller omits the argument. reachability.rs and the summary graph placed it in no function (module-level), so the write in a memo and the read through a helper were silent; they are uncertifiable now." }

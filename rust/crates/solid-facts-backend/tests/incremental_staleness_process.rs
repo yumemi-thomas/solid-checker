@@ -52,6 +52,7 @@ const STUB: &str = r#"declare module "solid-js" {
   export function createReaction(onInvalidate: () => void): (tracking: () => void) => void;
   export function createEffect<T>(compute: () => T, apply: (value: T) => void, options?: { defer?: boolean }): void;
   export function onSettled(callback: () => void | (() => void)): void;
+  export function onCleanup(cleanup: () => void): void;
 }
 
 declare namespace JSX {
@@ -1140,5 +1141,97 @@ fn the_first_returned_callback_primitive_in_another_file_reruns_early_exits() {
         moved,
         [true, true],
         "whether `track` is a tracker must move `B`'s answer"
+    );
+}
+
+/// ADR 0454: whether a call of the helper's parameter is in its body, in a
+/// closure's parameter list, or in its own parameter list decides the helper's
+/// summary row (`calls_parameter_in_body`, `calls_parameter_in_parameter_list`)
+/// and the callback's write role in another file. The caller is unedited and
+/// reads the helper's rows: a retained build must follow every move between
+/// the three placements, in both directions.
+const LIST_CALLER: &str = "import { createMemo, createSignal } from \"solid-js\";\nimport { build } from \"./helper\";\nexport function Write() {\n  const [n, setN] = createSignal(0);\n  const m = createMemo(() => {\n    build(() => setN(1));\n    return 1;\n  });\n  return <div>{m()}{n()}</div>;\n}\nexport function Read() {\n  const [c] = createSignal(0);\n  build(c);\n  return <div />;\n}\n";
+const NESTED_LIST_HELPER: &str = "export function build(cb: () => void) {\n  const g = (x: unknown = cb()) => x;\n  return g;\n}\n";
+const BODY_HELPER: &str = "export function build(cb: () => void) {\n  cb();\n  return 1;\n}\n";
+const OWN_LIST_HELPER: &str =
+    "export function build(cb: () => void, x: unknown = cb()) {\n  return x;\n}\n";
+
+#[test]
+fn a_call_that_moves_between_a_body_and_a_parameter_list_moves_the_unedited_caller() {
+    let Some(moved) = retained_through_edits(
+        "parameter-list-owner",
+        &[("helper.ts", NESTED_LIST_HELPER), ("App.tsx", LIST_CALLER)],
+        &[
+            ("helper.ts", BODY_HELPER),
+            ("helper.ts", NESTED_LIST_HELPER),
+            ("helper.ts", OWN_LIST_HELPER),
+            ("helper.ts", NESTED_LIST_HELPER),
+            ("helper.ts", BODY_HELPER),
+        ],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        // The own list and the closure's list are both uncertifiable now
+        // (the own list's read was silent), so only the moves to and from the
+        // body are asserted.
+        [moved[0], moved[1], moved[4]],
+        [true; 3],
+        "body against a list must move the caller's answer: {moved:?}"
+    );
+}
+
+/// ADR 0454, the owner graph: a cleanup that moves between a helper's body and
+/// a parameter list in an unedited file moves the caller's `missing-owner`
+/// answer (a violation in the body, uncertifiable in the list), and the kept
+/// graph follows in both directions.
+const OWNER_CALLER: &str = "import { make } from \"./helper\";\nexport function H() {\n  return <button onClick={() => make()}>x</button>;\n}\n";
+const OWNER_BODY_HELPER: &str = "import { onCleanup } from \"solid-js\";\nexport function make(): void {\n  onCleanup(() => {});\n}\n";
+const OWNER_LIST_HELPER: &str = "import { onCleanup } from \"solid-js\";\nexport function make(m: unknown = onCleanup(() => {})): void {\n  void m;\n}\n";
+
+#[test]
+fn a_cleanup_that_moves_between_a_body_and_a_parameter_list_moves_the_owner_answer() {
+    let Some(moved) = retained_through_edits(
+        "parameter-list-owner-graph",
+        &[("helper.ts", OWNER_BODY_HELPER), ("App.tsx", OWNER_CALLER)],
+        &[
+            ("helper.ts", OWNER_LIST_HELPER),
+            ("helper.ts", OWNER_BODY_HELPER),
+            ("helper.ts", OWNER_LIST_HELPER),
+        ],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        moved, [true; 3],
+        "a cleanup in a list is no unowned call of the handler's"
+    );
+}
+
+/// ADR 0454, reachability and the summary graph: a write that moves between a
+/// module function's body and its parameter list, called from a memo in an
+/// unedited file, moves the caller's answer (a violation in the body,
+/// uncertifiable in the list; the list's was silent), and the kept
+/// reachability follows in both directions.
+const REACH_CALLER: &str = "import { createMemo } from \"solid-js\";\nimport { listWrite } from \"./helper\";\nexport function M() {\n  const m = createMemo(() => {\n    listWrite();\n    return 1;\n  });\n  return <div>{m()}</div>;\n}\n";
+const REACH_BODY_HELPER: &str = "import { createSignal } from \"solid-js\";\nconst [, setCount] = createSignal(0);\nexport function listWrite(x: unknown = 0) {\n  setCount(1);\n  return x;\n}\n";
+const REACH_LIST_HELPER: &str = "import { createSignal } from \"solid-js\";\nconst [, setCount] = createSignal(0);\nexport function listWrite(x: unknown = setCount(1)) {\n  return x;\n}\n";
+
+#[test]
+fn a_write_that_moves_between_a_module_functions_body_and_list_moves_the_caller() {
+    let Some(moved) = retained_through_edits(
+        "parameter-list-owner-reach",
+        &[("helper.ts", REACH_BODY_HELPER), ("App.tsx", REACH_CALLER)],
+        &[
+            ("helper.ts", REACH_LIST_HELPER),
+            ("helper.ts", REACH_BODY_HELPER),
+            ("helper.ts", REACH_LIST_HELPER),
+        ],
+    ) else {
+        return;
+    };
+    assert_eq!(
+        moved, [true; 3],
+        "a write in a list is no write in the body"
     );
 }

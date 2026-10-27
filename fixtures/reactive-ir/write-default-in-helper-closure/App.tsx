@@ -45,12 +45,11 @@ export function BodyCall() {
   return <p>{m()}{v()}</p>;
 }
 
-// KNOWN FALSE POSITIVE, pinned as the current (wrong) answer: `runNested`
-// returns a closure whose default calls `cb`, and nothing calls that closure,
-// so the write never runs and rc.17 throws nothing. The lookups behind
-// `calls_parameter_in_body` and the every-completion table place a call in a
-// nested parameter list in the function around it (docs/open-work.md). The
-// fix moves this to uncertifiable and shows in this snapshot.
+// Uncertifiable: `runNested` returns a closure whose default calls `cb`, and
+// nothing calls that closure, so the write never runs and rc.17 throws nothing.
+// A call in a nested parameter list is no call in the helper's body (ADR 0454);
+// before it, the lookups through `containing_ast_function` placed it there and
+// this was a violation.
 export function NestedDefaultNeverRuns() {
   const [v, setV] = createSignal(0);
   const m = createMemo(() => {

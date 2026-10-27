@@ -516,3 +516,24 @@ pub(crate) fn direct_callback_contains(
         _ => false,
     }
 }
+
+/// [`direct_callback_contains`] for a rule that reports what the callback runs
+/// (ADR 0454): the callback's body runs `span`, so a site in a nested
+/// function's parameter list is not (it runs when that function is called
+/// without the argument, and the callback only builds the function), and neither
+/// is one in the callback's own parameter list. The role lookups keep
+/// [`direct_callback_contains`]: they place a list site by the code around it
+/// and then withhold it (`parameter_default_owner`, `unrun_closure_within`, the
+/// write guard).
+pub(crate) fn direct_callback_runs(
+    file: &solid_facts::FileFacts,
+    argument: Span,
+    span: Span,
+) -> bool {
+    direct_callback_contains(file, argument, span)
+        && file
+            .ast
+            .functions_within(argument)
+            .max_by_key(|function| function.span.end - function.span.start)
+            .is_none_or(|callback| crate::owners::owned_by_body(&file.ast, callback, span))
+}

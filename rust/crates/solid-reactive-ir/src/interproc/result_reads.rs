@@ -859,6 +859,16 @@ fn add_invoked_parameter_reads(
                             Some(solid_facts::ast::SiteStanding::Unreachable) => None,
                             _ => Some(false),
                         }
+                    } else if crate::execution_role::calls_parameter_in_parameter_list(
+                        callee_file,
+                        callee,
+                        *parameter,
+                        lookup,
+                    ) {
+                        // ADR 0454: a call in a parameter list runs when its
+                        // function is called without the argument: a call that
+                        // may be made, none this call is proven to perform.
+                        Some(false)
                     } else {
                         None
                     }
@@ -1983,7 +1993,7 @@ pub(crate) fn site_on_every_completion(
     site: Span,
 ) -> bool {
     file.ast.completion_sites.binary_search(&site).is_ok()
-        && containing_ast_function(&file.ast, site)
+        && crate::owners::containing_body_function(&file.ast, site)
             .filter(|function| function.span == function_span)
             .is_some_and(|function| {
                 body_site_runs_during_call(file, function, site)

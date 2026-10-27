@@ -1,0 +1,95 @@
+{
+  "note": "ADR 0454, SC4001: a closure with a call in its parameter list is built in an event handler or a module and never called, or called with the argument, or is a forEach callback supplied its index: the default never runs, nothing is registered, rc.17 raises nothing (counters stay 0). The checker made missing-owner violations of them; they are uncertifiable. CalledOmitted runs the default with no owner: the dev NO_OWNER_CLEANUP warning is covered by an uncertifiable result (known miss). OwnedBody is legal.",
+  "behaviour": [
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:31",
+      "observe": {
+        "window": "ranA"
+      },
+      "defect": 1,
+      "correct": 0
+    },
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:43",
+      "observe": {
+        "window": "ranB"
+      },
+      "defect": 1,
+      "correct": 0
+    },
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:53",
+      "observe": {
+        "window": "ranC"
+      },
+      "defect": 1,
+      "correct": 0
+    },
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:62",
+      "observe": {
+        "window": "ranD"
+      },
+      "defect": 1,
+      "correct": 0
+    },
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:75",
+      "observe": {
+        "window": "ranE"
+      },
+      "defect": 1,
+      "correct": 0
+    },
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:89",
+      "observe": {
+        "window": "ranF"
+      },
+      "defect": 1,
+      "correct": 0
+    },
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:101",
+      "observe": {
+        "window": "ranG"
+      },
+      "defect": 1,
+      "correct": 0
+    },
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:129",
+      "observe": {
+        "window": "ranI"
+      },
+      "defect": 1,
+      "correct": 0
+    },
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:109",
+      "observe": {
+        "window": "ranH"
+      },
+      "defect": 1,
+      "correct": 0
+    },
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:112",
+      "observe": {
+        "window": "ranH"
+      },
+      "defect": 1,
+      "correct": 0
+    }
+  ]
+}

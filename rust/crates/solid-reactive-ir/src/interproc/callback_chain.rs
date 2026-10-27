@@ -119,7 +119,8 @@ pub(super) fn synchronous_enclosure(
     let mut span = span;
     let mut covered = true;
     for _ in 0..8 {
-        let literal = crate::owners::containing_ast_function(&file.ast, span)?;
+        // ADR 0454: a call in a parameter list is no call in the body.
+        let literal = crate::owners::containing_body_function(&file.ast, span)?;
         if literal.body == owner.body {
             return Some(covered && cover(owner.body, span));
         }
@@ -151,7 +152,7 @@ pub(super) fn wrapped_owned_computation_call<'f>(
     call: &solid_facts::ast::CallFact,
     lookup: &SemanticLookup<'_>,
 ) -> Option<&'f solid_facts::ast::CallFact> {
-    let literal = crate::owners::containing_ast_function(&file.ast, call.span)?;
+    let literal = crate::owners::containing_body_function(&file.ast, call.span)?;
     let (computation, index) =
         file.ast
             .arguments_containing(call.span)

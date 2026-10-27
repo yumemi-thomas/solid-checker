@@ -317,9 +317,13 @@ pub(super) fn guarded_by_owner_probe(
                 && lookup.primitive_at_call(file, call.span) == Some(Primitive::GetOwner)
         })
     };
-    let function = containing_ast_function(&file.ast, span).map(|function| function.span);
+    // ADR 0454: the function that owns the operation, so one in a closure's
+    // parameter list is not under the owner of the code the closure is written
+    // in (it runs when the closure is called without the argument).
+    let function = crate::owners::owning_function(&file.ast, span).map(|function| function.span);
     let same_invocation = |test: Span, region: Span| {
-        let guard_function = containing_ast_function(&file.ast, test).map(|function| function.span);
+        let guard_function =
+            crate::owners::owning_function(&file.ast, test).map(|function| function.span);
         // The operation's function is the guard's, or is reached from it through
         // synchronous invoked literals, each invoked inside the guarded region
         // (ADR 0347 amendment): an IIFE in the guarded branch runs under the same owner.
@@ -334,7 +338,7 @@ pub(super) fn guarded_by_owner_probe(
             }) else {
                 return false;
             };
-            current = containing_ast_function(&file.ast, invocation.span).map(|f| f.span);
+            current = crate::owners::owning_function(&file.ast, invocation.span).map(|f| f.span);
         }
         !file
             .ast

@@ -968,6 +968,19 @@ pub struct FunctionDeclarationFact {
 }
 
 impl FunctionFact {
+    /// Where the parameter list begins: the first parameter's start, `None`
+    /// for a function with no parameter (its list holds no code). The list
+    /// runs to the body; what lies between the last parameter and the body
+    /// (`)`, a return type, `=>`) is no code. A site in the list runs only when
+    /// a caller leaves the argument out (ADR 0454).
+    pub fn parameter_list_start(&self) -> Option<u32> {
+        self.parameters
+            .iter()
+            .map(|parameter| parameter.declaration.start)
+            .chain(self.rest_parameter_names.iter().map(|name| name.span.start))
+            .min()
+    }
+
     /// Whether this function's own directive prologue contains `directive`.
     #[must_use]
     pub fn has_directive(&self, directive: &str) -> bool {

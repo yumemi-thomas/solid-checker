@@ -302,6 +302,12 @@ pub(crate) struct OwnerRequirementCandidate {
     /// emission pass resolves its binding against the closed provider census,
     /// which is program-wide, so the binding is not cached with the file.
     pub(crate) context_argument: Option<Span>,
+    /// The operation is written in a parameter list (ADR 0454): it runs when its
+    /// function is called without the argument, which nothing proves. Its
+    /// owner is that function; the requirement is uncertifiable, also when the
+    /// function has no owner context (never called) and when a providing
+    /// region around it would own the code around the function.
+    pub(crate) in_parameter_list: bool,
 }
 
 /// Whether a call-site-gated leaf owner (`onSettled`) actually materializes

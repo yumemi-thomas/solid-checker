@@ -279,8 +279,24 @@ fn discover_call_graph(
     let function_lookup = &scope.function_lookup;
     let returned_function_targets = &scope.returned_function_targets;
     let member_calls = &scope.member_calls;
+    // ADR 0454: a call in a parameter list is made when that function is
+    // called without the argument. A list at module level has no function
+    // around it, so placed by body alone the call would drop out of the graph
+    // and its reads with it: it belongs to the node of the function whose list
+    // it is (reached through an edge that is not a guaranteed one, so a read
+    // through it is a possible read). Inside a function the call keeps the node
+    // of the function around it, with the rows of the rungs that read it
+    // there (`invoked_parameters`), as before.
     let Some(owner) =
         containing_summary_function_indexed(nodes, nodes_by_path, file.path.as_str(), call.span)
+            .or_else(|| {
+                let function = crate::owners::owning_function(&file.ast, call.span)?;
+                nodes_by_path
+                    .get(file.path.as_str())?
+                    .iter()
+                    .copied()
+                    .find(|index| nodes[*index].span == function.span)
+            })
     else {
         return;
     };
@@ -302,7 +318,9 @@ fn discover_call_graph(
     }
     let owner_span = nodes[owner].span;
     let call_completes = site_on_every_completion(lookup, file, owner_span, call.span);
-    let in_owner_body = containing_ast_function(&file.ast, call.span)
+    // ADR 0454: a call in the owner's own parameter list, or in a closure's,
+    // is no call in the owner's body.
+    let in_owner_body = crate::owners::containing_body_function(&file.ast, call.span)
         .is_some_and(|function| function.body == nodes[owner].body);
     // Read propagation is relative to this owner's call. Keep unknown
     // callback timing, but exclude proven tracked/deferred callbacks,

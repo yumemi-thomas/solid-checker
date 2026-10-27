@@ -98,10 +98,12 @@ impl<'a, 'c> DirectiveCreationCollector<'a, 'c> {
         if !self.visiting.insert(key.clone()) {
             return;
         }
-        for call in file.ast.calls.iter().filter(|call| {
-            containing_ast_function(&file.ast, call.span)
-                .is_some_and(|owner| owner.span == function.span)
-        }) {
+        for call in file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| crate::owners::owned_by_body(&file.ast, function, call.span))
+        {
             if let Some(primitive) = crate::call_primitive_name_cached(
                 self.lookup,
                 file,

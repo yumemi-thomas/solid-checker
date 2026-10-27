@@ -177,7 +177,7 @@ pub(super) fn mutation_target_projected(
     if file.source_text(span) == Some("this") {
         let Some(function) = file
             .ast
-            .functions_body_containing(span)
+            .functions_owning(span)
             .filter(|f| f.kind != ast::FunctionKind::Arrow)
             .min_by_key(|f| f.span.end - f.span.start)
         else {
@@ -391,7 +391,7 @@ pub(super) fn mutation_holder_closed(
             .all(|s| {
                 let owner = file
                     .ast
-                    .functions_body_containing(s)
+                    .functions_owning(s)
                     .filter(|f| f.kind != ast::FunctionKind::Arrow)
                     .min_by_key(|f| f.span.end - f.span.start);
                 // A nested ordinary function has a different this channel. Its

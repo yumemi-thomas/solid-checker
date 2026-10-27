@@ -107,7 +107,12 @@ pub(super) fn emit_file(
         let owner = candidate
             .owner
             .and_then(|span| graph.node_context(pid, span));
-        let context = owner.map_or(OWNER_CONTEXT_UNOWNED, |(_, context)| context);
+        let mut context = owner.map_or(OWNER_CONTEXT_UNOWNED, |(_, context)| context);
+        // A function no owner edge reaches holds context zero: its body never
+        // runs from syntax. Its parameter list is no such claim (ADR 0454).
+        if candidate.in_parameter_list && context == 0 {
+            context = OWNER_CONTEXT_UNOWNED;
+        }
         // As in the fragment: effects, cleanups and context reads, never a
         // JSX boundary or `onSettled`'s returned cleanup. A context read after
         // an `await` is unowned (ADR 0352).
@@ -135,6 +140,7 @@ pub(super) fn emit_file(
         // Every chain span is one of this file's own nodes; one that did not
         // resolve would withhold the lexical answer, not grant it.
         let root_owned = possible_continuation.is_none()
+            && !candidate.in_parameter_list
             && root_owned_at(candidate.providing_region_chain.as_deref(), |span| {
                 graph
                     .context(pid, *span)
@@ -230,7 +236,8 @@ pub(super) fn emit_file(
                     CleanupReturnProof::OptionalFunction | CleanupReturnProof::Unresolved
                 )
             });
-        let runtime_uncertain = candidate.runtime_uncertain || cleanup_return_uncertain;
+        let runtime_uncertain =
+            candidate.runtime_uncertain || cleanup_return_uncertain || candidate.in_parameter_list;
         let uncertain = runtime_uncertain
             || conditional_owner
             || later_run_unowned

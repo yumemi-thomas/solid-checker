@@ -134,8 +134,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/leaf-scope-namespace-export/helpers.ts",
       "start": 110,
       "end": 119,
