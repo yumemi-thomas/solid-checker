@@ -18,8 +18,8 @@ import { dedupe } from "./dedupe.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { DEFAULT_FAST_INSTALL } from "./fast.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
-import { hitSummary } from "./hits.mjs";
-import { classifyChrome, evaluate, signaturesOf } from "./pipeline.mjs";
+import { findingsDiff, hitSummary } from "./hits.mjs";
+import { classifyChrome, evaluate, hasPackages, signaturesOf } from "./pipeline.mjs";
 import { applyLedgerToResults, falseCleanStream } from "./falseclean-run.mjs";
 import { LEDGER_PATH, loadLedger } from "./falseclean.mjs";
 import { programSeed } from "./rng.mjs";
@@ -73,7 +73,8 @@ export function configFrom(options, out) {
     concurrency: options.concurrency ?? defaultParallelism(undefined, { allCores: options.allCores }),
     workers: options.workers ?? defaultParallelism(undefined, { allCores: options.allCores }),
     keepWork: Boolean(options.keepWork),
-    control: Boolean(options.control),
+    // The checker's neutrality control on the twin is how a case with a generated package is vetted for Chrome (it cannot ask the oracle).
+    control: Boolean(options.control) || options.profile === "packages",
     deadSite: Boolean(options.deadSite),
     instrument: !options.noInstrument,
   };
@@ -173,7 +174,12 @@ async function sweep(options, config, out) {
     // Chrome decides. Without it a candidate stays a candidate.
     const chromeOptions = { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency };
     const chromeRecords = async (values) => {
-      const chromeCases = values.map((value) => ({ id: value.built.id, dir: value.caseDir ?? join(config.casesDir, value.built.id), sites: value.built.sites }));
+      // A case with a generated package is judged by the checker as a user runs it (the oracle's feedback run does not read packages
+      // from source): its findings on the clean text, and on the twin as the neutrality control.
+      const chromeCases = values.map((value) => ({
+        id: value.built.id, dir: value.caseDir ?? join(config.casesDir, value.built.id), sites: value.built.sites,
+        ...(hasPackages(value.built) ? { checker: { ok: true, findings: value.checker.findings, perturbed: value.twinChecker?.ok ? findingsDiff(value.checker.findings, value.twinChecker.findings) : ["no checker run on the twin (use --control)"] } } : {}),
+      }));
       // The clean case first, in Chrome: the oracle's own findings on the clean text are what its findings on the twin must equal
       // (the oracle reports kinds the fast checker adapter does not, so the fast pipeline's findings are not the reference).
       const cleanRuns = await runChrome(chromeCases, { ...chromeOptions, control: true });

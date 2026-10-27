@@ -13,10 +13,10 @@
 // The oracle copies only source files, so the JSON and .txt files are inert to it: the case
 // directory runs as it is (clean) with `scripts/runtime-oracle.mjs --cases`.
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { GENERATOR_VERSION } from "./generate.mjs";
 import { HITS_SELECTOR, stripInstrumentation } from "./hits.mjs";
-import { drivingPlan, printProgram } from "./print.mjs";
+import { drivingPlan, printProgram, programPackages } from "./print.mjs";
 
 const clickSelector = (id) => `[data-act="${id}"]`;
 
@@ -45,14 +45,20 @@ export function buildCase(program, { id = `fuzz-${program.seed}`, note } = {}) {
   const runSteps = scenarioSteps(plan, sites, { hits: true });
   // Neutrality, part (a): stripping every counter from the twin must give the clean text back, line for line.
   const neutral = stripInstrumentation(runText) === text;
+  // Generated packages: `node_modules/<name>/...` in the case directory. The oracle copies no node_modules of a case, so
+  // `oracle.json` names the packages it must install into the case's own node_modules (never the shared install's).
+  const packages = programPackages(program);
+  const packageNames = Object.keys(packages);
+  const packageFiles = Object.fromEntries(packageNames.flatMap((name) => Object.entries(packages[name]).map(([file, text]) => [`node_modules/${name}/${file}`, text])));
   const description = note ?? `differential fuzzer, generator ${GENERATOR_VERSION}, seed ${program.seed}`;
   return {
-    id, text, runText, sites, glue, ledger, lineTable, plan, neutral,
+    id, text, runText, sites, glue, ledger, lineTable, plan, neutral, packages,
     files: {
+      ...packageFiles,
       "App.tsx": text,
       "App.run.txt": runText,
-      "oracle.json": `${JSON.stringify({ note: description, steps }, null, 2)}\n`,
-      "oracle.run.json": `${JSON.stringify({ note: description, steps: runSteps }, null, 2)}\n`,
+      "oracle.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), steps }, null, 2)}\n`,
+      "oracle.run.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), steps: runSteps }, null, 2)}\n`,
       "program.json": `${JSON.stringify(program)}\n`,
       "sites.json": `${JSON.stringify({ id, generator: GENERATOR_VERSION, seed: program.seed, plan, sites, glue, ledger }, null, 2)}\n`,
     },
@@ -61,6 +67,9 @@ export function buildCase(program, { id = `fuzz-${program.seed}`, note } = {}) {
 
 export function writeCase(directory, built) {
   mkdirSync(directory, { recursive: true });
-  for (const [name, contents] of Object.entries(built.files)) writeFileSync(join(directory, name), contents);
+  for (const [name, contents] of Object.entries(built.files)) {
+    mkdirSync(dirname(join(directory, name)), { recursive: true });
+    writeFileSync(join(directory, name), contents);
+  }
   return directory;
 }

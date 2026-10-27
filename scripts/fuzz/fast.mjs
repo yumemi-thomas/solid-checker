@@ -68,6 +68,8 @@ export function stageCases(work, cases, { sub = "", out } = {}) {
     const target = join(work, "cases", sub, id);
     mkdirSync(target, { recursive: true });
     for (const file of ["App.tsx", "sites.json", "oracle.json"]) if (existsSync(join(dir, file))) cpSync(join(dir, file), join(target, file));
+    // A generated package sits in the case's own node_modules, where Vite resolves it from App.tsx.
+    if (existsSync(join(dir, "node_modules"))) cpSync(join(dir, "node_modules"), join(target, "node_modules"), { recursive: true });
     // The twin runs as App.tsx, so stack frames still name App.tsx and no line moves.
     if (variant !== "clean" && existsSync(join(dir, "App.run.txt"))) cpSync(join(dir, "App.run.txt"), join(target, "App.tsx"));
     mkdirSync(join(work, "tests", sub), { recursive: true });

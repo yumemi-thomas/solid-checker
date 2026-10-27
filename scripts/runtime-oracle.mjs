@@ -33,7 +33,10 @@
 // malformed `behaviour` spec refuses its case: that case is a harness-error with the
 // reason, and the other cases still run.
 // Files named *.d.ts and node_modules directories are not copied: the case
-// runs against the real packages of `--install`, never against a stub.
+// runs against the real packages of `--install`, never against a stub. The one
+// exception is `"packages": ["name"]` in oracle.json: each named directory under the case's
+// `node_modules` is copied to the run directory's own node_modules (a package the case
+// ships, as a project's dependency; it imports solid-js from the install, as a peer).
 //
 // The install is committed: scripts/runtime-oracle-install holds the manifest and
 // lockfile of the pinned Solid 2.0.0-rc.17 install (solid-js, @solidjs/web,
@@ -512,6 +515,14 @@ async function runCase(id) {
   assert(files.includes("App.tsx"), `${id}: no App.tsx`);
   const observations = behaviourSpec(id, spec, source, files);
   for (const file of files) cpSync(join(source, file), join(dir, file));
+  // `packages` names dependency packages the case ships in its own `node_modules/<name>` (the differential fuzzer's generated
+  // packages): copied into the case's directory, never into the install's node_modules, and never over a package the install has.
+  for (const name of spec.packages ?? []) {
+    assert(/^[a-z0-9][a-z0-9-]*$/.test(name), `${id}: package ${name} is not a plain package name`);
+    assert(existsSync(join(source, "node_modules", name, "package.json")), `${id}: package ${name} has no node_modules/${name}/package.json in the case`);
+    assert(!existsSync(join(install, "node_modules", name)), `${id}: package ${name} is already in the install`);
+    cpSync(join(source, "node_modules", name), join(dir, "node_modules", name), { recursive: true });
+  }
   writeFileSync(join(dir, "main.tsx"), mainSource(observations));
   writeFileSync(join(dir, "index.html"), html);
   writeFileSync(join(dir, "scenario.json"), JSON.stringify({ schemaVersion: 1, steps: [settle, ...(observations.length ? [probeStep] : []), ...(spec.steps ?? [])] }));

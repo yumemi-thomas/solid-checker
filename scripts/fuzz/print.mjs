@@ -15,6 +15,7 @@
 import { INSTRUMENT_PRELUDE } from "./hits.mjs";
 import { isSite, paramTsType, signalTable, walk } from "./model.mjs";
 import { AUX, MODULE, describeUse } from "./misuse.mjs";
+import { accessOf, packageFiles } from "./package.mjs";
 
 const MARK_OPEN = "\u0001";
 const MARK_CLOSE = "\u0002";
@@ -46,6 +47,25 @@ const INDENT = "  ";
 
 /** Node kinds whose print is a call the runtime executes: each is an auto-site (glue) in the twin. */
 export const GLUE_KINDS = ["call", "set", "iife", "iter", "prim", "getOwner"];
+
+/** The package helpers a program refers to, plus the `register` a referred `fire` reads from: the exports the package must have. */
+export function usedPackageHelpers(program) {
+  const byName = new Map((program.helpers ?? []).filter((helper) => helper.pkg).map((helper) => [helper.name, helper]));
+  const used = new Set();
+  for (const { node } of walk(program)) {
+    if (node.k !== "ref" || !byName.has(node.name)) continue;
+    used.add(node.name);
+    const of = byName.get(node.name).pkg.of;
+    if (of && byName.has(of)) used.add(of);
+  }
+  return (program.helpers ?? []).filter((helper) => used.has(helper.name));
+}
+
+/** The files of the program's generated package(s): `{ "fz-lib": { "index.js": ..., ... } }` (empty when it imports none). */
+export function programPackages(program) {
+  const files = packageFiles(usedPackageHelpers(program));
+  return files ? { "fz-lib": files } : {};
+}
 
 /**
  * @param {object} program
@@ -117,7 +137,8 @@ function render(program, instrument) {
   }
   const used = new Set(["createSignal"]);
   const signals = signalTable(program);
-  const helpers = new Map((program.helpers ?? []).map((helper) => [helper.name, helper]));
+  const helpers = new Map((program.helpers ?? []).filter((helper) => !helper.pkg).map((helper) => [helper.name, helper]));
+  const packageHelpers = new Map(usedPackageHelpers(program).map((helper) => [helper.name, helper]));
   // The misuse profile: what each `use` node prints and needs (imports, wrapper functions, aliases).
   const uses = new Map();
   for (const { node } of walk(program)) if (node.k === "use") uses.set(node, describeUse(node, signals));
@@ -227,7 +248,7 @@ function render(program, instrument) {
       case "write": return siteCall(e, writeText(e));
       case "own": return siteCall(e, ownText(e, depth));
       case "use": return siteCall(e, uses.get(e).text);
-      case "ref": return e.name;
+      case "ref": return packageHelpers.has(e.name) ? accessOf(packageHelpers.get(e.name)).callee : e.name;
       case "member": return `${expr(e.obj, depth)}.${e.key}`;
       case "obj": return e.fields.length ? `{ ${e.fields.map((f) => {
         if (f.e.k === "ref" && f.e.name === f.key) return f.key;
@@ -363,7 +384,8 @@ function render(program, instrument) {
   const importNames = [...new Set([...used, ...useList.flatMap(([, described]) => described.solid)])].sort();
   const webNames = [...new Set(useList.flatMap(([, described]) => described.web))].sort();
   const namespaces = [...new Set(useList.flatMap(([, described]) => described.namespaces))].sort();
-  const header = `import { ${importNames.join(", ")} } from "solid-js";\n${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}\n`;
+  const packageImports = [...new Set([...packageHelpers.values()].map((helper) => accessOf(helper).importLine))];
+  const header = `import { ${importNames.join(", ")} } from "solid-js";\n${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}${packageImports.map((line) => `${line}\n`).join("")}\n`;
   // Printing the body filled `used`; the header goes first, so line numbers shift by its height.
   const body = out.join("\n");
   const full = `${header}${body}`.replace(/\n+$/, "\n");

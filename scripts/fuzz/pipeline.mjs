@@ -20,6 +20,9 @@ import { signature as findingSignature } from "./dedupe.mjs";
 import { callAtLine } from "./falseclean.mjs";
 import { typecheck } from "./typecheck.mjs";
 
+/** A case that ships a generated package is checked as a user's run is (checker.mjs ORDINARY_ARGS): the package is read from source. */
+export const hasPackages = (built) => Object.keys(built.packages ?? {}).length > 0;
+
 const inconclusive = (reason, why) => ({ verdict: "inconclusive", reasons: [reason], items: [{ kind: "inconclusive", reason, why }] });
 
 /**
@@ -47,12 +50,13 @@ export async function evaluate(entries, config, deps = {}) {
     const dir = materializeForChecker(built, install, built.id);
     const typed = await types(dir, { tsc: config.tsc });
     if (!typed.ok) return { program, built, caseDir, dir, typecheck: typed };
-    const checker = await check(dir, { bin: config.bin, typefacts: config.typefacts });
+    const ordinary = hasPackages(built);
+    const checker = await check(dir, { bin: config.bin, typefacts: config.typefacts, ordinary });
     const value = { program, built, caseDir, dir, typecheck: typed, checker };
     if (instrument) {
       const twinDir = materializeForChecker(built, install, `${built.id}-run`, { twin: true });
       value.twinTypecheck = await types(twinDir, { tsc: config.tsc });
-      if (control && checker.ok && value.twinTypecheck.ok) value.twinChecker = await check(twinDir, { bin: config.bin, typefacts: config.typefacts });
+      if (control && checker.ok && value.twinTypecheck.ok) value.twinChecker = await check(twinDir, { bin: config.bin, typefacts: config.typefacts, ordinary });
       if (!config.keepWork) rmSync(twinDir, { recursive: true, force: true });
     }
     return value;
