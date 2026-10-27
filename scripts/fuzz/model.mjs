@@ -20,6 +20,8 @@
 // the runtime are compared at its line. `witness: { selector, text }` says what
 // the page shows when the site ran and landed (null when nothing shows it).
 
+import { EXPORT_FORMS, BEHAVIOURS, isPackageForm, behaviourOf, resultOf } from "./package.mjs";
+
 export const VERSION = 1;
 
 /** Helper forms: a same-file function taking `cb: () => unknown`. */
@@ -137,7 +139,17 @@ export function tsType(type) {
 }
 
 const helperType = (form) => ({ t: "helper", form });
-function helperResult(form, supplied) {
+/** What a call of a helper has as its type. A package behaviour's result follows the callback it was given (`arg`). */
+function helperResult(form, supplied, arg) {
+  if (isPackageForm(form)) {
+    const ret = arg?.t === "fn" ? arg.ret : T.unknown;
+    switch (resultOf(form)) {
+      case "value": return ret;
+      case "fn": return T.fn(ret);
+      case "obj": return T.obj({ cb: T.fn(ret) });
+      default: return T.num;
+    }
+  }
   switch (form) {
     case "call": case "timerCb": return T.num;
     case "returnClosure": return T.fn(T.unknown);
@@ -176,6 +188,14 @@ export function validate(program, { maxNodes = 400 } = {}) {
   if (nodeCount(program) > maxNodes) fail("too many nodes");
   if (!program.components.length) fail("no component");
   const helpers = new Map((program.helpers ?? []).map((helper) => [helper.name, helper]));
+  let defaults = 0;
+  for (const h of program.helpers ?? []) {
+    if (!h.pkg) { if (isPackageForm(h.form)) fail(`helper ${h.name} has a package form and no package`); continue; }
+    if (!isPackageForm(h.form) || !BEHAVIOURS[h.pkg.behaviour] || !EXPORT_FORMS.includes(h.pkg.exportForm)) fail(`helper ${h.name} is not a known package export`);
+    if (h.pkg.exportForm === "default") defaults += 1;
+    if (h.pkg.behaviour === "fire" && !helpers.get(h.pkg.of)?.pkg) fail(`fire ${h.name} has no register`);
+  }
+  if (defaults > 1) fail("a package has one default export");
   const seenSignals = new Set();
   for (const sig of [...(program.moduleSignals ?? []), ...program.components.flatMap((component) => component.signals)]) {
     if (seenSignals.has(sig.name)) fail(`duplicate signal ${sig.name}`);
@@ -314,9 +334,13 @@ export function validate(program, { maxNodes = 400 } = {}) {
           const args = e.args.map((a) => typeOf(a, scope));
           if (!callee) return null;
           if (callee.t === "helper") {
+            if (isPackageForm(callee.form) && behaviourOf(callee.form) === "fire") {
+              if (args.length) fail(`${where}: fire takes no argument`);
+              return T.num;
+            }
             if (args.length < 1 || !args[0] || args[0].t !== "fn") { fail(`${where}: a helper takes a function`); return null; }
             if (args.length > 1 && callee.form !== "defaultCall") fail(`${where}: only defaultCall takes a second argument`);
-            return helperResult(callee.form, args.length > 1);
+            return helperResult(callee.form, args.length > 1, args[0]);
           }
           if (callee.t === "acc") return callee.of;
           if (callee.t === "fn") return callee.ret;

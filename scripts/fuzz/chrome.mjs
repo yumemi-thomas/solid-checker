@@ -94,7 +94,10 @@ function spawnOracle(args, env) {
  * Each case runs its instrumented twin (App.run.txt as App.tsx, oracle.run.json as oracle.json) so the hit ledger is read
  * back; `control: true` runs the clean case unchanged instead. `findings` (the oracle's own on the clean text, from a
  * `control: true` run) are compared with the oracle's on the twin; without them nothing is compared.
- * @param {{ id: string, dir: string, sites: object[], findings?: object[] }[]} cases
+ * A case may carry `checker` (a record as `chromeChecker` returns): the oracle's own run is `feedback run`, which does not read dependency
+ * packages from source, so a case that ships a package is judged by the checker run as a user's is (checker.mjs ORDINARY_ARGS) and Chrome
+ * supplies the runtime only.
+ * @param {{ id: string, dir: string, sites: object[], findings?: object[], checker?: object }[]} cases
  */
 export async function runChrome(cases, { out, install = DEFAULT_ORACLE_INSTALL, bin, typefacts, browser, concurrency, control = false, env = process.env }) {
   if (!bin || !typefacts) throw new Error("Chrome confirmation needs the checker binary and typefacts (--checker-bin, --typefacts)");
@@ -118,12 +121,12 @@ export async function runChrome(cases, { out, install = DEFAULT_ORACLE_INSTALL, 
   const report = JSON.parse(readFileSync(result, "utf8"));
   const rows = new Map(report.results.map((row) => [row.id, row]));
   const records = new Map();
-  for (const { id, sites, findings } of cases) {
+  for (const { id, sites, findings, checker } of cases) {
     const row = rows.get(id);
     if (!row) { records.set(id, { row: null, runtime: { failure: { phase: "chrome", message: "no row" }, diagnostics: [], errors: [], witnesses: [] }, checker: { ok: false, error: "no oracle row", findings: [] } }); continue; }
     const reportPath = join(resolve(install), ".solid-checker-runtime-oracle", id, "report.json");
     const checkpoints = existsSync(reportPath) ? (JSON.parse(readFileSync(reportPath, "utf8")).execution?.checkpoints ?? []) : [];
-    records.set(id, { row, runtime: chromeRuntime(row, checkpoints, sites), checker: chromeChecker(row, control ? undefined : findings) });
+    records.set(id, { row, runtime: chromeRuntime(row, checkpoints, sites), checker: checker ?? chromeChecker(row, control ? undefined : findings) });
   }
   return records;
 }

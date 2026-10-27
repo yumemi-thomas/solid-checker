@@ -14,6 +14,7 @@
 // the last line, so no line moves. The type check, the fast path and Chrome run `runText`.
 import { INSTRUMENT_PRELUDE } from "./hits.mjs";
 import { isSite, paramTsType, signalTable, walk } from "./model.mjs";
+import { accessOf, packageFiles } from "./package.mjs";
 
 const MARK_OPEN = "\u0001";
 const MARK_CLOSE = "\u0002";
@@ -21,6 +22,25 @@ const INDENT = "  ";
 
 /** Node kinds whose print is a call the runtime executes: each is an auto-site (glue) in the twin. */
 export const GLUE_KINDS = ["call", "set", "iife", "iter", "prim", "getOwner"];
+
+/** The package helpers a program refers to, plus the `register` a referred `fire` reads from: the exports the package must have. */
+export function usedPackageHelpers(program) {
+  const byName = new Map((program.helpers ?? []).filter((helper) => helper.pkg).map((helper) => [helper.name, helper]));
+  const used = new Set();
+  for (const { node } of walk(program)) {
+    if (node.k !== "ref" || !byName.has(node.name)) continue;
+    used.add(node.name);
+    const of = byName.get(node.name).pkg.of;
+    if (of && byName.has(of)) used.add(of);
+  }
+  return (program.helpers ?? []).filter((helper) => used.has(helper.name));
+}
+
+/** The files of the program's generated package(s): `{ "fz-lib": { "index.js": ..., ... } }` (empty when it imports none). */
+export function programPackages(program) {
+  const files = packageFiles(usedPackageHelpers(program));
+  return files ? { "fz-lib": files } : {};
+}
 
 /**
  * @param {object} program
@@ -80,7 +100,8 @@ function render(program, instrument) {
   }
   const used = new Set(["createSignal"]);
   const signals = signalTable(program);
-  const helpers = new Map((program.helpers ?? []).map((helper) => [helper.name, helper]));
+  const helpers = new Map((program.helpers ?? []).filter((helper) => !helper.pkg).map((helper) => [helper.name, helper]));
+  const packageHelpers = new Map(usedPackageHelpers(program).map((helper) => [helper.name, helper]));
 
   // The hit ledger: one id per counter, allocated in print order (a function of the tree alone).
   const ledger = [];
@@ -175,7 +196,7 @@ function render(program, instrument) {
       case "read": return siteCall(e, `${e.sig}()`);
       case "write": return siteCall(e, writeText(e));
       case "own": return siteCall(e, ownText(e, depth));
-      case "ref": return e.name;
+      case "ref": return packageHelpers.has(e.name) ? accessOf(packageHelpers.get(e.name)).callee : e.name;
       case "member": return `${expr(e.obj, depth)}.${e.key}`;
       case "obj": return e.fields.length ? `{ ${e.fields.map((f) => {
         if (f.e.k === "ref" && f.e.name === f.key) return f.key;
@@ -287,7 +308,8 @@ function render(program, instrument) {
     out.push(`${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
   const importNames = [...used].sort();
-  const header = `import { ${importNames.join(", ")} } from "solid-js";\n\n`;
+  const packageImports = [...new Set([...packageHelpers.values()].map((helper) => accessOf(helper).importLine))];
+  const header = `import { ${importNames.join(", ")} } from "solid-js";\n${packageImports.map((line) => `${line}\n`).join("")}\n`;
   // Printing the body filled `used`; the header goes first, so line numbers shift by its height.
   const body = out.join("\n");
   const full = `${header}${body}`.replace(/\n+$/, "\n");

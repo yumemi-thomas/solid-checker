@@ -16,6 +16,7 @@
 // removed by validating the finished component and drawing again, up to a bound.
 import { createRng } from "./rng.mjs";
 import { buildDisposal } from "./disposal.mjs";
+import { chooseLayersPackages, ensurePkgHelper, firePlacement, packagePayloadKind, PACKAGE_HOSTS } from "./packages.mjs";
 import {
   validate, signal, num, read, write, ref, member, obj, call, iife, iter, fn, param, prim, expr, decl, ret,
   awaitStmt, probe, button, child, attr, show, forEach, set, exprTsType, getOwner, helper, component, program as makeProgram,
@@ -50,6 +51,8 @@ const hostWeights = {
   mixed: Object.fromEntries(HOSTS.map((host) => [host, 1])),
   // A memo that builds a closure the component body then calls (`m()()`): the read is untracked there (rc.17 warns).
   "body-call": { memo: 8, effect: 1, untrack: 0, root: 1, owner: 0, body: 1, apply: 0, settled: 0, cleanup: 0, timer: 0, then: 0, handler: 0, jsx: 1, async: 0 },
+  // Generated dependency packages (packages.mjs): the helper layers are package exports; asked for with `--profile packages`.
+  packages: PACKAGE_HOSTS,
   // Owner payloads: ownerless hosts (handler, timer, promise, runWithOwner(null), untrack) and owned ones (body, memo, effect, root) both.
   ...Object.fromEntries(Object.keys(OWNER_PROFILES).map((name) => [name, { memo: 3, effect: 3, untrack: 3, root: 3, owner: 4, body: 3, apply: 3, settled: 3, cleanup: 2, timer: 3, then: 3, handler: 3, jsx: 0, async: 2 }])),
 };
@@ -71,7 +74,7 @@ export function generateProgram(seed, options = {}) {
   // One component per page: a thrown dev error halts reactivity for every root on the page, so a second
   // component would hide or fake the first one's behaviour. More than one is for experiments only.
   const count = options.components ?? 1;
-  const ctx = { rng, profile, plan: options.disposalPlan, counters: {}, helpers: new Map(), moduleSignals: [] };
+  const ctx = { rng, profile, plan: options.disposalPlan ?? options.packagePlan, counters: {}, helpers: new Map(), moduleSignals: [] };
   const components = [];
   for (let index = 0; index < count; index += 1) {
     const control = index > 0 && rng.chance(0.5);
@@ -127,20 +130,24 @@ function buildComponent(ctx, index, control) {
   const view = [];
   const body = [];
   const needsValue = rng.chance(0.4);
-  const host = control ? rng.pick(LEGAL_HOSTS) : rng.weighted(Object.entries(hostWeights[profile]).map(([host, weight]) => [weight, host]));
+  const host = control ? rng.pick(LEGAL_HOSTS) : ctx.plan?.host ?? rng.weighted(Object.entries(hostWeights[profile]).map(([host, weight]) => [weight, host]));
   const mkSig = (prefix, init, role) => { const s = signal(name(ctx, prefix), init, role); sigs.push(s); return s; };
 
   // The payload and where its effect is shown.
-  let payload; let route = { needsValue };
-  if (profile in OWNER_PROFILES) {
+  ctx.pendingFires = [];
+  const pkgLayers = profile === "packages" ? ctx.plan?.layers ?? chooseLayersPackages(ctx) : null;
+  const pkgKind = pkgLayers ? ctx.plan?.kind ?? packagePayloadKind(rng, pkgLayers) : null;
+  const reads = pkgKind ? pkgKind === "read" : needsValue;
+  let payload; let route = { needsValue: reads };
+  if (profile in OWNER_PROFILES || pkgKind === "own") {
     payload = own(OWNER_PROFILES[profile] ?? rng.pick(OWN_OPS), { site: true, witness: null });
     route = { needsValue: false };
-  } else if (needsValue) {
+  } else if (reads) {
     const init = 1000 + 7 * counter(ctx, "value");
     const src = mkSig("r", init, "src");
     const sink = mkSig("k", 0, "sink");
     payload = read(src.name, { site: true, witness: probeWitness(sink.name, init) });
-    route = { needsValue, sink: sink.name, init, setSink: true };
+    route = { needsValue: reads, sink: sink.name, init, setSink: true };
     view.push(probe(sink.name));
   } else {
     const value = 10 + 7 * counter(ctx, "value");
@@ -150,18 +157,20 @@ function buildComponent(ctx, index, control) {
   }
 
   const pre = [];
-  const layers = chooseLayers(ctx, host);
+  const layers = pkgLayers ?? chooseLayers(ctx, host);
   let cur = { kind: "value", e: payload, key: null, dflt: null };
   for (const layer of layers) cur = applyLayer(ctx, layer, cur, pre);
 
-  const disp = chooseDisposition(ctx, host, cur);
+  const disp = ctx.plan?.disp ?? chooseDisposition(ctx, host, cur);
   const placed = place(ctx, host, cur, pre, disp, route);
   body.push(...placed.body);
   view.push(...placed.view);
   if (placed.signals) sigs.push(...placed.signals);
+  // A package `register` keeps the callback; its `fire` export calls it later (from a click, the body, or a timer).
+  for (const fire of ctx.pendingFires) firePlacement(ctx, fire, { body, view, name: (prefix) => name(ctx, prefix) });
 
   // Legal code beside the subject: a checker violation here is a false positive by construction.
-  if (rng.chance(0.5)) addDecoy(ctx, sigs, body, view);
+  if (rng.chance(0.5) && !ctx.plan?.plain) addDecoy(ctx, sigs, body, view);
 
   // JSX positions: a child expression may sit under Show or inside a For row.
   for (let i = 0; i < view.length; i += 1) {
@@ -171,7 +180,7 @@ function buildComponent(ctx, index, control) {
   }
 
   // A leaf subject may be wrapped in one more scope: an outer host whose body the subject becomes.
-  const wrappable = placed.wrappable && rng.chance(0.3);
+  const wrappable = placed.wrappable && rng.chance(0.3) && !ctx.plan?.plain;
   const finalBody = wrappable ? wrapOuter(ctx, body, view) : body;
   return component(`C${index + 1}`, sigs, finalBody, view);
 }
@@ -233,6 +242,17 @@ function applyLayer(ctx, layer, cur, pre) {
     }
     default: {
       const fnExpr = cur.kind === "fn" ? cur.e : fn([ret(valueOf(cur))]);
+      if (layer.k === "pkg") {
+        const h = ensurePkgHelper(ctx, layer.pkg);
+        const c = call(ref(h), [fnExpr]);
+        switch (layer.pkg.behaviour) {
+          case "returnCb": return { kind: "fn", e: c, key: null, dflt: cur.kind === "fn" ? cur.dflt : null };
+          case "returnWrap": return { kind: "fn", e: c, key: null, dflt: null };
+          case "storeObj": return { kind: "obj", e: c, key: "cb", dflt: null };
+          case "register": ctx.pendingFires.push(ctx.fireOf.get(h)); return { kind: "value", e: c, key: null, dflt: null };
+          default: return { kind: "value", e: c, key: null, dflt: null };
+        }
+      }
       const h = ensureHelper(ctx, layer.form);
       const supply = layer.form === "defaultCall" && layer.supply;
       const c = call(ref(h), [fnExpr, ...(supply ? [num(5)] : [])]);

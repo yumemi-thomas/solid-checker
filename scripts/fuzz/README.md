@@ -35,6 +35,7 @@ When a run confirms a false positive (exit status 3), stop the sweep. Do not cha
 | `classify.mjs`, `codes.mjs` | the comparator; the oracle's code/rule tables (a test fails when they drift) |
 | `shrink.mjs`, `dedupe.mjs` | delta debugging over the tree; signatures by construct path |
 | `chrome.mjs` | Chrome confirmation through `scripts/runtime-oracle.mjs` |
+| `package.mjs`, `packages.mjs`, `packages-seeds.mjs`, `packages-check.mjs` | the `packages` profile: generated dependency packages (below) |
 | `run.mjs` | the command line |
 
 ## Install
@@ -109,6 +110,15 @@ Nothing here changes a verdict (the acceptance run compares them): the fast path
 ### dead-site (off by default)
 
 `--dead-site` enables the `dead-site` false-positive subkind: a violation of an execution-claim rule at a site no execution entered. It needs, all at once: a closed branch-free program (`model.mjs closedGrammar`), a quiescent page, a neutral twin (build strip and clean-twin control), no disturbance and no unplaced diagnostic, a nearest enclosing function never entered while an enclosing function ran, no parameter default, and the same in Chrome. See `deadsite.mjs`; each unmet condition is a typed `inconclusive`. Do not enable it until the neutrality evidence has been reviewed.
+
+## The packages profile
+
+`--profile packages` gives a program one or two exports of a generated dependency package, `fz-lib`, so the fuzzer tests how the checker reads dependency source (ADRs 0291, 0297, 0300). The same tree, host and disposition machinery builds the program; the helper layer is an export of the package. `package.mjs` is the single place that says what each behaviour does at run time (call the callback inline or N times; in `setTimeout`, `queueMicrotask` or `Promise.then`; under `untrack`, `runWithOwner(null | getOwner())` or `createRoot`; pass it to `createEffect`, `createMemo`, `onCleanup` or `onSettled`; return it, a wrapper of it, or `{ cb }`; store it in a module variable, array or object, with or without its owner, for a second export, `fire`, to call later; never call it) and in which export form (named, arrow, default, an index re-exporting `impl.js` by name, renamed or `export *`, a class method, a static method, an object method, a namespace import). The generator knows each behaviour, so each shape's runtime truth is determined; `packages-seeds.mjs` pins sixteen of them and `node scripts/fuzz/packages-check.mjs --out <fresh>` runs them through the fast path and exits 1 when the runtime contradicts one.
+
+* **Layout.** The package is real ESM with `.d.ts` typings and a `package.json` of `type: module`, `peerDependencies: { "solid-js": ... }` and an `exports` map (`types`, `default`), the shape the checker selects (ADR 0291). It imports `solid-js` from the program's install, never its own copy. A case holds it as `node_modules/fz-lib/` and only the exports the program refers to; the checker and the type check see it below the case's work directory, the fast path stages it beside `App.tsx` (the Vitest config inlines `fz-*` so the dev build of `solid-js` is the one instance), and `oracle.json` names it in `packages`, which `runtime-oracle.mjs` copies into the run directory's own `node_modules`. Nothing is written into the shared install's `node_modules`.
+* **The checker runs as a user's run does.** A case with a package is checked without `--feedback-facts`: under a declared runtime target and build an ordinary analysis reads the package from source (ADR 0297), and the feedback mode `feedback run` uses does not. Chrome is the runtime only for such a case; its checker verdict is this run's, on the clean text, with the checker's run on the twin as the neutrality control (always on for this profile).
+* **Reads.** A read payload is drawn only when every package export on its chain hands the callback's value back, so its witness can land.
+* **Triage.** Uncertifiable results at the package call (SC9005 or SC9012) count as uncertifiable; with a runtime diagnostic they are recall gaps, not false cleans.
 
 ## Provenance
 
