@@ -430,3 +430,198 @@ export function HandleWriteAfterTwoAwaitsInJsx() {
     </div>
   );
 }
+
+// --- The handle call must be reached ----------------------------------------
+
+// A handle call judges the write only when it runs. In a branch that cannot
+// run, after a `return`, or in a function nothing runs, the write runs only in
+// the disposal, which is legal: uncertifiable (rc.17: no throw).
+export function HandleInDeadIfInJsx() {
+  const [w, setW] = createSignal(0);
+  const [o] = createSignal(1);
+  return (
+    <div>
+      <output>{w()}</output>
+      <Show when={o()}>
+        <p>
+          {(() => {
+            const cb1 = () => {
+              setW(17);
+            };
+            const h1 = onCleanup(cb1);
+            if (false) {
+              h1();
+            }
+            return 1;
+          })()}
+        </p>
+      </Show>
+    </div>
+  );
+}
+export function HandleInDeadIf() {
+  const [v, setV] = createSignal(0);
+  const m = createMemo(() => {
+    const h = onCleanup(() => {
+      setV(60);
+    });
+    if (false) {
+      h();
+    }
+    return 1;
+  });
+  return <div>{m() + v()}</div>;
+}
+export function HandleAfterReturn() {
+  const [v, setV] = createSignal(0);
+  const m = createMemo(() => {
+    const h = onCleanup(() => {
+      setV(61);
+    });
+    return 1;
+    h();
+  });
+  return <div>{m() + v()}</div>;
+}
+export function HandleFalseAnd() {
+  const [v, setV] = createSignal(0);
+  const m = createMemo(() => {
+    const h = onCleanup(() => {
+      setV(62);
+    });
+    false && h();
+    return 1;
+  });
+  return <div>{m() + v()}</div>;
+}
+// A nested function nothing calls.
+export function HandleInNeverCalledNested() {
+  const [v, setV] = createSignal(0);
+  const m = createMemo(() => {
+    const h = onCleanup(() => {
+      setV(63);
+    });
+    const unused = () => {
+      h();
+    };
+    return 1;
+  });
+  return <div>{m() + v()}</div>;
+}
+// A component rendered only from a function that is never called or rendered.
+export function HandleChildOfDeadAsyncFunction() {
+  const [w, setW] = createSignal(0);
+  const m = createMemo(() => {
+    const h1 = onCleanup(() => {
+      const cb1 = () => {
+        setW(64);
+      };
+      cb1();
+    });
+    async function Child1() {
+      function Child2() {
+        h1();
+        return <span />;
+      }
+      <Child2 />;
+      return <span />;
+    }
+    return 1;
+  });
+  return <div>{m() + w()}</div>;
+}
+export function HandleChildOfDeadFunction() {
+  const [v, setV] = createSignal(0);
+  const m = createMemo(() => {
+    const h = onCleanup(() => {
+      setV(65);
+    });
+    function render() {
+      function Child() {
+        h();
+        return <span />;
+      }
+      return <Child />;
+    }
+    return 1;
+  });
+  return <div>{m() + v()}</div>;
+}
+// An action behind a handle that a short circuit never calls.
+export function ActionHandleFalseAnd() {
+  const [t] = createSignal(0);
+  const m = createMemo(() => {
+    t();
+    const h = onCleanup(() => {
+      act();
+    });
+    false && h();
+    return 1;
+  });
+  return <div>{m()}</div>;
+}
+// A callback registered by name, the handle called in a dead branch of an
+// effect's compute.
+export function HandleByNameInDeadIf() {
+  const [w, setW] = createSignal(0);
+  const [t] = createSignal(0);
+  createEffect(
+    () => {
+      t();
+      const cb = () => {
+        setW(69);
+      };
+      const h = onCleanup(cb);
+      if (false) {
+        h();
+      }
+      return 1;
+    },
+    () => {}
+  );
+  return <div>{w()}</div>;
+}
+// Violations: the call can run. `if (true)` always does; a runtime condition
+// may (rc.17 throws when it holds).
+export function HandleInIfTrue() {
+  const [v, setV] = createSignal(0);
+  const m = createMemo(() => {
+    const h = onCleanup(() => {
+      setV(66);
+    });
+    if (true) {
+      h();
+    }
+    return 1;
+  });
+  return <div>{m() + v()}</div>;
+}
+export function HandleInIfRuntime() {
+  const [v, setV] = createSignal(0);
+  const [c] = createSignal(true);
+  const m = createMemo(() => {
+    const h = onCleanup(() => {
+      setV(67);
+    });
+    if (c()) {
+      h();
+    }
+    return 1;
+  });
+  return <div>{m() + v()}</div>;
+}
+// Legal control for the callee: a closure the memo does call.
+export function HandleInCalledNested() {
+  const [v, setV] = createSignal(0);
+  const m = createMemo(() => {
+    const h = onCleanup(() => {
+      setV(68);
+    });
+    const run = () => {
+      h();
+    };
+    run();
+    return 1;
+  });
+  return <div>{m() + v()}</div>;
+}
