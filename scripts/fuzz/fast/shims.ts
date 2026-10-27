@@ -1,5 +1,5 @@
 // Two generic Happy DOM compatibility shims, from the Happy DOM experiment's
-// happy-dom-fixes.ts (scratch notes in /tmp/sc-scratch.noindex/diag-experiment). The
+// happy-dom-fixes.ts. The
 // corpus-specific doubles of that experiment (execCommand, dialog.requestClose, XHR)
 // are not carried over: no generated program uses them.
 //

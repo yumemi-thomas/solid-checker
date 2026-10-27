@@ -4,8 +4,7 @@
 // the dev diagnostics (code, message, owner loc, and the stack lines that fall in
 // App.tsx), the errors thrown, and the page text at every witness selector.
 //
-// Ported from the Happy DOM experiment's runner (happy-patched-runner.tsx, scratch
-// notes in /tmp/sc-scratch.noindex/diag-experiment): the capture mechanism
+// Ported from the Happy DOM experiment's runner (happy-patched-runner.tsx): the capture mechanism
 // (@solidjs/diagnostics captureArtifact plus an OBSERVE.diagnostics listener that
 // stacks each event) and the event passes are its; its corpus-specific scenario
 // steps and case lookup are replaced by the fuzzer's plan. Runs only inside Vitest

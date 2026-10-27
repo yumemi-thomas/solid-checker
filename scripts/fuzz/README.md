@@ -46,7 +46,7 @@ cd scripts/fuzz/install && npm install        # first time; commit the resulting
 make runtime-oracle-install                   # the checker's, the type check's and Chrome's install
 ```
 
-The type checker is `tsrs` (`/Users/thomas/Documents/Github/tsrs/target/release/tsrs`, or `--tsc` / `FUZZ_TSC`), never `tsc` from node_modules.
+The type checker is `tsrs` (a release build in a `tsrs` checkout beside this repository, or `--tsc` / `FUZZ_TSC`), never `tsc` from node_modules.
 
 ## Running
 

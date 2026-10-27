@@ -4,10 +4,11 @@
 // checker must stay silent on it (invariant 1), so the fuzzer discards it.
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-/** The binary the owner builds; `--tsc <path>` / FUZZ_TSC override it. Never `tsc` from node_modules. */
-export const DEFAULT_TSC = "/Users/thomas/Documents/Github/tsrs/target/release/tsrs";
+/** A release build in a `tsrs` checkout beside this repository; `--tsc <path>` / FUZZ_TSC override it. Never `tsc` from node_modules. */
+export const DEFAULT_TSC = resolve(fileURLToPath(import.meta.url), "../../../../tsrs/target/release/tsrs");
 
 /** The oracle's compiler options (scripts/runtime-oracle.mjs), so a program checks as the oracle will compile it. */
 export const COMPILER_OPTIONS = {
