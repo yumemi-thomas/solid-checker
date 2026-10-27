@@ -77,6 +77,46 @@ describe("shrink", () => {
   });
 });
 
+describe("shrink with a batch judge", () => {
+  const seedProgram = find((p) => anyDefaultWrite(p) !== null && nodeCount(p) > 60 && p.components.length === 3);
+  const value = anyDefaultWrite(seedProgram);
+  const predicate = async (program) => holdsDefaultWrite(value)(program);
+
+  it("reaches the program the one-at-a-time loop reaches, whatever the batch size", async () => {
+    const sequential = await shrink(seedProgram, predicate, { budget: 400 });
+    for (const batchSize of [1, 2, 5, 16]) {
+      const batches = [];
+      const batched = await shrink(seedProgram, predicate, {
+        budget: 400, batchSize,
+        judgeBatch: async (programs) => { batches.push(programs.length); return Promise.all(programs.map(predicate)); },
+      });
+      expect(programKey(batched.program), `batch ${batchSize}`).toBe(programKey(sequential.program));
+      expect(batched.accepted).toBe(sequential.accepted);
+      expect(batched.attempts).toBe(sequential.attempts);
+      expect(Math.max(...batches)).toBeLessThanOrEqual(batchSize);
+      if (batchSize > 1) expect(batches.length).toBeLessThan(sequential.attempts);
+    }
+  });
+
+  it("never judges more candidates in a batch than the budget has left, and stops at the budget", async () => {
+    const sizes = [];
+    const result = await shrink(seedProgram, predicate, {
+      budget: 7, batchSize: 16,
+      judgeBatch: async (programs) => { sizes.push(programs.length); return Promise.all(programs.map(predicate)); },
+    });
+    expect(result.attempts).toBeLessThanOrEqual(7);
+    expect(sizes.every((size) => size <= 7)).toBe(true);
+  });
+
+  it("agrees with the sequential loop when the control rejects some accepted programs", async () => {
+    const control = async (program) => program.components.length > 1 || nodeCount(program) % 3 !== 0;
+    const sequential = await shrink(seedProgram, predicate, { budget: 400, control });
+    const batched = await shrink(seedProgram, predicate, { budget: 400, control, batchSize: 6, judgeBatch: (programs) => Promise.all(programs.map(predicate)) });
+    expect(programKey(batched.program)).toBe(programKey(sequential.program));
+    expect(batched.attempts).toBe(sequential.attempts);
+  });
+});
+
 describe("SearchBudget", () => {
   it("counts executions, not candidates", async () => {
     const budget = new SearchBudget(2);
@@ -85,5 +125,24 @@ describe("SearchBudget", () => {
     await budget.run(async () => 1);
     expect(budget.available()).toBe(false);
     await expect(budget.run(async () => 1)).rejects.toThrow(/budget/);
+  });
+});
+
+describe("the misuse program families", () => {
+  const holdsSite = (program) => [...walk(program)].some(({ node }) => node.k === "use");
+  it("unwraps a Show or For row and falls back to a direct binding when the predicate allows", async () => {
+    const program = generateProgram(4, { profile: "misuse", misusePlan: { code: "CONTEXT_NOT_FOUND", context: "show", binding: "alias", layer: "none" } });
+    expect([...walk(program)].some(({ node }) => node.k === "show")).toBe(true);
+    const reduced = await shrink(program, async (candidate) => holdsSite(candidate), { budget: 40 });
+    const kinds = [...walk(reduced.program)].map(({ node }) => node.k);
+    expect(kinds).not.toContain("show");
+    expect([...walk(reduced.program)].find(({ node }) => node.k === "use").node.bind).toBe("direct");
+    expect(isValid(reduced.program)).toBe(true);
+  });
+  it("keeps the binding the predicate depends on", async () => {
+    const program = generateProgram(4, { profile: "misuse", misusePlan: { code: "CONTEXT_NOT_FOUND", context: "body", binding: "alias", layer: "none" } });
+    const needsAlias = (candidate) => [...walk(candidate)].some(({ node }) => node.k === "use" && node.bind === "alias");
+    const reduced = await shrink(program, async (candidate) => needsAlias(candidate), { budget: 40 });
+    expect([...walk(reduced.program)].find(({ node }) => node.k === "use").node.bind).toBe("alias");
   });
 });

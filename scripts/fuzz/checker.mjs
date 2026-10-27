@@ -30,6 +30,17 @@ export function oracleMainSource(oracleText = readFileSync(join(dirname(fileURLT
 }
 export const MAIN_SOURCE = oracleMainSource();
 
+/** Writes a case's generated packages (`{ name: { file: text } }`) into `<dir>/node_modules/<name>`: the project's own dependency, never the shared install's. */
+export function installPackages(dir, packages = {}) {
+  for (const [name, files] of Object.entries(packages)) {
+    for (const [file, text] of Object.entries(files)) {
+      const target = join(dir, "node_modules", name, file);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, text);
+    }
+  }
+}
+
 /** Where checker cases live: inside the install, which the oracle's own cases also use. */
 export const checkerWorkDir = (install, id) => join(resolve(install), ".solid-checker-fuzz", id);
 
@@ -44,6 +55,7 @@ export function materializeForChecker(built, install, id = built.id, { twin = fa
   writeFileSync(join(dir, "App.tsx"), twin ? built.files["App.run.txt"] : built.files["App.tsx"]);
   writeFileSync(join(dir, "main.tsx"), MAIN_SOURCE);
   writeFileSync(join(dir, "tsconfig.json"), tsconfigFor(["main.tsx", "App.tsx"]));
+  installPackages(dir, built.packages);
   return dir;
 }
 
@@ -53,6 +65,7 @@ export function materializeFromDirectory(caseDir, install, id) {
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   cpSync(join(caseDir, "App.tsx"), join(dir, "App.tsx"));
+  if (existsSync(join(caseDir, "node_modules"))) cpSync(join(caseDir, "node_modules"), join(dir, "node_modules"), { recursive: true });
   writeFileSync(join(dir, "main.tsx"), MAIN_SOURCE);
   writeFileSync(join(dir, "tsconfig.json"), tsconfigFor(["main.tsx", "App.tsx"]));
   return dir;
@@ -63,18 +76,25 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const RESOLVER = join(repo, "packages/cli/scripts/runtime-resolver.mjs");
 
 const CHECKER_ARGS = ["--format", "json", "--feedback-facts", "--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"];
+/**
+ * The same run as a user's `solid-checker` has: no `--feedback-facts`. Under a declared target and build an ordinary analysis reads the
+ * installed Solid packages from their source (ADR 0297; `defaults_to_dependency_sources` excludes the feedback-facts mode that
+ * `feedback run` uses), which is what a case that ships a generated package is about.
+ */
+const ORDINARY_ARGS = ["--format", "json", "--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"];
 
 /**
  * Runs the native checker on a materialized directory.
  * `bin` and `typefacts` set SOLID_CHECKER_NATIVE_BIN and SOLID_TYPEFACTS_BIN (the same variables the oracle needs).
+ * `ordinary` runs as a user does (ORDINARY_ARGS), so the dependency packages of the project are read from source.
  * @returns {Promise<{ ok: boolean, findings: object[], wallMs: number, error?: string, exitStatus?: number }>}
  */
-export function runChecker(dir, { bin, typefacts, timeoutMs = 180000, env = process.env } = {}) {
+export function runChecker(dir, { bin, typefacts, timeoutMs = 180000, env = process.env, ordinary = false } = {}) {
   return new Promise((done) => {
     const executable = bin ?? env.SOLID_CHECKER_NATIVE_BIN;
     if (!executable || !existsSync(executable)) { done({ ok: false, findings: [], wallMs: 0, error: `checker binary not found: ${executable}` }); return; }
     const started = Date.now();
-    const child = spawn(executable, ["--project", join(dir, "tsconfig.json"), ...CHECKER_ARGS], {
+    const child = spawn(executable, ["--project", join(dir, "tsconfig.json"), ...(ordinary ? ORDINARY_ARGS : CHECKER_ARGS)], {
       cwd: dir, stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...env, SOLID_CHECKER_DAEMON: "0", SOLID_CHECKER_RUNTIME_RESOLVER: env.SOLID_CHECKER_RUNTIME_RESOLVER ?? RESOLVER,

@@ -20,6 +20,6 @@ export default defineConfig({
     maxWorkers: workers,
     isolate: true,
     testTimeout: 60000,
-    server: { deps: { inline: ['solid-js', '@solidjs/signals', '@solidjs/web', '@solidjs/diagnostics'] } },
+    server: { deps: { inline: ['solid-js', '@solidjs/signals', '@solidjs/web', '@solidjs/diagnostics', /\/node_modules\/fz-[a-z0-9-]+\//] } },
   },
 });

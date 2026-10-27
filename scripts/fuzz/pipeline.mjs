@@ -17,7 +17,11 @@ import { runFast } from "./fast.mjs";
 import { findingsDiff, outcomeDiff } from "./hits.mjs";
 import { closedGrammar } from "./model.mjs";
 import { signature as findingSignature } from "./dedupe.mjs";
+import { callAtLine } from "./falseclean.mjs";
 import { typecheck } from "./typecheck.mjs";
+
+/** A case that ships a generated package is checked as a user's run is (checker.mjs ORDINARY_ARGS): the package is read from source. */
+export const hasPackages = (built) => Object.keys(built.packages ?? {}).length > 0;
 
 const inconclusive = (reason, why) => ({ verdict: "inconclusive", reasons: [reason], items: [{ kind: "inconclusive", reason, why }] });
 
@@ -46,12 +50,13 @@ export async function evaluate(entries, config, deps = {}) {
     const dir = materializeForChecker(built, install, built.id);
     const typed = await types(dir, { tsc: config.tsc });
     if (!typed.ok) return { program, built, caseDir, dir, typecheck: typed };
-    const checker = await check(dir, { bin: config.bin, typefacts: config.typefacts });
+    const ordinary = hasPackages(built);
+    const checker = await check(dir, { bin: config.bin, typefacts: config.typefacts, ordinary });
     const value = { program, built, caseDir, dir, typecheck: typed, checker };
     if (instrument) {
       const twinDir = materializeForChecker(built, install, `${built.id}-run`, { twin: true });
       value.twinTypecheck = await types(twinDir, { tsc: config.tsc });
-      if (control && checker.ok && value.twinTypecheck.ok) value.twinChecker = await check(twinDir, { bin: config.bin, typefacts: config.typefacts });
+      if (control && checker.ok && value.twinTypecheck.ok) value.twinChecker = await check(twinDir, { bin: config.bin, typefacts: config.typefacts, ordinary });
       if (!config.keepWork) rmSync(twinDir, { recursive: true, force: true });
     }
     return value;
@@ -126,9 +131,13 @@ export function signaturesOf(program, built, classification) {
     if (item.kind === "candidate-false-positive") {
       const site = known.find((s) => s.id === item.siteIds?.[0]);
       if (site) out.push({ item, site, signature: findingSignature({ rule: item.finding.rule, kind: item.kind, program, path: site.path, outcome: item.subkind ?? "silent" }) });
+    } else if (item.kind === "candidate-wrong-rule") {
+      const site = known.find((candidate) => candidate.line === item.finding.line) ?? known.find((candidate) => Math.abs(candidate.line - item.finding.line) <= 1);
+      if (site) out.push({ item, site, signature: findingSignature({ rule: item.finding.rule, kind: item.kind, program, path: site.path, outcome: item.diagnostic.code }) });
     } else if (item.kind === "candidate-false-clean") {
-      const site = built.sites.find((s) => s.line === item.diagnostic.line) ?? built.sites.reduce((best, s) => (best && Math.abs(best.line - item.diagnostic.line) <= Math.abs(s.line - item.diagnostic.line) ? best : s), null);
-      if (site) out.push({ item, site, signature: findingSignature({ rule: item.diagnostic.code, kind: item.kind, program, path: site.path, outcome: "diagnosed" }) });
+      // The node at the diagnostic's innermost App line, from the printer's line table (not the nearest site by line).
+      const node = item.diagnostic.line === null ? null : callAtLine(built.lineTable, item.diagnostic.line);
+      if (node) out.push({ item, site: built.sites.find((s) => s.line === item.diagnostic.line) ?? null, signature: findingSignature({ rule: item.diagnostic.code, kind: item.kind, program, path: node.path, outcome: "diagnosed" }) });
     }
   }
   return out;

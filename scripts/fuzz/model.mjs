@@ -10,23 +10,47 @@
 //
 // Node kinds
 //   expressions: num read write ref member obj field call iife iter fn param prim
-//   statements:  expr decl return await
+//   statements:  expr decl return await try contain
 //   view items:  probe button child attr show for
 //
-// A `read` or `write` with `site: true` is a *site of interest*: the checker and
+// An `own` node (`{ k: "own", op, fn?, apply? }`) is an owner-requiring call: `onCleanup`, `createEffect`,
+// `onSettled` or `useContext`. It is a site like a read or a write; what it shows is a hit, not page text.
+//
+// A `read`, `write` or `own` with `site: true` is a *site of interest*: the checker and
 // the runtime are compared at its line. `witness: { selector, text }` says what
 // the page shows when the site ran and landed (null when nothing shows it).
+
+import { EXPORT_FORMS, BEHAVIOURS, isPackageForm, behaviourOf, resultOf } from "./package.mjs";
 
 export const VERSION = 1;
 
 /** Helper forms: a same-file function taking `cb: () => unknown`. */
 export const HELPER_FORMS = ["call", "defaultCall", "returnClosure", "returnCb", "storeCb", "timerCb"];
 /** `prim` names: the Solid primitive or host API a function expression is handed to. */
-export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then"];
+export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro", "render", "tracked", "action"];
 
 export const num = (n) => ({ k: "num", n });
 export const read = (sig, extra = {}) => ({ k: "read", sig, ...extra });
 export const write = (sig, value, extra = {}) => ({ k: "write", sig, value, ...extra });
+/** Owner ops: the Solid calls that need an owner (`NO_OWNER_*`, `SETTLED_CLEANUP_UNOWNED`). */
+export const OWN_OPS = ["cleanup", "effect", "settled", "context"];
+/**
+ * `onCleanup(() => {})`, `createEffect(() => 1, () => {})`, `onSettled(() => {})`, `useContext(Ctx)`.
+ * Each has callbacks as real `fn` nodes (so they are counted), except `context`.
+ */
+export const own = (op, extra = {}) => ({
+  k: "own", op,
+  ...(op === "effect" ? { fn: fn([ret(num(1))]), apply: fn([]) } : op === "context" ? {} : { fn: fn([]) }),
+  ...extra,
+});
+/**
+ * `{ k: "use", code, variant, bind, sig?, ... }`: the call a misuse program is about (the misuse profile, misuse.mjs): one Solid API
+ * call or reactive access that the runtime diagnoses under `code`, bound by a direct import, a namespace, an alias, a destructuring or
+ * a wrapper (`bind`). misuse.mjs prints it and types it.
+ */
+export const use = (code, extra = {}) => ({ k: "use", code, variant: null, bind: "direct", ...extra });
+/** True for a node that is a site of interest. */
+export const isSite = (node) => (node.k === "read" || node.k === "write" || node.k === "own" || node.k === "use") && Boolean(node.site);
 export const ref = (name) => ({ k: "ref", name });
 export const member = (obj, key) => ({ k: "member", obj, key });
 export const obj = (fields) => ({ k: "obj", fields: fields.map(([key, e]) => ({ k: "field", key, e })) });
@@ -40,9 +64,39 @@ export const fn = (body, { params = [], form = "arrow", async = false } = {}) =>
 export const param = (def, destructured = false) => ({ k: "param", destructured, default: def });
 export const prim = (name, f, extra = {}) => ({ k: "prim", name, fn: f, ...extra });
 export const expr = (e) => ({ k: "expr", e });
-export const decl = (name, e) => ({ k: "decl", name, e });
+export const decl = (name, e, extra = {}) => ({ k: "decl", name, e, ...extra });
 export const ret = (e) => ({ k: "return", e });
 export const awaitStmt = () => ({ k: "await" });
+/** `try { <body> } finally { <fin> }` (the disposal profile). */
+export const tryStmt = (body, fin = []) => ({ k: "try", body, fin });
+/** `flush()` (the disposal profile). */
+export const flush = () => ({ k: "flush" });
+/** `null` (a component's return). */
+export const nul = () => ({ k: "nul" });
+/** `<span />` (a component's return: the checker reads a function that returns JSX as a component). */
+export const jsx = () => ({ k: "jsx" });
+
+/**
+ * Containers (the containers dimension, container.mjs): a statement that wraps statements in a place where code is written but
+ * runs elsewhere, later, or not at all. `kind` is one of CONTAINER_KINDS; `id` numbers its names (ChildN, KN, deadN); `async` makes
+ * a function-like container async (the body then holds `await` statements); `use` is what the program does with the container.
+ */
+export const CONTAINER_KINDS = [
+  "comp-never", "comp-rendered", "comp-slot", "comp-prop", "comp-returned",
+  "class-field", "class-static", "class-sblock", "class-method", "class-ctor",
+  "dead-if", "dead-after-return", "dead-fn", "and-true", "and-false",
+];
+/** Kinds whose body is the body of a function of its own (an `await` needs `async`). The rest run inside the parent function. */
+export const FUNCTION_KINDS = new Set([
+  "comp-never", "comp-rendered", "comp-slot", "comp-prop", "comp-returned", "class-method", "class-ctor", "class-static", "class-sblock",
+  "class-field", "dead-after-return", "dead-fn",
+]);
+/** Kinds that can be async (the others cannot hold an `await`: a field initializer, a constructor, a static block, a rendered component). */
+export const ASYNC_KINDS = new Set(["comp-never", "comp-slot", "comp-prop", "comp-returned", "class-method", "dead-after-return", "dead-fn"]);
+export const USES = {
+  "comp-returned": ["discard", "call"], "class-field": ["new", "never"], "class-ctor": ["new", "never"], "class-method": ["call", "new", "never"],
+};
+export const contain = (kind, id, body, extra = {}) => ({ k: "contain", kind, id, async: false, use: null, body, ...extra });
 
 export const probe = (sig) => ({ k: "probe", sig });
 export const button = (id, handler) => ({ k: "button", id, handler });
@@ -54,6 +108,18 @@ export const forEach = (children) => ({ k: "for", children });
 export const signal = (name, init, role = "src", scope = "component") => ({
   k: "signal", name, setter: `set${name[0].toUpperCase()}${name.slice(1)}`, init, role, scope,
 });
+/**
+ * Write targets of the disposal profile (a `write` node names one by `sig`; the printer reads `kind`):
+ * a store (`createStore({ v })`, written by its setter), a memo (written by `refresh(m)`), an action (written by calling it;
+ * its body writes the probe signal `target` to `value`). A plain `signal` has no `kind`.
+ */
+export const storeSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store" });
+export const memoSignal = (name) => ({ ...signal(name, 0, "src"), kind: "memo" });
+/** An async memo (`createMemo(async () => 1)`): reading it is pending until the promise settles. */
+/** A store whose property may be deleted (`createStore<{ v?: number }>`). */
+export const storeOptSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-opt" });
+export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
+export const actionSignal = (name, target, value) => ({ ...signal(name, 0, "src"), kind: "action", target, value });
 
 // ---------------------------------------------------------------------------
 // Generic traversal
@@ -94,7 +160,7 @@ export const clone = (value) => structuredClone(value);
 
 const T = {
   num: { t: "num" }, void: { t: "void" }, unknown: { t: "unknown" },
-  fn: (r, needs = 0) => ({ t: "fn", ret: r, needs }),
+  fn: (r, needs = 0, isAsync = false) => ({ t: "fn", ret: r, needs, async: isAsync }),
   acc: (of) => ({ t: "acc", of }),
   obj: (fields) => ({ t: "obj", fields }),
 };
@@ -109,7 +175,17 @@ export function tsType(type) {
 }
 
 const helperType = (form) => ({ t: "helper", form });
-function helperResult(form, supplied) {
+/** What a call of a helper has as its type. A package behaviour's result follows the callback it was given (`arg`). */
+function helperResult(form, supplied, arg) {
+  if (isPackageForm(form)) {
+    const ret = arg?.t === "fn" ? arg.ret : T.unknown;
+    switch (resultOf(form)) {
+      case "value": return ret;
+      case "fn": return T.fn(ret);
+      case "obj": return T.obj({ cb: T.fn(ret) });
+      default: return T.num;
+    }
+  }
   switch (form) {
     case "call": case "timerCb": return T.num;
     case "returnClosure": return T.fn(T.unknown);
@@ -148,6 +224,14 @@ export function validate(program, { maxNodes = 400 } = {}) {
   if (nodeCount(program) > maxNodes) fail("too many nodes");
   if (!program.components.length) fail("no component");
   const helpers = new Map((program.helpers ?? []).map((helper) => [helper.name, helper]));
+  let defaults = 0;
+  for (const h of program.helpers ?? []) {
+    if (!h.pkg) { if (isPackageForm(h.form)) fail(`helper ${h.name} has a package form and no package`); continue; }
+    if (!isPackageForm(h.form) || !BEHAVIOURS[h.pkg.behaviour] || !EXPORT_FORMS.includes(h.pkg.exportForm)) fail(`helper ${h.name} is not a known package export`);
+    if (h.pkg.exportForm === "default") defaults += 1;
+    if (h.pkg.behaviour === "fire" && !helpers.get(h.pkg.of)?.pkg) fail(`fire ${h.name} has no register`);
+  }
+  if (defaults > 1) fail("a package has one default export");
   const seenSignals = new Set();
   for (const sig of [...(program.moduleSignals ?? []), ...program.components.flatMap((component) => component.signals)]) {
     if (seenSignals.has(sig.name)) fail(`duplicate signal ${sig.name}`);
@@ -166,6 +250,8 @@ export function validate(program, { maxNodes = 400 } = {}) {
     const where = component.name;
     const own = new Set([...(program.moduleSignals ?? []).map((s) => s.name), ...component.signals.map((s) => s.name)]);
     const buttons = new Set();
+    // An action's body writes its target signal: removing the target (the shrinker) leaves the action unprintable.
+    for (const sig of component.signals) if (sig.kind === "action" && !own.has(sig.target)) fail(`${where}: action ${sig.name} writes ${sig.target}, which is not in scope`);
     const scopeOf = (parent, extra = {}) => ({ vars: new Map(), parent, async: parent?.async ?? false, ...extra });
     const lookup = (scope, name) => {
       for (let s = scope; s; s = s.parent) if (s.vars.has(name)) return s.vars.get(name);
@@ -222,6 +308,11 @@ export function validate(program, { maxNodes = 400 } = {}) {
           case "await":
             if (!scope.async) fail(`${where}: await outside an async function`);
             break;
+          case "try":
+            checkBlock(stmt.body, scopeOf(scope, { async: scope.async }), "free");
+            checkBlock(stmt.fin, scopeOf(scope, { async: scope.async }), "free");
+            break;
+          case "contain": checkContain(stmt, scope); break;
           default: fail(`${where}: unknown statement ${stmt.k}`);
         }
       });
@@ -231,13 +322,30 @@ export function validate(program, { maxNodes = 400 } = {}) {
       return result;
     }
 
-    function fnTypeChecked(f, scope, returns, vars = []) {
-      if (f.k === "ref" && returns === "free") {
-        const type = typeOf(f, scope);
-        if (type && type.t === "fn") return type;
-        fail(`${where}: expected a function`);
-        return T.fn(T.unknown);
+    function checkContain(stmt, scope) {
+      if (!CONTAINER_KINDS.includes(stmt.kind)) fail(`${where}: unknown container ${stmt.kind}`);
+      const own = FUNCTION_KINDS.has(stmt.kind);
+      if (stmt.async && !ASYNC_KINDS.has(stmt.kind)) fail(`${where}: a ${stmt.kind} cannot be async`);
+      if (stmt.kind === "comp-rendered" && stmt.body.at(-1)?.k !== "return") fail(`${where}: a rendered component returns`);
+      if (USES[stmt.kind] && !USES[stmt.kind].includes(stmt.use)) fail(`${where}: a ${stmt.kind} is used "${stmt.use}"`);
+      checkBlock(stmt.body, scopeOf(scope, own ? { async: Boolean(stmt.async) } : {}), "free");
+    }
+
+    /** A function-valued argument that is a declared name: the same constraints as a literal, on the declared function's type. */
+    function refFnChecked(f, scope, returns) {
+      const type = typeOf(f, scope);
+      if (!type || type.t !== "fn") { fail(`${where}: expected a function`); return T.fn(T.unknown); }
+      if (returns === "voidOrFn") {
+        if (type.async) fail(`${where}: an async callback is not (() => void) | void`);
+        if (type.ret.t !== "fn" && type.ret.t !== "void") fail(`${where}: this callback may return only a function`);
       }
+      if (returns === "any" && type.ret.t === "void") fail(`${where}: a compute must return a value`);
+      if (returns === "num" && type.ret.t !== "num") fail(`${where}: an effect compute must return a number`);
+      return type;
+    }
+
+    function fnTypeChecked(f, scope, returns, vars = []) {
+      if (f.k === "ref") return refFnChecked(f, scope, returns);
       if (f.k !== "fn") { fail(`${where}: expected a function literal`); return T.fn(T.unknown); }
       if (f.async && returns === "voidOrFn") fail(`${where}: an async callback is not (() => void) | void`);
       const inner = scopeOf(scope, { async: f.async });
@@ -252,7 +360,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
       });
       const r = checkBlock(f.body, inner, f.async ? "free" : returns);
       if (f.async && returns === "num" && r.t !== "num") fail(`${where}: an effect compute must return a number`);
-      return T.fn(f.async ? T.unknown : r, 0);
+      return T.fn(f.async ? T.unknown : r, 0, Boolean(f.async));
     }
 
     function typeOf(e, scope) {
@@ -260,6 +368,11 @@ export function validate(program, { maxNodes = 400 } = {}) {
         case "num": return T.num;
         case "read": sigCheck(e.sig, "read"); return T.num;
         case "write": sigCheck(e.sig, "write"); return T.num;
+        case "own": return ownType(e, scope);
+        case "use": {
+          for (const name of e.sigs ?? []) sigCheck(name, "use");
+          return T.unknown;
+        }
         case "ref": {
           const type = lookup(scope, e.name);
           if (!type) { fail(`${where}: ${e.name} is not declared before use`); return null; }
@@ -279,16 +392,22 @@ export function validate(program, { maxNodes = 400 } = {}) {
           const args = e.args.map((a) => typeOf(a, scope));
           if (!callee) return null;
           if (callee.t === "helper") {
+            if (isPackageForm(callee.form) && behaviourOf(callee.form) === "fire") {
+              if (args.length) fail(`${where}: fire takes no argument`);
+              return T.num;
+            }
             if (args.length < 1 || !args[0] || args[0].t !== "fn") { fail(`${where}: a helper takes a function`); return null; }
             if (args.length > 1 && callee.form !== "defaultCall") fail(`${where}: only defaultCall takes a second argument`);
-            return helperResult(callee.form, args.length > 1);
+            return helperResult(callee.form, args.length > 1, args[0]);
           }
           if (callee.t === "acc") return callee.of;
-          if (callee.t === "fn") return callee.ret;
+          if (callee.t === "fn") return e.via === "optional" ? T.unknown : callee.ret;
           fail(`${where}: calling a ${callee.t}`);
           return null;
         }
         case "getOwner": return { t: "owner" };
+        case "nul": case "jsx": return T.unknown;
+        case "flush": return T.void;
         case "set": {
           sigCheck(e.sig, "set");
           const type = typeOf(e.e, scope);
@@ -306,6 +425,21 @@ export function validate(program, { maxNodes = 400 } = {}) {
       }
     }
 
+    function ownType(e, scope) {
+      switch (e.op) {
+        // onCleanup returns a Disposable in the published typings, not void.
+        case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return e.handle ? T.fn(T.void) : T.unknown;
+        case "settled": fnTypeChecked(e.fn, scope, RETURNS.settled); return T.void;
+        case "effect": {
+          const compute = fnTypeChecked(e.fn, scope, RETURNS.effect);
+          fnTypeChecked(e.apply, scope, RETURNS.applyFn, [["v", compute.ret]]);
+          return T.void;
+        }
+        case "context": return T.num;
+        default: fail(`${where}: unknown owner op ${e.op}`); return null;
+      }
+    }
+
     function primType(e, scope) {
       switch (e.name) {
         case "memo": return T.acc(fnTypeChecked(e.fn, scope, RETURNS.memo).ret);
@@ -319,8 +453,26 @@ export function validate(program, { maxNodes = 400 } = {}) {
         case "owner":
           if (e.ownerArg === "owner" && !lookup(scope, "owner")) fail(`${where}: owner is not captured`);
           return fnTypeChecked(e.fn, scope, "free").ret;
+        // createRoot((dispose) => ...): the callback returns what the root hands back (the disposer, here).
+        case "rootd": {
+          const result = fnTypeChecked(e.fn, scope, "free", [["dispose", T.fn(T.void)]]);
+          if (result.ret.t !== "fn") fail(`${where}: a rootd callback returns a function`);
+          return T.fn(T.void);
+        }
+        case "micro": fnTypeChecked(e.fn, scope, "free"); return T.void;
+        // createRenderEffect(compute, apply): like createEffect, its apply returns void | (() => void).
+        case "render": {
+          const compute = fnTypeChecked(e.fn, scope, RETURNS.effect);
+          if (!e.apply) fail(`${where}: render effect without an apply`);
+          else fnTypeChecked(e.apply, scope, RETURNS.applyFn, [["v", compute.ret]]);
+          return T.void;
+        }
+        case "tracked": fnTypeChecked(e.fn, scope, "free"); return T.void;
+        // action(function* () { ... }): the generator body is a block; its result is the action function.
+        case "action": fnTypeChecked(e.fn, scope, "free"); return T.fn(T.unknown);
         case "settled": fnTypeChecked(e.fn, scope, RETURNS.settled); return T.void;
-        case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return T.void;
+        // onCleanup returns a Disposable in the published typings, not void.
+        case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return T.unknown;
         case "timer": case "then": fnTypeChecked(e.fn, scope, "free"); return T.void;
         default: fail(`${where}: unknown prim ${e.name}`); return null;
       }
@@ -340,6 +492,7 @@ export function paramTsType(p) {
 export function exprTsType(e) {
   if (e.k === "set") return "number";
   switch (e.k) {
+    case "own": return e.op === "context" ? "number" : e.op === "cleanup" ? "unknown" : "void";
     case "num": case "read": case "write": return "number";
     case "iter": return e.method === "map" ? "unknown" : "void";
     default: return "unknown";
@@ -384,6 +537,8 @@ export function closedGrammar(program) {
         if (node.fallback?.length) fail("Show has a fallback");
         break;
       case "iter": if (!["map", "forEach"].includes(node.method)) fail(`iteration ${node.method}`); break;
+      // A container changes whether or where its body runs (classes, dead code, components, optional calls): not yet in the grammar.
+      case "contain": fail(`container ${node.kind}`); break;
       case "prim": if (!PRIMS.includes(node.name)) fail(`primitive ${node.name} is not in the table`); break;
       case "fn": {
         const awaits = node.body.filter((stmt) => stmt.k === "await").length;
@@ -392,6 +547,7 @@ export function closedGrammar(program) {
         break;
       }
       case "call": {
+        if (node.via) fail(`call through ${node.via}`);
         const root = (callee) => (callee.k === "member" ? root(callee.obj) : callee);
         const base = root(node.callee);
         if (base.k === "ref" && !declared.has(base.name)) fail(`call of undeclared ${base.name}`);

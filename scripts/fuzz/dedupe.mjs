@@ -31,7 +31,10 @@ function describe(node, helperForms) {
     case "param": return `param:${node.destructured ? "destructured" : "plain"}`;
     case "prim": return `prim:${node.name}${node.name === "owner" ? `:${node.ownerArg ?? "null"}` : ""}`;
     case "iter": return `iter:${node.method}`;
-    case "call": return node.callee.k === "ref" && helperForms.has(node.callee.name) ? `call:helper:${helperForms.get(node.callee.name)}` : "call";
+    case "call": return node.callee.k === "ref" && helperForms.has(node.callee.name) ? `call:helper:${helperForms.get(node.callee.name)}` : node.via ? `call:${node.via}` : "call";
+    case "own": return node.site ? null : `own:${node.op}${node.handle ? ":handle" : ""}`;
+    case "contain": return `contain:${node.kind}${node.use ? `:${node.use}` : ""}${node.async ? ":async" : ""}`;
+    case "try": case "flush": return node.k;
     case "iife": case "obj": case "field": case "button": case "child": case "attr": case "show": case "for": case "return": return node.k;
     default: return null;
   }
@@ -87,7 +90,9 @@ export function constructPath(program, path) {
     const token = describe(ancestor, helperForms);
     if (token) chain.push(token);
     else if (ancestor.k === "component") chain.push(`component.${path[2]}`);
-    else if (ancestor.k === "read" || ancestor.k === "write") chain.push(`site:${ancestor.k}`);
+    else if (ancestor.k === "read" || ancestor.k === "write") chain.push(`site:${ancestor.k}${ancestor.via ? `:${ancestor.via}` : ""}`);
+    else if (ancestor.k === "own") chain.push(`site:own:${ancestor.op}`);
+    else if (ancestor.k === "use") chain.push(`site:use:${ancestor.code}:${ancestor.bind}`);
     // Names bound by a declaration: how does the rest of the component use them?
     const link = up.get(ancestor);
     if (link?.parent.k === "decl" && link.key === "e") {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateProgram } from "./generate.mjs";
+import { OWNER_PROFILES, generateProgram } from "./generate.mjs";
 import { buildCase, scenarioSteps } from "./emit.mjs";
 import { validate } from "./model.mjs";
 import { printProgram } from "./print.mjs";
@@ -84,6 +84,38 @@ describe("generateProgram", () => {
     expect(program.components).toHaveLength(3);
     expect(generateProgram(3).components).toHaveLength(1);
     expect(printProgram(program).text).toMatch(/p0/);
+  });
+});
+
+describe("owner profiles (phase C)", () => {
+  it("only produce valid compositions with an owner site, never fall back to the plain write", () => {
+    for (const profile of Object.keys(OWNER_PROFILES)) {
+      for (const seed of SEEDS.slice(0, 200)) {
+        const program = generateProgram(seed, { profile });
+        expect(validate(program), `${profile} seed ${seed}`).toEqual([]);
+        expect(JSON.stringify(program), `${profile} seed ${seed}`).toContain('"k":"own"');
+      }
+    }
+  });
+
+  it("cover every op, owned and ownerless hosts, and print the Solid call", () => {
+    const texts = SEEDS.slice(0, 200).map((seed) => printProgram(generateProgram(seed, { profile: "owner" })).text);
+    const seen = (pattern) => texts.filter((text) => pattern.test(text)).length;
+    for (const [name, pattern] of Object.entries({
+      cleanup: /onCleanup\(/, effect: /createEffect\(\(\) => \{\n\s*return 1;/, settled: /onSettled\(/, context: /useContext\(Ctx\)/,
+      "a context is declared once": /^const Ctx = createContext\(7\);$/m, "in a handler": /onClick=\{\(\) => \{[\s\S]*?(?:onCleanup|onSettled|createEffect|useContext)/,
+      "in a timer": /setTimeout\(/, "under runWithOwner(null": /runWithOwner\(null/, "in a memo": /createMemo\(/,
+    })) expect(seen(pattern), name).toBeGreaterThan(0);
+    for (const text of texts) if (/useContext/.test(text)) expect(text).toContain("const Ctx = createContext(7);");
+  });
+
+  it("a named owner profile fixes the op; the other profiles draw no owner site", () => {
+    for (const seed of SEEDS.slice(0, 30)) {
+      expect(JSON.stringify(generateProgram(seed, { profile: "owner-cleanup" }))).toContain('"op":"cleanup"');
+      expect(JSON.stringify(generateProgram(seed, { profile: "owner-cleanup" }))).not.toMatch(/"op":"(effect|settled|context)"/);
+    }
+    // (Checked once against the commit before the owner profiles, 8 profiles x 400 seeds: the text and the twin were byte-equal.)
+    for (const profile of [undefined, "body-call", "mixed"]) expect(JSON.stringify(generateProgram(3, { profile }))).not.toContain('"k":"own"');
   });
 });
 
