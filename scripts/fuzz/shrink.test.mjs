@@ -127,3 +127,22 @@ describe("SearchBudget", () => {
     await expect(budget.run(async () => 1)).rejects.toThrow(/budget/);
   });
 });
+
+describe("the misuse program families", () => {
+  const holdsSite = (program) => [...walk(program)].some(({ node }) => node.k === "use");
+  it("unwraps a Show or For row and falls back to a direct binding when the predicate allows", async () => {
+    const program = generateProgram(4, { profile: "misuse", misusePlan: { code: "CONTEXT_NOT_FOUND", context: "show", binding: "alias", layer: "none" } });
+    expect([...walk(program)].some(({ node }) => node.k === "show")).toBe(true);
+    const reduced = await shrink(program, async (candidate) => holdsSite(candidate), { budget: 40 });
+    const kinds = [...walk(reduced.program)].map(({ node }) => node.k);
+    expect(kinds).not.toContain("show");
+    expect([...walk(reduced.program)].find(({ node }) => node.k === "use").node.bind).toBe("direct");
+    expect(isValid(reduced.program)).toBe(true);
+  });
+  it("keeps the binding the predicate depends on", async () => {
+    const program = generateProgram(4, { profile: "misuse", misusePlan: { code: "CONTEXT_NOT_FOUND", context: "body", binding: "alias", layer: "none" } });
+    const needsAlias = (candidate) => [...walk(candidate)].some(({ node }) => node.k === "use" && node.bind === "alias");
+    const reduced = await shrink(program, async (candidate) => needsAlias(candidate), { budget: 40 });
+    expect([...walk(reduced.program)].find(({ node }) => node.k === "use").node.bind).toBe("alias");
+  });
+});

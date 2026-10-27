@@ -37,11 +37,14 @@ export class SearchBudget {
   }
 }
 
-/** A stable preference for less machinery: [nodes, components, helpers, depth]. */
+/** A stable preference for less machinery: [nodes, components, helpers, depth, indirect bindings]. */
 export function complexity(program) {
   let depth = 0;
   for (const { path } of walk(program)) depth = Math.max(depth, path.length);
-  return [nodeCount(program), program.components.length, program.helpers.length, depth];
+  // A non-direct binding of a misuse call is machinery too (the last tie-break).
+  let indirect = 0;
+  for (const { node } of walk(program)) if (node.k === "use" && node.bind !== "direct") indirect += 1;
+  return [nodeCount(program), program.components.length, program.helpers.length, depth, indirect];
 }
 export function compareSize(a, b) {
   const left = complexity(a); const right = complexity(b);
@@ -126,13 +129,41 @@ function* unreturn(program) {
   }
 }
 
+/** Replace a `Show` or `For` view item by its children, in place. */
+function* unwrapView(program) {
+  for (const { node, path } of walk(program)) {
+    for (const [key, isList] of slotsOf(node)) {
+      if (!isList) continue;
+      for (let index = 0; index < node[key].length; index += 1) {
+        const item = node[key][index];
+        if (item.k !== "show" && item.k !== "for") continue;
+        const copy = clone(program);
+        getAt(copy, path)[key].splice(index, 1, ...clone(item.children));
+        yield copy;
+      }
+    }
+  }
+}
+
+/** The misuse profile: a simpler way to reach the API (a `use` node's direct binding), when the finding does not depend on it. */
+function* directBinding(program) {
+  for (const { node, path } of walk(program)) {
+    if (node.k !== "use" || node.bind === "direct") continue;
+    const copy = clone(program);
+    getAt(copy, path).bind = "direct";
+    yield copy;
+  }
+}
+
 export const families = {
   lists: listChunks,
   inline: inlineScopes,
   unreturn,
   simplify: simplifyExpressions,
+  unwrap: unwrapView,
+  direct: directBinding,
 };
-export const familyOrder = ["lists", "inline", "unreturn", "simplify"];
+export const familyOrder = ["lists", "inline", "unwrap", "unreturn", "simplify", "direct"];
 
 // ---------------------------------------------------------------------------
 

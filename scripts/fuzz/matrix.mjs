@@ -72,7 +72,9 @@ export function judge({ code, site, typecheck: typed, checker, runtime }) {
   const covering = checker.findings.filter((finding) => !ignoredRules.includes(finding.rule) && inLines(finding, region));
   const claiming = covering.filter((finding) => rules.includes(finding.rule));
   const violations = covering.filter((finding) => finding.kind === "violation");
-  const detail = { placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`) };
+  // A violation that does not cover the site: in a one-site program it is either a second defect of the template or a false positive.
+  const stray = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && !inLines(finding, region));
+  const detail = { placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}) };
   if (claiming.some((finding) => finding.kind === "violation")) return { outcome: "agree", detail };
   if (violations.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(violations.map((finding) => finding.rule))] } };
   if (covering.length) return { outcome: "recall-gap", detail };
@@ -185,7 +187,11 @@ export function buildMatrix(rows, { options, header, typedAway }) {
     };
   }
   const total = tally(rows);
+  // Violations away from the site, per rule: they need a look (a template's second defect, or a false positive).
+  const strays = {};
+  for (const row of rows) for (const label of row.detail?.stray ?? []) { const rule = label.split("@")[0]; strays[rule] = [...(strays[rule] ?? []), row.id]; }
   return {
+    strays: Object.fromEntries(Object.entries(strays).map(([rule, ids]) => [rule, { programs: ids.length, examples: ids.slice(0, 3) }])),
     generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.perCell, checker: header, total,
     confirmed: CONFIRMED.reduce((sum, name) => sum + total[name], 0), typedAway, cells: out,
   };
