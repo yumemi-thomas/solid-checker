@@ -708,6 +708,89 @@ pub(crate) fn invokes_parameter_during_call(
     lookup.parameter_called_on_every_completion(file.path.as_str(), function.span, index)
 }
 
+/// What a callee does with a parameter it calls on every completion
+/// ([`parameter_uses_during_call`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ParameterUses {
+    /// Every use of the parameter is a direct call in the callee's own
+    /// synchronous body: each run of the callback is one of those calls, on the
+    /// call's stack and under its owner.
+    OnlyCalled,
+    /// The callee also passes the parameter on, stores it or closes over it:
+    /// a run of the callback may be elsewhere, at another time or owner.
+    AlsoElsewhere,
+}
+
+/// ADR 0457: [`invokes_parameter_during_call`], and whether every use of the
+/// parameter is such a call. Nothing is claimed for a callee that reassigns
+/// the parameter or reads `arguments` (`None`): the call may reach another
+/// function. A source scan backs the binder's references, so a use the binder
+/// does not list (a shorthand property `{ cb }`) still counts as a use.
+pub(crate) fn parameter_uses_during_call(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ParameterUses> {
+    if !invokes_parameter_during_call(file, function, index, lookup) {
+        return None;
+    }
+    let name = function.parameters.get(index)?.names.first()?;
+    let source = file
+        .source
+        .get(function.span.start as usize..function.span.end as usize)?;
+    let parameter = file
+        .source
+        .get(name.span.start as usize..name.span.end as usize)?;
+    if identifier_occurrences(source, "arguments") > 0 {
+        return None;
+    }
+    let references = file.ast.references_to(name.span);
+    if references
+        .iter()
+        .any(|reference| file.ast.any_write_target_containing(*reference))
+    {
+        return None;
+    }
+    let direct = references
+        .iter()
+        .filter(|reference| {
+            function.body.contains(**reference)
+                && !file
+                    .ast
+                    .functions_within(function.span)
+                    .any(|nested| nested.span != function.span && nested.span.contains(**reference))
+                && file.ast.calls.iter().any(|call| {
+                    !call.construct && file.ast.peel_ts_sugar_span(call.callee) == **reference
+                })
+        })
+        .count();
+    // The declaration is one occurrence; a use is anything else.
+    Some(if identifier_occurrences(source, parameter) == direct + 1 {
+        ParameterUses::OnlyCalled
+    } else {
+        ParameterUses::AlsoElsewhere
+    })
+}
+
+/// How many times `name` appears in `source` as a whole identifier (property
+/// names and shadowing declarations count: the scan only ever errs toward a
+/// use).
+fn identifier_occurrences(source: &str, name: &str) -> usize {
+    let is_part =
+        |character: char| character.is_alphanumeric() || character == '_' || character == '$';
+    source
+        .match_indices(name)
+        .filter(|(at, _)| {
+            !source[..*at].chars().next_back().is_some_and(is_part)
+                && !source[*at + name.len()..]
+                    .chars()
+                    .next()
+                    .is_some_and(is_part)
+        })
+        .count()
+}
+
 /// Whether `span` lies inside an argument the dialect says runs on reads of
 /// the call's returned object ([`Dialect::callback_runs_on_result_access`]).
 ///
@@ -1037,4 +1120,22 @@ pub(super) fn context_provider_value_role(
     } else {
         ExecutionRole::UntrackedRendering
     })
+}
+
+#[cfg(test)]
+mod parameter_use_tests {
+    use super::identifier_occurrences;
+
+    #[test]
+    fn counts_whole_identifiers_only() {
+        assert_eq!(
+            identifier_occurrences("(cb) { cb(); mycb(); cb2(); $cb; }", "cb"),
+            2
+        );
+        assert_eq!(identifier_occurrences("{ cb }", "cb"), 1);
+        assert_eq!(
+            identifier_occurrences("arguments[0]; xarguments", "arguments"),
+            1
+        );
+    }
 }

@@ -3,6 +3,7 @@ import { callNow } from "inline-helpers";
 import callNowDefault from "default-helper";
 import { keep } from "keep-helper";
 import { later, whenScheduled } from "late-helper";
+import { both } from "both-helper";
 
 // ADR 0457, the same climb through dependency functions read from their source.
 // The packages are synthetic, written for this fixture in published layout
@@ -17,7 +18,8 @@ import { later, whenScheduled } from "late-helper";
 // PackageCreatedOwnerDefault.
 // Uncertifiable: a package that keeps the callback (PackageNullKeeps,
 // PackageCreatedOwnerKeeps) or runs it from a scheduler it does not name
-// (PackageNullScheduled, PackageCreatedOwnerScheduled).
+// (PackageNullScheduled, PackageCreatedOwnerScheduled), or one that calls it in
+// place and in a root it creates (PackageNullBoth; rc.17 throws in the root).
 
 export function PackageNullReexport() {
   const [v, setV] = createSignal(0);
@@ -81,6 +83,13 @@ export function PackageCreatedOwnerScheduled() {
   const [v, setV] = createSignal(0);
   runWithOwner(createOwner(), () => {
     whenScheduled(() => setV(1));
+  });
+  return <div>{v()}</div>;
+}
+export function PackageNullBoth() {
+  const [v, setV] = createSignal(0);
+  runWithOwner(null, () => {
+    both(() => setV(3));
   });
   return <div>{v()}</div>;
 }

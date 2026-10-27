@@ -21,6 +21,7 @@ Strict read in a setup body (`strict-read-untracked`, SC1001):
 Write in an owned scope (`no-write-in-pure-computation`, SC2001):
 
 - A named handler both attached as `onClick` and called directly in the component body hides the write in a helper it calls; the runtime warns at that call.
+- A helper that calls its callback and also runs it elsewhere (`cb(); createRoot(() => cb())`, `queueMicrotask(cb)`, a store) leaves a write in that callback uncertifiable under a null owner, a disposal or `untrack` (ADR 0457; rc.17 throws in the other run). A handler literal passed to such a helper (`onClick={() => both(() => setV(3))}`) stays silent: the run in the root is not followed.
 - A setter call in a component's default parameter initializer runs in the owned component scope; the write rule places nothing there.
 - SC2001 in `render`/`hydrate` `code` off web rc.13/17: uncertifiable (ADR 0353). Signals rc.17: a typed-only or `let`-aliased setter is unclaimed: `createOptimistic`'s unguarded one shares its type.
 

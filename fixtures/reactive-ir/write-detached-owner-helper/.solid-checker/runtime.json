@@ -1,1 +1,1 @@
-{ "target": "browser", "build": "development", "dependencySources": ["inline-helpers", "default-helper", "keep-helper", "late-helper"] }
+{ "target": "browser", "build": "development", "dependencySources": ["inline-helpers", "default-helper", "keep-helper", "late-helper", "both-helper"] }

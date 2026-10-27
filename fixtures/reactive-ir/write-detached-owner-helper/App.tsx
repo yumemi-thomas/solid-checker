@@ -18,6 +18,16 @@ declare const attached: boolean;
 // never at the outer role: it keeps the callback (NullHelperKeeps), calls it in
 // a root it creates (NullHelperOwnRoot, a cost: rc.17 throws) or hands it on
 // (CreatedOwnerHelperDetaches, legal).
+//
+// A helper that calls the callback in its own body and also runs it elsewhere
+// (hands it to a root or an owner, a microtask, a store) has runs the climb does
+// not follow, and a legal write needs every run legal. rc.17 throws in the other
+// run of each (checked on dev), so none may be clean. Uncertifiable: NullBoth,
+// NullBothOwner, NullUntrackBoth, NullIifeBoth, HandlerBoth, CleanupNowAndLater,
+// CleanupNowAndKeep, NullNowAndKeep, NullShorthandStore. Violation (its in place
+// run is under the owner, and one throwing run is enough): CreatedOwnerBoth.
+// CreatedOwnerReassign is no violation: the helper replaces the parameter before
+// it calls it, so the callback never runs.
 function callNow<T>(cb: () => T): T {
   return cb();
 }
@@ -120,4 +130,112 @@ export function CleanupCreatedOwnerHelper() {
 }
 export function fireKept() {
   kept?.();
+}
+
+function both(cb: () => void): void {
+  cb();
+  createRoot(() => cb());
+}
+function bothOwner(cb: () => void): void {
+  cb();
+  runWithOwner(createOwner(), cb);
+}
+function nowAndLater(cb: () => void): void {
+  cb();
+  queueMicrotask(cb);
+}
+let saved: (() => void) | undefined;
+function nowAndKeep(cb: () => void): void {
+  cb();
+  saved = cb;
+}
+export function fireSaved() {
+  saved?.();
+}
+
+export function NullBoth() {
+  const [v, setV] = createSignal(0);
+  runWithOwner(null, () => {
+    both(() => setV(1));
+  });
+  return <div>{v()}</div>;
+}
+export function NullBothOwner() {
+  const [v, setV] = createSignal(0);
+  runWithOwner(null, () => {
+    bothOwner(() => setV(2));
+  });
+  return <div>{v()}</div>;
+}
+export function NullUntrackBoth() {
+  const [v, setV] = createSignal(0);
+  runWithOwner(null, () => {
+    untrack(() => both(() => setV(1)));
+  });
+  return <div>{v()}</div>;
+}
+export function NullIifeBoth() {
+  const [v, setV] = createSignal(0);
+  runWithOwner(null, () => {
+    (() => both(() => setV(4)))();
+  });
+  return <div>{v()}</div>;
+}
+export function HandlerBoth() {
+  const [v, setV] = createSignal(0);
+  const reset = () => both(() => setV(2));
+  return <button onClick={reset}>{v()}</button>;
+}
+export function CleanupNowAndLater() {
+  const [v, setV] = createSignal(0);
+  onCleanup(() => {
+    nowAndLater(() => runWithOwner(createOwner(), () => setV(3)));
+  });
+  return <div>{v()}</div>;
+}
+export function CleanupNowAndKeep() {
+  const [v, setV] = createSignal(0);
+  onCleanup(() => {
+    nowAndKeep(() => runWithOwner(createOwner(), () => setV(4)));
+  });
+  return <div>{v()}</div>;
+}
+export function NullNowAndKeep() {
+  const [v, setV] = createSignal(0);
+  runWithOwner(null, () => {
+    nowAndKeep(() => setV(5));
+  });
+  return <div>{v()}</div>;
+}
+
+const sink: Array<{ cb: () => void }> = [];
+function storeShorthand(cb: () => void): void {
+  cb();
+  sink.push({ cb });
+}
+function reassign(cb: () => void): void {
+  cb = () => {};
+  cb();
+}
+
+export function CreatedOwnerBoth() {
+  const [v, setV] = createSignal(0);
+  runWithOwner(createOwner(), () => {
+    both(() => setV(1));
+  });
+  return <div>{v()}</div>;
+}
+export function NullShorthandStore() {
+  const [v, setV] = createSignal(0);
+  runWithOwner(null, () => {
+    storeShorthand(() => setV(1));
+  });
+  return <div>{v()}</div>;
+}
+export function CreatedOwnerReassign() {
+  const [v, setV] = createSignal(0);
+  runWithOwner(createOwner(), () => {
+    reassign(() => setV(1));
+  });
+  return <div>{v()}</div>;
 }

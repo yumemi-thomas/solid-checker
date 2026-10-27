@@ -98,6 +98,10 @@ pub(super) enum WriteRegionAdjustment {
     /// operation's [`RootBodyGuard`] decides, short of a suspension before
     /// the write.
     CreatedRoot,
+    /// [`WriteRegionAdjustment::CreatedRoot`] for a function a helper runs in
+    /// place and also hands on or keeps (ADR 0457): one run is under the root,
+    /// which proves a rejection and no legal write.
+    CreatedRootAmongOthers,
     /// The write sits directly in an inline callback whose call may create a
     /// root this vocabulary has not audited
     /// ([`solid_dialect::Dialect::callback_root_is_unaudited`]). Whether it runs
@@ -214,6 +218,10 @@ fn detached_in_place(
     let mut in_list = false;
     // The innermost owner-keeping call, when a layer lies between it and `span`.
     let mut first_hop = None;
+    // Whether a layer on the way is a helper that also hands its callback on
+    // or keeps it ([`LayerRun::InPlaceAmongOthers`]): the callback has runs this
+    // climb does not follow, so only a run that proves a violation is read.
+    let mut among_others = false;
     // Bounded: each step moves to the call that holds the previous function.
     for _ in 0..16 {
         let Some(function) = crate::owners::owning_function(&file.ast, at) else {
@@ -242,10 +250,18 @@ fn detached_in_place(
                     .callback_inherits_calling_window(primitive, index)
             {
                 match callback_owner_at_call(file, call, primitive, index, lookup) {
+                    // Every run is legal with no owner; another run of a callback a
+                    // helper also hands on may be under one.
+                    Some(solid_dialect::CallbackOwner::None) if among_others => {
+                        return Some(WriteRegionAdjustment::OwnerUnknown);
+                    }
                     Some(solid_dialect::CallbackOwner::None) => {
                         return Some(WriteRegionAdjustment::Detached);
                     }
                     // A site in a list is no proof the write runs under the root.
+                    Some(solid_dialect::CallbackOwner::Creates) if !in_list && among_others => {
+                        return Some(WriteRegionAdjustment::CreatedRootAmongOthers);
+                    }
                     Some(solid_dialect::CallbackOwner::Creates) if !in_list => {
                         return Some(WriteRegionAdjustment::CreatedRoot);
                     }
@@ -274,12 +290,19 @@ fn detached_in_place(
         }
         match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) => at = call,
+            // An owner-keeping call already crossed is as legal as it is, and
+            // stays so; the helper's other runs bear on nothing past it.
+            LayerRun::InPlaceAmongOthers(_) if first_hop.is_some() => break,
+            LayerRun::InPlaceAmongOthers(call) => {
+                among_others = true;
+                at = call;
+            }
             LayerRun::FreshStack | LayerRun::Elsewhere => break,
         }
         layered = true;
     }
     first_hop
-        .filter(|_| !in_list)
+        .filter(|_| !in_list && !among_others)
         .map(WriteRegionAdjustment::CallSite)
 }
 
@@ -326,6 +349,9 @@ pub(super) fn runs_in_disposal(
     // Whether the climb has left the callback of the call that gave the write
     // its owner (`runWithOwner`, `createRoot`).
     let mut owner_given = false;
+    // Whether a layer on the way is a helper that also hands its callback on or
+    // keeps it ([`LayerRun::InPlaceAmongOthers`]): runs of it are unplaced.
+    let mut among_others = false;
     // Whether a callback on the way runs at a time its call does not state: it
     // runs during the call or later, and only the call's place can say that it
     // is not in a disposal.
@@ -368,7 +394,7 @@ pub(super) fn runs_in_disposal(
                 .dialect
                 .callback_runs_only_in_disposal(primitive, index)
             {
-                return if call.result_discarded && !timing_unknown {
+                return if call.result_discarded && !timing_unknown && !among_others {
                     DisposalReach::Only
                 } else {
                     DisposalReach::Unplaced
@@ -397,6 +423,12 @@ pub(super) fn runs_in_disposal(
         match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) => at = call,
             LayerRun::FreshStack => return DisposalReach::NotIn,
+            // `NotIn` needs one run outside a disposal, which the in place run
+            // is; `Only` needs every run inside, which `among_others` denies.
+            LayerRun::InPlaceAmongOthers(call) => {
+                among_others = true;
+                at = call;
+            }
             LayerRun::Elsewhere => {
                 return match lookup.function_component_status(file, function) {
                     ComponentStatus::Proven => DisposalReach::NotIn,
@@ -790,7 +822,7 @@ fn unrun_layer_in_owner_keeping_callback(
         match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) => at = call,
             LayerRun::FreshStack => return false,
-            LayerRun::Elsewhere => {
+            LayerRun::Elsewhere | LayerRun::InPlaceAmongOthers(_) => {
                 unrun = true;
                 at = function.span;
             }
@@ -939,12 +971,23 @@ fn write_role_walk(
             //
             // Past an await the body runs on a later task with no owner, so
             // the root is no longer the ambient owner.
-            Some(WriteRegionAdjustment::CreatedRoot) => {
+            Some(
+                adjustment @ (WriteRegionAdjustment::CreatedRoot
+                | WriteRegionAdjustment::CreatedRootAmongOthers),
+            ) => {
                 if let Some(role) = suspended_write_role(file, span, lookup) {
                     return role;
                 }
                 match root_body {
                     RootBodyGuard::Rejects => return ExecutionRole::UntrackedRendering,
+                    // Legal in the run under the root; the callback's other runs
+                    // are not placed, so a legal write is no claim there.
+                    RootBodyGuard::Exempts
+                        if matches!(adjustment, WriteRegionAdjustment::CreatedRootAmongOthers) =>
+                    {
+                        *decided = true;
+                        return ExecutionRole::Unknown;
+                    }
                     RootBodyGuard::Exempts => return ExecutionRole::UntrackedCallback,
                     // The guard stands down while an owner is disposed, on the
                     // release that says so, and the write is written in a
@@ -1420,7 +1463,7 @@ fn layers_run_inline(
         match layer_run(file, layer, lookup) {
             LayerRun::FreshStack => return fresh_stack_ok,
             LayerRun::InPlace(_) => {}
-            LayerRun::Elsewhere => return false,
+            LayerRun::Elsewhere | LayerRun::InPlaceAmongOthers(_) => return false,
         }
         // The layer's own span is outside its body, so the function that owns
         // it is the enclosing function, or the function whose parameter list
@@ -1441,6 +1484,13 @@ enum LayerRun {
     /// ([`helper_runs_layer_inline`]): it runs on the stack of the call, which
     /// this span is.
     InPlace(Span),
+    /// A function that calls the parameter in its own body on every completion
+    /// ([`helper_runs_layer_inline`]) and also passes it on, stores it or
+    /// closes over it: one run is in place, the others are elsewhere. A
+    /// violation needs one run, so it may read the in place call; a legal write
+    /// needs every run, so its arms treat this as [`LayerRun::Elsewhere`]
+    /// (ADR 0457).
+    InPlaceAmongOthers(Span),
     /// An argument a reviewed scheduler runs on a fresh stack (`setTimeout(fn)`),
     /// which no owner reaches wherever it was scheduled from.
     FreshStack,
@@ -1482,8 +1532,11 @@ fn layer_run(
         (Some((_, RuntimeArgumentBehavior::FreshStackCallback)), _) => LayerRun::FreshStack,
         (Some((call, RuntimeArgumentBehavior::InlineCallback)), _) => LayerRun::InPlace(call),
         (_, Some(call)) => LayerRun::InPlace(call.span),
-        _ => helper_runs_layer_inline(file, layer, lookup)
-            .map_or(LayerRun::Elsewhere, LayerRun::InPlace),
+        _ => match helper_runs_layer_inline(file, layer, lookup) {
+            Some((call, ParameterUses::OnlyCalled)) => LayerRun::InPlace(call),
+            Some((call, ParameterUses::AlsoElsewhere)) => LayerRun::InPlaceAmongOthers(call),
+            None => LayerRun::Elsewhere,
+        },
     }
 }
 
@@ -1496,11 +1549,15 @@ fn layer_run(
 /// and under its owner: a callee that hands the parameter on (`runWithOwner(o,
 /// cb)`) or calls it in a closure (`createRoot(() => cb())`) proves nothing.
 /// A primitive's callback is the dialect's question, never this one.
+///
+/// The proof says the parameter is called at least once, not that every run of
+/// the callback is that call: [`ParameterUses::AlsoElsewhere`] says the callee
+/// has other uses of it.
 fn helper_runs_layer_inline(
     file: &solid_facts::FileFacts,
     layer: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
-) -> Option<Span> {
+) -> Option<(Span, ParameterUses)> {
     file.ast
         .arguments_containing(layer.span)
         .filter(|(call, index)| {
@@ -1513,8 +1570,11 @@ fn helper_runs_layer_inline(
             }
             let (callee_file, callee, exact) =
                 project_callee_at_parameter(file, call, index, lookup)?;
-            (exact && invokes_parameter_during_call(callee_file, callee, index, lookup))
-                .then_some(call.span)
+            if !exact {
+                return None;
+            }
+            parameter_uses_during_call(callee_file, callee, index, lookup)
+                .map(|uses| (call.span, uses))
         })
 }
 
