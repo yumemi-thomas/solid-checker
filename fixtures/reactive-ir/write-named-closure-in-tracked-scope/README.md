@@ -1,0 +1,3 @@
+# write-named-closure-in-tracked-scope
+
+**Claim.** A closure bound to a name inside a tracked scope (a memo or effect compute, a tracked JSX expression) is constructed there, not run there, so the scope's role (`TrackedJsx`) is no proof that its `SC2001` write throws: the closure runs where it is called (ADR 0450). A closure only returned or stored (`Returned`, `ReturnedDeclaration`, `Stored`) has no call to place and is uncertifiable, as the anonymous form (`Inline`) always was; a call in the scope's own pass (`CalledInCompute`, `CalledInComputeAndReturned`, `CalledInJsxExpression`) is a proven violation; a call only in a leaf scope (`CalledInLeafScope`) reports nothing. Stub: `createSignal`, `createMemo`, `createEffect` and `onSettled` shapes of rc.17.

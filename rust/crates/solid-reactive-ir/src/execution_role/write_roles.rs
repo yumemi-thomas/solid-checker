@@ -396,6 +396,22 @@ pub(super) fn semantic_write_role_walk(
     {
         return unknown;
     }
+    // The same holds for a closure bound to a name inside the tracked scope
+    // (ADR 0450): the scope runs its construction, not its body. The closure's
+    // own invocations decide, through the walk below.
+    let direct = if direct == ExecutionRole::TrackedJsx
+        && enclosed_by_named_closure_in_tracked_scope(
+            file,
+            span,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+        ) {
+        ExecutionRole::Unknown
+    } else {
+        direct
+    };
     // Past an await that dominates it, the write runs on a later task with no
     // owner, whatever its lexical role or its function's callers: legal, and
     // proven so, though in no single role.

@@ -108,6 +108,40 @@ pub(super) fn enclosed_by_stored_function(
     })
 }
 
+/// ADR 0450: whether `span` sits in a function bound to a name (`const openFn
+/// = () => …`, `function openFn() {…}`) that is constructed inside the tracked
+/// scope whose role the lexical position gave it. A tracked scope runs what is
+/// written in it, but constructing a named closure runs nothing: the closure
+/// runs where it is called, so the scope's role is no proof for its body. A
+/// stored literal has the same standing ([`enclosed_by_stored_function`]) but is
+/// anonymous; a named one is entered through its references, which the call
+/// sites of the write walk place (a call in the scope's own pass is a tracked
+/// call and proves the write; a closure only returned or stored has no call and
+/// stays unplaced).
+pub(super) fn enclosed_by_named_closure_in_tracked_scope(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast.functions_body_containing(span).any(|function| {
+        function.method_name.is_none()
+            && function_binding_name(file, function).is_some()
+            && lookup.function_component_status(file, function) == ComponentStatus::No
+            && semantic_execution_role_within(
+                file,
+                function.span,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                &mut HashSet::from_iter([write_classification_marker()]),
+            ) == ExecutionRole::TrackedJsx
+    })
+}
+
 /// Whether `span` is written in an async function after an `await` of that
 /// same function, by position. Only the function's own awaits count: one in a
 /// nested closure suspends that closure.

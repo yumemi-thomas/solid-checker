@@ -61,7 +61,8 @@ export const FILE_BUDGETS = {
   // 178,593 bytes before its entry, which removes the CI performance workflow); and for
   // ADR 0423 (the file stood 179,066 bytes before its entry, which adds the real-project gate).
   // Merging origin/main (the incremental-daemon track, ADRs 0382-0423) into the catalog-review branch (ADRs 0381, 0424-0448), with ADR 0449: the two sides' raises combine; the merged tree stood at 231,107 bytes: 232_000.
-  "docs/decisions.md": 232_000,
+  // And for ADR 0450 (the file stood 231,443 bytes before its entry): 233_000.
+  "docs/decisions.md": 233_000,
 };
 
 export const GROUP_BUDGETS = [
@@ -87,7 +88,8 @@ export const GROUP_BUDGETS = [
   // And for ADR 0446 (the reproduction set and the pre-release run): 665_446 bytes against 664_000: 667_000.
   // And for ADRs 0447-0448 (see above): 669_000.
   // Merging origin/main (the incremental-daemon track, ADRs 0382-0423) into the catalog-review branch (ADRs 0381, 0424-0448), with ADR 0449: the two sides' raises combine; the merged tree stood at 739,773 bytes: 741_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 741_000 },
+  // And for ADR 0450 (its entry and rule-page paragraph): 742_136 bytes against 741_000: 743_000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 743_000 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
@@ -103,7 +105,8 @@ export const GROUP_BUDGETS = [
     // And for the Opus review's fixes (suite bodies per runner, after-await and sync-dispatch variants): 295_000.
     // And for ADRs 0428-0429's fixtures (group key, suppression comments): 297_071 bytes against 295_000: 298_000.
     // And for ADRs 0444-0445's fixtures (workspace boundary, census with no entry): 298_292 bytes against 298_000: 299_500.
-    bytes: 299_500,
+    // And for ADR 0450's fixture: 300_248 bytes against 299_500: 300_500.
+    bytes: 300_500,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];
