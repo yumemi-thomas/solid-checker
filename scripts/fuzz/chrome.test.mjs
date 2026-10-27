@@ -126,6 +126,11 @@ describe("the checker on the instrumented text must give the clean findings", ()
     const moved = chromeChecker(r, [finding("no-write-in-pure-computation", 8), finding("strict-read-untracked", 12)]);
     expect(moved.perturbed).toEqual(["missing on the instrumented text: strict-read-untracked|violation|12"]);
   });
+  it("a missing clean reference (null) is a perturbation too; none given (undefined) compares nothing", () => {
+    const r = row({ diagnostics: [], findings: [finding("no-write-in-pure-computation", 8)] });
+    expect(chromeChecker(r, null).perturbed).toHaveLength(1);
+    expect(chromeChecker(r, undefined).perturbed).toEqual([]);
+  });
   it("a perturbed checker makes the candidate inconclusive, never confirmed", () => {
     const r = row({ diagnostics: [], findings: [finding("no-write-in-pure-computation", 8)] });
     const checker = chromeChecker(r, [finding("no-write-in-pure-computation", 8), finding("strict-read-untracked", 12, "uncertifiable")]);

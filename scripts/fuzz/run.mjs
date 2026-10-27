@@ -133,8 +133,12 @@ async function main(options) {
     // Chrome decides. Without it a candidate stays a candidate.
     let chrome = new Map();
     if (options.confirmWithChrome && candidates.length) {
-      chrome = await runChrome(candidates.map((value) => ({ id: value.built.id, dir: join(config.casesDir, value.built.id), sites: value.built.sites, findings: value.checker.findings })),
-        { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency });
+      const chromeCases = candidates.map((value) => ({ id: value.built.id, dir: join(config.casesDir, value.built.id), sites: value.built.sites }));
+      const chromeOptions = { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency };
+      // The clean case first, in Chrome: the oracle's own findings on the clean text are what its findings on the twin must equal
+      // (the oracle reports kinds the fast checker adapter does not, so the fast pipeline's findings are not the reference).
+      const cleanRuns = await runChrome(chromeCases, { ...chromeOptions, control: true });
+      chrome = await runChrome(chromeCases.map((c) => ({ ...c, findings: cleanRuns.get(c.id)?.checker?.ok ? cleanRuns.get(c.id).checker.findings : null })), chromeOptions);
     }
     for (const value of candidates) {
       const record = chrome.get(value.built.id);

@@ -74,7 +74,7 @@ export const chromeChecker = (row, cleanFindings) => {
   const findings = row.findings ?? [];
   // The oracle checks whatever App.tsx it is given, which here is the instrumented twin. Its findings must be the ones
   // the clean text got (rule, kind, line); a difference means the counters perturbed the checker, and nothing it says counts.
-  const perturbed = cleanFindings === undefined ? [] : findingsDiff(cleanFindings, findings);
+  const perturbed = cleanFindings === undefined ? [] : cleanFindings === null ? ["no clean reference run in Chrome to compare with"] : findingsDiff(cleanFindings, findings);
   return { ok: !["harness-error", "type-error"].includes(row.verdict), error: row.error, findings, perturbed };
 };
 
@@ -92,8 +92,8 @@ function spawnOracle(args, env) {
  * Runs the cases through scripts/runtime-oracle.mjs and returns `Map<id, { row, runtime, checker }>`.
  * Exit status 1 from the oracle (a finding it reports as unproven-clean, say) is not a failure here.
  * Each case runs its instrumented twin (App.run.txt as App.tsx, oracle.run.json as oracle.json) so the hit ledger is read
- * back; `control: true` runs the clean case unchanged instead. `findings` (the fast pipeline's, on the clean text) are
- * compared with the oracle's on the twin.
+ * back; `control: true` runs the clean case unchanged instead. `findings` (the oracle's own on the clean text, from a
+ * `control: true` run) are compared with the oracle's on the twin; without them nothing is compared.
  * @param {{ id: string, dir: string, sites: object[], findings?: object[] }[]} cases
  */
 export async function runChrome(cases, { out, install = DEFAULT_ORACLE_INSTALL, bin, typefacts, browser, concurrency, control = false, env = process.env }) {
