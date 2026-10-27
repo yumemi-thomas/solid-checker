@@ -1,8 +1,8 @@
 # runtime-oracle
 
-Cases for `scripts/runtime-oracle.mjs`: each runs in Chrome on the Solid 2 dev build, and its diagnostics are compared with the checker's verdict at the same site. An unmatched dev diagnostic is an unproven clean claim. Cases run in `../solid-checker-rc17-corpus/apps/helge-dev` (rc.17; `--install` overrides) against the real packages: `*.d.ts` stubs and `node_modules` are not copied, and a case `tsc` rejects is `type-error`.
+Cases for `scripts/runtime-oracle.mjs`: each runs in Chrome on the Solid 2 dev build, and its diagnostics are compared with the checker's verdict at the same site. An unmatched dev diagnostic is an unproven clean claim. Cases run in the pinned rc.17 install `scripts/runtime-oracle-install` (`make runtime-oracle-install`; ADR 0453, script header) against the real packages: `*.d.ts` stubs and `node_modules` are not copied, and a case `tsc` rejects is `type-error`.
 
-A case is a directory with an `App.tsx` and no `tsconfig.json`; all exported components render and all elements receive events. Optional `oracle.json`: `note`, `steps`, `programBoundary` (`open` or `closed`), `install` (corpus app with the same Solid version), `open` (known unproven clean sites `{ code, site, reason }`, or `{ rule, site, reason }` for an observation; a site that stops firing is `stale-open`), and `behaviour` (below).
+A case is a directory with an `App.tsx` and no `tsconfig.json`; all exported components render and all elements receive events. Optional `oracle.json`: `note`, `steps`, `programBoundary` (`open` or `closed`), `open` (known unproven clean sites `{ code, site, reason }`, or `{ rule, site, reason }` for an observation; a site that stops firing is `stale-open`), and `behaviour` (below).
 
 Verdicts: `covered-violation` and `covered-uncertifiable` (a finding on the diagnostic's line or an application frame), `unproven-clean` (exit 1), `known-open`, `no-rule`; `static-only` (a checker violation with no dev diagnostic and no observation: inspect it before calling it a false positive); `behaviour-confirmed`, `behaviour-refuted`, `behaviour-clean`, `behaviour-unexpected`; collector failures are `harness-error`.
 
@@ -68,4 +68,4 @@ The `oracle-behaviour-primitive-in-directive` control's `missing-owner` finding 
 
 A diagnostic covers a finding when the finding's lines include the diagnostic's site or one of its application frames, and its code claims the finding's rule. The runtime attributes a read to the call that led to it, so the read's own line is a frame, not the site. `oracle-frame-covered-sc1004` pins this: a `components-return-once` finding at a props read (`App.tsx:9`) is a frame of the `STRICT_READ_UNTRACKED` diagnostic sited at `Parent`'s call (`App.tsx:17`), and must not print as `static-only`.
 
-The `identity` and `thrown` observation kinds are implemented, but no committed case uses them yet.
+The `identity` and `thrown` observation kinds have no committed case yet.

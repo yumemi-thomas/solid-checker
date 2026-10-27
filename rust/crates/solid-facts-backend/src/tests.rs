@@ -469,6 +469,47 @@ fn array_shape_demands_are_limited_to_compiler_proven_jsx_maps() {
 }
 
 #[test]
+fn declared_key_demands_are_limited_to_intrinsic_element_spreads() {
+    let file = test_file_facts(
+        "src/spreads.tsx",
+        "const a = <div {...props} />; const b = <Card {...props} />; const c = <ui.Box {...props} />;",
+    );
+    let spread_span = |tag: &str| {
+        file.ast
+            .jsx_elements
+            .iter()
+            .find(|element| file.source_text(element.name.span) == Some(tag))
+            .and_then(|element| element.spreads.first())
+            .map(|spread| spread.argument)
+            .unwrap_or_else(|| panic!("no spread on {tag}"))
+    };
+    let demands = semantic_demands(
+        dialect::default_dialect(),
+        std::slice::from_ref(&file),
+        SemanticDemandOptions::NONE,
+    )
+    .unwrap();
+    let declared_keys = |tag: &str| {
+        let location = typefacts_location(file.path.as_str(), spread_span(tag));
+        demands
+            .iter()
+            .any(|demand| demand.location == location && demand.declared_keys)
+    };
+    assert!(declared_keys("div"), "an intrinsic element's spread asks");
+    assert!(
+        !declared_keys("Card"),
+        "a component's spread is not a handler site"
+    );
+    assert!(
+        demands
+            .iter()
+            .filter(|demand| demand.declared_keys)
+            .all(|demand| !demand.symbol),
+        "the demand carries no symbol observation"
+    );
+}
+
+#[test]
 fn returned_member_calls_combine_symbol_and_resolved_call_demands() {
     let file = test_file_facts(
         "src/cleanup.ts",
@@ -857,6 +898,7 @@ const STUB_RULE: solid_reactive_ir::RuleMetadata = solid_reactive_ir::RuleMetada
     severity: "warning",
     uncertifiable: false,
     default_enabled: true,
+    configurable: true,
     presets: &[],
 };
 
@@ -889,6 +931,7 @@ static STUB_DIALECT: dialect::Dialect = dialect::Dialect {
     solve_measured: stub_solve,
     docs_url: |rule| format!("stub://docs/{rule}"),
     has_rule: |_| false,
+    has_code: |_| false,
     rule_metadata: |rule| (rule == STUB_RULE.name).then_some(STUB_RULE),
     semantic_demands: dialect::SemanticDemandCapabilities::NONE,
     catalog_capabilities: solid_reactive_ir::CatalogCapabilities::SOLID_2,

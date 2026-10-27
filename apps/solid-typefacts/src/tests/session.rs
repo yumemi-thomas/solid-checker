@@ -158,6 +158,7 @@ fn latest_semantic_domains_are_available_in_v1() {
         array_shape: true,
         tuple_shape: true,
         library_types: true,
+        declared_keys: true,
         ..EntityDemand::default()
     };
     let mut session = source_session();
@@ -173,7 +174,7 @@ fn latest_semantic_domains_are_available_in_v1() {
     let summary = inspect_table_transition(&response.table_transition).unwrap();
     assert_eq!(
         summary.table_schema,
-        TYPE_FACTS_SCHEMA_V1 + 21,
+        TYPE_FACTS_SCHEMA_V1 + 22,
         "active wire table schema"
     );
 

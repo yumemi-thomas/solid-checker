@@ -717,7 +717,9 @@ impl Memo<BuildSchema> for SpreadTargetsAt {
                 let targets = if cx.hazard(Hazard::Eval) {
                     None
                 } else {
-                    spread_handlers(cx, slot, file, argument, &references)?
+                    spread_handlers(cx, slot, file, argument, &references)?.or_else(|| {
+                        declared_keys_hold_no_listener(cx, slot, spread.argument).then(Vec::new)
+                    })
                 };
                 spreads.push((spread.argument, targets));
             }
@@ -732,6 +734,22 @@ impl Memo<BuildSchema> for SpreadTargetsAt {
     fn implied((id, _): &SlotKey) -> Vec<Input> {
         own_inputs(*id)
     }
+}
+
+/// ADR 0436: a spread argument that no exact object resolves still holds no
+/// handler when the compiler gives its declared type a complete key set and the
+/// dialect lowers none of those keys as a listener. A key set the producer did
+/// not prove complete (an index signature, `any`, a union with an open member,
+/// a generic type) is no fact, and an unaudited dialect answers `None` for
+/// every key; both leave the spread unresolved.
+fn declared_keys_hold_no_listener(cx: Cx<'_, '_, '_>, slot: Slot, argument: Span) -> bool {
+    cx.file(slot.id, slot.rank as usize)
+        .and_then(|read| read.entity_at(argument))
+        .and_then(|entity| entity.declared_keys.as_deref())
+        .is_some_and(|keys| {
+            keys.iter()
+                .all(|key| cx.dialect().spread_key_is_event(key) == Some(false))
+        })
 }
 
 /// The handlers one spread argument supplies. An object literal written in

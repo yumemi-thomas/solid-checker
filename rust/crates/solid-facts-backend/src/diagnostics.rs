@@ -8,8 +8,8 @@ use std::{
 use serde::{Deserialize, Serialize};
 use solid_facts::ProjectFacts;
 use solid_reactive_ir::{
-    AnalysisInputs, CacheRetention, Finding, IncrementalBuilder, Program, RuleOptions,
-    RuntimeEnvironment, suppress_findings_owned_by_enabled_rules,
+    AnalysisInputs, CacheRetention, Finding, IncrementalBuilder, Program, ProgramBoundary,
+    RuleOptions, RuntimeEnvironment, suppress_findings_owned_by_enabled_rules,
 };
 
 use crate::dialect::{self, Dialect};
@@ -118,6 +118,12 @@ pub struct RequestedRuleEnablement<'a> {
     pub rules: &'a [String],
     pub runtime: RuntimeEnvironment,
     pub feedback_facts: bool,
+    /// Rule ids the host suppresses `eslint-disable` comments for (ADR 0429).
+    pub host_suppressions: &'a [String],
+    /// The default program boundary the caller already decided for this
+    /// project in this request, used where the runtime selects none; `None`
+    /// decides it here (ADR 0444).
+    pub default_program_boundary: Option<ProgramBoundary>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -332,13 +338,18 @@ impl DiagnosticSession {
         let mut rule_options = discover_rule_options(project)?;
         rule_options.request_presets(enablement.presets.iter().cloned());
         rule_options.request_rules(enablement.rules.iter().cloned());
+        rule_options.request_host_suppressions(enablement.host_suppressions.iter().cloned());
         enablement
             .runtime
             .validate()
             .map_err(BackendError::RuntimePremise)?;
         rule_options.runtime = enablement.runtime;
         if rule_options.runtime.program_boundary.is_none() {
-            rule_options.runtime.program_boundary = Some(default_program_boundary(project));
+            rule_options.runtime.program_boundary = Some(
+                enablement
+                    .default_program_boundary
+                    .unwrap_or_else(|| default_program_boundary(project)),
+            );
         }
         rule_options.runtime.router_install =
             crate::installed_bytes::router_install_evidence(project, facts);
@@ -483,7 +494,7 @@ impl DiagnosticSession {
         // nothing about it is proven, and neither is anything a finding
         // elsewhere reaches through it. Its sites are unplaced in the IR; a
         // violation located in it, or whose evidence passes through it, is an
-        // obligation here. Each refused file gets a project-level notice.
+        // obligation here. Each refused file gets one SC9015 (ADR 0441).
         let refused = facts
             .files
             .iter()
@@ -515,10 +526,29 @@ impl DiagnosticSession {
                     );
                 }
             }
+            let compiler = (self.dialect.compiler)();
             for (path, message) in &refused {
-                findings.push(compiler_refused_finding(path, message));
+                let reason = message
+                    .strip_prefix(path)
+                    .and_then(|rest| rest.strip_prefix(": "))
+                    .unwrap_or(message);
+                findings.push(compiler_refused_finding(
+                    path,
+                    message,
+                    compiler.classify_refusal(reason),
+                ));
             }
         }
+        // ADR 0429: after every reclassification, so a comment removes only a
+        // violation that would have been reported, and before the notices,
+        // which have no site to comment on.
+        let unknown_names = crate::suppression::apply(
+            self.dialect,
+            facts,
+            rule_options.host_suppressions(),
+            &mut findings,
+        );
+        findings.extend(unknown_names);
         let metrics = analysis_metrics(facts, &program);
         let mut snapshot = snapshot_of(sources, metrics, findings);
         // A disabled coverage rule hides its obligations, not the gap they
@@ -542,6 +572,9 @@ impl DiagnosticSession {
         if !facts.dependency_source_roots.is_empty() {
             snapshot.premises.push("package integrity (ADR 0300): code outside the analyzed program neither provides selected packages' exported contexts nor rewrites objects those packages create".into());
         }
+        snapshot
+            .premises
+            .extend(program.event_dispatch_sites.iter().map(dispatch_premise));
         let analysis = Arc::new(DiagnosticAnalysis { program, snapshot });
         self.retained = Some(RetainedDiagnostic {
             identity,
@@ -595,9 +628,10 @@ pub fn analyze_project_inputs_measured_with_enablement(
         .analyze_inputs_measured_with_enablement(project, sources, facts, inputs, enablement)
 }
 
-/// Drops the findings of disabled rules. Returns the dropped findings of
-/// coverage rules (`RuleMetadata::uncertifiable`: SC9005, SC9011, SC9012),
-/// which report where the analysis is incomplete rather than a defect.
+/// Drops the findings of disabled rules. Returns the dropped uncertifiable
+/// findings (`RuleMetadata::uncertifiable`), which report where the analysis is
+/// incomplete rather than a defect. An obligation (SC9005, SC9012) is never
+/// dropped: it has no key to disable it (ADR 0440).
 fn retain_enabled(
     dialect: &Dialect,
     options: &RuleOptions,
@@ -607,12 +641,15 @@ fn retain_enabled(
     let mut withheld_coverage = Vec::new();
     for finding in std::mem::take(findings) {
         match (dialect.rule_metadata)(&finding.rule) {
+            // An obligation has no key, so nothing disables it (ADR 0440).
             Some(metadata)
-                if options.is_enabled(
-                    &finding.rule,
-                    metadata.default_enabled,
-                    metadata.presets,
-                ) =>
+                if !metadata.configurable
+                    || options.is_enabled_for_code(
+                        &finding.rule,
+                        &finding.id,
+                        metadata.default_enabled,
+                        metadata.presets,
+                    ) =>
             {
                 findings.push(finding);
             }
@@ -792,6 +829,7 @@ pub fn unaudited_release_finding(notice: &dialect::ReleaseNotice) -> Finding {
         severity: "warning",
         uncertifiable: true,
         default_enabled: true,
+        configurable: true,
         presets: &[],
     };
     let mut finding = Finding::new(metadata, message, location);
@@ -844,6 +882,7 @@ pub fn unaudited_router_finding(
         severity: "warning",
         uncertifiable: true,
         default_enabled: true,
+        configurable: true,
         presets: &[],
     };
     let mut finding = Finding::new(metadata, message, location.clone());
@@ -865,13 +904,22 @@ pub fn unaudited_router_finding(
     finding
 }
 
-/// The `SC9015` notice for a file the dialect compiler refused (ADR 0360). It
-/// is about the file, not a site in it, and states the compiler's own message:
-/// the file has no compiler facts, so the analysis claims nothing about it and
-/// withholds what depends on it. Project-level like SC9014, so a run that
-/// would otherwise look clean shows it and `--certify` fails.
+/// The `SC9015` finding for a file the dialect compiler refused (ADR 0360,
+/// 0441). It is about the file, not a site in it, and states the compiler's
+/// own message: the file has no compiler facts, so the analysis claims nothing
+/// else about it and withholds what depends on it.
+///
+/// A refusal the dialect proves a defect of the source (and `tsc` does not
+/// also report) is a violation, one per file. Any other is the project-level
+/// notice of ADR 0360, as SC9014's is, so a run that would otherwise look
+/// clean shows it and `--certify` fails.
 #[must_use]
-pub fn compiler_refused_finding(path: &str, message: &str) -> Finding {
+pub fn compiler_refused_finding(
+    path: &str,
+    message: &str,
+    verdict: solid_facts::compiler::RefusalVerdict,
+) -> Finding {
+    use solid_facts::compiler::RefusalVerdict;
     let location = typefacts::Location {
         path: path.into(),
         start_byte: 0,
@@ -884,24 +932,41 @@ pub fn compiler_refused_finding(path: &str, message: &str) -> Finding {
     // The compiler's first line names the refusal; the rest (the malformed
     // markup, say) goes in the evidence.
     let summary = reason.lines().next().unwrap_or(reason).trim_end();
+    let proven = verdict == RefusalVerdict::ProvenDefect;
     let metadata = solid_reactive_ir::RuleMetadata {
         code: dialect::COMPILER_REFUSED_CODE,
         name: dialect::COMPILER_REFUSED_RULE,
-        severity: "warning",
-        uncertifiable: true,
+        severity: if proven { "error" } else { "warning" },
+        uncertifiable: !proven,
         default_enabled: true,
+        configurable: true,
         presets: &[],
     };
-    let mut finding = Finding::new(
-        metadata,
-        format!(
-            "the Solid compiler refused {path}: {summary}; the file has no compiler facts, so nothing in it is proven and findings that depend on it are not proven either"
-        ),
-        location.clone(),
-    );
-    finding.hint = "Findings beside this notice that do not depend on the file stand. To have the file analyzed, rewrite the construct the compiler names in a form the pinned Solid 2 compiler accepts.".into();
-    finding.analysis_context = "compiler-facts".into();
-    finding.subject_kind = "project".into();
+    let mut finding = if proven {
+        let mut finding = Finding::new(
+            metadata,
+            format!(
+                "the pinned Solid 2 compiler refuses {path}: {summary}; the compiler rejects this construct whatever the options, so the file does not build with it, and the file has no compiler facts"
+            ),
+            location.clone(),
+        );
+        finding.hint = "Rewrite the construct the compiler names in the form it gives, as the compiler's message says. The refusal is judged against the pinned compiler, not the one installed here (docs/rules/compiler-refused-source.md).".into();
+        finding.analysis_context = "compiler-refusal".into();
+        finding.subject_kind = "file".into();
+        finding
+    } else {
+        let mut finding = Finding::new(
+            metadata,
+            format!(
+                "the Solid compiler refused {path}: {summary}; the file has no compiler facts, so nothing in it is proven and findings that depend on it are not proven either"
+            ),
+            location.clone(),
+        );
+        finding.hint = "Findings beside this notice that do not depend on the file stand. To have the file analyzed, rewrite the construct the compiler names in a form the pinned Solid 2 compiler accepts.".into();
+        finding.analysis_context = "compiler-facts".into();
+        finding.subject_kind = "project".into();
+        finding
+    };
     finding.evidence = vec![solid_reactive_ir::EvidenceStep {
         message: format!("the compiler's message: {reason}"),
         location: Some(location),
@@ -1325,52 +1390,7 @@ fn discover_package_install(
     Ok(None)
 }
 
-/// The program boundary a check uses when the user selected none (ADR 0193).
-///
-/// An application is the whole program: every caller of its exported
-/// components and hooks is one of its own call sites. A published library is
-/// not. The nearest `package.json` at or above the project decides:
-///
-/// - `"private": true` is an application;
-/// - otherwise, a manifest that publishes an entry (`exports`, `main`,
-///   `module`, `types`, `typings` or `bin`) is a library;
-/// - a manifest that publishes nothing is an application.
-///
-/// No manifest, or one that cannot be read, keeps the open boundary: a build
-/// that cannot tell stays fail-closed.
-pub(crate) fn default_program_boundary(project: &Path) -> solid_reactive_ir::ProgramBoundary {
-    use solid_reactive_ir::ProgramBoundary;
-    let start = if project.is_dir() {
-        project
-    } else {
-        project.parent().unwrap_or(project)
-    };
-    let Some(manifest) = start
-        .ancestors()
-        .map(|directory| directory.join("package.json"))
-        .find(|candidate| candidate.is_file())
-    else {
-        return ProgramBoundary::Open;
-    };
-    let Ok(text) = std::fs::read_to_string(&manifest) else {
-        return ProgramBoundary::Open;
-    };
-    let Ok(serde_json::Value::Object(fields)) = serde_json::from_str::<serde_json::Value>(&text)
-    else {
-        return ProgramBoundary::Open;
-    };
-    if fields.get("private") == Some(&serde_json::Value::Bool(true)) {
-        return ProgramBoundary::Closed;
-    }
-    let publishes = ["exports", "main", "module", "types", "typings", "bin"]
-        .iter()
-        .any(|field| fields.contains_key(*field));
-    if publishes {
-        ProgramBoundary::Open
-    } else {
-        ProgramBoundary::Closed
-    }
-}
+pub(crate) use crate::program_boundary::default_program_boundary;
 
 /// Loads the project's per-rule options from the nearest
 /// `.solid-checker/rule-options.json`, walking ancestors. A project without one gets upstream's defaults;
@@ -1421,10 +1441,16 @@ fn discover_rule_options_with(
         let candidate = ancestor.join(".solid-checker").join("rule-options.json");
         match fs::read_to_string(&candidate) {
             Ok(encoded) => {
-                return RuleOptions::parse_with_aliases(&encoded, &has_rule, dialect::rule_alias)
-                    .map_err(|error| {
-                        BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
-                    });
+                return RuleOptions::parse_with_groups(
+                    &encoded,
+                    &has_rule,
+                    dialect::rule_alias,
+                    dialect::rule_alias_code,
+                    dialect::rule_group,
+                )
+                .map_err(|error| {
+                    BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
+                });
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),
@@ -1448,6 +1474,34 @@ pub fn discovered_rule_options_path(project_directory: &Path) -> Option<PathBuf>
         }
     }
     None
+}
+
+/// ADR 0435: one synchronous DOM dispatch call. A site that withholds event
+/// proofs says which; an excluded one says why, so a report lists everything
+/// the veto decided.
+fn dispatch_premise(site: &solid_reactive_ir::EventDispatchSite) -> String {
+    let at = format!("{}:{}", site.path, site.line);
+    let withheld = match (site.withholds_owner_proofs, site.withholds_read_proofs) {
+        (true, true) => "owner and read proofs",
+        (true, false) => "owner proofs",
+        (false, true) => "read proofs",
+        (false, false) => "",
+    };
+    if withheld.is_empty() {
+        let why = match site.receiver.as_str() {
+            "window" | "document" => format!("receiver {}", site.receiver),
+            _ => format!("caller {}", site.caller.as_deref().unwrap_or("unproven")),
+        };
+        return format!("synchronous dispatch (ADR 0435) at {at} excluded: {why}");
+    }
+    let caller = site
+        .caller
+        .as_deref()
+        .map_or_else(String::new, |caller| format!(", caller {caller}"));
+    format!(
+        "synchronous dispatch (ADR 0435) at {at} withholds event handler {withheld}: receiver {}{caller}",
+        site.receiver
+    )
 }
 
 #[cfg(test)]

@@ -140,6 +140,9 @@ pub fn prepare_rows(
         if entity.library_types.is_some() {
             target.library_types = entity.library_types;
         }
+        if entity.declared_keys.is_some() {
+            target.declared_keys = entity.declared_keys;
+        }
         if entity.reference_space.is_some() {
             target.reference_space = entity.reference_space;
         }

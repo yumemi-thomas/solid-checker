@@ -10,7 +10,7 @@ declare const thenable: PromiseLike<number>;
 
 // Positive (violation): a read in the component body runs inside the
 // strict-read window.
-function Body() {
+export function Body() {
   console.log(count());
   return <div />;
 }
@@ -18,55 +18,55 @@ function Body() {
 // Uncertifiable: a host API retains each of these callbacks and may invoke it
 // on its invoker's stack -- inside the component body's strict-read window when
 // the body hands control back synchronously, after it otherwise.
-function ElementListener() {
+export function ElementListener() {
   element.addEventListener("click", () => console.log(count()));
   return <div />;
 }
 
-function InputListener() {
+export function InputListener() {
   input.addEventListener("input", () => console.log(count()));
   return <div />;
 }
 
-function TargetListener() {
+export function TargetListener() {
   target.addEventListener("change", () => console.log(count()));
   return <div />;
 }
 
-function WindowListener() {
+export function WindowListener() {
   window.addEventListener("resize", () => console.log(count()));
   return <div />;
 }
 
-function DocumentListener() {
+export function DocumentListener() {
   document.addEventListener("keydown", () => console.log(count()));
   return <div />;
 }
 
-function Thenable() {
+export function Thenable() {
   thenable.then(() => console.log(count()));
   return <div />;
 }
 
-function Bound() {
+export function Bound() {
   const log = (read: () => number) => console.log(read());
   log.bind(null, () => count());
   return <div />;
 }
 
-function Geolocation() {
+export function Geolocation() {
   navigator.geolocation.getCurrentPosition(() => console.log(count()));
   return <div />;
 }
 
 // Uncertifiable: a standard-library inline callback inside the listener runs
 // where the listener does, and a read through a local helper called there too.
-function ListenerForEach() {
+export function ListenerForEach() {
   element.addEventListener("click", () => list.forEach(() => console.log(count())));
   return <div />;
 }
 
-function ListenerHelper() {
+export function ListenerHelper() {
   const read = () => count();
   element.addEventListener("click", () => console.log(read()));
   return <div />;
@@ -76,7 +76,7 @@ function ListenerHelper() {
 // registering, which does run the listener inside the window, but the checker
 // does not prove a dispatch reaches a registered listener (same target, same
 // event type, no removal in between, on every path).
-function DispatchedInBody() {
+export function DispatchedInBody() {
   target.addEventListener("ping", () => console.log(count()));
   target.dispatchEvent(new Event("ping"));
   return <div />;
@@ -84,7 +84,7 @@ function DispatchedInBody() {
 
 // Uncertifiable SC5001: inside the window a pending read throws
 // PENDING_ASYNC_UNTRACKED_READ, after it a plain NotReadyError.
-function ListenerAsync() {
+export function ListenerAsync() {
   const user = createMemo(async () => 1);
   element.addEventListener("click", () => console.log(user()));
   return <div />;
@@ -92,12 +92,12 @@ function ListenerAsync() {
 
 // Negatives: a fresh-stack scheduler runs its callback after the body returned,
 // and a JSX event handler is the compiler's event callback.
-function Timer() {
+export function Timer() {
   setTimeout(() => console.log(count()), 0);
   return <div />;
 }
 
-function Handler() {
+export function Handler() {
   return <button onClick={() => console.log(count())} />;
 }
 
@@ -108,7 +108,7 @@ const bus = {
     listener();
   },
 };
-function LocalBus() {
+export function LocalBus() {
   bus.addEventListener("tick", () => console.log(count()));
   return <div />;
 }

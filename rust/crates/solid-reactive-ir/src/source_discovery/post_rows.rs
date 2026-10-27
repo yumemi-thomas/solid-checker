@@ -551,6 +551,7 @@ pub(super) enum TypedRow {
         name: SymbolId,
         declaration: Location,
         kind: ReactiveSourceKind,
+        owned_write: crate::OwnedWriteOption,
     },
 }
 
@@ -711,16 +712,22 @@ pub(super) fn typed_rows(
             | solid_dialect::TypeRole::Signal
             | solid_dialect::TypeRole::Store => unreachable!(),
             solid_dialect::TypeRole::Setter | solid_dialect::TypeRole::StoreSetter => {
-                let kind = if role == solid_dialect::TypeRole::StoreSetter {
-                    ReactiveSourceKind::Store
+                let (kind, owned_write) = if role == solid_dialect::TypeRole::StoreSetter {
+                    (ReactiveSourceKind::Store, crate::OwnedWriteOption::Off)
                 } else {
-                    ReactiveSourceKind::Accessor
+                    // Found by its type alone: the source, and so its options,
+                    // are out of view (ADR 0424).
+                    (
+                        ReactiveSourceKind::Accessor,
+                        crate::OwnedWriteOption::Unknown,
+                    )
                 };
                 rows.push(TypedRow::Setter {
                     symbol: symbol.clone(),
                     name: symbol_id(name.as_ref()),
                     declaration: declaration_location,
                     kind,
+                    owned_write,
                 });
             }
             solid_dialect::TypeRole::Component | solid_dialect::TypeRole::Owner => unreachable!(),

@@ -50,8 +50,8 @@ fn catalog_prose_program() -> Program {
             position: "sample expression".into(),
         },
         StaticDefectKind::DirectMutation {
-            name: "sampleAccessor".into(),
-            target: DirectMutationTarget::AccessorBinding,
+            name: "sampleProjection".into(),
+            target: DirectMutationTarget::Projection,
         },
         StaticDefectKind::DirectMutation {
             name: "sampleStore".into(),
@@ -60,10 +60,6 @@ fn catalog_prose_program() -> Program {
         StaticDefectKind::DirectMutation {
             name: "sampleProps".into(),
             target: DirectMutationTarget::Props,
-        },
-        StaticDefectKind::DirectMutation {
-            name: "sampleValue".into(),
-            target: DirectMutationTarget::ReactiveValue,
         },
     ];
     Program {
@@ -93,7 +89,7 @@ fn catalog_prose_program() -> Program {
             location: location(3),
             declaration: location(4),
             execution: ExecutionRole::TrackedJsx,
-            allowed_by_option: false,
+            owned_write: solid_reactive_ir::OwnedWriteOption::Off,
             context: "sample computation".into(),
         }],
         missing_owners: vec![OwnerRequirement {
@@ -195,14 +191,52 @@ fn dialect_ids_are_unique_and_resolvable() {
 fn compatibility_registry_counts_match_the_catalog_migration() {
     assert_eq!(
         RULE_ALIASES.len(),
-        20,
+        21,
         "the migration note must list every transferred configuration key"
     );
     assert_eq!(
         RETIRED_RULES.len(),
-        57,
-        "eight pre-existing TypeScript redundancies, 31 catalog-reduction identities, and the 18 the 1.x catalog still declared when ADR 0110 deleted it"
+        64,
+        "eight pre-existing TypeScript redundancies, 31 catalog-reduction identities, the 18 the 1.x catalog still declared when ADR 0110 deleted it, and the seven names of SC9005, SC9011 and SC9012 (ADR 0440)"
     );
+}
+
+/// ADR 0428: a group is a key over rules, never a rule or a former name, and
+/// each member is a real rule of the one catalog that carries the group.
+#[test]
+fn rule_groups_name_catalog_rules_and_collide_with_no_identity() {
+    assert_eq!(
+        RULE_GROUPS
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>(),
+        ["reactivity"]
+    );
+    let v2 = default_dialect();
+    for (group, members) in RULE_GROUPS {
+        assert!(!members.is_empty());
+        for member in *members {
+            assert!((v2.has_rule)(member), "{group}: {member}");
+            assert!(rule_group(member).is_none());
+        }
+        assert!(!(v2.has_rule)(group), "{group} must not also be a rule");
+        assert!(rule_alias(group).is_none() && retired_rule(group).is_none());
+    }
+    assert_eq!(
+        rule_group("reactivity"),
+        Some(
+            &[
+                "strict-read-untracked",
+                "reactive-read-after-await",
+                "uncalled-accessor",
+                "reactive-handler-frozen"
+            ][..]
+        )
+    );
+    // SC1003 keeps its own key in upstream (ADR 0428), and SC4001 has no
+    // upstream counterpart: neither belongs to the group.
+    let members = rule_group("reactivity").unwrap();
+    assert!(!members.contains(&"no-destructure") && !members.contains(&"missing-owner"));
 }
 
 #[test]
@@ -210,9 +244,25 @@ fn every_catalog_identity_resolves_to_its_metadata() {
     for dialect in ALL {
         if dialect.id == "solid-v2" {
             for rule in solid_v2_rules::Rule::ALL {
+                // A name is the lookup key (ADR 0426): codes sharing one name
+                // resolve to the first of them, and agree on all else.
+                let found = (dialect.rule_metadata)(rule.metadata().name).unwrap();
+                let expected = rule.metadata();
                 assert_eq!(
-                    (dialect.rule_metadata)(rule.metadata().name),
-                    Some(rule.metadata())
+                    (
+                        found.name,
+                        found.severity,
+                        found.uncertifiable,
+                        found.default_enabled,
+                        found.presets
+                    ),
+                    (
+                        expected.name,
+                        expected.severity,
+                        expected.uncertifiable,
+                        expected.default_enabled,
+                        expected.presets
+                    )
                 );
             }
         }
@@ -1000,33 +1050,57 @@ fn every_release_variant_is_one_its_language_lists() {
     ));
 }
 
-/// ADR 0360: the refused-file notice's identity is the catalog's, and it is a
-/// project-level notice quoting the compiler's first line.
+/// ADR 0360, 0441: the refused-file finding's identity is the catalog's. A
+/// proven refusal is the catalog's error, one per file; any other refusal is
+/// the project-level notice quoting the compiler's first line.
 #[cfg(feature = "dialect-v2")]
 #[test]
-fn the_compiler_refusal_notice_identity_is_the_one_the_catalog_publishes() {
+fn the_compiler_refusal_identity_is_the_one_the_catalog_publishes() {
+    use solid_facts::compiler::RefusalVerdict;
     let dialect = by_id("solid-v2").expect("the 2.0 dialect is compiled in");
     let metadata = (dialect.rule_metadata)(COMPILER_REFUSED_RULE)
         .unwrap_or_else(|| panic!("the 2.0 catalog must declare {COMPILER_REFUSED_RULE}"));
     assert_eq!(metadata.code, COMPILER_REFUSED_CODE);
-    assert!(metadata.uncertifiable);
-    let finding = crate::diagnostics::compiler_refused_finding(
+    assert!(!metadata.uncertifiable);
+    assert_eq!(metadata.severity, "error");
+    let proven = crate::diagnostics::compiler_refused_finding(
         "/app/View.tsx",
-        "/app/View.tsx: The HTML provided is malformed. (3:5)\nUser HTML:\n <p><p></p></p>",
+        "/app/View.tsx: `attr:data-z` on <p> uses the `attr:` namespace, which was removed in Solid 2.0. Attributes are the default in 2.0. (3:5)",
+        RefusalVerdict::ProvenDefect,
     );
-    assert_eq!(finding.id, metadata.code);
-    assert_eq!(finding.rule, metadata.name);
-    assert_eq!(finding.severity, metadata.severity);
-    assert_eq!(finding.kind, "uncertifiable");
-    assert_eq!(finding.subject_kind, "project");
+    assert_eq!(proven.id, metadata.code);
+    assert_eq!(proven.rule, metadata.name);
+    assert_eq!(proven.severity, metadata.severity);
+    assert_eq!(proven.kind, "violation");
+    assert_eq!(proven.subject_kind, "file");
+    assert_eq!(proven.primary_location.path.as_ref(), "/app/View.tsx");
     assert!(
-        finding.message.starts_with(
-            "the Solid compiler refused /app/View.tsx: The HTML provided is malformed. (3:5);"
+        proven.message.starts_with(
+            "the pinned Solid 2 compiler refuses /app/View.tsx: `attr:data-z` on <p> uses the `attr:` namespace"
         ),
         "{}",
-        finding.message
+        proven.message
     );
-    assert!(finding.evidence[0].message.contains("User HTML"));
+    for verdict in [RefusalVerdict::Unproven, RefusalVerdict::TypeScriptOwned] {
+        let finding = crate::diagnostics::compiler_refused_finding(
+            "/app/View.tsx",
+            "/app/View.tsx: The HTML provided is malformed. (3:5)\nUser HTML:\n <p><p></p></p>",
+            verdict,
+        );
+        assert_eq!(finding.id, metadata.code);
+        assert_eq!(finding.rule, metadata.name);
+        assert_eq!(finding.severity, "warning");
+        assert_eq!(finding.kind, "uncertifiable");
+        assert_eq!(finding.subject_kind, "project");
+        assert!(
+            finding.message.starts_with(
+                "the Solid compiler refused /app/View.tsx: The HTML provided is malformed. (3:5);"
+            ),
+            "{}",
+            finding.message
+        );
+        assert!(finding.evidence[0].message.contains("User HTML"));
+    }
 }
 
 /// The notice's identity is held here and published by the catalog; this

@@ -478,6 +478,58 @@ pub(super) fn symbol_references(
     })
 }
 
+/// ADR 0442: the call sites in other modules of the exported function
+/// declaration at `function` in `id` (its name at `name`), when every other
+/// module's reference to the declaration's symbol is one the call graph
+/// accounts for ([`super::census::CallSitesOf`]: no alias, re-export,
+/// argument, type query or namespace hand-out) and the program is closed;
+/// `None` when they cannot all be accounted for. The memo-world twin of
+/// `execution_role::exported_call_sites_in`, over the same census answers.
+pub(crate) fn exported_call_sites_of(
+    ctx: &Ctx<'_, '_, BuildSchema>,
+    id: FileId,
+    function: Span,
+    name: Span,
+) -> Result<Option<Vec<CallSite>>, Cycle> {
+    if !ctx.constant(Constant::ProgramClosed) {
+        return Ok(None);
+    }
+    let hand_outs = ctx.memo::<HandOuts>(&id)?;
+    if hand_outs.0 || hand_outs.1.binary_search(&function).is_ok() {
+        return Ok(None);
+    }
+    let Some(symbol) = first(ctx, id).and_then(|read| read.symbol_at(name).cloned()) else {
+        return Ok(None);
+    };
+    let Some(references) = symbol_references(ctx, &symbol.shared())? else {
+        return Ok(None);
+    };
+    let sites = ctx.memo::<CallSitesOf>(&(id, function))?;
+    let accounted = sites
+        .iter()
+        .flat_map(|site| {
+            std::iter::once((site.file, site.callee))
+                .chain(site.also_referenced.map(|span| (site.file, span)))
+        })
+        .collect::<BTreeSet<_>>();
+    for reference in references {
+        // A reference outside the analyzed files accounts for nothing.
+        let Some((file, span)) = reference else {
+            return Ok(None);
+        };
+        if file != id && !accounted.contains(&(file, span)) {
+            return Ok(None);
+        }
+    }
+    Ok(Some(
+        sites
+            .iter()
+            .filter(|site| site.file != id)
+            .copied()
+            .collect(),
+    ))
+}
+
 /// The symbols of the function at `span` in `id`.
 fn function_symbols(
     ctx: &Ctx<'_, '_, BuildSchema>,
@@ -1307,6 +1359,19 @@ fn local_identity(
     if function.name.is_none() && compound_value(ctx, id, function.span)? {
         return Ok(Some(Proven));
     }
+    // An anonymous function literal called where it is written has that call
+    // as its only entry: no reference can hand it to `createComponent` (a
+    // named expression's own name could), so it runs in its caller's
+    // position, never as a component. Its callers' role is its role.
+    if function.name.is_none()
+        && file
+            .ast
+            .calls
+            .iter()
+            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == function.span)
+    {
+        return Ok(Some(No));
+    }
     // Every remaining runtime proof only decides whether a direct JSX return
     // is used as a component value or as an ordinary callback. Without such
     // a return, only an exact compiler-resolved Component type can still
@@ -1467,6 +1532,11 @@ fn component_census(
         .collect::<BTreeSet<_>>();
     let mut alias_entries = AliasEntries::default();
     let mut reference_escapes = true;
+    // A reference that renders the function: a dialect renderer's prop, a
+    // proven `lazy` default, an audited route option, a compound member a tag
+    // reaches. A declaration, a module surface and a callback position are
+    // accounted for but render nothing (see `direct_return_proof`).
+    let mut rendered_by_reference = false;
     let symbol = if method {
         None
     } else {
@@ -1519,14 +1589,16 @@ fn component_census(
             let component_value = component_value_operation(candidate, span);
             referenced_as_callback |= callback;
             referenced_as_component_property |= component_value;
+            let renders = ctx
+                .memo::<PropRenderSitesIn>(&candidate_id)?
+                .contains_key(&span)
+                || lazy_default_value(ctx, candidate_id, function.span, span, &mut lazy_veto)?
+                || route_value(ctx, candidate_id, span)?
+                || compound_value(ctx, candidate_id, span)?;
+            rendered_by_reference |= renders;
             let escapes = !(callback && !component_value)
-                && !ctx
-                    .memo::<PropRenderSitesIn>(&candidate_id)?
-                    .contains_key(&span)
-                && !reference_is_declaration_or_module_surface(candidate, span)
-                && !lazy_default_value(ctx, candidate_id, function.span, span, &mut lazy_veto)?
-                && !route_value(ctx, candidate_id, span)?
-                && !compound_value(ctx, candidate_id, span)?;
+                && !renders
+                && !reference_is_declaration_or_module_surface(candidate, span);
             reference_escapes |= escapes;
             if !escapes
                 || call_references.contains(&(candidate_id, span))
@@ -1580,8 +1652,23 @@ fn component_census(
         && (!used_as_any_call_argument || hoc_bound)
         && !used_as_render_value
         && (!referenced_as_callback || referenced_as_component_property);
+    // ADR 0445: accounting for every reference proves a component only when
+    // some reference renders it. A function nothing renders passes the census
+    // with no entry at all, and its body is not shown to run, let alone as a
+    // component's. The one kept premise (ADR 0331): an exported capitalized
+    // binding is the host's component by module surface (a file route's
+    // default export, a library component).
+    let surface_component = binding_name.is_some_and(|name| {
+        super::components::binding_exported(file, name.span)
+            && file
+                .source_text(name.span)
+                .and_then(|text| text.chars().next())
+                .is_some_and(|first| first.is_ascii_uppercase())
+    });
     Ok(
-        if direct_return_proof && !reference_escapes || has_component_type(ctx, id, binding_name)? {
+        if direct_return_proof && !reference_escapes && (rendered_by_reference || surface_component)
+            || has_component_type(ctx, id, binding_name)?
+        {
             Proven
         } else if direct_return_proof {
             Escaped

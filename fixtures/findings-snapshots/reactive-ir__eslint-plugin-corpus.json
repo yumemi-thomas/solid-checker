@@ -72,6 +72,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-extended-valid.tsx",
+      "start": 284,
+      "end": 291,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -212,6 +222,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/await-control-flow-valid.tsx",
+      "start": 629,
+      "end": 636,
+      "fixes": 0
+    },
+    {
       "rule": "components-return-once",
       "code": "SC1004",
       "kind": "uncertifiable",
@@ -302,7 +322,7 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -312,7 +332,7 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -652,7 +672,7 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -702,7 +722,7 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -712,7 +732,7 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -742,7 +762,7 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -762,7 +782,7 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -772,7 +792,7 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -792,7 +812,7 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -802,7 +822,7 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -839,16 +859,6 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-extended-invalid.tsx",
       "start": 498,
       "end": 508,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-extended-valid.tsx",
-      "start": 265,
-      "end": 269,
       "fixes": 0
     },
     {

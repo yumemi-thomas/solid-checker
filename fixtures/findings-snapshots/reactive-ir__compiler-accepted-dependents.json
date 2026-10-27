@@ -22,7 +22,7 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",

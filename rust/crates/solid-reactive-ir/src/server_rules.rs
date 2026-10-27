@@ -12,7 +12,7 @@ use crate::HashSet;
 
 use solid_dialect::Primitive;
 use solid_facts::FileFacts;
-use solid_facts::ast::{ArgumentValueKind, ExportKind, FunctionKind};
+use solid_facts::ast::ArgumentValueKind;
 use solid_facts::core::Span;
 use typefacts::{ConstantValueKind, EntityFact, ResolvedCallValidity};
 
@@ -30,7 +30,7 @@ const USE_SERVER: &str = "use server";
 pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     http_response_after_flush(ctx, draft);
     if ctx.dialect.models_server_functions() {
-        server_function_module_directive(ctx, draft);
+        crate::valid_use_server::check_project(ctx, draft);
         server_function_rich_argument(ctx, draft);
     }
 }
@@ -211,174 +211,6 @@ fn loading_wrapped_components<'a>(ctx: &AnalysisContext<'a>) -> HashSet<(&'a str
         }
     }
     hosts
-}
-
-/// SC7006: a module-level `"use server"` directive with exports that are not
-/// direct function declarations. RFC 10 §Compiler implications records the
-/// compiler defect this surfaces: "with a module-level `\"use server\"`
-/// directive, a wrapped export (`export const x = wrapper(async () => ...)`)
-/// is silently dropped from the client build — only direct function exports
-/// become references. ... Minimum: a diagnostic." The directive pass is a
-/// build-plugin contract, not part of the pinned `@solidjs/web` runtime, so
-/// the RFC text is the specification this rule encodes.
-///
-/// Positive forms: a wrapped export (call-expression initializer), a
-/// non-function `export default` expression, and re-exports (`export { x }
-/// from`, `export * from`). Identifier aliases, plain values, and other shapes
-/// that are neither proven direct functions nor proven wrapped exports are
-/// explicit uncertifiable results.
-fn server_function_module_directive(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    for file in &ctx.facts.files {
-        if !file
-            .ast
-            .module_directives
-            .iter()
-            .any(|directive| directive.value == USE_SERVER)
-        {
-            continue;
-        }
-        for export in &file.ast.exports {
-            if export.type_only {
-                continue;
-            }
-            match export.kind {
-                ExportKind::All => {
-                    push_module_directive_finding(
-                        draft,
-                        file,
-                        export.span,
-                        "every re-exported binding",
-                        "a re-export",
-                        false,
-                    );
-                }
-                ExportKind::Named if export.module.is_some() => {
-                    for specifier in export
-                        .specifiers
-                        .iter()
-                        .filter(|specifier| !specifier.type_only)
-                    {
-                        push_module_directive_finding(
-                            draft,
-                            file,
-                            specifier.local.span,
-                            specifier.exported.as_str(),
-                            "a re-export",
-                            false,
-                        );
-                    }
-                }
-                ExportKind::Named | ExportKind::Default => {
-                    for specifier in export
-                        .declarations
-                        .iter()
-                        .filter(|specifier| !specifier.type_only)
-                    {
-                        match module_export_shape(file, specifier.local.span) {
-                            ModuleExportShape::DirectFunction => {}
-                            ModuleExportShape::NotDirect(shape) => {
-                                push_module_directive_finding(
-                                    draft,
-                                    file,
-                                    specifier.local.span,
-                                    specifier.exported.as_str(),
-                                    shape,
-                                    false,
-                                );
-                            }
-                            ModuleExportShape::Unresolved => {
-                                push_module_directive_finding(
-                                    draft,
-                                    file,
-                                    specifier.local.span,
-                                    specifier.exported.as_str(),
-                                    "an export whose runtime shape cannot be proven",
-                                    true,
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-enum ModuleExportShape {
-    DirectFunction,
-    NotDirect(&'static str),
-    Unresolved,
-}
-
-/// Classifies an exported declaration without treating an unrecognized shape
-/// as a direct-function proof.
-fn module_export_shape(file: &FileFacts, local: Span) -> ModuleExportShape {
-    // A function declaration exported by name, or a default-exported
-    // function/class expression whose recorded span is the function itself.
-    if file.ast.functions.iter().any(|function| {
-        function.span == file.ast.peel_ts_sugar_span(local)
-            || (function.kind == FunctionKind::Declaration
-                && function
-                    .name
-                    .as_ref()
-                    .is_some_and(|name| name.span == local))
-    }) {
-        return ModuleExportShape::DirectFunction;
-    }
-    if let Some(binding) = file
-        .ast
-        .bindings
-        .iter()
-        .find(|binding| binding.names.iter().any(|name| name.span == local))
-    {
-        // `export const x = wrap(fn)` — the RFC's named case. A direct
-        // function expression is a reference; anything else stays silent
-        // rather than guessed.
-        if binding.initializer_function {
-            return ModuleExportShape::DirectFunction;
-        }
-        return if binding.call_initializer.is_some() {
-            ModuleExportShape::NotDirect("a wrapped function")
-        } else {
-            ModuleExportShape::Unresolved
-        };
-    }
-    // `export default <expression>`: the recorded local span is the
-    // expression. A call is the proven wrapped form.
-    let value = file.ast.peel_ts_sugar_span(local);
-    if file.ast.calls.iter().any(|call| call.span == value) {
-        ModuleExportShape::NotDirect("a wrapped function")
-    } else {
-        ModuleExportShape::Unresolved
-    }
-}
-
-fn push_module_directive_finding(
-    draft: &mut ProgramDraft,
-    file: &FileFacts,
-    span: Span,
-    exported: &str,
-    shape: &str,
-    uncertain: bool,
-) {
-    draft.static_violations.push(StaticViolation {
-        id: "SC7006".into(),
-        rule: "server-function-module-directive".into(),
-        message: if uncertain {
-            format!(
-                "this module's top-level \"use server\" directive requires direct function exports, but export {exported} is {shape}; available syntax facts cannot prove that the compiler will turn it into a client reference"
-            )
-        } else {
-            format!(
-                "this module's top-level \"use server\" directive extracts every export to the server build, but export {exported} is {shape}, not a direct function declaration; the compiler turns only direct function exports into client references, so this export is silently dropped from the client build"
-            )
-        },
-        hint: "Move the \"use server\" directive into each function body and keep the wrapper at the export site — export const getData = GET(async (id) => { \"use server\"; ... }) round-trips the wrapper call — or export plain functions from this module and wrap them where they are imported.".into(),
-        location: location(file.path.shared(), span),
-        analysis_context: String::new(),
-        fixes: vec![],
-        uncertain,
-    });
 }
 
 /// SC7007: a rich-typed argument handed to a server-function reference while

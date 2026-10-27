@@ -20,7 +20,7 @@ export function ReassignedCallback() {
   return <button onClick={() => memo()}>{n()}</button>;
 }
 
-// Not clean: the writer escapes through its outer binding `reset`, though its
+// Violation: the writer escapes through its outer binding `reset`, though its
 // own name `inner` is only its declaration. `Child` runs it in its body.
 export function NamedFunctionExpression() {
   const [n, setN] = createSignal(0);
@@ -50,8 +50,8 @@ export function RecursiveRender() {
   return <button onClick={Reset}>{n()}</button>;
 }
 
-// Not clean: the click handler's entries say nothing of the closure it
-// creates and hands to `Child`, which calls it in its body.
+// Violation: the click handler's entries say nothing of the closure it
+// creates and hands to `Child`, which calls it in its body (ADR 0442).
 export function NestedEscape() {
   const [n, setN] = createSignal(0);
   const click = () => {

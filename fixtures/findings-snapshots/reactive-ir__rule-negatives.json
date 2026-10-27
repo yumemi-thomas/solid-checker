@@ -10,16 +10,6 @@
       "start": 664,
       "end": 673,
       "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rule-negatives/Props.tsx",
-      "start": 521,
-      "end": 527,
-      "fixes": 0
     }
   ]
 }

@@ -265,6 +265,7 @@ impl Probes for SemanticLookup<'_> {
 fn symbol_info(symbol: &solid_facts::TypeScriptSymbol<'_>) -> SymbolInfo {
     SymbolInfo {
         alias: !symbol.alias_target().is_empty(),
+        alias_target: Arc::from(symbol.alias_target()),
         declarations: symbol
             .declarations()
             .iter()

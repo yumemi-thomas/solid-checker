@@ -1,0 +1,105 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-limits/App.tsx",
+      "start": 479,
+      "end": 488,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-limits/App.tsx",
+      "start": 707,
+      "end": 716,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-limits/App.tsx",
+      "start": 938,
+      "end": 947,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-limits/App.tsx",
+      "start": 1285,
+      "end": 1294,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-limits/App.tsx",
+      "start": 1586,
+      "end": 1595,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-limits/App.tsx",
+      "start": 1891,
+      "end": 1900,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-limits/App.tsx",
+      "start": 2191,
+      "end": 2200,
+      "fixes": 0
+    },
+    {
+      "rule": "unknown-suppression-rule",
+      "code": "SC9016",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-limits/App.tsx",
+      "start": 2462,
+      "end": 2536,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-limits/App.tsx",
+      "start": 2551,
+      "end": 2560,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/suppression-limits/App.tsx",
+      "start": 2965,
+      "end": 2977,
+      "fixes": 0
+    }
+  ]
+}

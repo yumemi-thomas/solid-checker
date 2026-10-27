@@ -16,7 +16,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus
+.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus
 
 build: build-rust
 
@@ -170,6 +170,12 @@ compiler-facts-identity:
 verify-delta:
 	$(BUN) scripts/verify-delta.mjs $(if $(BASE),--base $(BASE))
 
+# The runtime oracle's pinned Solid 2.0.0-rc.17 install (ADR 0453): the committed
+# manifest and lockfile in scripts/runtime-oracle-install, reproduced by `npm ci`.
+# scripts/runtime-oracle.mjs defaults --install to it.
+runtime-oracle-install:
+	cd scripts/runtime-oracle-install && npm ci
+
 # "Does TypeScript already report this?", as a checkable claim. Provisioning
 # installs the audited Solid versions into rust/target/tsc-oracle and refuses
 # to run on a version mismatch.
@@ -239,6 +245,22 @@ coverage: build-checker-debug
 coverage-update: build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/coverage.mjs --update
+
+# The uncertifiable reproduction set (ADR 0446): every case still produces its
+# expected results with the cause the classifier reads, and the set stays in
+# its budget. The corpus side (scripts/uncertifiable-causes.mjs --report) needs
+# a sweep and runs by hand; CONTRIBUTING.md, "Adding a repo to the reproduction set".
+repro-causes: build-checker-debug
+	$(BUN) scripts/uncertifiable-causes.mjs --repro fixtures/uncertifiable-repro \
+	  --cases fixtures/uncertifiable-repro/cases.json \
+	  --checker "$(CURDIR)/rust/target/debug/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts"
+
+repro-budget:
+	$(BUN) scripts/repro-budget.mjs
+
+# Opt-in, needs network: not a dependency of verify.
+repro-registry:
+	$(BUN) scripts/repro-registry-check.mjs
 
 verify-performance: build-typefacts
 	cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-checker-session-bench

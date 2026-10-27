@@ -348,6 +348,11 @@ gates_lane() {
   lane_step coverage
   SOLID_CHECKER_BIN="$checker_bin" \
     SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/coverage.mjs
+  # ADR 0446: each reproduction still reads as the cause it stands for.
+  lane_step repro-causes
+  bun scripts/uncertifiable-causes.mjs --repro fixtures/uncertifiable-repro \
+    --cases fixtures/uncertifiable-repro/cases.json \
+    --checker "$checker_bin" --typefacts "$PWD/bin/solid-typefacts" >/dev/null
   lane_step ownership-gate
   SOLID_CHECKER_BIN="$checker_bin" \
     SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/ownership-gate.mjs \
@@ -366,7 +371,13 @@ gates_lane() {
 # repository. See scripts/wasm-parity/README.md.
 wasm_parity_lane() {
   lane_step wasm-parity
-  wasm_parity_scratch=$(mktemp -d "${TMPDIR:-/tmp}/sc-wasm-parity.XXXXXX")
+  # On macOS the scratch must have the OS's /private alias (wasm-parity.mjs
+  # checks it), which a TMPDIR moved elsewhere would not.
+  case "$(uname -s)" in
+    Darwin) wasm_parity_tmp=/private/tmp ;;
+    *) wasm_parity_tmp=${TMPDIR:-/tmp} ;;
+  esac
+  wasm_parity_scratch=$(mktemp -d "$wasm_parity_tmp/sc-wasm-parity.XXXXXX")
   mkdir -p "$wasm_parity_scratch/n2-tmp"
   TMPDIR="$wasm_parity_scratch/n2-tmp" TYPEFACTS_BRIDGE_FRAMES="$wasm_parity_scratch/update-frames" \
     TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" \
@@ -424,6 +435,7 @@ jq empty fixtures/tsc-oracle/*.json
 jq empty fixtures/obligation-cases/*.json
 bun scripts/dialect-manifests.mjs validate
 bun scripts/doc-budget.mjs
+bun scripts/repro-budget.mjs
 # A ratchet on raw cross-file reads in the reactive IR (ADR 0383).
 bun scripts/ir-read-lint.mjs
 

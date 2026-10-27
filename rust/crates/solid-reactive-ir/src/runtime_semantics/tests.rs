@@ -699,3 +699,107 @@ fn the_fresh_stack_list_only_refines_a_standard_deferral() {
         assert!(!behavior.runs_on_fresh_stack(), "{behavior:?}");
     }
 }
+
+/// ADR 0438: a registration function counts only when its declaration lies in
+/// an installed reviewed runner package under a registration function's name;
+/// a project path, a runner-looking directory without `node_modules`, and a
+/// helper declared in a runner's file are not one.
+#[test]
+fn a_test_runner_registration_is_a_reviewed_package_declaration() {
+    for path in [
+        "/app/node_modules/vitest/dist/index.d.ts",
+        "/app/node_modules/.pnpm/vitest@5.0.0_x/node_modules/vitest/dist/chunks/task-utils.d.ts",
+        "/app/node_modules/bun-types/test.d.ts",
+        "/app/node_modules/@types/node/test.d.ts",
+        "/app/node_modules/@playwright/test/index.d.ts",
+        "/app/node_modules/playwright/types/test.d.ts",
+        "/app/node_modules/@jest/globals/build/index.d.ts",
+        "/app/node_modules/@types/jest/index.d.ts",
+        "/app/node_modules/@types/mocha/index.d.ts",
+    ] {
+        for name in ["test", "it", "describe", "beforeEach", "afterAll", "suite"] {
+            assert!(
+                test_runner_function_declaration(path, name).is_some(),
+                "{path} {name}"
+            );
+        }
+        assert!(
+            test_runner_function_declaration(path, "expect").is_none(),
+            "{path}"
+        );
+        assert!(
+            test_runner_function_declaration(path, "vi").is_none(),
+            "{path}"
+        );
+    }
+    for path in [
+        "/app/src/it.ts",
+        "/app/vitest/index.d.ts",
+        "/app/node_modules/other/vitest.d.ts",
+        "/app/node_modules/@types/node/fs.d.ts",
+        "/app/node_modules/@types/react/index.d.ts",
+    ] {
+        assert!(
+            test_runner_function_declaration(path, "it").is_none(),
+            "{path}"
+        );
+    }
+    assert!(test_runner_modifier("only") && test_runner_modifier("each"));
+    assert!(!test_runner_modifier("step") && !test_runner_modifier("call"));
+    assert!(test_runner_curried_modifier("each") && !test_runner_curried_modifier("only"));
+    assert!(test_runner_suite_function("describe") && test_runner_suite_function("suite"));
+    assert!(!test_runner_suite_function("it") && !test_runner_suite_function("test"));
+    assert!(test_runner_suite_modifier("describe") && !test_runner_suite_modifier("serial"));
+}
+
+/// ADR 0438: each runner's suite-body answer is its own, read on its bytes:
+/// vitest collects the body after the file loads, jest-circus, mocha,
+/// `node:test` and playwright call it inside the registration, and `bun:test`
+/// shows no readable bytes.
+#[test]
+fn a_suite_body_is_placed_per_runner() {
+    for (path, expected) in [
+        (
+            "/app/node_modules/vitest/dist/index.d.ts",
+            SuiteBodyRun::Scheduled,
+        ),
+        (
+            "/app/node_modules/@vitest/runner/dist/index.d.ts",
+            SuiteBodyRun::Scheduled,
+        ),
+        (
+            "/app/node_modules/bun-types/test.d.ts",
+            SuiteBodyRun::Unproven,
+        ),
+        (
+            "/app/node_modules/@types/node/test.d.ts",
+            SuiteBodyRun::Inline,
+        ),
+        (
+            "/app/node_modules/@playwright/test/index.d.ts",
+            SuiteBodyRun::Inline,
+        ),
+        (
+            "/app/node_modules/playwright/types/test.d.ts",
+            SuiteBodyRun::Inline,
+        ),
+        (
+            "/app/node_modules/@jest/globals/build/index.d.ts",
+            SuiteBodyRun::Inline,
+        ),
+        (
+            "/app/node_modules/@types/jest/index.d.ts",
+            SuiteBodyRun::Inline,
+        ),
+        (
+            "/app/node_modules/@types/mocha/index.d.ts",
+            SuiteBodyRun::Inline,
+        ),
+    ] {
+        assert_eq!(
+            test_runner_function_declaration(path, "describe"),
+            Some(expected),
+            "{path}"
+        );
+    }
+}

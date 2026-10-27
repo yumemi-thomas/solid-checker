@@ -428,7 +428,15 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     /// visible is an obligation, never a read.
     pub(crate) typed_sources: &'a HashMap<SymbolId, crate::source_discovery::TypedSource>,
     pub(crate) accessor_origins: &'a HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
-    pub(crate) setters: &'a HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
+    pub(crate) setters: &'a HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    >,
     pub(crate) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) source_primitives: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) async_sources: &'a HashSet<SymbolId>,
@@ -963,6 +971,21 @@ impl LocalAccessContext<'_, '_> {
                         self.symbol_names,
                         self.lookup,
                     ) {
+                        // ADR 0443: `runWithOwner` clears tracking in a window
+                        // the tracked call does not have.
+                        ExecutionRole::TrackedJsx
+                            if dialect
+                                .callback_clears_tracking_in_calling_window(primitive, index) =>
+                        {
+                            match crate::execution_role::unwindowed_role_at_call(
+                                file,
+                                call.callee,
+                                self.lookup,
+                            ) {
+                                ExecutionRole::Unknown | ExecutionRole::Unreported => None,
+                                role => Some(role),
+                            }
+                        }
                         ExecutionRole::TrackedJsx => Some(ExecutionRole::DeferredCallback),
                         ExecutionRole::ModuleInitialization
                         | ExecutionRole::Unknown
@@ -984,6 +1007,8 @@ impl LocalAccessContext<'_, '_> {
                     return Some(
                         if dialect.apply_callback_argument(primitive) == Some(index) {
                             ExecutionRole::EffectApply
+                        } else if dialect.callback_runs_untracked_without_window(primitive, index) {
+                            ExecutionRole::UntrackedUnwindowed
                         } else {
                             ExecutionRole::UntrackedCallback
                         },
@@ -1435,8 +1460,7 @@ impl LocalAccessContext<'_, '_> {
                 .dispatch_obligations
                 .push(typed_source_obligation(file, call.callee));
         }
-        if let Some((name, declaration, allowed_by_option, source_kind)) = self.setters.get(symbol)
-        {
+        if let Some((name, declaration, owned_write, source_kind)) = self.setters.get(symbol) {
             // Under a root owner `setSignal`'s guard throws on every
             // release; a store setter's only where the resolved signals
             // dropped the root exemption (rc.9). In dev a component body
@@ -1500,7 +1524,7 @@ impl LocalAccessContext<'_, '_> {
                     location: location(file.path.shared(), call.span),
                     declaration: declaration.clone(),
                     execution: write_execution,
-                    allowed_by_option: *allowed_by_option,
+                    owned_write: *owned_write,
                     context: analysis_context(
                         file,
                         call.span,
@@ -1769,7 +1793,9 @@ impl LocalAccessContext<'_, '_> {
                 ).is_none()
                 && !matches!(
                     execution,
-                    ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback
+                    ExecutionRole::EffectApply
+                        | ExecutionRole::UntrackedCallback
+                        | ExecutionRole::UntrackedUnwindowed
                 );
         if helper.is_none() && gate_refuses {
             return;
@@ -2075,15 +2101,17 @@ impl LocalAccessContext<'_, '_> {
         result: &mut LocalAccessResult,
     ) {
         for spread in &file.ast.spreads {
-            let argument = location(file.path.shared(), spread.argument);
-            let inline_root = if !self.entities.get(&argument).is_some_and(|symbol| {
+            // The value the argument denotes, not the symbol at its first
+            // byte: `...(props.q ? {} : {})` spreads no props object.
+            let argument = self.entities.value_symbol(file, spread.argument);
+            let inline_root = if !argument.is_some_and(|symbol| {
                 self.prop_sources.contains_key(symbol) || self.accessors.contains_key(symbol)
             }) {
                 self.inline_view_root(file, spread.argument)
             } else {
                 None
             };
-            let Some(symbol) = inline_root.as_ref().or(self.entities.get(&argument)) else {
+            let Some(symbol) = inline_root.as_ref().or(argument) else {
                 continue;
             };
             let execution = semantic_execution_role(

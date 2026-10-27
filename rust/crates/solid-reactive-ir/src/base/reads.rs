@@ -65,8 +65,13 @@ pub(crate) enum Section {
     ReturnedSources,
     /// The returned-callback invocations and their sites (ADR 0390, 0392).
     ReturnedCallbacks,
-    /// The synchronous event-dispatch hazard (ADR 0356).
+    /// The synchronous event-dispatch hazard (ADR 0356) read as the raw base
+    /// index of hazards: the hazard alone.
     SynchronousDispatch,
+    /// The classified dispatch veto (ADR 0356, narrowed by ADR 0435, 0437,
+    /// 0438), read through its two answers, owner proofs and read proofs
+    /// (ADR 0450).
+    DispatchVeto,
     /// The reflective-definition hazard (ADR 0293, 0314).
     ReflectiveDefinition,
     /// A reflective write through a `prototype` (ADR 0292).
@@ -83,7 +88,7 @@ pub(crate) enum Section {
 }
 
 impl Section {
-    pub(crate) const ALL: [Self; 15] = [
+    pub(crate) const ALL: [Self; 16] = [
         Self::Components,
         Self::MemberTargets,
         Self::SpreadTargets,
@@ -94,6 +99,7 @@ impl Section {
         Self::ReturnedSources,
         Self::ReturnedCallbacks,
         Self::SynchronousDispatch,
+        Self::DispatchVeto,
         Self::ReflectiveDefinition,
         Self::ReflectivePrototypeWrite,
         Self::RouteComponents,

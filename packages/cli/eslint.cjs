@@ -67,11 +67,45 @@ const ownedRules = new Map();
  * project that was never analyzed as stated would look clean. The native
  * `--format default` applies the same rule (`snapshot_emission::user_facing`).
  */
-/** The unavailable-package-behavior rule no shipped config enables (ADR 0248). */
-const UNAVAILABLE_BEHAVIOR_RULE = "package-behavior-unavailable";
-
 function userFacing(finding) {
   return finding.kind !== "uncertifiable" || finding.subjectKind === "project";
+}
+
+/**
+ * The registry key of a rule's findings: its name, or `name#code` for a former
+ * name that covered one code of a merged rule (ADR 0426), which reports and so
+ * owns that code's findings only.
+ */
+function ownedKey(ruleName, code) {
+  return code === undefined ? ruleName : `${ruleName}#${code}`;
+}
+
+/**
+ * Per-file registry of the ESLint rule keys that are enabled for the file
+ * during the current lint pass (ADR 0429). ESLint applies an
+ * `eslint-disable solid-checker/<key>` comment to the messages reported under
+ * that key, so native must not apply the same comment again: the unused
+ * directive would be reported by ESLint, and a finding suppressed twice is
+ * suppressed once. A member whose own rule is not enabled is reported through
+ * `certification`, which ESLint's comment does not match, so native applies
+ * it. Filled and released like `ownedRules`.
+ */
+const hostSuppressedRules = new Map();
+
+function registerHostSuppressedRule(filename, ruleKey) {
+  let keys = hostSuppressedRules.get(filename);
+  if (!keys) {
+    keys = new Set();
+    hostSuppressedRules.set(filename, keys);
+  }
+  keys.add(ruleKey);
+}
+
+function releaseHostSuppressedRule(filename, ruleKey) {
+  const keys = hostSuppressedRules.get(filename);
+  if (!keys) return;
+  keys.delete(ruleKey);
+  if (keys.size === 0) hostSuppressedRules.delete(filename);
 }
 
 function registerOwnedRule(filename, ruleName) {
@@ -262,7 +296,7 @@ function inferenceFingerprint(project, runtime) {
  */
 const NATIVE_VALUE_OPTIONS = new Set([
   "--project", "-project", "--typefacts", "--dialect", "--conditions", "--preset",
-  "--enable-rule", "--format", "--runtime-resolution", "--daemon-runtime",
+  "--enable-rule", "--host-suppresses", "--format", "--runtime-resolution", "--daemon-runtime",
   "--dependency-source", "--runtime-realm", "--runtime-target", "--runtime-build",
   "--rendering", "--program-boundary", "--runtime-condition", "--runtime-conditions",
   "--framework-transform", "--only-file"
@@ -382,8 +416,10 @@ function loadSnapshot(context) {
   const inferredHostInputs = inferenceFingerprint(project, runtime);
   const configuredRules = Array.isArray(config.enableRule) ? config.enableRule : [];
   const activeDefaultDisabled = [...(ownedRules.get(contextFilename(context)) ?? [])]
+    .map(key => key.split("#")[0])
     .filter(rule => manifestEntriesByRule.get(rule)?.defaultEnabled === false);
   const enableRules = [...new Set([...configuredRules, ...activeDefaultDisabled])].sort();
+  const hostSuppressions = [...(hostSuppressedRules.get(contextFilename(context)) ?? [])].sort();
   // The adapter reports a file's own findings (`projectFindings`), so the
   // native checker is asked for the ones that can matter to this file alone:
   // a whole-project report is megabytes to move and parse per linted file.
@@ -398,6 +434,7 @@ function loadSnapshot(context) {
     dialect,
     presets,
     enableRules,
+    hostSuppressions,
     runtime,
     runtimeResolution,
     inferredHostInputs
@@ -437,6 +474,7 @@ function loadSnapshot(context) {
   if (runtimeResolution === "required") args.push("--runtime-resolution", "required");
   for (const preset of presets) args.push("--preset", preset);
   for (const rule of enableRules) args.push("--enable-rule", rule);
+  for (const rule of hostSuppressions) args.push("--host-suppresses", rule);
   if (runtime?.target) args.push("--runtime-target", runtime.target);
   if (runtime?.build) args.push("--runtime-build", runtime.build);
   if (runtime?.rendering) args.push("--rendering", runtime.rendering);
@@ -649,7 +687,10 @@ const certification = {
         // reporting them again would duplicate every one of its findings.
         const owned = ownedRules.get(contextFilename(context));
         const findings = (snapshot.findings ?? []).filter(
-          finding => !owned?.has(finding.rule) && userFacing(finding)
+          finding =>
+            !owned?.has(finding.rule) &&
+            !owned?.has(ownedKey(finding.rule, finding.id)) &&
+            userFacing(finding)
         );
         projectFindings(context, program, findings);
       },
@@ -713,12 +754,13 @@ const packageNote = {
  * traversal event fires, which is how `certification` knows to leave these
  * findings alone whichever config order enabled both surfaces.
  */
-function reportingRule(entry, catalog) {
+function reportingRule(entry, catalog, codes = null, ruleKey = entry.name) {
+  const covered = codes ?? entry.codes ?? [entry.code];
   return {
     meta: {
       type: "problem",
       docs: {
-        description: `solid-checker ${entry.code} ${entry.name}`,
+        description: `solid-checker ${covered.join("/")} ${entry.name}`,
         recommended: entry.defaultEnabled && !entry.uncertifiable,
         url: `${catalog.docsBaseUrl}/${entry.name}.md`
       },
@@ -728,7 +770,9 @@ function reportingRule(entry, catalog) {
     },
     create(context) {
       const filename = contextFilename(context);
-      registerOwnedRule(filename, entry.name);
+      const owned = codes ? codes.map(code => ownedKey(entry.name, code)) : [entry.name];
+      for (const key of owned) registerOwnedRule(filename, key);
+      registerHostSuppressedRule(filename, ruleKey);
       return {
         Program(program) {
           // A namespaced compatibility rule analyzes with its manifest's
@@ -740,13 +784,17 @@ function reportingRule(entry, catalog) {
               : context;
           const snapshot = loadSnapshot(forced);
           const findings = (snapshot.findings ?? []).filter(
-            finding => finding.rule === entry.name && userFacing(finding)
+            finding =>
+              finding.rule === entry.name &&
+              (!codes || codes.includes(finding.id)) &&
+              userFacing(finding)
           );
           if (findings.length === 0) return;
           projectFindings(context, program, findings);
         },
         "Program:exit"() {
-          releaseOwnedRule(filename, entry.name);
+          for (const key of owned) releaseOwnedRule(filename, key);
+          releaseHostSuppressedRule(filename, ruleKey);
           endPass(context);
         }
       };
@@ -810,10 +858,36 @@ const DEPRECATED_RULE_KEYS = [
   ["expected-function-got-expression", "reactive-handler-frozen"],
   // The `v1/` alias went with the 1.x catalog (ADR 0110): a deprecation alias
   // can only delegate to a rule that still exists, and its target does not.
-  ["resolve-in-reactive-scope", "resolve-in-tracked-scope"],
+  ["reactive-write-in-owned-scope", "no-write-in-pure-computation"],
+  ["no-direct-mutation", "no-store-mutation-outside-setter"],
+  // The third entry limits a former name to the one code of the merged rule it
+  // covered (ADR 0426), so each keeps its own severity and findings.
+  ["resolve-in-tracked-scope", "no-await-primitive-in-tracked-scope", ["SC2004"]],
+  ["resolve-in-reactive-scope", "no-await-primitive-in-tracked-scope", ["SC2004"]],
+  ["until-in-tracked-scope", "no-await-primitive-in-tracked-scope", ["SC2005"]],
+  ["server-function-module-directive", "valid-use-server"],
   ["sync-node-received-async", "sync-computation-received-async"],
-  // SC9005 was named for the removed package-contract model (ADR 0312).
-  ["package-contract-incomplete", "package-behavior-unavailable"]
+  // The remaining non-`v1/` rows of `RULE_ALIASES` (`dialect.rs`), which names
+  // the authority: native accepts each, so ESLint must as well.
+  ["no-owner-effect", "missing-owner"],
+  ["no-owner-cleanup", "missing-owner"],
+  ["no-owner-boundary", "missing-owner"],
+  ["no-owner-settled-cleanup", "missing-owner"]
+];
+
+// ADR 0440: SC9005 and SC9012 (with SC9011 merged into it) are obligations,
+// internal uncertifiable results, and no ESLint key configures one. A key a
+// config still names stays a deprecated rule that reports nothing, so an
+// existing config loads and its setting changes nothing. Native accepts every
+// former name (`RETIRED_RULES`, `dialect.rs`), so ESLint must as well.
+const RETIRED_RULE_KEYS = [
+  "package-behavior-unavailable",
+  "package-contract-incomplete",
+  "package-contract-export-missing",
+  "package-contract-missing",
+  "package-contract-callback-missing",
+  "reactive-dispatch-unresolved",
+  "reactive-source-uncaptured"
 ];
 
 for (const catalog of Object.values(manifests)) {
@@ -825,19 +899,64 @@ for (const catalog of Object.values(manifests)) {
   }
 }
 
-for (const [oldName, currentName] of DEPRECATED_RULE_KEYS) {
+// ADR 0428: `reactivity` groups four member rules in `rule-options.json`, which
+// native expands. ESLint cannot report a member's finding under the group's id
+// and one rule cannot read another's severity, so the key exists here only to
+// be valid in a migrated config and in a disable comment (ESLint refuses an
+// unknown rule id in both). It reports nothing and sets nothing: severity stays
+// per member, and native applies a `reactivity` disable comment itself.
+if (Object.hasOwn(plugin.rules, "reactivity")) {
+  throw new Error("catalog rule reactivity collides with the adapter's group key");
+}
+plugin.rules.reactivity = {
+  meta: {
+    type: "problem",
+    docs: {
+      description:
+        "Accepted so a migrated `solid/reactivity` key is valid; configure the member rules, or `reactivity` in rule-options.json"
+    },
+    schema: adapterSchema,
+    messages: {}
+  },
+  create() {
+    return {};
+  }
+};
+
+for (const [oldName, currentName, codes] of DEPRECATED_RULE_KEYS) {
   const catalog = Object.values(manifests).find(candidate =>
     candidate.rules.some(entry => entry.name === currentName)
   );
   if (!catalog) throw new Error(`deprecated rule target ${currentName} is absent`);
   const entry = catalog.rules.find(candidate => candidate.name === currentName);
-  const delegated = reportingRule(entry, catalog);
+  const delegated = reportingRule(entry, catalog, codes ?? null, oldName);
   plugin.rules[oldName] = {
     ...delegated,
     meta: {
       ...delegated.meta,
       deprecated: true,
       replacedBy: [currentName]
+    }
+  };
+}
+
+for (const name of RETIRED_RULE_KEYS) {
+  if (Object.hasOwn(plugin.rules, name)) {
+    throw new Error(`retired rule key ${name} is still a catalog rule`);
+  }
+  plugin.rules[name] = {
+    meta: {
+      type: "problem",
+      docs: {
+        description: `solid-checker ${name} is an obligation, not a rule (ADR 0440); this key does nothing`
+      },
+      deprecated: true,
+      replacedBy: [],
+      schema: adapterSchema,
+      messages: {}
+    },
+    create() {
+      return {};
     }
   };
 }
@@ -863,11 +982,11 @@ for (const catalog of Object.values(manifests)) {
       // Shipped configs keep the historical key: a user config that turned
       // `contract-note` off must keep silencing the note.
       "solid-checker/contract-note": "warn",
-      // ADR 0248: unavailable package behavior is opt-in. They are not findings about the
-      // user's code, so no shipped config enables them.
+      // The manifest lists configurable rules only (ADR 0440): an obligation
+      // has no key.
       ...Object.fromEntries(
         catalog.rules
-          .filter(entry => entry.defaultEnabled && entry.name !== UNAVAILABLE_BEHAVIOR_RULE)
+          .filter(entry => entry.defaultEnabled)
           .map(entry => [
           `solid-checker/${entry.name}`,
           entry.severity === "error" ? "error" : "warn"
@@ -914,6 +1033,7 @@ module.exports._testing = {
   manifests,
   manifestEntriesByRule,
   deprecatedRuleKeys: DEPRECATED_RULE_KEYS,
+  retiredRuleKeys: RETIRED_RULE_KEYS,
   ownedRules,
   snapshotCache
 };

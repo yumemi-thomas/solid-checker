@@ -359,6 +359,16 @@ impl Dialect for Solid2 {
             ),
         }
     }
+    fn document_dispatch_reaches_no_element_handler(&self) -> bool {
+        // Read on the rc.17 bytes (`dist/web.js` `eventHandler`): it walks
+        // `e.composedPath()` from the event's target and calls only
+        // `node["$$" + type]` handlers, which `addEvent` sets on elements.
+        // Only the release whose `eventHandler` was read answers.
+        matches!(
+            self.spread_event_keys,
+            releases::SpreadEventKeys::OnUppercase
+        )
+    }
     fn optimistic_signal_setter_guarded(&self) -> bool {
         self.optimistic_signal_setter_guarded
     }
@@ -1865,8 +1875,9 @@ impl Dialect for Solid2 {
     /// three entry points 1.x reports. `runWithOwner` swaps the owner while
     /// `@solidjs/signals` sets `tracking = false` around the call (see
     /// [`Solid2::runs_callback_deferred`]), so reads inside it register
-    /// nothing either. `mapArray`/`repeat` are deliberately absent: unlike
-    /// 1.x, their map callbacks run tracked.
+    /// nothing either. `mapArray`/`repeat` are present for their map function
+    /// (ADR 0443): rc.17 runs it under `runWithOwner`, so it is untracked, not
+    /// tracked as this comment used to say (`callback_runs_untracked_without_window`).
     /// `createEffect(compute, apply)` and `createRenderEffect(compute, apply)`
     /// are the two with an apply slot; `createTrackedEffect(compute, options?)`
     /// has none. Matches the `(1, Execution::Deferred)` row in
@@ -1895,6 +1906,9 @@ impl Dialect for Solid2 {
             Primitive::Hydrate | Primitive::Lazy | Primitive::Render | Primitive::CreateReaction
         ) && argument == 0)
             || (primitive == Primitive::RunWithOwner && argument == 1)
+            // ADR 0443: the map function of `mapArray` and `repeat` runs with
+            // tracking off (`callback_runs_untracked_without_window`).
+            || (matches!(primitive, Primitive::MapArray | Primitive::RepeatMap) && argument == 1)
     }
 
     /// `mapArray(list, map, { name })` and `repeat(count, map, { name })` wrap
@@ -1910,6 +1924,50 @@ impl Dialect for Solid2 {
         argument == 1
             && argument_count > 2
             && matches!(primitive, Primitive::MapArray | Primitive::RepeatMap)
+    }
+
+    /// ADR 0443. The map function of `mapArray(list, map, options?)` and
+    /// `repeat(count, map, options?)` runs with tracking off and no strict-read
+    /// window of its own unless `options.name` is passed, so a reactive read in
+    /// it subscribes nothing and raises nothing: the mapper runs under
+    /// `runWithOwner`, which sets `tracking = false` and leaves `strictRead`
+    /// alone (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:5779`), inside
+    /// the map computation whose recompute clears `strictRead`
+    /// (`dist/dev-shared.js:4196-4200`). The wrapper that opens the window sits
+    /// at `dist/dev.js:3093-3102` (`mapArray`) and `3623-3633` (`repeat`), and
+    /// only `options?.name` selects it. The mapper itself is called at
+    /// `dist/dev.js:3347`, `3362-3377`, `3406` (`mapArray`) and `3661`, `3694`
+    /// (`repeat`). Probed on the rc.17 browser dev builds, module scope and
+    /// component body, with and without `name`: `observers(source)` is `[]`, a
+    /// write leaves the mapper's run count and output unchanged, and only the
+    /// named calls raise `STRICT_READ_UNTRACKED`.
+    fn callback_runs_untracked_without_window(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        argument == 1 && matches!(primitive, Primitive::MapArray | Primitive::RepeatMap)
+    }
+
+    /// ADR 0443. `runWithOwner(owner, fn)` sets `tracking = false` around
+    /// `fn()` and leaves `strictRead` as the call had it (`dist/dev-shared.js:5776-5785`
+    /// at rc.17, `runWithOwner` and `getObserver`), so `fn` runs in the
+    /// window of the call and untracked. Inside a tracked computation (an
+    /// effect or memo compute, a JSX expression) the call has no window, so a
+    /// read in `fn` neither subscribes nor warns. Probed on rc.17: a read in
+    /// `createEffect(() => runWithOwner(owner, () => log(signal())))` ran
+    /// once, left `observers(signal)` empty, raised nothing, and a write did
+    /// not re-run it, in a root and in a component body.
+    ///
+    /// Not `createRoot`: it is `runWithOwner(createOwner(), …)` by the code
+    /// read at `dist/dev-shared.js:3478-3481`, but no probe reached a read in
+    /// one inside a computation, and a root there may be deliberate.
+    fn callback_clears_tracking_in_calling_window(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        primitive == Primitive::RunWithOwner && argument == 1
     }
 
     /// The callbacks nothing runs until the returned value is used:

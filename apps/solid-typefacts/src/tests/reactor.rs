@@ -297,6 +297,7 @@ fn a_symlinked_project_root_names_the_same_runtime_symbol() {
             location: find(file, source, "value"),
             symbol: true,
             runtime_identity: true,
+            declared_keys: false,
             ..EntityDemand::default()
         };
         entities(&mut project, file, &[demand])

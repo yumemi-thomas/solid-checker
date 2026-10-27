@@ -129,6 +129,8 @@ Call the accessor at a value-consuming use: `` `${count()}` `` or
 `values[count()]`. If you mean to pass the accessor itself—to a helper or Solid's
 JSX child insertion—leave it uncalled.
 
+This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#adr-0428)): `reactivity` in `rule-options.json` or a disable comment reaches it, and `uncalled-accessor` alone overrides the group.
+
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — reads that happen outside tracking

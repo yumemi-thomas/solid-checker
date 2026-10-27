@@ -2197,7 +2197,7 @@ fn prepare_analyze_response_mode(
         let candidate = retained.as_ref().ok_or_else(|| {
             SessionError::InvalidResponse("reuse response has no retained table".into())
         })?;
-        if candidate.schema() != v3::TYPE_FACTS_TABLE_SCHEMA_V22
+        if candidate.schema() != v3::TYPE_FACTS_TABLE_SCHEMA_V23
             || candidate.project_id() != expected_project
             || candidate.generation() != response.generation
         {
@@ -2220,7 +2220,7 @@ fn prepare_analyze_response_mode(
         .map_err(SessionError::InvalidResponse)?;
     if transition.project_id.as_ref() != response.project_id.as_str()
         || transition.target_generation != response.generation
-        || transition.table_schema != v3::TYPE_FACTS_TABLE_SCHEMA_V22
+        || transition.table_schema != v3::TYPE_FACTS_TABLE_SCHEMA_V23
     {
         return Err(SessionError::InvalidResponse(
             "table transition identity does not match response".into(),

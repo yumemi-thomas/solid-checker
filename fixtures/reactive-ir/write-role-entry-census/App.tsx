@@ -12,9 +12,9 @@ function keep(callback: () => void) {
   kept = callback;
 }
 
-// Not clean: `reset` is also a prop `RunsInBody` calls in its body, where the
-// rc.17 runtime throws REACTIVE_WRITE_IN_OWNED_SCOPE. The handler call is one
-// of its entries, not all of them.
+// Violation: `reset` is also a prop `RunsInBody` calls in its body, where the
+// rc.17 runtime throws REACTIVE_WRITE_IN_OWNED_SCOPE (ADR 0442 follows the prop
+// into the child). The handler call is one of its entries, not all of them.
 export function EscapedToChild() {
   const [n, setN] = createSignal(0);
   const reset = () => setN(0);
@@ -26,7 +26,7 @@ export function EscapedToChild() {
   );
 }
 
-// Not clean: the same escape beside a handler named by the attribute.
+// Violation: the same prop call, beside a handler named by the attribute.
 export function NamedHandlerEscapedToChild() {
   const [n, setN] = createSignal(0);
   const reset = () => setN(0);
@@ -46,7 +46,7 @@ export function StoredByHelper() {
   return <button onClick={() => reset()}>{n()}</button>;
 }
 
-// Not clean: an alias of `reset` is an entry the census does not follow.
+// Violation: the alias is followed to the prop `RunsInBody` calls in its body.
 export function Aliased() {
   const [n, setN] = createSignal(0);
   const reset = () => setN(0);

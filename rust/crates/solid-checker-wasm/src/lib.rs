@@ -667,6 +667,7 @@ mod owned {
             presets: request.presets,
             enable_rules: request.enable_rules,
             feedback_facts: false,
+            host_suppressions: Vec::new(),
             dependency_sources,
             implicit_dependency_sources,
             window_realm: request.window_realm,

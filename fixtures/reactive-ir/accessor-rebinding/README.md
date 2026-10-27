@@ -1,0 +1,3 @@
+# SC2003: rebinding an accessor is not a dropped write
+
+`count = 2` on a signal accessor binding was this rule's accessor-binding arm. On the audited rc.17 typings a `const` binding is TS2588 and a `let` assigned a number, a function or an update is TS2322 / TS2356 / TS2365 (tsc-oracle `removed-because-redundant`, ADR 0425), so those spellings are TypeScript's. What type-checks is a deliberate rebinding with a value of the accessor's own type (another signal's accessor, a `let` store assigned an object of its type) or a cast; the rebinding replaces a local binding and drops no write, so the arm is gone and this fixture pins its silence.

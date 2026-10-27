@@ -17,7 +17,7 @@ use sha2::{Digest, Sha256};
 use crate::{
     FactTable, SymbolFact, decode_trusted,
     v3::{
-        self, Handshake, Operation, Request, Response, TYPE_FACTS_TABLE_SCHEMA_V22, TransitionMode,
+        self, Handshake, Operation, Request, Response, TYPE_FACTS_TABLE_SCHEMA_V23, TransitionMode,
     },
 };
 
@@ -173,7 +173,7 @@ impl StreamDecoder {
         let transition = v3::decode_table_transition(&response.table_transition)?;
         if transition.project_id.as_ref() != response.project_id.as_str()
             || transition.target_generation != response.generation
-            || transition.table_schema != TYPE_FACTS_TABLE_SCHEMA_V22
+            || transition.table_schema != TYPE_FACTS_TABLE_SCHEMA_V23
         {
             return Err("table transition identity does not match response".into());
         }

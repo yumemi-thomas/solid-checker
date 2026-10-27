@@ -78,9 +78,8 @@ the defect, and the checker asserts nothing about it.
 Upgrade the project to Solid 2.0, or pin a checker release that still carries
 the 1.x dialect. For `2.0.0-experimental.x`, move to a Solid 2.0 release
 candidate; `2.0.0-rc.17` is the audited one. [ADR 0110](../decisions.md#adr-0110) records
-why this build carries one dialect, and `docs/rule-catalog-migration.md` maps
-the 1.x rule names onto their 2.0 identities for a project migrating its
-suppressions.
+why this build carries one dialect; a `v1/` rule name in a configuration is a
+retired no-op (`RETIRED_RULES` in `rust/crates/solid-facts-backend/src/dialect.rs`).
 
 If the version is a deliberate placeholder (`workspace:*`, a monorepo link),
 nothing resolves to a released major and the project is analyzed under the

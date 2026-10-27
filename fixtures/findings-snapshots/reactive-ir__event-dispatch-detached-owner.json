@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-dispatch-detached-owner/App.tsx",
+      "start": 474,
+      "end": 481,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-dispatch-detached-owner/App.tsx",
+      "start": 496,
+      "end": 514,
+      "fixes": 0
+    }
+  ]
+}

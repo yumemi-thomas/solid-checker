@@ -457,7 +457,9 @@ pub(crate) fn counts_as_strict_read_root(
 ) -> bool {
     matches!(
         execution,
-        ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback
+        ExecutionRole::EffectApply
+            | ExecutionRole::UntrackedCallback
+            | ExecutionRole::UntrackedUnwindowed
     ) || enclosing_render_function(file, span, lookup)
 }
 

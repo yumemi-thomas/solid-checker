@@ -30,7 +30,7 @@ and it mirrors where the runtime actually installs strict-read contexts (compone
 and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
 
 - **Plain assignment targets are writes, not reads.** `store.name = next` is
-  diagnosed by `no-direct-mutation` without also reporting `store.name` here.
+  diagnosed by `no-store-mutation-outside-setter` without also reporting `store.name` here.
   Only the member that *is* the written target is exempt: read-modify-write
   forms such as `store.count += 1` and `store.count++` keep the read finding
   because the old value is evaluated, and so do reads nested inside a target —
@@ -64,6 +64,57 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   uncertifiable. A JSX event handler (`onClick={...}`) is the compiler's event
   callback. Visible native synchronous dispatch withholds its execution proof
   (ADR 0356), so its reads are then uncertifiable; otherwise it is not reported.
+  A dispatch on the global `window` (or `document` on web rc.17), or written in
+  a scheduler callback or at module top level, does not withhold it (ADR 0435);
+  one in a `runWithOwner(null, …)` callback does, because that leaves the
+  enclosing strict-read window open. A dispatch in a callback a reviewed test
+  runner registers (ADR 0438, an async one included, or a helper only such
+  callbacks call, in a closed program, exported or not when every other
+  module's reference to it is a call, and a call past an `await` in an async
+  helper included; a literal handed to such a helper is one, ADR 0442), or
+  written in a function only events invoke (ADR 0437), does not withhold it
+  either, and a read in a registered test callback is placed outside every
+  strict-read window, as in a scheduled callback. A helper handed a literal
+  (`fireAndFlush(() => el.dispatchEvent(...))`) places the literal where the
+  helper's call runs it; the same helper also called from a component body
+  keeps the veto, and the literal's read is SC1001 there.
+- **A map function runs untracked, and may run unwarned.** The map function of
+  `mapArray(list, map)` and `repeat(count, map)` runs under `runWithOwner`, which
+  sets `tracking = false`, so a read written directly in it (`item => item + tag()`)
+  subscribes nothing and goes stale. Only a call that passes `name` opens a
+  strict-read window around it; unnamed, Solid raises nothing, and the finding's
+  hint says so instead of promising the dev warning (ADR 0443). JSX the map
+  function returns tracks its own expressions, `untrack(() => tag())` is the
+  explicit snapshot, and a function it only returns runs when its caller does.
+  The list or count thunk is a tracked computation. The index accessor of a
+  default `mapArray` is not a source here, so `index()` is not reported
+  (`fixtures/reactive-ir/mapper-untracked-reads`).
+- **A context provider reads `value` once.** In Solid 2 the context itself is the
+  provider (`<Ctx value={count()}>`); its function reads `value` under the
+  `<provider>` window and keeps a snapshot, so a child's `useContext` never sees
+  a later write. A read written directly in `value` is a violation when the tag
+  resolves to the exact `createContext` binding (also one imported from another
+  file); a function value is stored, not run, and stays unplaced. A prop in
+  `value` follows its component's callers like any prop read
+  (`fixtures/reactive-ir/provider-value-untracked`).
+- **A closure a tracked scope builds is not run by it.** A read in a closure a
+  memo or effect compute, or a tracked JSX expression, returns, stores or names
+  (`const f = () => count(); return f`) is tracked only where a call runs the
+  closure in the scope's own pass; rc.17 warns when the component body calls it
+  through the memo's value. Such a read is uncertifiable, and an IIFE or a name
+  every reference of which is a tracked call keeps the tracked role (ADR 0452;
+  `fixtures/reactive-ir/read-closure-in-tracked-scope`).
+- **`runWithOwner` clears tracking inside a computation.** It sets `tracking =
+  false` around its callback and keeps the window the call had, so in an effect
+  or memo compute, or a JSX expression, a read in the callback subscribes nothing
+  and raises nothing: reported, with the no-warning hint. In a component body it
+  reports as the body does. Not reported: a callback that only creates a
+  primitive (its own compute tracks), `untrack` around the call or the read, JSX
+  the callback writes, a call after an await the compute reaches (that is
+  [reactive-read-after-await](reactive-read-after-await.md)'s, also through an
+  immediately invoked function), and a call `tsc` rejects. `createRoot` is
+  `runWithOwner(createOwner(), …)` but was not probed in a computation, so it
+  keeps its role (`fixtures/reactive-ir/run-with-owner-in-computation`).
 - **A read an await may precede is uncertifiable.** Past an unconditional
   `await` the window is closed and the read is silent. Past a conditional
   (`if (c) await p`, `x ??= await p`, `f?.(await p)`, a labelled `break`), a
@@ -90,6 +141,10 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   followed (ADR 0331): one passed, stored, aliased by a written `let`, or
   exported from an open program leaves its body reads uncertifiable, beside
   whatever its calls prove.
+- **A function nothing renders is no component body (ADR 0445).** A dead
+  or lowercase JSX-returning function, and a callback or IIFE evaluated at
+  module scope, leave body reads uncertifiable; an exported capitalized
+  function is a component by module surface (ADR 0331).
 - **A named local handler can forward a callback prop.** A project component
   may invoke a callback prop from a synchronous immutable local arrow bound
   only to intrinsic event attributes or exact component props that themselves
@@ -213,6 +268,8 @@ explicit one-time snapshot; it does not make the prop reactive.
 - **Props views.** `omit(props, …)` always builds a view: `omitTraps` in `@solidjs/signals@2.0.0-rc.13` (`dist/dev.js`) returns true from `set` and `deleteProperty`. `merge(...)` returns its one non-falsy source, so it is a view only with no spread argument and an argument that is syntactically never falsy (an object or function literal, or a call that is itself a view). `@solidjs/web`'s `spread` and `ssrElement` only read the object. An element that spreads the props among several sources is a view only when another source is provably never falsy: a non-`ref` attribute, a rendering child, or a member spread (a bare identifier may be `undefined`). A `children` attribute beside a raw child, and a member spread carrying `/*@static*/`, count as no such source, in the native lowering and in `@solidjs/babel-plugin` alike. The view premise needs `Proxy`, since without it `merge` can return its last source.
 - **Getter arity.** The rc.13 accessor is `read.bind(null, node)` over `function read(el)` (`dist/dev.js` `accessor`, `dist/prod/signals.js` `accessor`). `solid-js`'s client wrappers return it unchanged, and its server builds return arrows with no parameter. Probed on the dev and prod client builds: `length` 0 and `typeof` `"function"`. The walk folds `p.length` against a numeric literal (`===`, `!==`, `==`, `!=`, `<`, `<=`, `>`, `>=`), and `typeof p`, or a `p.length` that only feeds a test, is no escape, so a branch that cannot run for the arguments is proven absent. A hoisted function declaration's body runs whenever it is called, so an earlier `return` leaves it possible rather than unreachable. A binding declared in a file with a direct `eval` is refused, and a binding the module exports proves no length.
 - **Not decided.** A read through another helper hop, an array of accessors (`accessArray`), and a read after an `await` (always an obligation).
+
+This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#adr-0428)): `reactivity` in `rule-options.json` or a disable comment reaches it, and `strict-read-untracked` alone overrides the group.
 
 ## Related
 

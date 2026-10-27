@@ -57,6 +57,7 @@ fn entity(path: &str, start: u64, symbol: &str) -> EntityFact {
         library_types: None,
         reference_space: None,
         runtime_identity: "".into(),
+        declared_keys: None,
     }
 }
 
@@ -618,6 +619,30 @@ fn library_binding_changes_rows_but_frozen_schemas_omit_it() {
     );
 }
 
+#[test]
+fn declared_keys_round_trip_on_v23_and_are_omitted_on_frozen_schemas() {
+    let mut table = state(1, 1, "a", b"a");
+    let names: Arc<Vec<Arc<str>>> = Arc::new(vec!["class".into(), "style".into()]);
+    let EntityRows::Flat(rows) = &mut table.entities else {
+        unreachable!()
+    };
+    rows[0].declared_keys = Some(names.clone());
+    let keys_of = |schema: u64| {
+        let plan = decoded(&full(&TransitionEncoder::new(schema), &table));
+        let op = plan.paths.iter().find(|op| &*op.path == "a.ts").unwrap();
+        match &op.entities {
+            v3::SlotOp::Replace(entities) => entities[0].declared_keys.clone(),
+            _ => panic!("a full transition replaces every path's entities"),
+        }
+    };
+    assert_eq!(keys_of(v3::TYPE_FACTS_TABLE_SCHEMA_V23), Some(names));
+    assert_eq!(
+        keys_of(v3::TYPE_FACTS_TABLE_SCHEMA_V22),
+        None,
+        "v22 is frozen and must not carry the field"
+    );
+}
+
 impl ProducerTable {
     fn entities_vec(&self) -> &[EntityFact] {
         match &self.entities {
@@ -732,7 +757,7 @@ fn transition_carries_identity_and_distinguishes_reuse_from_advancement() {
     let envelope = read_envelope(&first);
     assert_eq!(envelope.version, 1);
     assert_eq!(envelope.mode, 0);
-    assert_eq!(envelope.schema, v3::TYPE_FACTS_TABLE_SCHEMA_V22);
+    assert_eq!(envelope.schema, v3::TYPE_FACTS_TABLE_SCHEMA_V23);
     assert_eq!(envelope.base, 0);
     assert_eq!(envelope.target, table.generation);
     assert_eq!(&*table.project_id, envelope.project_id);
@@ -1491,7 +1516,7 @@ fn the_decoder_reads_back_every_row_the_encoder_writes() {
     let frame = full(&TransitionEncoder::default(), &table);
     let plan = decoded(&frame);
     assert_eq!(plan.mode, TransitionMode::Full);
-    assert_eq!(plan.table_schema, v3::TYPE_FACTS_TABLE_SCHEMA_V22);
+    assert_eq!(plan.table_schema, v3::TYPE_FACTS_TABLE_SCHEMA_V23);
     assert_eq!(&*plan.project_id, "/p/tsconfig.json");
 
     let mut want = table.entities_vec().iter().collect::<Vec<_>>();

@@ -1,0 +1,95 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/handler-argument.tsx",
+      "start": 1208,
+      "end": 1251,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/handler-argument.tsx",
+      "start": 1302,
+      "end": 1315,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/handler-argument.tsx",
+      "start": 1302,
+      "end": 1315,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/handler-argument.tsx",
+      "start": 1391,
+      "end": 1398,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/keyboard.tsx",
+      "start": 1370,
+      "end": 1419,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/keyboard.tsx",
+      "start": 1378,
+      "end": 1384,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/store-handler.tsx",
+      "start": 874,
+      "end": 888,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/store-handler.tsx",
+      "start": 953,
+      "end": 969,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/unplaced-action.tsx",
+      "start": 515,
+      "end": 527,
+      "fixes": 0
+    }
+  ]
+}

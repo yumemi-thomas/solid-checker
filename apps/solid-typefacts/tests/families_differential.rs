@@ -229,6 +229,7 @@ fn demands_for(files: &[SourceFile]) -> Vec<EntityDemand> {
                 library_types: true,
                 reference_space: true,
                 runtime_identity: true,
+                declared_keys: false,
                 ..EntityDemand::default()
             });
         }

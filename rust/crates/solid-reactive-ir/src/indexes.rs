@@ -27,7 +27,7 @@ pub(crate) use callees::{
 pub(crate) use census::{
     CENSUS_TABLES_FROM, CallPrimitives, CallSite, CallSitesOf, CensusTables, ComponentIdentity,
     FileComponentStatuses, LazyWitnessesIn, PropRenderSitesIn, ResultAccessForwardedAll,
-    TagRendered,
+    TagRendered, exported_call_sites_of,
 };
 mod class_prototype;
 mod closed_members;
@@ -59,11 +59,13 @@ mod intrinsics;
 mod member_values;
 mod primitive_proof;
 mod project_memos;
+mod test_runner;
 pub(crate) use intrinsics::mentions_word;
 pub(crate) use project_memos::{
-    EffectApplyCalls, EffectApplyRegions, PROJECT_TABLES_FROM, ProjectTables, RouterParams,
-    SourceTexts, StringCodeVeto, TupleIterationVeto,
+    DispatchVetoAnswer, EffectApplyCalls, EffectApplyRegions, PROJECT_TABLES_FROM, ProjectTables,
+    RouterParams, SourceTexts, StringCodeVeto, TupleIterationVeto,
 };
+pub(crate) use test_runner::TestRunnerCallback;
 
 /// What every reflective definer spelling in the project says about the key
 /// it defines: `any` when some spelling may define any name, otherwise only
@@ -820,6 +822,12 @@ pub(super) struct SemanticLookup<'a> {
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
+    /// ADR 0435: every dispatch call with the receiver and caller its own
+    /// position decides.
+    placed_event_dispatch: OnceLock<Vec<event_delivery::DispatchSite>>,
+    /// ADR 0437: [`Self::placed_event_dispatch`] with the sites in an
+    /// event-only function. The veto reads this one.
+    synchronous_event_dispatch: OnceLock<Vec<event_delivery::DispatchSite>>,
     /// ADR 0292: whether some file holds a reflective write through a
     /// `prototype`.
     reflective_prototype_write: crate::base::reads::Recorded<bool>,
@@ -1178,6 +1186,8 @@ impl<'a> SemanticLookup<'a> {
             memos: crate::base::memo::build::LookupMemos::owned(&file_table),
             invocation_flow_answers: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
+            placed_event_dispatch: OnceLock::new(),
+            synchronous_event_dispatch: OnceLock::new(),
             reflective_prototype_write: crate::base::reads::Recorded::new(),
             objects_assigned_into: crate::base::reads::Recorded::new(),
             router_params: crate::base::reads::Recorded::new(),
@@ -1633,9 +1643,18 @@ impl<'a> SemanticLookup<'a> {
                 None => hasher.update([0]),
             },
             Section::SynchronousDispatch => {
+                // The hazard itself: a reader of the raw index.
                 hasher.update([u8::from(
                     self.hazard_present(crate::base::Hazard::SynchronousDispatch),
                 )]);
+            }
+            Section::DispatchVeto => {
+                // The hazard, then the two answers the classified sites give.
+                hasher.update([u8::from(
+                    self.hazard_present(crate::base::Hazard::SynchronousDispatch),
+                )]);
+                let (owner, read) = self.dispatch_veto();
+                hasher.update([u8::from(owner), u8::from(read)]);
             }
             Section::ReflectivePrototypeWrite => {
                 hasher.update([u8::from(self.reflective_prototype_write_present())]);
@@ -2057,6 +2076,19 @@ impl<'a> SemanticLookup<'a> {
     /// Whether [`Self::invocation_flow_answers`] is already computed.
     pub(crate) fn invocation_flow_answers_ready(&self) -> bool {
         self.invocation_flow_answers.get().is_some()
+    }
+
+    /// ADR 0442: the write-flow answer of one function and guard, a memo
+    /// (ADR 0450): a reader records that answer, not the answers of the
+    /// program.
+    pub(crate) fn write_flow_answer_at(
+        &self,
+        path: &str,
+        span: Span,
+        exempts_root: bool,
+    ) -> Option<(crate::ExecutionRole, bool)> {
+        self.memo_world()
+            .answer::<project_memos::WriteFlowAnswer>(&(path.to_owned(), span, exempts_root))
     }
 
     /// The literals whose every invocation comes through event delivery, for the

@@ -93,7 +93,39 @@ fn lazy_export(call: &CallExpression<'_>) -> Option<CompactString> {
     Some(export.unwrap_or_else(|| CompactString::from("default")))
 }
 
+/// The cooked text of an expression statement that is a string literal or a
+/// substitution-free template literal, and whether it is the template form
+/// (facts schema 75). A parenthesized string is neither, as the parser keeps
+/// the parentheses.
+fn string_statement(
+    statement: &oxc_ast::ast::ExpressionStatement<'_>,
+) -> Option<(CompactString, bool)> {
+    match &statement.expression {
+        Expression::StringLiteral(literal) => {
+            Some((CompactString::from(literal.value.as_str()), false))
+        }
+        Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
+            .quasis
+            .first()
+            .and_then(|quasi| quasi.value.cooked.as_ref())
+            .map(|cooked| (CompactString::from(cooked.as_str()), true)),
+        _ => None,
+    }
+}
+
 impl Collector<'_, '_> {
+    /// Remembers which string and template statements are direct children of
+    /// a program or function body (`direct_string_statements`).
+    fn note_direct_string_statements(&mut self, statements: &[oxc_ast::ast::Statement<'_>]) {
+        for statement in statements {
+            if let oxc_ast::ast::Statement::ExpressionStatement(expression) = statement
+                && string_statement(expression).is_some()
+            {
+                self.direct_string_statements.push(span(expression.span));
+            }
+        }
+    }
+
     /// The parts of a `for…in` or `for…of` loop that repeat: its left-hand
     /// target and its body. The iterable is evaluated once, before the first
     /// iteration, so it is not among them (`loop_repeats`).
@@ -130,6 +162,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 span: span(directive.span),
                 value: directive.expression.value.as_str().into(),
             }));
+        self.note_direct_string_statements(&program.body);
         walk::walk_program(self, program);
     }
 
@@ -183,6 +216,15 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_expression_statement(&mut self, statement: &oxc_ast::ast::ExpressionStatement<'a>) {
+        if let Some((value, template)) = string_statement(statement) {
+            let statement_span = span(statement.span);
+            self.stray_directives.push(StrayDirectiveFact {
+                span: statement_span,
+                value,
+                template,
+                direct: self.direct_string_statements.contains(&statement_span),
+            });
+        }
         // Saved and restored rather than cleared: an expression statement
         // inside a function inside this statement's own expression is a
         // different discard, and the outer one has to survive it.
@@ -294,24 +336,6 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .collect(),
             static_callee: self.is_static_callee(callee_span),
             result_discarded: self.discarded_expression == Some(call.span),
-            owned_write_option: call.arguments.get(1).is_some_and(|argument| {
-                let Argument::ObjectExpression(options) = argument else {
-                    return false;
-                };
-                options.properties.iter().any(|property| {
-                    let ObjectPropertyKind::ObjectProperty(property) = property else {
-                        return false;
-                    };
-                    let PropertyKey::StaticIdentifier(key) = &property.key else {
-                        return false;
-                    };
-                    key.name == "ownedWrite"
-                        && matches!(
-                            &property.value,
-                            oxc_ast::ast::Expression::BooleanLiteral(value) if value.value
-                        )
-                })
-            }),
             construct: false,
         });
         walk::walk_call_expression(self, call);
@@ -342,7 +366,6 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .collect(),
             static_callee: self.is_static_callee(callee_span),
             result_discarded: self.discarded_expression == Some(expression.span),
-            owned_write_option: false,
             construct: true,
         });
         walk::walk_new_expression(self, expression);
@@ -500,6 +523,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                     .iter()
                     .map(|directive| directive.expression.value.as_str().into())
                     .collect(),
+                directive_spans: body
+                    .directives
+                    .iter()
+                    .map(|directive| span(directive.span))
+                    .collect(),
             });
         }
         self.function_flow_depths.push(self.conditional_flow_depth);
@@ -631,6 +659,16 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                     .directives
                     .iter()
                     .map(|directive| directive.expression.value.as_str().into())
+                    .collect()
+            },
+            directive_spans: if function.expression {
+                Vec::new()
+            } else {
+                function
+                    .body
+                    .directives
+                    .iter()
+                    .map(|directive| span(directive.span))
                     .collect()
             },
         });
@@ -1384,6 +1422,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_function_body(&mut self, body: &oxc_ast::ast::FunctionBody<'a>) {
+        self.note_direct_string_statements(&body.statements);
         self.open_blocks.push((
             span(body.span),
             self.conditional_flow_depth,

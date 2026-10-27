@@ -357,16 +357,18 @@ test("per-rule surface: every discovered catalog identity is an ESLint rule", ()
     assert.ok(!entry.name.includes("/"), `v2 stays unprefixed: ${entry.name}`);
   }
   assert.equal(v2.namespace, "");
-  // The dialect config enables exactly its default-enabled catalog, less the
-  // opt-in unavailable-package-behavior rule (ADR 0248), plus the certification switch-off
-  // that keeps it composable with `recommended` and the note rule every
-  // shipped config carries.
+  // The dialect config enables exactly its default-enabled catalog, plus the
+  // certification switch-off that keeps it composable with `recommended` and
+  // the note rule every shipped config carries. An obligation (SC9005, SC9012)
+  // has no manifest entry and so no key (ADR 0440).
   assert.equal(
     Object.keys(plugin.configs.v2.rules).length,
-    v2.rules.filter(entry => entry.defaultEnabled && entry.name !== "package-behavior-unavailable")
-      .length + 2
+    v2.rules.filter(entry => entry.defaultEnabled).length + 2
   );
-  assert.equal(plugin.configs.v2.rules["solid-checker/package-behavior-unavailable"], undefined);
+  for (const obligation of plugin._testing.retiredRuleKeys) {
+    assert.equal(plugin.configs.v2.rules[`solid-checker/${obligation}`], undefined);
+    assert.ok(!v2.rules.some(entry => entry.name === obligation));
+  }
   assert.equal(plugin.configs.v2.rules["solid-checker/certification"], "off");
   assert.equal(plugin.configs.v2.rules["solid-checker/contract-note"], "warn");
 });
@@ -399,7 +401,7 @@ test("preference configs and recommendation metadata follow generated catalogs",
       );
       assert.equal(
         `solid-checker/${entry.name}` in plugin.configs[catalog.config].rules,
-        entry.defaultEnabled && entry.name !== "package-behavior-unavailable"
+        entry.defaultEnabled
       );
     }
   }
@@ -532,6 +534,90 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
   plugin._testing.snapshotCache.clear();
 });
 
+test("the rules enabled for a file are forwarded so native skips the comments ESLint applies (ADR 0429)", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-host-suppresses-"));
+  const project = join(root, "tsconfig.json");
+  const calls = join(root, "calls.txt");
+  const analyzer = join(root, "analyzer.mjs");
+  const filename = join(root, "App.tsx");
+  writeFileSync(project, "{}\n");
+  writeFileSync(filename, "export {};\n");
+  writeFileSync(analyzer, `import { writeFileSync } from "node:fs";
+writeFileSync(process.argv[2], JSON.stringify(process.argv.slice(3)));
+process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
+`);
+  const context = {
+    filename,
+    physicalFilename: filename,
+    settings: { solidChecker: { command: process.execPath, commandArgs: [analyzer, calls], project } },
+    options: [],
+    sourceCode: sourceCode("export {};\n"),
+    report() {}
+  };
+  const flagged = () => {
+    const args = JSON.parse(readFileSync(calls, "utf8"));
+    return args.flatMap((arg, index) => (arg === "--host-suppresses" ? [args[index + 1]] : []));
+  };
+  try {
+    // A member reported through `certification` is not ESLint's to suppress.
+    plugin._testing.snapshotCache.clear();
+    const certification = plugin.rules.certification.create(context);
+    certification.Program({ type: "Program" });
+    certification["Program:exit"]();
+    assert.deepEqual(flagged(), []);
+
+    // Enabled per-rule rules, a deprecated key and the no-op group key: ESLint
+    // matches a comment against the ids that reported, so those that report
+    // are forwarded and `reactivity` (which never reports) is not.
+    const created = ["strict-read-untracked", "no-direct-mutation", "reactivity"].map(
+      name => plugin.rules[name].create(context)
+    );
+    created[0].Program({ type: "Program" });
+    assert.deepEqual(flagged(), ["no-direct-mutation", "strict-read-untracked"]);
+    for (const listeners of created) listeners["Program:exit"]?.();
+
+    // Released with the pass: the next one starts clean.
+    plugin._testing.snapshotCache.clear();
+    const next = plugin.rules.certification.create(context);
+    next.Program({ type: "Program" });
+    next["Program:exit"]();
+    assert.deepEqual(flagged(), []);
+  } finally {
+    plugin._testing.snapshotCache.clear();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ESLint applies a disable comment to the per-rule id that reported (ADR 0429)", () => {
+  const finding = (rule, code, start, end) => ({
+    id: code, rule, kind: "violation", severity: "error", message: `${rule} here`,
+    primaryLocation: { path: "App.js", startByte: start, endByte: end, line: 2, column: 1 }
+  });
+  const source = "// eslint-disable-next-line solid-checker/strict-read-untracked\nvalue;\nother;\n";
+  const at = needle => source.indexOf(needle);
+  const verify = rules => new Linter().verify(
+    source,
+    [{
+      plugins: { "solid-checker": plugin },
+      linterOptions: { reportUnusedDisableDirectives: "error" },
+      settings: { solidChecker: { snapshot: { status: "violation", findings: [
+        finding("strict-read-untracked", "SC1001", at("value"), at("value") + 5)
+      ] } } },
+      rules
+    }],
+    { filename: "App.js" }
+  );
+  // Reported under its own id: ESLint suppresses it, and the directive is used.
+  assert.deepEqual(verify({ "solid-checker/strict-read-untracked": "error" }), []);
+  // Reported through `certification`, the comment does not match what ESLint
+  // sees: native is the one that applies it (and then reports nothing).
+  const unmatched = verify({ "solid-checker/certification": "error" });
+  assert.deepEqual(
+    unmatched.map(message => message.ruleId).sort(),
+    [null, "solid-checker/certification"]
+  );
+});
+
 test("deprecated rule keys delegate without entering dialect presets", () => {
   for (const [oldName, currentName] of plugin._testing.deprecatedRuleKeys) {
     const rule = plugin.rules[oldName];
@@ -545,17 +631,112 @@ test("deprecated rule keys delegate without entering dialect presets", () => {
   }
 });
 
-test("the former SC9005 rule name still loads and maps to package-behavior-unavailable", () => {
-  assert.ok(
-    plugin._testing.deprecatedRuleKeys.some(
-      ([oldName, currentName]) =>
-        oldName === "package-contract-incomplete" && currentName === "package-behavior-unavailable"
-    )
+test("every non-v1 RULE_ALIASES row is a deprecated ESLint key (dialect.rs is the authority)", () => {
+  const source = readFileSync(new URL("../../../rust/crates/solid-facts-backend/src/dialect.rs", import.meta.url), "utf8");
+  const table = source.slice(
+    source.indexOf("pub const RULE_ALIASES"),
+    source.indexOf("pub const CODE_SCOPED_ALIASES")
   );
-  const old = plugin.rules["package-contract-incomplete"];
-  assert.ok(old);
-  assert.equal(old.meta.deprecated, true);
-  assert.deepEqual(old.meta.replacedBy, ["package-behavior-unavailable"]);
+  const rows = [...table.matchAll(/\(\s*"([^"]+)",\s*"([^"]+)"\s*,?\s*\)/g)]
+    .map(([, oldName, currentName]) => [oldName, currentName])
+    .filter(([oldName]) => !oldName.startsWith("v1/"));
+  assert.ok(rows.length >= 14, `parsed ${rows.length} rows`);
+  const keys = new Map(plugin._testing.deprecatedRuleKeys.map(([oldName, currentName]) => [oldName, currentName]));
+  for (const [oldName, currentName] of rows) {
+    assert.equal(keys.get(oldName), currentName, `deprecated key ${oldName}`);
+  }
+  assert.equal(keys.size, rows.length, "no ESLint key lacks a native alias");
+});
+
+test("every former name of an obligation in RETIRED_RULES is a retired no-op ESLint key (ADR 0440)", () => {
+  const source = readFileSync(new URL("../../../rust/crates/solid-facts-backend/src/dialect.rs", import.meta.url), "utf8");
+  const table = source.slice(
+    source.indexOf("pub const RETIRED_RULES"),
+    source.indexOf("pub const RULE_ALIASES")
+  );
+  const names = [...table.matchAll(/\(\s*"([^"]+)",\s*(?:RETIRED_AS_OBLIGATION_\w+|"[^"]*obligation and not a rule[^"]*")\s*,?\s*\)/g)]
+    .map(([, name]) => name)
+    .filter(name => !name.startsWith("v1/"));
+  assert.equal(names.length, 7, `parsed ${names.join()}`);
+  assert.deepEqual([...names].sort(), [...plugin._testing.retiredRuleKeys].sort());
+});
+
+test("the reactivity group key is valid in a config and in a disable comment, and reports nothing (ADR 0428)", () => {
+  assert.ok(plugin.rules.reactivity);
+  assert.deepEqual(plugin.rules.reactivity.create({}), {});
+  const linter = new Linter();
+  const source = "// eslint-disable-next-line solid-checker/reactivity\nconst answer = 42;\n";
+  const messages = linter.verify(
+    source,
+    [{
+      plugins: { "solid-checker": plugin },
+      linterOptions: { reportUnusedDisableDirectives: "off" },
+      settings: { solidChecker: { snapshot: { status: "certified", findings: [] } } },
+      rules: { "solid-checker/reactivity": "error", "solid-checker/no-owner-cleanup": "error" }
+    }],
+    { filename: "App.js" }
+  );
+  assert.deepEqual(messages, []);
+  // The group is not a finding's rule, so no manifest entry may take its name.
+  for (const catalog of Object.values(plugin._testing.manifests)) {
+    assert.ok(!catalog.rules.some(entry => entry.name === "reactivity"));
+  }
+});
+
+test("a former name of a merged rule reports and owns its own code only (ADR 0426)", () => {
+  const merged = "no-await-primitive-in-tracked-scope";
+  const findings = [
+    finding("SC2004", merged, 0, 2),
+    finding("SC2005", merged, 3, 5)
+  ];
+  const ids = reported => reported.map(entry => entry.data.message.slice(1, 7)).sort();
+  for (const [rules, expected] of [
+    [["resolve-in-tracked-scope"], ["SC2004"]],
+    [["resolve-in-reactive-scope"], ["SC2004"]],
+    [["until-in-tracked-scope"], ["SC2005"]],
+    [["resolve-in-tracked-scope", "until-in-tracked-scope"], ["SC2004", "SC2005"]],
+    [[merged], ["SC2004", "SC2005"]]
+  ]) {
+    const reported = [];
+    lintPass(rules, syntheticContext({ findings }, reported));
+    assert.deepEqual(ids(reported), expected, rules.join());
+  }
+  // Certification skips only the code the enabled old key owns, so the other
+  // code is neither dropped nor reported twice.
+  for (const [rules, expected] of [
+    [["certification", "resolve-in-tracked-scope"], ["SC2004", "SC2005"]],
+    [["certification", "until-in-tracked-scope"], ["SC2004", "SC2005"]],
+    [["certification", merged], ["SC2004", "SC2005"]]
+  ]) {
+    const reported = [];
+    lintPass(rules, syntheticContext({ findings }, reported));
+    assert.deepEqual(ids(reported), expected, rules.join());
+  }
+  assert.equal(plugin._testing.ownedRules.size, 0);
+});
+
+test("the keys of SC9005, SC9011 and SC9012 still load and do nothing (ADR 0440)", () => {
+  for (const name of [
+    "package-behavior-unavailable",
+    "package-contract-incomplete",
+    "package-contract-export-missing",
+    "package-contract-missing",
+    "package-contract-callback-missing",
+    "reactive-dispatch-unresolved",
+    "reactive-source-uncaptured"
+  ]) {
+    assert.ok(plugin._testing.retiredRuleKeys.includes(name), name);
+    const retired = plugin.rules[name];
+    assert.ok(retired, name);
+    assert.equal(retired.meta.deprecated, true);
+    assert.deepEqual(retired.meta.replacedBy, []);
+    // It registers nothing and reports nothing, whatever the snapshot holds.
+    assert.deepEqual(retired.create({}), {});
+  }
+  assert.ok(
+    !plugin._testing.deprecatedRuleKeys.some(([oldName]) => oldName === "package-contract-incomplete"),
+    "it no longer delegates to a rule"
+  );
 });
 
 test("recommended followed by a dialect config reports each finding once", () => {
@@ -712,16 +893,17 @@ test("a project-scoped finding is reported on every linted file, not matched by 
 });
 
 test("a finding collapsed over a package export is reported in every file holding a site", () => {
-  // An SC9005 finding is collapsed over the whole project: its related
-  // locations are further sites, not context.
+  // A finding of a package subject (SC9005's shape, though SC9005 is an
+  // internal obligation and has no rule of its own, ADR 0440) is collapsed over
+  // the whole project: its related locations are further sites, not context.
   // A per-file reporter must still see it in each file that has one, once, at
   // that file's first site.
   // A violation, because uncertifiable findings are internal and never
   // reported (`internal findings are never reported` below); the collapse
   // depends on the subject kind alone.
   const collapsed = {
-    id: "SC9005",
-    rule: "package-behavior-unavailable",
+    id: "SC1001",
+    rule: "strict-read-untracked",
     kind: "violation",
     severity: "warning",
     message: "pkg is not analyzed from source here, so the behaviour of imported export run is unknown; " +
@@ -736,7 +918,7 @@ test("a finding collapsed over a package export is reported in every file holdin
   };
   const snapshot = { status: "uncertifiable", findings: [collapsed] };
   const text = "0123456789ab";
-  const rule = "package-behavior-unavailable";
+  const rule = "strict-read-untracked";
 
   // The per-rule rule reports it; the catch-all leaves findings a
   // per-rule rule owns to that rule.
@@ -785,6 +967,34 @@ test("internal findings are never reported, project notices are", () => {
   const all = run(snapshot, "/tmp/app/App.ts", text);
   assert.equal(all.length, 1);
   assert.match(all[0].data.message, /^\[SC9014\] unaudited release/);
+});
+
+test("a proven compiler refusal is reported in its own file, an unproven one in every file (ADR 0441)", () => {
+  const text = "0123456789ab";
+  const refusal = {
+    id: "SC9015",
+    rule: "compiler-refused-source",
+    kind: "violation",
+    severity: "error",
+    message: "the pinned Solid 2 compiler refuses /tmp/app/Refused.tsx",
+    subjectKind: "file",
+    primaryLocation: { path: "/tmp/app/Refused.tsx", startByte: 0, endByte: 0 }
+  };
+  const snapshot = { status: "violation", findings: [refusal] };
+  const own = run(snapshot, "/tmp/app/Refused.tsx", text, "compiler-refused-source");
+  assert.equal(own.length, 1);
+  assert.match(own[0].data.message, /^\[SC9015\] the pinned Solid 2 compiler refuses/);
+  assert.equal(run(snapshot, "/tmp/app/Other.tsx", text, "compiler-refused-source").length, 0);
+
+  const notice = {
+    ...refusal,
+    kind: "uncertifiable",
+    severity: "warning",
+    subjectKind: "project",
+    message: "the Solid compiler refused /tmp/app/Refused.tsx"
+  };
+  const noticed = { status: "uncertifiable", findings: [notice] };
+  assert.equal(run(noticed, "/tmp/app/Other.tsx", text, "compiler-refused-source").length, 1);
 });
 
 function finding(id, rule, start, end) {

@@ -8,8 +8,9 @@ interface Api {
 declare const api: Api;
 
 // Each helper hands its parameter on to a callee with no analyzed body:
-// `observe(count)` or `fn(count)` written here is SC9011; the call through
-// the helper is an SC9012 obligation (ADR 0370).
+// `observe(count)` or `fn(count)` written here is an SC9012 `package-callee`
+// obligation; the call through the helper is an SC9012 obligation too
+// (ADR 0370, 0440).
 function watch(source: () => number): void {
   observe(source);
 }

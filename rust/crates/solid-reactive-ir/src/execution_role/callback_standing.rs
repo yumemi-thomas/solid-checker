@@ -174,7 +174,15 @@ pub(super) fn literal_invocation_unproven(
         return false;
     }
     if literal.method_name.is_none() && function_binding_name(file, literal).is_some() {
-        return !named_helper_runs_during_body(file, literal, None, execution, lookup, following);
+        return !named_helper_runs_during_body(
+            file,
+            literal,
+            None,
+            ExecutionRole::UntrackedRendering,
+            execution,
+            lookup,
+            following,
+        );
     }
     true
 }
@@ -207,6 +215,9 @@ pub(super) fn stored_literal_invocation_unproven(
 /// A call written in a handler, a timer, a stored closure or a callback prop is
 /// unproven by the same walk, so the helper is too; a call cycle is unproven.
 ///
+/// `expected` is the role every call must have (`UntrackedRendering` for a body
+/// helper; `TrackedJsx` for a closure a tracked scope builds, ADR 0452).
+///
 /// With `default_parameter` the question is about that parameter's default
 /// initializer, which runs only when a call leaves the argument out: every call
 /// must then pass fewer arguments than the parameter's position, spread-free.
@@ -214,6 +225,7 @@ pub(super) fn named_helper_runs_during_body(
     file: &solid_facts::FileFacts,
     literal: &solid_facts::ast::FunctionFact,
     default_parameter: Option<usize>,
+    expected: ExecutionRole,
     execution: ExecutionRole,
     lookup: &SemanticLookup<'_>,
     following: &mut HashSet<(String, Span)>,
@@ -274,7 +286,7 @@ pub(super) fn named_helper_runs_during_body(
                 lookup.entities(),
                 lookup.symbol_names(),
                 lookup,
-            ) == ExecutionRole::UntrackedRendering
+            ) == expected
             && !callee_callback_timing_within(caller, *callee, execution, lookup, following)
     });
     following.remove(&key);
@@ -802,8 +814,13 @@ pub(super) fn returned_factory_callback_execution_role(
                 index,
                 factory_call.arguments.len(),
             );
+            // A map function runs untracked wherever the returned accessor is
+            // read (ADR 0443), so that use cannot place it.
             if !semantics.requires_return_invocation
                 || semantics.execution != Some(Execution::Inline)
+                || lookup
+                    .dialect
+                    .callback_runs_untracked_without_window(primitive, index)
             {
                 return None;
             }
@@ -923,19 +940,21 @@ pub(super) fn returned_callback_execution_role(
         })
 }
 
-/// Whether `span` is evaluated as the `value` getter of a resolved Solid 1.x
-/// `createContext().Provider`.
+/// Whether `span` is evaluated as the `value` getter of a resolved context
+/// provider: Solid 1.x's `createContext().Provider`, or Solid 2.0's context
+/// element itself (`<Ctx value={…}>`, ADR 0443).
 ///
-/// Both halves are semantic proof: the JSX member object resolves to the
-/// binding initialized by the exact Solid `createContext` primitive, and the
-/// final member is `Provider`. An arbitrary component named `SomeProvider` or
-/// object with a same-spelled property satisfies neither condition.
+/// Both halves are semantic proof: the JSX tag (1.x: its member object)
+/// resolves to the binding initialized by the exact Solid `createContext`
+/// primitive, and, for 1.x, the final member is `Provider`. An arbitrary
+/// component named `SomeProvider` or object with a same-spelled property
+/// satisfies neither condition.
 pub(super) fn context_provider_value_role(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
-    let provider_member = lookup.dialect.context_provider_member()?;
+    let provider_member = lookup.dialect.context_provider_member();
     let element = file
         .ast
         .jsx_elements
@@ -949,25 +968,48 @@ pub(super) fn context_provider_value_role(
             })
         })
         .min_by_key(|element| element.span.end - element.span.start)?;
-    let (Some(object), Some(property)) = (element.member_object, element.member_property) else {
-        return None;
-    };
-    if file.source_text(property) != Some(provider_member) {
-        return None;
+    if let Some(provider_member) = provider_member {
+        let (Some(object), Some(property)) = (element.member_object, element.member_property)
+        else {
+            return None;
+        };
+        if file.source_text(property) != Some(provider_member) {
+            return None;
+        }
+        if !lookup.is_context_reference(file.path.as_str(), object) {
+            return None;
+        }
+    } else {
+        // Solid 2.0: the context is the provider. Its function reads `value`
+        // once, in the strict-read window `observedComponent` opens for
+        // `<provider>`, and stores a snapshot (`@solid-js/solid.dev.js:9-16`,
+        // `@solidjs/signals@2.0.0-rc.17` `dist/dev.js:1834-1844`); a child's
+        // `useContext` subscribes to nothing. Probed on rc.17: a write left
+        // the child's memo unrun, the getter uncalled again, and the dev
+        // build raised STRICT_READ_UNTRACKED for `<provider>`.
+        if element.member_object.is_some()
+            || !lookup.is_context_reference(file.path.as_str(), element.name.span)
+        {
+            return None;
+        }
     }
-    if !lookup.is_context_reference(file.path.as_str(), object) {
-        return None;
-    }
-    // Solid 1.x's createProvider implementation eagerly reads props.value
-    // inside untrack. A function expression is the one exception: reading
+    // The provider's implementation eagerly reads props.value inside
+    // untrack. A function expression is the one exception: reading
     // the getter only creates/stores the function; its body is not run.
-    let stores_function = file.ast.functions_body_containing(span).any(|function| {
+    let stores_function = functions_around(file, span).into_iter().any(|function| {
         element.attributes.iter().any(|attribute| {
             attribute
                 .expression
                 .is_some_and(|expression| expression.contains(function.span))
         })
     });
+    if stores_function && provider_member.is_none() {
+        // Solid 2.0: a function stored in the snapshot runs whenever its
+        // consumer calls it, so no fact places it. The role stays unproven,
+        // as it was before ADR 0443 (an internal uncertifiable result), and
+        // only a read written directly in `value` is placed.
+        return None;
+    }
     Some(if stores_function {
         ExecutionRole::DeferredCallback
     } else {

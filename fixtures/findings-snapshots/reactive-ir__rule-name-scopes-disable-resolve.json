@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rule-name-scopes/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rule-name-scopes/variants/disable-resolve/App.tsx",
+      "start": 484,
+      "end": 489,
+      "fixes": 0
+    }
+  ]
+}

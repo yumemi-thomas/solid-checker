@@ -2,53 +2,53 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "server-function-module-directive",
+      "rule": "valid-use-server",
       "code": "SC7006",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-directive/api.ts",
-      "start": 466,
-      "end": 473,
-      "fixes": 0
-    },
-    {
-      "rule": "server-function-module-directive",
-      "code": "SC7006",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/server-function-directive/api.ts",
-      "start": 589,
+      "start": 549,
       "end": 596,
       "fixes": 0
     },
     {
-      "rule": "server-function-module-directive",
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-directive/api.ts",
+      "start": 825,
+      "end": 832,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
       "code": "SC7006",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-directive/api.ts",
-      "start": 701,
-      "end": 707,
+      "start": 979,
+      "end": 985,
       "fixes": 0
     },
     {
-      "rule": "server-function-module-directive",
+      "rule": "valid-use-server",
       "code": "SC7006",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-directive/api.ts",
-      "start": 769,
-      "end": 792,
+      "start": 1035,
+      "end": 1058,
       "fixes": 0
     },
     {
-      "rule": "server-function-module-directive",
+      "rule": "valid-use-server",
       "code": "SC7006",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-directive/default-wrapped.ts",
-      "start": 218,
-      "end": 260,
+      "start": 254,
+      "end": 296,
       "fixes": 0
     }
   ]

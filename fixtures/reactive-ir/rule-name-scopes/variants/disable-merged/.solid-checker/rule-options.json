@@ -1,0 +1,4 @@
+{
+  "schemaVersion": 1,
+  "rules": { "no-await-primitive-in-tracked-scope": { "enabled": false } }
+}

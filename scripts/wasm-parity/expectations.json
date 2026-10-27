@@ -421,7 +421,7 @@
   },
   "w7BadHandshake": {
     "status": 1,
-    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 85, schema sha256:550d7a97f830c0f5af7b76ee544dc08c70bb48e29f7d82065435158f646c1c73, build \"dev\"; got protocol 85, schema sha256:550d7a97f830c0f5af7b76ee544dc08c70bb48e29f7d82065435158f646c1c72, build \"dev\"",
+    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 86, schema sha256:61cbcb41ba0d3f6cdaa2244ea8d405175bd0735119af27e3c155d268ca361c11, build \"dev\"; got protocol 86, schema sha256:61cbcb41ba0d3f6cdaa2244ea8d405175bd0735119af27e3c155d268ca361c10, build \"dev\"",
     "host": {
       "opened": [
         1
@@ -676,8 +676,8 @@
           "endByte": 248
         },
         {
-          "id": "SC9011",
-          "rule": "reactive-source-uncaptured",
+          "id": "SC9012",
+          "rule": "reactive-dispatch-unresolved",
           "kind": "uncertifiable",
           "path": "<root>/legacy/Legacy.tsx",
           "startByte": 348,

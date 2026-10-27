@@ -11,7 +11,7 @@ export const moduleScope = (() => {
 
 // Positive: an IIFE inside a callback that `runWithOwner(null, ...)` runs with
 // no owner, whatever calls this function.
-export function detachedIife() {
+export function DetachedIife() {
   runWithOwner(null, () => {
     const value = (() => {
       createEffect(count, () => {});

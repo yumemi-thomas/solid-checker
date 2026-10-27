@@ -43,6 +43,72 @@ fn a_compile_error_is_a_refusal_of_the_source() {
     }
 }
 
+/// ADR 0441: a refusal is a proven defect only for a removed 1.x attribute
+/// form whose name `tsc` does not also reject (a hyphen exempts it), and the
+/// classification reads the pinned compiler's own messages, so a pin move that
+/// rewords one fails here instead of silently demoting or promoting it.
+#[test]
+fn a_refusal_is_proven_only_for_a_removed_form_tsc_accepts() {
+    use solid_facts::compiler::RefusalVerdict::{ProvenDefect, TypeScriptOwned, Unproven};
+    for (source, expected) in [
+        ("const v = <p attr:data-z={1}>x</p>;", ProvenDefect),
+        ("const v = <p bool:data-flag={true}>x</p>;", ProvenDefect),
+        (
+            "const v = <p on:custom-event={() => {}}>x</p>;",
+            ProvenDefect,
+        ),
+        (
+            "const v = <p oncapture:my-click={() => {}}>x</p>;",
+            ProvenDefect,
+        ),
+        ("const v = <p use:my-tip>x</p>;", ProvenDefect),
+        // Nested native elements are checked with their template root.
+        (
+            "const v = <div><p attr:data-z={1}>x</p></div>;",
+            ProvenDefect,
+        ),
+        ("const v = <p attr:title={1}>x</p>;", TypeScriptOwned),
+        ("const v = <p bool:hidden={true}>x</p>;", TypeScriptOwned),
+        (
+            "const v = <button on:click={() => {}}>x</button>;",
+            TypeScriptOwned,
+        ),
+        ("const v = <p use:tip>x</p>;", TypeScriptOwned),
+        (
+            "const v = <p classList={{ a: true }}>x</p>;",
+            TypeScriptOwned,
+        ),
+        // `validate` can switch the markup error off, and the fragment error
+        // belongs to the ssr generate.
+        ("const v = <p><p>x</p></p>;", Unproven),
+    ] {
+        let request = AnalysisRequest::new("App.tsx", source, CompilerOptions::default());
+        let Err(CompilerProviderError::Refused(message)) = NativeCompilerFacts.analyze(&request)
+        else {
+            panic!("{source}: the pinned compiler must refuse this source");
+        };
+        let reason = message.strip_prefix("App.tsx: ").expect("path prefix");
+        assert_eq!(
+            NativeCompilerFacts.classify_refusal(reason),
+            expected,
+            "{source}: {reason}"
+        );
+    }
+    assert_eq!(
+        super::classify_refusal(
+            "`attr:` on <p> uses the `attr:` namespace, which was removed in Solid 2.0."
+        ),
+        Unproven,
+        "an empty name is not the compiler's message"
+    );
+    assert_eq!(
+        super::classify_refusal(
+            "`xlink:href` on <p> uses the `xlink:` namespace, which was removed in Solid 2.0."
+        ),
+        Unproven
+    );
+}
+
 #[test]
 fn certification_replay_retains_the_exact_output_and_is_trace_neutral() {
     let request = AnalysisRequest::new(

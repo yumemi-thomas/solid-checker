@@ -210,6 +210,18 @@ impl<'r, 'c, 'w: 'c> CtxFlow<'r, 'c, 'w> {
         facts
     }
 
+    /// The facts of slot `rank` of `id`, read like [`Self::read`]'s first.
+    fn read_slot(&self, id: FileId, rank: u32) -> Option<&'w FileFacts> {
+        if rank == 0 {
+            return self.read(id);
+        }
+        let read = self.ctx.file(id, rank as usize)?;
+        read.compiler();
+        let facts = read.facts();
+        self.ids.borrow_mut().insert(facts.path.as_str(), id);
+        Some(facts)
+    }
+
     /// The id of a file the walk holds; `None` for any other.
     fn id(&self, file: &FileFacts) -> Option<FileId> {
         self.ids.borrow().get(file.path.as_str()).copied()
@@ -698,6 +710,35 @@ impl<'w> FlowWorld<'w> for CtxFlow<'_, '_, 'w> {
         let mut context = classifying.iter().cloned().collect::<Vec<_>>();
         context.sort_unstable();
         self.memo::<FlowSiteRole>(&(id, call, context)).flatten()
+    }
+
+    fn exported_call_sites(
+        &self,
+        file: &'w FileFacts,
+        function: &'w solid_facts::ast::FunctionFact,
+    ) -> Option<Vec<(&'w FileFacts, Span)>> {
+        let id = self.id(file)?;
+        let name = function.name.as_ref()?;
+        // The census's own answers (the call graph, the hand-outs, the
+        // symbol's references), each a recorded read.
+        let sites =
+            match crate::indexes::exported_call_sites_of(self.ctx, id, function.span, name.span) {
+                Ok(sites) => sites?,
+                Err(cycle) => {
+                    self.cycle.borrow_mut().get_or_insert(cycle);
+                    return None;
+                }
+            };
+        sites
+            .into_iter()
+            .map(|site| {
+                let caller = self.read_slot(site.file, site.rank)?;
+                let call = caller.ast.calls.iter().find(|call| {
+                    !call.construct && caller.ast.peel_ts_sugar_span(call.callee) == site.callee
+                })?;
+                Some((caller, call.span))
+            })
+            .collect()
     }
 }
 

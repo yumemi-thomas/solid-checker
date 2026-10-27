@@ -22,6 +22,8 @@ mod cross_file_callbacks_process;
 mod cross_file_digest_process;
 #[path = "daemon_residue_process.rs"]
 mod daemon_residue_process;
+#[path = "dispatch_veto_reads_process.rs"]
+mod dispatch_veto_reads_process;
 #[path = "forwarding_refresh_process.rs"]
 mod forwarding_refresh_process;
 #[path = "harness_process.rs"]

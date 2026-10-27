@@ -748,12 +748,13 @@ pub(super) fn run(
                     name,
                     declaration,
                     kind,
+                    owned_write,
                     ..
                 } => {
                     tables.setters.entry(symbol.clone()).or_insert((
                         name.clone(),
                         declaration.clone(),
-                        false,
+                        *owned_write,
                         *kind,
                     ));
                 }

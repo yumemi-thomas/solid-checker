@@ -564,7 +564,7 @@ fn symbol_rows_digest(view: &FileView<'_>) -> [u8; 32] {
 }
 
 /// The declaration each resolved call of `entities` names (a callee's
-/// symbol), digested.
+/// symbol) and the declared key set each carries (ADR 0436), digested.
 fn declarations_digest(entities: &[typefacts::EntityFact]) -> [u8; 32] {
     let mut digest = Sha256::new();
     for entity in entities {
@@ -586,6 +586,21 @@ fn declarations_digest(entities: &[typefacts::EntityFact]) -> [u8; 32] {
                         .to_le_bytes(),
                 );
                 digest.update(symbol.as_bytes());
+            }
+        }
+        match entity.declared_keys.as_deref() {
+            None => digest.update([0]),
+            Some(names) => {
+                digest.update([1]);
+                digest.update(u64::try_from(names.len()).unwrap_or(u64::MAX).to_le_bytes());
+                for declared in names {
+                    digest.update(
+                        u64::try_from(declared.len())
+                            .unwrap_or(u64::MAX)
+                            .to_le_bytes(),
+                    );
+                    digest.update(declared.as_bytes());
+                }
             }
         }
     }
@@ -1730,6 +1745,16 @@ impl<'w> FileRead<'_, '_, 'w> {
         self.view.references()
     }
 
+    /// The TypeFacts entity at exactly `span` of this file: reads the entity
+    /// rows. Its `declared_keys` are part of the Entities fingerprint
+    /// ([`declarations_digest`]); no other field of the row is, so a memo reads
+    /// from it only what that digest covers.
+    pub(crate) fn entity_at(&self, span: Span) -> Option<&'w typefacts::EntityFact> {
+        self.ctx
+            .record_input(Input::File(self.id, Section::Entities));
+        self.view.entity_at(span)
+    }
+
     /// The symbol a callee resolves to, runtime redirects aside
     /// ([`FileView::callee_symbol`]): reads the AST and the TypeFacts rows.
     pub(crate) fn callee_symbol(&self, callee: Span) -> Option<&'w str> {
@@ -1907,8 +1932,23 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
             .any(|read| read.query == super::QueryId(u32::MAX));
         for section in sections {
             match section {
+                // The raw hazards index: the hazard's probe stands for it, as
+                // for a reflective definition below. The veto is the next arm.
                 crate::base::reads::Section::SynchronousDispatch => {
                     let _ = self.hazard(crate::base::Hazard::SynchronousDispatch);
+                }
+                // A reader of the veto's two answers records the answers
+                // (ADR 0450): the hazard's probe, and while the hazard is
+                // present the memo that holds the classified veto. A cycle
+                // reads the whole program.
+                crate::base::reads::Section::DispatchVeto => {
+                    if self.hazard(crate::base::Hazard::SynchronousDispatch)
+                        && self
+                            .memo::<crate::indexes::DispatchVetoAnswer>(&())
+                            .is_err()
+                    {
+                        whole = true;
+                    }
                 }
                 crate::base::reads::Section::ReflectiveDefinition => {
                     let _ = self.hazard(crate::base::Hazard::ReflectiveDefinitionSpelling);

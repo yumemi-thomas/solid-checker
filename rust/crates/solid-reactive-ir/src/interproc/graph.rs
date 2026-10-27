@@ -708,11 +708,16 @@ fn record_invoked_parameter_callback(
     // The boundary is read off the AST rather than off
     // `invocation_owner`, so it does not depend on which function
     // shapes the summary-node universe carries.
-    let call_in_owner_body = file
-        .ast
-        .functions_body_containing(call.span)
-        .min_by_key(|function| function.body.end - function.body.start)
-        .is_some_and(|innermost| innermost.body == nodes[callback_owner].body);
+    let call_in_owner_body = crate::execution_role::functions_around(file, call.span)
+        .into_iter()
+        .min_by_key(|function| function.span.end - function.span.start)
+        // A call in the owner's own parameter list runs only when the caller
+        // leaves that argument out, so it is no call "in the body": the body
+        // must hold the call, not just belong to the function that does.
+        .is_some_and(|innermost| {
+            innermost.body == nodes[callback_owner].body
+                && nodes[callback_owner].body.contains(call.span)
+        });
     // Every primitive callback position between this call and the
     // declaring function's body, composed. This rung outranks the
     // lexical role below it because the lexical role answers a

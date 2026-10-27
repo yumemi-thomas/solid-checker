@@ -151,7 +151,6 @@ pub(crate) fn emit_only_file(
 const COVERAGE_RULES: &[&str] = &[
     "package-behavior-unavailable",
     "reactive-dispatch-unresolved",
-    "reactive-source-uncaptured",
     "unaudited-solid-release",
 ];
 

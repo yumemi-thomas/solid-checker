@@ -36,6 +36,12 @@ use solid_reactive_ir::{Finding, Program, RuleMetadata, SolveTimings};
 /// claim was TypeScript's", and "the dialect is gone" would not tell them that.
 const RETIRED_WITH_THE_V1_CATALOG: &str = "removed 2026-09-16: the Solid 1.x catalog was deleted with its dialect (ADR 0110); a project whose installed solid-js resolves to 1.x is refused with SC9013 rather than analyzed under another catalog";
 
+/// The note for every former name of SC9005 (ADR 0440).
+const RETIRED_AS_OBLIGATION_SC9005: &str = "became an obligation 2026-10-26: required package behavior unavailable from source (SC9005) is an internal uncertifiable result, not a rule, and no option disables it (ADR 0440); the key does nothing";
+
+/// The note for SC9012 (ADR 0440).
+const RETIRED_AS_OBLIGATION_SC9012: &str = "became an obligation 2026-10-26: an unresolved reactive dispatch (SC9012) is an internal uncertifiable result, not a rule, and no option disables it (ADR 0440); the key does nothing";
+
 pub const RETIRED_RULES: &[(&str, &str)] = &[
     (
         "invalid-cleanup-return",
@@ -221,7 +227,37 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
         "v1/package-contract-incomplete",
         RETIRED_WITH_THE_V1_CATALOG,
     ),
+    // ADR 0440: SC9005, SC9011 and SC9012 are obligations, internal
+    // uncertifiable results, not rules. A configuration that named one still
+    // loads, and the key does nothing: no option reaches an obligation.
+    ("package-behavior-unavailable", RETIRED_AS_OBLIGATION_SC9005),
+    ("package-contract-incomplete", RETIRED_AS_OBLIGATION_SC9005),
+    (
+        "package-contract-export-missing",
+        RETIRED_AS_OBLIGATION_SC9005,
+    ),
+    ("package-contract-missing", RETIRED_AS_OBLIGATION_SC9005),
+    (
+        "package-contract-callback-missing",
+        RETIRED_AS_OBLIGATION_SC9005,
+    ),
+    ("reactive-dispatch-unresolved", RETIRED_AS_OBLIGATION_SC9012),
+    (
+        "reactive-source-uncaptured",
+        "merged 2026-10-26 into SC9012 as the context `package-callee`, which is an obligation and not a rule (ADR 0440); the key does nothing",
+    ),
 ];
+
+/// Diagnostic codes that no longer exist (ADR 0440): SC9011 merged into SC9012.
+/// A `solid-checker-*` suppression comment may still name one; it is accepted
+/// silently and suppresses nothing.
+pub const RETIRED_CODES: &[&str] = &["SC9011"];
+
+/// Whether `code` is a diagnostic code the catalog retired.
+#[must_use]
+pub fn retired_code(code: &str) -> bool {
+    RETIRED_CODES.contains(&code)
+}
 
 /// Former external rule identities that canonicalize onto a current rule.
 ///
@@ -248,20 +284,6 @@ pub const RULE_ALIASES: &[(&str, &str)] = &[
         "v1/package-contract-callback-missing",
         "v1/package-contract-incomplete",
     ),
-    (
-        "package-contract-export-missing",
-        "package-behavior-unavailable",
-    ),
-    ("package-contract-missing", "package-behavior-unavailable"),
-    (
-        "package-contract-callback-missing",
-        "package-behavior-unavailable",
-    ),
-    // SC9005 was named for the removed package-contract model (ADR 0312).
-    (
-        "package-contract-incomplete",
-        "package-behavior-unavailable",
-    ),
     ("component-props-destructure", "no-destructure"),
     ("component-returns-conditionally", "components-return-once"),
     (
@@ -272,12 +294,120 @@ pub const RULE_ALIASES: &[(&str, &str)] = &[
         "v1/expected-function-got-expression",
         "v1/reactive-handler-frozen",
     ),
-    ("resolve-in-reactive-scope", "resolve-in-tracked-scope"),
+    // ADR 0381: catalog names follow eslint-plugin-solid where it still
+    // describes what the checker proves.
+    (
+        "reactive-write-in-owned-scope",
+        "no-write-in-pure-computation",
+    ),
+    ("no-direct-mutation", "no-store-mutation-outside-setter"),
+    // ADR 0426: `resolve` and `until` are one rule, `SC2004` and `SC2005`.
+    (
+        "resolve-in-tracked-scope",
+        "no-await-primitive-in-tracked-scope",
+    ),
+    (
+        "resolve-in-reactive-scope",
+        "no-await-primitive-in-tracked-scope",
+    ),
+    (
+        "until-in-tracked-scope",
+        "no-await-primitive-in-tracked-scope",
+    ),
+    ("server-function-module-directive", "valid-use-server"),
     (
         "sync-node-received-async",
         "sync-computation-received-async",
     ),
 ];
+
+/// Former names that covered one code of a merged rule (ADR 0426): configuring
+/// one reaches that code alone, where the current name reaches every code of
+/// the rule. Each name here is also in [`RULE_ALIASES`], which validates it.
+pub const CODE_SCOPED_ALIASES: &[(&str, &str)] = &[
+    ("resolve-in-tracked-scope", "SC2004"),
+    ("resolve-in-reactive-scope", "SC2004"),
+    ("until-in-tracked-scope", "SC2005"),
+];
+
+/// Group keys (ADR 0428): one name that configures several rules at once, as
+/// eslint-plugin-solid's `reactivity` does for the four defects it reports. A
+/// group is not a rule: it has no finding, no code and no ESLint severity, and
+/// an explicit setting of a member wins over the group's.
+pub const RULE_GROUPS: &[(&str, &[&str])] = &[(
+    "reactivity",
+    &[
+        "strict-read-untracked",
+        "reactive-read-after-await",
+        "uncalled-accessor",
+        "reactive-handler-frozen",
+    ],
+)];
+
+/// The rule names eslint-plugin-solid v0.18.1 registers (`allRules` in
+/// `src/plugin.ts`; `validate-jsx-nesting` is commented out there). A
+/// suppression comment naming `solid/<name>` for one of them is accepted
+/// whether or not this checker has a rule of that name (ADR 0429); any other
+/// `solid/*` name belongs to whatever plugin owns that namespace.
+pub const UPSTREAM_RULE_NAMES: &[&str] = &[
+    "components-return-once",
+    "event-handlers",
+    "imports",
+    "jsx-no-duplicate-props",
+    "jsx-no-undef",
+    "jsx-no-script-url",
+    "jsx-uses-vars",
+    "no-accessor-as-prop",
+    "no-boolean-enumerated-attribute",
+    "no-browser-globals-in-server-function",
+    "no-destructure",
+    "no-innerhtml",
+    "no-invalid-server-capture",
+    "no-module-scope-reactive-primitive",
+    "no-proxy-apis",
+    "no-react-deps",
+    "no-react-specific-props",
+    "no-restated-default-options",
+    "no-single-arg-create-effect",
+    "no-store-mutation-outside-setter",
+    "no-unknown-namespaces",
+    "no-unused-signal",
+    "no-write-in-pure-computation",
+    "prefer-classlist",
+    "prefer-for",
+    "prefer-onSettled-for-side-effects",
+    "prefer-show",
+    "prefer-structured-class",
+    "reactivity",
+    "removed-api",
+    "require-async-server-function",
+    "self-closing-comp",
+    "style-prop",
+    "valid-use-server",
+    "no-array-handlers",
+];
+
+/// The ESLint adapter's own rule ids, which a project writes in disable
+/// comments but which report no finding of their own.
+pub const ADAPTER_RULE_IDS: &[&str] = &["certification", "package-note", "contract-note"];
+
+/// The member rules of a group key, if `name` is one.
+#[must_use]
+pub fn rule_group(name: &str) -> Option<&'static [&'static str]> {
+    RULE_GROUPS
+        .iter()
+        .find(|(group, _)| *group == name)
+        .map(|(_, members)| *members)
+}
+
+/// The finding code a former rule name is limited to, if it is.
+#[must_use]
+pub fn rule_alias_code(name: &str) -> Option<&'static str> {
+    CODE_SCOPED_ALIASES
+        .iter()
+        .find(|(old, _)| *old == name)
+        .map(|(_, code)| *code)
+}
 
 /// The removal note for a retired rule identity, or `None` if the checker never
 /// published that name.
@@ -307,6 +437,10 @@ pub struct SemanticDemandCapabilities {
     pub array_map_receiver_types: bool,
     pub async_array_map_callbacks: bool,
     pub server_argument_library_types: bool,
+    /// ADR 0436: the declared key set of a spread argument on an intrinsic
+    /// element, which `missing-owner` asks to prove the spread holds no
+    /// listener key.
+    pub spread_declared_keys: bool,
 }
 
 impl SemanticDemandCapabilities {
@@ -314,6 +448,7 @@ impl SemanticDemandCapabilities {
         array_map_receiver_types: false,
         async_array_map_callbacks: false,
         server_argument_library_types: false,
+        spread_declared_keys: false,
     };
     /// Only the 2.0 catalog carries `server-function-rich-argument`, so only it
     /// pays for the library-type identities that rule reads.
@@ -321,6 +456,7 @@ impl SemanticDemandCapabilities {
         array_map_receiver_types: true,
         async_array_map_callbacks: true,
         server_argument_library_types: true,
+        spread_declared_keys: true,
     };
 }
 
@@ -346,11 +482,15 @@ pub struct Dialect {
     /// Documentation page for a rule, addressed by its externally visible
     /// name.
     pub docs_url: fn(&str) -> String,
-    /// Whether the catalog carries a rule with this externally visible name.
-    /// Lets shared backend code condition work on catalog capability
-    /// (for example, which type facts to demand) instead of naming a
-    /// version.
+    /// Whether the catalog carries a *configurable* rule with this externally
+    /// visible name: the names a rule-options document, an alias and the
+    /// plugin manifest may use. An obligation (SC9005, SC9012; ADR 0440) has
+    /// metadata but no key, so it is not one. Lets shared backend code
+    /// condition work on catalog capability (for example, which type facts to
+    /// demand) instead of naming a version.
     pub has_rule: fn(&str) -> bool,
+    /// Whether the catalog declares a diagnostic with this code.
+    pub has_code: fn(&str) -> bool,
     /// Catalog metadata for one exact external rule identity.
     pub rule_metadata: fn(&str) -> Option<RuleMetadata>,
     /// Typed fact-acquisition requirements of the catalog.
@@ -512,6 +652,13 @@ pub const UNAUDITED_RELEASE_RULE: &str = "unaudited-solid-release";
 pub const COMPILER_REFUSED_CODE: &str = "SC9015";
 /// The rule name paired with [`COMPILER_REFUSED_CODE`].
 pub const COMPILER_REFUSED_RULE: &str = "compiler-refused-source";
+
+/// The diagnostic identity of the notice for a suppression comment that names
+/// no rule of this checker (ADR 0429). Suppression parsing decides it, not a
+/// rule, and it is pinned to the catalog like [`COMPILER_REFUSED_CODE`].
+pub const UNKNOWN_SUPPRESSION_CODE: &str = "SC9016";
+/// The rule name paired with [`UNKNOWN_SUPPRESSION_CODE`].
+pub const UNKNOWN_SUPPRESSION_RULE: &str = "unknown-suppression-rule";
 
 /// What the dialect walk found, and where it found it.
 ///
@@ -908,9 +1055,15 @@ const SOLID_V2_LANGUAGE: Dialect = Dialect {
     solve_measured: solid_v2_rules::solve_measured,
     docs_url: solid_v2_rules::docs_url,
     has_rule: |name| {
+        solid_v2_rules::Rule::ALL.into_iter().any(|rule| {
+            let metadata = rule.metadata();
+            metadata.name == name && metadata.configurable
+        })
+    },
+    has_code: |code| {
         solid_v2_rules::Rule::ALL
             .into_iter()
-            .any(|rule| rule.metadata().name == name)
+            .any(|rule| rule.metadata().code == code)
     },
     rule_metadata: |name| {
         solid_v2_rules::Rule::ALL

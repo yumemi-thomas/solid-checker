@@ -53,9 +53,11 @@ mod host_plugins;
 mod inferred_host;
 pub mod installed_bytes;
 mod package_requirements;
+mod program_boundary;
 mod release_scope;
 pub mod runtime_resolution;
 pub mod source_redirects;
+mod suppression;
 mod wire;
 
 pub use cache::{CacheStats, FactsCache};
@@ -73,6 +75,7 @@ pub use inferred_host::{
     inferred_host_input_paths_for_sources, inferred_project_host_with_note,
 };
 pub use package_requirements::{external_package_boundary, unsupplied_package_boundary};
+pub use program_boundary::{BoundaryCache, BoundaryDecision, program_boundary_digest};
 /// The shared analysis input an in-memory adapter builds without the
 /// filesystem.
 pub use solid_reactive_ir::{

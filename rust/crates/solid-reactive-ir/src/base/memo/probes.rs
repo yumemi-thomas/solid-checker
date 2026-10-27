@@ -96,6 +96,9 @@ pub(crate) enum PolledKey {
 pub(crate) struct SymbolInfo {
     /// The symbol aliases another.
     pub(crate) alias: bool,
+    /// The symbol it aliases (empty when it aliases none): a re-export
+    /// retargeted elsewhere moves a chain's root.
+    pub(crate) alias_target: Arc<str>,
     pub(crate) declarations: Vec<DeclarationInfo>,
 }
 

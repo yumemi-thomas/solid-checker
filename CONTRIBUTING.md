@@ -8,7 +8,13 @@ compiler owns execution semantics, and tsrs owns checker facts.
 ## Prerequisites
 
 - Rust 1.99.1 with `rustfmt` and `clippy`, and the `wasm32-wasip1` target (the
-  Type Facts producer and its WASM reactor)
+  Type Facts producer and its WASM reactor) and `wasm32-wasip1-threads` (the
+  WASM lane of `make verify`; without it the build stops at "can't find crate
+  for `core`"): `rustup target add wasm32-wasip1 wasm32-wasip1-threads`
+- A one-time dependency fetch for each workspace, because the compiler-identity
+  step runs `cargo metadata --offline` and fails on a fresh machine until it
+  has run: `cargo +1.99.1 fetch --manifest-path rust/Cargo.toml` and
+  `cargo +1.99.1 fetch --manifest-path apps/solid-typefacts/Cargo.toml`
 - CMake (the producer's mimalloc allocator)
 - Node.js (the `tsc` oracle and the runtime resolver run it)
 - Bun 1.4.0 (published packages remain compatible with Node.js)
@@ -131,6 +137,64 @@ published runtime and declaration bytes and record exact versions and integrity.
 
 Do not infer JSX execution behavior from transformed output. Do not expose
 tsrs or Oxc nodes across fact-domain interfaces.
+
+## The pre-release run and the reproduction set
+
+Precision work iterates on `fixtures/uncertifiable-repro` (ADR 0446), a few
+small projects on published rc.17 bytes: one short case per cause or shape, in
+one table, `cases.json`, with a `kind` (`uncertifiable`, `violation`, `clean`).
+`make repro-causes` checks that each case still produces what it stands for,
+`make repro-budget` that the set stays small, and `make coverage` pins its
+findings, so a slice that certifies a case moves its snapshot. Between
+releases, what users see arrives as issues with minimal repros; nothing else is
+taken in.
+
+Once before each release, run the checker locally over many pinned public
+Solid 2 repositories, then discard them:
+
+1. Write the release manifest (shape of `scripts/corpus/rc17-manifest.json`:
+   each app's repository and commit, its projects, the configuration), restore
+   it (clone at the commits, install frozen), and build the release checker
+   (`make build-checker-release`).
+2. Sweep it, and once more with `--program-boundary closed` for the
+   open-program counterfactual:
+   `node scripts/corpus-sweep.mjs --manifest <m> --apps-root <apps> --out sweep.json`.
+   For the dispatch veto's share (ADR 0447), sweep once more with a scratch
+   build in its own worktree whose `withholds_owner_proofs` and
+   `withholds_read_proofs` (`indexes/event_delivery.rs`) return `false`
+   (`--checker <that build>`), and never commit it.
+3. Uncertifiable results: group them by cause,
+   `node scripts/uncertifiable-causes.mjs --report sweep.json --closed-report closed.json --noveto-report noveto.json --cases fixtures/uncertifiable-repro/cases.json`.
+   A cause a case stands for updates that case's `labelWeight` and `sites`;
+   a new cause of 10 distinct sites or more becomes a case, folded into an
+   existing file when its mechanism is the same; one that cannot be
+   reproduced faithfully (a package beyond the budget, a checkout artifact)
+   or has fewer sites goes to `notReproduced` with its reason. Then verify
+   (ADR 0448): `--draw 5 --draw-out samples.json` gives each case's seeded
+   sample of sites; read each from source against the case's file, record
+   the verdicts in the case's `verification.samples`, and split a case whose
+   samples do not all read the same. Quote only verified coverage.
+4. Violations, after triage: a real defect becomes a `violation` case; a false
+   positive blocks the release until the checker is fixed, and its shape
+   becomes a `clean` case.
+5. Clean results, by sample: a certified shape confirmed by a runtime probe
+   (`scripts/runtime-oracle.mjs`) or a mutation (`scripts/mutants.mjs`)
+   becomes a `clean` case, so a later change cannot turn it uncertifiable or
+   into a violation.
+
+One case per cause or shape, never per finding. To write one, reduce a sample
+site with `node scripts/repro-reduce.mjs` (it mirrors the app to scratch and
+keeps the result while TypeScript 7.1 stays as clean as it was), then rewrite
+the lines as one file of at most 40 lines (two if the cause is cross-file) in
+the project of its rule; a cause that acts on the whole project (the dispatch
+veto, the program boundary) gets its own. It must type-check against the set's
+published typings and must not be something `tsc` reports. Record the source
+(app, file:line, commit) and the expected results, run `make repro-causes`,
+`make repro-budget` and `make coverage`, read every new snapshot, then
+`make coverage-update`. Adding a package to the set's `node_modules` means
+copying published bytes and listing them, with version and integrity, in
+`packages.json`; run `make repro-registry` (network) after adding or changing
+one, to check the record against the registry.
 
 ## Releases
 

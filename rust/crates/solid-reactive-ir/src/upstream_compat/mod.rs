@@ -669,7 +669,7 @@ pub(super) struct UpstreamCompatContext<'a> {
     pub(super) prefer_for_enabled: bool,
     pub(super) prefer_show_enabled: bool,
     /// ADR 0370: analyzed functions' parameters that reach an undescribed
-    /// callee, for `reactive-source-uncaptured` at their callers.
+    /// callee, for SC9012's `package-callee` context at their callers.
     pub(super) forwarded_uncaptured: shared_reactivity::ForwardedUncaptured,
 }
 

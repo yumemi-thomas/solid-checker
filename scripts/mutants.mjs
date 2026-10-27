@@ -44,16 +44,16 @@ const patterns = {
   P2: { rule: "missing-owner", code: "NO_OWNER_CLEANUP", family: "handler",
     imports: ["onCleanup as __scMutantCleanup"],
     body: () => "__scMutantCleanup(() => {});" },
-  P3: { rule: "reactive-write-in-owned-scope", code: "REACTIVE_WRITE_IN_OWNED_SCOPE", family: "component",
+  P3: { rule: "no-write-in-pure-computation", code: "REACTIVE_WRITE_IN_OWNED_SCOPE", family: "component",
     imports: ["createSignal as __scMutantSignal", "createMemo as __scMutantMemo"],
     body: id => `const [, ${id}Set] = __scMutantSignal(0);\nconst ${id}Memo = __scMutantMemo(() => { ${id}Set(1); return 0; });\nconsole.log(${id}Memo());` },
   // Read from a JSX child: the render effect's throw escapes as an uncaught
   // error, which the feedback run maps to its site (a throw in the component
   // body is the harness's render failure, and one in an effect is logged).
-  P4: { rule: "resolve-in-tracked-scope", code: "RESOLVE_IN_REACTIVE_SCOPE", family: "component",
+  P4: { rule: "no-await-primitive-in-tracked-scope", code: "RESOLVE_IN_REACTIVE_SCOPE", family: "component",
     imports: ["createMemo as __scMutantMemo", "resolve as __scMutantResolve"],
     body: id => `const ${id}Memo = __scMutantMemo(() => __scMutantResolve(() => 1));\nvoid (<div>{String(${id}Memo())}</div>);` },
-  P5: { rule: "until-in-tracked-scope", code: "UNTIL_IN_REACTIVE_SCOPE", family: "component",
+  P5: { rule: "no-await-primitive-in-tracked-scope", code: "UNTIL_IN_REACTIVE_SCOPE", family: "component",
     imports: ["createMemo as __scMutantMemo", "until as __scMutantUntil"],
     body: id => `const ${id}Memo = __scMutantMemo(() => { void __scMutantUntil(() => true); return 0; });\nvoid (<div>{${id}Memo()}</div>);` },
   P6: { rule: "sync-computation-received-async", code: "SYNC_NODE_RECEIVED_ASYNC", family: "component",

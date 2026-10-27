@@ -300,7 +300,7 @@
    }
   },
   {
-   "id": "no-direct-mutation/positive/001",
+   "id": "no-store-mutation-outside-setter/positive/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -313,7 +313,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
       "severity": "warning",
@@ -329,7 +329,7 @@
       }
      },
      {
-      "rule": "no-direct-mutation",
+      "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
       "severity": "warning",
@@ -352,7 +352,7 @@
    }
   },
   {
-   "id": "no-direct-mutation/nested-props-value/001",
+   "id": "no-store-mutation-outside-setter/nested-props-value/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -364,12 +364,12 @@
    "enableRules": [],
    "expect": {
     "findings": [],
-    "absent": [{ "rule": "no-direct-mutation" }]
+    "absent": [{ "rule": "no-store-mutation-outside-setter" }]
    },
    "note": "Solid 2 props container behavior is shallow. Its nested value can be a plain mutable object or an application-owned writable proxy; a root props fact does not prove a dropped nested write. This product-owned control follows the unchanged invoicer application whose proxy delegates writes to setStore. The existing positive store case still proves nested readonly store writes. Published typings accept these writes."
   },
   {
-   "id": "reactive-write-in-owned-scope/positive/001",
+   "id": "no-write-in-pure-computation/positive/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -382,7 +382,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -872,7 +872,7 @@
    "note": "Kept divergence: 2.0 rc.13 ChildProperties includes innerText (@solidjs/web dist/web.js line 33), so a write to it replaces the element's children, the same clash textContent has. eslint-plugin-solid 0.14.5 has no innerText arm (src/rules/jsx-no-duplicate-props.ts lines 77-83 at 6d3bc311 read innerHTML, innerhtml and textContent only). The published typings accept innerText as an ordinary prop (@solidjs/web types/jsx.d.ts line 953), so TypeScript reports nothing and the finding is checker-only. The camel-case spelling is jsx-no-duplicate-props/solid-v2/content-positive/001."
   },
   {
-   "id": "resolve-in-tracked-scope/positive/001",
+   "id": "no-await-primitive-in-tracked-scope/positive/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -885,7 +885,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "resolve-in-tracked-scope",
+      "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
       "kind": "violation",
       "severity": "error",
@@ -906,7 +906,7 @@
    }
   },
   {
-   "id": "resolve-in-tracked-scope/negative/001",
+   "id": "no-await-primitive-in-tracked-scope/negative/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -920,7 +920,7 @@
     "findings": [],
     "absent": [
      {
-      "rule": "resolve-in-tracked-scope"
+      "rule": "no-await-primitive-in-tracked-scope"
      }
     ]
    }
@@ -959,7 +959,7 @@
    }
   },
   {
-   "id": "server-function-module-directive/positive/001",
+   "id": "valid-use-server/positive/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".ts",
@@ -972,9 +972,9 @@
    "expect": {
     "findings": [
      {
-      "rule": "server-function-module-directive",
+      "rule": "valid-use-server",
       "code": "SC7006",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "span": {
        "marker": "audited"
@@ -989,7 +989,8 @@
      }
     ],
     "absent": []
-   }
+   },
+   "note": "Was a violation (a wrapped export is dropped from the client build, RFC 10 as first written). The audited compiler registers each export of a module-level directive file by its evaluated value and never inspects its shape (`@solidjs/compiler@2.0.0-rc.17` `transform.rs:411-420`; compiler fixture `module-wrapped-exports`; RFC 10 \"Module-level directives invert this\"; the wrapped-export compile error of rc.3 was superseded in rc.4). So the export is not a defect; it is an uncertifiable result because the facts do not show the call's result is a function, which `registerServerReference` requires at server boot (`@solidjs/web@2.0.0-rc.17` `server-functions/dist/server.js:1567-1571`)."
   },
   {
    "id": "http-response-after-flush/positive/001",
@@ -1197,7 +1198,7 @@
    }
   },
   {
-   "id": "reactive-source-uncaptured/positive/001",
+   "id": "reactive-dispatch-unresolved/package-callee/001",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -1210,8 +1211,8 @@
    "expect": {
     "findings": [
      {
-      "rule": "reactive-source-uncaptured",
-      "code": "SC9011",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "span": {
@@ -1293,7 +1294,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -1490,7 +1491,7 @@
    }
   },
   {
-   "id": "reactive-write-in-owned-scope/positive/002",
+   "id": "no-write-in-pure-computation/positive/002",
    "dialect": "solid-v2",
    "source": {
     "extension": ".ts",
@@ -1503,7 +1504,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -1519,7 +1520,7 @@
       }
      },
      {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -1540,7 +1541,7 @@
    "note": "A deliberate divergence from eslint-plugin-solid 0.14.5, whose corpus (fixtures/reactive-ir/eslint-plugin-corpus/owned-scope-valid.tsx) lists a write in `flush(fn)` inside a memo as valid. Under 2.0 the runtime decides: `flush(fn)` runs `fn` inline and touches neither the owner nor the listener (@solidjs/signals rc.3 `dist/dev.js:1788-1802`), so `fn` answers to the memo compute's owner, and on every published rc.0-rc.9 dev client build `setSignal` throws REACTIVE_WRITE_IN_OWNED_SCOPE there, inline or with the callback passed by name (probed). The module-scope `flush(flushWrite)` is legal, which is why the finding on `setCount(1)` rests on the memo call alone."
   },
   {
-   "id": "reactive-write-in-owned-scope/positive/003",
+   "id": "no-write-in-pure-computation/positive/003",
    "dialect": "solid-v2",
    "source": {
     "extension": ".ts",
@@ -1553,7 +1554,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -1574,7 +1575,7 @@
    "note": "A function passed to `createRoot` by name is its root body, exactly as an inline arrow is: it runs during the call with the new root as the ambient owner, and `setSignal` throws there on every rc.0-rc.9 dev build (probed). Resolved by the argument's symbol to the same-file declaration."
   },
   {
-   "id": "reactive-write-in-owned-scope/positive/004",
+   "id": "no-write-in-pure-computation/positive/004",
    "dialect": "solid-v2",
    "source": {
     "extension": ".tsx",
@@ -1587,7 +1588,7 @@
    "expect": {
     "findings": [
      {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
@@ -1661,6 +1662,1062 @@
     "absent": []
    },
    "note": "An action call's dev guard (`getOwner()` not children-forbidden, @solidjs/signals rc.3 `dist/dev.js:5567`) has no root exemption: directly in a `createRoot` body, and in a memo compute nested in one, it throws ACTION_CALLED_IN_OWNED_SCOPE on every rc.0-rc.9 dev build (probed)."
+  },
+ {
+  "id": "no-write-in-pure-computation/const-held-options/001",
+  "dialect": "solid-v2",
+  "source": {
+   "extension": ".tsx",
+   "prelude": "",
+   "text": "import { createSignal, createMemo } from \"solid-js\";\nconst opts = { name: \"count\" };\nconst [count, setCount] = createSignal(0, opts);\nconst bad = createMemo(() => {\n  setCount(count() + 1);\n  return count();\n});\n"
+  },
+  "ruleOptions": {},
+  "presets": [],
+  "enableRules": [],
+  "expect": {
+   "findings": [
+    {
+     "rule": "no-write-in-pure-computation",
+     "code": "SC2001",
+     "kind": "uncertifiable",
+     "severity": "error",
+     "span": {
+      "marker": "setCount(count() + 1)"
+     },
+     "fix": {
+      "behavior": "none"
+     },
+     "typescript": {
+      "ownership": "checker-only",
+      "diagnostics": []
+     }
+    }
+   ],
+   "absent": []
+  },
+  "note": "Kept divergence from eslint-plugin-solid 0.18.1 (ADR 0424): upstream resolves the options argument through one level of `const` indirection and reports this write; the checker reads only an object literal written at the call, so options held in a variable may carry `ownedWrite: true` and the write is uncertifiable, never a violation and never a silent clean. Literal options without the key (`{ name: \"count\" }` at the call) stay a violation (`fixtures/reactive-ir/owned-write-option`)."
+ },
+ {
+  "id": "no-write-in-pure-computation/store-owned-write/001",
+  "dialect": "solid-v2",
+  "source": {
+   "extension": ".tsx",
+   "prelude": "",
+   "text": "import { createStore, createMemo } from \"solid-js\";\nconst storeOptions = { name: \"store\", ownedWrite: true };\nconst [store, setStore] = createStore({ count: 0 }, storeOptions);\nconst bad = createMemo(() => {\n  setStore((draft) => {\n    draft.count = 1;\n  });\n  return store.count;\n});\n"
+  },
+  "ruleOptions": {},
+  "presets": [],
+  "enableRules": [],
+  "expect": {
+   "findings": [
+    {
+     "rule": "no-write-in-pure-computation",
+     "code": "SC2001",
+     "kind": "violation",
+     "severity": "error",
+     "span": {
+      "marker": "setStore((draft) => {\n    draft.count = 1;\n  })"
+     },
+     "fix": {
+      "behavior": "none"
+     },
+     "typescript": {
+      "ownership": "checker-only",
+      "diagnostics": []
+     }
+    }
+   ],
+   "absent": []
+  },
+  "note": "`ownedWrite` is a signal option: the store setter's guard (`devGuardStoreSetterWrite`, `@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5811-5825`) has no exemption and `createStore$1` (`:5904`) never reads the option, so a store created with `ownedWrite: true` is not exempt (upstream 0.18.1 agrees, test case 8). `StoreOptions` declares no `ownedWrite` (`dist/types/store/types.d.ts:30`); the variable keeps TypeScript quiet about the key."
+ },
+  {
+   "id": "no-store-mutation-outside-setter/array-mutator/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ items: [3, 1, 2] });\nexport function Mutate() {\n  store.items.push(1);\n  store.items.sort();\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "store.items.push(1)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "store.items.sort()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream eslint-plugin-solid 0.18.1's array-method shape (test case 3), adopted: a call whose callee resolves to the standard library's `Array` method on a path of a `createStore` read proxy. TypeScript accepts it on the audited rc.17 (`Store<T> = T`) and the proxy's `set` trap drops every element and `length` write outside a setter (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5691-5700`; probed for all nine mutators). Unlike upstream, which matches the method name, a project method or typed array of the same name is silent (fixtures/reactive-ir/store-mutators)."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/projection-write/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createProjection } from \"solid-js\";\nconst selected = createProjection<{ list: number[]; other?: boolean }>((draft) => {\n  draft.other = true;\n}, { list: [] });\nexport function Outside() {\n  selected.other = true;\n  selected.list.push(1);\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "selected.other"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "selected.list.push(1)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream's `mutateProjection` shape (test case 7) with the update and mutator forms: a `createProjection` result is a derived store, and a write through it outside the compute function is dropped (rc.17 `dist/dev.js:5691-5700`; probed). The write through the draft inside the compute function is a different binding and commits."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/own-setter-write/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [store, setStore] = createStore({ count: 0 });\nsetStore(() => {\n  store.count = 5;\n});\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "no-store-mutation-outside-setter"
+     }
+    ]
+   },
+   "note": "Kept divergence from eslint-plugin-solid 0.18.1 (ADR 0425): upstream's test case 6 (\"mutating the read proxy is wrong even inside the setter\") reports a write through the read proxy inside its own setter callback. On rc.17 it commits: `storeSetter` adds the store to `writeScopes` for the callback (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5847-5866`), so the `set` trap's `inDraft(target)` holds (`:4955-4957`, `:5691-5700`) and the value lands after `flush()` (probed: `count` reads 5, and a `push` of the store's array through the proxy there lands too). A write through another store's proxy inside the callback is still dropped (`scopeKey` differs) and stays a finding (fixtures/reactive-ir/store-mutators `OtherSetter`)."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/projection-compute-write/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createProjection } from \"solid-js\";\nconst selected: { list: number[]; other?: boolean } = createProjection(\n  (draft: { list: number[]; other?: boolean }) => {\n    draft.other = true;\n    selected.other = true;\n    selected.list.push(1);\n  },\n  { list: [] },\n);\nexport { selected };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "no-store-mutation-outside-setter"
+     }
+    ]
+   },
+   "note": "Kept divergence from eslint-plugin-solid 0.18.1 (ADR 0425), which resolves `selected` to its `createProjection` initializer wherever it is written. Inside the compute function the result symbol commits like the draft: `runProjectionComputed` runs the function inside `storeSetter(draft, \u2026)` (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:6675-6678`), which write-enables the family (`:5847-5866`; probed: a re-run's `selected.viaResult = 2` landed after `flush()`). The same holds for a function-form `createStore(fn, seed)`'s store (fixtures/reactive-ir/projection-writes)."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/delete-required-property/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ req: { id: 1 } });\nexport function Remove() {\n  delete store.req.id;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "span": {
+       "marker": "store.req.id"
+      },
+      "typescript": {
+       "ownership": "typescript-owned",
+       "diagnostics": [
+        {
+         "code": "TS2790",
+         "span": {
+          "marker": "store.req.id"
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream's `delete store.path` shape (test case 4) is not adopted where TypeScript speaks (ADR 0381): for a required property under strictNullChecks the published rc.17 typings give TS2790 (\"The operand of a 'delete' operator must be optional\") at the operand, and the checker is silent. The proxy does drop the delete outside a setter (`deleteProperty` trap `dist/dev.js:5761-5767`; probed). A property whose type includes `undefined` or an optional one type-checks, and no Type Fact says that at a delete operand, so it stays unreported (docs/open-work.md)."
+  },
+  {
+   "id": "valid-use-server/placement/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "export async function afterStatement(id: string) {\n  const table = \"users\";\n  \"use server\";\n  return [table, id];\n}\nexport async function inBlock(id: string) {\n  if (id) {\n    \"use server\";\n    return id;\n  }\n}\nexport async function template(id: string) {\n  `use server`;\n  return id;\n}\nexport const api = {\n  async getUser(id: string) {\n    \"use server\";\n    return id;\n  },\n  get size() {\n    \"use server\";\n    return 1;\n  },\n};\nexport class Api {\n  async getUser(id: string) {\n    \"use server\";\n    return id;\n  }\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "\"use server\";",
+       "occurrence": 1
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "\"use server\";",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "`use server`;"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "\"use server\";",
+       "occurrence": 3
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "\"use server\";",
+       "occurrence": 4
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "\"use server\";",
+       "occurrence": 5
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream's four placement shapes, adopted (eslint-plugin-solid 0.18.1 `valid-use-server` test cases 1-7). The audited compiler (`@solidjs/compiler@2.0.0-rc.17`) reads a directive only from a module's or function body's prologue (`transform.rs:897-901` `body_has_directive`, `:148-151` for the module), so a string statement after another statement, in a block, or a template literal is an ordinary expression and the function stays on the client. A directive in an object method, getter, setter or class method is never extracted, and rc.17 rejects it with a compile error (`validate.rs:403-437`, rc.8; earlier compilers ignore it)."
+  },
+  {
+   "id": "valid-use-server/stray-in-extracted-function/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "export async function outer() {\n  \"use server\";\n  const table = \"users\";\n  if (table) {\n    \"use server\";\n  }\n  const helpers = {\n    inner() {\n      \"use server\";\n      return 1;\n    },\n  };\n  return helpers.inner();\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "valid-use-server"
+     }
+    ]
+   },
+   "note": "Upstream exempts a directive in a function nested inside an extracted server function (its valid case) but reports a stray string in the extracted function's own block as misplaced. The claim there is false: `outer` is already extracted, its whole body runs on the server, and the pass skips directive checks inside an extracted function (`validate.rs:247-258`: \"that whole body ships to the server, so a directive within it changes nothing\"). Silent here; both nested spellings are silent."
+  },
+  {
+   "id": "valid-use-server/directive-file-suppresses-placement/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "\"use server\";\nexport async function getUser(id: string) {\n  const table = \"users\";\n  \"use server\";\n  return [table, id];\n}\nconst api = {\n  async load() {\n    \"use server\";\n    return 1;\n  },\n};\nexport async function useApi() {\n  return api;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "valid-use-server"
+     }
+    ]
+   },
+   "note": "Mirrors upstream (valid-use-server.md section 4, step 2): in a module-level directive file the whole module is server code, so function-level placement is not read (`validate.rs` module doc: \"Module-level directives are unaffected\"; `transform.rs:148-165` takes the module path and skips the function-level one). A template literal is still no directive even there (fixtures/reactive-ir/valid-use-server-placement)."
+  },
+  {
+   "id": "valid-use-server/re-export/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "\"use server\";\nexport { createSignal } from \"solid-js\";\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "createSignal"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence from eslint-plugin-solid 0.18.1, which accepts `export { x } from` in a directive module (\"not statically analyzable; give them the benefit of the doubt\"). The audited compiler rejects it: `check_supported_exports` returns `UnsupportedReason::ReExport` for `export { a } from` and `export * from` (`@solidjs/compiler@2.0.0-rc.17` `transform.rs:1377-1412`, changeset bb905db in rc.8; before rc.8 the export was silently missing from the client build). RFC 10: re-export \"from a module without the directive\"."
+  },
+  {
+   "id": "valid-use-server/client-wrapper-builtin/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "\"use server\";\nimport { GET, live, withMeta } from \"@solidjs/web/server-functions\";\n\nconst a = GET(async () => 1);\nconst b = live(async () => 2);\nconst c = withMeta(async () => 3, { method: \"GET\" });\n\nexport async function setup() {\n  return GET(async () => 4);\n}\nexport { a, b, c };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "GET(async () => 1)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "live(async () => 2)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "withMeta(async () => 3, { method: \"GET\" })"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream's `clientWrapper` shape (valid-use-server test cases 10-12): a module-scope call to a built-in client-side declaration wrapper in a module-level directive file. The module is rebuilt on the client as bare references (`@solidjs/compiler@2.0.0-rc.17` `transform.rs:8-11`), so `GET`'s method, `withMeta`'s metadata and `live`'s transport never reach the client (RFC 10: \"client-transport declarations like `GET` are meaningless inside a module-level file\"). Unlike upstream the callee is resolved to its exact import binding (a subpath of `@solidjs/web`, `solid-js`, `@solidjs/router` or `@solidjs/start`), not matched by spelling; a call inside a function is server code and silent."
+  },
+  {
+   "id": "valid-use-server/client-wrapper-not-imported/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "\"use server\";\nimport * as web from \"@solidjs/web/server-functions\";\n\nfunction GET<T>(fn: T): T {\n  return fn;\n}\nconst a = GET(async () => 1);\nconst b = web.GET(async () => 2);\nexport { a, b };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "valid-use-server"
+     }
+    ]
+   },
+   "note": "Where upstream and this checker differ by design: upstream's built-in list matches an imported name, so it is silent on a project function or a member call too; the ADR 0427 resolution is stricter in the same direction for built-ins (exact import binding), and a project function spelled `GET` is not the wrapper. Only the project's own `clientWrappers` option names a callee by spelling."
+  },
+  {
+   "id": "valid-use-server/client-wrappers-option/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "\"use server\";\ndeclare function defineLoader<T>(fn: T): T;\ndeclare function define<T>(fn: T): T;\ndeclare function redefine<T>(fn: T): T;\ndeclare function loadUser<T>(fn: T): T;\ndeclare function reload<T>(fn: T): T;\ndeclare function exactName<T>(fn: T): T;\ndeclare function exactNames<T>(fn: T): T;\ndeclare function amidst<T>(fn: T): T;\ndeclare function bystander<T>(fn: T): T;\ndeclare function a<T>(fn: T): T;\ndeclare function ab<T>(fn: T): T;\n\nconst r1 = defineLoader(async () => 1);\nconst r2 = define(async () => 2);\nconst r3 = redefine(async () => 3);\nconst r4 = loadUser(async () => 4);\nconst r5 = reload(async () => 5);\nconst r6 = exactName(async () => 6);\nconst r7 = exactNames(async () => 7);\nconst r8 = amidst(async () => 8);\nconst r9 = bystander(async () => 9);\nconst r10 = a(async () => 10);\nconst r11 = ab(async () => 11);\nexport { r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11 };\n"
+   },
+   "ruleOptions": {
+    "valid-use-server": {
+     "clientWrappers": [
+      "define*",
+      "/^load[A-Z]/",
+      "exactName",
+      "/mid/",
+      "/(a/",
+      "/a(?=b)/"
+     ]
+    }
+   },
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "defineLoader(async () => 1)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "define(async () => 2)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "loadUser(async () => 4)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "exactName(async () => 6)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "amidst(async () => 8)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "The `clientWrappers` option in upstream's grammar (`createNameMatcher`, eslint-plugin-solid 0.18.1 `src/utils.ts`; test case 13): `define*` is a wildcard over `[a-zA-Z0-9_$]` anchored at both ends (`defineLoader` and `define` match, `redefine` does not), `/^load[A-Z]/` is a regex (`reload` does not match), `/mid/` is **unanchored** (`amidst` matches), an exact entry matches only itself (`exactNames` does not), and an invalid regex (`/(a/`) compares exactly, so `a` is silent. A user-declared name matches the callee's local spelling: the one place this checker matches by name, because the project states it. Divergence: the regex arm is a subset of JavaScript's (no lookaround, backreference or `\\\\b`), so `/a(?=b)/` compares exactly here where upstream would match `ab`; that can only withhold a report."
+  },
+  {
+   "id": "valid-use-server/non-function-export/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "\"use server\";\nexport const LIMIT = 10;\nexport const NAME = `users`;\nexport const CONFIG = { version: 1 };\nexport default [1, 2];\nexport async function getUsers() {\n  return LIMIT;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "LIMIT",
+       "occurrence": 1
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "NAME"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "CONFIG"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "[1, 2]"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream's `nonFunctionExport` (test cases 8-9): every export of a module-level directive file is registered as a server function, and `registerServerReference` throws at module evaluation for anything else (`@solidjs/web@2.0.0-rc.17` `server-functions/dist/server.js:1567-1571`), so the server fails at boot. The set is upstream's: a literal, template literal, array or object; identifiers, calls and functions are not reported (a call or alias whose value is not shown to be a function is an uncertifiable result)."
+  },
+  {
+   "id": "strict-read-untracked/run-with-owner-in-compute/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createEffect, createRoot, createSignal, getOwner, runWithOwner } from \"solid-js\";\n\nconst [signal] = createSignal(0);\n\nexport const dispose = createRoot((dispose) => {\n  const owner = getOwner();\n  createEffect(\n    () => runWithOwner(owner, () => console.log(signal())),\n    () => {},\n  );\n  return dispose;\n});\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "signal()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream badUnnamedDerivedSignal case 32 in its two-argument form (the exact one-argument form is `run-with-owner-in-compute/one-argument-effect/003`). `runWithOwner` sets `tracking = false` around its callback and leaves the strict-read window as the call had it (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:5776-5785`), and an effect compute has no window, so the read subscribes nothing and raises nothing: probed on rc.17, one run, `observers(signal)` empty, no diagnostic, and a write does not re-run it (`scripts/probes/rc17-untracked-reads/3-unnamed-derived.mjs`, 3d). The finding says so and does not promise the dev warning (ADR 0443)."
+  },
+  {
+   "id": "strict-read-untracked/run-with-owner-in-compute/component/002",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createEffect, createSignal, getOwner, runWithOwner } from \"solid-js\";\n\nfunction Component() {\n  const owner = getOwner();\n  const [signal] = createSignal(0);\n  createEffect(\n    () => runWithOwner(owner, () => console.log(signal())),\n    () => {},\n  );\n  return null;\n}\n\nexport const view = <Component />;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "signal()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream badUnnamedDerivedSignal case 33, the same shape inside a component, in its two-argument form: untracked and unwarned on rc.17 (probe 3e). The component is rendered at module scope so the effect has an owner and no missing-owner obligation joins the case."
+  },
+  {
+   "id": "strict-read-untracked/run-with-owner-in-compute/one-argument-effect/003",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createEffect, createSignal, getOwner, runWithOwner } from \"solid-js\";\n\nconst owner = getOwner();\nconst [signal] = createSignal(0);\ncreateEffect(() => runWithOwner(owner, () => console.log(signal())));\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "span": {
+       "textRange": [
+        140,
+        152
+       ]
+      },
+      "typescript": {
+       "ownership": "typescript-owned",
+       "diagnostics": [
+        {
+         "code": "TS2554",
+         "span": {
+          "textRange": [
+           140,
+           152
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "absent": [
+     {
+      "rule": "strict-read-untracked"
+     }
+    ]
+   },
+   "note": "Upstream's exact badUnnamedDerivedSignal case 32 passes one argument. The published rc.17 types require two (TS2554), and the runtime throws MISSING_EFFECT_FN before the compute ever runs (probe 3d, `dist/dev.js:2504-2517`), so no read happens and TypeScript owns the call. The checker stays silent beside it: its strict-read and missing-effect-function findings both require a type-valid call."
+  },
+  {
+   "id": "strict-read-untracked/mapper/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal, mapArray } from \"solid-js\";\n\nconst [list] = createSignal([1, 2]);\nconst [tag] = createSignal(\"a\");\n\nexport function Rows() {\n  const rows = mapArray(list, (item) => `${item}${tag()}`);\n  return <div>{rows()}</div>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "tag()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream untrackedReactive cases 40-41 (a read in a `mapArray` map function). rc.17 runs the map function under `runWithOwner` (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:3347`, `3362-3377`, `3406`), which sets `tracking = false`, so the read is stale; the strict-read window opens only when the call passes `name` (`dist/dev.js:3093-3102`), so without it the runtime is silent. Probed (`scripts/probes/rc17-untracked-reads/1-mapper-window.mjs`, A and D): the mapper run count and output do not change after the write and `observers(tag)` is empty. The index accessor read of case 41 (`i()`) is not a source here (docs/open-work.md)."
+  },
+  {
+   "id": "strict-read-untracked/mapper/jsx-tracks/002",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal, mapArray } from \"solid-js\";\n\nconst [list] = createSignal([1, 2]);\nconst [tag] = createSignal(\"a\");\n\nexport function Rows() {\n  const rows = mapArray(list, (item) => <b>{item}{tag()}</b>);\n  return <div>{rows()}</div>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [],
+    "silent": true
+   },
+   "note": "The control for `mapper/001`: JSX the map function returns is compiled to its own tracked expressions, so the read in `{tag()}` subscribes the row's render effect and updates."
+  },
+  {
+   "id": "strict-read-untracked/context-provider-value/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createContext, createSignal } from \"solid-js\";\n\nconst Theme = createContext<number>();\nconst [count] = createSignal(1);\n\nexport function Provided() {\n  return <Theme value={count()}><span /></Theme>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "count()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream providerValue case 31, in Solid 2's provider form (`<Ctx value>`; the `Context.Provider` of cases 28 and 30 is gone in 2.0). The provider reads `props.value` once, under `observedComponent`'s strict-read window labelled `<provider>` (`solid-js@2.0.0-rc.17` `dist/solid.dev.js:9-16`, `48-49`, `65`) and stores the result as the context snapshot (`@solidjs/signals` `dist/dev.js:1834-1844`); `useContext` subscribes to nothing. Probe 2: one read at creation with STRICT_READ_UNTRACKED for `<provider>`, then after `setCount(2)` the child's memo never re-ran and the getter was not called again."
+  },
+  {
+   "id": "strict-read-untracked/unnamed-derived/effect-compute-returns-function/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createEffect, createRoot, createSignal } from \"solid-js\";\n\nconst [count] = createSignal(1);\n\nexport const dispose = createRoot((dispose) => {\n  createEffect(\n    () => () => count(),\n    (read) => {\n      void read;\n    },\n  );\n  return dispose;\n});\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [],
+    "silent": true
+   },
+   "note": "Kept divergence: eslint-plugin-solid 0.18.1's `badUnnamedDerivedSignal` flags an anonymous function that reads a signal and is not handed to a tracked scope. On rc.17 an effect compute that returns such an arrow is legal: the compute reads nothing itself (the arrow is returned, not called), the effect has no dependency to lose, and calling the received function later reads whatever its caller reads (probe 3a: no diagnostic, one run, `observers(count)` empty because nothing reads). The shape that is a defect, calling the received function inside the apply, is not built (docs/open-work.md)."
+  },
+  {
+   "id": "strict-read-untracked/unnamed-derived/memo-returns-function/002",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createMemo, createSignal } from \"solid-js\";\n\nconst [count] = createSignal(1);\n\nexport function Reader() {\n  const getter = createMemo(() => () => count());\n  return <p>{getter()()}</p>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "count()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence from `badUnnamedDerivedSignal`: a memo whose value is a function is legal. The memo reads nothing and runs once; the function it returns is called by a consumer, here JSX, where the call is a tracked read (probe 3b: memo runs 1 to 1, the tracked consumer re-ran and saw the new value, no diagnostic). Since ADR 0452 the checker no longer certifies it: the closure is built in the memo, and the call in JSX is not followed to place it, so the read is an uncertifiable result (never a violation)."
+  },
+  {
+   "id": "strict-read-untracked/unnamed-derived/props-condition/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal } from \"solid-js\";\n\nfunction Card(props: { big: boolean; size: number }) {\n  const style = props.big ? () => ({ fontSize: props.size }) : undefined;\n  return <div style={style && style()} />;\n}\n\nexport function App() {\n  const [big] = createSignal(true);\n  const [size] = createSignal(10);\n  return <Card big={big()} size={size()} />;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "props.big"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "props.size"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream case 34 (untrackedReactive plus badUnnamedDerivedSignal). Only the first holds on rc.17: the condition `props.big` is read once while the component body runs, so a later `setBig(false)` never changes `style` (probe 3f: warned `big` read directly in `<Card>`, style stayed `{fontSize: 12}`), and the finding is a violation here because the visible call site passes `big()`. The arrow itself is legal, since `style()` is a tracked read in JSX and `props.size` updated (probe 3f), so there is no violation for it: the checker records only an internal uncertifiable result at `props.size`, because it does not prove the stored arrow is invoked. Upstream's `style && style()` form is kept verbatim."
+  },
+  {
+   "id": "strict-read-untracked/unnamed-derived/dynamic-unresolved-package/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal } from \"solid-js\";\n\n// Not Solid's `dynamic`: an unanalyzed stand-in for a package that exports one.\ndeclare function dynamic(source: () => unknown): (props: object) => unknown;\ndeclare function test(value: number): () => unknown;\n\nexport function Component() {\n  const [count] = createSignal(0);\n  const Test = dynamic(() => test(count()));\n  return <Test />;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "count()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Upstream case 35 (`a dynamic not imported from Solid is not a tracked scope`). Undecided on rc.17: nothing here describes a `dynamic` that is not Solid's, so whether it runs the arrow in a tracking scope is unknown, and the checker neither reports it as a violation nor certifies it: the read is an internal uncertifiable result (a callback handed to a consumer not proven to invoke it). Solid's own `dynamic` is legal (probe 3g: the source re-ran, the output changed, `observers` held the computed)."
   }
  ]
 }

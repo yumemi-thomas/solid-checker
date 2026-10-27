@@ -87,6 +87,9 @@ pub(crate) struct IncrementalCacheState {
     /// [`IncrementalCacheState::finish_deferred_end`] (a daemon sweeps after
     /// it has answered).
     defer_memo_end: bool,
+    /// Verify-reused mode for every memo store this state opens, over
+    /// `SOLID_CHECKER_IR_VERIFY_REUSED` ([`Self::set_verify_reused`]).
+    verify_reused: Option<bool>,
     domain: Option<SourceDiscoveryDomain>,
 }
 
@@ -141,6 +144,7 @@ impl IncrementalCacheState {
     /// The caches one build uses. With shadow mode on, the build also checks
     /// the retained base indexes ([`crate::base::retained`]).
     pub(crate) fn for_build(&mut self, shadow: crate::shadow::ShadowMode) -> BuildCaches<'_> {
+        let verify_reused = self.verify_reused;
         BuildCaches {
             base_check: (shadow != crate::shadow::ShadowMode::Off)
                 .then_some((&mut self.base_indexes, shadow)),
@@ -151,16 +155,25 @@ impl IncrementalCacheState {
             typescript_indexes: Some(&mut self.typescript_indexes),
             reachability: Some(&mut self.reachability),
             late_stages: Some(&mut self.late_stages),
-            memos: Some(
-                self.memos
-                    .get_or_insert_with(crate::base::memo::build::MemoStore::from_env),
-            ),
+            memos: Some(self.memos.get_or_insert_with(|| match verify_reused {
+                Some(verify) => crate::base::memo::build::MemoStore::new(verify, verify),
+                None => crate::base::memo::build::MemoStore::from_env(),
+            })),
             defer_memo_end: self.defer_memo_end,
         }
     }
 
     pub(crate) fn set_defer_memo_end(&mut self, defer: bool) {
         self.defer_memo_end = defer;
+    }
+
+    /// Opens every memo store of this state (from the next build, and after
+    /// every reset) with verify-reused mode (each reused answer recomputed
+    /// and compared) set to `verify`, whatever `SOLID_CHECKER_IR_VERIFY_REUSED`
+    /// says.
+    pub(crate) fn set_verify_reused(&mut self, verify: bool) {
+        self.verify_reused = Some(verify);
+        self.memos = None;
     }
 
     /// Runs the memo sweep a build deferred, if one is due.
@@ -230,14 +243,22 @@ pub(crate) struct SourceDiscoveryIdentity {
 pub(crate) struct SourceDiscoveryContribution {
     pub(crate) accessors: Vec<(SymbolId, (SymbolId, Location))>,
     pub(crate) accessor_origins: Vec<(SymbolId, (SymbolId, SymbolId, Location))>,
-    pub(crate) setters: Vec<(SymbolId, (SymbolId, Location, bool, ReactiveSourceKind))>,
+    pub(crate) setters: Vec<(
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    )>,
     pub(crate) actions: Vec<(SymbolId, (SymbolId, Location))>,
     pub(crate) source_kinds: Vec<(SymbolId, ReactiveSourceKind)>,
     pub(crate) source_primitives: Vec<(SymbolId, SymbolName)>,
     pub(crate) source_phases: Vec<(SymbolId, u8)>,
     pub(crate) returned_source_symbols: Vec<SymbolId>,
     pub(crate) summary_source_symbols: Vec<SymbolId>,
-    pub(crate) source_owned_write: Vec<(SymbolId, bool)>,
+    pub(crate) source_owned_write: Vec<(SymbolId, crate::OwnedWriteOption)>,
     pub(crate) async_sources: Vec<SymbolId>,
     pub(crate) source_async_options: Vec<(SymbolId, crate::source_discovery::AsyncSourceOptions)>,
     /// Store bindings whose initializer is provably the value form
@@ -585,7 +606,12 @@ pub(crate) struct LocalAccessSymbolState {
     pub(crate) accessor: Option<(SymbolId, Location)>,
     pub(crate) typed_source: Option<crate::source_discovery::TypedSource>,
     pub(crate) accessor_origin: Option<(SymbolId, SymbolId, Location)>,
-    pub(crate) setter: Option<(SymbolId, Location, bool, ReactiveSourceKind)>,
+    pub(crate) setter: Option<(
+        SymbolId,
+        Location,
+        crate::OwnedWriteOption,
+        ReactiveSourceKind,
+    )>,
     pub(crate) action: Option<(SymbolId, Location)>,
     pub(crate) source_primitive: Option<SymbolId>,
     pub(crate) async_source: bool,
@@ -627,7 +653,15 @@ pub(crate) struct LocalAccessSources {
     pub(crate) accessors: HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) typed_sources: HashMap<SymbolId, crate::source_discovery::TypedSource>,
     pub(crate) accessor_origins: HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
-    pub(crate) setters: HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
+    pub(crate) setters: HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    >,
     pub(crate) actions: HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) source_primitives: HashMap<SymbolId, SymbolId>,
     pub(crate) async_sources: HashSet<SymbolId>,

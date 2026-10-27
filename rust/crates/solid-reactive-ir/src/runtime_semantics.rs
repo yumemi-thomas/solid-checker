@@ -91,6 +91,157 @@ pub(super) const FRESH_STACK_SCHEDULERS: &[&str] = &[
     "ReportingObserver.construct",
 ];
 
+/// ADR 0438: when a reviewed runner runs the body of a suite registration
+/// (`describe`, `suite`, `test.describe`). Per runner, read on its published
+/// bytes: only a runner that defers the body past the registration call may be
+/// placed on its own scheduler's stack.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum SuiteBodyRun {
+    /// The runner records the body and runs it later, from its collection loop
+    /// (vitest): no Solid API is on the stack, whatever the registration call's
+    /// own position.
+    Scheduled,
+    /// The runner calls the body inside the registration call (jest-circus,
+    /// mocha, `node:test`, playwright): the body takes the role of the call's
+    /// own position.
+    Inline,
+    /// No published JavaScript shows when (`bun:test` is native, and its
+    /// behavior changed across releases): the body is not placed.
+    Unproven,
+}
+
+/// ADR 0438: the test runners whose registered callbacks are reviewed to run
+/// with no Solid owner and outside every strict-read window. Each entry is a
+/// run of consecutive path components of an installed declaration file (so a
+/// project directory named `vitest` is not one: `node_modules` leads each),
+/// matched on the declaration the callee's root identifier resolves to, never
+/// on a spelling. The premise reads each runner's published source: the runner
+/// invokes every registered test and hook from its own scheduler (an awaited
+/// call from its collection or run loop), with no Solid API on the stack. A
+/// suite body is the exception, and each runner's answer is its own
+/// ([`SuiteBodyRun`]); the bytes are cited in ADR 0438. A runner configured
+/// to wrap tests in a Solid root, or patched, is outside the premise.
+///
+/// - `vitest` and `@vitest/runner`: the declarations of `test`, `it`,
+///   `describe`, `suite` and the hooks (vitest 5 declares them in its own
+///   package, vitest 4 re-exports `@vitest/runner`'s, the package that holds
+///   the runner loop; its `globals` typing lives in the same package);
+/// - `bun:test` (`bun-types/test.d.ts`) and `node:test`
+///   (`@types/node/test.d.ts`): the module declarations, whose `describe` is
+///   `suite` and `it` is `test`;
+/// - `@playwright/test` and `playwright/types/test.d.ts`, where `test` is
+///   declared;
+/// - `@jest/globals`, `@types/jest` and `@types/mocha`.
+const TEST_RUNNER_DECLARATIONS: &[(&[&str], SuiteBodyRun)] = &[
+    (&["node_modules", "vitest"], SuiteBodyRun::Scheduled),
+    (
+        &["node_modules", "@vitest", "runner"],
+        SuiteBodyRun::Scheduled,
+    ),
+    (
+        &["node_modules", "bun-types", "test.d.ts"],
+        SuiteBodyRun::Unproven,
+    ),
+    (
+        &["node_modules", "@types", "node", "test.d.ts"],
+        SuiteBodyRun::Inline,
+    ),
+    (
+        &["node_modules", "@playwright", "test"],
+        SuiteBodyRun::Inline,
+    ),
+    (
+        &["node_modules", "playwright", "types", "test.d.ts"],
+        SuiteBodyRun::Inline,
+    ),
+    (&["node_modules", "@jest", "globals"], SuiteBodyRun::Inline),
+    (&["node_modules", "@types", "jest"], SuiteBodyRun::Inline),
+    (&["node_modules", "@types", "mocha"], SuiteBodyRun::Inline),
+];
+
+/// The declared names of the runners' registration functions: tests and
+/// suites, and the hooks (`before` and `after` are `node:test`'s and mocha's
+/// spelling of `beforeAll` and `afterAll`).
+const TEST_RUNNER_FUNCTIONS: &[&str] = &[
+    "test",
+    "it",
+    "describe",
+    "suite",
+    "beforeEach",
+    "afterEach",
+    "beforeAll",
+    "afterAll",
+    "before",
+    "after",
+];
+
+/// The members a registration function carries that register the same kind of
+/// callback (`it.only`, `test.describe.serial`, `describe.skip`), and the ones
+/// of them that are called once before the registration (`test.each(rows)(…)`,
+/// `it.skipIf(cond)(…)`).
+const TEST_RUNNER_MODIFIERS: &[&str] = &[
+    "only",
+    "skip",
+    "todo",
+    "concurrent",
+    "sequential",
+    "parallel",
+    "serial",
+    "fails",
+    "fail",
+    "fixme",
+    "slow",
+    "describe",
+    "beforeEach",
+    "afterEach",
+    "beforeAll",
+    "afterAll",
+    "each",
+    "for",
+    "skipIf",
+    "runIf",
+];
+const TEST_RUNNER_CURRIED_MODIFIERS: &[&str] = &["each", "for", "skipIf", "runIf"];
+
+/// The suite-body timing of the reviewed runner whose declaration of the name
+/// `name` lies in the file `path` ([`TEST_RUNNER_DECLARATIONS`]), or `None`
+/// when it is not one of the reviewed runners' registration functions.
+pub(super) fn test_runner_function_declaration(path: &str, name: &str) -> Option<SuiteBodyRun> {
+    if !TEST_RUNNER_FUNCTIONS.contains(&name) {
+        return None;
+    }
+    let components = path.split(['/', '\\']).collect::<Vec<_>>();
+    TEST_RUNNER_DECLARATIONS
+        .iter()
+        .find(|(runner, _)| {
+            components
+                .windows(runner.len())
+                .any(|window| window == *runner)
+        })
+        .map(|(_, suite_bodies)| *suite_bodies)
+}
+
+/// Whether a registration function declared under `name` registers a suite.
+pub(super) fn test_runner_suite_function(name: &str) -> bool {
+    matches!(name, "describe" | "suite")
+}
+
+/// Whether `member` turns the registration function it follows into a suite
+/// registration (`test.describe`, `test.describe.serial`).
+pub(super) fn test_runner_suite_modifier(member: &str) -> bool {
+    member == "describe"
+}
+
+/// Whether `member` may follow a registration function in a callee chain.
+pub(super) fn test_runner_modifier(member: &str) -> bool {
+    TEST_RUNNER_MODIFIERS.contains(&member)
+}
+
+/// Whether the chain's call before the final registration may be `member(…)`.
+pub(super) fn test_runner_curried_modifier(member: &str) -> bool {
+    TEST_RUNNER_CURRIED_MODIFIERS.contains(&member)
+}
+
 /// The modules the Node runtime provides under a bare name (Node 24
 /// `module.builtinModules`, without the `_`-prefixed internals). A specifier
 /// naming one, or any `node:` specifier, loads the runtime's module rather

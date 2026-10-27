@@ -7,8 +7,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 1434,
-      "end": 1463,
+      "start": 1552,
+      "end": 1581,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 1635,
-      "end": 1663,
+      "start": 1753,
+      "end": 1781,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 1856,
-      "end": 1871,
+      "start": 3403,
+      "end": 3418,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 1970,
-      "end": 1985,
+      "start": 3517,
+      "end": 3532,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 2087,
-      "end": 2110,
+      "start": 3634,
+      "end": 3657,
       "fixes": 0
     },
     {
@@ -57,8 +57,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 2230,
-      "end": 2252,
+      "start": 3775,
+      "end": 3799,
       "fixes": 0
     },
     {
@@ -67,8 +67,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 2365,
-      "end": 2381,
+      "start": 4010,
+      "end": 4023,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 2487,
-      "end": 2503,
+      "start": 4246,
+      "end": 4263,
       "fixes": 0
     },
     {
@@ -87,38 +87,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 2603,
-      "end": 2627,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 2731,
-      "end": 2755,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 2863,
-      "end": 2882,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 3131,
-      "end": 3145,
+      "start": 4482,
+      "end": 4496,
       "fixes": 0
     }
   ]

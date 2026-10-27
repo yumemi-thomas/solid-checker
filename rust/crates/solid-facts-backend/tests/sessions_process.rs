@@ -784,11 +784,8 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
     let expected = [
         ("leaf-reexport-flush.tsx", "leaf-owner-forbidden-call"),
         ("leaf-reexport-cleanup.tsx", "leaf-owner-forbidden-call"),
-        ("owned-reexport-memo.tsx", "reactive-write-in-owned-scope"),
-        (
-            "owned-reexport-refresh.tsx",
-            "reactive-write-in-owned-scope",
-        ),
+        ("owned-reexport-memo.tsx", "no-write-in-pure-computation"),
+        ("owned-reexport-refresh.tsx", "no-write-in-pure-computation"),
         ("owned-reexport-action.tsx", "action-called-in-owned-scope"),
         // ADR 0294: an exported function's `Accessor<T>` parameter is a
         // typed candidate, so its reads are obligations, not violations.
@@ -829,7 +826,7 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
         ("component-props-body-destructure.tsx", "no-destructure"),
         (
             "derived-signal-in-effect.tsx",
-            "reactive-write-in-owned-scope",
+            "no-write-in-pure-computation",
         ),
     ];
     for (file, rule) in expected {
@@ -877,7 +874,7 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
         ("component-static-early-return.tsx", "strict-read-untracked"),
         (
             "signal-write-in-effect-apply.tsx",
-            "reactive-write-in-owned-scope",
+            "no-write-in-pure-computation",
         ),
     ];
     for (file, rule) in negatives {

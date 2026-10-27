@@ -38,8 +38,18 @@ use serde::Deserialize;
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct RuleOptions {
     overrides: BTreeMap<String, RuleOverride>,
+    /// Overrides of a single finding code, set through a former rule name that
+    /// covered one code of a merged rule (ADR 0426): `resolve-in-tracked-scope`
+    /// reaches `SC2004` alone, where the merged name reaches both codes.
+    code_overrides: BTreeMap<String, RuleOverride>,
     requested_presets: BTreeSet<String>,
     requested_rules: BTreeSet<String>,
+    /// Rule ids the host applies `eslint-disable` comments for itself
+    /// (ADR 0429): the ESLint adapter reports per-rule ids, and ESLint
+    /// suppresses a message by the id it was reported under, so the checker
+    /// must not suppress the same comment a second time. Host-selected, like
+    /// [`Self::runtime`], and never read from the project's configuration.
+    host_suppressions: BTreeSet<String>,
     /// Host-selected runtime evidence is part of the retained analysis
     /// identity, but is not a rule-owned option. Keeping it beside the
     /// catalog options lets the shared pipeline thread one immutable selector
@@ -48,6 +58,10 @@ pub struct RuleOptions {
     /// Optional source models for development instrumentation; included in
     /// cache identity and never inferred from project rule configuration.
     pub development_feedback: bool,
+    /// `valid-use-server`'s `clientWrappers` entries, in upstream's name
+    /// grammar (ADR 0427): names the project itself declares to be client-side
+    /// declaration wrappers, beside the built-in list.
+    client_wrappers: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -85,6 +99,33 @@ impl RuleOptions {
         has_rule: impl Fn(&str) -> bool,
         alias: impl Fn(&str) -> Option<&'static str>,
     ) -> Result<Self, String> {
+        Self::parse_with_scoped_aliases(encoded, has_rule, alias, |_| None)
+    }
+
+    /// [`Self::parse_with_aliases`] where a former name may also be limited to
+    /// one finding code (`scope`): its `enabled` then applies to that code
+    /// alone and not to the rest of the rule it canonicalizes onto.
+    pub fn parse_with_scoped_aliases(
+        encoded: &str,
+        has_rule: impl Fn(&str) -> bool,
+        alias: impl Fn(&str) -> Option<&'static str>,
+        scope: impl Fn(&str) -> Option<&'static str>,
+    ) -> Result<Self, String> {
+        Self::parse_with_groups(encoded, has_rule, alias, scope, |_| None)
+    }
+
+    /// [`Self::parse_with_scoped_aliases`] where a key may also name a group
+    /// (`group` returns its members): its `enabled` sets every member, and a
+    /// member the document also names takes its own setting whatever order the
+    /// keys sort in (ADR 0428). The group is not a rule and `has_rule` is not
+    /// asked about it.
+    pub fn parse_with_groups(
+        encoded: &str,
+        has_rule: impl Fn(&str) -> bool,
+        alias: impl Fn(&str) -> Option<&'static str>,
+        scope: impl Fn(&str) -> Option<&'static str>,
+        group: impl Fn(&str) -> Option<&'static [&'static str]>,
+    ) -> Result<Self, String> {
         let document: Document = serde_json::from_str(encoded)
             .map_err(|error| format!("rule options are not a valid document: {error}"))?;
         if document.schema_version != 1 {
@@ -94,9 +135,20 @@ impl RuleOptions {
             ));
         }
         let mut options = Self::default();
-        for (configured_rule, value) in document.rules {
-            let rule = alias(&configured_rule).unwrap_or(&configured_rule);
-            if !has_rule(rule) {
+        // The map iterates by key, so a group would overwrite a member that
+        // sorts before it. Groups go first; every named member then wins.
+        let (groups, rules): (Vec<_>, Vec<_>) = document
+            .rules
+            .into_iter()
+            .partition(|(configured_rule, _)| group(configured_rule).is_some());
+        for (configured_rule, value) in groups.into_iter().chain(rules) {
+            let members = group(&configured_rule);
+            let rule = if members.is_some() {
+                &configured_rule
+            } else {
+                alias(&configured_rule).unwrap_or(&configured_rule)
+            };
+            if members.is_none() && !has_rule(rule) {
                 return Err(format!(
                     "the rule catalog has no rule named {configured_rule:?}"
                 ));
@@ -109,14 +161,45 @@ impl RuleOptions {
                     format!("rule options for {configured_rule:?}: enabled must be a boolean")
                 })
             })?;
-            options.overrides.insert(
-                rule.to_owned(),
-                if enabled {
-                    RuleOverride::Enabled
-                } else {
-                    RuleOverride::Disabled
-                },
-            );
+            let requested = if enabled {
+                RuleOverride::Enabled
+            } else {
+                RuleOverride::Disabled
+            };
+            if let Some(members) = members {
+                for member in members {
+                    options.overrides.insert((*member).to_owned(), requested);
+                }
+            } else if let Some(code) = scope(&configured_rule) {
+                // Two former names of one code (`resolve-in-tracked-scope`,
+                // `resolve-in-reactive-scope`) may disagree: a disable stays.
+                let slot = options
+                    .code_overrides
+                    .entry(code.to_owned())
+                    .or_insert(requested);
+                if requested == RuleOverride::Disabled {
+                    *slot = requested;
+                }
+            } else {
+                options.overrides.insert(rule.to_owned(), requested);
+            }
+            if rule == "valid-use-server"
+                && let Some(entries) = fields.remove("clientWrappers")
+            {
+                options.client_wrappers = entries
+                    .as_array()
+                    .and_then(|entries| {
+                        entries
+                            .iter()
+                            .map(|entry| entry.as_str().map(str::to_owned))
+                            .collect::<Option<Vec<_>>>()
+                    })
+                    .ok_or_else(|| {
+                        format!(
+                            "rule options for {configured_rule:?}: clientWrappers must be an array of strings"
+                        )
+                    })?;
+            }
             let value = serde_json::Value::Object(fields);
             // This module owns 1.x option shapes, not the catalog's external
             // namespace. Match the final, stable upstream rule key after the
@@ -124,20 +207,29 @@ impl RuleOptions {
             let result = if value.as_object().is_some_and(serde_json::Map::is_empty) {
                 Ok(())
             } else {
-                // No rule in the shipped catalog takes options beyond
-                // `enabled`. The one that did was 1.x's `prefer-classlist`, whose
-                // `classnames` list went with the 1.x catalog (ADR 0110). The
-                // refusal stays because this module's whole point is that a
-                // typo must not silently mean "defaults" -- when a 2.0 rule
-                // grows an option, it is this arm that grows a parser.
-                Err(
-                    "this rule takes only `enabled`; no rule in this catalog takes additional options"
-                        .to_owned(),
-                )
+                // Only `valid-use-server` takes an option beyond `enabled` (its
+                // `clientWrappers`, parsed above); the other that did was 1.x's
+                // `prefer-classlist`, whose `classnames` list went with the 1.x
+                // catalog (ADR 0110). The refusal stays because this module's
+                // whole point is that a typo must not silently mean
+                // "defaults" -- when a rule grows an option, it is this arm
+                // that grows a parser.
+                Err(if rule == "valid-use-server" {
+                    "this rule takes only `enabled` and `clientWrappers`".to_owned()
+                } else {
+                    "this rule takes only `enabled`; no other rule in this catalog takes additional options"
+                        .to_owned()
+                })
             };
             result.map_err(|error| format!("rule options for {configured_rule:?}: {error}"))?;
         }
         Ok(options)
+    }
+
+    /// The project's declared `valid-use-server` client wrappers.
+    #[must_use]
+    pub fn client_wrappers(&self) -> &[String] {
+        &self.client_wrappers
     }
 
     pub fn request_presets(&mut self, presets: impl IntoIterator<Item = String>) {
@@ -146,6 +238,33 @@ impl RuleOptions {
 
     pub fn request_rules(&mut self, rules: impl IntoIterator<Item = String>) {
         self.requested_rules.extend(rules);
+    }
+
+    pub fn request_host_suppressions(&mut self, rules: impl IntoIterator<Item = String>) {
+        self.host_suppressions.extend(rules);
+    }
+
+    /// The rule ids the host suppresses `eslint-disable` comments for.
+    #[must_use]
+    pub fn host_suppressions(&self) -> &BTreeSet<String> {
+        &self.host_suppressions
+    }
+
+    /// [`Self::is_enabled`] for a finding of `code`: an override the project set
+    /// through a former name limited to that code wins over the rule's.
+    #[must_use]
+    pub fn is_enabled_for_code(
+        &self,
+        rule: &str,
+        code: &str,
+        default_enabled: bool,
+        presets: &[&str],
+    ) -> bool {
+        match self.code_overrides.get(code) {
+            Some(RuleOverride::Disabled) => false,
+            Some(RuleOverride::Enabled) => true,
+            None | Some(RuleOverride::Unset) => self.is_enabled(rule, default_enabled, presets),
+        }
     }
 
     /// Whether a catalog finding participates in certification.
@@ -169,15 +288,31 @@ impl RuleOptions {
 mod tests {
     use super::RuleOptions;
 
+    const MEMBERS: &[&str] = &["reactive-b", "strict-a", "zeta-c"];
+
+    /// A group whose key sorts between its members, so a naive single pass over
+    /// the sorted map would let the group overwrite one and not the other.
+    fn parse_grouped(document: &str) -> RuleOptions {
+        RuleOptions::parse_with_groups(
+            document,
+            |rule| MEMBERS.contains(&rule) || rule == "outside",
+            |rule| (rule == "old-a").then_some("strict-a"),
+            |_| None,
+            |rule| (rule == "reactivity-group").then_some(MEMBERS),
+        )
+        .unwrap()
+    }
+
     fn known_rule(rule: &str) -> bool {
         matches!(
             rule,
             "prefer-classlist"
                 | "no-destructure"
-                | "no-direct-mutation"
+                | "no-store-mutation-outside-setter"
                 | "no-owner-cleanup"
                 | "no-owner-settled-cleanup"
                 | "strict-read-untracked"
+                | "valid-use-server"
         )
     }
 
@@ -210,7 +345,7 @@ mod tests {
             r#"{
               "schemaVersion": 1,
               "rules": {
-                "no-direct-mutation": { "enabled": false },
+                "no-store-mutation-outside-setter": { "enabled": false },
                 "no-owner-cleanup": { "enabled": false },
                 "strict-read-untracked": { "enabled": true }
               }
@@ -218,7 +353,7 @@ mod tests {
             known_rule,
         )
         .unwrap();
-        assert!(!options.is_enabled("no-direct-mutation", true, &[]));
+        assert!(!options.is_enabled("no-store-mutation-outside-setter", true, &[]));
         assert!(options.is_enabled("strict-read-untracked", true, &[]));
         assert!(options.is_enabled("no-destructure", true, &[]));
         assert!(!options.is_enabled("no-owner-cleanup", true, &[]));
@@ -249,6 +384,40 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    /// ADR 0426: a former name limited to one code disables that code alone;
+    /// the merged name still governs both, and a code override wins for its own
+    /// code.
+    #[test]
+    fn a_scoped_alias_governs_its_own_code_only() {
+        let parse = |document: &str| {
+            RuleOptions::parse_with_scoped_aliases(
+                document,
+                |rule| rule == "merged",
+                |rule| matches!(rule, "old-a" | "old-b").then_some("merged"),
+                |rule| match rule {
+                    "old-a" => Some("SC1"),
+                    "old-b" => Some("SC2"),
+                    _ => None,
+                },
+            )
+            .unwrap()
+        };
+        let enabled = |options: &RuleOptions, code: &str| {
+            options.is_enabled_for_code("merged", code, true, &[])
+        };
+        let old_a = parse(r#"{ "schemaVersion": 1, "rules": { "old-a": { "enabled": false } } }"#);
+        assert!(!enabled(&old_a, "SC1") && enabled(&old_a, "SC2"));
+        assert!(old_a.is_enabled("merged", true, &[]));
+        let merged =
+            parse(r#"{ "schemaVersion": 1, "rules": { "merged": { "enabled": false } } }"#);
+        assert!(!enabled(&merged, "SC1") && !enabled(&merged, "SC2"));
+        let both = parse(
+            r#"{ "schemaVersion": 1, "rules": {
+                 "merged": { "enabled": false }, "old-b": { "enabled": true } } }"#,
+        );
+        assert!(!enabled(&both, "SC1") && enabled(&both, "SC2"));
     }
 
     #[test]
@@ -287,5 +456,119 @@ mod tests {
         .unwrap();
         disabled.request_presets(["preferences".into()]);
         assert!(!disabled.is_enabled("prefer-classlist", true, &["preferences"]));
+    }
+
+    #[test]
+    fn valid_use_server_takes_client_wrappers_and_nothing_else() {
+        let options = RuleOptions::parse(
+            r#"{
+              "schemaVersion": 1,
+              "rules": {
+                "valid-use-server": { "clientWrappers": ["define*", "/^use[A-Z]/"] }
+              }
+            }"#,
+            known_rule,
+        )
+        .unwrap();
+        assert_eq!(options.client_wrappers(), ["define*", "/^use[A-Z]/"]);
+        assert!(options.is_enabled("valid-use-server", true, &[]));
+        assert!(RuleOptions::default().client_wrappers().is_empty());
+
+        for bad in [
+            r#"{ "clientWrappers": "define*" }"#,
+            r#"{ "clientWrappers": ["ok", 1] }"#,
+            r#"{ "clientWrappers": ["ok"], "wrappers": ["x"] }"#,
+        ] {
+            let error = RuleOptions::parse(
+                &format!(r#"{{ "schemaVersion": 1, "rules": {{ "valid-use-server": {bad} }} }}"#),
+                known_rule,
+            )
+            .expect_err(bad);
+            assert!(
+                error.contains("clientWrappers must be an array of strings")
+                    || error.contains("takes only `enabled` and `clientWrappers`"),
+                "{error}"
+            );
+        }
+        // The option belongs to this rule alone.
+        assert!(
+            RuleOptions::parse(
+                r#"{ "schemaVersion": 1, "rules": { "no-destructure": { "clientWrappers": ["x"] } } }"#,
+                known_rule,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn the_former_rule_name_carries_the_option_to_the_canonical_rule() {
+        let options = RuleOptions::parse_with_aliases(
+            r#"{
+              "schemaVersion": 1,
+              "rules": {
+                "server-function-module-directive": { "clientWrappers": ["define*"] }
+              }
+            }"#,
+            |rule| rule == "valid-use-server",
+            |rule| (rule == "server-function-module-directive").then_some("valid-use-server"),
+        )
+        .unwrap();
+        assert_eq!(options.client_wrappers(), ["define*"]);
+    }
+
+    #[test]
+    fn a_group_key_sets_every_member_and_a_named_member_wins_in_any_key_order() {
+        let group_off = parse_grouped(
+            r#"{ "schemaVersion": 1, "rules": { "reactivity-group": { "enabled": false } } }"#,
+        );
+        for member in MEMBERS {
+            assert!(!group_off.is_enabled(member, true, &[]), "{member}");
+        }
+        assert!(group_off.is_enabled("outside", true, &[]));
+        assert!(group_off.is_enabled("reactivity-group", true, &[]));
+
+        // `reactive-b` sorts before the group key, `strict-a` after it, and
+        // `old-a` (an alias of `strict-a`) before it: each keeps its own
+        // setting, whichever side of the group the map visits it on.
+        let member_wins = parse_grouped(
+            r#"{ "schemaVersion": 1, "rules": {
+                 "reactivity-group": { "enabled": false },
+                 "reactive-b": { "enabled": true },
+                 "strict-a": { "enabled": true } } }"#,
+        );
+        assert!(member_wins.is_enabled("reactive-b", false, &[]));
+        assert!(member_wins.is_enabled("strict-a", false, &[]));
+        assert!(!member_wins.is_enabled("zeta-c", true, &[]));
+
+        let group_on = parse_grouped(
+            r#"{ "schemaVersion": 1, "rules": {
+                 "old-a": { "enabled": false },
+                 "reactivity-group": { "enabled": true },
+                 "zeta-c": { "enabled": false } } }"#,
+        );
+        assert!(!group_on.is_enabled("strict-a", true, &[]));
+        assert!(!group_on.is_enabled("zeta-c", true, &[]));
+        assert!(group_on.is_enabled("reactive-b", false, &[]));
+    }
+
+    #[test]
+    fn a_group_key_takes_only_enabled() {
+        let error = RuleOptions::parse_with_groups(
+            r#"{ "schemaVersion": 1, "rules": { "reactivity-group": { "severity": "off" } } }"#,
+            |_| false,
+            |_| None,
+            |_| None,
+            |rule| (rule == "reactivity-group").then_some(MEMBERS),
+        )
+        .expect_err("a group takes no option beyond `enabled`");
+        assert!(error.contains("takes only `enabled`"), "{error}");
+        // Without the group table the same key is an unknown rule.
+        assert!(
+            RuleOptions::parse(
+                r#"{ "schemaVersion": 1, "rules": { "reactivity-group": {} } }"#,
+                |_| false,
+            )
+            .is_err()
+        );
     }
 }

@@ -55,6 +55,8 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
     collector.ambient_variable = source_type.is_typescript_definition();
     collector.visit_program(&parsed.program);
     let mut facts = collector.finish(identity);
+    facts.suppression_comments =
+        suppression::suppression_comments(source, &parsed.program.comments);
     if execution_semantics_valid {
         (facts.host_execution, facts.host_defaults) = host_execution::host_execution(&semantic);
         facts.host_undefined_arguments = host_execution::undefined_values(&semantic);
@@ -148,6 +150,10 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) pattern_values: Vec<(Span, Span)>,
     pub(super) implicit_suspensions: Vec<Span>,
     pub(super) module_directives: Vec<DirectiveFact>,
+    pub(super) stray_directives: Vec<StrayDirectiveFact>,
+    /// Spans of the string and template statements that are direct children
+    /// of the program or a function body, so a nested one is told apart.
+    pub(super) direct_string_statements: Vec<Span>,
     pub(super) tagged_templates: Vec<TaggedTemplateFact>,
     pub(super) array_literal_elements: Vec<ArrayLiteralFact>,
     pub(super) pattern_elements: Vec<PatternElementFact>,
@@ -377,6 +383,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             pattern_values: Vec::new(),
             implicit_suspensions: Vec::new(),
             module_directives: Vec::new(),
+            stray_directives: Vec::new(),
+            direct_string_statements: Vec::new(),
             tagged_templates: Vec::new(),
             array_literal_elements: Vec::new(),
             pattern_elements: Vec::new(),
@@ -466,6 +474,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.pattern_values.sort_unstable();
         self.implicit_suspensions.sort_unstable();
         self.module_directives.sort_by_key(|fact| fact.span);
+        self.stray_directives.sort_by_key(|fact| fact.span);
         self.tagged_templates.sort_by_key(|fact| fact.span);
         self.array_literal_elements.sort_by_key(|fact| fact.span);
         self.pattern_elements
@@ -544,6 +553,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             pattern_values: self.pattern_values,
             implicit_suspensions: self.implicit_suspensions,
             module_directives: self.module_directives,
+            stray_directives: self.stray_directives,
+            suppression_comments: Vec::new(),
             tagged_templates: self.tagged_templates,
             array_literal_elements: self.array_literal_elements,
             pattern_elements: self.pattern_elements,

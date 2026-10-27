@@ -1,10 +1,3 @@
 {
-  "note": "r6 reviewer: b6/ClassMethodOpaque. Runtime-only witnesses supply the original ambient globals (no-op sink/runner, true flag, resolved promise); their declarations remain opaque to analysis.",
-  "open": [
-    {
-      "code": "STRICT_READ_UNTRACKED",
-      "site": "App.tsx:13",
-      "reason": "Real read miss under the explicit runtime witness: opaqueFn invokes the class method during setup. Class receiver/opaque-consumer timing is not established by the checker."
-    }
-  ]
+  "note": "r6 reviewer: b6/ClassMethodOpaque. Runtime-only witnesses supply the original ambient globals (no-op sink/runner, true flag, resolved promise); their declarations remain opaque to analysis."
 }

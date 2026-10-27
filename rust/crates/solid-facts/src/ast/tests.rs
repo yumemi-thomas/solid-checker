@@ -395,6 +395,63 @@ fn parameter_initializers_survive_function_and_arrow_normalization() {
     assert_eq!(initializers, vec![None, Some("1"), Some("2")]);
 }
 
+/// Suppression comments (facts schema 76): both families, both comment forms,
+/// inside JSX and after a hashbang, and nothing else.
+#[test]
+fn extracts_suppression_comments_only() {
+    let source = "#!/usr/bin/env node\n\
+// eslint-disable-next-line solid-checker/a, solid/b -- reason\n\
+const x = 1; // solid-checker-disable-line c\n\
+/* eslint-disable solid-checker/d */\n\
+/* solid-checker-enable */\n\
+// eslint-disable solid-checker/ignored-line-comment\n\
+// just a comment\n\
+/** eslint-env browser */\n\
+const y = <div>{/* eslint-disable-next-line solid-checker/e */}</div>;\n";
+    let facts = extract("/project/App.tsx", source).unwrap();
+    let seen: Vec<_> = facts
+        .suppression_comments
+        .iter()
+        .map(|comment| {
+            (
+                comment.origin,
+                comment.action,
+                comment.block,
+                comment
+                    .names
+                    .iter()
+                    .map(|name| name.as_str())
+                    .collect::<Vec<_>>(),
+                &source[comment.span.start as usize..][..2],
+            )
+        })
+        .collect();
+    use SuppressionAction::*;
+    use SuppressionOrigin::*;
+    assert_eq!(
+        seen,
+        vec![
+            (
+                Eslint,
+                DisableNextLine,
+                false,
+                vec!["solid-checker/a", "solid/b"],
+                "//"
+            ),
+            (SolidChecker, DisableLine, false, vec!["c"], "//"),
+            (Eslint, Disable, true, vec!["solid-checker/d"], "/*"),
+            (SolidChecker, Enable, true, vec![], "/*"),
+            (Eslint, DisableNextLine, true, vec!["solid-checker/e"], "/*"),
+        ]
+    );
+    assert!(
+        extract("/project/plain.ts", "// nothing here\nexport {};\n")
+            .unwrap()
+            .suppression_comments
+            .is_empty()
+    );
+}
+
 /// String directives: the module prologue lands in `module_directives`,
 /// each function's prologue lands on its `FunctionFact`, and a string
 /// literal after the first real statement is not a directive.

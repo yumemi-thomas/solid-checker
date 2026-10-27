@@ -93,6 +93,10 @@ computation. To split props use `omit(props, ...keys)`; to default them use
 `merge(defaults, props)`. Parameter destructuring is always setup-time;
 destructuring inside a tracked memo or effect is safe.
 
+eslint-plugin-solid's `reactivity` rule also reports destructured props
+(`untrackedReactive`); here that claim is this rule's alone, so disabling the
+`reactivity` key ([ADR 0428](../decisions.md#adr-0428)) does not turn it off.
+
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — the general untracked-read rule

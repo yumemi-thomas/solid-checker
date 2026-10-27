@@ -19,7 +19,7 @@ createRoot(() => {
 });
 
 // A component body: every owner requirement, and every reviewed scheduler.
-function Clock() {
+export function Clock() {
   setTimeout(() => {
     onCleanup(() => {});
   }, 0);
@@ -88,7 +88,7 @@ createRoot(() => {
   }, 0);
 });
 
-function Controls() {
+export function Controls() {
   // A root created in the timer callback owns what it contains.
   setTimeout(() => {
     createRoot(() => {
@@ -111,7 +111,7 @@ function Controls() {
 
 // A local function spelled like a scheduler is not the standard-library
 // declaration: it runs its callback inline, under the component's owner.
-function Shadowed() {
+export function Shadowed() {
   const setTimeout = (fn: () => void, _delay: number) => fn();
   setTimeout(() => {
     onCleanup(() => {});
@@ -125,7 +125,7 @@ function Shadowed() {
 function wrap(fn: () => void): () => void {
   return fn;
 }
-function Wrapped() {
+export function Wrapped() {
   setTimeout(
     wrap(() => {
       onCleanup(() => {});

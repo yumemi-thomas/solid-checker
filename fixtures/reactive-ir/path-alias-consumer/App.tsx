@@ -1,7 +1,7 @@
-// Precision regression for reactive-source-uncaptured (SC9011). The
+// Precision regression for the SC9012 `package-callee` obligation. The
 // "@/helpers" specifier is spelled bare, exactly like a package import, but
 // tsconfig "paths" resolves it into the project's own sources -- so passing a
-// reactive accessor to it must NOT report SC9011. This guards the path-alias
+// reactive accessor to it must NOT report it. This guards the path-alias
 // exclusion in shared_reactivity.rs's reactive_source_uncaptured (the
 // `symbol_is_project_code` filter on the package-imported set): before it, a
 // bare specifier alone made `consume` look like an undescribed package export

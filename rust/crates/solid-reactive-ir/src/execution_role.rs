@@ -104,7 +104,10 @@ fn callback_runs_outside_tracking(
         // Inline means the callback inherits the caller's Listener. Only
         // primitives such as untrack/createRoot/runWithOwner that explicitly
         // clear Listener belong to the outside-tracking set.
-        Some(Execution::Inline) => dialect.runs_callback_deferred(primitive),
+        Some(Execution::Inline) => {
+            dialect.runs_callback_deferred(primitive)
+                || dialect.callback_runs_untracked_without_window(primitive, argument)
+        }
     }
 }
 
@@ -233,9 +236,8 @@ fn source_execution_role(
     // does a tracked region around the element. Like an attribute's
     // function, it is placed by the arms that follow the value into the
     // component, or stays unproven; only facts inside it place code there.
-    let within = file
-        .ast
-        .functions_body_containing(span)
+    let within = functions_around(file, span)
+        .into_iter()
         .filter(|function| component_child_function(file, function.span))
         .min_by_key(|function| function.span.end - function.span.start)
         .map(|function| function.span);
@@ -279,7 +281,7 @@ pub(super) fn semantic_execution_role(
 /// ([`solid_dialect::Dialect::callback_runs_in_created_root`]) and, where the
 /// dialect says so, directly in a component body
 /// ([`solid_dialect::Dialect::component_body_runs_under_root`]).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(super) enum RootBodyGuard {
     /// The guard rejects the operation under a root, as under any
     /// children-capable owner: signal setters, `refresh` and action calls on

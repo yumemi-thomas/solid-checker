@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 390,
-      "end": 397,
+      "start": 397,
+      "end": 404,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 730,
-      "end": 737,
+      "start": 744,
+      "end": 751,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 841,
-      "end": 848,
+      "start": 862,
+      "end": 869,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 955,
-      "end": 962,
+      "start": 983,
+      "end": 990,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 1069,
-      "end": 1076,
+      "start": 1104,
+      "end": 1111,
       "fixes": 0
     },
     {
@@ -57,8 +57,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 1188,
-      "end": 1195,
+      "start": 1230,
+      "end": 1237,
       "fixes": 0
     },
     {
@@ -67,8 +67,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 1276,
-      "end": 1283,
+      "start": 1325,
+      "end": 1332,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 1409,
-      "end": 1416,
+      "start": 1465,
+      "end": 1472,
       "fixes": 0
     },
     {
@@ -87,8 +87,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 1526,
-      "end": 1533,
+      "start": 1589,
+      "end": 1596,
       "fixes": 0
     },
     {
@@ -97,8 +97,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 1818,
-      "end": 1825,
+      "start": 1888,
+      "end": 1895,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 1963,
-      "end": 1969,
+      "start": 2040,
+      "end": 2046,
       "fixes": 0
     },
     {
@@ -117,8 +117,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 2357,
-      "end": 2364,
+      "start": 2441,
+      "end": 2448,
       "fixes": 0
     },
     {
@@ -127,8 +127,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 2685,
-      "end": 2691,
+      "start": 2776,
+      "end": 2782,
       "fixes": 0
     },
     {
@@ -137,8 +137,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 3008,
-      "end": 3015,
+      "start": 3113,
+      "end": 3120,
       "fixes": 0
     },
     {
@@ -147,8 +147,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-callback-read-timing/App.tsx",
-      "start": 3349,
-      "end": 3356,
+      "start": 3461,
+      "end": 3468,
       "fixes": 0
     }
   ]

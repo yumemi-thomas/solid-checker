@@ -61,6 +61,7 @@ mod interproc;
 mod late_chunks;
 mod literal_member_slots;
 mod local_access;
+mod name_matcher;
 mod owners;
 /// The crate's maps and sets hash spans, symbol ids and paths on every
 /// lookup; Fx hashing is several times cheaper than SipHash for such keys.
@@ -90,6 +91,7 @@ pub mod summary_semantics;
 mod symbols;
 mod timings;
 mod upstream_compat;
+mod valid_use_server;
 mod value_identity;
 
 pub use owners::function_binding_name;
@@ -170,6 +172,13 @@ pub enum ExecutionRole {
     TrackedJsx,
     DeferredCallback,
     UntrackedCallback,
+    /// Untracked like [`Self::UntrackedCallback`], but in no strict-read window:
+    /// the code runs with tracking off where the runtime raises no warning
+    /// unless an option of the call opens one (ADR 0443: a `mapArray` or
+    /// `repeat` map function, and a `runWithOwner` callback inside a tracked
+    /// computation). The read is as stale as any other, and the finding must not
+    /// promise a development warning.
+    UntrackedUnwindowed,
     EffectApply,
     EventCallback,
     DirectiveApply,
@@ -414,6 +423,7 @@ impl ExecutionRole {
             Self::ModuleInitialization
                 | Self::UntrackedRendering
                 | Self::UntrackedCallback
+                | Self::UntrackedUnwindowed
                 | Self::EffectApply
         )
     }
@@ -553,8 +563,29 @@ pub struct ReactiveWrite {
     pub location: Location,
     pub declaration: Location,
     pub execution: ExecutionRole,
-    pub allowed_by_option: bool,
+    #[serde(default)]
+    pub owned_write: OwnedWriteOption,
     pub context: Arc<str>,
+}
+
+/// What a source's options argument proves about `ownedWrite` (ADR 0424),
+/// the node option that exempts the source's setter from the owned-scope
+/// write guard. Only an exact object literal proves the key present or
+/// absent; an options value the syntax does not show may carry it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OwnedWriteOption {
+    /// The key is absent or `false`, or the primitive's node does not read
+    /// it (the store family: `@solidjs/signals@2.0.0-rc.17`
+    /// `dist/dev.js:5847-5944`, `storeSetter` and `createStore$1`, never
+    /// consult `options.ownedWrite`).
+    #[default]
+    Off,
+    /// The final `ownedWrite` property of an exact literal is `true`.
+    On,
+    /// An identifier, spread, wrapped literal or other value: the option may
+    /// be set, so a write is neither proven allowed nor proven a violation.
+    Unknown,
 }
 
 impl ReactiveWrite {
@@ -696,6 +727,13 @@ pub const EXPORTED_PARAMETER_MEMBER_DISPATCH: &str = "exported-parameter-member-
 /// Get. Its `callee` is the Get's text. Producer: `interproc.rs`; consumer:
 /// `projection.rs`, which words it.
 pub const DEPENDENCY_SOURCE_GETTER: &str = "dependency-source-getter:";
+
+/// ADR 0440: the `analysis_context` of a dispatch obligation at an argument
+/// position where a reactive source is handed to a callee imported from a
+/// package, whose reactive behavior no analyzed source or primitive describes
+/// (SC9011 before the merge). Producer: `upstream_compat/shared_reactivity.rs`;
+/// consumers: `projection.rs`, which words it.
+pub const PACKAGE_CALLEE: &str = "package-callee";
 
 /// ADR 0293: the `analysis_context` prefix of a dispatch obligation at an
 /// untracked store Get whose strict-read warning depends on a key
@@ -949,7 +987,7 @@ impl StaticDefectFamily {
             Self::ExpectedFunctionGotExpression => "expected-function-got-expression",
             Self::HandlerOwnerUnresolved => "handler-owner-unresolved",
             Self::UncalledAccessor => "uncalled-accessor",
-            Self::DirectMutation => "no-direct-mutation",
+            Self::DirectMutation => "no-store-mutation-outside-setter",
             Self::ServerFunctionRichArgument => "server-function-rich-argument",
         }
     }
@@ -1054,8 +1092,8 @@ impl StaticDefectKind {
 pub enum DirectMutationTarget {
     Props,
     Store,
-    ReactiveValue,
-    AccessorBinding,
+    /// A `createProjection` result: derived, with no setter to route through.
+    Projection,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1257,6 +1295,27 @@ pub struct Program {
     /// proven ([`site_in_undecided_component`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub undecided_component_regions: Vec<UndecidedRegion>,
+    /// Every synchronous DOM dispatch call (ADR 0356, 0435) and what it
+    /// withholds, so a report can list what keeps event proofs out of reach.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub event_dispatch_sites: Vec<EventDispatchSite>,
+}
+
+/// One call of `EventTarget.dispatchEvent` or `HTMLElement.click`.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventDispatchSite {
+    pub path: String,
+    pub line: u32,
+    /// `element`, `unknown`, `window` or `document`.
+    pub receiver: String,
+    /// The caller proven to have no owner, when one is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caller: Option<String>,
+    /// Owner and write proofs of event handlers are withheld program-wide.
+    pub withholds_owner_proofs: bool,
+    /// Untracked-read proofs of event handlers are withheld program-wide.
+    pub withholds_read_proofs: bool,
 }
 
 /// The body of a function analyzed as a component because it returns JSX,
@@ -1353,6 +1412,11 @@ pub struct BuildTimings {
     /// The returned-invocation memo's files (one answer per file, ADR
     /// 0392): reused, recomputed, and recomputed to a new answer.
     pub returned_invocation_files: [u64; 3],
+    /// The call-site role memo's answers ([`execution_role`]'s `FlowSiteRole`,
+    /// the reader of the dispatch veto) and the veto's own memo (ADR 0450),
+    /// each as `[reused, computed, changed]`.
+    pub flow_site_role_answers: [u64; 3],
+    pub dispatch_veto_answers: [u64; 3],
     pub reused: bool,
     /// Files whose identity (source hash and Type Facts delta) is the last
     /// build's: the build's `unchanged_paths`.
@@ -1639,6 +1703,14 @@ impl IncrementalBuilder {
         self.shadow = Some(mode);
     }
 
+    /// Starts this builder's memo store empty with verify-reused mode set to
+    /// `verify` (every reused answer is recomputed and compared with the kept
+    /// one, a difference named by table and key), whatever
+    /// `SOLID_CHECKER_IR_VERIFY_REUSED` says. Call before the first build.
+    pub fn verify_reused_memos(&mut self, verify: bool) {
+        self.caches.set_verify_reused(verify);
+    }
+
     /// Whether a build leaves the memo store's end-of-build sweep (the
     /// entries it did not reach, dropped with their edges) to
     /// [`Self::finish_deferred`]. The answer a build makes does not depend on
@@ -1797,7 +1869,9 @@ fn callback_execution_word(execution: ExecutionRole) -> Option<&'static str> {
         ExecutionRole::DiscardedRendering => None,
         ExecutionRole::ModuleInitialization => Some("inline"),
         ExecutionRole::TrackedJsx => Some("tracked"),
-        ExecutionRole::DeferredCallback | ExecutionRole::UntrackedCallback => Some("deferred"),
+        ExecutionRole::DeferredCallback
+        | ExecutionRole::UntrackedCallback
+        | ExecutionRole::UntrackedUnwindowed => Some("deferred"),
         ExecutionRole::EffectApply
         | ExecutionRole::EventCallback
         | ExecutionRole::DirectiveApply
@@ -2235,6 +2309,33 @@ fn call_primitive_name(
         call_option_literal(file, call, argument, key)
     });
     Some(PrimitiveName::Known(form, spelling))
+}
+
+/// What `call`'s options argument proves about `ownedWrite` for a source made
+/// by `primitive` (ADR 0424). A primitive that returns a store never reads
+/// the option, so it is `Off` whatever the argument holds; an unresolved
+/// primitive reads the first options slot and keeps an unreadable value
+/// `Unknown`.
+pub(crate) fn owned_write_option(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: Option<solid_dialect::Primitive>,
+    dialect: &dyn Dialect,
+) -> OwnedWriteOption {
+    use solid_dialect::OptionLiteral;
+    let index = match primitive {
+        Some(primitive) if dialect.returns_store(primitive) => return OwnedWriteOption::Off,
+        Some(primitive) => match dialect.options_argument(primitive) {
+            Some(index) => index,
+            None => return OwnedWriteOption::Off,
+        },
+        None => 1,
+    };
+    match call_option_literal(file, call, index, "ownedWrite") {
+        OptionLiteral::Absent | OptionLiteral::False => OwnedWriteOption::Off,
+        OptionLiteral::True => OwnedWriteOption::On,
+        OptionLiteral::Unknown => OwnedWriteOption::Unknown,
+    }
 }
 
 /// What `call`'s syntax proves about the boolean option `key` in its

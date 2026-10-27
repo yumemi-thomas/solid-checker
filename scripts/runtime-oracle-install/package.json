@@ -1,0 +1,27 @@
+{
+  "name": "solid-checker-runtime-oracle-install",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The runtime oracle's pinned Solid 2.0.0-rc.17 install (scripts/runtime-oracle.mjs, ADR 0453). Provision with `make runtime-oracle-install`.",
+  "dependencies": {
+    "@jridgewell/trace-mapping": "0.3.31",
+    "@kobalte/core": "2.0.0-alpha.0",
+    "@solidjs/babel-plugin": "2.0.0-rc.17",
+    "@solidjs/compiler": "2.0.0-rc.17",
+    "@solidjs/router": "2.0.0-next.41",
+    "@solidjs/signals": "2.0.0-rc.17",
+    "@solidjs/vite-plugin": "3.0.0-next.51",
+    "@solidjs/web": "2.0.0-rc.17",
+    "playwright": "1.60.0",
+    "solid-js": "2.0.0-rc.17",
+    "vite": "8.0.14"
+  },
+  "overrides": {
+    "@solidjs/babel-plugin": "2.0.0-rc.17",
+    "@solidjs/compiler": "2.0.0-rc.17",
+    "@solidjs/signals": "2.0.0-rc.17",
+    "@solidjs/web": "2.0.0-rc.17",
+    "solid-js": "2.0.0-rc.17"
+  }
+}

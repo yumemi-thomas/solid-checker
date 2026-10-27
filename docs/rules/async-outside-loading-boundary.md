@@ -33,9 +33,10 @@ pattern's entire point, and the runtime warning does not fire for it
 (verified against `solid-js@2.0.0-rc.0`). Once the first real answer lands,
 re-asks use the normal pending machinery, but by then the reader holds a
 committed value and the boundary question is moot for this warning. If the
-options argument cannot be read statically (a spread, a variable), the
-warning keeps firing — it is informational, so over-reporting is the honest
-default there.
+options argument cannot be read statically (a spread, a variable), the source
+may declare either key, so the bare render is **uncertifiable**, never a
+violation (ADR 0430; the same holds for the SSR variant below, and for
+SC5001). Pass the options as an object literal so the checker can read them.
 
 ## Why is this bad?
 
@@ -93,7 +94,7 @@ letting the stream hang.
 This proof is based on the option itself, not async provenance, so it also
 catches a synchronous client-only compute. A named server-rendering or hydrate
 entry proves the error. When the entry may live outside the analyzed project,
-the finding is uncertifiable. Spread/computed options remain silent because a
+the finding is uncertifiable. A spread or variable options argument gives no SSR error, because a
 first-paint declaration cannot be ruled out.
 
 ```tsx

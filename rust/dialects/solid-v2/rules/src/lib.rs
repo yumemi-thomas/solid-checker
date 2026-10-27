@@ -52,8 +52,16 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
 const STRICT_READ_UNTRACKED_WARNS: &str = "Solid warns STRICT_READ_UNTRACKED here in dev.";
 const STRICT_READ_UNTRACKED_MAY_WARN: &str = "If this read executes untracked in dev, Solid warns STRICT_READ_UNTRACKED for it; this finding does not establish that it does, so confirm the read's actual execution and tracking status before relying on that warning.";
 
-fn strict_read_hint(kind: &str, uncertifiable: bool) -> String {
-    let warning = if uncertifiable {
+/// ADR 0443: the read is untracked in no strict-read window (a `mapArray` or
+/// `repeat` map function, a `runWithOwner` callback inside a tracked
+/// computation), so no warning is promised, and none is denied: a map function
+/// opens a window when the call passes `name`.
+const STRICT_READ_UNWINDOWED: &str = "No strict-read window is open for this read (a map function opens one only when the call passes a `name`), so Solid's development warning does not point out the stale value.";
+
+fn strict_read_hint(kind: &str, uncertifiable: bool, unwindowed: bool) -> String {
+    let warning = if unwindowed {
+        STRICT_READ_UNWINDOWED
+    } else if uncertifiable {
         STRICT_READ_UNTRACKED_MAY_WARN
     } else {
         STRICT_READ_UNTRACKED_WARNS
@@ -94,7 +102,11 @@ impl CatalogWording for Catalog {
                 FindingWording::new(
                     Rule::StrictReadUntracked.metadata(),
                     message,
-                    strict_read_hint(&read.kind, uncertifiable),
+                    strict_read_hint(
+                        &read.kind,
+                        uncertifiable,
+                        read.execution == ExecutionRole::UntrackedUnwindowed,
+                    ),
                 )
                 .with_evidence(strict_read_evidence(read))
             }
@@ -219,12 +231,25 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
                 ReactiveSourceKind::Accessor => "accessor",
                 ReactiveSourceKind::Store => "store",
             };
-            (
+            let opt_in = if write.source_kind == ReactiveSourceKind::Accessor {
+                " For an internal reactive signal only, opt in with { ownedWrite: true } in that signal's creation options; a store setter has no such opt-in."
+            } else {
+                " A store setter has no ownedWrite opt-in."
+            };
+            let message = if write.owned_write == solid_reactive_ir::OwnedWriteOption::Unknown {
+                format!(
+                    "{source} setter {:?} is called inside owned scope {context}, and its source's options argument cannot be read statically; if the source sets ownedWrite: true the write is allowed, otherwise Solid throws REACTIVE_WRITE_IN_OWNED_SCOPE here in dev, and whether it does cannot be proven either way",
+                    write.setter
+                )
+            } else {
                 format!(
                     "{source} setter {:?} is called inside owned scope {context}; writes under a children-capable owner create feedback loops in the reactive graph, and Solid throws REACTIVE_WRITE_IN_OWNED_SCOPE here in dev",
                     write.setter
-                ),
-                "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking. For an internal reactive source only, opt in with { ownedWrite: true } in that source's creation options.".to_owned(),
+                )
+            };
+            (
+                message,
+                format!("Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking.{opt_in}"),
                 format!(
                     "{:?} is paired with a source proven to be a Solid {source}",
                     write.setter
@@ -245,7 +270,7 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
     } else {
         "this scope runs under a children-capable owner; writes are only legal outside one — event handlers, actions, effect apply callbacks, and the leaf scopes onSettled and createTrackedEffect — and untrack() keeps the enclosing owner".into()
     };
-    FindingWording::new(Rule::ReactiveWriteInOwnedScope.metadata(), message, hint).with_evidence(
+    FindingWording::new(Rule::NoWriteInPureComputation.metadata(), message, hint).with_evidence(
         vec![
             EvidenceStep {
                 message: provenance,
@@ -481,10 +506,17 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
             },
             ExecutionRole::TrackedJsx if !read.under_loading => (
                 Rule::AsyncOutsideLoadingBoundary,
-                format!(
-                    "async accessor {:?} is rendered without a Loading boundary above it; while it is pending nothing renders, and the mount is deferred until all uncaught async settles (Solid dev warning ASYNC_OUTSIDE_LOADING_BOUNDARY)",
-                    read.accessor
-                ),
+                if read.options_opaque {
+                    format!(
+                        "async accessor {:?} is rendered without a Loading boundary above it, and its source's options argument cannot be read statically; if the options declare a loadingValue or seedLoadingValue the first flight serves that value and no boundary is needed, and whether they do cannot be proven either way",
+                        read.accessor
+                    )
+                } else {
+                    format!(
+                        "async accessor {:?} is rendered without a Loading boundary above it; while it is pending nothing renders, and the mount is deferred until all uncaught async settles (Solid dev warning ASYNC_OUTSIDE_LOADING_BOUNDARY)",
+                        read.accessor
+                    )
+                },
                 "This is safe but shows nothing while loading. Wrap the reading subtree in <Loading fallback={...}> for visible fallback UI, or leave it as is if an empty container during load is intended. For a revalidation indicator, use isPending(() => ...) under the same boundary.".to_owned(),
             ),
             // `DiscardedRendering` is here and not above: a pending read the
@@ -495,6 +527,7 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
             | ExecutionRole::TrackedJsx
             | ExecutionRole::DeferredCallback
             | ExecutionRole::UntrackedCallback
+            | ExecutionRole::UntrackedUnwindowed
             | ExecutionRole::EffectApply
             | ExecutionRole::EventCallback
             | ExecutionRole::DirectiveApply
@@ -557,7 +590,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::SyncNodeReceivedAsync => {
             "a sync computation is proven capable of returning Promise or AsyncIterable"
         }
-        Rule::ResolveInReactiveScope => {
+        Rule::ResolveInTrackedScope => {
             "the resolve() call runs directly in a tracked scope, where the runtime's observer guard throws in dev"
         }
         Rule::UntilInTrackedScope => {
@@ -575,8 +608,8 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::HttpResponseAfterFlush => {
             "the call's scope renders below a Loading boundary, but request-time ordering does not prove whether the boundary settles before or after the response head commits"
         }
-        Rule::ServerFunctionModuleDirective => {
-            "the module's directive prologue contains \"use server\" and this export is provably not a direct function declaration"
+        Rule::ValidUseServer => {
+            "the directive's position or the module-level directive file's export, re-export or module-scope wrapper call is provably one the audited compiler and server runtime reject, ignore or drop from the client"
         }
         Rule::JsxNoDuplicateProps => {
             "the intrinsic element uses more than one competing source of DOM child content"
@@ -587,12 +620,11 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::ReactiveReadAfterAwait
         | Rule::UncalledAccessor
         | Rule::ExpectedFunctionGotExpression
-        | Rule::NoDirectMutation
-        | Rule::ReactiveSourceUncaptured
+        | Rule::NoStoreMutationOutsideSetter
         | Rule::ReactiveDispatchUnresolved
         | Rule::ComponentPropsDestructure
         | Rule::ComponentReturnsConditionally
-        | Rule::ReactiveWriteInOwnedScope
+        | Rule::NoWriteInPureComputation
         | Rule::ActionCalledInOwnedScope
         | Rule::LeafOwnerForbiddenCall
         | Rule::MissingOwner
@@ -614,7 +646,9 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         // detected release and the dialect's review of it.
         | Rule::UnauditedSolidRelease
         // Likewise: the backend builds it from a file the compiler refused.
-        | Rule::CompilerRefusedSource => panic!(
+        | Rule::CompilerRefusedSource
+        // Likewise: the backend builds it from the suppression comments.
+        | Rule::UnknownSuppressionRule => panic!(
             "rule {} is not emitted through the static-violation channel",
             rule.metadata().name
         ),
@@ -641,12 +675,14 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectFamily::ComponentReturnsConditionally => Rule::ComponentReturnsConditionally,
         StaticDefectFamily::PackageBehaviorUnavailable => Rule::PackageBehaviorUnavailable,
         StaticDefectFamily::MissingEffectFunction => Rule::MissingEffectFunction,
-        StaticDefectFamily::ReactiveSourceUncaptured => Rule::ReactiveSourceUncaptured,
+        // ADR 0440: the source handed to a package callee is SC9012's
+        // `package-callee` context, not an identity of its own.
+        StaticDefectFamily::ReactiveSourceUncaptured => Rule::ReactiveDispatchUnresolved,
         StaticDefectFamily::ReactiveDispatchUnresolved => Rule::ReactiveDispatchUnresolved,
         StaticDefectFamily::ExpectedFunctionGotExpression => Rule::ExpectedFunctionGotExpression,
         StaticDefectFamily::HandlerOwnerUnresolved => Rule::MissingOwner,
         StaticDefectFamily::UncalledAccessor => Rule::UncalledAccessor,
-        StaticDefectFamily::DirectMutation => Rule::NoDirectMutation,
+        StaticDefectFamily::DirectMutation => Rule::NoStoreMutationOutsideSetter,
         StaticDefectFamily::ServerFunctionRichArgument => Rule::ServerFunctionRichArgument,
     };
     let text = solid_reactive_ir::static_defect_text(defect, &V2_STATIC_TERMS);
@@ -853,7 +889,7 @@ mod strict_read_hint_tests {
 
     #[test]
     fn component_props_hint_does_not_present_untrack_as_a_reactivity_fix() {
-        let hint = strict_read_hint("component-props", false);
+        let hint = strict_read_hint("component-props", false, false);
         assert!(hint.contains("read props.<name> directly in JSX"));
         assert!(hint.contains("Do not use untrack() to make a prop reactive"));
     }
@@ -861,16 +897,30 @@ mod strict_read_hint_tests {
     #[test]
     fn violation_hint_asserts_solid_warns_unconditionally() {
         for kind in ["component-props", "signal"] {
-            let hint = strict_read_hint(kind, false);
+            let hint = strict_read_hint(kind, false, false);
             assert!(hint.contains("Solid warns STRICT_READ_UNTRACKED here in dev"));
             assert!(!hint.contains("If this read executes untracked"));
         }
     }
 
     #[test]
+    fn an_unwindowed_read_promises_no_warning() {
+        for kind in ["component-props", "signal"] {
+            for uncertifiable in [false, true] {
+                let hint = strict_read_hint(kind, uncertifiable, true);
+                assert!(
+                    !hint.contains("Solid warns STRICT_READ_UNTRACKED"),
+                    "{hint}"
+                );
+                assert!(hint.contains("No strict-read window is open"), "{hint}");
+            }
+        }
+    }
+
+    #[test]
     fn uncertifiable_hint_never_asserts_that_solid_will_warn() {
         for kind in ["component-props", "signal"] {
-            let hint = strict_read_hint(kind, true);
+            let hint = strict_read_hint(kind, true, false);
             assert!(!hint.contains("Solid warns STRICT_READ_UNTRACKED here in dev"));
             assert!(hint.contains("If this read executes untracked in dev, Solid warns"));
             assert!(hint.contains("this finding does not establish that it does"));
@@ -899,7 +949,8 @@ mod source_argument_evidence_tests {
         }))
         .unwrap();
         let finding = project_finding(FindingSeed::StaticDefect(&defect), &Catalog);
-        assert_eq!(finding.id, "SC9011");
+        assert_eq!(finding.id, "SC9012");
+        assert_eq!(finding.rule, "reactive-dispatch-unresolved");
         assert_eq!(finding.kind, "uncertifiable");
         assert_eq!(finding.evidence.len(), 1);
         assert_eq!(

@@ -16,6 +16,46 @@
       "code": "SC9015",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/compiler-refused-file/AttrTitle.tsx",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compiler-refused-file/AttrTitle.tsx",
+      "start": 275,
+      "end": 282,
+      "fixes": 0
+    },
+    {
+      "rule": "compiler-refused-source",
+      "code": "SC9015",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compiler-refused-file/ClassList.tsx",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compiler-refused-file/ClassList.tsx",
+      "start": 318,
+      "end": 325,
+      "fixes": 0
+    },
+    {
+      "rule": "compiler-refused-source",
+      "code": "SC9015",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/compiler-refused-file/Malformed.tsx",
       "start": 0,
       "end": 0,
@@ -34,8 +74,8 @@
     {
       "rule": "compiler-refused-source",
       "code": "SC9015",
-      "kind": "uncertifiable",
-      "severity": "warning",
+      "kind": "violation",
+      "severity": "error",
       "path": "fixtures/reactive-ir/compiler-refused-file/Refused.tsx",
       "start": 0,
       "end": 0,

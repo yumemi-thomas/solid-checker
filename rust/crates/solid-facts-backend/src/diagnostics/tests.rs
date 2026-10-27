@@ -46,6 +46,7 @@ fn unknown_finding_identities_fail_closed() {
             severity: "error",
             uncertifiable: false,
             default_enabled: true,
+            configurable: true,
             presets: &[],
         },
         "synthetic".into(),
@@ -70,7 +71,8 @@ fn unknown_finding_identities_fail_closed() {
 }
 
 #[test]
-fn a_disabled_coverage_rule_returns_its_withheld_obligations() {
+fn a_disabled_coverage_rule_returns_its_withheld_obligations_and_an_obligation_cannot_be_disabled()
+{
     let finding = |code: &'static str, name: &'static str, uncertifiable: bool| {
         let mut finding = solid_reactive_ir::Finding::new(
             solid_reactive_ir::RuleMetadata {
@@ -79,6 +81,7 @@ fn a_disabled_coverage_rule_returns_its_withheld_obligations() {
                 severity: "warning",
                 uncertifiable,
                 default_enabled: true,
+                configurable: true,
                 presets: &[],
             },
             "synthetic".into(),
@@ -94,19 +97,31 @@ fn a_disabled_coverage_rule_returns_its_withheld_obligations() {
         finding
     };
     let mut findings = vec![
-        finding("SC9012", "reactive-dispatch-unresolved", true),
+        finding("SC7005", "http-response-after-flush", true),
         finding("SC1001", "strict-read-untracked", false),
+        // An obligation has no key: the options below cannot disable it.
+        finding("SC9012", "reactive-dispatch-unresolved", true),
+        finding("SC9005", "package-behavior-unavailable", true),
     ];
     let options = solid_reactive_ir::RuleOptions::parse(
         r#"{ "schemaVersion": 1, "rules": {
+          "http-response-after-flush": { "enabled": false },
           "reactive-dispatch-unresolved": { "enabled": false },
+          "package-behavior-unavailable": { "enabled": false },
           "strict-read-untracked": { "enabled": false } } }"#,
         |_| true,
     )
     .unwrap();
     let withheld =
         retain_enabled(crate::dialect::default_dialect(), &options, &mut findings).unwrap();
-    assert!(findings.is_empty());
+    // The obligations stay (ADR 0440); the disabled rules go.
+    assert_eq!(
+        findings
+            .iter()
+            .map(|finding| finding.id.as_str())
+            .collect::<Vec<_>>(),
+        ["SC9012", "SC9005"]
+    );
     // Only the coverage rule's obligation keeps the result from certifying;
     // a disabled defect rule is a rule the project chose not to check.
     assert_eq!(
@@ -114,8 +129,128 @@ fn a_disabled_coverage_rule_returns_its_withheld_obligations() {
             .iter()
             .map(|finding| finding.id.as_str())
             .collect::<Vec<_>>(),
-        ["SC9012"]
+        ["SC7005"]
     );
+}
+
+/// ADR 0428: the `reactivity` key reaches the findings of its four members
+/// through the same enablement as any member key, and a member the document
+/// names keeps its own setting.
+#[test]
+fn the_reactivity_group_key_configures_its_members() {
+    let finding = |code: &'static str, name: &'static str| {
+        solid_reactive_ir::Finding::new(
+            solid_reactive_ir::RuleMetadata {
+                code,
+                name,
+                severity: "error",
+                uncertifiable: false,
+                default_enabled: true,
+                configurable: true,
+                presets: &[],
+            },
+            "synthetic".into(),
+            typefacts::Location {
+                path: "synthetic.tsx".into(),
+                start_byte: 0,
+                end_byte: 1,
+            },
+        )
+    };
+    let retained = |rules: &str| {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-group-key-{}-{}",
+            std::process::id(),
+            rules.len()
+        ));
+        std::fs::create_dir_all(directory.join(".solid-checker")).unwrap();
+        std::fs::write(
+            directory.join(".solid-checker").join("rule-options.json"),
+            format!(r#"{{ "schemaVersion": 1, "rules": {{ {rules} }} }}"#),
+        )
+        .unwrap();
+        let options = super::discover_rule_options(&directory).unwrap();
+        std::fs::remove_dir_all(&directory).unwrap();
+        let mut findings = vec![
+            finding("SC1001", "strict-read-untracked"),
+            finding("SC1002", "reactive-read-after-await"),
+            finding("SC1003", "no-destructure"),
+            finding("SC1005", "uncalled-accessor"),
+            finding("SC1007", "reactive-handler-frozen"),
+        ];
+        retain_enabled(crate::dialect::default_dialect(), &options, &mut findings).unwrap();
+        findings
+            .iter()
+            .map(|finding| finding.id.clone())
+            .collect::<Vec<_>>()
+    };
+    // SC1003 is not a member: the group never reaches it.
+    assert_eq!(
+        retained(r#""reactivity": { "enabled": false }"#),
+        ["SC1003"]
+    );
+    assert_eq!(
+        retained(
+            r#""reactivity": { "enabled": false },
+               "reactive-handler-frozen": { "enabled": true },
+               "strict-read-untracked": { "enabled": true }"#
+        ),
+        ["SC1001", "SC1003", "SC1007"]
+    );
+    assert_eq!(
+        retained(r#""reactivity": { "enabled": true }, "uncalled-accessor": { "enabled": false }"#),
+        ["SC1001", "SC1002", "SC1003", "SC1007"]
+    );
+}
+
+/// ADR 0426: `resolve-in-tracked-scope` and `until-in-tracked-scope` disable
+/// their own code of the merged rule only; the merged name disables both.
+#[test]
+fn a_former_name_of_a_merged_rule_disables_its_own_code_only() {
+    let finding = |code: &'static str| {
+        solid_reactive_ir::Finding::new(
+            solid_reactive_ir::RuleMetadata {
+                code,
+                name: "no-await-primitive-in-tracked-scope",
+                severity: "error",
+                uncertifiable: false,
+                default_enabled: true,
+                configurable: true,
+                presets: &[],
+            },
+            "synthetic".into(),
+            typefacts::Location {
+                path: "synthetic.tsx".into(),
+                start_byte: 0,
+                end_byte: 1,
+            },
+        )
+    };
+    let retained = |disabled: &str| {
+        let options = solid_reactive_ir::RuleOptions::parse_with_scoped_aliases(
+            &format!(
+                r#"{{ "schemaVersion": 1, "rules": {{ {disabled:?}: {{ "enabled": false }} }} }}"#
+            ),
+            |rule| {
+                crate::dialect::ALL
+                    .iter()
+                    .any(|dialect| (dialect.has_rule)(rule))
+            },
+            crate::dialect::rule_alias,
+            crate::dialect::rule_alias_code,
+        )
+        .unwrap();
+        let mut findings = vec![finding("SC2004"), finding("SC2005")];
+        retain_enabled(crate::dialect::default_dialect(), &options, &mut findings).unwrap();
+        findings
+            .iter()
+            .map(|finding| finding.id.as_str().to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(retained("resolve-in-tracked-scope"), ["SC2005"]);
+    assert_eq!(retained("resolve-in-reactive-scope"), ["SC2005"]);
+    assert_eq!(retained("until-in-tracked-scope"), ["SC2004"]);
+    assert!(retained("no-await-primitive-in-tracked-scope").is_empty());
 }
 
 #[test]
@@ -210,6 +345,8 @@ fn diagnostic_session_keys_retention_on_requested_enablement() {
                 rules: &[],
                 runtime: RuntimeEnvironment::default(),
                 feedback_facts: false,
+                host_suppressions: &[],
+                default_program_boundary: None,
             },
         )
         .unwrap();
@@ -224,6 +361,8 @@ fn diagnostic_session_keys_retention_on_requested_enablement() {
                 rules: &[],
                 runtime: RuntimeEnvironment::default(),
                 feedback_facts: false,
+                host_suppressions: &[],
+                default_program_boundary: None,
             },
         )
         .unwrap();
@@ -238,6 +377,8 @@ fn diagnostic_session_keys_retention_on_requested_enablement() {
                 rules: &["prefer-show".into()],
                 runtime: RuntimeEnvironment::default(),
                 feedback_facts: false,
+                host_suppressions: &[],
+                default_program_boundary: None,
             },
         )
         .unwrap();
@@ -319,10 +460,20 @@ fn compatibility_rule_identities_are_tolerated_and_typos_are_not() {
         .unwrap();
         let loaded = super::discover_rule_options(&directory)
             .unwrap_or_else(|error| panic!("alias {old:?} must load: {error}"));
-        assert!(
-            !loaded.is_enabled(current, true, &[]),
-            "disabling alias {old:?} did not disable {current:?}"
-        );
+        if let Some(code) = crate::dialect::rule_alias_code(old) {
+            // ADR 0426: a name limited to one code of a merged rule disables
+            // that code alone.
+            assert!(
+                !loaded.is_enabled_for_code(current, code, true, &[])
+                    && loaded.is_enabled(current, true, &[]),
+                "disabling alias {old:?} must disable {code} and not {current:?}"
+            );
+        } else {
+            assert!(
+                !loaded.is_enabled(current, true, &[]),
+                "disabling alias {old:?} did not disable {current:?}"
+            );
+        }
         assert!(
             crate::dialect::ALL
                 .iter()
@@ -383,6 +534,37 @@ fn the_default_program_boundary_follows_the_nearest_manifest() {
     assert_eq!(boundary(Some("not json")), Open, "an unreadable manifest");
     assert_eq!(boundary(None), Open, "no manifest above the project");
     let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn dispatch_premises_name_what_each_site_withholds_or_why_it_is_excluded() {
+    use super::dispatch_premise;
+    let site = |receiver: &str, caller: Option<&str>, owner: bool, read: bool| {
+        solid_reactive_ir::EventDispatchSite {
+            path: "src/a.ts".into(),
+            line: 7,
+            receiver: receiver.into(),
+            caller: caller.map(str::to_owned),
+            withholds_owner_proofs: owner,
+            withholds_read_proofs: read,
+        }
+    };
+    assert_eq!(
+        dispatch_premise(&site("unknown", None, true, true)),
+        "synchronous dispatch (ADR 0435) at src/a.ts:7 withholds event handler owner and read proofs: receiver unknown"
+    );
+    assert_eq!(
+        dispatch_premise(&site("element", Some("runWithOwner(null)"), false, true)),
+        "synchronous dispatch (ADR 0435) at src/a.ts:7 withholds event handler read proofs: receiver element, caller runWithOwner(null)"
+    );
+    assert_eq!(
+        dispatch_premise(&site("window", None, false, false)),
+        "synchronous dispatch (ADR 0435) at src/a.ts:7 excluded: receiver window"
+    );
+    assert_eq!(
+        dispatch_premise(&site("element", Some("scheduled callback"), false, false)),
+        "synchronous dispatch (ADR 0435) at src/a.ts:7 excluded: caller scheduled callback"
+    );
 }
 
 #[test]

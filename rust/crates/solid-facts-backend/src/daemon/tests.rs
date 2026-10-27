@@ -185,6 +185,11 @@ fn daemon_enablement_order_and_duplicates_normalize_to_one_key() {
             "prefer-for".into(),
             "prefer-show".into(),
         ],
+        host_suppressions: vec![
+            "prefer-for".into(),
+            "no-destructure".into(),
+            "prefer-for".into(),
+        ],
         runtime: RuntimeEnvironment::default(),
         dependency_sources: vec!["dep-b".into(), "*".into(), "dep-b".into()],
         only_file: None,
@@ -192,6 +197,7 @@ fn daemon_enablement_order_and_duplicates_normalize_to_one_key() {
     normalize_enablement(&mut repeated);
     assert_eq!(repeated.presets, ["preferences", "z"]);
     assert_eq!(repeated.enable_rules, ["prefer-for", "prefer-show"]);
+    assert_eq!(repeated.host_suppressions, ["no-destructure", "prefer-for"]);
     assert_eq!(repeated.dependency_sources, ["*", "dep-b"]);
 }
 

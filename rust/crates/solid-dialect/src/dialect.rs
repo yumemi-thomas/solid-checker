@@ -938,6 +938,16 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// Whether an event dispatched on the global `document` object reaches no
+    /// event handler this runtime installs from JSX (ADR 0435): its delegated
+    /// handler starts at the event's target and looks for handler data on the
+    /// elements of the path, and `document` carries none; undelegated handlers
+    /// are listeners on their own elements, below the document. The default
+    /// is `false`: an unaudited runtime may route events differently.
+    fn document_dispatch_reaches_no_element_handler(&self) -> bool {
+        false
+    }
+
     /// Whether a call of `primitive` with exactly one argument, a compute
     /// function that takes no parameters, returns an accessor that is the
     /// only way the values the compute returns reach program code.
@@ -1365,7 +1375,8 @@ pub trait Dialect: Sync {
             execution,
             owner: self.callback_owner_at(primitive, argument, argument_count),
             tracks_reads: execution == Some(Execution::Tracked)
-                && !self.runs_callback_deferred(primitive),
+                && !self.runs_callback_deferred(primitive)
+                && !self.callback_runs_untracked_without_window(primitive, argument),
             requires_return_invocation: self
                 .callback_requires_return_invocation(primitive, argument),
             stores_as_value: self.stores_function_argument_as_value(primitive, argument),
@@ -1449,6 +1460,33 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the callback at `argument` runs with tracking off and opens no
+    /// strict-read window of its own (ADR 0443): a reactive read in it
+    /// subscribes nothing and, unless the call passes an option that opens one
+    /// ([`Self::callback_may_open_strict_window`]), raises nothing either, so
+    /// the stale value is not pointed out at run time.
+    fn callback_runs_untracked_without_window(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// Whether the callback at `argument` clears tracking but keeps the strict
+    /// -read window of the call that runs it (ADR 0443, `runWithOwner`). In a
+    /// tracked computation such a call has no window, so the callback's read
+    /// is untracked and unwarned.
+    fn callback_clears_tracking_in_calling_window(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// The member a context must be accessed through to act as a provider,
     /// if this dialect has one. Solid 1.x exposes `.Provider`, whose value
     /// getter runs untracked; Solid 2.0 makes the context itself the
@@ -1508,7 +1546,7 @@ pub trait Dialect: Sync {
     /// Whether this dialect's compiler includes server functions —
     /// the `"use server"` directive, `@solidjs/web/server-functions`, and the
     /// plain-JSON argument transport. Gates the server-function rules
-    /// (`server-function-module-directive`, `server-function-rich-argument`)
+    /// (`valid-use-server`, `server-function-rich-argument`)
     /// so a same-spelled directive in a 1.x project stays out of that
     /// catalog. Solid 1.x has no core server functions, so the default is
     /// `false`.

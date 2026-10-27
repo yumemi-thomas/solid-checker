@@ -96,7 +96,7 @@ downloads only the binary matching your platform.
 | Audited runtime | `solid-js@2.0.0-rc.17`, `@solidjs/signals@2.0.0-rc.17` and `@solidjs/web@2.0.0-rc.17` |
 | Dialect id | `solid-v2` |
 | Rule names | Unprefixed |
-| Catalog | 32 rules |
+| Catalog | 34 identities (28 configurable rules, 2 obligations, 4 detection findings) |
 | Effect model | `createEffect(compute, apply)` |
 | Async boundary | `Loading` / async computations |
 | Lifecycle | `onSettled`; leaf cleanup returned from callbacks |
@@ -163,7 +163,10 @@ export default [solidChecker.configs.recommended];
 
 The `prefer-*` rules are enabled by default. Set an individual ESLint rule to
 `"off"`, or set `enabled: false` in `.solid-checker/rule-options.json` for
-standalone and certification-mode checks. The legacy dialect-specific
+standalone and certification-mode checks. `no-await-primitive-in-tracked-scope`
+covers both `resolve` (SC2004) and `until` (SC2005); its former names keep their
+own code, so `resolve-in-tracked-scope` configures SC2004 alone and
+`until-in-tracked-scope` SC2005 alone. The legacy dialect-specific
 `preferences-v1` and `preferences-v2` configs remain composable but are now
 redundant.
 

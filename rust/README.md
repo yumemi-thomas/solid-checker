@@ -76,7 +76,7 @@ have been removed; see ADR 0312.
 Implemented rule slices are:
 
 - `strict-read-untracked`;
-- `reactive-write-in-owned-scope`;
+- `no-write-in-pure-computation`;
 - `action-called-in-owned-scope`;
 - `cleanup-in-forbidden-scope`;
 - `primitive-in-leaf-owner`;

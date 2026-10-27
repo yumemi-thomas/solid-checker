@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/test-runner-suites/variants/jest-test/App.test.tsx",
+      "start": 234,
+      "end": 252,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/test-runner-suites/variants/jest-test/App.test.tsx",
+      "start": 596,
+      "end": 614,
+      "fixes": 0
+    }
+  ]
+}

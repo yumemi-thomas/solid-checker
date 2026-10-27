@@ -31,6 +31,10 @@ pub struct RuleMetadata {
     pub severity: &'static str,
     pub uncertifiable: bool,
     pub default_enabled: bool,
+    /// Whether a project may configure the rule by name. `false` for an
+    /// obligation (SC9005, SC9012): an internal uncertifiable result that no
+    /// option reaches and no key names (ADR 0440).
+    pub configurable: bool,
     pub presets: &'static [&'static str],
 }
 
@@ -43,6 +47,10 @@ pub const DOCS_BASE_URL: &str =
 /// Serializes a rule catalog into the stable manifest consumed by the npm
 /// adapter. Catalogs remain responsible for ordering and metadata; this owns
 /// the shared wire shape and formatting.
+///
+/// One entry per rule *name*, the configurable identity (ADR 0426): codes that
+/// share a name become one entry whose `code` is the first and whose `codes`
+/// lists every one. Two rules of one name must agree on every other field.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RuleManifestIdentity {
     /// Stable checker dialect id (`solid-v2`).
@@ -63,16 +71,50 @@ pub fn rule_manifest_json(
         "{{\n  \"schemaVersion\": 1,\n  \"dialect\": \"{}\",\n  \"config\": \"{}\",\n  \"namespace\": \"{}\",\n  \"docsBaseUrl\": \"{docs_base_url}\",\n  \"rules\": [\n",
         identity.dialect, identity.config, identity.namespace
     );
-    let count = rules.len();
-    for (index, metadata) in rules.enumerate() {
+    let mut entries: Vec<(RuleMetadata, Vec<&'static str>)> = Vec::new();
+    for metadata in rules {
+        // An obligation has no key to configure, so the plugin has no entry
+        // for it (ADR 0440).
+        if !metadata.configurable {
+            continue;
+        }
+        if let Some((first, codes)) = entries
+            .iter_mut()
+            .find(|(first, _)| first.name == metadata.name)
+        {
+            assert!(
+                first.severity == metadata.severity
+                    && first.uncertifiable == metadata.uncertifiable
+                    && first.default_enabled == metadata.default_enabled
+                    && first.presets == metadata.presets,
+                "rules named {} must share severity, certifiability and presets",
+                metadata.name
+            );
+            codes.push(metadata.code);
+        } else {
+            entries.push((metadata, vec![metadata.code]));
+        }
+    }
+    let count = entries.len();
+    for (index, (metadata, codes)) in entries.into_iter().enumerate() {
         let presets = metadata
             .presets
             .iter()
             .map(|preset| format!("\"{preset}\""))
             .collect::<Vec<_>>()
             .join(", ");
+        let all_codes = if codes.len() > 1 {
+            let listed = codes
+                .iter()
+                .map(|code| format!("\"{code}\""))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(" \"codes\": [{listed}],")
+        } else {
+            String::new()
+        };
         out.push_str(&format!(
-            "    {{ \"code\": \"{}\", \"name\": \"{}\", \"severity\": \"{}\", \"uncertifiable\": {}, \"defaultEnabled\": {}, \"presets\": [{}] }}{}\n",
+            "    {{ \"code\": \"{}\",{all_codes} \"name\": \"{}\", \"severity\": \"{}\", \"uncertifiable\": {}, \"defaultEnabled\": {}, \"presets\": [{}] }}{}\n",
             metadata.code,
             metadata.name,
             metadata.severity,
@@ -376,6 +418,7 @@ const fn unnamed_read_context(execution: crate::ExecutionRole) -> &'static str {
         crate::ExecutionRole::ModuleInitialization => "module scope",
         crate::ExecutionRole::EffectApply => "effect apply callback",
         crate::ExecutionRole::Unknown => "code the analysis cannot place",
+        crate::ExecutionRole::UntrackedUnwindowed => "a callback that runs with tracking off",
         _ => "rendering function",
     }
 }
@@ -651,33 +694,28 @@ pub fn direct_mutation_wording(
     store_hint: impl FnOnce(&str) -> String,
 ) -> (String, String) {
     match target {
-        DirectMutationTarget::AccessorBinding => (
-            format!(
-                "reactive accessor {name:?} is reassigned; the binding is replaced and every subscriber keeps reading the old accessor"
-            ),
-            format!("Call the setter returned beside it instead of rebinding {name}."),
-        ),
         DirectMutationTarget::Store => (
             format!(
                 "{name:?} is a reactive store and is written through directly; Solid hands out a readonly proxy, so the write is dropped and nothing re-runs"
             ),
             store_hint(name),
         ),
-        DirectMutationTarget::Props | DirectMutationTarget::ReactiveValue => {
-            let object = if target == DirectMutationTarget::Props {
-                "props object"
-            } else {
-                "value"
-            };
-            (
-                format!(
-                    "{name:?} is a reactive {object} and is written through directly; Solid hands out a readonly proxy, so the write is dropped and nothing re-runs"
-                ),
-                format!(
-                    "Props are readonly by design: the parent owns the value. Lift the state to the parent and pass a callback down, rather than assigning to {name}."
-                ),
-            )
-        }
+        DirectMutationTarget::Projection => (
+            format!(
+                "{name:?} is a projection, a read-only derived store; a write through it is dropped and nothing re-runs"
+            ),
+            format!(
+                "Derive the value inside the projection's compute function instead of mutating the result {name}."
+            ),
+        ),
+        DirectMutationTarget::Props => (
+            format!(
+                "{name:?} is a reactive props object and is written through directly; Solid hands out a readonly proxy, so the write is dropped and nothing re-runs"
+            ),
+            format!(
+                "Props are readonly by design: the parent owns the value. Lift the state to the parent and pass a callback down, rather than assigning to {name}."
+            ),
+        ),
     }
 }
 

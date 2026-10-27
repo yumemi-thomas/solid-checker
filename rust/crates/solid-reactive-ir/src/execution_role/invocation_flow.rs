@@ -139,6 +139,21 @@ pub(super) trait FlowWorld<'a> {
         call: Span,
         classifying: &mut HashSet<(String, Span)>,
     ) -> Option<ExecutionRole>;
+    /// The call sites in other modules of the exported function declaration
+    /// `function` of `file` (ADR 0442): `(caller file, call span)`; `None`
+    /// when they cannot all be accounted for ([`exported_call_sites_in`]).
+    fn exported_call_sites(
+        &self,
+        file: &'a solid_facts::FileFacts,
+        function: &'a solid_facts::ast::FunctionFact,
+    ) -> Option<Vec<(&'a solid_facts::FileFacts, Span)>>;
+    /// The build's lookup, when the world is the lookup ([`LookupFlow`]). The
+    /// write question (ADR 0442) and the test-runner census (ADR 0438) are
+    /// whole-lookup computations, never memos: they ask it for the tables the
+    /// memo world does not record, and a world without it answers nothing.
+    fn lookup(&self) -> Option<&SemanticLookup<'a>> {
+        None
+    }
 }
 
 /// The walk over the build's lookup, unrecorded: for a nested evaluation
@@ -227,6 +242,73 @@ impl<'a> FlowWorld<'a> for LookupFlow<'_, 'a> {
     ) -> Option<ExecutionRole> {
         site_role_in(self.lookup, file, call, classifying)
     }
+
+    fn exported_call_sites(
+        &self,
+        file: &'a solid_facts::FileFacts,
+        function: &'a solid_facts::ast::FunctionFact,
+    ) -> Option<Vec<(&'a solid_facts::FileFacts, Span)>> {
+        exported_call_sites_in(self.lookup, file, function)
+    }
+
+    fn lookup(&self) -> Option<&SemanticLookup<'a>> {
+        Some(self.lookup)
+    }
+}
+
+/// ADR 0442: the invocations of an exported function declaration in other
+/// modules of a closed program. Every other module's reference to the
+/// declaration's symbol must be a call site the call graph accounts for
+/// (`function_call_site_references`: no alias, re-export, argument, type query
+/// or namespace hand-out), and each site must be a plain call expression; any
+/// other reference refuses, as an open program does. The module's own
+/// references are followed by the walk, as for a function that is not
+/// exported.
+pub(super) fn exported_call_sites_in<'a>(
+    lookup: &SemanticLookup<'a>,
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> Option<Vec<(&'a solid_facts::FileFacts, Span)>> {
+    let path = file.path.as_str();
+    let name = function.name.as_ref()?;
+    if !lookup.program_closed
+        || lookup.escapes_unnamed(path)
+        || lookup.hands_out_by_name(path, function.span)
+    {
+        return None;
+    }
+    let symbol = lookup.entities().at(path, name.span)?;
+    let references = lookup.symbol_references_if_present(symbol.as_str())?;
+    let accounted: HashSet<(&str, u32, u32)> = lookup
+        .function_call_site_references(path, function.span)
+        .into_iter()
+        .map(|(caller, callee)| (caller.path.as_str(), callee.start, callee.end))
+        .collect();
+    for reference in &references {
+        if reference.path.as_ref() == path {
+            continue;
+        }
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return None;
+        };
+        if !accounted.contains(&(reference.path.as_ref(), start, end)) {
+            return None;
+        }
+    }
+    let mut sites = Vec::new();
+    for (caller_file, callee) in lookup.function_call_sites(path, function.span) {
+        if caller_file.path == file.path {
+            continue;
+        }
+        let call = caller_file.ast.calls.iter().find(|call| {
+            !call.construct && caller_file.ast.peel_ts_sugar_span(call.callee) == callee
+        })?;
+        sites.push((caller_file, call.span));
+    }
+    Some(sites)
 }
 
 /// [`FlowWorld::primitive_slot`] over the lookup.
@@ -307,6 +389,19 @@ pub(super) struct InvocationFlow<'a, 'w, 'c, W: FlowWorld<'a>> {
     /// the call (which `createRoot` and `runWithOwner` pass through from
     /// their caller although they supply an owner).
     pub(super) owner_mode: bool,
+    /// The owner question's other census (ADR 0438): the entries that count
+    /// are the function literals a reviewed test runner invokes (a
+    /// registration's callback, [`SemanticLookup::test_runner_callback`]),
+    /// not an event delivery. Meaningful only with `owner_mode`.
+    pub(super) test_entries: bool,
+    /// ADR 0442: the write question. A call's role is the write classifier's
+    /// role at the call under this guard, and the join keeps an owned entry
+    /// as the answer (ADR 0378). Never combined with `owner_mode`.
+    pub(super) write_root_body: Option<RootBodyGuard>,
+    /// The modules this walk read (a holder, a callee, a caller, a rendered
+    /// component): an answer that read another module than the literal's own
+    /// depends on that module's contents (ADR 0442's digest binding).
+    pub(super) touched: HashSet<&'a str>,
 }
 
 /// ADR 0319: the one role every invocation of the function literal directly
@@ -418,8 +513,223 @@ pub(super) fn literal_flow_role<'a, W: FlowWorld<'a>>(
         frames: Vec::new(),
         props_stack: Vec::new(),
         owner_mode: false,
+        test_entries: false,
+        write_root_body: None,
+        touched: HashSet::default(),
     };
     let role = flow.function_role(file, literal).flatten();
     flow.classifying.remove(&key);
     role
+}
+
+thread_local! {
+    /// Set while [`write_flow_answer`] computes an answer: the write walk,
+    /// asked at an invocation site, then skips its own use of the answers, so
+    /// every answer is computed from an empty context and no order of
+    /// computation matters.
+    static COMPUTING_WRITE_FLOW: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// ADR 0442, per function and guard (ADR 0450): the write-flow answer of a
+/// function a closed program hands to project code (a component prop value, an
+/// argument of a call that is no primitive, a named function). Only a proven
+/// role is an answer, with whether the walk read another module than the
+/// function's own; see [`literal_write_flow_role`]. `None` for a function that
+/// is no candidate and for one the walk proves nothing about.
+///
+/// The walk's cache of the classifier's role at each call lives for one answer
+/// only: what the classifier says at a call depends on the build.
+pub(crate) fn write_flow_answer(
+    lookup: &SemanticLookup<'_>,
+    path: &str,
+    span: Span,
+    exempts_root: bool,
+) -> Option<(ExecutionRole, bool)> {
+    let file = lookup.file_by_path(path)?;
+    let literal = file.ast.function_at(span)?;
+    if !write_flow_candidate(file, literal) {
+        return None;
+    }
+    let guard = if exempts_root {
+        RootBodyGuard::Exempts
+    } else {
+        RootBodyGuard::Rejects
+    };
+    let outer = COMPUTING_WRITE_FLOW.with(|computing| computing.replace(true));
+    let answer = literal_write_flow_role(file, literal, guard, lookup);
+    COMPUTING_WRITE_FLOW.with(|computing| computing.set(outer));
+    clear_write_site_roles();
+    answer
+}
+
+/// Whether `literal` is handed to other code where it is written: the value
+/// of a non-intrinsic JSX attribute, a whole argument of a call, or a
+/// function bound to a name. A function that is none of these has no
+/// invocation this walk could follow.
+fn write_flow_candidate(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+) -> bool {
+    !literal.generator
+        && (component_prop_literal(file, literal.span).is_some()
+            || file
+                .ast
+                .arguments_containing(literal.span)
+                .any(|(call, index)| {
+                    !call.arguments[index].spread
+                        && !call.construct
+                        && file.ast.peel_ts_sugar_span(call.arguments[index].span) == literal.span
+                })
+            || named_function_handed_on(file, literal))
+}
+
+/// Whether a function bound to a name is handed on somewhere in its own file:
+/// a whole argument (`withTx(save)`), a JSX attribute's value
+/// (`<Child onPress={save} />`) or the initializer of an alias binding
+/// (`const again = save`). A function every use of which is a call or an
+/// intrinsic handler is the write walk's own business. A named function
+/// expression is held by the binding it initializes as well as by its name.
+fn named_function_handed_on(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+) -> bool {
+    let peel = |span: Span| file.ast.peel_ts_sugar_span(span);
+    let mut holders = Vec::new();
+    holders.extend(function_binding_name(file, literal).map(|name| name.span));
+    if literal.kind == solid_facts::ast::FunctionKind::Expression && literal.name.is_some() {
+        holders.extend(
+            file.ast
+                .bindings_initializer_containing(literal.span)
+                .find(|binding| {
+                    binding.shape == solid_facts::ast::BindingShape::Identifier
+                        && binding
+                            .initializer
+                            .is_some_and(|initializer| peel(initializer) == literal.span)
+                })
+                .and_then(|binding| binding.names.first())
+                .map(|name| name.span),
+        );
+    }
+    file.ast
+        .reference_declarations
+        .iter()
+        .filter(|(reference, declaration)| {
+            holders.contains(declaration) && !holders.contains(reference)
+        })
+        .any(|(reference, _)| {
+            file.ast
+                .arguments_containing(*reference)
+                .any(|(call, index)| {
+                    !call.arguments[index].spread && peel(call.arguments[index].span) == *reference
+                })
+                || file.ast.jsx_containing(*reference).any(|element| {
+                    !intrinsic_element(file, element)
+                        && element.attributes.iter().any(|attribute| {
+                            attribute
+                                .expression
+                                .is_some_and(|value| peel(value) == *reference)
+                        })
+                })
+                || file.ast.bindings.iter().any(|binding| {
+                    binding
+                        .initializer
+                        .is_some_and(|initializer| peel(initializer) == *reference)
+                })
+        })
+}
+
+/// The one role every invocation of `literal` runs in, for a write in it
+/// (ADR 0442): followed forward as ADR 0319 follows a value, each call's role
+/// the write classifier's at the call. An invocation in an owned scope makes
+/// the answer that role, as ADR 0378's entries rule has it; every other
+/// invocation must be one proven role, and any census gap or unplaced
+/// invocation answers nothing. Open or closed program alike: what a callee
+/// does with the value does not depend on its other callers, and an exported
+/// function holding the value's invocation refuses unless the program is
+/// closed ([`InvocationFlow::exported_call_sites`]).
+fn literal_write_flow_role(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    root_body: RootBodyGuard,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(ExecutionRole, bool)> {
+    let file = lookup.file_by_path(file.path.as_str())?;
+    let literal = file.ast.function_at(literal.span)?;
+    if literal.generator
+        || lookup.function_component_status(file, literal) != ComponentStatus::No
+        || lookup.program_has_eval()
+    {
+        return None;
+    }
+    let mut classifying = HashSet::default();
+    classifying.insert((format!("\0write-flow:{}", file.path.as_str()), literal.span));
+    let mut flow = InvocationFlow {
+        world: &LookupFlow { lookup },
+        classifying: &mut classifying,
+        budget: FLOW_BUDGET,
+        seen: HashSet::default(),
+        frames: Vec::new(),
+        props_stack: Vec::new(),
+        owner_mode: false,
+        test_entries: false,
+        write_root_body: Some(root_body),
+        touched: HashSet::default(),
+    };
+    let role = flow.function_role(file, literal).flatten()?;
+    let across_modules = flow.touched.iter().any(|path| *path != file.path.as_str());
+    Some((role, across_modules))
+}
+
+/// ADR 0442: the role the invocations of `span`'s function (or of a function
+/// around it that runs `span` in place) give a write there, from the
+/// function's own answer ([`write_flow_answer`]). `None` while an answer is computed, in an open program, and for a
+/// function the walk proves nothing about.
+pub(super) fn write_flow_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    root_body: RootBodyGuard,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    if COMPUTING_WRITE_FLOW.with(std::cell::Cell::get) {
+        return None;
+    }
+    let innermost = containing_ast_function(&file.ast, span)?;
+    if !innermost.body.contains(span) {
+        return None;
+    }
+    // A default value runs when its function is called without the argument,
+    // not when the function around it does: those invocations place nothing
+    // for it (a nested function's parameter list lies in the outer body).
+    if functions_around(file, span)
+        .into_iter()
+        .any(|function| parameter_slot(function, span).is_some())
+    {
+        return None;
+    }
+    let mut enclosing = file.ast.functions_body_containing(span).collect::<Vec<_>>();
+    enclosing.sort_by_key(|function| function.span.end - function.span.start);
+    // Where the write, then each layer around it, sits in the next function
+    // out. An await in any of those functions that precedes the position
+    // suspends the run: it resumes later with no owner (ADR 0333), whatever
+    // invokes the function.
+    let mut position = span;
+    for function in enclosing {
+        if !runs_in_place_within(file, innermost, function, lookup) {
+            return None;
+        }
+        if let Some(suspended) = suspended_write_role(file, position, lookup) {
+            return Some(suspended);
+        }
+        position = function.span;
+        if write_flow_candidate(file, function)
+            && let Some((role, _)) = lookup.write_flow_answer_at(
+                file.path.as_str(),
+                function.span,
+                root_body == RootBodyGuard::Exempts,
+            )
+        {
+            return Some(role);
+        }
+    }
+    None
 }

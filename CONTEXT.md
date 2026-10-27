@@ -118,6 +118,10 @@ _Avoid_: Elided region, dead region, untracked region (that is the once-executin
 A user-facing grouping of the runtime misbehavior that findings prevent: silent staleness (reads that register no dependency), feedback loops (writes and actions in owned scopes), escaped async (pending reads outside tracked or Loading-bounded regions), and lifecycle leaks (effects, cleanups, and boundaries without a live owner).
 _Avoid_: Bug category, rule group (that is the SCxxxx numbering)
 
+**Suppression comment**:
+A source comment that switches rules off or on, in the `eslint-disable` family or the checker's own `solid-checker-disable` family, read with ESLint's grammar (ADR 0429). It removes violations at a site and nothing else: an uncertifiable result, a notice or a project finding is never removed by a comment.
+_Avoid_: Directive fact (a string prologue directive such as `"use server"` is a `DirectiveFact`), lint directive, ignore comment
+
 **Source-edge refusal**:
 A caller's recorded statement that source-boundary analysis was withheld for one exact occurrence of an import specifier (ADR 0310): an importer, the specifier as written, and a form plus the byte range of the whole statement or expression, held in the package boundary apart from package identities. The analysis joins it to the supplied facts by exact membership, keeps the package obligation open at that pair, and reports one neutral SC9005 uncertifiable finding per occurrence. It does not authenticate the caller's decision and establishes no missing module, missing export, runtime target or execution; a source implementation the program supplies is not withdrawn by it, and a record carries no generation, so the caller reacquires it for each facts generation.
 _Avoid_: Source refusal, retained reason, missing-contract finding

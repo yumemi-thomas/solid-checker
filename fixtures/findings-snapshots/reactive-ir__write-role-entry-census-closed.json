@@ -1,5 +1,5 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
     {
       "rule": "missing-owner",
@@ -12,9 +12,9 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
+      "rule": "no-write-in-pure-computation",
       "code": "SC2001",
-      "kind": "uncertifiable",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-role-entry-census/variants/closed/App.tsx",
       "start": 938,

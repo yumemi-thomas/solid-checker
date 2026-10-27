@@ -56,6 +56,7 @@ pub(super) fn check_file(
 ) {
     uncalled_accessor(file, context, defects);
     no_direct_mutation(file, context, defects);
+    no_store_mutator_call(file, context, defects);
     expected_function_got_expression(file, context, defects);
     reactive_source_uncaptured(file, context, defects);
 }
@@ -150,7 +151,7 @@ fn reactive_source_uncaptured(
                     callee: callee_text.to_owned(),
                 },
                 location: location(file.path.shared(), argument.span),
-                analysis_context: String::new(),
+                analysis_context: crate::PACKAGE_CALLEE.to_owned(),
                 fixes: vec![],
                 uncertain: false,
             });
@@ -296,7 +297,7 @@ fn bound_method_entry<'a>(
     })
 }
 
-/// The analyzed function a caller's call enters, as the SC9011 rule decides
+/// The analyzed function a caller's call enters, as the `package-callee` check decides
 /// it: the identifier callee's function, or `.call`/`.apply` of one. A
 /// member callee stays the rule's own question.
 fn caller_target<'a>(
@@ -1191,9 +1192,16 @@ fn no_direct_mutation(
         {
             continue;
         }
-        // A props root only misbehaves when written *through* — rebinding a
-        // local `props`-like identifier is shadowing, not a dropped write.
-        if props && !through_member {
+        // Rebinding the container itself (`count = 2` on a signal accessor,
+        // `store = {}`, a props-like local) is not a dropped write, and the
+        // spellings that would make it one are TypeScript's: on the audited
+        // rc.17 typings a `const` binding is TS2588 and a `let` assigned a
+        // number, a function or an update is TS2322/TS2356/TS2365 (tsc-oracle
+        // `removed-because-redundant`). What type-checks is a deliberate
+        // rebinding (`count = otherAccessor`, `store = { ... }` on a `let`)
+        // or a cast, whose later reads are not proven to fail, so the branch
+        // is gone (ADR 0425).
+        if !through_member {
             continue;
         }
         // Props are shallow: `props.state.count = 1` may write through an
@@ -1217,51 +1225,33 @@ fn no_direct_mutation(
         {
             continue;
         }
-        let target = if through_member {
-            if props {
-                DirectMutationTarget::Props
-            } else if kind == Some(ReactiveSourceKind::Store) {
-                DirectMutationTarget::Store
-            } else {
-                DirectMutationTarget::ReactiveValue
-            }
+        // A member written on an accessor function (`memo.a = 1`) is not a
+        // write through a readonly proxy: the accessor is an ordinary
+        // extensible function, so the property lands (probed on rc.17: the
+        // value reads back, and the accessor is neither frozen nor a proxy).
+        // The uncast spelling is TypeScript's (TS2339, TS7053 under `strict`)
+        // and a cast one may attach metadata deliberately, so no claim
+        // remains (tsc-oracle `removed-because-redundant`).
+        let target = if props {
+            DirectMutationTarget::Props
+        } else if kind == Some(ReactiveSourceKind::Store) {
+            store_target(context, symbol)
         } else {
-            DirectMutationTarget::AccessorBinding
-        };
-        // A write to the root record's *own* property is TS2540 where the
-        // dialect's store type is `Readonly` at that level -- 2.0 -- so it is
-        // TypeScript's, not this rule's. The readonly-ness is shallow, so a
-        // nested store record and a direct props property stay here; 1.x's store type is
-        // mutable throughout, and its rule is unaffected.
-        //
-        // The root must be a bare identifier. `(state as { count: number }).count
-        // = 1` casts the readonly away, so TypeScript falls silent there while
-        // the write is still dropped at runtime -- and `member_root` resolves
-        // through the cast, so a span comparison alone would have handed that
-        // case to a TypeScript diagnostic that does not exist.
-        if target == DirectMutationTarget::Store
-            && context.dialect.store_root_properties_are_readonly()
-            && file
-                .ast
-                .member_at(assignment.target)
-                .is_some_and(|member| member.object == root)
-            && file
-                .ast
-                .identifiers
-                .iter()
-                .any(|identifier| identifier.span == root)
-        {
             continue;
-        }
-        // 2.0 write-enables the original store proxy for the duration of its
-        // own setter's draft callback (probed on rc.0: the write commits;
-        // through another store's setter it is silently dropped). A write
-        // through the store rooted lexically inside that store's own setter
-        // callback is therefore correct code, not a dropped write.
-        if target == DirectMutationTarget::Store
-            && context.dialect.store_setter_callback_enables_proxy_writes()
-            && inside_own_setter_callback(file, context, assignment.target, symbol)
-        {
+        };
+        if matches!(
+            target,
+            DirectMutationTarget::Store | DirectMutationTarget::Projection
+        ) && store_write_is_exempt(
+            file,
+            context,
+            StoreWriteSite {
+                span: assignment.target,
+                member: assignment.target,
+                root,
+            },
+            symbol,
+        ) {
             continue;
         }
         defects.push(StaticDefect {
@@ -1281,6 +1271,230 @@ fn no_direct_mutation(
             uncertain: props,
         });
     }
+}
+
+/// A store write the rule is about to report: the whole write (an assignment
+/// target or a mutator call), the member expression whose object it writes
+/// through (the assignment target itself, or the mutator's callee), and the
+/// root identifier that member chain starts at.
+#[derive(Clone, Copy)]
+struct StoreWriteSite {
+    span: Span,
+    member: Span,
+    root: Span,
+}
+
+/// The finding target for a write through the proven store `symbol`: a
+/// `createProjection` result (or a view of one) has no setter to name, so it
+/// reads differently from a `createStore` read proxy.
+fn store_target(
+    context: &UpstreamCompatContext<'_>,
+    symbol: &crate::SymbolId,
+) -> DirectMutationTarget {
+    let primitive = context.source_primitives.get(symbol).or_else(|| {
+        // A `merge`/`omit` view or an effect-apply parameter carries the
+        // source's declaration, not its primitive.
+        let (_, declaration) = context.accessors.get(symbol)?;
+        context
+            .source_primitives
+            .iter()
+            .find_map(|(source, primitive)| {
+                (context.accessors.get(source).map(|(_, found)| found) == Some(declaration))
+                    .then_some(primitive)
+            })
+    });
+    if primitive.is_some_and(|primitive| primitive.as_str() == "createProjection") {
+        DirectMutationTarget::Projection
+    } else {
+        DirectMutationTarget::Store
+    }
+}
+
+/// Whether a write through the proven store `symbol` is correct code or
+/// TypeScript's to report, so this rule stays silent.
+///
+/// - A write to the root record's *own* property is TS2540 where the
+///   dialect's store type is `Readonly` at that level (`@solidjs/signals`
+///   rc.0-rc.6), so it is TypeScript's. The readonly-ness is shallow: a
+///   nested record, or a mutator on a nested array, stays here. The root must
+///   be a bare identifier: `(state as { count: number }).count = 1` casts the
+///   readonly away, so TypeScript falls silent there while the write is still
+///   dropped at runtime, and `member_root` resolves through the cast.
+/// - 2.0 write-enables the original proxy for the duration of the store's own
+///   setter callback and of the compute function that derives it
+///   ([`inside_own_setter_callback`], [`inside_own_compute_function`]).
+fn store_write_is_exempt(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    site: StoreWriteSite,
+    symbol: &crate::SymbolId,
+) -> bool {
+    if context.dialect.store_root_properties_are_readonly()
+        && file
+            .ast
+            .member_at(site.member)
+            .is_some_and(|member| member.object == site.root)
+        && file
+            .ast
+            .identifiers
+            .iter()
+            .any(|identifier| identifier.span == site.root)
+    {
+        return true;
+    }
+    context.dialect.store_setter_callback_enables_proxy_writes()
+        && (inside_own_setter_callback(file, context, site.span, symbol)
+            || inside_own_compute_function(file, context, site.span, symbol))
+}
+
+/// The nine in-place `Array.prototype` methods upstream names
+/// (`MUTATING_METHODS`).
+const ARRAY_MUTATORS: [&str; 9] = [
+    "push",
+    "pop",
+    "shift",
+    "unshift",
+    "splice",
+    "sort",
+    "reverse",
+    "fill",
+    "copyWithin",
+];
+
+/// A call of an in-place array method on a path of a proven store: the call
+/// resolves, through Type Facts, to the standard library's `Array` method, so
+/// a project method of the same name, a `ReadonlyArray`, a typed array and an
+/// unresolved receiver are all silent. TypeScript accepts the call (`Store<T>
+/// = T` from `@solidjs/signals` rc.7, and a nested array is mutable on every
+/// release), and the runtime drops it: every element write and the `length`
+/// write reach the proxy's `set` trap, which returns `true` without storing
+/// (rc.17 `dist/dev.js:5691-5700`, ADR 0425).
+fn no_store_mutator_call(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    defects: &mut Vec<StaticDefect>,
+) {
+    for call in &file.ast.calls {
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let Some(member) = file.ast.member_at(callee) else {
+            continue;
+        };
+        if call.construct
+            || file.ast.computed_members.binary_search(&callee).is_ok()
+            || !ARRAY_MUTATORS.contains(&text(file, member.property))
+        {
+            continue;
+        }
+        let Some(declaration) =
+            context
+                .lookup
+                .standard_library_declaration(file, call, typefacts::CallKind::Call)
+        else {
+            continue;
+        };
+        if declaration.qualified_name.as_ref() != format!("Array.{}", text(file, member.property)) {
+            continue;
+        }
+        let Some(root) = member_root(file, callee) else {
+            continue;
+        };
+        let Some(symbol) = source_symbol_at(context, file, root) else {
+            continue;
+        };
+        if context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store) {
+            continue;
+        }
+        let Some((name, _)) = context.accessors.get(symbol) else {
+            continue;
+        };
+        // A member chain rooted at a call writes to what the call returned
+        // (`store.items.slice().push(1)` is a plain copy), and a root that is
+        // not a bare identifier is not the proxy.
+        if file
+            .ast
+            .call_at(file.ast.peel_ts_sugar_span(root))
+            .is_some()
+            || !file
+                .ast
+                .identifiers
+                .iter()
+                .any(|identifier| identifier.span == root)
+        {
+            continue;
+        }
+        if store_write_is_exempt(
+            file,
+            context,
+            StoreWriteSite {
+                span: call.span,
+                member: callee,
+                root,
+            },
+            symbol,
+        ) {
+            continue;
+        }
+        defects.push(StaticDefect {
+            kind: StaticDefectKind::DirectMutation {
+                name: name.as_str().to_owned(),
+                target: store_target(context, symbol),
+            },
+            location: location(file.path.shared(), call.span),
+            analysis_context: String::new(),
+            fixes: vec![],
+            uncertain: false,
+        });
+    }
+}
+
+/// Whether `target` sits lexically inside the compute function that derives
+/// the store `store_symbol`: the first argument of the `createProjection(fn)`
+/// or function-form `createStore(fn, seed)` call its binding initializes.
+///
+/// The runtime runs that function inside `storeSetter(draft, …)`, which
+/// write-enables the store's family for the run (`@solidjs/signals@2.0.0-rc.17`
+/// `dist/dev.js:6675-6678`, `:5847-5866`); a write through the result symbol
+/// from the re-run commits like the draft's (probed). Any function nested in
+/// it counts too, so a callback whose run outlives the compute function is a
+/// miss on the checker's side only, never a finding. The binding must be in
+/// this file: a write from another module is never inside the call.
+fn inside_own_compute_function(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    target: Span,
+    store_symbol: &crate::SymbolId,
+) -> bool {
+    let Some((_, declaration)) = context.accessors.get(store_symbol) else {
+        return false;
+    };
+    if declaration.path.as_ref() != file.path.as_str() {
+        return false;
+    }
+    let declared = Span::new(
+        u32::try_from(declaration.start_byte).unwrap_or(u32::MAX),
+        u32::try_from(declaration.end_byte).unwrap_or(u32::MAX),
+    );
+    file.ast
+        .bindings
+        .iter()
+        .filter(|binding| {
+            binding.names.iter().any(|name| name.span == declared)
+                || binding
+                    .array_slots
+                    .first()
+                    .and_then(Option::as_ref)
+                    .is_some_and(|name| name.span == declared)
+        })
+        .filter_map(|binding| binding.call_initializer)
+        .filter_map(|call| file.ast.call_at(call))
+        .filter_map(|call| call.arguments.first())
+        .any(|argument| {
+            let argument = file.ast.peel_ts_sugar_span(argument.span);
+            file.ast
+                .functions
+                .iter()
+                .any(|function| function.span == argument && function.body.contains(target))
+        })
 }
 
 /// Whether `target` (an assignment through a store proxy rooted at

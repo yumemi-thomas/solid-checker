@@ -380,6 +380,21 @@ pub struct AstFacts {
     /// expression statement and is deliberately absent.
     #[serde(default)]
     pub module_directives: Vec<DirectiveFact>,
+    /// Every statement that spells a string directive without being one
+    /// (facts schema 75): a string-literal expression statement the parser
+    /// did not classify as part of a directive prologue, and a
+    /// substitution-free template literal statement, which is never a
+    /// directive. In source order. A leading string statement of a program or
+    /// function body is a [`DirectiveFact`] (module) or in
+    /// [`FunctionFact::directives`], not here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stray_directives: Vec<StrayDirectiveFact>,
+    /// Comments that switch rules off or on (facts schema 76): the
+    /// `eslint-disable` family and the checker's own `solid-checker-disable`
+    /// family, each parsed with ESLint's directive grammar. In source order.
+    /// Every other comment is absent.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suppression_comments: Vec<SuppressionCommentFact>,
     /// Every tagged template, with its substitutions in order (facts schema
     /// 61, ADR 0309). The template calls its tag with the template object
     /// as argument 0 and substitution `i` as argument `i + 1`; no call fact
@@ -503,7 +518,6 @@ pub struct CallFact {
     pub type_arguments: bool,
     pub arguments: Vec<ArgumentFact>,
     pub static_callee: bool,
-    pub owned_write_option: bool,
     /// Whether this call's own result provably reaches nothing: the call
     /// **is** the expression of an `ExpressionStatement`.
     ///
@@ -708,6 +722,65 @@ pub struct DirectiveFact {
     pub value: CompactString,
 }
 
+/// A statement that reads like a string directive but is not one (facts
+/// schema 75). The directive pass only reads a program's or function body's
+/// prologue, so such a statement is an ordinary expression.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StrayDirectiveFact {
+    /// The whole expression statement.
+    pub span: Span,
+    /// The string's cooked text.
+    pub value: CompactString,
+    /// A substitution-free template literal rather than a string literal.
+    pub template: bool,
+    /// Whether the statement is a direct child of the program or of a
+    /// function body: the statement lists that have a directive prologue. A
+    /// statement in a block, a `switch` case or a class static block is not.
+    pub direct: bool,
+}
+
+/// Which comment family a [`SuppressionCommentFact`] belongs to.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SuppressionOrigin {
+    /// `eslint-disable`, `eslint-enable`, `eslint-disable-line` and
+    /// `eslint-disable-next-line`.
+    Eslint,
+    /// The same four, spelled `solid-checker-*`.
+    SolidChecker,
+}
+
+/// What a suppression comment does, by its label.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SuppressionAction {
+    Disable,
+    Enable,
+    DisableLine,
+    DisableNextLine,
+}
+
+/// One comment that switches rules off or on (facts schema 76). Only the
+/// syntax is recorded: which rule a name denotes, and which findings it
+/// reaches, is the consumer's. A `//` comment is kept only for the two
+/// line-scoped actions, as in ESLint, and the justification after ` -- ` is
+/// dropped.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuppressionCommentFact {
+    /// The whole comment, delimiters included.
+    pub span: Span,
+    pub origin: SuppressionOrigin,
+    pub action: SuppressionAction,
+    /// A `/* */` comment rather than a `//` comment.
+    pub block: bool,
+    /// The comma-separated names as written, trimmed and with one pair of
+    /// surrounding quotes removed; empty when the comment names none, which
+    /// means every rule.
+    pub names: Vec<CompactString>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum BindingShape {
@@ -881,6 +954,10 @@ pub struct FunctionFact {
     /// expression-bodied arrows, which have no statement prologue.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub directives: Vec<CompactString>,
+    /// The span of each entry of `directives`, in the same order (facts
+    /// schema 75).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub directive_spans: Vec<Span>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1841,6 +1918,8 @@ impl AstFacts {
             pattern_values: Vec::new(),
             implicit_suspensions: Vec::new(),
             module_directives: Vec::new(),
+            stray_directives: Vec::new(),
+            suppression_comments: Vec::new(),
             tagged_templates: Vec::new(),
             array_literal_elements: Vec::new(),
             pattern_elements: Vec::new(),

@@ -40,6 +40,7 @@ struct DemandSpans {
     array_shape_spans: HashSet<Span>,
     tuple_shape_spans: HashSet<Span>,
     library_type_spans: HashSet<Span>,
+    declared_key_spans: HashSet<Span>,
     async_symbol_spans: HashSet<Span>,
     async_value_spans: Vec<Span>,
 }
@@ -83,7 +84,7 @@ fn plan_file(
         .filter_map(|returned| returned.callee)
         .collect::<HashSet<_>>();
     let (import_bindings, import_references) = collect_symbol_spans(file, &mut spans);
-    collect_jsx_spans(file, &mut spans);
+    collect_jsx_spans(dialect, file, &mut spans);
     collect_coercion_spans(dialect, options, file, &mut spans);
     collect_return_spans(file, &mut spans, demands, (&path, &returned_callees));
     collect_argument_spans(dialect, file, &mut spans);
@@ -200,12 +201,13 @@ fn collect_symbol_spans(
     (import_bindings, import_references)
 }
 
-fn collect_jsx_spans(file: &FileFacts, spans: &mut DemandSpans) {
+fn collect_jsx_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut DemandSpans) {
     let DemandSpans {
         symbol_spans,
         type_descriptor_spans,
         runtime_value_domain_spans,
         array_shape_spans,
+        declared_key_spans,
         ..
     } = spans;
     let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
@@ -217,6 +219,18 @@ fn collect_jsx_spans(file: &FileFacts, spans: &mut DemandSpans) {
         let native = file
             .source_text(element.name.span)
             .is_some_and(|name| name.starts_with(|c: char| c.is_ascii_lowercase()));
+        // A spread onto an intrinsic element hands the element every key of its
+        // object, so whether any key is an event listener is a question about
+        // the type of exactly the spread argument (ADR 0436). The producer
+        // answers only when the declared key set is provably complete.
+        if dialect.semantic_demands.spread_declared_keys
+            && element.member_object.is_none()
+            && native
+        {
+            for spread in &element.spreads {
+                declared_key_spans.insert(spread.argument);
+            }
+        }
         for attribute in &element.attributes {
             let Some(expression) = attribute.expression else {
                 continue;
@@ -805,6 +819,7 @@ fn emit_span_demands(
         array_shape_spans,
         tuple_shape_spans,
         library_type_spans,
+        declared_key_spans,
         async_symbol_spans,
         async_value_spans,
     } = spans;
@@ -850,6 +865,14 @@ fn emit_span_demands(
                         .chain(&export.declarations)
                         .any(|item| item.local.span == span)
             });
+        demands.push(planned);
+    }
+
+    // Declared keys carry no symbol demand: a symbol observation at a spread
+    // argument (a call, an object) would add facts nobody reads.
+    for span in declared_key_spans {
+        let mut planned = demand(file_location(path, span));
+        planned.declared_keys = true;
         demands.push(planned);
     }
 
@@ -1011,7 +1034,34 @@ fn plan_call_demands(
                                     && suspension.end >= call.span.end
                             })
                 });
+        // SC2003 reports an in-place array method on a store path only when
+        // the callee resolves to the standard library's `Array` method, so an
+        // argumentless `pop()`, `shift()`, `sort()` or `reverse()` needs its
+        // declaration too (the demand states no decision: the rule resolves
+        // the receiver itself).
+        let argumentless_array_mutator = call.arguments.is_empty()
+            && !call.construct
+            && file
+                .ast
+                .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|member| {
+                    matches!(
+                        file.source_text(member.property),
+                        Some(
+                            "push"
+                                | "pop"
+                                | "shift"
+                                | "unshift"
+                                | "splice"
+                                | "sort"
+                                | "reverse"
+                                | "fill"
+                                | "copyWithin"
+                        )
+                    )
+                });
         planned.resolved_call = !call.arguments.is_empty()
+            || argumentless_array_mutator
             || argumentless_before_suspension
             || returned_callees.contains(&call.callee)
             || computed_dispatch
@@ -1221,6 +1271,7 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         library_types: false,
         reference_space: false,
         runtime_identity: false,
+        declared_keys: false,
     }
 }
 
@@ -1287,6 +1338,7 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.library_types |= demand.library_types;
             current.reference_space |= demand.reference_space;
             current.runtime_identity |= demand.runtime_identity;
+            current.declared_keys |= demand.declared_keys;
         } else {
             merged.push(demand);
         }

@@ -189,8 +189,54 @@ pub(super) fn nested_in_leaf_scope(
     .then_some(WriteRegionAdjustment::LeafScope)
 }
 
+/// The write classification of `span`, and where it ends unplaced, ADR 0442:
+/// the function that holds the write, or one that runs it in place, is handed
+/// to other code (a component's prop, a call's argument, a named function),
+/// and every invocation of it is found and placed by the invocation flow
+/// ([`write_flow_role`]). A role the walk proves is never replaced.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn semantic_write_execution_role_within(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+    visiting: &mut HashSet<(String, Span)>,
+) -> ExecutionRole {
+    let role = semantic_write_role_walk(
+        file,
+        span,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+        root_body,
+        visiting,
+    );
+    if role != ExecutionRole::Unknown || file.compiler.withheld() {
+        return role;
+    }
+    // A write that follows an await that may be skipped has no placement its
+    // function's entries give (the walk stopped there on purpose).
+    if may_follow_suspension(file, span) {
+        return role;
+    }
+    write_flow_role(file, span, root_body, lookup).unwrap_or(role)
+}
+
+/// The `visiting` entry that restricts [`semantic_write_role_walk`] to the
+/// role the position itself proves (ADR 0442): the aggregation over every
+/// entry of the function that holds it is skipped. The write flow asks it of a
+/// call inside a function it entered through one activation, where another
+/// call site of that function says nothing about this run.
+pub(super) fn lexical_only_marker() -> (String, Span) {
+    ("\0lexical-only".to_owned(), Span::new(0, 0))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn semantic_write_role_walk(
     file: &solid_facts::FileFacts,
     span: Span,
     allowed: &[Span],
@@ -263,16 +309,18 @@ pub(super) fn semantic_write_execution_role_within(
                 }
             }
             None => {
-                if let Some(role) = named_callback_write_role(
-                    file,
-                    span,
-                    allowed,
-                    entities,
-                    symbol_names,
-                    lookup,
-                    root_body,
-                    visiting,
-                ) {
+                if !visiting.contains(&lexical_only_marker())
+                    && let Some(role) = named_callback_write_role(
+                        file,
+                        span,
+                        allowed,
+                        entities,
+                        symbol_names,
+                        lookup,
+                        root_body,
+                        visiting,
+                    )
+                {
                     if role.reports_disallowed_write()
                         && let Some(suspended) = suspended_write_role(file, span, lookup)
                     {
@@ -348,6 +396,19 @@ pub(super) fn semantic_write_execution_role_within(
     {
         return unknown;
     }
+    // The same holds for a closure bound to a name inside the tracked scope
+    // (ADR 0452): the scope runs its construction, not its body. The closure's
+    // own invocations decide, through the walk below.
+    let tracked_named = if direct == ExecutionRole::TrackedJsx {
+        named_closure_in_tracked_scope(file, span, allowed, entities, symbol_names, lookup)
+    } else {
+        None
+    };
+    let direct = if tracked_named.is_some() {
+        ExecutionRole::Unknown
+    } else {
+        direct
+    };
     // Past an await that dominates it, the write runs on a later task with no
     // owner, whatever its lexical role or its function's callers: legal, and
     // proven so, though in no single role.
@@ -363,6 +424,21 @@ pub(super) fn semantic_write_execution_role_within(
     if (direct == ExecutionRole::Unknown || direct.reports_disallowed_write())
         && may_follow_suspension(file, span)
     {
+        return unknown;
+    }
+    // A site in a parameter list (a default value) of a closure bound to a name
+    // runs when that closure is called without the argument. The function
+    // around the closure (the body that holds the list) does not run it, and
+    // the closure has no call sites: its parameter list is not inert, so the
+    // call graph withholds them (ADR 0339). Nothing places the write (ADR
+    // 0452); a lexical tracked or rendering role, or the surrounding function's
+    // calls, would claim a run the closure's own calls decide.
+    if functions_around(file, span).into_iter().any(|function| {
+        parameter_slot(function, span).is_some()
+            && function.method_name.is_none()
+            && function_binding_name(file, function).is_some()
+            && lookup.function_component_status(file, function) == ComponentStatus::No
+    }) {
         return unknown;
     }
     let innermost = crate::owners::containing_ast_function(&file.ast, span);
@@ -391,15 +467,28 @@ pub(super) fn semantic_write_execution_role_within(
     let Some(innermost) = innermost else {
         return unknown;
     };
+    // ADR 0452: the named closure built in a tracked scope is entered by its
+    // calls, and the write runs with it only through layers that run in place
+    // (an IIFE, an inline standard-library callback). Any other layer keeps or
+    // schedules the write's function, whose entries are not the closure's.
+    let entry = match tracked_named {
+        Some(closure) if closure.span == innermost.span => Some(closure),
+        Some(closure) if runs_in_place_within(file, innermost, closure, lookup) => Some(closure),
+        Some(_) => return unknown,
+        None => None,
+    };
     // ADR 0327: every invocation of the writing function, followed forward
     // through the closed program, is an event delivery. No other entry exists.
-    if event_only_entries(file, innermost, lookup) {
+    if event_only_entries(file, entry.unwrap_or(innermost), lookup) {
         return ExecutionRole::EventCallback;
     }
-    let function = named.unwrap_or(innermost);
+    if visiting.contains(&lexical_only_marker()) {
+        return unknown;
+    }
+    let function = named.or(entry).unwrap_or(innermost);
     // The write is in a closure nested in the named callback: a call of the
     // callback does not run it, so a disallowed entry proves nothing here.
-    let nested = function.span != innermost.span;
+    let nested = entry.is_none() && function.span != innermost.span;
     // A binding that may hold another function (`let reset = …; reset = …`)
     // names more than this one at its positions and calls, so none of them is
     // proof that this function runs in an owned scope.
@@ -584,6 +673,28 @@ fn runs_inline_within(
     outer: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
+    layers_run_inline(file, inner, outer, lookup, true)
+}
+
+/// [`runs_inline_within`] without the fresh-stack exception: every layer
+/// between them is an IIFE or an argument a standard-library call runs inline,
+/// so `inner` runs wherever `outer` does, on its stack and owner.
+pub(super) fn runs_in_place_within(
+    file: &solid_facts::FileFacts,
+    inner: &solid_facts::ast::FunctionFact,
+    outer: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    layers_run_inline(file, inner, outer, lookup, false)
+}
+
+fn layers_run_inline(
+    file: &solid_facts::FileFacts,
+    inner: &solid_facts::ast::FunctionFact,
+    outer: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    fresh_stack_ok: bool,
+) -> bool {
     use crate::runtime_semantics::RuntimeArgumentBehavior;
     let mut layer = inner;
     while layer.span != outer.span {
@@ -614,7 +725,7 @@ fn runs_inline_within(
                 crate::runtime_semantics::argument_behavior(resolved, callability, index)
             });
         match behavior {
-            Some(RuntimeArgumentBehavior::FreshStackCallback) => return true,
+            Some(RuntimeArgumentBehavior::FreshStackCallback) => return fresh_stack_ok,
             Some(RuntimeArgumentBehavior::InlineCallback) => {}
             _ if iife => {}
             _ => return false,
@@ -690,7 +801,7 @@ fn event_only_entries(
 /// where the owner a callback slot gives the function is gone: legal past a
 /// dominating await, unplaced past one that may be skipped. `None` when no
 /// suspension precedes it.
-fn suspended_write_role(
+pub(super) fn suspended_write_role(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
@@ -710,8 +821,8 @@ pub(super) fn enclosed_by_jsx_attribute_function(
     file: &solid_facts::FileFacts,
     span: Span,
 ) -> bool {
-    file.ast
-        .functions_body_containing(span)
+    functions_around(file, span)
+        .into_iter()
         .any(|function| jsx_attribute_value_function(file, function.span))
 }
 
@@ -726,7 +837,7 @@ pub(super) fn attribute_function_within(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    file.ast.functions_body_containing(span).any(|function| {
+    functions_around(file, span).into_iter().any(|function| {
         region.contains(function.span)
             && region != function.span
             && (jsx_attribute_value_function(file, function.span)

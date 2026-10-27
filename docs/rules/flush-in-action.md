@@ -132,5 +132,5 @@ the result, read after the action resolves (`await save(); …`).
 
 - [action-called-in-owned-scope](action-called-in-owned-scope.md) — the other
   action guard
-- [until-in-tracked-scope](until-in-tracked-scope.md) — a release-keyed dev
+- [no-await-primitive-in-tracked-scope](no-await-primitive-in-tracked-scope.md) — a release-keyed dev
   throw in the same family

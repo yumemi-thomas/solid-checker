@@ -17,14 +17,13 @@ pub enum Rule {
     // (SC5001 and SC5003 own that surface).
     UncalledAccessor,
     ExpectedFunctionGotExpression,
-    NoDirectMutation,
-    ReactiveSourceUncaptured,
+    NoStoreMutationOutsideSetter,
     ReactiveDispatchUnresolved,
     ComponentPropsDestructure,
     ComponentReturnsConditionally,
-    ReactiveWriteInOwnedScope,
+    NoWriteInPureComputation,
     ActionCalledInOwnedScope,
-    ResolveInReactiveScope,
+    ResolveInTrackedScope,
     UntilInTrackedScope,
     FlushInAction,
     StaticDynamicAsyncSource,
@@ -38,7 +37,7 @@ pub enum Rule {
     MissingEffectFunction,
     SyncNodeReceivedAsync,
     HttpResponseAfterFlush,
-    ServerFunctionModuleDirective,
+    ValidUseServer,
     ServerFunctionRichArgument,
     PackageBehaviorUnavailable,
     /// The only identity in this catalog the rules engine never produces.
@@ -59,6 +58,11 @@ pub enum Rule {
     /// carries no compiler facts (ADR 0360). The backend appends it beside the
     /// analysis (`diagnostics.rs`); the rules engine never produces it.
     CompilerRefusedSource,
+    /// Decided by suppression comments (ADR 0429): a `solid-checker/*` name in
+    /// an `eslint-disable` or `solid-checker-disable` comment that names no
+    /// rule of this checker. The backend appends it beside the analysis
+    /// (`diagnostics.rs`); the rules engine never produces it.
+    UnknownSuppressionRule,
     JsxNoDuplicateProps,
     PreferFor,
     PreferShow,
@@ -81,14 +85,13 @@ impl Rule {
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
         Self::ExpectedFunctionGotExpression,
-        Self::NoDirectMutation,
-        Self::ReactiveSourceUncaptured,
+        Self::NoStoreMutationOutsideSetter,
         Self::ReactiveDispatchUnresolved,
         Self::ComponentPropsDestructure,
         Self::ComponentReturnsConditionally,
-        Self::ReactiveWriteInOwnedScope,
+        Self::NoWriteInPureComputation,
         Self::ActionCalledInOwnedScope,
-        Self::ResolveInReactiveScope,
+        Self::ResolveInTrackedScope,
         Self::UntilInTrackedScope,
         Self::FlushInAction,
         Self::StaticDynamicAsyncSource,
@@ -102,12 +105,13 @@ impl Rule {
         Self::MissingEffectFunction,
         Self::SyncNodeReceivedAsync,
         Self::HttpResponseAfterFlush,
-        Self::ServerFunctionModuleDirective,
+        Self::ValidUseServer,
         Self::ServerFunctionRichArgument,
         Self::PackageBehaviorUnavailable,
         Self::UnsupportedSolidRuntime,
         Self::UnauditedSolidRelease,
         Self::CompilerRefusedSource,
+        Self::UnknownSuppressionRule,
         Self::JsxNoDuplicateProps,
         Self::PreferFor,
         Self::PreferShow,
@@ -122,10 +126,15 @@ impl Rule {
             Self::ExpectedFunctionGotExpression => {
                 ("SC1007", "reactive-handler-frozen", "warning", false)
             }
-            Self::NoDirectMutation => ("SC2003", "no-direct-mutation", "warning", false),
-            Self::ReactiveSourceUncaptured => {
-                ("SC9011", "reactive-source-uncaptured", "warning", true)
-            }
+            Self::NoStoreMutationOutsideSetter => (
+                "SC2003",
+                "no-store-mutation-outside-setter",
+                "warning",
+                false,
+            ),
+            // ADR 0440: SC9012 and SC9005 are obligations, not rules. SC9012
+            // also carries what SC9011 (`reactive-source-uncaptured`) was, as
+            // the context `package-callee`; no key configures either.
             Self::ReactiveDispatchUnresolved => {
                 ("SC9012", "reactive-dispatch-unresolved", "warning", true)
             }
@@ -133,24 +142,36 @@ impl Rule {
             Self::ComponentReturnsConditionally => {
                 ("SC1004", "components-return-once", "error", false)
             }
-            Self::ReactiveWriteInOwnedScope => {
-                ("SC2001", "reactive-write-in-owned-scope", "error", false)
+            Self::NoWriteInPureComputation => {
+                ("SC2001", "no-write-in-pure-computation", "error", false)
             }
             Self::ActionCalledInOwnedScope => {
                 ("SC2002", "action-called-in-owned-scope", "error", false)
             }
-            // SC2003 is the shared no-direct-mutation concept; this new
-            // 2.0-only rule takes the next free code in the writes/actions
-            // family. The rc.0 dev guard throws on an active observer
-            // (probed), so the proven tracked-scope form mirrors it as an
-            // error; production has no guard and silently takes a one-shot
-            // snapshot.
-            Self::ResolveInReactiveScope => ("SC2004", "resolve-in-tracked-scope", "error", false),
+            // `resolve` and `until` are one configurable rule with two codes
+            // (ADR 0426): the name is the identity a project configures, the
+            // code names the defect, so a finding says which primitive it is
+            // about (SC2004 `resolve`, SC2005 `until`) and one name enables
+            // or disables both. The rc.0 dev guard of `resolve` throws on an
+            // active observer (probed), so the proven tracked-scope form
+            // mirrors it as an error; production has no guard and silently
+            // takes a one-shot snapshot.
+            Self::ResolveInTrackedScope => (
+                "SC2004",
+                "no-await-primitive-in-tracked-scope",
+                "error",
+                false,
+            ),
             // rc.9's `until` carries resolve's observer guard verbatim
             // (`@solidjs/signals@2.0.0-rc.9` `dist/dev.js:2718-2722`) and the
             // same dev-only throw, so it takes the next code in the family
             // and the same severity.
-            Self::UntilInTrackedScope => ("SC2005", "until-in-tracked-scope", "error", false),
+            Self::UntilInTrackedScope => (
+                "SC2005",
+                "no-await-primitive-in-tracked-scope",
+                "error",
+                false,
+            ),
             // `@solidjs/signals@2.0.0-rc.8` added the `FLUSH_IN_ACTION` dev
             // throw to `flush` inside an action step (rc.9
             // `dist/dev-shared.js:2210-2219`): an error like the other
@@ -214,11 +235,11 @@ impl Rule {
             Self::HttpResponseAfterFlush => {
                 ("SC7005", "http-response-after-flush", "warning", true)
             }
-            // The client build silently loses the export (RFC 10 §Compiler
-            // implications — "Minimum: a diagnostic"), so this is an error.
-            Self::ServerFunctionModuleDirective => {
-                ("SC7006", "server-function-module-directive", "error", false)
-            }
+            // A misplaced or unextractable directive leaves server code on
+            // the client (or fails the build), and a directive file's
+            // re-export or non-function export fails the compile or the
+            // server boot (ADR 0427), so this is an error.
+            Self::ValidUseServer => ("SC7006", "valid-use-server", "error", false),
             // The default transport throws at the call site (probed, rc.0
             // server-functions client), so the proven form is an error.
             Self::ServerFunctionRichArgument => {
@@ -238,11 +259,18 @@ impl Rule {
             // the installed runtime, not the project's source -- but a warning:
             // the analysis ran, and every other finding beside it stands.
             Self::UnauditedSolidRelease => ("SC9014", "unaudited-solid-release", "warning", true),
-            // Uncertifiable: the claim is that one file has no compiler facts,
-            // so nothing about it is proven. A warning like SC9014: the rest of
-            // the project was analyzed, and the findings that do not depend on
-            // the file stand.
-            Self::CompilerRefusedSource => ("SC9015", "compiler-refused-source", "warning", true),
+            // ADR 0441: a refusal the dialect proves a defect of the source (a
+            // removed 1.x attribute `tsc` accepts) is an error, one per file.
+            // Every other refusal keeps ADR 0360's project-level notice (a
+            // warning, uncertifiable): the file has no compiler facts, so
+            // nothing about it is proven, and the findings that do not depend
+            // on it stand. The backend builds both (`compiler_refused_finding`),
+            // so this entry is the violation's identity.
+            Self::CompilerRefusedSource => ("SC9015", "compiler-refused-source", "error", false),
+            // Uncertifiable: a name nothing resolves suppresses nothing, so the
+            // comment is not a claim about any site. Project-level and a warning
+            // like SC9015, because the findings beside it stand.
+            Self::UnknownSuppressionRule => ("SC9016", "unknown-suppression-rule", "warning", true),
             Self::JsxNoDuplicateProps => ("SC8003", "jsx-no-duplicate-props", "error", false),
             Self::PreferFor => ("SC8014", "prefer-for", "error", false),
             Self::PreferShow => ("SC8015", "prefer-show", "warning", false),
@@ -254,6 +282,10 @@ impl Rule {
             severity,
             uncertifiable,
             default_enabled: true,
+            configurable: !matches!(
+                self,
+                Self::PackageBehaviorUnavailable | Self::ReactiveDispatchUnresolved
+            ),
             presets: if preference { &["preferences"] } else { &[] },
         }
     }
@@ -324,6 +356,38 @@ mod tests {
         assert_eq!(identities.len(), Rule::ALL.len());
     }
 
+    /// ADR 0426: the name is the configurable identity, so codes that share
+    /// one must agree on everything a configuration or a preset can see.
+    #[test]
+    fn codes_sharing_a_name_share_their_configuration() {
+        for rule in Rule::ALL {
+            let metadata = rule.metadata();
+            for other in Rule::ALL {
+                let other = other.metadata();
+                if other.name == metadata.name {
+                    assert_eq!(
+                        (
+                            other.severity,
+                            other.uncertifiable,
+                            other.default_enabled,
+                            other.presets
+                        ),
+                        (
+                            metadata.severity,
+                            metadata.uncertifiable,
+                            metadata.default_enabled,
+                            metadata.presets
+                        ),
+                        "{} and {} share the name {} and must share its configuration",
+                        metadata.code,
+                        other.code,
+                        metadata.name
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn every_rule_has_a_documentation_page() {
         let docs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../docs/rules");
@@ -338,14 +402,14 @@ mod tests {
     #[test]
     fn every_v2_static_violation_identity_resolves() {
         for (code, name) in [
-            ("SC2004", "resolve-in-tracked-scope"),
-            ("SC2005", "until-in-tracked-scope"),
+            ("SC2004", "no-await-primitive-in-tracked-scope"),
+            ("SC2005", "no-await-primitive-in-tracked-scope"),
             ("SC2006", "flush-in-action"),
             ("SC2008", "flush-in-effect-callback"),
             ("SC2007", "static-dynamic-async-source"),
             ("SC7002", "sync-computation-received-async"),
             ("SC7005", "http-response-after-flush"),
-            ("SC7006", "server-function-module-directive"),
+            ("SC7006", "valid-use-server"),
             ("SC7007", "server-function-rich-argument"),
             ("SC8003", "jsx-no-duplicate-props"),
             ("SC8014", "prefer-for"),
@@ -397,7 +461,7 @@ mod tests {
         // resolve inside a reactive scope", probed on the rc.0 signals dev
         // bundle), mirrored as an error like the other owned/tracked-scope
         // throws.
-        assert_eq!(Rule::ResolveInReactiveScope.metadata().severity, "error");
+        assert_eq!(Rule::ResolveInTrackedScope.metadata().severity, "error");
         // until() carries the same dev throw ("Cannot call until inside a
         // reactive scope", rc.9 signals dev bundle).
         assert_eq!(Rule::UntilInTrackedScope.metadata().severity, "error");
