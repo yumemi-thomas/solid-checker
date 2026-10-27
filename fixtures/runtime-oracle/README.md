@@ -1,12 +1,12 @@
 # runtime-oracle
 
-Cases for `scripts/runtime-oracle.mjs`: each runs in Chrome on the Solid 2 dev build, and its diagnostics are compared with the checker's verdict at the same site. An unmatched dev diagnostic is an unproven clean claim. Cases run in the pinned rc.17 install `scripts/runtime-oracle-install` (`make runtime-oracle-install`; ADR 0453, script header) against the real packages: `*.d.ts` stubs and `node_modules` are not copied, and a case `tsc` rejects is `type-error`.
+Cases for `scripts/runtime-oracle.mjs`: each runs in Chrome on the Solid 2 dev build; its diagnostics are compared with the checker's verdict at the same site. An unmatched dev diagnostic is an unproven clean claim. Cases run in the pinned rc.17 install `scripts/runtime-oracle-install` (`make runtime-oracle-install`) against the real packages: `*.d.ts` stubs and `node_modules` are not copied; a case `tsc` rejects is `type-error`.
 
-A case is a directory with an `App.tsx` and no `tsconfig.json`; all exported components render and all elements receive events. Optional `oracle.json`: `note`, `steps`, `packages` (names of directories under the case's own `node_modules`, copied to the run directory's `node_modules`: dependency packages a case ships; refused when the install already has the name), `programBoundary` (`open` or `closed`), `open` (known unproven clean sites `{ code, site, reason }`, or `{ rule, site, reason }` for an observation; a site that stops firing is `stale-open`), and `behaviour` (below).
+A case is a directory with an `App.tsx` and no `tsconfig.json`; every exported component renders and every element gets events. Optional `oracle.json`: `note`, `steps`, `packages` (directories of the case's `node_modules` to install; refused if the install has the name), `programBoundary` (`open` or `closed`), `open` (known unproven clean sites `{ code, site, reason }`, or `{ rule, site, reason }` for an observation; one that stops firing is `stale-open`), and `behaviour` (below).
 
-Verdicts: `covered-violation` and `covered-uncertifiable` (a finding on the diagnostic's line or an application frame), `unproven-clean` (exit 1), `known-open`, `no-rule`; `static-only` (a checker violation with no dev diagnostic and no observation: inspect it before calling it a false positive); `behaviour-confirmed`, `behaviour-refuted`, `behaviour-clean`, `behaviour-unexpected`; collector failures are `harness-error`.
+Verdicts: `covered-violation` and `covered-uncertifiable` (a finding on the diagnostic's line or an application frame), `unproven-clean` (exit 1), `known-open`, `no-rule`; `static-only` (a checker violation with no dev diagnostic or observation: inspect it before calling it a false positive); `behaviour-confirmed`, `behaviour-refuted`, `behaviour-clean`, `behaviour-unexpected`; collector failures are `harness-error`.
 
-The `c*`, `r*` and `oracle-*` cases are reviewer counterexamples and probes (adaptations in each `note`).
+The `c*`, `r*` and `oracle-*` cases are reviewer probes (see `note`).
 
 ## Behavioural observations (`behaviour`)
 
@@ -34,7 +34,7 @@ A static violation with no dev code may be real or false, so a case can observe 
 - `probe` is a separate node bound to the write's source; if it does not change, the write was a no-op (`behaviour-unexpected`). A refused direct store write shows in no binding, so there the handler fills the probe with the value it assigned.
 - Each side of a write settles first: text and probe must hold across two `setTimeout(0)` ticks (500 ms at most), else `behaviour-unexpected`. Writes must be synchronous: a later effect reads as `lost`.
 - `expect` gates the verdict: a write whose outcome differs is `behaviour-unexpected` (`harness-error`), printed with the mismatch. The page shows the defect when any write is `lost`, the correct behaviour when every write is `reflected`.
-- A click that throws, a missing element, or a step still running after 2 s is `harness-error`; a page that never returns from a step ends the feedback run, also `harness-error`.
+- A click that throws, a missing element or a step running past 2 s is `harness-error`; a page that never returns from a step ends the feedback run (`harness-error`).
 - Refused at load: no `writes` or an empty list; a write not exactly `{ click, expect, value, probe }`, a blank `value`, or a `probe` equal to the observed selector; a click listed twice; `act`, `defect` or `correct` beside it; `writes` on another kind.
 
 Each observation gets a row by what the page shows and whether a finding of its rule covers its site:

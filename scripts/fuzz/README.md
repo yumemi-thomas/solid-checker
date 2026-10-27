@@ -1,6 +1,6 @@
 # Differential fuzzer
 
-Finds checker violations that the real Solid 2.0.0-rc.17 runtime contradicts (false positives), automatically. For each random program it compares what the checker says at each site (violation, uncertifiable, none) with what the runtime says (dev diagnostics and thrown errors after driving the program). Only disagreements go to Chrome, the authority. It is operator tooling: it is not part of `make verify`, and the checker and the gates do not read it.
+Finds checker violations that the real Solid 2.0.0-rc.17 runtime contradicts (false positives) and defects Solid reports where the checker is silent (false cleans), automatically. For each generated program it compares what the checker says at each site (violation, uncertifiable, none) with what the runtime says (dev diagnostics and thrown errors after driving the program). Only disagreements go to Chrome, the authority. It is operator tooling: it is not part of `make verify`, and the checker and the gates do not read it.
 
 ## What a finding means
 
@@ -20,83 +20,18 @@ A fast-path candidate is a hypothesis. A **confirmed** finding is a fast-path ca
 
 When a run confirms a false positive (exit status 3), stop the sweep. Do not change the checker from inside a fuzzing session. Report the shrunk repro directory (`repros/<hash>/`, an oracle case: `App.tsx`, `oracle.json`), the rule and finding id, the signature, and the Chrome row. The owner decides whether it is a checker bug, a witness that does not prove what it should, or a runtime behaviour the rule should respect (invariants 1 and 2 of AGENTS.md).
 
-### False cleans (phase D)
+## Profiles
 
-A **false clean** is a runtime diagnostic of a defect code with no checker finding that covers it. Which codes are defects is the policy table in `codes.mjs`: every rc.17 dev code has `{ rules, disposition, severity }`, and `codes.test.mjs` greps `code: "X"` across the pinned dev dists of the fast install and fails on a code the table does not classify (so a Solid bump cannot add noise silently) or a severity that differs from the dist. Dispositions: `defect-claimed` (a rule claims it), `defect-unclaimed` (a recall gap by "never quieter than Solid"), `consequence` (the engine's reaction to an earlier failure), `advisory`, `out-of-scope` (SSR, host attribute checks, codes the published typings already reject).
+`--profile <name>` picks what the generator draws. Without it a program takes one of the seven base profiles at random. The others are asked for by name and never drawn at random, so adding one does not move the seeds of any other: with no new flag, every profile prints the same programs for the same seed as before it existed.
 
-Per runtime diagnostic of a defect code: a checker violation there is `agree`; an uncertifiable finding is a `recall-gap`; nothing that could claim it is a `candidate-false-clean`. A diagnostic no line could be given for is a false clean only when the checker has no claiming finding anywhere in the file.
-
-The pipeline (`falseclean.mjs`, `falseclean-run.mjs`):
-
-1. **Coarse key** = the code, the chain of primitives above the owner call (`root>untrack`, `memo`), and the dynamic stack shape (the roles of the diagnostic's frames: a primitive, a handler, JSX; wrapper functions and calls are left out). Closure layers, helpers and decoys do not change it; the fine signature (`dedupe.mjs`) keeps them apart. The frames are read through `print.mjs`'s `lineTable` (line to node path), not the nearest site by line. On the 179 Chrome-confirmed owner diagnostics of phase C the key gives 55 groups (15 to 18 per code).
-2. **Ledger** `known-open.json`: `{ code, coarseKey, ref, reason }`, one exact key each, no wildcards. `ref` is `open-work.md#<anchor>` of a heading that exists, or `ADR nnnn` of a decision that exists; a bad ledger stops the run before it starts. A false clean matching an entry is `known-open`. A run reports the entries that did not fire (`stale-open` when the run covered the profile the entry came from). `--ledger <path>` or `--no-ledger`.
-3. **Confirm**: with `--confirm-with-chrome`, one representative per new group (the smallest program) is run in Chrome. Confirmed means Chrome reports the same code at the same innermost App line with no covering finding. A diagnostic Chrome reports but could not place counts too (`confirmed-unplaced`): for a false clean, Solid spoke. Other outcomes: `line-differs`, `covered-in-chrome`, `refuted-by-chrome`, `chrome-inconclusive`.
-4. **Shrink** (`--shrink`): the predicate is the same code, the same coarse key and no covering finding; the control is the legal twin, the program with its payload replaced by a literal, which must report no diagnostic of the code. The minimum is run in Chrome again and its status is reported (`minimum confirmed`); the fast path alone can drift.
-5. **Exit status 4**: a confirmed false clean with a coarse key the ledger does not know. The sweep still runs to the end (exit 3, a confirmed false positive, stays the stop).
-
-`findings.json` has a `falseClean` section (groups worst severity first, `knownOpen`, `staleOpen`, ranked `recallGaps`); `summary.json` carries the counts.
-
-### The misuse profile and the recall matrix
-
-The fuzzer above hunts a checker that is too loud (false positives) or silent where Solid speaks (false cleans) in programs it draws at random. The **misuse profile** (`--profile misuse`, `misuse.mjs`) asks the other question on purpose: for every code a rule claims (the `defect-claimed` rows of the policy table), does the checker report a violation when the primitive is misused? Each program targets one code at one marked site (a `use` node), so a matrix cell is unambiguous.
-
-* **Context** (the matrix column): component body, memo, effect compute or apply, render-effect compute or apply, `createTrackedEffect`, `onSettled`, `untrack`, `createRoot`, `runWithOwner(null)`, event handler, timer, promise callback, microtask, after an `await`, a JSX child (plain, under `Show`, in a `For` row), an `action` body, an async memo or effect compute. A code's list (`SPEC[code].contexts`) holds only the contexts where the call is a defect and the runtime reports it; `misuse-fire.test.mjs` fires every cell in the fast runtime.
-* **Layer** (random per program): none, a named closure called in place, a same-file helper taking the callback, an IIFE, or two of them.
-* **Binding** (random per program): the API reached by a direct import, `import * as S`, an alias (`flush as flushAlias`), a destructuring (`const { flush } = S`), or a wrapper function (the wrapper's inner call line belongs to the site, `aux` in `sites.json`).
-* **typed-away**: a code whose every misuse the published typings reject has no template (`MISSING_EFFECT_FN`: `createEffect(fn)` is TS2554). It is recorded with the type checker's error, never counted as a gap (invariant 1).
-
-`matrix.mjs` runs `--per-cell N` programs per (code, context) and judges each at its site:
-
-| column | meaning |
+| profile | what it generates |
 | --- | --- |
-| typed-away | tsc rejects the program; not evidence |
-| harness | the checker or runtime run failed; not evidence |
-| not-fired | the program type-checks and the runtime did not report the code at the site: a generator problem |
-| agree | runtime-confirmed, and a violation of a rule that claims the code covers the site |
-| wrong-rule | runtime-confirmed, and only another rule's violation covers the site |
-| recall-gap | runtime-confirmed, and only an uncertifiable finding covers the site |
-| false-clean | runtime-confirmed, and no finding covers the site |
-
-Only runtime-confirmed programs (agree + wrong-rule + recall-gap + false-clean) count in the checker columns. `ASYNC_OUTSIDE_LOADING_BOUNDARY` is `placeless`: Solid reports it from the render root, at a line that is not an authored one, so it counts wherever the program reports it.
-
-```sh
-node scripts/fuzz/matrix.mjs --out <fresh dir> --seed 1 --per-cell 20 --confirm-with-chrome --shrink --checker-label <commit>
-node scripts/fuzz/matrix.mjs ... --baseline <saved matrix.json>         # gate: exit 1 on a regression
-node scripts/fuzz/matrix.mjs --gate <baseline.json> <current.json>      # compare two recorded matrices
-```
-
-`--confirm-with-chrome` runs, per cell, up to `--chrome-sample` (3) agree programs, up to `--chrome-false-clean` (4) false-clean programs and every wrong-rule program in Chrome and records `same`, `differs`, `not-fired-in-chrome` or `chrome-inconclusive` beside the fast verdict. `--shrink` reduces the smallest Chrome-confirmed false-clean program of each cell (the control is the legal twin) and reconfirms the minimum in Chrome. Output: `matrix.json` (per cell counts, per binding and layer counts, per-seed verdicts, Chrome summary, minimum), `matrix.md`, `programs.jsonl`, `repros/`.
-
-**Gate.** A cell's program seeds depend on the run seed, the code, the context and the index only (`cellSeed`), so a baseline and a later run with the same `--seed` and `--per-cell` judge the same programs. The gate fails (exit 1) when a cell's agree count drops or its false-clean count rises, or a baseline cell is missing; it names the seeds that moved. Different seeds, per-cell counts or generator versions are refused (exit 2). A cell where the checker improved is reported, not failed.
-
-## Layout
-
-| file | role |
-| --- | --- |
-| `model.mjs` | the construct tree and its validator (a small type checker for the node language) |
-| `generate.mjs` | seed -> program: a payload (write or read) in layers (closures, defaults, IIFE, forEach/map, helpers), a host scope, a disposition |
-| `print.mjs`, `emit.mjs` | tree -> the clean `App.tsx` and its instrumented twin `App.run.txt`, with the site table, glue (auto-sites) and hit ledger; an oracle case directory (`App.tsx`, `oracle.json` steps, `program.json`, `sites.json`, and the twin's files) |
-| `container.mjs` | the containers dimension: wraps statements in places that run elsewhere or not at all (components, classes, dead code), passes callbacks by name, rewrites call forms; the ran/not-ran evidence per container |
-| `hits.mjs` | the hit ledger: the counter's source, the strip, the readout parser, the per-site record, and the pure comparisons of the neutrality gate |
-| `neutrality.mjs` | the regression: a seed range with and without instrumentation, verdict by verdict (`--profiles`, `--chunk`, `--order failing-first`, `--stop-on-mismatch`) |
-| `fast-daemon.mjs`, `fast/serve.mjs` | the long-lived fast host: one Vitest process (Vite server, Solid plugin, transform cache) serving every batch; `--no-daemon` gives one process per batch |
-| `cache.mjs` | the baseline cache of the regression and its mismatch history |
-| `deadsite.mjs` | the `dead-site` conditions as code (off by default, `--dead-site`) |
-| `typecheck.mjs` | `tsrs -p ... --noEmit` against the published typings; a program that does not type-check is dropped |
-| `checker.mjs` | materializes a case as the oracle does and runs the native checker; per-site verdicts |
-| `fast.mjs`, `fast/` | the Happy DOM + `@solidjs/diagnostics` runtime path (Vitest) |
-| `classify.mjs`, `codes.mjs` | the comparator; the policy table per rc.17 code and the oracle's code/rule tables (tests fail when they drift) |
-| `falseclean.mjs`, `falseclean-run.mjs`, `known-open.json` | the false-clean stream: coarse key, ledger, Chrome confirmation, focused shrink with a control |
-| `shrink.mjs`, `dedupe.mjs` | delta debugging over the tree; signatures by construct path |
-| `chrome.mjs` | Chrome confirmation through `scripts/runtime-oracle.mjs` |
-| `misuse.mjs` | the misuse profile: a template per claimed code, the contexts, layers and binding forms |
-| `matrix.mjs` | the recall matrix (code x context), its Chrome sample, the false-clean shrink and the baseline gate |
-| `package.mjs`, `packages.mjs`, `packages-seeds.mjs`, `packages-check.mjs` | the `packages` profile: generated dependency packages (below) |
-| `run.mjs` | the command line |
-
-## Containers
-
-`--profile containers` (or `--containers` on top of any profile, `disposal` and `owner-cleanup` among them) wraps expression statements of a generated component in a *container*, a place where code is written but runs elsewhere, later or not at all: an uppercase inner function never rendered, rendered as `<Child />`, handed to a slot (`props.slot?.(Child)`, a local object's method) or returned; a class instance field, static field, static block, method or constructor (constructed or not); dead code (`if (false)`, after `return`, a function never called, `false && f()`, with `true && f()` as the live twin). It also passes the callback of every primitive by name (`const`, `let` or a function declaration), rewrites calls as `f?.()`, `(f as typeof f)()`, `(void 0, f)()`, `(true && f)()` or `(f)()`, and puts an `await` before or after the payload of an async container. Every program type-checks with tsrs. A function-like container has an entry counter and a direct form (`f = h();`, `false && h();`) the glue counter of its call, so the ledger tells ran from not-ran (`containers` in `results.jsonl`: kind, use, `entered`); a site in a container that never ran is `inconclusive: never-ran`. The profile draws its base profile (mostly `disposal` with the cleanup handle called now or later) from a stream of its own, so every other profile's seeds are unchanged. Not built: a callback imported from another generated file (a case is one `App.tsx`), event handlers passed by name.
+| `closure-escape`, `default-param`, `helper-closure`, `in-place`, `async`, `mixed`, `body-call` | the base mix: a payload (a write or a read) in layers (closures, defaults, IIFE, `forEach`/`map`, helpers), a host scope, a disposition; legal decoys beside it |
+| `owner-cleanup`, `owner-effect`, `owner-settled`, `owner-context`, `owner` | an owner-requiring call (`onCleanup`, `createEffect`, `onSettled`, `useContext`) in every host, owned or not (NO_OWNER_*, SETTLED_CLEANUP_UNOWNED, CLEANUP_IN_FORBIDDEN_SCOPE) |
+| `disposal` | a write that runs while an owner is being disposed, behind a cleanup handle called now, later or never (see The disposal profile) |
+| `misuse` | one program per claimed diagnostic code, the misuse at one marked site, in a chosen context, layer and binding (see The misuse profile) |
+| `packages` | the helper layers are exports of a generated dependency package, `fz-lib` (see The packages profile) |
+| `containers` | any base profile (mostly `disposal`) with statements wrapped in containers that run elsewhere, later or never (see Containers); `--containers` does the same on top of any profile |
 
 ## Install
 
@@ -129,13 +64,101 @@ node scripts/fuzz/run.mjs --seed 1 --count 200 --out /tmp/fuzz-run-2 --confirm-w
 
 Any case directory is also runnable by the oracle directly: `node scripts/runtime-oracle.mjs --cases <out>/cases --only <id> --out <fresh.json>`.
 
-## Phases
+### Flags
 
-1. Generator, type-check, classifier, shrinker, dedupe, CLI. Unit tests: `packages/cli/node_modules/.bin/vitest run --config packages/cli/vitest.config.mjs scripts/fuzz`.
-2. Rediscover this week's false positives on the pre-fix checker (ADR 0452 families), then confirm the fix clears them.
-3. Sweeps on the current checker; confirmed findings go to the owner.
-4. False cleans (phase D): the policy table and its drift test, the verdict tiers, the ledger, coarse dedupe, Chrome confirmation, focused shrink, exit status 4.
-5. The hit ledger (phase A): the twin, ran/landed, glue sites, the neutrality gate. The `dead-site` subkind is written and off.
+| flag | meaning |
+| --- | --- |
+| `--out <dir>` | fresh output directory (required) |
+| `--seed N`, `--count N` | the seed of the run (program seeds are derived from it and the index) and the number of programs |
+| `--profile <name>`, `--containers`, `--components N` | the generator (Profiles above); more than one component per page is for experiments |
+| `--code`, `--context`, `--binding`, `--layer`, `--variant` | with `--profile misuse`: pin the template's code, context, binding, layer or variant |
+| `--checker-bin`, `--typefacts`, `--install`, `--fast-install`, `--tsc`, `--browser` | the tools and installs (or `SOLID_CHECKER_NATIVE_BIN`, `SOLID_TYPEFACTS_BIN`, `FUZZ_TSC`) |
+| `--concurrency N`, `--workers N`, `--all-cores` | checker/type-check parallelism and Vitest workers; default half the cores, `--all-cores` takes all |
+| `--confirm-with-chrome` | Chrome decides each candidate (and one representative per new false-clean group) |
+| `--shrink`, `--shrink-mode discovery\|focused`, `--budget N`, `--shrink-jobs N`, `--shrink-batch N` | reduce one representative per signature |
+| `--control` | neutrality control on the clean twin (always on for `--profile packages`) |
+| `--ledger <file>`, `--no-ledger` | the accepted false cleans (default `known-open.json`, currently empty) |
+| `--no-instrument`, `--no-daemon`, `--no-cache`, `--keep-work`, `--generate-only`, `--dead-site` | the baseline text with no ledger, one Vitest process per batch, no neutrality cache, keep the checker directories, type-check only, the experimental subkind |
+
+Exit status: 0 clean; 3 Chrome confirmed a false positive (stop and report); 4 Chrome confirmed a false clean the ledger does not know (the sweep ran to the end); 2 a usage or setup error.
+
+### Merge gate
+
+To gate a checker change against false positives only, run fast and wide, not deep:
+
+```sh
+for seed in 11 12 13 14; do   # one process per seed; each its own --out and its own seed range
+  node scripts/fuzz/run.mjs --out <fresh dir>-$seed --seed $seed --count 200 --profile closure-escape --concurrency 3 &
+done; wait
+```
+
+Rules: no `--shrink` (a reduction is for a person, after a confirmed finding); distinct `--seed` and `--out` per process, so program ids and work directories never collide; keep `--concurrency` times the number of processes within the cores; use the release checker. A false positive needs a fast-path candidate first, so a run whose `summary.json` has `candidates: 0` passes without Chrome. When candidates exist, rerun that seed with `--confirm-with-chrome` and gate on exit 3. Exit 4 and the false-clean and recall-gap counts are recall, not false positives: report them, do not gate on them. Repeat the profile list that matches the change (`owner-cleanup`, `disposal`, `packages`, `containers`), and run `misuse` through the matrix gate below.
+
+## False cleans (phase D)
+
+A **false clean** is a runtime diagnostic of a defect code with no checker finding that covers it. Which codes are defects is the policy table in `codes.mjs`: every rc.17 dev code has `{ rules, disposition, severity }`, and `codes.test.mjs` greps `code: "X"` across the pinned dev dists of the fast install and fails on a code the table does not classify (so a Solid bump cannot add noise silently) or a severity that differs from the dist. Dispositions: `defect-claimed` (a rule claims it), `defect-unclaimed` (a recall gap by "never quieter than Solid"), `consequence` (the engine's reaction to an earlier failure), `advisory`, `out-of-scope` (SSR, host attribute checks, codes the published typings already reject).
+
+Per runtime diagnostic of a defect code: a checker violation there is `agree`; an uncertifiable finding is a `recall-gap`; nothing that could claim it is a `candidate-false-clean`. A diagnostic no line could be given for is a false clean only when the checker has no claiming finding anywhere in the file.
+
+The pipeline (`falseclean.mjs`, `falseclean-run.mjs`):
+
+1. **Coarse key** = the code, the chain of primitives above the owner call (`root>untrack`, `memo`), and the dynamic stack shape (the roles of the diagnostic's frames: a primitive, a handler, JSX; wrapper functions and calls are left out). Closure layers, helpers and decoys do not change it; the fine signature (`dedupe.mjs`) keeps them apart. The frames are read through `print.mjs`'s `lineTable` (line to node path), not the nearest site by line. On the 179 Chrome-confirmed owner diagnostics of phase C the key gives 55 groups (15 to 18 per code).
+2. **Ledger** `known-open.json`: `{ code, coarseKey, ref, reason }`, one exact key each, no wildcards. `ref` is `open-work.md#<anchor>` of a heading that exists, or `ADR nnnn` of a decision that exists; a bad ledger stops the run before it starts. A false clean matching an entry is `known-open`. A run reports the entries that did not fire (`stale-open` when the run covered the profile the entry came from). `--ledger <path>` or `--no-ledger`.
+3. **Confirm**: with `--confirm-with-chrome`, one representative per new group (the smallest program) is run in Chrome. Confirmed means Chrome reports the same code at the same innermost App line with no covering finding. A diagnostic Chrome reports but could not place counts too (`confirmed-unplaced`): for a false clean, Solid spoke. Other outcomes: `line-differs`, `covered-in-chrome`, `refuted-by-chrome`, `chrome-inconclusive`.
+4. **Shrink** (`--shrink`): the predicate is the same code, the same coarse key and no covering finding; the control is the legal twin, the program with its payload replaced by a literal, which must report no diagnostic of the code. The minimum is run in Chrome again and its status is reported (`minimum confirmed`); the fast path alone can drift.
+5. **Exit status 4**: a confirmed false clean with a coarse key the ledger does not know. The sweep still runs to the end (exit 3, a confirmed false positive, stays the stop).
+
+`findings.json` has a `falseClean` section (groups worst severity first, `knownOpen`, `staleOpen`, ranked `recallGaps`); `summary.json` carries the counts.
+
+## The misuse profile and the recall matrix
+
+The fuzzer above hunts a checker that is too loud (false positives) or silent where Solid speaks (false cleans) in programs it draws at random. The **misuse profile** (`--profile misuse`, `misuse.mjs`) asks the other question on purpose: for every code a rule claims (the `defect-claimed` rows of the policy table), does the checker report a violation when the primitive is misused? Each program targets one code at one marked site (a `use` node), so a matrix cell is unambiguous.
+
+* **Context** (the matrix column): component body, memo, effect compute or apply, render-effect compute or apply, `createTrackedEffect`, `onSettled`, `untrack`, `createRoot`, `runWithOwner(null)`, event handler, timer, promise callback, microtask, after an `await`, a JSX child (plain, under `Show`, in a `For` row), an `action` body, an async memo or effect compute. A code's list (`SPEC[code].contexts`) holds only the contexts where the call is a defect and the runtime reports it; `misuse-fire.test.mjs` fires every cell in the fast runtime.
+* **Layer** (random per program): none, a named closure called in place, a same-file helper taking the callback, an IIFE, or two of them.
+* **Binding** (random per program): the API reached by a direct import, `import * as S`, an alias (`flush as flushAlias`), a destructuring (`const { flush } = S`), or a wrapper function (the wrapper's inner call line belongs to the site, `aux` in `sites.json`).
+* **typed-away**: a code whose every misuse the published typings reject has no template (`MISSING_EFFECT_FN`: `createEffect(fn)` is TS2554). It is recorded with the type checker's error, never counted as a gap (invariant 1).
+
+`matrix.mjs` runs `--per-cell N` programs per (code, context) and judges each at its site:
+
+| column | meaning |
+| --- | --- |
+| typed-away | tsc rejects the program; not evidence |
+| harness | the checker or runtime run failed; not evidence |
+| not-fired | the program type-checks and the runtime did not report the code at the site: a generator problem |
+| agree | runtime-confirmed, and a violation of a rule that claims the code covers the site |
+| wrong-rule | runtime-confirmed, and only another rule's violation covers the site |
+| recall-gap | runtime-confirmed, and only an uncertifiable finding covers the site |
+| false-clean | runtime-confirmed, and no finding covers the site |
+
+Only runtime-confirmed programs (agree + wrong-rule + recall-gap + false-clean) count in the checker columns. `ASYNC_OUTSIDE_LOADING_BOUNDARY` is `placeless`: Solid reports it from the render root, at a line that is not an authored one, so it counts wherever the program reports it.
+
+```sh
+node scripts/fuzz/matrix.mjs --out <fresh dir> --seed 1 --per-cell 20 --confirm-with-chrome --shrink --checker-label <commit>
+node scripts/fuzz/matrix.mjs ... --baseline <saved matrix.json>         # gate: exit 1 on a regression
+node scripts/fuzz/matrix.mjs --gate <baseline.json> <current.json>      # compare two recorded matrices
+```
+
+`--confirm-with-chrome` runs, per cell, up to `--chrome-sample` (3) agree programs, up to `--chrome-false-clean` (4) false-clean programs and every wrong-rule program in Chrome and records `same`, `differs`, `not-fired-in-chrome` or `chrome-inconclusive` beside the fast verdict. `--shrink` reduces the smallest Chrome-confirmed false-clean program of each cell (the control is the legal twin) and reconfirms the minimum in Chrome. Output: `matrix.json` (per cell counts, per binding and layer counts, per-seed verdicts, Chrome summary, minimum), `matrix.md`, `programs.jsonl`, `repros/`.
+
+**Gate.** A cell's program seeds depend on the run seed, the code, the context and the index only (`cellSeed`), so a baseline and a later run with the same `--seed` and `--per-cell` judge the same programs. The gate fails (exit 1) when a cell's agree count drops or its false-clean count rises, or a baseline cell is missing; it names the seeds that moved. Different seeds, per-cell counts or generator versions are refused (exit 2). A cell where the checker improved is reported, not failed.
+
+## The packages profile
+
+`--profile packages` gives a program one or two exports of a generated dependency package, `fz-lib`, so the fuzzer tests how the checker reads dependency source (ADRs 0291, 0297, 0300). The same tree, host and disposition machinery builds the program; the helper layer is an export of the package. `package.mjs` is the single place that says what each behaviour does at run time (call the callback inline or N times; in `setTimeout`, `queueMicrotask` or `Promise.then`; under `untrack`, `runWithOwner(null | getOwner())` or `createRoot`; pass it to `createEffect`, `createMemo`, `onCleanup` or `onSettled`; return it, a wrapper of it, or `{ cb }`; store it in a module variable, array or object, with or without its owner, for a second export, `fire`, to call later; never call it) and in which export form (named, arrow, default, an index re-exporting `impl.js` by name, renamed or `export *`, a class method, a static method, an object method, a namespace import). The generator knows each behaviour, so each shape's runtime truth is determined; `packages-seeds.mjs` pins sixteen of them and `node scripts/fuzz/packages-check.mjs --out <fresh>` runs them through the fast path and exits 1 when the runtime contradicts one.
+
+* **Layout.** The package is real ESM with `.d.ts` typings and a `package.json` of `type: module`, `peerDependencies: { "solid-js": ... }` and an `exports` map (`types`, `default`), the shape the checker selects (ADR 0291). It imports `solid-js` from the program's install, never its own copy. A case holds it as `node_modules/fz-lib/` and only the exports the program refers to; the checker and the type check see it below the case's work directory, the fast path stages it beside `App.tsx` (the Vitest config inlines `fz-*` so the dev build of `solid-js` is the one instance), and `oracle.json` names it in `packages`, which `runtime-oracle.mjs` copies into the run directory's own `node_modules`. Nothing is written into the shared install's `node_modules`.
+* **The checker runs as a user's run does.** A case with a package is checked without `--feedback-facts`: under a declared runtime target and build an ordinary analysis reads the package from source (ADR 0297), and the feedback mode `feedback run` uses does not. Chrome is the runtime only for such a case; its checker verdict is this run's, on the clean text, with the checker's run on the twin as the neutrality control (always on for this profile).
+* **Reads.** A read payload is drawn only when every package export on its chain hands the callback's value back, so its witness can land.
+* **Triage.** Uncertifiable results at the package call (SC9005 or SC9012) count as uncertifiable; with a runtime diagnostic they are recall gaps, not false cleans.
+
+## Containers
+
+`--profile containers` (or `--containers` on top of any profile, `disposal` and `owner-cleanup` among them) wraps expression statements of a generated component in a *container*, a place where code is written but runs elsewhere, later or not at all: an uppercase inner function never rendered, rendered as `<Child />`, handed to a slot (`props.slot?.(Child)`, a local object's method) or returned; a class instance field, static field, static block, method or constructor (constructed or not); dead code (`if (false)`, after `return`, a function never called, `false && f()`, with `true && f()` as the live twin). It also passes the callback of every primitive by name (`const`, `let` or a function declaration), rewrites calls as `f?.()`, `(f as typeof f)()`, `(void 0, f)()`, `(true && f)()` or `(f)()`, and puts an `await` before or after the payload of an async container. Every program type-checks with tsrs. A function-like container has an entry counter and a direct form (`f = h();`, `false && h();`) the glue counter of its call, so the ledger tells ran from not-ran (`containers` in `results.jsonl`: kind, use, `entered`); a site in a container that never ran is `inconclusive: never-ran`. The profile draws its base profile (mostly `disposal` with the cleanup handle called now or later) from a stream of its own, so every other profile's seeds are unchanged. Not built: a callback imported from another generated file (a case is one `App.tsx`), event handlers passed by name.
+
+## The disposal profile
+
+`--profile disposal` (`disposal.mjs`) builds a write that runs while an owner is disposed, the case rc.17's owned-scope write guard exempts (`disposalDepth > 0`) and an action call or a later run of the `onCleanup` handle does not. The host is an owner the driver can dispose (a `Show` a button toggles, a memo or effect a button reruns, a `createRoot` whose disposer a button calls); the cleanup keeps its handle discarded, kept, called at once or called later; a chain of wrappers (`runWithOwner(captured | createOwner() | null)`, `createRoot`, `untrack`, an IIFE, `forEach`, a helper, a timer, a microtask, a promise callback, an async function, `try`/`finally`, `flush()`) sits around the write, which is a signal setter, a store setter, `refresh(memo)` or an action call. Controls put the same chain in a component body (the write throws) or an event handler (legal). Cleanup evidence (did the driver really dispose the host, did the handle run) is in `results.jsonl` (`cleanup`), so a write that never ran under disposal proves nothing. `disposal-seeds.mjs` pins the known shapes with the runtime's answer for each; `node scripts/fuzz/disposal-check.mjs --out <fresh>` runs them through the fast path and exits 1 when the runtime contradicts one.
 
 ## How the evidence works
 
@@ -171,14 +194,52 @@ Nothing here changes a verdict (the acceptance run compares them): the fast path
 
 `--dead-site` enables the `dead-site` false-positive subkind: a violation of an execution-claim rule at a site no execution entered. It needs, all at once: a closed branch-free program (`model.mjs closedGrammar`), a quiescent page, a neutral twin (build strip and clean-twin control), no disturbance and no unplaced diagnostic, a nearest enclosing function never entered while an enclosing function ran, no parameter default, and the same in Chrome. See `deadsite.mjs`; each unmet condition is a typed `inconclusive`. Do not enable it until the neutrality evidence has been reviewed.
 
-## The packages profile
+## Known limits
 
-`--profile packages` gives a program one or two exports of a generated dependency package, `fz-lib`, so the fuzzer tests how the checker reads dependency source (ADRs 0291, 0297, 0300). The same tree, host and disposition machinery builds the program; the helper layer is an export of the package. `package.mjs` is the single place that says what each behaviour does at run time (call the callback inline or N times; in `setTimeout`, `queueMicrotask` or `Promise.then`; under `untrack`, `runWithOwner(null | getOwner())` or `createRoot`; pass it to `createEffect`, `createMemo`, `onCleanup` or `onSettled`; return it, a wrapper of it, or `{ cb }`; store it in a module variable, array or object, with or without its owner, for a second export, `fire`, to call later; never call it) and in which export form (named, arrow, default, an index re-exporting `impl.js` by name, renamed or `export *`, a class method, a static method, an object method, a namespace import). The generator knows each behaviour, so each shape's runtime truth is determined; `packages-seeds.mjs` pins sixteen of them and `node scripts/fuzz/packages-check.mjs --out <fresh>` runs them through the fast path and exits 1 when the runtime contradicts one.
+* The fast path is Happy DOM, not a browser, and Chrome judges only its candidates: a false positive the fast path does not produce is not looked for in Chrome. A candidate the fast path invents is refuted by Chrome and noted, not reported as a checker bug.
+* One component and one `App.tsx` per case: no import from another generated file (a callback "from another module" is not generated; the packages profile is the dependency-source stand-in), and no event handler passed by name (containers).
+* A program `tsrs` rejects is dropped (invariant 1), so a defect the published typings catch is out of reach by design: the matrix records such codes as `typed-away` (`MISSING_EFFECT_FN` has no template).
+* A site that never ran, or ran without landing its witness, is `inconclusive`, never agreement. Sites in containers that never ran, programs that throw or halt reactivity, and diagnostics Chrome cannot place on a line limit what a run can say.
+* `ASYNC_OUTSIDE_LOADING_BOUNDARY` is reported from the render root, so the matrix judges it wherever the program reports it (`placeless`).
+* The instrumentation hides the read in `(f(), m1()())` from the checker; the counters avoid the form, and the gap is the checker's (see Neutrality). The `dead-site` subkind is written and off until its neutrality evidence is reviewed.
+* Packages: only the export forms and behaviours `package.mjs` lists; a read payload only through exports that hand the callback's value back; the checker's run is the clean text's, not Chrome's own.
+* The matrix gate compares the same seeds and per-cell count against a recorded baseline of a given generator version; it says nothing about programs it did not draw.
+* The fuzzer is operator tooling: it is not part of `make verify`, and the checker and its gates do not read it. Do not change the checker from inside a fuzzing session.
 
-* **Layout.** The package is real ESM with `.d.ts` typings and a `package.json` of `type: module`, `peerDependencies: { "solid-js": ... }` and an `exports` map (`types`, `default`), the shape the checker selects (ADR 0291). It imports `solid-js` from the program's install, never its own copy. A case holds it as `node_modules/fz-lib/` and only the exports the program refers to; the checker and the type check see it below the case's work directory, the fast path stages it beside `App.tsx` (the Vitest config inlines `fz-*` so the dev build of `solid-js` is the one instance), and `oracle.json` names it in `packages`, which `runtime-oracle.mjs` copies into the run directory's own `node_modules`. Nothing is written into the shared install's `node_modules`.
-* **The checker runs as a user's run does.** A case with a package is checked without `--feedback-facts`: under a declared runtime target and build an ordinary analysis reads the package from source (ADR 0297), and the feedback mode `feedback run` uses does not. Chrome is the runtime only for such a case; its checker verdict is this run's, on the clean text, with the checker's run on the twin as the neutrality control (always on for this profile).
-* **Reads.** A read payload is drawn only when every package export on its chain hands the callback's value back, so its witness can land.
-* **Triage.** Uncertifiable results at the package call (SC9005 or SC9012) count as uncertifiable; with a runtime diagnostic they are recall gaps, not false cleans.
+## Layout
+
+| file | role |
+| --- | --- |
+| `model.mjs` | the construct tree and its validator (a small type checker for the node language) |
+| `generate.mjs` | seed -> program: a payload (write or read) in layers (closures, defaults, IIFE, forEach/map, helpers), a host scope, a disposition |
+| `print.mjs`, `emit.mjs` | tree -> the clean `App.tsx` and its instrumented twin `App.run.txt`, with the site table, glue (auto-sites) and hit ledger; an oracle case directory (`App.tsx`, `oracle.json` steps, `program.json`, `sites.json`, and the twin's files) |
+| `container.mjs` | the containers dimension: wraps statements in places that run elsewhere or not at all (components, classes, dead code), passes callbacks by name, rewrites call forms; the ran/not-ran evidence per container |
+| `hits.mjs` | the hit ledger: the counter's source, the strip, the readout parser, the per-site record, and the pure comparisons of the neutrality gate |
+| `neutrality.mjs` | the regression: a seed range with and without instrumentation, verdict by verdict (`--profiles`, `--chunk`, `--order failing-first`, `--stop-on-mismatch`) |
+| `fast-daemon.mjs`, `fast/serve.mjs` | the long-lived fast host: one Vitest process (Vite server, Solid plugin, transform cache) serving every batch; `--no-daemon` gives one process per batch |
+| `cache.mjs` | the baseline cache of the regression and its mismatch history |
+| `deadsite.mjs` | the `dead-site` conditions as code (off by default, `--dead-site`) |
+| `typecheck.mjs` | `tsrs -p ... --noEmit` against the published typings; a program that does not type-check is dropped |
+| `checker.mjs` | materializes a case as the oracle does and runs the native checker; per-site verdicts |
+| `fast.mjs`, `fast/` | the Happy DOM + `@solidjs/diagnostics` runtime path (Vitest) |
+| `classify.mjs`, `codes.mjs` | the comparator; the policy table per rc.17 code and the oracle's code/rule tables (tests fail when they drift) |
+| `falseclean.mjs`, `falseclean-run.mjs`, `known-open.json` | the false-clean stream: coarse key, ledger, Chrome confirmation, focused shrink with a control |
+| `shrink.mjs`, `dedupe.mjs` | delta debugging over the tree; signatures by construct path |
+| `chrome.mjs` | Chrome confirmation through `scripts/runtime-oracle.mjs` |
+| `misuse.mjs` | the misuse profile: a template per claimed code, the contexts, layers and binding forms |
+| `matrix.mjs` | the recall matrix (code x context), its Chrome sample, the false-clean shrink and the baseline gate |
+| `package.mjs`, `packages.mjs`, `packages-seeds.mjs`, `packages-check.mjs` | the `packages` profile: generated dependency packages (below) |
+| `run.mjs` | the command line |
+
+## Phases
+
+1. Generator, type-check, classifier, shrinker, dedupe, CLI. Unit tests: `packages/cli/node_modules/.bin/vitest run --config packages/cli/vitest.config.mjs scripts/fuzz`.
+2. Rediscover this week's false positives on the pre-fix checker (ADR 0452 families), then confirm the fix clears them.
+3. Sweeps on the current checker; confirmed findings go to the owner.
+4. The hit ledger (phase A): the twin, ran/landed, glue sites, the neutrality gate. The `dead-site` subkind is written and off.
+5. Speed: one long-lived fast host, a baseline cache, batched shrinking.
+6. Owner and disposal profiles (phase C), then false cleans (phase D): the policy table and its drift test, the verdict tiers, the ledger, coarse dedupe, Chrome confirmation, focused shrink, exit status 4.
+7. The misuse profile with the recall matrix and its gate; the packages profile; the containers dimension.
 
 ## Provenance
 
