@@ -140,14 +140,19 @@ export const familyOrder = ["lists", "inline", "unreturn", "simplify"];
  * Reduce `initial` while `predicate` holds.
  * @param {object} initial the program (it must satisfy the predicate)
  * @param {(program: object) => Promise<boolean>} predicate expensive: runs the pipeline
- * @param {{ budget?: number, cheap?: (program: object) => boolean, control?: (program: object) => Promise<boolean>, order?: string[], onAccept?: (program: object, family: string) => void }} [options]
+ * @param {{ budget?: number, cheap?: (program: object) => boolean, control?: (program: object) => Promise<boolean>, order?: string[], onAccept?: (program: object, family: string) => void,
+ *   judgeBatch?: (programs: object[]) => Promise<boolean[]>, batchSize?: number }} [options]
  *   `cheap` is a free pre-filter (e.g. "still has a site"); `control` must stay true on every accepted program.
+ *   `judgeBatch` judges several candidates in one run (one fast-path process for the lot): it must answer what `predicate` would,
+ *   program by program. The search then takes the first candidate, in the order the family yields them, that holds, exactly as the
+ *   one-at-a-time loop does; the candidates after it were judged for nothing, so they are neither counted against the budget nor
+ *   marked seen, and the result is the sequential one.
  */
-export async function shrink(initial, predicate, { budget = 150, cheap = () => true, control, order = familyOrder, onAccept } = {}) {
+export async function shrink(initial, predicate, { budget = 150, cheap = () => true, control, order = familyOrder, onAccept, judgeBatch, batchSize = 8 } = {}) {
   const limit = new SearchBudget(budget);
   let current = initial;
   const seen = new Set([programKey(initial)]);
-  let accepted = 0; let duplicates = 0; let invalid = 0; let skipped = 0; let controlAttempts = 0;
+  let accepted = 0; let duplicates = 0; let invalid = 0; let skipped = 0; let controlAttempts = 0; let rounds = 0;
   let progress = true;
   outer: while (progress && limit.available() && limit.candidates < limit.candidateLimit) {
     progress = false;
@@ -155,35 +160,61 @@ export async function shrink(initial, predicate, { budget = 150, cheap = () => t
       let again = true;
       while (again && limit.available()) {
         again = false;
-        for (const candidate of families[family](current)) {
-          if (limit.candidates >= limit.candidateLimit) break outer;
-          limit.candidates += 1;
-          if (!isValid(candidate)) { invalid += 1; continue; }
-          if (compareSize(candidate, current) >= 0) { skipped += 1; continue; }
-          if (!cheap(candidate)) { skipped += 1; continue; }
-          const key = programKey(candidate);
-          if (seen.has(key)) { duplicates += 1; continue; }
-          if (!limit.available()) break outer;
-          seen.add(key);
-          const holds = await limit.run(() => predicate(candidate));
-          if (!holds) continue;
-          if (control) {
-            controlAttempts += 1;
-            if (!limit.available() || !(await limit.run(() => control(candidate)))) continue;
+        const candidates = families[family](current)[Symbol.iterator]();
+        let drained = false;
+        while (!drained && !again) {
+          // Gather the next candidates that pass the free filters (at most as many as the budget can still pay for).
+          const room = judgeBatch ? Math.min(batchSize, limit.limit - limit.executions) : 1;
+          if (room < 1) break;
+          const batch = [];
+          while (batch.length < room) {
+            const next = candidates.next();
+            if (next.done) { drained = true; break; }
+            const candidate = next.value;
+            if (limit.candidates >= limit.candidateLimit) break outer;
+            limit.candidates += 1;
+            if (!isValid(candidate)) { invalid += 1; continue; }
+            if (compareSize(candidate, current) >= 0) { skipped += 1; continue; }
+            if (!cheap(candidate)) { skipped += 1; continue; }
+            const key = programKey(candidate);
+            if (seen.has(key)) { duplicates += 1; continue; }
+            seen.add(key);
+            batch.push({ candidate, key });
           }
-          current = candidate;
-          seen.add(programKey(current));
-          accepted += 1;
-          onAccept?.(current, family);
-          progress = true;
-          again = true;
-          break;
+          if (!batch.length) continue;
+          rounds += 1;
+          const verdicts = judgeBatch ? await judgeBatch(batch.map((entry) => entry.candidate)) : [await predicate(batch[0].candidate)];
+          let take = -1; let controlRuns = 0;
+          for (let index = 0; index < batch.length; index += 1) {
+            if (!verdicts[index]) continue;
+            if (control) {
+              controlAttempts += 1;
+              if (limit.executions + index + 1 + controlRuns >= limit.limit) break;
+              controlRuns += 1;
+              if (!(await control(batch[index].candidate))) continue;
+            }
+            take = index;
+            break;
+          }
+          // Executions: those a one-at-a-time loop would have run (up to and including the one it takes), and its control runs.
+          limit.executions += (take < 0 ? batch.length : take + 1) + controlRuns;
+          // The candidates after the one taken were not reached: another round may meet them again.
+          for (let index = take < 0 ? batch.length : take + 1; index < batch.length; index += 1) seen.delete(batch[index].key);
+          if (take >= 0) {
+            current = batch[take].candidate;
+            seen.add(batch[take].key);
+            accepted += 1;
+            onAccept?.(current, family);
+            progress = true;
+            again = true;
+          }
+          if (!limit.available()) break outer;
         }
       }
     }
   }
   return {
-    program: current, accepted, duplicates, invalid, skipped, controlAttempts,
+    program: current, accepted, duplicates, invalid, skipped, controlAttempts, rounds,
     attempts: limit.executions, candidates: limit.candidates,
     exhausted: !limit.available() || limit.candidates >= limit.candidateLimit,
   };
