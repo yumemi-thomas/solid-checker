@@ -1,0 +1,696 @@
+{
+ "note": "What each rc.17 corpus app actually has installed (frozen tree, 2026-10-27). The checker compiles every file with its own pinned rc.17 compiler and reads dependency source as installed, so sweeps describe these installs as they are; they were deliberately not upgraded. Runtime evidence uses the oracle install instead.",
+ "apps": {
+  "ai-memory-ui": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.18",
+      "@solidjs/babel-plugin": "2.0.0-rc.18"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": [
+    "@solid-devtools/debugger@0.28.1 (solid ^1.9.0)",
+    "@solid-devtools/logger@0.9.11 (solid ^1.9.0)",
+    "@solid-devtools/shared@0.20.0 (solid ^1.9.0)",
+    "@solid-primitives/bounds@0.1.5 (solid ^1.6.12)",
+    "@solid-primitives/event-listener@2.4.6 (solid ^1.6.12)",
+    "@solid-primitives/keyboard@1.3.5 (solid ^1.6.12)",
+    "@solid-primitives/media@2.3.5 (solid ^1.6.12)",
+    "@solid-primitives/refs@1.1.3 (solid ^1.6.12)",
+    "@solid-primitives/resize-observer@2.1.5 (solid ^1.6.12)",
+    "@solid-primitives/rootless@1.5.3 (solid ^1.6.12)",
+    "@solid-primitives/scheduled@1.5.3 (solid ^1.6.12)",
+    "@solid-primitives/static-store@0.1.3 (solid ^1.6.12)",
+    "@solid-primitives/styles@0.1.3 (solid ^1.6.12)",
+    "@solid-primitives/utils@6.4.1 (solid ^1.6.12)",
+    "@tanstack/solid-query@6.0.0-rc.5 (solid >=2.0.0-rc.13 <3.0.0)",
+    "@tanstack/solid-router@2.0.0-rc.9 (solid >=2.0.0-rc.16 <3.0.0)"
+   ]
+  },
+  "app-game": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "vite-plugin-solid",
+     "version": "3.0.0-next.27",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.4",
+      "@solidjs/babel-plugin": "2.0.0-rc.4"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": [
+    "@solid-primitives/active-element@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/clipboard@2.0.0-next.17 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/context@2.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/cursor@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/deep@1.0.0-next.5 (solid ^2.0.0-rc.14)",
+    "@solid-primitives/devices@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/drag-drop@0.1.0-next.0 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/event-bus@3.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/event-listener@3.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/event-listener@3.0.0-next.9 (solid ^2.0.0-rc.14)",
+    "@solid-primitives/fullscreen@2.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/history@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/i18n@3.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/intersection-observer@3.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/jsx-tokenizer@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/keyboard@2.0.0-next.5 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/keyed@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/map@1.0.0-next.4 (solid ^2.0.0-rc.14)",
+    "@solid-primitives/media@4.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/memo@2.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/memo@2.0.0-next.4 (solid ^2.0.0-rc.14)",
+    "@solid-primitives/mouse@4.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/mutation-observer@3.0.0-next.4 (solid ^2.0.0-rc.14)",
+    "@solid-primitives/page-utilities@3.0.0-next.0 (solid ^2.0.0-beta.15)",
+    "@solid-primitives/pointer@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/props@4.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/raf@4.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/refs@3.0.0-next.4 (solid ^2.0.0-rc.14)",
+    "@solid-primitives/resize-observer@4.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/rootless@2.0.0-next.4 (solid ^2.0.0-rc.14)",
+    "@solid-primitives/scheduled@2.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/scroll@3.0.0-next.7 (solid ^2.0.0-rc.14)",
+    "@solid-primitives/set@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/static-store@1.0.0-next.5 (solid ^2.0.0-rc.14)",
+    "@solid-primitives/storage@5.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/timer@1.4.5-next.1 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/transition-group@2.0.0-next.4 (solid ^2.0.0-rc.14)",
+    "@solid-primitives/trigger@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/trigger@3.0.0-next.4 (solid ^2.0.0-rc.14)",
+    "@solid-primitives/utils@7.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/utils@7.0.0-next.7 (solid ^2.0.0-rc.14)",
+    "@solid-primitives/virtual@1.0.0-next.6 (solid ^2.0.0-rc.14)",
+    "vite-plugin-solid-svg@0.8.1 (solid >=1 <3)"
+   ]
+  },
+  "compass-ui": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "vite-plugin-solid",
+     "version": "3.0.0-next.27",
+     "compiler": {
+      "babel-preset-solid": "2.0.0-rc.2"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": [
+    "@kobalte/core@2.0.0-alpha.0 (solid 2.0.0-rc.0)",
+    "@kobalte/utils@2.0.0-alpha.0 (solid 2.0.0-rc.0)",
+    "@rigelbuild/solid-markdown@3.0.0-rc.0 (solid ^2.0.0-rc.0)",
+    "@rigelbuild/solid-virtual@3.0.0-rc.0 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/a11y@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/controlled-signal@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/event-listener@3.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/focus@1.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/form@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/i18n@3.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/interaction@1.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/keyboard@2.0.0-next.5 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/keyed@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/map@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/media@4.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/platform@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/presence@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/props@4.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/refs@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/resize-observer@4.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/rootless@2.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/scroll@3.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/static-store@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/trigger@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/upload@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/utils@7.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@tanstack/solid-query@6.0.0-rc.5 (solid >=2.0.0-rc.13 <3.0.0)",
+    "babel-preset-solid@2.0.0-rc.2 (solid ^2.0.0-rc.2)"
+   ]
+  },
+  "dashiboard-ui": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.18",
+      "@solidjs/babel-plugin": "2.0.0-rc.18"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": []
+  },
+  "donegeon-client": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": "2.0.0-rc.17",
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.28",
+     "compiler": {
+      "babel-preset-solid": "2.0.0-rc.1"
+     }
+    },
+    {
+     "name": "vite-plugin-solid",
+     "version": "3.0.0-next.27",
+     "compiler": {
+      "babel-preset-solid": "2.0.0-rc.1"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [
+    "@solidjs/web@2.0.0-rc.0",
+    "solid-js@2.0.0-rc.1"
+   ],
+   "solidLibrariesNotPinnedToRc17": [
+    "@tanstack/solid-query@6.0.0-rc.5 (solid >=2.0.0-rc.13 <3.0.0)",
+    "babel-preset-solid@2.0.0-rc.1 (solid ^2.0.0-rc.1)"
+   ]
+  },
+  "error-menu-web": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.3",
+      "@solidjs/babel-plugin": "2.0.0-rc.3"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": [
+    "@kobalte/core@2.0.0-alpha.2 (solid 2.0.0-rc.3)",
+    "@kobalte/utils@2.0.0-alpha.0 (solid 2.0.0-rc.0)",
+    "@solid-primitives/a11y@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/controlled-signal@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/drag-drop@0.1.0-next.0 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/event-listener@3.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/event-listener@3.0.0-next.5 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/focus@1.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/form@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/i18n@3.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/interaction@1.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/keyboard@2.0.0-next.5 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/keyed@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/map@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/media@4.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/platform@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/presence@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/props@4.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/refs@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/resize-observer@4.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/rootless@2.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/scroll@3.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/static-store@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/trigger@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/upload@1.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/utils@7.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "solid-icons@1.2.0 (solid *)"
+   ]
+  },
+  "every-deck-of-cards": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.18",
+      "@solidjs/babel-plugin": "2.0.0-rc.18"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": []
+  },
+  "expenses-app": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": "2.0.0-rc.17",
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.18",
+      "@solidjs/babel-plugin": "2.0.0-rc.18"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": []
+  },
+  "helge-dev": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": "2.0.0-rc.17",
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.18",
+      "@solidjs/babel-plugin": "2.0.0-rc.18"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": [
+    "solid-icons@1.2.0 (solid *)"
+   ]
+  },
+  "hoxxes-briefing": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "vite-plugin-solid",
+     "version": "3.0.0-next.27",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.6",
+      "@solidjs/babel-plugin": "2.0.0-rc.6"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": []
+  },
+  "inferay": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": "2.0.0-rc.17",
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.17",
+      "@solidjs/babel-plugin": "2.0.0-rc.18"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": [
+    "@tanstack/solid-query@6.0.0-rc.5 (solid >=2.0.0-rc.13 <3.0.0)"
+   ]
+  },
+  "jandibat-web": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": "2.0.0-rc.17",
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.18",
+      "@solidjs/babel-plugin": "2.0.0-rc.18"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": []
+  },
+  "jar-hell-web": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.18",
+      "@solidjs/babel-plugin": "2.0.0-rc.18"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": []
+  },
+  "kui": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "vite-plugin-solid",
+     "version": "3.0.0-next.27",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.6",
+      "@solidjs/babel-plugin": "2.0.0-rc.6"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": [
+    "storybook-solidjs-vite@10.7.4 (solid ^1.8.0-0 || ^2.0.0-0)"
+   ]
+  },
+  "oscartbeaumont-website": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.18",
+      "@solidjs/babel-plugin": "2.0.0-rc.18"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": []
+  },
+  "pekochan-blog": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": "2.0.0-rc.17",
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.38",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.6",
+      "@solidjs/babel-plugin": "2.0.0-rc.6"
+     }
+    },
+    {
+     "name": "vite-plugin-solid",
+     "version": "3.0.0-next.27",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.6",
+      "@solidjs/babel-plugin": "2.0.0-rc.6"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": [
+    "@kobalte/core@2.0.0-alpha.2 (solid 2.0.0-rc.3)",
+    "@kobalte/utils@2.0.0-alpha.0 (solid 2.0.0-rc.0)",
+    "@solid-primitives/a11y@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/controlled-signal@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/drag-drop@0.1.0-next.0 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/event-listener@3.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/event-listener@3.0.0-next.5 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/focus@1.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/form@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/i18n@3.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/interaction@1.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/keyboard@2.0.0-next.5 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/keyed@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/map@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/media@4.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/platform@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/presence@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/props@4.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/refs@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/resize-observer@4.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/rootless@2.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/scroll@3.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/static-store@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/trigger@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/upload@1.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/utils@7.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "astro-solid-next@0.1.0 (solid ^2.0.0-rc.0)",
+    "cmdk-solid@2.0.0-rc.0 (solid >=2.0.0-rc.0 <3)"
+   ]
+  },
+  "probus-hk": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": "2.0.0-rc.17",
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.35",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.4",
+      "@solidjs/babel-plugin": "2.0.0-rc.4"
+     }
+    },
+    {
+     "name": "vite-plugin-solid",
+     "version": "3.0.0-next.27",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.4",
+      "@solidjs/babel-plugin": "2.0.0-rc.4"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": [
+    "@kobalte/core@2.0.0-alpha.0 (solid 2.0.0-rc.0)",
+    "@kobalte/utils@2.0.0-alpha.0 (solid 2.0.0-rc.0)",
+    "@sinhong2011/solid-drawer@0.1.4 (solid >=2.0.0-rc.0)",
+    "@solid-devtools/debugger@0.28.1 (solid ^1.9.0)",
+    "@solid-devtools/logger@0.9.11 (solid ^1.9.0)",
+    "@solid-devtools/shared@0.20.0 (solid ^1.9.0)",
+    "@solid-primitives/a11y@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/bounds@0.1.7 (solid ^1.6.12)",
+    "@solid-primitives/controlled-signal@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/event-listener@2.4.6 (solid ^1.6.12)",
+    "@solid-primitives/event-listener@3.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/focus@1.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/form@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/i18n@3.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/interaction@1.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/keyboard@1.3.7 (solid ^1.6.12)",
+    "@solid-primitives/keyboard@2.0.0-next.5 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/keyed@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/map@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/media@2.3.6 (solid ^1.6.12)",
+    "@solid-primitives/media@4.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/platform@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/presence@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/props@4.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/refs@1.1.4 (solid ^1.6.12)",
+    "@solid-primitives/refs@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/resize-observer@2.2.0 (solid ^1.6.12)",
+    "@solid-primitives/resize-observer@4.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/rootless@1.5.4 (solid ^1.6.12)",
+    "@solid-primitives/rootless@2.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/scheduled@1.5.3 (solid ^1.6.12)",
+    "@solid-primitives/scroll@3.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/static-store@0.1.4 (solid ^1.6.12)",
+    "@solid-primitives/static-store@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/styles@0.1.4 (solid ^1.6.12)",
+    "@solid-primitives/trigger@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/upload@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/utils@6.4.1 (solid ^1.6.12)",
+    "@solid-primitives/utils@7.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@tanstack/solid-query@6.0.0-rc.5 (solid >=2.0.0-rc.13 <3.0.0)",
+    "@tanstack/solid-router@2.0.0-rc.9 (solid >=2.0.0-rc.16 <3.0.0)"
+   ]
+  },
+  "sensor-sim": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.18",
+      "@solidjs/babel-plugin": "2.0.0-rc.18"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": [
+    "solid-icons@1.2.0 (solid *)"
+   ]
+  },
+  "skyjtx-website": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.18",
+      "@solidjs/babel-plugin": "2.0.0-rc.18"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": [
+    "@kobalte/core@2.0.0-alpha.2 (solid 2.0.0-rc.3)",
+    "@kobalte/utils@2.0.0-alpha.0 (solid 2.0.0-rc.0)",
+    "@solid-primitives/a11y@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/controlled-signal@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/drag-drop@0.1.0-next.0 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/event-listener@3.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/event-listener@3.0.0-next.5 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/focus@1.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/form@1.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/i18n@3.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/interaction@1.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/keyboard@2.0.0-next.5 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/keyed@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/map@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/media@4.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/platform@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/presence@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/props@4.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/refs@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/resize-observer@4.0.0-next.3 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/rootless@2.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/scroll@3.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/static-store@1.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/trigger@3.0.0-next.2 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/upload@1.0.0-next.4 (solid ^2.0.0-rc.0)",
+    "@solid-primitives/utils@7.0.0-next.4 (solid ^2.0.0-rc.0)"
+   ]
+  },
+  "solid-groove": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": "2.0.0-rc.17",
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.18",
+      "@solidjs/babel-plugin": "2.0.0-rc.18"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": [
+    "solid-icons@1.2.0 (solid *)"
+   ]
+  },
+  "spookysoftware-www": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.18",
+      "@solidjs/babel-plugin": "2.0.0-rc.18"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": []
+  },
+  "spotify-desk-thing": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "vite-plugin-solid",
+     "version": "3.0.0-next.27",
+     "compiler": {
+      "babel-preset-solid": "2.0.0-rc.1"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": [
+    "@solid-devtools/debugger@0.28.1 (solid ^1.9.0)",
+    "@solid-devtools/logger@0.9.11 (solid ^1.9.0)",
+    "@solid-devtools/shared@0.20.0 (solid ^1.9.0)",
+    "@solid-primitives/bounds@0.1.7 (solid ^1.6.12)",
+    "@solid-primitives/event-listener@2.4.6 (solid ^1.6.12)",
+    "@solid-primitives/keyboard@1.3.7 (solid ^1.6.12)",
+    "@solid-primitives/media@2.3.6 (solid ^1.6.12)",
+    "@solid-primitives/refs@1.1.4 (solid ^1.6.12)",
+    "@solid-primitives/resize-observer@2.2.0 (solid ^1.6.12)",
+    "@solid-primitives/rootless@1.5.4 (solid ^1.6.12)",
+    "@solid-primitives/scheduled@1.5.3 (solid ^1.6.12)",
+    "@solid-primitives/static-store@0.1.4 (solid ^1.6.12)",
+    "@solid-primitives/styles@0.1.4 (solid ^1.6.12)",
+    "@solid-primitives/utils@6.4.1 (solid ^1.6.12)",
+    "@tanstack/solid-query-devtools@6.0.0-rc.5 (solid >=2.0.0-rc.13 <3.0.0)",
+    "@tanstack/solid-query@6.0.0-rc.5 (solid >=2.0.0-rc.13 <3.0.0)",
+    "@tanstack/solid-router-devtools@2.0.0-rc.7 (solid ^2.0.0-rc.16)",
+    "@tanstack/solid-router@2.0.0-rc.9 (solid >=2.0.0-rc.16 <3.0.0)",
+    "@tanstack/solid-start-client@2.0.0-rc.9 (solid >=2.0.0-rc.16 <3.0.0)",
+    "@tanstack/solid-start-server@2.0.0-rc.9 (solid >=2.0.0-rc.16 <3.0.0)",
+    "@tanstack/solid-start@2.0.0-rc.9 (solid >=2.0.0-rc.16 <3.0.0)",
+    "babel-preset-solid@2.0.0-rc.1 (solid ^2.0.0-rc.1)",
+    "solid-icons@1.2.0 (solid *)"
+   ]
+  },
+  "viviana-ui-web": {
+   "solid-js": "2.0.0-rc.17",
+   "@solidjs/web": "2.0.0-rc.17",
+   "@solidjs/signals": null,
+   "plugins": [
+    {
+     "name": "@solidjs/vite-plugin",
+     "version": "3.0.0-next.51",
+     "compiler": {
+      "@solidjs/compiler": "2.0.0-rc.18",
+      "@solidjs/babel-plugin": "2.0.0-rc.18",
+      "babel-preset-solid": "1.9.15"
+     }
+    }
+   ],
+   "otherSolidRuntimes": [],
+   "solidLibrariesNotPinnedToRc17": [
+    "@solid-devtools/debugger@0.28.1 (solid ^1.9.0)",
+    "@solid-devtools/logger@0.9.11 (solid ^1.9.0)",
+    "@solid-devtools/shared@0.20.0 (solid ^1.9.0)",
+    "@solid-primitives/bounds@0.1.7 (solid ^1.6.12)",
+    "@solid-primitives/event-listener@2.4.6 (solid ^1.6.12)",
+    "@solid-primitives/keyboard@1.3.7 (solid ^1.6.12)",
+    "@solid-primitives/media@2.3.6 (solid ^1.6.12)",
+    "@solid-primitives/refs@1.1.4 (solid ^1.6.12)",
+    "@solid-primitives/resize-observer@2.2.0 (solid ^1.6.12)",
+    "@solid-primitives/rootless@1.5.4 (solid ^1.6.12)",
+    "@solid-primitives/scheduled@1.5.3 (solid ^1.6.12)",
+    "@solid-primitives/static-store@0.1.4 (solid ^1.6.12)",
+    "@solid-primitives/styles@0.1.4 (solid ^1.6.12)",
+    "@solid-primitives/utils@6.4.1 (solid ^1.6.12)",
+    "@tanstack/solid-router@2.0.0-rc.9 (solid >=2.0.0-rc.16 <3.0.0)",
+    "@tanstack/solid-start-client@2.0.0-rc.9 (solid >=2.0.0-rc.16 <3.0.0)",
+    "@tanstack/solid-start-server@2.0.0-rc.9 (solid >=2.0.0-rc.16 <3.0.0)",
+    "@tanstack/solid-start@2.0.0-rc.9 (solid >=2.0.0-rc.16 <3.0.0)",
+    "babel-preset-solid@1.9.15 (solid ^1.9.15)",
+    "solid-icons@1.2.0 (solid *)",
+    "solid-refresh@0.6.3 (solid ^1.3)",
+    "vite-plugin-solid@2.11.14 (solid ^1.7.2)"
+   ]
+  }
+ }
+}
