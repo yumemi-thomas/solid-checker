@@ -85,6 +85,9 @@ Other:
 - A context-provided value read through a package hook (kui `TopicsRoute.tsx:425`) stays an uncertifiable SC9012. Only the router's own provider is proven; a project provider or an `Object.defineProperty` replacement of the location getter both type-check (ADR 0289, 0312).
 - `typeof window` in solid-query source blocks the proxy proof unless a Window realm is declared (ADR 0295, 0312).
 
+- `no-write-in-pure-computation` (SC2001), recall lost (ADR 0452): a closure named in a memo or effect compute and called there, with code in its parameter list (`const f = (x = setOpen(true)) => x; f()`, or `(x = Math.random()) => setOpen(x)`), is an uncertifiable result, not a violation. The call graph holds no call sites for a function whose parameter list is not inert (ADR 0339), so nothing places the write. A literal default keeps the violation.
+- `no-write-in-pure-computation` (SC2001), contrived (ADR 0452): a default the caller always supplies (`items.forEach((item, i = setX(1)) => {})` in a memo) is treated as running, a violation that never fires.
+- `no-write-in-pure-computation` (SC2001), known false positive (ADR 0452, the next PR): a call in the parameter list of a closure a helper builds is placed in the helper's body by the lookups through `containing_ast_function` / `innermost_function_body_containing` (about 150 uses; `calls_parameter_in_body` in `callback_standing.rs` and the every-completion table in `indexes/completion.rs`), so `function runNested(cb) { const g = (x = cb()) => x; return g; }` with `createMemo(() => { runNested(() => setV(1)); return 1; })` reports a write that never runs. Planned fix: one owner primitive (a site in a parameter list belongs to its function and runs only when that function is called) used by both lookups, with a digest change. Pinned as the current answer in `fixtures/reactive-ir/write-default-in-helper-closure`.
 
 Leaf body (`leaf-owner-forbidden-call`, SC3001):
 

@@ -2613,11 +2613,27 @@
    "presets": [],
    "enableRules": [],
    "expect": {
-    "findings": [],
-    "absent": [],
-    "silent": true
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "count()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
    },
-   "note": "Kept divergence from `badUnnamedDerivedSignal`: a memo whose value is a function is legal. The memo reads nothing and runs once; the function it returns is called by a consumer, here JSX, where the call is a tracked read (probe 3b: memo runs 1 to 1, the tracked consumer re-ran and saw the new value, no diagnostic)."
+   "note": "Kept divergence from `badUnnamedDerivedSignal`: a memo whose value is a function is legal. The memo reads nothing and runs once; the function it returns is called by a consumer, here JSX, where the call is a tracked read (probe 3b: memo runs 1 to 1, the tracked consumer re-ran and saw the new value, no diagnostic). Since ADR 0452 the checker no longer certifies it: the closure is built in the memo, and the call in JSX is not followed to place it, so the read is an uncertifiable result (never a violation)."
   },
   {
    "id": "strict-read-untracked/unnamed-derived/props-condition/001",

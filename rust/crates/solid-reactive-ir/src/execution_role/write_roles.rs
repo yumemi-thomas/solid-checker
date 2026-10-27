@@ -396,6 +396,19 @@ pub(super) fn semantic_write_role_walk(
     {
         return unknown;
     }
+    // The same holds for a closure bound to a name inside the tracked scope
+    // (ADR 0452): the scope runs its construction, not its body. The closure's
+    // own invocations decide, through the walk below.
+    let tracked_named = if direct == ExecutionRole::TrackedJsx {
+        named_closure_in_tracked_scope(file, span, allowed, entities, symbol_names, lookup)
+    } else {
+        None
+    };
+    let direct = if tracked_named.is_some() {
+        ExecutionRole::Unknown
+    } else {
+        direct
+    };
     // Past an await that dominates it, the write runs on a later task with no
     // owner, whatever its lexical role or its function's callers: legal, and
     // proven so, though in no single role.
@@ -411,6 +424,21 @@ pub(super) fn semantic_write_role_walk(
     if (direct == ExecutionRole::Unknown || direct.reports_disallowed_write())
         && may_follow_suspension(file, span)
     {
+        return unknown;
+    }
+    // A site in a parameter list (a default value) of a closure bound to a name
+    // runs when that closure is called without the argument. The function
+    // around the closure (the body that holds the list) does not run it, and
+    // the closure has no call sites: its parameter list is not inert, so the
+    // call graph withholds them (ADR 0339). Nothing places the write (ADR
+    // 0452); a lexical tracked or rendering role, or the surrounding function's
+    // calls, would claim a run the closure's own calls decide.
+    if functions_around(file, span).into_iter().any(|function| {
+        parameter_slot(function, span).is_some()
+            && function.method_name.is_none()
+            && function_binding_name(file, function).is_some()
+            && lookup.function_component_status(file, function) == ComponentStatus::No
+    }) {
         return unknown;
     }
     let innermost = crate::owners::containing_ast_function(&file.ast, span);
@@ -439,18 +467,28 @@ pub(super) fn semantic_write_role_walk(
     let Some(innermost) = innermost else {
         return unknown;
     };
+    // ADR 0452: the named closure built in a tracked scope is entered by its
+    // calls, and the write runs with it only through layers that run in place
+    // (an IIFE, an inline standard-library callback). Any other layer keeps or
+    // schedules the write's function, whose entries are not the closure's.
+    let entry = match tracked_named {
+        Some(closure) if closure.span == innermost.span => Some(closure),
+        Some(closure) if runs_in_place_within(file, innermost, closure, lookup) => Some(closure),
+        Some(_) => return unknown,
+        None => None,
+    };
     // ADR 0327: every invocation of the writing function, followed forward
     // through the closed program, is an event delivery. No other entry exists.
-    if event_only_entries(file, innermost, lookup) {
+    if event_only_entries(file, entry.unwrap_or(innermost), lookup) {
         return ExecutionRole::EventCallback;
     }
     if visiting.contains(&lexical_only_marker()) {
         return unknown;
     }
-    let function = named.unwrap_or(innermost);
+    let function = named.or(entry).unwrap_or(innermost);
     // The write is in a closure nested in the named callback: a call of the
     // callback does not run it, so a disallowed entry proves nothing here.
-    let nested = function.span != innermost.span;
+    let nested = entry.is_none() && function.span != innermost.span;
     // A binding that may hold another function (`let reset = …; reset = …`)
     // names more than this one at its positions and calls, so none of them is
     // proof that this function runs in an owned scope.
@@ -783,8 +821,8 @@ pub(super) fn enclosed_by_jsx_attribute_function(
     file: &solid_facts::FileFacts,
     span: Span,
 ) -> bool {
-    file.ast
-        .functions_body_containing(span)
+    functions_around(file, span)
+        .into_iter()
         .any(|function| jsx_attribute_value_function(file, function.span))
 }
 
@@ -799,7 +837,7 @@ pub(super) fn attribute_function_within(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    file.ast.functions_body_containing(span).any(|function| {
+    functions_around(file, span).into_iter().any(|function| {
         region.contains(function.span)
             && region != function.span
             && (jsx_attribute_value_function(file, function.span)

@@ -69,6 +69,45 @@ pub(super) fn call_argument_invocation_unproven(
     true
 }
 
+/// ADR 0452: the functions whose body or parameter list contains `span`. A
+/// default value (`(x = set(1)) => x`, `({ a = count() }) => a`) lies outside
+/// its function's body but runs only when that function is called, so for
+/// every question about the closure around a site it is inside it.
+pub(crate) fn functions_around(
+    file: &solid_facts::FileFacts,
+    span: Span,
+) -> Vec<&solid_facts::ast::FunctionFact> {
+    // A function written inside a default value (an IIFE, an inline callback)
+    // sits outside the body of the function owning the default, so the
+    // parameter-list owners are found by their whole span, wherever the site
+    // is nested.
+    let mut around: Vec<_> = file.ast.functions_body_containing(span).collect();
+    around.extend(
+        file.ast
+            .functions_containing(span)
+            .filter(|function| !function.body.contains(span) && span.end <= function.body.start),
+    );
+    around
+}
+
+/// Where `span` sits in `function`: `None` in its body, `Some(Some(index))` in
+/// the default value of parameter `index`, `Some(None)` elsewhere in the
+/// parameter list (a default inside a destructuring pattern, which no call
+/// argument decides).
+pub(crate) fn parameter_slot(
+    function: &solid_facts::ast::FunctionFact,
+    span: Span,
+) -> Option<Option<usize>> {
+    if function.body.contains(span) {
+        return None;
+    }
+    Some(function.parameters.iter().position(|parameter| {
+        parameter
+            .initializer
+            .is_some_and(|value| value.contains(span))
+    }))
+}
+
 /// Whether `span` sits in a function literal that is merely *stored* where it
 /// is written -- an object property, a getter, an array element, a returned
 /// closure -- or in a function nested inside one. Constructing such a literal
@@ -83,29 +122,129 @@ pub(super) fn enclosed_by_stored_function(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    file.ast.functions_body_containing(span).any(|literal| {
-        stored_literal_invocation_unproven(file, literal, lookup)
-            && !file
-                .ast
-                .arguments_containing(literal.span)
-                .any(|(call, index)| {
-                    let argument = &call.arguments[index];
-                    !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == literal.span
-                })
-            && !file
-                .ast
-                .calls
-                .iter()
-                .any(|call| file.ast.peel_ts_sugar_span(call.callee) == literal.span)
-            && control_flow_execution_role(
-                file,
-                literal.body,
-                entities,
-                symbol_names,
-                lookup.dialect,
-            )
+    functions_around(file, span)
+        .into_iter()
+        .any(|literal| stored_function(file, literal, entities, symbol_names, lookup))
+}
+
+/// Whether `literal` is a function stored where it is written: not handed to a
+/// call as an argument, not invoked in place, not a control-flow render
+/// callback ([`enclosed_by_stored_function`]).
+fn stored_function(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    stored_literal_invocation_unproven(file, literal, lookup)
+        && !file
+            .ast
+            .arguments_containing(literal.span)
+            .any(|(call, index)| {
+                let argument = &call.arguments[index];
+                !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == literal.span
+            })
+        && !file
+            .ast
+            .calls
+            .iter()
+            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == literal.span)
+        && control_flow_execution_role(file, literal.body, entities, symbol_names, lookup.dialect)
             .is_none()
+}
+
+/// ADR 0452, reads: whether `span` sits in a function written strictly inside
+/// the tracked `region` that the region's tracking pass does not run: a
+/// function stored where it is written (a returned closure, an object member,
+/// [`stored_function`]), or a closure bound to a name that is not entered only
+/// by calls in tracked positions (a name that is returned, stored or called
+/// elsewhere). Building such a function runs nothing, so the region's role is
+/// no proof for what is read in it; it takes none, and the read is
+/// uncertifiable rather than certified tracked.
+pub(super) fn unrun_closure_within(
+    file: &solid_facts::FileFacts,
+    region: Span,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    thread_local! {
+        /// The named closures whose calls are being placed on this thread: a
+        /// call written in the closure itself (recursion) or in another being
+        /// placed asks again, and a closure already in progress is unproven.
+        static IN_PROGRESS: std::cell::RefCell<HashSet<(String, Span)>> = std::cell::RefCell::default();
+    }
+    functions_around(file, span).into_iter().any(|function| {
+        region.contains(function.span)
+            && region != function.span
+            && if function.method_name.is_none() && function_binding_name(file, function).is_some()
+            {
+                // A default value runs when a call omits its argument. Its
+                // function's parameter list is not inert, so the call graph
+                // withholds its call sites (ADR 0339) and nothing places it.
+                if parameter_slot(function, span).is_some() {
+                    return true;
+                }
+                let key = (file.path.to_string(), function.span);
+                lookup.function_component_status(file, function) == ComponentStatus::No
+                    && (!IN_PROGRESS.with(|seen| seen.borrow_mut().insert(key.clone())) || {
+                        let proven = named_helper_runs_during_body(
+                            file,
+                            function,
+                            None,
+                            ExecutionRole::TrackedJsx,
+                            ExecutionRole::TrackedJsx,
+                            lookup,
+                            &mut HashSet::default(),
+                        );
+                        IN_PROGRESS.with(|seen| seen.borrow_mut().remove(&key));
+                        !proven
+                    })
+            } else {
+                stored_function(file, function, entities, symbol_names, lookup)
+            }
     })
+}
+
+/// ADR 0452: the innermost function around `span` that is bound to a name
+/// (`const openFn = () => …`, `function openFn() {…}`) and constructed inside the
+/// tracked scope whose role the lexical position gave `span`. A tracked scope
+/// runs what is written in it, but constructing a named closure runs nothing:
+/// the closure runs where it is called, so the scope's role is no proof for
+/// its body. A stored literal has the same standing
+/// ([`enclosed_by_stored_function`]) but is anonymous; a named one is entered
+/// through its references, which the call sites of the write walk place (a call
+/// in the scope's own pass is a tracked call and proves the write; a closure
+/// only returned or stored has no call and stays unplaced). The caller walks
+/// the returned closure's call sites, once the layers between it and the write
+/// are proven to run in place.
+pub(super) fn named_closure_in_tracked_scope<'a>(
+    file: &'a solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'a solid_facts::ast::FunctionFact> {
+    functions_around(file, span)
+        .into_iter()
+        .filter(|function| {
+            function.method_name.is_none()
+                && function_binding_name(file, function).is_some()
+                && lookup.function_component_status(file, function) == ComponentStatus::No
+                && semantic_execution_role_within(
+                    file,
+                    function.span,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    &mut HashSet::from_iter([write_classification_marker()]),
+                ) == ExecutionRole::TrackedJsx
+        })
+        .min_by_key(|function| function.body.end - function.body.start)
 }
 
 /// Whether `span` is written in an async function after an `await` of that
@@ -270,7 +409,7 @@ pub(super) fn named_callbacks_within_component<'f>(
     lookup: &SemanticLookup<'_>,
 ) -> Vec<&'f solid_facts::ast::FunctionFact> {
     let roles = lookup.named_callback_roles(file);
-    let mut enclosing = file.ast.functions_body_containing(span).collect::<Vec<_>>();
+    let mut enclosing = functions_around(file, span);
     // Innermost first: a function nested in another starts later.
     enclosing.sort_by_key(|function| std::cmp::Reverse(function.span.start));
     enclosing

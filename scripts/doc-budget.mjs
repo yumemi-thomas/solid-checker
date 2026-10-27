@@ -33,7 +33,9 @@ export const FILE_BUDGETS = {
   // And for ADR 0443's untracked-read misses: 32_541 bytes against 32_000: 33_000.
   // And for ADRs 0444-0445's trades (workspace boundary, exported capitalized components): 33_453 bytes against 33_000: 34_000.
   // Merging origin/main (the incremental-daemon track, ADRs 0382-0423) into the catalog-review branch (ADRs 0381, 0424-0448), with ADR 0449: the two sides' raises combine; the merged tree stood at 38,235 bytes: 39_000.
-  "docs/open-work.md": 39_000,
+  // And for the default-value known miss of ADR 0452 (39_161 bytes against 39_000): 39_500.
+  // And for the pinned SC2001 false positive and the L1 line (40_194 bytes): 40_500.
+  "docs/open-work.md": 40_500,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for the
   // catalog review's ADRs 0381 and 0424-0434, 4 bytes under 115_600; and for ADR 0435,
@@ -62,7 +64,9 @@ export const FILE_BUDGETS = {
   // ADR 0423 (the file stood 179,066 bytes before its entry, which adds the real-project gate).
   // Merging origin/main (the incremental-daemon track, ADRs 0382-0423) into the catalog-review branch (ADRs 0381, 0424-0448), with ADR 0449: the two sides' raises combine; the merged tree stood at 231,107 bytes: 232_000.
   // And for ADR 0450 (edits on a project with dispatch sites): 235,494 bytes against 232,000: 236_000.
-  "docs/decisions.md": 236_000,
+  // And for ADR 0452 (the file stood 231,443 bytes before its entry; 233_295 with its read extension, 234_022 with the default-value case): 235_000.
+  // Both together after merging the two branches (ADRs 0450 and 0452): 239,324 bytes: 240_000.
+  "docs/decisions.md": 240_000,
 };
 
 export const GROUP_BUDGETS = [
@@ -89,7 +93,9 @@ export const GROUP_BUDGETS = [
   // And for ADRs 0447-0448 (see above): 669_000.
   // Merging origin/main (the incremental-daemon track, ADRs 0382-0423) into the catalog-review branch (ADRs 0381, 0424-0448), with ADR 0449: the two sides' raises combine; the merged tree stood at 739,773 bytes: 741_000.
   // And for ADR 0450: 744,869 bytes against 741,000: 745_500.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 745_500 },
+  // And for ADR 0452 (its entry and rule-page paragraphs): 743_600 bytes against 741_000: 744_500.
+  // Both together (ADRs 0450 and 0452): 751,131 bytes: 752_000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 752_000 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
@@ -105,7 +111,10 @@ export const GROUP_BUDGETS = [
     // And for the Opus review's fixes (suite bodies per runner, after-await and sync-dispatch variants): 295_000.
     // And for ADRs 0428-0429's fixtures (group key, suppression comments): 297_071 bytes against 295_000: 298_000.
     // And for ADRs 0444-0445's fixtures (workspace boundary, census with no entry): 298_292 bytes against 298_000: 299_500.
-    bytes: 299_500,
+    // And for ADR 0452's two fixtures: 301_497 bytes against 299_500: 302_000.
+    // And ADR 0452's default-value cases: 302_229 bytes against 302_000: 303_000.
+    // And the pinned false positive's fixture: 303_850 bytes against 303_000: 304_500.
+    bytes: 304_500,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

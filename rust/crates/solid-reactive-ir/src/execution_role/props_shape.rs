@@ -251,7 +251,7 @@ pub(super) fn component_child_function_within(
     region: Span,
     span: Span,
 ) -> bool {
-    file.ast.functions_body_containing(span).any(|function| {
+    functions_around(file, span).into_iter().any(|function| {
         region.contains(function.span) && component_child_function(file, function.span)
     })
 }

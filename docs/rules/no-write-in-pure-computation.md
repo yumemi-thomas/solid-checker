@@ -214,6 +214,12 @@ prove an owned-scope write.
 - a function passed by name;
 - a closure the compute only returns.
 
+A closure bound to a name inside the compute (`const openFn = () => setOpen(true)`)
+is built there, not run there (ADR 0452): a call in the compute's own pass is a
+violation, a call only in a leaf scope or handler is not, and one the compute only
+returns or stores is uncertifiable, as the anonymous form is
+(`fixtures/reactive-ir/write-named-closure-in-tracked-scope`).
+
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.
 

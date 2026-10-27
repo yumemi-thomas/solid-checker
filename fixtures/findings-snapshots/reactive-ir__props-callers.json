@@ -110,6 +110,16 @@
       "start": 6185,
       "end": 6196,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/props-callers/App.tsx",
+      "start": 6829,
+      "end": 6840,
+      "fixes": 0
     }
   ]
 }

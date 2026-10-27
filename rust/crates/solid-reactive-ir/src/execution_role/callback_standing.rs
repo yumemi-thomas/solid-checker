@@ -174,7 +174,15 @@ pub(super) fn literal_invocation_unproven(
         return false;
     }
     if literal.method_name.is_none() && function_binding_name(file, literal).is_some() {
-        return !named_helper_runs_during_body(file, literal, None, execution, lookup, following);
+        return !named_helper_runs_during_body(
+            file,
+            literal,
+            None,
+            ExecutionRole::UntrackedRendering,
+            execution,
+            lookup,
+            following,
+        );
     }
     true
 }
@@ -207,6 +215,9 @@ pub(super) fn stored_literal_invocation_unproven(
 /// A call written in a handler, a timer, a stored closure or a callback prop is
 /// unproven by the same walk, so the helper is too; a call cycle is unproven.
 ///
+/// `expected` is the role every call must have (`UntrackedRendering` for a body
+/// helper; `TrackedJsx` for a closure a tracked scope builds, ADR 0452).
+///
 /// With `default_parameter` the question is about that parameter's default
 /// initializer, which runs only when a call leaves the argument out: every call
 /// must then pass fewer arguments than the parameter's position, spread-free.
@@ -214,6 +225,7 @@ pub(super) fn named_helper_runs_during_body(
     file: &solid_facts::FileFacts,
     literal: &solid_facts::ast::FunctionFact,
     default_parameter: Option<usize>,
+    expected: ExecutionRole,
     execution: ExecutionRole,
     lookup: &SemanticLookup<'_>,
     following: &mut HashSet<(String, Span)>,
@@ -274,7 +286,7 @@ pub(super) fn named_helper_runs_during_body(
                 lookup.entities(),
                 lookup.symbol_names(),
                 lookup,
-            ) == ExecutionRole::UntrackedRendering
+            ) == expected
             && !callee_callback_timing_within(caller, *callee, execution, lookup, following)
     });
     following.remove(&key);
@@ -984,7 +996,7 @@ pub(super) fn context_provider_value_role(
     // The provider's implementation eagerly reads props.value inside
     // untrack. A function expression is the one exception: reading
     // the getter only creates/stores the function; its body is not run.
-    let stores_function = file.ast.functions_body_containing(span).any(|function| {
+    let stores_function = functions_around(file, span).into_iter().any(|function| {
         element.attributes.iter().any(|attribute| {
             attribute
                 .expression

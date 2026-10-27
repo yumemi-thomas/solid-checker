@@ -236,9 +236,8 @@ fn source_execution_role(
     // does a tracked region around the element. Like an attribute's
     // function, it is placed by the arms that follow the value into the
     // component, or stays unproven; only facts inside it place code there.
-    let within = file
-        .ast
-        .functions_body_containing(span)
+    let within = functions_around(file, span)
+        .into_iter()
         .filter(|function| component_child_function(file, function.span))
         .min_by_key(|function| function.span.end - function.span.start)
         .map(|function| function.span);

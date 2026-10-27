@@ -18,7 +18,9 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ("action-called-in-owned-scope", 2),
         // Review round 4: two zero-parameter `Show` children are tracked
         // inserts, not strict-read callbacks.
-        ("strict-read-untracked", 18),
+        // Two of them are uncertifiable reads in the closures the two `nested`
+        // memos return (ADR 0452), pinned below.
+        ("strict-read-untracked", 20),
         ("reactive-read-after-await", 19),
         // ADR 0294: the exported `install(read: Accessor<number>)` shapes.
         ("reactive-dispatch-unresolved", 3),
@@ -142,6 +144,16 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             "component-return-valid.tsx",
             [("strict-read-untracked", 1)].as_slice(),
         ),
+        // ADR 0452: the closure an async memo returns is built in the memo, so
+        // its read has no placement (an uncertifiable result, no violation).
+        (
+            "after-await-extended-valid.tsx",
+            [("strict-read-untracked", 1)].as_slice(),
+        ),
+        (
+            "await-control-flow-valid.tsx",
+            [("strict-read-untracked", 1)].as_slice(),
+        ),
         (
             "effect-apply-valid.tsx",
             [("missing-owner", 3), ("cleanup-return-unresolved", 0)].as_slice(),
@@ -254,9 +266,15 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
                 findings_for_rule(&findings, rule)
                     .into_iter()
                     .all(|finding| {
+                        // The file name, not a suffix: `await-control-flow-valid.tsx`
+                        // ends with `control-flow-valid.tsx`.
                         !finding["primaryLocation"]["path"]
                             .as_str()
-                            .is_some_and(|path| path.ends_with(file))
+                            .is_some_and(|path| {
+                                std::path::Path::new(path)
+                                    .file_name()
+                                    .is_some_and(|name| name == file)
+                            })
                     }),
                 "unexpected {file} / {rule}: {findings:#?}"
             );
