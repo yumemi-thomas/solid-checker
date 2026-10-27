@@ -25,7 +25,7 @@ export const VERSION = 1;
 /** Helper forms: a same-file function taking `cb: () => unknown`. */
 export const HELPER_FORMS = ["call", "defaultCall", "returnClosure", "returnCb", "storeCb", "timerCb"];
 /** `prim` names: the Solid primitive or host API a function expression is handed to. */
-export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro"];
+export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro", "render", "tracked", "action"];
 
 export const num = (n) => ({ k: "num", n });
 export const read = (sig, extra = {}) => ({ k: "read", sig, ...extra });
@@ -41,8 +41,14 @@ export const own = (op, extra = {}) => ({
   ...(op === "effect" ? { fn: fn([ret(num(1))]), apply: fn([]) } : op === "context" ? {} : { fn: fn([]) }),
   ...extra,
 });
+/**
+ * `{ k: "use", code, variant, bind, sig?, ... }`: the call a misuse program is about (the misuse profile, misuse.mjs): one Solid API
+ * call or reactive access that the runtime diagnoses under `code`, bound by a direct import, a namespace, an alias, a destructuring or
+ * a wrapper (`bind`). misuse.mjs prints it and types it.
+ */
+export const use = (code, extra = {}) => ({ k: "use", code, variant: null, bind: "direct", ...extra });
 /** True for a node that is a site of interest. */
-export const isSite = (node) => (node.k === "read" || node.k === "write" || node.k === "own") && Boolean(node.site);
+export const isSite = (node) => (node.k === "read" || node.k === "write" || node.k === "own" || node.k === "use") && Boolean(node.site);
 export const ref = (name) => ({ k: "ref", name });
 export const member = (obj, key) => ({ k: "member", obj, key });
 export const obj = (fields) => ({ k: "obj", fields: fields.map(([key, e]) => ({ k: "field", key, e })) });
@@ -81,6 +87,10 @@ export const signal = (name, init, role = "src", scope = "component") => ({
  */
 export const storeSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store" });
 export const memoSignal = (name) => ({ ...signal(name, 0, "src"), kind: "memo" });
+/** An async memo (`createMemo(async () => 1)`): reading it is pending until the promise settles. */
+/** A store whose property may be deleted (`createStore<{ v?: number }>`). */
+export const storeOptSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-opt" });
+export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
 export const actionSignal = (name, target, value) => ({ ...signal(name, 0, "src"), kind: "action", target, value });
 
 // ---------------------------------------------------------------------------
@@ -295,6 +305,10 @@ export function validate(program, { maxNodes = 400 } = {}) {
         case "read": sigCheck(e.sig, "read"); return T.num;
         case "write": sigCheck(e.sig, "write"); return T.num;
         case "own": return ownType(e, scope);
+        case "use": {
+          for (const name of e.sigs ?? []) sigCheck(name, "use");
+          return T.unknown;
+        }
         case "ref": {
           const type = lookup(scope, e.name);
           if (!type) { fail(`${where}: ${e.name} is not declared before use`); return null; }
@@ -377,6 +391,16 @@ export function validate(program, { maxNodes = 400 } = {}) {
           return T.fn(T.void);
         }
         case "micro": fnTypeChecked(e.fn, scope, "free"); return T.void;
+        // createRenderEffect(compute, apply): like createEffect, its apply returns void | (() => void).
+        case "render": {
+          const compute = fnTypeChecked(e.fn, scope, RETURNS.effect);
+          if (!e.apply) fail(`${where}: render effect without an apply`);
+          else fnTypeChecked(e.apply, scope, RETURNS.applyFn, [["v", compute.ret]]);
+          return T.void;
+        }
+        case "tracked": fnTypeChecked(e.fn, scope, "free"); return T.void;
+        // action(function* () { ... }): the generator body is a block; its result is the action function.
+        case "action": fnTypeChecked(e.fn, scope, "free"); return T.fn(T.unknown);
         case "settled": fnTypeChecked(e.fn, scope, RETURNS.settled); return T.void;
         // onCleanup returns a Disposable in the published typings, not void.
         case "cleanup": fnTypeChecked(e.fn, scope, RETURNS.cleanup); return T.unknown;

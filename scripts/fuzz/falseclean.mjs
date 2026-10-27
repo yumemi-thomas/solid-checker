@@ -77,7 +77,7 @@ export function stackShape(lineTable, frames) {
 /** The call a diagnostic at `line` is about: an owner call or a payload read/write there beats a deeper node that is only its argument. */
 export function callAtLine(lineTable, line) {
   const rows = nodesAtLine(lineTable, line);
-  return rows.find((row) => /^(own:|read$|write$)/.test(row.label)) ?? rows[0] ?? null;
+  return rows.find((row) => /^(own:|use:|read$|write$)/.test(row.label)) ?? rows[0] ?? null;
 }
 
 /**

@@ -14,6 +14,7 @@
 // the last line, so no line moves. The type check, the fast path and Chrome run `runText`.
 import { INSTRUMENT_PRELUDE } from "./hits.mjs";
 import { isSite, paramTsType, signalTable, walk } from "./model.mjs";
+import { AUX, MODULE, describeUse } from "./misuse.mjs";
 
 const MARK_OPEN = "\u0001";
 const MARK_CLOSE = "\u0002";
@@ -23,15 +24,19 @@ const SPAN_OPEN = "\u0003";
 const SPAN_OPEN_END = "\u0004";
 const SPAN_CLOSE = "\u0005";
 const SPAN_CLOSE_END = "\u0006";
+// The aux marker: the line of a wrapper's inner call (the misuse profile), found like a site marker and removed with it.
+const AUX_OPEN = "\u0007";
+const AUX_CLOSE = "\u0008";
 /** Node kinds the line table records: statements, view items, and every expression that is a call or a function. */
 const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "child", "attr", "show", "for",
-  "read", "write", "own", "fn", "call", "set", "getOwner", "iife", "iter", "prim"]);
+  "read", "write", "own", "use", "fn", "call", "set", "getOwner", "iife", "iter", "prim"]);
 
 /** A node's label in the line table and in the coarse dedupe key: its kind and, where it matters, what it is. */
 export function nodeLabel(node) {
   switch (node.k) {
     case "prim": return `prim:${node.name}`;
     case "own": return `own:${node.op}`;
+    case "use": return `use:${node.code}`;
     case "fn": return `fn:${node.form}${node.async ? ":async" : ""}`;
     case "iter": return `iter:${node.method}`;
     default: return node.k;
@@ -113,6 +118,10 @@ function render(program, instrument) {
   const used = new Set(["createSignal"]);
   const signals = signalTable(program);
   const helpers = new Map((program.helpers ?? []).map((helper) => [helper.name, helper]));
+  // The misuse profile: what each `use` node prints and needs (imports, wrapper functions, aliases).
+  const uses = new Map();
+  for (const { node } of walk(program)) if (node.k === "use") uses.set(node, describeUse(node, signals));
+  const auxLine = (node, line) => line.replace(AUX, siteIndex.has(node) ? `${AUX_OPEN}${siteIndex.get(node)}${AUX_CLOSE}` : "");
 
   // The hit ledger: one id per counter, allocated in print order (a function of the tree alone).
   const ledger = [];
@@ -217,6 +226,7 @@ function render(program, instrument) {
       case "read": return siteCall(e, `${e.sig}()`);
       case "write": return siteCall(e, writeText(e));
       case "own": return siteCall(e, ownText(e, depth));
+      case "use": return siteCall(e, uses.get(e).text);
       case "ref": return e.name;
       case "member": return `${expr(e.obj, depth)}.${e.key}`;
       case "obj": return e.fields.length ? `{ ${e.fields.map((f) => {
@@ -255,7 +265,7 @@ function render(program, instrument) {
     }
   }
   function primText(e, depth) {
-    const f = e.name === "rootd" ? null : expr(e.fn, depth);
+    const f = e.name === "rootd" || e.name === "action" ? null : expr(e.fn, depth);
     switch (e.name) {
       case "memo": used.add("createMemo"); return `createMemo(${f})`;
       case "effect": used.add("createEffect"); return `createEffect(${f}, ${fnText(e.apply, depth, { header: "(v)" })})`;
@@ -272,6 +282,13 @@ function render(program, instrument) {
       case "cleanup": used.add("onCleanup"); return `onCleanup(${f})`;
       case "timer": return `setTimeout(${f}, 0)`;
       case "then": return `Promise.resolve().then(${f})`;
+      case "render": used.add("createRenderEffect"); return `createRenderEffect(${f}, ${fnText(e.apply, depth, { header: "(v)" })})`;
+      case "tracked": used.add("createTrackedEffect"); return `createTrackedEffect(${f})`;
+      case "action": {
+        used.add("action");
+        const { head, body } = fnParts(e.fn, depth, "()");
+        return `action(function* ${head} ${body})`;
+      }
       default: throw new Error(`cannot print prim ${e.name}`);
     }
   }
@@ -311,6 +328,8 @@ function render(program, instrument) {
       case "store": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init} });`;
       case "memo": used.add("createMemo"); return `const ${sig.name} = createMemo(() => 1);`;
       case "action": used.add("action"); return `const ${sig.name} = action(function* () { ${signals.get(sig.target).setter}(${sig.value}); });`;
+      case "async": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => 1);`;
+      case "store-opt": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({ v: ${sig.init} });`;
       default: return `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
     }
   };
@@ -318,6 +337,11 @@ function render(program, instrument) {
   // `useContext(Ctx)`: one module-level context with a default value (a read with no provider is then not an error; no owner is).
   const usesContext = [...walk(program)].some(({ node }) => node.k === "own" && node.op === "context");
   if (usesContext) { used.add("createContext"); out.push("const Ctx = createContext(7);", ""); }
+  const useList = [...uses.entries()];
+  for (const [node, described] of useList) {
+    if (described.contextLine) { used.add("createContext"); out.push(described.contextLine, ""); }
+    for (const line of described.moduleLines) out.push(auxLine(node, line), "");
+  }
   const moduleSignals = program.moduleSignals ?? [];
   moduleSignals.forEach((sig) => out.push(signalLine(sig)));
   if (moduleSignals.length) out.push("");
@@ -329,14 +353,17 @@ function render(program, instrument) {
     out.push(`export function ${component.name}() {${entry === null ? "" : ` __h(${entry});`}`);
     within({ entry, inDefault: false }, () => {
       for (const sig of component.signals) out.push(`${INDENT}${signalLine(sig)}`);
+      for (const [node, described] of useList) for (const line of described.preludeLines) out.push(`${INDENT}${auxLine(node, line)}`);
       for (const stmt of component.body) out.push(`${INDENT}${stmtText(stmt, 1)}`);
       out.push(`${INDENT}return (`, `${INDENT}${INDENT}<div>`);
       for (const item of component.view) out.push(...viewText(item, 3));
     });
     out.push(`${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
-  const importNames = [...used].sort();
-  const header = `import { ${importNames.join(", ")} } from "solid-js";\n\n`;
+  const importNames = [...new Set([...used, ...useList.flatMap(([, described]) => described.solid)])].sort();
+  const webNames = [...new Set(useList.flatMap(([, described]) => described.web))].sort();
+  const namespaces = [...new Set(useList.flatMap(([, described]) => described.namespaces))].sort();
+  const header = `import { ${importNames.join(", ")} } from "solid-js";\n${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}\n`;
   // Printing the body filled `used`; the header goes first, so line numbers shift by its height.
   const body = out.join("\n");
   const full = `${header}${body}`.replace(/\n+$/, "\n");
@@ -345,7 +372,10 @@ function render(program, instrument) {
   const siteLines = new Map();
   const markPattern = new RegExp(`${MARK_OPEN}(\\d+)${MARK_CLOSE}`, "g");
   const hitLines = new Map();
+  const auxPattern = new RegExp(`${AUX_OPEN}(\\d+)${AUX_CLOSE}`, "g");
+  const auxLines = new Map();
   lines.forEach((line, row) => {
+    for (const match of line.matchAll(auxPattern)) auxLines.set(Number(match[1]), [...(auxLines.get(Number(match[1])) ?? []), row + 1]);
     for (const match of line.matchAll(markPattern)) siteLines.set(Number(match[1]), row + 1);
     if (instrument) for (const match of line.matchAll(/__h\((\d+)\)/g)) hitLines.set(Number(match[1]), row + 1);
   });
@@ -358,10 +388,11 @@ function render(program, instrument) {
   });
   const lineTable = spans.map(({ node, path }, id) => ({ line: starts.get(id), endLine: ends.get(id), path, label: nodeLabel(node) }))
     .filter((row) => row.line !== undefined && row.endLine !== undefined && row.path);
-  const text = full.replace(markPattern, "").replace(spanOpen, "").replace(spanClose, "");
+  const text = full.replace(markPattern, "").replace(auxPattern, "").replace(spanOpen, "").replace(spanClose, "");
   const sites = sitePaths.map(({ node, path }, index) => ({
     id: `s${index + 1}`, kind: node.k, sig: node.sig, op: node.k === "own" ? node.op : undefined, value: node.k === "write" ? node.value : undefined,
     line: siteLines.get(index), path, witness: node.witness ?? null,
+    ...(node.k === "use" ? { code: node.code, bind: node.bind, aux: auxLines.get(index) ?? [] } : {}),
   }));
   for (const row of ledger) row.line = hitLines.get(row.hit);
   return { text, sites, siteHits, ledger, lineTable };

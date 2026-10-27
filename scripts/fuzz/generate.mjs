@@ -16,6 +16,7 @@
 // removed by validating the finished component and drawing again, up to a bound.
 import { createRng } from "./rng.mjs";
 import { buildDisposal } from "./disposal.mjs";
+import { buildMisuse } from "./misuse.mjs";
 import {
   validate, signal, num, read, write, ref, member, obj, call, iife, iter, fn, param, prim, expr, decl, ret,
   awaitStmt, probe, button, child, attr, show, forEach, set, exprTsType, getOwner, helper, component, program as makeProgram,
@@ -71,7 +72,7 @@ export function generateProgram(seed, options = {}) {
   // One component per page: a thrown dev error halts reactivity for every root on the page, so a second
   // component would hide or fake the first one's behaviour. More than one is for experiments only.
   const count = options.components ?? 1;
-  const ctx = { rng, profile, plan: options.disposalPlan, counters: {}, helpers: new Map(), moduleSignals: [] };
+  const ctx = { rng, profile, plan: options.disposalPlan, misusePlan: options.misusePlan, counters: {}, helpers: new Map(), moduleSignals: [] };
   const components = [];
   for (let index = 0; index < count; index += 1) {
     const control = index > 0 && rng.chance(0.5);
@@ -90,6 +91,8 @@ function buildValidComponent(ctx, index, control) {
     // A drawn component that failed validation consumed names; restore them so a retry is stable.
     ctx.counters = snapshot.counters; ctx.helpers = snapshot.helpers; ctx.moduleSignals = snapshot.moduleSignals;
   }
+  // A misuse program is its template: a fallback would hide a broken one.
+  if (ctx.profile === "misuse") throw new Error(`misuse template for seed ${ctx.seed ?? "?"} failed validation: ${validate(makeProgram({ seed: 0, helpers: [...ctx.helpers.values()], moduleSignals: ctx.moduleSignals, components: [buildComponent(ctx, index, control)] })).join("; ")}`);
   return fallbackComponent(ctx, index);
 }
 
@@ -122,6 +125,11 @@ function buildComponent(ctx, index, control) {
     // Writes that run while an owner is disposed (disposal.mjs). Asked for with `--profile disposal`, never drawn at random.
     const built = buildDisposal({ rng, name: (prefix) => name(ctx, prefix), counter: (key) => counter(ctx, key), ensureHelper: (form) => ensureHelper(ctx, form) }, ctx.plan);
     return { ...component(`C${index + 1}`, built.sigs, built.body, built.view), shape: built.shape };
+  }
+  if (profile === "misuse") {
+    // Provokes one claimed diagnostic code at one marked site (misuse.mjs). Asked for with `--profile misuse`, never drawn at random.
+    const built = buildMisuse({ rng, name: (prefix) => name(ctx, prefix), ensureHelper: (form) => ensureHelper(ctx, form) }, ctx.misusePlan);
+    return { ...component(`C${index + 1}`, built.sigs, built.body, built.view), shape: built.shape, misuse: built.misuse };
   }
   const sigs = [];
   const view = [];

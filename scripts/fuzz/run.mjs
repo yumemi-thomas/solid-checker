@@ -32,16 +32,16 @@ import { mapPoolSettled } from "../lib/pool.mjs";
 import { cleanupEvidence } from "./disposal.mjs";
 
 const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "help"]);
-const VALUES = new Set(["seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch", "ledger"]);
+const VALUES = new Set(["seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch", "ledger", "code", "context", "binding", "layer", "variant"]);
 
-export function parseArgs(argv, { extraValues = [] } = {}) {
+export function parseArgs(argv, { extraValues = [], extraFlags = [] } = {}) {
   const options = { seed: 1, count: 20, shrinkMode: "discovery", budget: 120 };
   for (let index = 0; index < argv.length; index += 1) {
     const raw = argv[index];
     if (!raw.startsWith("--")) throw new Error(`unexpected argument ${raw}`);
     const key = raw.slice(2);
     const camel = key.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-    if (FLAGS.has(key)) { options[camel] = true; continue; }
+    if (FLAGS.has(key) || extraFlags.includes(key)) { options[camel] = true; continue; }
     if (!VALUES.has(key) && !extraValues.includes(key)) throw new Error(`unknown option ${raw}`);
     if (argv[index + 1] === undefined) throw new Error(`${raw} needs a value`);
     index += 1;
@@ -84,7 +84,8 @@ export function generateEntries(options) {
   const entries = [];
   for (let index = 0; index < options.count; index += 1) {
     const seed = programSeed(options.seed, index);
-    const program = generateProgram(seed, { profile: options.profile, components: options.components });
+    const misusePlan = options.profile === "misuse" ? Object.fromEntries(["code", "context", "binding", "layer", "variant"].filter((key) => options[key] !== undefined).map((key) => [key, options[key]])) : undefined;
+    const program = generateProgram(seed, { profile: options.profile, components: options.components, misusePlan });
     entries.push({ program, built: buildCase(program, { id: `fuzz-${seed}` }) });
   }
   return entries;
