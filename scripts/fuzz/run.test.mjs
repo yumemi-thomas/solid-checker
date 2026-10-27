@@ -34,6 +34,7 @@ describe("parallelism", () => {
     expect(defaultWorkers(14, { virtualClock: true })).toBe(14);
     expect(defaultWorkers(1, { virtualClock: true })).toBe(1);
     expect(configFrom(parseArgs(["--workers", "5"]), "out").workers).toBe(5);
-    expect(configFrom(parseArgs(["--virtual-clock"]), "out").workers).toBe(defaultWorkers(undefined, { virtualClock: true }));
+    expect(configFrom(parseArgs([]), "out")).toMatchObject({ virtualClock: true, workers: defaultWorkers(undefined, { virtualClock: true }) });
+    expect(configFrom(parseArgs(["--real-clock"]), "out")).toMatchObject({ virtualClock: false, workers: defaultWorkers(undefined) });
   });
 });

@@ -32,7 +32,7 @@ import { mapPoolSettled } from "../lib/pool.mjs";
 import { cleanupEvidence } from "./disposal.mjs";
 import { containerEvidence } from "./container.mjs";
 
-const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "containers", "virtual-clock", "help"]);
+const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "containers", "real-clock", "help"]);
 const VALUES = new Set(["seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch", "shrink-control", "ledger", "code", "context", "binding", "layer", "variant"]);
 
 export function parseArgs(argv, { extraValues = [], extraFlags = [] } = {}) {
@@ -80,13 +80,13 @@ export function configFrom(options, out) {
     tsc: options.tsc ?? process.env.FUZZ_TSC ?? DEFAULT_TSC,
     casesDir: join(out, "cases"),
     concurrency: options.concurrency ?? defaultParallelism(undefined, { allCores: options.allCores }),
-    workers: options.workers ?? defaultWorkers(undefined, { virtualClock: Boolean(options.virtualClock) }),
+    workers: options.workers ?? defaultWorkers(undefined, { virtualClock: !options.realClock }),
     keepWork: Boolean(options.keepWork),
     // The checker's neutrality control on the twin is how a case with a generated package is vetted for Chrome (it cannot ask the oracle).
     control: Boolean(options.control) || options.profile === "packages",
     deadSite: Boolean(options.deadSite),
     shrinkControl: options.shrinkControl ?? "accepted",
-    virtualClock: Boolean(options.virtualClock),
+    virtualClock: !options.realClock,
     instrument: !options.noInstrument,
   };
 }
@@ -137,7 +137,7 @@ const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--
   [--all-cores]       every core for the checker/type-check concurrency (the default is half the cores); the Vitest workers default to twice the cores (--workers N)
   [--shrink-jobs N]   shrink N signature groups at once (default 4); [--shrink-batch N] candidates judged per round (default 8)
   [--shrink-control accepted|each]   with --control, ask for the control of each accepted reduction (default) or of every candidate tried
-  [--virtual-clock]   the program's timers and the runner's waits run on a virtual clock (fast/virtual-clock.mjs): no wall time spent waiting
+  [--real-clock]      the fast path waits on the wall clock (the default is the virtual clock, fast/virtual-clock.mjs); Chrome always uses its own
   [--no-daemon]       one Vitest process per batch instead of the long-lived fast host
   [--no-instrument]   run the clean text with no hit ledger (the baseline of the neutrality regression)
   [--generate-only]   write and type-check the programs, run nothing else
