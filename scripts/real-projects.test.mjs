@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "vitest";
 
-import { ceilingFor, editText, manifestErrors, markdownTable, median, signP, summarize } from "../benchmarks/lib/real-projects.mjs";
+import { DIFFERING_RATIO_LIMIT, RATIO_LIMIT, ceilingFor, editText, manifestErrors, markdownTable, median, signP, summarize } from "../benchmarks/lib/real-projects.mjs";
 
 const manifest = JSON.parse(readFileSync("benchmarks/real-projects/manifest.json", "utf8"));
 
@@ -68,13 +68,22 @@ test("the gate is the median of paired ratios, not the ratio of medians", () => 
   assert.equal(ok.fails, false);
 });
 
-test("differing answers are reported and leave the ratio ungated", () => {
-  const rows = pairs("p", "code", [100, 100], [200, 200], { head: { hash: "other" } });
-  const [line] = summarize(rows);
-  assert.equal(line.answersEqual, false);
-  assert.equal(line.ratioGated, false);
-  assert.equal(line.fails, false);
-  assert.match(markdownTable([line]), /\| NO \|.*answers differ/);
+test("differing answers are gated at the looser ratio", () => {
+  assert.equal(RATIO_LIMIT, 1.25);
+  assert.equal(DIFFERING_RATIO_LIMIT, 1.5);
+  const other = { head: { hash: "other" } };
+  const [within] = summarize(pairs("p", "code", [100, 100], [140, 140], other));
+  assert.equal(within.answersEqual, false);
+  assert.equal(within.ratioGated, true);
+  assert.equal(within.fails, false);
+  assert.match(markdownTable([within]), /\| NO \|.*answers differ; ratio gated at 1\.5/);
+  const [over] = summarize(pairs("p", "code", [100, 100], [200, 200], other));
+  assert.equal(over.fails, true);
+  assert.match(over.notes.join(), /answers differ; ratio gated at 1\.5.*ratio above 1\.5/);
+  // The same ratio with equal answers is the stricter gate.
+  const [equal] = summarize(pairs("p", "code", [100, 100], [140, 140]));
+  assert.equal(equal.fails, true);
+  assert.match(equal.notes.join(), /ratio above 1\.25/);
 });
 
 test("a head answer outside its retained daemon fails; a base one only ungates", () => {
@@ -100,4 +109,62 @@ test("an incomplete pair is not a measurement", () => {
   const [line] = summarize([row("p", "code", 0, "base", 100)]);
   assert.equal(line.n, 0);
   assert.equal(line.fails, true);
+});
+
+// Reports recorded by `benchmarks/real-projects.mjs --out`: the three CI
+// projects (n 5, one runner) with the arms below, one verdict each (ADR 0451).
+const recorded = name =>
+  readFileSync(`benchmarks/real-projects/fixtures/${name}.jsonl`, "utf8")
+    .trim()
+    .split("\n")
+    .map(line => JSON.parse(line));
+const verdicts = name => Object.fromEntries(summarize(recorded(name)).map(line => [`${line.project}:${line.kind}`, line]));
+
+test("recorded: the stack tip against main moved answers and slowed app-game 1.9 to 2.5x, which now fails", () => {
+  const lines = verdicts("stack-against-main-answers-differ");
+  for (const kind of ["code", "mid", "body", "import"]) {
+    const line = lines[`app-game:${kind}`];
+    assert.equal(line.answersEqual, false, kind);
+    assert.ok(line.ratio > DIFFERING_RATIO_LIMIT, `${kind} ${line.ratio}`);
+    assert.equal(line.fails, true, kind);
+    assert.match(line.notes.join(), /ratio above 1\.5/);
+  }
+  // The same run's other projects stay inside the bound: a moved answer is not a failure by itself.
+  for (const [key, line] of Object.entries(lines)) {
+    if (key.startsWith("app-game:")) continue;
+    assert.equal(line.answersEqual, false, key);
+    assert.equal(line.fails, false, key);
+  }
+});
+
+test("recorded: the fix against the stack tip returns the same answers and passes the 1.25 gate", () => {
+  const lines = Object.values(verdicts("fix-against-stack-answers-equal"));
+  assert.equal(lines.length, 11);
+  for (const line of lines) {
+    assert.equal(line.answersEqual, true);
+    assert.equal(line.fails, false, `${line.project}:${line.kind}`);
+    assert.ok(line.ratio <= RATIO_LIMIT);
+  }
+});
+
+test("recorded: the same two builds with the arms reversed return the same answers and fail the 1.25 gate", () => {
+  const lines = verdicts("stack-against-fix-answers-equal");
+  for (const kind of ["code", "mid", "body", "import"]) {
+    const line = lines[`app-game:${kind}`];
+    assert.equal(line.answersEqual, true, kind);
+    assert.equal(line.fails, true, kind);
+    assert.match(line.notes.join(), /ratio above 1\.25/);
+  }
+  assert.equal(lines["sensor-sim:code"].fails, false);
+});
+
+test("recorded: the fix against main moves answers within the looser bound and passes", () => {
+  const lines = Object.values(verdicts("fix-against-main-answers-differ"));
+  assert.equal(lines.length, 11);
+  for (const line of lines) {
+    assert.equal(line.answersEqual, false);
+    assert.equal(line.ratioGated, true);
+    assert.equal(line.fails, false, `${line.project}:${line.kind}`);
+    assert.ok(line.ratio <= DIFFERING_RATIO_LIMIT);
+  }
 });

@@ -61,14 +61,16 @@ export const FILE_BUDGETS = {
   // ADR 0420 (the file stood 173,980 bytes before its entry); and for
   // ADR 0421 (the file stood 176,343 bytes before its entry); and for ADR 0422 (the file stood
   // 178,593 bytes before its entry, which removes the CI performance workflow); and for
-  // ADR 0423 (the file stood 179,066 bytes before its entry, which adds the real-project gate).
+  // ADR 0423 (the file stood 179,066 bytes before its entry, which adds the real-project gate);
+  // and for ADR 0451 (the file stood 181,000 bytes of 181,000 before its entry, which gates moved answers).
   // Merging origin/main (the incremental-daemon track, ADRs 0382-0423) into the catalog-review branch (ADRs 0381, 0424-0448), with ADR 0449: the two sides' raises combine; the merged tree stood at 231,107 bytes: 232_000.
   // And for ADR 0450 (edits on a project with dispatch sites): 235,494 bytes against 232,000: 236_000.
   // And for ADR 0452 (the file stood 231,443 bytes before its entry; 233_295 with its read extension, 234_022 with the default-value case): 235_000.
   // Both together after merging the two branches (ADRs 0450 and 0452): 239,324 bytes: 240_000.
   // And for ADR 0453 (the file stood 231,598 bytes before its entry): 233_000.
   // All three (ADRs 0450, 0452, 0453): 240,224 bytes: 241_000.
-  "docs/decisions.md": 241_000,
+  // With main's ADR 0451 (PR #119) merged in: 241,944 bytes: 242_500.
+  "docs/decisions.md": 242_500,
 };
 
 export const GROUP_BUDGETS = [
@@ -83,7 +85,8 @@ export const GROUP_BUDGETS = [
   // its entry, which added 2,363); and for ADR 0421 (the group stood 649,148 bytes before
   // its entry, which added 2,250).
   // and for ADR 0422 (the group stood 650,999 bytes before its entry, which added about 800);
-  // and for ADR 0423 (the group stood 651,778 bytes before its entry, which added 1,762).
+  // and for ADR 0423 (the group stood 651,778 bytes before its entry, which added 1,762);
+  // and for ADR 0451 (the group stood 653,800 bytes against 653,800 before its entry, which added about 1,500).
   // Raised for ADRs 0437-0438 and their rule-page mechanics: docs/ stood at 604_388 bytes.
   // And for ADR 0439 and its two rule pages: 607_028 bytes against 605_000.
   // And for ADR 0438's extension (decisions, open work, two rule pages): 610_122 bytes.
@@ -99,7 +102,8 @@ export const GROUP_BUDGETS = [
   // Both together (ADRs 0450 and 0452): 751,131 bytes: 752_000.
   // And for ADR 0453 (the group stood 740,735 bytes before its entry): 742_000.
   // All three (ADRs 0450, 0452, 0453): 752,031 bytes: 753_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 753_000 },
+  // With main's ADR 0451 (PR #119) merged in: 753,780 bytes: 754_500.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 754_500 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
