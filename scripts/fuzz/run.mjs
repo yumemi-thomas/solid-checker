@@ -198,10 +198,9 @@ async function sweep(options, config, out) {
         id: value.built.id, dir: value.caseDir ?? join(config.casesDir, value.built.id), sites: value.built.sites,
         ...(hasPackages(value.built) ? { checker: { ok: true, findings: value.checker.findings, perturbed: value.twinChecker?.ok ? findingsDiff(value.checker.findings, value.twinChecker.findings) : ["no checker run on the twin (use --control)"] } } : {}),
       }));
-      // The clean case first, in Chrome: the oracle's own findings on the clean text are what its findings on the twin must equal
+      // Each case runs twice in Chrome in one oracle call: the twin, and the clean case, whose findings are what the twin's must equal
       // (the oracle reports kinds the fast checker adapter does not, so the fast pipeline's findings are not the reference).
-      const cleanRuns = await runChrome(chromeCases, { ...chromeOptions, control: true });
-      return runChrome(chromeCases.map((c) => ({ ...c, findings: cleanRuns.get(c.id)?.checker?.ok ? cleanRuns.get(c.id).checker.findings : null })), chromeOptions);
+      return runChrome(chromeCases, { ...chromeOptions, withClean: true });
     };
     const chrome = options.confirmWithChrome && candidates.length ? await chromeRecords(candidates) : new Map();
     for (const value of candidates) {

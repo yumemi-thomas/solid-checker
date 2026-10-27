@@ -78,9 +78,9 @@ export const chromeChecker = (row, cleanFindings) => {
   return { ok: !["harness-error", "type-error"].includes(row.verdict), error: row.error, findings, perturbed };
 };
 
-function spawnOracle(args, env) {
+function spawnOracle(args, env, oracle = ORACLE) {
   return new Promise((done) => {
-    const child = spawn(process.execPath, [ORACLE, ...args], { cwd: repo, env, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(process.execPath, [oracle, ...args], { cwd: repo, env, stdio: ["ignore", "pipe", "pipe"] });
     let log = "";
     child.stdout.on("data", (chunk) => { log += chunk; });
     child.stderr.on("data", (chunk) => { log += chunk; });
@@ -89,23 +89,51 @@ function spawnOracle(args, env) {
 }
 
 /**
+ * The CLI closes the browser, the page context and the dev server with a 2 s limit each (packages/cli/scripts/feedback-browser.mjs
+ * `closeFeedbackResources`); on a loaded machine a close overruns it and the run fails after it has finished its work. That is a
+ * failure of the harness, not a finding, and the same case run again succeeds.
+ */
+export const isCloseTimeout = (row) => row?.verdict === "harness-error" && /close timed out after \d+ ms/.test(String(row.error ?? ""));
+
+/** The id under which a case's clean control runs in the same oracle call as its twin (`withClean`). */
+export const CLEAN_ID = (id) => `${id}~clean`;
+
+/** One oracle call over a staged cases directory; returns its rows by id. */
+async function oracleRows(root, { out, install, browser, concurrency, env, bin, typefacts, oracle }, only) {
+  const result = join(resolve(out), `chrome-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.json`);
+  const args = ["--cases", root, "--out", result, "--install", resolve(install), "--cache", "off",
+    ...(only ? ["--only", only.join(",")] : []),
+    ...(browser ? ["--browser", browser] : []), ...(concurrency ? ["--concurrency", String(concurrency)] : [])];
+  const run = await spawnOracle(args, { ...env, SOLID_CHECKER_NATIVE_BIN: bin, SOLID_TYPEFACTS_BIN: typefacts }, oracle);
+  if (!existsSync(result)) throw new Error(`the oracle wrote no result (exit ${run.status}): ${run.log.slice(-800)}`);
+  return new Map(JSON.parse(readFileSync(result, "utf8")).results.map((row) => [row.id, row]));
+}
+
+/**
  * Runs the cases through scripts/runtime-oracle.mjs and returns `Map<id, { row, runtime, checker }>`.
  * Exit status 1 from the oracle (a finding it reports as unproven-clean, say) is not a failure here.
  * Each case runs its instrumented twin (App.run.txt as App.tsx, oracle.run.json as oracle.json) so the hit ledger is read
  * back; `control: true` runs the clean case unchanged instead. `findings` (the oracle's own on the clean text, from a
  * `control: true` run) are compared with the oracle's on the twin; without them nothing is compared.
+ * `withClean: true` runs each case's clean control in the same oracle call as its twin (one pool, one process, no tail between
+ * two calls) and compares the twin's findings with the control's: the records are the ones a `control: true` call followed by
+ * a call with `findings` gives.
+ * A case whose run ended in a close timeout (`isCloseTimeout`) is run once more, alone, up to `closeRetries` times (default 1); a case
+ * that still fails keeps its row. A retried case's record says `retries`.
  * A case may carry `checker` (a record as `chromeChecker` returns): the oracle's own run is `feedback run`, which does not read dependency
  * packages from source, so a case that ships a package is judged by the checker run as a user's is (checker.mjs ORDINARY_ARGS) and Chrome
  * supplies the runtime only.
  * @param {{ id: string, dir: string, sites: object[], findings?: object[], checker?: object }[]} cases
  */
-export async function runChrome(cases, { out, install = DEFAULT_ORACLE_INSTALL, bin, typefacts, browser, concurrency, control = false, env = process.env }) {
+export async function runChrome(cases, { out, install = DEFAULT_ORACLE_INSTALL, bin, typefacts, browser, concurrency, control = false, withClean = false, closeRetries = 1, oracle, env = process.env }) {
   if (!bin || !typefacts) throw new Error("Chrome confirmation needs the checker binary and typefacts (--checker-bin, --typefacts)");
   const root = join(resolve(out), "chrome-cases");
   rmSync(root, { recursive: true, force: true });
   mkdirSync(root, { recursive: true });
+  const cleanToo = withClean && !control;
   for (const { id, dir } of cases) {
     cpSync(dir, join(root, id), { recursive: true });
+    if (cleanToo) cpSync(dir, join(root, CLEAN_ID(id)), { recursive: true });
     if (control) continue;
     const twin = join(root, id, "App.run.txt");
     if (existsSync(twin)) {
@@ -113,20 +141,34 @@ export async function runChrome(cases, { out, install = DEFAULT_ORACLE_INSTALL, 
       cpSync(join(root, id, "oracle.run.json"), join(root, id, "oracle.json"));
     }
   }
-  const result = join(resolve(out), `chrome-${Date.now()}.json`);
-  const args = ["--cases", root, "--out", result, "--install", resolve(install), "--cache", "off",
-    ...(browser ? ["--browser", browser] : []), ...(concurrency ? ["--concurrency", String(concurrency)] : [])];
-  const run = await spawnOracle(args, { ...env, SOLID_CHECKER_NATIVE_BIN: bin, SOLID_TYPEFACTS_BIN: typefacts });
-  if (!existsSync(result)) throw new Error(`the oracle wrote no result (exit ${run.status}): ${run.log.slice(-800)}`);
-  const report = JSON.parse(readFileSync(result, "utf8"));
-  const rows = new Map(report.results.map((row) => [row.id, row]));
+  const settings = { out, install, browser, concurrency, env, bin, typefacts, oracle };
+  const rows = await oracleRows(root, settings);
+  const retries = new Map();
+  for (let attempt = 1; attempt <= closeRetries; attempt += 1) {
+    const failed = [...rows.values()].filter(isCloseTimeout).map((row) => row.id);
+    if (!failed.length) break;
+    const again = await oracleRows(root, settings, failed);
+    for (const id of failed) {
+      retries.set(id, attempt);
+      if (again.has(id)) rows.set(id, again.get(id));
+    }
+  }
+  const reportOf = (id) => {
+    const reportPath = join(resolve(install), ".solid-checker-runtime-oracle", id, "report.json");
+    return existsSync(reportPath) ? (JSON.parse(readFileSync(reportPath, "utf8")).execution?.checkpoints ?? []) : [];
+  };
   const records = new Map();
   for (const { id, sites, findings, checker } of cases) {
     const row = rows.get(id);
     if (!row) { records.set(id, { row: null, runtime: { failure: { phase: "chrome", message: "no row" }, diagnostics: [], errors: [], witnesses: [] }, checker: { ok: false, error: "no oracle row", findings: [] } }); continue; }
-    const reportPath = join(resolve(install), ".solid-checker-runtime-oracle", id, "report.json");
-    const checkpoints = existsSync(reportPath) ? (JSON.parse(readFileSync(reportPath, "utf8")).execution?.checkpoints ?? []) : [];
-    records.set(id, { row, runtime: chromeRuntime(row, checkpoints, sites), checker: checker ?? chromeChecker(row, control ? undefined : findings) });
+    // The reference for the twin's findings: the oracle's own on the clean text (from this call's control, or passed in).
+    let reference = findings;
+    if (cleanToo) {
+      const cleanRow = rows.get(CLEAN_ID(id));
+      const cleanChecker = cleanRow ? (checker ?? chromeChecker(cleanRow, undefined)) : null;
+      reference = cleanChecker?.ok ? cleanChecker.findings : null;
+    }
+    records.set(id, { row, runtime: chromeRuntime(row, reportOf(id), sites), checker: checker ?? chromeChecker(row, control ? undefined : reference), ...(retries.has(id) ? { retries: retries.get(id) } : {}) });
   }
   return records;
 }
