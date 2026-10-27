@@ -27,7 +27,6 @@ fn copy_tree(from: &Path, to: &Path) {
 struct Run {
     stdout: Vec<u8>,
     stderr: String,
-    elapsed: Duration,
 }
 
 impl Run {
@@ -97,6 +96,9 @@ impl Project {
             .env("SOLID_CHECKER_IDLE_SHADOW", "1")
             .env("SOLID_CHECKER_IDLE_SHADOW_DEBOUNCE_MS", "50")
             .env("SOLID_CHECKER_IDLE_SHADOW_TRACE", "1")
+            // The check thread runs at background priority, which a busy
+            // machine starves: the tests wait for verdicts, not for the load.
+            .env("SOLID_CHECKER_IDLE_SHADOW_NORMAL_PRIORITY", "1")
             .env("SOLID_CHECKER_IDLE_SHADOW_LOG", self.log())
             .env("TMPDIR", &self.sockets);
         for (key, value) in &self.environment {
@@ -109,12 +111,10 @@ impl Project {
     }
 
     fn check(&self, daemon: bool) -> Run {
-        let started = Instant::now();
         let output = self.command(daemon).output().unwrap();
         Run {
             stdout: output.stdout,
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            elapsed: started.elapsed(),
         }
     }
 
@@ -252,23 +252,26 @@ fn an_unperturbed_edit_sequence_verifies_every_answer() {
 
 #[test]
 fn a_request_during_a_check_cancels_it_and_the_check_resumes_afterwards() {
-    // The delay hook keeps the fresh build waiting (and cancellable) for 4 s.
-    let Some(project) = Project::new("cancel", &[("SOLID_CHECKER_IDLE_SHADOW_DELAY_MS", "4000")])
+    // The hold hook keeps the first check waiting (and cancellable) before its
+    // fresh build until a request cancels it, so the request lands during the
+    // check whatever the machine's load; later checks run unheld.
+    let Some(project) = Project::new("cancel", &[("SOLID_CHECKER_IDLE_SHADOW_HOLD_FIRST", "1")])
     else {
         return;
     };
     let cold = project.check(true);
     assert_eq!(cold.timing()["cacheHit"], false);
-    std::thread::sleep(Duration::from_millis(500)); // the check is waiting out its delay
-    assert_eq!(project.log_text(), "");
+    project.wait_for_log("holding the first check", 1);
     let repeat = project.check(true);
     assert_eq!(repeat.timing()["cacheHit"], true);
-    assert!(
-        repeat.elapsed < Duration::from_secs(3),
-        "the request was not held back by the check: {:?}",
-        repeat.elapsed
-    );
+    // The request cancelled the check: it did not wait the hold out, and the
+    // check had not finished (nothing was verified) when it was cancelled.
     project.wait_for_log("cancelled", 1);
+    assert!(
+        !project.log_text().contains("verified"),
+        "{}",
+        project.log_text()
+    );
     // Resumed after the next debounce, and this time left alone.
     project.wait_for_log("verified", 1);
 }
