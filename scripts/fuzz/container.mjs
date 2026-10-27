@@ -57,7 +57,7 @@ function interest(stmt) {
  * @param {object} component
  * @param {{ rng: object, kinds?: [number, string][], count?: [number, number][] }} options
  */
-export function applyContainers(ctx, component, { rng, kinds = KIND_WEIGHTS, count = [[1, 0], [5, 1], [3, 2]] } = {}) {
+export function applyContainers(ctx, component, { rng, kinds = KIND_WEIGHTS, count = [[2, 0], [5, 1], [3, 2]] } = {}) {
   const next = (key) => { ctx.counters[key] = (ctx.counters[key] ?? 0) + 1; return ctx.counters[key]; };
   const wanted = rng.weighted(count);
   for (let made = 0; made < wanted; made += 1) {
