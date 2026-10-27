@@ -31,7 +31,9 @@ const inconclusive = (reason, why) => ({ verdict: "inconclusive", reasons: [reas
  * @returns {Promise<Map<string, object>>} id -> { program, built, typecheck, checker, runtime, classification, verdicts, control }
  */
 export async function evaluate(entries, config, deps = {}) {
-  const { runChecker: check = runChecker, runFast: fast = runFast, typecheck: types = typecheck } = deps;
+  const { runChecker: check = runChecker, typecheck: types = typecheck } = deps;
+  // The long-lived host (`config.fast`) serves the batches when there is one; tests inject `deps.runFast`.
+  const fast = deps.runFast ?? (config.fast ? (cases) => config.fast.run(cases) : runFast);
   const results = new Map();
   const { install, casesDir } = config;
   const instrument = config.instrument !== false;

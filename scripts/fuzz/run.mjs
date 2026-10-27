@@ -23,9 +23,10 @@ import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { DEFAULT_TSC } from "./typecheck.mjs";
 import { walk } from "./model.mjs";
-import { recommendedConcurrency } from "../lib/pool.mjs";
+import { availableParallelism } from "node:os";
+import { createFastDaemon } from "./fast-daemon.mjs";
 
-const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "help"]);
+const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "help"]);
 const VALUES = new Set(["seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components"]);
 
 export function parseArgs(argv, { extraValues = [] } = {}) {
@@ -47,6 +48,14 @@ export function parseArgs(argv, { extraValues = [] } = {}) {
   return options;
 }
 
+/** Half the cores: every unit starts a checker and a type checker, and the runtime path sleeps on timers, so more than this only queues. */
+export const defaultParallelism = (cores = availableParallelism()) => Math.max(1, Math.floor(cores / 2));
+
+/** Starts the long-lived fast host unless `--no-daemon`; the caller closes it (`config.fast?.close()`). */
+export function attachDaemon(config, options) {
+  return options.noDaemon ? config : { ...config, fast: createFastDaemon({ install: config.fastInstall, workers: config.workers }) };
+}
+
 /** The run's configuration from parsed options (`out` is the fresh output directory). */
 export function configFrom(options, out) {
   return {
@@ -56,8 +65,8 @@ export function configFrom(options, out) {
     typefacts: options.typefacts ? resolve(options.typefacts) : process.env.SOLID_TYPEFACTS_BIN,
     tsc: options.tsc ?? process.env.FUZZ_TSC ?? DEFAULT_TSC,
     casesDir: join(out, "cases"),
-    concurrency: options.concurrency ?? recommendedConcurrency(),
-    workers: options.workers ?? 4,
+    concurrency: options.concurrency ?? defaultParallelism(),
+    workers: options.workers ?? defaultParallelism(),
     keepWork: Boolean(options.keepWork),
     control: Boolean(options.control),
     deadSite: Boolean(options.deadSite),
@@ -97,6 +106,7 @@ const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--
   [--confirm-with-chrome [--browser <chromium>]] [--shrink [--shrink-mode discovery|focused] [--budget N]]
   [--control]         neutrality control: also run the clean twin and the checker on the instrumented text, and compare
   [--dead-site]       EXPERIMENTAL, off by default: the dead-site false-positive subkind (implies --control)
+  [--no-daemon]       one Vitest process per batch instead of the long-lived fast host
   [--no-instrument]   run the clean text with no hit ledger (the baseline of the neutrality regression)
   [--generate-only]   write and type-check the programs, run nothing else
   [--keep-work]       keep the materialized checker directories`;
@@ -108,7 +118,15 @@ async function main(options) {
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
   mkdirSync(out, { recursive: true });
 
-  const config = configFrom(options, out);
+  const config = attachDaemon(configFrom(options, out), options);
+  try {
+    return await sweep(options, config, out);
+  } finally {
+    await config.fast?.close();
+  }
+}
+
+async function sweep(options, config, out) {
   if (!existsSync(join(config.install, "node_modules/solid-js/package.json"))) {
     throw new Error(`${config.install} has no node_modules/solid-js: run \`make runtime-oracle-install\``);
   }

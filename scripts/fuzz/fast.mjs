@@ -46,10 +46,48 @@ export function installedVersions(install) {
   return versions;
 }
 
-const testSource = (id, caseDir) => `import { test } from 'vitest';
-import { runCase } from '../runner';
-test('${id}', () => runCase('${id}', ${JSON.stringify(caseDir)}, () => import('../cases/${id}/App.tsx')), 60000);
+/** One Vitest test file for a case; `up` is the path from the test file's directory to the work directory. */
+const testSource = (id, caseDir, { up = "..", sub = "", out } = {}) => `import { test } from 'vitest';
+import { runCase } from '${up}/runner';
+test('${id}', () => runCase('${id}', ${JSON.stringify(caseDir)}, () => import('${up}/cases/${sub}${id}/App.tsx')${out ? `, ${JSON.stringify(out)}` : ""}), 60000);
 `;
+
+/** The Vitest work directory inside the install: the config, the runner and what they import. */
+export function prepareWork(root, label = `${Date.now()}-${process.pid}`) {
+  const work = join(root, ".solid-checker-fuzz-fast", label);
+  mkdirSync(join(work, "tests"), { recursive: true });
+  const fast = join(here, "fast");
+  for (const file of ["runner.tsx", "shims.ts", "frames.mjs", "vitest.config.mjs", "serve.mjs"]) cpSync(join(fast, file), join(work, file));
+  return work;
+}
+
+/** Copies the cases into `work/cases/<sub>/<id>` and writes one test file each under `work/tests/<sub>`; returns the test files. */
+export function stageCases(work, cases, { sub = "", out } = {}) {
+  const tests = [];
+  for (const { id, dir, variant } of cases) {
+    const target = join(work, "cases", sub, id);
+    mkdirSync(target, { recursive: true });
+    for (const file of ["App.tsx", "sites.json", "oracle.json"]) if (existsSync(join(dir, file))) cpSync(join(dir, file), join(target, file));
+    // The twin runs as App.tsx, so stack frames still name App.tsx and no line moves.
+    if (variant !== "clean" && existsSync(join(dir, "App.run.txt"))) cpSync(join(dir, "App.run.txt"), join(target, "App.tsx"));
+    mkdirSync(join(work, "tests", sub), { recursive: true });
+    const test = join(work, "tests", sub, `${id}.test.ts`);
+    writeFileSync(test, testSource(id, target, { up: sub ? "../.." : "..", sub: sub ? `${sub}/` : "", out }));
+    tests.push(test);
+  }
+  return tests;
+}
+
+/** Records written by the runner into `out`, one per case; a case with none gets a vitest failure record. */
+export function collectRecords(cases, out, run) {
+  const records = new Map();
+  const written = existsSync(out) ? new Set(readdirSync(out)) : new Set();
+  for (const { id } of cases) {
+    if (written.has(`${id}.json`)) records.set(id, JSON.parse(readFileSync(join(out, `${id}.json`), "utf8")));
+    else records.set(id, { id, failure: { phase: "vitest", message: `no record written (${run.status ?? "exit ?"})`, tail: String(run.log ?? "").slice(-1200) }, diagnostics: [], errors: [], witnesses: [] });
+  }
+  return records;
+}
 
 /**
  * Runs the cases under Happy DOM and returns `Map<id, record>`.
@@ -63,18 +101,8 @@ export async function runFast(cases, { install = DEFAULT_FAST_INSTALL, workers =
   if (problems.length) throw new Error(`the fast path needs the pinned install (${root}): ${problems.join("; ")}`);
   const vitest = join(root, "node_modules/vitest/vitest.mjs");
   if (!existsSync(vitest)) throw new Error(`no vitest in ${root}/node_modules (npm install in scripts/fuzz/install)`);
-  const work = join(root, ".solid-checker-fuzz-fast", `${Date.now()}-${process.pid}`);
-  mkdirSync(join(work, "tests"), { recursive: true });
-  const fast = join(here, "fast");
-  for (const file of ["runner.tsx", "shims.ts", "frames.mjs", "vitest.config.mjs"]) cpSync(join(fast, file), join(work, file));
-  for (const { id, dir, variant } of cases) {
-    const target = join(work, "cases", id);
-    mkdirSync(target, { recursive: true });
-    for (const file of ["App.tsx", "sites.json", "oracle.json"]) if (existsSync(join(dir, file))) cpSync(join(dir, file), join(target, file));
-    // The twin runs as App.tsx, so stack frames still name App.tsx and no line moves.
-    if (variant !== "clean" && existsSync(join(dir, "App.run.txt"))) cpSync(join(dir, "App.run.txt"), join(target, "App.tsx"));
-    writeFileSync(join(work, "tests", `${id}.test.ts`), testSource(id, target));
-  }
+  const work = prepareWork(root);
+  stageCases(work, cases);
   const out = join(work, "out");
   const run = await new Promise((done) => {
     const child = spawn(process.execPath, [vitest, "run", "--config", "vitest.config.mjs"], {
@@ -90,12 +118,7 @@ export async function runFast(cases, { install = DEFAULT_FAST_INSTALL, workers =
     child.stderr.on("data", (chunk) => { log += chunk; });
     child.on("close", (status) => { clearTimeout(timer); done({ status, log }); });
   });
-  const records = new Map();
-  const written = existsSync(out) ? new Set(readdirSync(out)) : new Set();
-  for (const { id } of cases) {
-    if (written.has(`${id}.json`)) records.set(id, JSON.parse(readFileSync(join(out, `${id}.json`), "utf8")));
-    else records.set(id, { id, failure: { phase: "vitest", message: `no record written (vitest exit ${run.status})`, tail: run.log.slice(-1200) }, diagnostics: [], errors: [], witnesses: [] });
-  }
+  const records = collectRecords(cases, out, run);
   if (!keep) rmSync(work, { recursive: true, force: true });
   return records;
 }

@@ -13,7 +13,7 @@ export default defineConfig({
   server: { fs: { strict: false } },
   ssr: { resolve: { conditions: ['browser', 'development'], externalConditions: ['browser', 'development'] } },
   test: {
-    include: ['tests/*.test.ts'],
+    include: ['tests/**/*.test.ts'],
     environment: 'happy-dom',
     environmentOptions: { happyDOM: { url: 'http://localhost/' } },
     setupFiles: ['@solidjs/diagnostics/vitest', './shims.ts'],

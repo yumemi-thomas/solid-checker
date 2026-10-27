@@ -48,9 +48,9 @@ async function settleHits(): Promise<boolean | null> {
   return false;
 }
 
-export async function runCase(id: string, caseDir: string, load: () => Promise<any>) {
+export async function runCase(id: string, caseDir: string, load: () => Promise<any>, outDirOverride?: string) {
   const started = performance.now();
-  const outDir = process.env.FUZZ_FAST_OUT as string;
+  const outDir = (outDirOverride ?? process.env.FUZZ_FAST_OUT) as string;
   const settings = { eventPasses: 2, pauseMs: Number(process.env.FUZZ_PAUSE_MS ?? 60), finalMs: Number(process.env.FUZZ_FINAL_MS ?? 150) };
   const diagnostics: any[] = [], errors: any[] = [], consoleErrors: string[] = [], disposers: (() => void)[] = [];
   let witnesses: any[] = [], failure: any = null, phase = 'import', artifactCount: number | null = null;
