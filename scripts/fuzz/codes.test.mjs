@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { codeOfThrown, codeRules, codesForRule, ruleHasRuntimeCounterpart, thrownCodes, withholdingRules } from "./codes.mjs";
+import { DISPOSITIONS, codeOfThrown, codePolicy, codeRules, codesForRule, consequenceCodes, isDefectCode, policyOf, ruleHasRuntimeCounterpart, severityRank, thrownCodes, withholdingRules } from "./codes.mjs";
 
 const oracle = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../runtime-oracle.mjs"), "utf8");
 /** The source text of a top-level `const name = [...]` or `{...}` literal in the oracle. */
@@ -64,5 +64,80 @@ describe("lookups", () => {
     expect(codeOfThrown("[FLUSH_IN_ACTION] x")).toBe("FLUSH_IN_ACTION");
     expect(codeOfThrown("something else")).toBeNull();
     expect(codeOfThrown(undefined)).toBeNull();
+  });
+});
+
+// The drift test: every code the pinned dev dists emit is classified in the policy table.
+const fastModules = join(repo, "scripts/fuzz/install/node_modules");
+const distFiles = (dir) => (existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+  const path = join(dir, entry.name);
+  if (entry.isDirectory()) return entry.name === "types" ? [] : distFiles(path);
+  return entry.name.endsWith(".js") ? [path] : [];
+}) : []);
+/** Every `code: "X"` in the dev dists, with the severities found in the 400 characters after it. */
+const emittedCodes = () => {
+  const found = new Map();
+  for (const pkg of ["@solidjs/signals", "@solidjs/web", "solid-js"]) {
+    for (const file of distFiles(join(fastModules, pkg, "dist"))) {
+      const source = readFileSync(file, "utf8");
+      for (const match of source.matchAll(/code: "([A-Z][A-Z_]+)"/g)) {
+        const severity = source.slice(match.index, match.index + 400).match(/severity: "(\w+)"/)?.[1];
+        const entry = found.get(match[1]) ?? new Set();
+        if (severity) entry.add(severity);
+        found.set(match[1], entry);
+      }
+    }
+  }
+  return found;
+};
+
+describe("the policy table", () => {
+  it("is well formed: a known disposition, a severity, rules only on claimed defects", () => {
+    for (const [code, policy] of Object.entries(codePolicy)) {
+      expect(DISPOSITIONS, code).toContain(policy.disposition);
+      expect(["error", "warn", "info"], code).toContain(policy.severity);
+      expect(policy.rules.length > 0, code).toBe(policy.disposition === "defect-claimed");
+    }
+  });
+  it("classifies the ones the proposal lists", () => {
+    expect(Object.values(codePolicy).filter((policy) => policy.disposition === "defect-claimed")).toHaveLength(23);
+    for (const code of ["PRIMITIVE_IN_EFFECT_CALLBACK", "RUN_WITH_DISPOSED_OWNER", "PENDING_ASYNC_FORBIDDEN_SCOPE", "ASYNC_STORE_SETTER", "UNCOMMITTED_INPUT_OVERWRITTEN", "LOADING_ON_OUTSIDE_HOLD"]) {
+      expect(policyOf(code).disposition, code).toBe("defect-unclaimed");
+      expect(isDefectCode(code), code).toBe(true);
+    }
+    expect(consequenceCodes.sort()).toEqual(["INVARIANT_VIOLATION", "REACTIVITY_HALTED", "SETTLE_WALK_UNINITIALIZED_SOURCE"]);
+    for (const code of ["HUGE_FAN_OUT", "HUGE_FAN_IN", "HEAD_TAG_INVALID", "INVALID_REFRESH_TARGET", "REACTIVITY_HALTED"]) expect(isDefectCode(code), code).toBe(false);
+    expect(isDefectCode("NOT_A_CODE")).toBe(false);
+  });
+  it("outranks warnings with errors", () => {
+    expect(severityRank("REACTIVE_WRITE_IN_OWNED_SCOPE")).toBeLessThan(severityRank("STRICT_READ_UNTRACKED"));
+    expect(severityRank("NOT_A_CODE")).toBeGreaterThan(severityRank("HUGE_FAN_OUT"));
+  });
+  it("keeps STORE_WRITE_OUTSIDE_SETTER mapped to SC2003 (it was once missing, so the oracle reported no-rule)", () => {
+    expect(codePolicy.STORE_WRITE_OUTSIDE_SETTER).toMatchObject({ rules: ["no-store-mutation-outside-setter"], disposition: "defect-claimed", severity: "warn" });
+  });
+  it("names every thrown code", () => {
+    for (const [, code] of thrownCodes) expect(codePolicy[code], code).toBeDefined();
+  });
+  it("classifies every code the pinned rc.17 dev dists emit, with the severity they emit (skipped without the fast install)", () => {
+    if (!existsSync(join(fastModules, "@solidjs/signals/package.json"))) return;
+    for (const pkg of ["@solidjs/signals", "@solidjs/web", "solid-js"]) {
+      const { version } = JSON.parse(readFileSync(join(fastModules, pkg, "package.json"), "utf8"));
+      expect(version, pkg).toMatch(/^2\.0\.0-rc\.17$/);
+    }
+    const emitted = emittedCodes();
+    expect(emitted.size).toBeGreaterThan(30);
+    const unclassified = [...emitted.keys()].filter((code) => !codePolicy[code]);
+    expect(unclassified, `unclassified codes: add them to codePolicy (scripts/fuzz/codes.mjs)`).toEqual([]);
+    for (const [code, severities] of emitted) {
+      if (severities.size) expect([...severities], `${code}: severity in the dist`).toContain(codePolicy[code].severity);
+    }
+  });
+  it("lists no code that nothing emits (a stale entry), apart from the thrown ones", () => {
+    if (!existsSync(join(fastModules, "@solidjs/signals/package.json"))) return;
+    const emitted = emittedCodes();
+    const thrown = new Set(thrownCodes.map(([, code]) => code));
+    const dist = ["@solidjs/signals", "@solidjs/web", "solid-js"].flatMap((pkg) => distFiles(join(fastModules, pkg, "dist"))).map((file) => readFileSync(file, "utf8")).join("\n");
+    for (const code of Object.keys(codePolicy)) expect(emitted.has(code) || thrown.has(code) || dist.includes(`"${code}"`), code).toBe(true);
   });
 });
