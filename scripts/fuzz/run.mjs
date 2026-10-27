@@ -6,8 +6,9 @@
 //
 // Pipeline per program: generate -> type-check (tsrs) -> checker verdicts -> Happy DOM runtime
 // records -> classify. Only candidates go to Chrome (scripts/runtime-oracle.mjs, the authority) and
-// to the shrinker. Exit status: 0 no confirmed false positive, 3 a confirmed false positive (stop and
-// report, see the README), 2 a usage or harness error.
+// to the shrinker. Exit status: 0 nothing to stop for, 3 a confirmed false positive (stop and report, see
+// the README), 4 a confirmed false clean with a coarse key the ledger does not know (report; the sweep
+// is complete), 2 a usage or harness error.
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
@@ -19,6 +20,8 @@ import { DEFAULT_FAST_INSTALL } from "./fast.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import { hitSummary } from "./hits.mjs";
 import { classifyChrome, evaluate, signaturesOf } from "./pipeline.mjs";
+import { applyLedgerToResults, falseCleanStream } from "./falseclean-run.mjs";
+import { LEDGER_PATH, loadLedger } from "./falseclean.mjs";
 import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { DEFAULT_TSC } from "./typecheck.mjs";
@@ -28,8 +31,8 @@ import { createFastDaemon } from "./fast-daemon.mjs";
 import { mapPoolSettled } from "../lib/pool.mjs";
 import { cleanupEvidence } from "./disposal.mjs";
 
-const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "hunt-false-cleans", "all-cores", "help"]);
-const VALUES = new Set(["seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch"]);
+const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "help"]);
+const VALUES = new Set(["seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch", "ledger"]);
 
 export function parseArgs(argv, { extraValues = [] } = {}) {
   const options = { seed: 1, count: 20, shrinkMode: "discovery", budget: 120 };
@@ -108,13 +111,13 @@ const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>]   (or SOLID_CHECKER_NATIVE_BIN, SOLID_TYPEFACTS_BIN)
   [--install <oracle install>] [--fast-install <fuzz install>] [--tsc <tsrs>] [--workers N] [--concurrency N]
   [--confirm-with-chrome [--browser <chromium>]] [--shrink [--shrink-mode discovery|focused] [--budget N]]
+  [--ledger <known-open.json>] [--no-ledger]   the accepted false cleans (default scripts/fuzz/known-open.json)
   [--control]         neutrality control: also run the clean twin and the checker on the instrumented text, and compare
   [--dead-site]       EXPERIMENTAL, off by default: the dead-site false-positive subkind (implies --control)
   [--all-cores]       every core for the concurrency and the Vitest workers (the default is half the cores)
   [--shrink-jobs N]   shrink N signature groups at once (default 4); [--shrink-batch N] candidates judged per round (default 8)
   [--no-daemon]       one Vitest process per batch instead of the long-lived fast host
   [--no-instrument]   run the clean text with no hit ledger (the baseline of the neutrality regression)
-  [--hunt-false-cleans] also confirm false cleans in Chrome (with --confirm-with-chrome) and shrink them (with --shrink)
   [--generate-only]   write and type-check the programs, run nothing else
   [--keep-work]       keep the materialized checker directories`;
 
@@ -144,7 +147,10 @@ async function sweep(options, config, out) {
     for (const { built } of entries) writeCase(join(config.casesDir, built.id), built);
   }
 
+  // A bad ledger stops the sweep before it starts: it must not quiet anything by accident.
+  const ledger = options.generateOnly || options.noLedger ? [] : loadLedger(options.ledger ? resolve(options.ledger) : LEDGER_PATH);
   const results = options.generateOnly ? await typecheckOnly(entries, config) : await evaluate(entries, config);
+  const firedEntries = options.generateOnly ? [] : applyLedgerToResults(results, ledger);
   const rows = resultRows(results);
   writeFileSync(join(out, "results.jsonl"), rows.map((row) => JSON.stringify(row)).join("\n") + "\n");
   const tally = (key) => rows.reduce((counts, row) => ({ ...counts, [row[key]]: (counts[row[key]] ?? 0) + 1 }), {});
@@ -161,19 +167,18 @@ async function sweep(options, config, out) {
     if (!wanted.has(key)) wanted.set(key, { value, ...spec });
     return key;
   };
+  let falseClean = null;
   if (!options.generateOnly) {
     // Chrome decides. Without it a candidate stays a candidate.
-    let chrome = new Map();
-    const huntable = options.huntFalseCleans ? [...results.values()].filter((value) => value.classification.items.some((item) => item.kind === "candidate-false-clean")) : [];
-    const toChrome = [...new Set([...candidates, ...huntable])];
-    if (options.confirmWithChrome && toChrome.length) {
-      const chromeCases = toChrome.map((value) => ({ id: value.built.id, dir: join(config.casesDir, value.built.id), sites: value.built.sites }));
-      const chromeOptions = { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency };
+    const chromeOptions = { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency };
+    const chromeRecords = async (values) => {
+      const chromeCases = values.map((value) => ({ id: value.built.id, dir: value.caseDir ?? join(config.casesDir, value.built.id), sites: value.built.sites }));
       // The clean case first, in Chrome: the oracle's own findings on the clean text are what its findings on the twin must equal
       // (the oracle reports kinds the fast checker adapter does not, so the fast pipeline's findings are not the reference).
       const cleanRuns = await runChrome(chromeCases, { ...chromeOptions, control: true });
-      chrome = await runChrome(chromeCases.map((c) => ({ ...c, findings: cleanRuns.get(c.id)?.checker?.ok ? cleanRuns.get(c.id).checker.findings : null })), chromeOptions);
-    }
+      return runChrome(chromeCases.map((c) => ({ ...c, findings: cleanRuns.get(c.id)?.checker?.ok ? cleanRuns.get(c.id).checker.findings : null })), chromeOptions);
+    };
+    const chrome = options.confirmWithChrome && candidates.length ? await chromeRecords(candidates) : new Map();
     for (const value of candidates) {
       const record = chrome.get(value.built.id);
       const judged = record ? classifyChrome(value, record, config) : null;
@@ -192,30 +197,6 @@ async function sweep(options, config, out) {
         findings.push({ id: value.built.id, signature: found.signature, status: "wrong-rule-provisional", reason: found.item.reason, size: value.built.text.split("\n").length, repro: join(config.casesDir, value.built.id) });
       }
     }
-    // False cleans: a runtime diagnostic no finding covers. Reported as provisional unless hunted (--hunt-false-cleans): then Chrome
-    // decides and the shrinker reduces what Chrome confirms, the way a false positive is.
-    for (const value of results.values()) {
-      const items = value.classification.items.filter((item) => item.kind === "candidate-false-clean");
-      if (!items.length) continue;
-      const record = options.huntFalseCleans ? chrome.get(value.built.id) : null;
-      const judged = record ? classifyChrome(value, record, config) : null;
-      const chromeItems = judged ? judged.items.filter((item) => item.kind === "candidate-false-clean") : null;
-      const confirmedCodes = chromeItems ? new Set(chromeItems.map((item) => item.diagnostic.code)) : null;
-      for (const item of items) {
-        let status = "false-clean-provisional";
-        if (options.huntFalseCleans) {
-          if (!judged) status = "false-clean-unconfirmed";
-          else if (confirmedCodes.has(item.diagnostic.code)) status = "false-clean-confirmed";
-          else status = judged.verdict === "inconclusive" ? "false-clean-chrome-inconclusive" : "false-clean-refuted-by-chrome";
-        }
-        const [found] = signaturesOf(value.program, value.built, { items: [item] });
-        const reducible = options.shrink && options.huntFalseCleans && ["false-clean-confirmed", "false-clean-unconfirmed"].includes(status);
-        if (found) {
-          findings.push({ id: value.built.id, signature: found.signature, status, reason: item.reason, size: value.built.text.split("\n").length, repro: join(config.casesDir, value.built.id),
-            ...(reducible ? { shrinkKey: wantShrink(value, { kind: "candidate-false-clean", code: item.diagnostic.code, signature: found.signature }) } : {}) });
-        }
-      }
-    }
     // The reductions: one representative per signature (the later members of a group add a count, not a reduction), run in a
     // bounded pool across groups. Each reduction batches its candidates (shrinkCandidate).
     const keys = [...wanted.keys()];
@@ -228,17 +209,40 @@ async function sweep(options, config, out) {
       if (minimal) { finding.size = minimal.size; finding.repro = minimal.dir; }
       delete finding.shrinkKey;
     }
+    // False cleans: their own stream (falseclean-run.mjs), below.
+    falseClean = await falseCleanStream({ results, ledger, firedEntries, config, options, out, chromeRecords });
   }
   const groups = dedupe(findings.filter((f) => f.signature !== "-").map((f) => ({ ...f })));
-  writeFileSync(join(out, "findings.json"), `${JSON.stringify({ generator: GENERATOR_VERSION, seed: options.seed, count: options.count, groups, refuted: findings.filter((f) => f.signature === "-") }, null, 2)}\n`);
-  writeFileSync(join(out, "summary.json"), `${JSON.stringify({ programs: rows.length, verdicts: tally("verdict"), items: itemTally, candidates: candidates.length, confirmed, groups: groups.length }, null, 2)}\n`);
+  const falseCleanReport = falseClean && {
+    groups: falseClean.groups.map(({ coarseKey, code, severity, count, status, signature, repro, size, minimum, members }) => ({ coarseKey, code, severity, count, status, signature, repro, size, minimum, members })),
+    knownOpen: falseClean.knownOpen, staleOpen: falseClean.staleOpen.map(({ code, coarseKey, ref }) => ({ code, coarseKey, ref })), recallGaps: falseClean.recallGaps,
+  };
+  writeFileSync(join(out, "findings.json"), `${JSON.stringify({ generator: GENERATOR_VERSION, seed: options.seed, count: options.count, groups, refuted: findings.filter((f) => f.signature === "-"), falseClean: falseCleanReport }, null, 2)}\n`);
+  writeFileSync(join(out, "summary.json"), `${JSON.stringify({ programs: rows.length, verdicts: tally("verdict"), items: itemTally, candidates: candidates.length, confirmed, groups: groups.length,
+    falseClean: falseClean && { groups: falseClean.groups.length, confirmed: falseClean.confirmed, knownOpen: falseClean.knownOpen, staleOpen: falseClean.staleOpen.length, recallGaps: falseClean.recallGaps.reduce((sum, row) => sum + row.count, 0) } }, null, 2)}\n`);
   for (const group of groups) console.error(`${group.count}x [${group.representative.status}] ${group.signature}\n    repro: ${group.representative.repro}`);
+  if (falseClean) reportFalseCleans(falseClean);
 
   if (confirmed) {
     console.error("\nSTOP: Chrome confirms a checker violation the real runtime contradicts. Do not continue the sweep; report the repro(s) above (scripts/fuzz/README.md).");
     return 3;
   }
+  if (falseClean?.confirmed) {
+    console.error(`\nFALSE CLEAN: Chrome confirms ${falseClean.confirmed} defect(s) Solid reports and the checker misses, with a coarse key the ledger does not know (scripts/fuzz/README.md). The sweep ran to the end.`);
+    return 4;
+  }
   return 0;
+}
+
+/** One line per coarse group (worst severity first), then the ledger and recall-gap counts. */
+function reportFalseCleans(falseClean) {
+  for (const group of falseClean.groups) {
+    const minimum = group.minimum ? `, minimum ${group.minimum.status}` : "";
+    console.error(`false clean ${group.count}x [${group.status}${minimum}] ${group.severity} ${group.coarseKey}\n    repro: ${group.repro}`);
+  }
+  console.error(`false cleans: ${falseClean.groups.length} new group(s), ${falseClean.knownOpen} item(s) known-open, ${falseClean.staleOpen.length} ledger entr${falseClean.staleOpen.length === 1 ? "y" : "ies"} not fired in this run (stale-open if the run covered their profile)`);
+  const gaps = falseClean.recallGaps.reduce((sum, row) => sum + row.count, 0);
+  if (gaps) console.error(`recall gaps (the checker declines where Solid reports): ${gaps}; top ${falseClean.recallGaps.slice(0, 3).map((row) => `${row.count}x ${row.signature}`).join("; ")}`);
 }
 
 async function typecheckOnly(entries, config) {
@@ -271,15 +275,15 @@ async function typecheckOnly(entries, config) {
  * Shrinks one candidate under the fast path (checker + Happy DOM); writes the minimal case.
  * Each round of candidates is judged in one `evaluate` (one fast-path run for the lot, the checker and type check in a pool).
  */
-async function shrinkCandidate(value, config, options, out, { kind = "candidate-false-positive", code } = {}) {
-  const target = value.classification.items.find((item) => item.kind === kind && (!code || item.diagnostic?.code === code));
+async function shrinkCandidate(value, config, options, out, { kind = "candidate-false-positive" } = {}) {
+  const target = value.classification.items.find((item) => item.kind === kind);
   const targetSignature = signaturesOf(value.program, value.built, { items: [target] })[0]?.signature;
   let counter = 0;
-  const base = `${value.built.id}-${kind === "candidate-false-clean" ? "fc" : "fp"}`;
+  const base = `${value.built.id}-fp`;
   const holds = (program, built, result) => {
     const hit = result.classification.items.filter((item) => item.kind === kind);
     if (!hit.length) return false;
-    if (options.shrinkMode === "discovery") return hit.some((item) => (kind === "candidate-false-clean" ? item.diagnostic.code === target.diagnostic.code : item.finding.rule === target.finding.rule));
+    if (options.shrinkMode === "discovery") return hit.some((item) => item.finding.rule === target.finding.rule);
     return signaturesOf(program, built, { items: hit }).some((found) => found.signature === targetSignature);
   };
   const judgeBatch = async (programs) => {

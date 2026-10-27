@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classify, disturbances, runtimeEvents, unattributedCodes } from "./classify.mjs";
+import { VERDICTS, classify, disturbances, runtimeEvents, unattributedCodes } from "./classify.mjs";
 
 // Hand-written records. Sites: s1 is a write on line 8 (witness shown when it ran), s2 a read on line 20.
 const sites = [
@@ -95,24 +95,51 @@ describe("classify: the checker is quiet, uncertifiable or failed", () => {
     const silent = classify({ sites, checker: checker([uncertifiable("no-write-in-pure-computation", 8)]), runtime: runtime(), plan });
     expect(silent.verdict).toBe("agree");
     const covered = classify({ sites, checker: checker([uncertifiable("no-write-in-pure-computation", 8)]), runtime: runtime({ diagnostics: [diag("REACTIVE_WRITE_IN_OWNED_SCOPE", 8)] }), plan });
-    expect(covered.verdict).toBe("agree");
+    expect(covered.verdict).toBe("recall-gap");
     expect(covered.items[0].reason).toMatch(/uncertifiable/);
   });
 
-  it("a runtime diagnostic no finding covers is a candidate false clean (phase 4, provisional)", () => {
+  it("a runtime diagnostic no finding covers is a candidate false clean, with its severity", () => {
     const result = classify({ sites, checker: checker([]), runtime: runtime({ diagnostics: [diag("REACTIVE_WRITE_IN_OWNED_SCOPE", 8)] }), plan });
     expect(result.verdict).toBe("candidate-false-clean");
-    expect(result.items[0]).toMatchObject({ provisional: true, diagnostic: { code: "REACTIVE_WRITE_IN_OWNED_SCOPE", line: 8 } });
+    expect(result.items[0]).toMatchObject({ kind: "candidate-false-clean", diagnostic: { code: "REACTIVE_WRITE_IN_OWNED_SCOPE", line: 8, severity: "error" } });
   });
 
-  it("a withholding finding covers any diagnostic at its site", () => {
+  it("a withholding finding at the diagnostic is a recall gap: the checker declined", () => {
     const result = classify({ sites, checker: checker([uncertifiable("reactive-dispatch-unresolved", 8)]), runtime: runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 8)] }), plan });
-    expect(result.verdict).toBe("agree");
+    expect(result.verdict).toBe("recall-gap");
+    expect(result.items[0]).toMatchObject({ kind: "recall-gap", diagnostic: { code: "STRICT_READ_UNTRACKED", line: 8, rule: "reactive-dispatch-unresolved" } });
   });
 
-  it("a diagnostic with no application position, or with no claiming rule, is not held against the checker", () => {
-    const result = classify({ sites, checker: checker([]), runtime: runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED"), diag("REACTIVITY_HALTED", 8)] }), plan });
-    expect(result.verdict).toBe("agree");
+  it("a checker violation at the diagnostic is an agree, never a recall gap or a false clean", () => {
+    const result = classify({ sites, checker: checker([violation("no-write-in-pure-computation", 8)]), runtime: runtime({ diagnostics: [diag("REACTIVE_WRITE_IN_OWNED_SCOPE", 8)] }), plan });
+    expect(result.items.map((item) => item.kind)).toEqual(["agree"]);
+  });
+
+  it("a defect code no rule claims, with no finding, is a false clean; a consequence, advisory or SSR code never is", () => {
+    const unclaimed = classify({ sites, checker: checker([]), runtime: runtime({ diagnostics: [diag("RUN_WITH_DISPOSED_OWNER", 8)] }), plan });
+    expect(unclaimed.verdict).toBe("candidate-false-clean");
+    expect(unclaimed.items[0].diagnostic).toMatchObject({ code: "RUN_WITH_DISPOSED_OWNER", severity: "warn" });
+    for (const code of ["REACTIVITY_HALTED", "HUGE_FAN_OUT", "SSR_BOUNDARY_WATERFALL", "NOT_A_CODE"]) {
+      expect(classify({ sites, checker: checker([]), runtime: runtime({ diagnostics: [diag(code, 8)] }), plan }).items.map((item) => item.kind), code).not.toContain("candidate-false-clean");
+    }
+  });
+
+  it("a diagnostic with no line is a false clean only when no claiming finding exists anywhere", () => {
+    const unplaced = runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED")] });
+    const none = classify({ sites, checker: checker([]), runtime: unplaced, plan });
+    expect(none.items.find((item) => item.kind === "candidate-false-clean")?.diagnostic).toMatchObject({ code: "STRICT_READ_UNTRACKED", line: null, unplaced: true });
+    const elsewhere = classify({ sites, checker: checker([violation("strict-read-untracked", 20, 20, "SC1001")]), runtime: unplaced, plan });
+    expect(elsewhere.items.map((item) => item.kind)).not.toContain("candidate-false-clean");
+    expect(classify({ sites, checker: checker([]), runtime: runtime({ diagnostics: [diag("REACTIVITY_HALTED", 8)] }), plan }).verdict).toBe("agree");
+  });
+
+  it("ranks the tiers: false clean, wrong rule, known open, recall gap, inconclusive, agree", () => {
+    expect(VERDICTS).toEqual(["candidate-false-positive", "candidate-false-clean", "candidate-wrong-rule", "known-open", "recall-gap", "inconclusive", "agree"]);
+    const both = classify({ sites, checker: checker([uncertifiable("reactive-dispatch-unresolved", 8), violation("no-write-in-pure-computation", 20, 20)]),
+      runtime: runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 8)], witnesses: [{ siteId: "s1", reached: true }, { siteId: "s2", reached: false }] }), plan });
+    expect(both.items.map((item) => item.kind).sort()).toEqual(["inconclusive", "recall-gap"]);
+    expect(both.verdict).toBe("recall-gap");
   });
 
   it("a checker failure is inconclusive, never agree", () => {

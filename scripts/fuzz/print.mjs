@@ -17,6 +17,26 @@ import { isSite, paramTsType, signalTable, walk } from "./model.mjs";
 
 const MARK_OPEN = "\u0001";
 const MARK_CLOSE = "\u0002";
+// Span markers for the line table: `\u0003N\u0004` opens node N's text and `\u0005N\u0006` closes it. They are
+// removed with the site markers, so they move nothing.
+const SPAN_OPEN = "\u0003";
+const SPAN_OPEN_END = "\u0004";
+const SPAN_CLOSE = "\u0005";
+const SPAN_CLOSE_END = "\u0006";
+/** Node kinds the line table records: statements, view items, and every expression that is a call or a function. */
+const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "child", "attr", "show", "for",
+  "read", "write", "own", "fn", "call", "set", "getOwner", "iife", "iter", "prim"]);
+
+/** A node's label in the line table and in the coarse dedupe key: its kind and, where it matters, what it is. */
+export function nodeLabel(node) {
+  switch (node.k) {
+    case "prim": return `prim:${node.name}`;
+    case "own": return `own:${node.op}`;
+    case "fn": return `fn:${node.form}${node.async ? ":async" : ""}`;
+    case "iter": return `iter:${node.method}`;
+    default: return node.k;
+  }
+}
 const INDENT = "  ";
 
 /** Node kinds whose print is a call the runtime executes: each is an auto-site (glue) in the twin. */
@@ -25,16 +45,18 @@ export const GLUE_KINDS = ["call", "set", "iife", "iter", "prim", "getOwner"];
 /**
  * @param {object} program
  * @param {{ instrument?: boolean }} [options] `instrument: false` skips the twin (`runText` is `text`, the ledger empty)
- * @returns {{ text: string, runText: string, sites: object[], glue: object[], ledger: object[] }}
+ * @returns {{ text: string, runText: string, sites: object[], glue: object[], ledger: object[], lineTable: object[] }}
  *   `sites`: the payload sites, each with its `hit` id in the twin.
  *   `glue`: one auto-site per emitted call, `{ id: "aN", hit, kind, line, path }`.
  *   `ledger`: every counter `{ hit, kind: site|auto|entry, ref, node, line, path, enclosing, inDefault }`;
  *   `enclosing` is the hit id of the nearest enclosing function entry (null for a component's own entry);
  *   `inDefault` marks a counter inside a parameter default (run only when the caller passes no argument).
+ *   `lineTable`: `{ line, endLine, path, label }` for every statement, view item, call and function: the node (its path in the
+ *   tree, its `nodeLabel`) whose text starts on `line` and ends on `endLine`. `nodeAtLine` reads it. Clean and twin share it.
  */
 export function printProgram(program, { instrument = true } = {}) {
   const clean = render(program, false);
-  if (!instrument) return { text: clean.text, runText: clean.text, sites: clean.sites, glue: [], ledger: [] };
+  if (!instrument) return { text: clean.text, runText: clean.text, sites: clean.sites, glue: [], ledger: [], lineTable: clean.lineTable };
   const run = render(program, true);
   const sites = clean.sites.map((site, index) => ({ ...site, hit: run.siteHits[index] }));
   const bySiteHit = new Map(sites.map((site) => [site.hit, site.id]));
@@ -49,8 +71,18 @@ export function printProgram(program, { instrument = true } = {}) {
     }
     return { ...base, ref: `e${row.hit}` };
   });
-  return { text: clean.text, runText: `${run.text}${INSTRUMENT_PRELUDE}`, sites, glue, ledger };
+  return { text: clean.text, runText: `${run.text}${INSTRUMENT_PRELUDE}`, sites, glue, ledger, lineTable: clean.lineTable };
 }
+
+/**
+ * The nodes of the line table that cover `line`, innermost first (deepest path, then the narrowest span).
+ * A runtime frame's line lands inside the call it is running; the first row is the innermost node there.
+ */
+export function nodesAtLine(lineTable, line) {
+  return (lineTable ?? []).filter((row) => row.line <= line && line <= row.endLine)
+    .sort((a, b) => b.path.length - a.path.length || (a.endLine - a.line) - (b.endLine - b.line));
+}
+export const nodeAtLine = (lineTable, line) => nodesAtLine(lineTable, line)[0] ?? null;
 
 function render(program, instrument) {
   // Site numbering follows the tree walk, which is the order sites appear in the file.
@@ -128,6 +160,14 @@ function render(program, instrument) {
     return `${mark(node)}(__h(${hit}), ${text})`;
   };
   const ind = (depth) => INDENT.repeat(depth);
+  // The line table: every lineable node's text is wrapped in span markers, read back (and stripped) below.
+  const spans = [];
+  const span = (node, text) => {
+    if (!LINE_KINDS.has(node.k)) return text;
+    spans.push({ node, path: pathOf.get(node) });
+    const id = spans.length - 1;
+    return `${SPAN_OPEN}${id}${SPAN_OPEN_END}${text}${SPAN_CLOSE}${id}${SPAN_CLOSE_END}`;
+  };
 
   function params(f, depth) {
     return f.params.map((p, index) => {
@@ -154,7 +194,8 @@ function render(program, instrument) {
     const text = entry === null ? inner() : within({ entry, inDefault: false }, inner);
     return `{${hit ? ` ${hit}` : ""}\n${text}\n${ind(depth)}}`;
   }
-  function stmtText(stmt, depth) {
+  function stmtText(stmt, depth) { return span(stmt, statement(stmt, depth)); }
+  function statement(stmt, depth) {
     switch (stmt.k) {
       case "expr": return counting(stmt.e, () => `${expr(stmt.e, depth)};`);
       case "decl":
@@ -169,7 +210,8 @@ function render(program, instrument) {
       default: throw new Error(`cannot print statement ${stmt.k}`);
     }
   }
-  function expr(e, depth) {
+  function expr(e, depth) { return span(e, expression(e, depth)); }
+  function expression(e, depth) {
     switch (e.k) {
       case "num": return String(e.n);
       case "read": return siteCall(e, `${e.sig}()`);
@@ -235,6 +277,13 @@ function render(program, instrument) {
   }
 
   function viewText(item, depth) {
+    const lines = view(item, depth);
+    if (!LINE_KINDS.has(item.k)) return lines;
+    spans.push({ node: item, path: pathOf.get(item) });
+    const id = spans.length - 1;
+    return [`${SPAN_OPEN}${id}${SPAN_OPEN_END}${lines[0]}`, ...lines.slice(1)].map((line, index, all) => (index === all.length - 1 ? `${line}${SPAN_CLOSE}${id}${SPAN_CLOSE_END}` : line));
+  }
+  function view(item, depth) {
     switch (item.k) {
       case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${signals.get(item.sig)?.kind === "store" ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
       case "button": {
@@ -300,13 +349,22 @@ function render(program, instrument) {
     for (const match of line.matchAll(markPattern)) siteLines.set(Number(match[1]), row + 1);
     if (instrument) for (const match of line.matchAll(/__h\((\d+)\)/g)) hitLines.set(Number(match[1]), row + 1);
   });
-  const text = full.replace(markPattern, "");
+  const spanOpen = new RegExp(`${SPAN_OPEN}(\\d+)${SPAN_OPEN_END}`, "g");
+  const spanClose = new RegExp(`${SPAN_CLOSE}(\\d+)${SPAN_CLOSE_END}`, "g");
+  const starts = new Map(); const ends = new Map();
+  lines.forEach((line, row) => {
+    for (const match of line.matchAll(spanOpen)) starts.set(Number(match[1]), row + 1);
+    for (const match of line.matchAll(spanClose)) ends.set(Number(match[1]), row + 1);
+  });
+  const lineTable = spans.map(({ node, path }, id) => ({ line: starts.get(id), endLine: ends.get(id), path, label: nodeLabel(node) }))
+    .filter((row) => row.line !== undefined && row.endLine !== undefined && row.path);
+  const text = full.replace(markPattern, "").replace(spanOpen, "").replace(spanClose, "");
   const sites = sitePaths.map(({ node, path }, index) => ({
     id: `s${index + 1}`, kind: node.k, sig: node.sig, op: node.k === "own" ? node.op : undefined, value: node.k === "write" ? node.value : undefined,
     line: siteLines.get(index), path, witness: node.witness ?? null,
   }));
   for (const row of ledger) row.line = hitLines.get(row.hit);
-  return { text, sites, siteHits, ledger };
+  return { text, sites, siteHits, ledger, lineTable };
 
   function helperText(helper) {
     switch (helper.form) {
