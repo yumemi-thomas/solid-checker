@@ -20,6 +20,14 @@ not this rule's.
 A callback of an `onSettled` called inside another leaf body runs with no owner
 (rc.13 queues it), so an `onCleanup` there is this rule's claim.
 
+`Loading(props)` or `Errored(props)` called as a function creates its boundary
+in the call, and rc.17 warns `NO_OWNER_BOUNDARY` when no owner is current. The
+call is placed as an effect is: an ownerless handler, a timer or promise
+callback, a microtask, module scope, code after an `await`, or a
+`runWithOwner(null)` callback is unowned (ADR 0462). A JSX `<Loading>` in a
+handler is not claimed: rc.17 dev runs the component in a transparent root,
+so the runtime does not warn there.
+
 ## What it does
 
 The checker reports an operation when no component, computation, or root owner

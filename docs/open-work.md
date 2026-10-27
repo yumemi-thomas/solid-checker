@@ -51,6 +51,7 @@ Server directives (`valid-use-server`, SC7006; ADR 0427):
 Async read outside a loading boundary (`async-outside-loading-boundary`, SC5003):
 
 - `r9-b3-childrenasync` (App.tsx:15): an async memo read flows through `children()` into JSX with no `Loading`.
+- An alias (`const useIt = a1`) or object-literal destructuring of an async accessor read in JSX is silent; a read in a rendered local function is only uncertifiable (ADR 0462).
 
 Missing owner (`missing-owner`, SC4001):
 

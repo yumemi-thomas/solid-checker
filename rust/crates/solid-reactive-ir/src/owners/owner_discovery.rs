@@ -246,6 +246,17 @@ pub(crate) fn discover_owner_file(
                 call.callee,
                 false,
             )),
+            // ADR 0462: `Loading(props)`/`Errored(props)` called as a function
+            // creates its boundary in the call, with the caller's owner. Its
+            // own operation name, so the call is placed after an `await` as
+            // an effect is, and a JSX boundary keeps its placement.
+            (Some(OwnerRequirementRole::Boundary), _) => Some((
+                "boundary-call",
+                OWNER_CONTEXT_UNOWNED,
+                None,
+                call.callee,
+                false,
+            )),
             _ => None,
         };
         if let Some((operation, report_mask, settled_target, operation_span, runtime_uncertain)) =

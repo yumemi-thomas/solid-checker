@@ -226,6 +226,7 @@ fn catalog_capabilities_gate_whole_program_tables() {
             callee_callback_timing: false,
             invocation_context_unproven: false,
             mount_unresolved: false,
+            call_attributed: false,
         }],
         ..Program::default()
     };
@@ -269,6 +270,7 @@ fn a_discarded_async_read_is_excluded_ahead_of_the_leaf_owner_short_circuit() {
             callee_callback_timing: false,
             invocation_context_unproven: false,
             mount_unresolved: false,
+            call_attributed: false,
         }],
         ..Program::default()
     };
@@ -320,6 +322,7 @@ fn selection_filters_safe_rows_before_the_catalog_seam() {
             callee_callback_timing: false,
             invocation_context_unproven: false,
             mount_unresolved: false,
+            call_attributed: false,
         }],
         ..Program::default()
     };

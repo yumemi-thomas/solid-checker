@@ -598,6 +598,10 @@ fn owner_requirement_roles_need_exact_dialect_ownership() {
     // ADR 0352: the read throws without an owner; creating a context does not.
     assert_eq!(role("useContext"), Some(OwnerRequirementRole::ContextRead));
     assert_eq!(role("createContext"), None);
+    // ADR 0462: a boundary component called as a function creates its boundary.
+    assert_eq!(role("Loading"), Some(OwnerRequirementRole::Boundary));
+    assert_eq!(role("Errored"), Some(OwnerRequirementRole::Boundary));
+    assert_eq!(role("Show"), None);
     assert_eq!(role("effect"), None);
     assert_eq!(role("createUnknown"), None);
 }

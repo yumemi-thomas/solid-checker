@@ -2398,9 +2398,18 @@ impl Dialect for Solid2 {
     /// `NoOwnerError`, whatever default the context has (ADR 0352). The
     /// `ContextNotFoundError` half is a different claim (a missing provider),
     /// so it is not a role here.
+    ///
+    /// rc.17's `Loading` and `Errored` (`solid-js` `dist/solid.dev.js`) call
+    /// `createLoadingBoundary`/`createErrorBoundary`, whose `createBoundary`
+    /// (`@solidjs/signals` `dist/dev.js`) warns `NO_OWNER_BOUNDARY` when
+    /// `getOwner()` is null; the hydrated wrappers pass straight through with
+    /// no owner (`noHydrationId`). JSX `<Loading>` reaches them through
+    /// `createComponent`, whose dev build runs the component in a transparent
+    /// root, so the role is the direct call's (ADR 0462).
     fn owner_requirement_role(&self, primitive: Primitive) -> Option<OwnerRequirementRole> {
         match primitive {
             Primitive::UseContext => Some(OwnerRequirementRole::ContextRead),
+            Primitive::Loading | Primitive::Errored => Some(OwnerRequirementRole::Boundary),
             _ => crate::dialect::shared_owner_requirement_role(primitive),
         }
     }

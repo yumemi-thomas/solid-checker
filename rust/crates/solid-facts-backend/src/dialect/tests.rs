@@ -122,6 +122,7 @@ fn catalog_prose_program() -> Program {
             callee_callback_timing: false,
             invocation_context_unproven: false,
             mount_unresolved: false,
+            call_attributed: false,
         }],
         static_defects: defect_kinds
             .into_iter()

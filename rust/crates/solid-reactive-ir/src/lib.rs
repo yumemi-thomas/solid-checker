@@ -1179,7 +1179,8 @@ impl OwnerRequirementOperation {
         match operation {
             "effect" => Self::Effect,
             "cleanup" => Self::Cleanup,
-            "boundary" => Self::Boundary,
+            // ADR 0462: a boundary component called as a function.
+            "boundary" | "boundary-call" => Self::Boundary,
             "settled-cleanup" => Self::SettledCleanup,
             "context-read" => Self::ContextRead,
             "context-provider" => Self::ContextProvider,
@@ -1259,6 +1260,13 @@ pub struct AsyncRead {
     /// missing-boundary findings are uncertifiable then, not proven.
     #[serde(default, skip_serializing_if = "is_false")]
     pub mount_unresolved: bool,
+    /// The read is a project function call in rendered JSX whose callee's
+    /// interprocedural summary reads the async source (ADR 0462): a wrapper,
+    /// a local closure, a callback a helper calls. The summary does not prove
+    /// the read runs while the call renders, so the missing-boundary findings
+    /// are uncertifiable, never proven.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub call_attributed: bool,
 }
 
 fn default_async_provenance() -> bool {

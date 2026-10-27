@@ -107,7 +107,11 @@ export const FILE_BUDGETS = {
   // And its review amendment (parentheses-only operand, nullish links): 261,636 bytes: 261_750.
   // And ADR 0461's chain-past-the-root sentence (strictNullChecks unrecorded): 261,863 bytes: 262_000.
   // Merge of PR #129 (ADRs 0459/0460) with ADR 0461: 269,238 bytes: 269_500.
-  "docs/decisions.md": 269_500,
+  // And ADR 0460's chain-past-the-root sentence (strictNullChecks unrecorded): 261,863 bytes: 262_000.
+  // Merge of ADR 0458/0459 (PR #129) with ADR 0460 (PR #130): 266,031 bytes: 266_500.
+  // And ADR 0462, boundary calls and call-attributed async reads: 268,514 bytes: 269_000.
+  // And ADR 0462 (Loading/Errored as calls; call-attributed async reads): 271,721 bytes: 272_000.
+  "docs/decisions.md": 272_000,
 };
 
 export const GROUP_BUDGETS = [
@@ -142,7 +146,7 @@ export const GROUP_BUDGETS = [
   // With main's ADR 0451 (PR #119) merged in: 753,780 bytes: 754_500.
   // And for ADR 0454 (its entry, the open-work lines, a rule-page paragraph): 758,425 bytes against 754,500: 759_000; its owner-graph follow-up: 760,511 bytes: 761_000; its reachability follow-up: 761,579 bytes: 762_500.
   // And for ADR 0455 (its entry, one open-work line, a rule-page paragraph): 765,586 bytes against 762,500: 766_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 793_000 }, // Merge of PR #129 with ADR 0461 (PR #130): 792,496 bytes. // ADR 0461 review amendment (ADR sentences, open-work lines, rule-page sentences): 782,004 bytes. // ADR 0461 (its entry, the open-work line, a rule-page paragraph): 780,658 bytes. // Merge of ADR 0456 (PR #123) with ADR 0457: 778,757 bytes. // ADR 0456 (its entry, open-work lines, a rule-page paragraph): 775,714 bytes. // ADR 0457 review amendment (its sentences, one open-work line): 774,199 bytes against 773,500. // ADR 0457 (its entry, a rule-page sentence): 773,270 bytes against 771,500. // ADR 0455 fourth-review amendment: 771,408 bytes. // ADR 0455 third-review amendment: 770,819 bytes. // ADR 0455 cleanup amendment: 769,241 bytes. // ADR 0455 named-closure follow-up: 767,101 bytes. // ADR 0455 follow-up: 766,106 bytes against 766,000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 796_500 }, // ADR 0462 (its entry, two rule-page paragraphs, one open-work line): 796,067 bytes. // Merge of PR #129 with ADR 0461 (PR #130): 792,496 bytes. // ADR 0461 review amendment (ADR sentences, open-work lines, rule-page sentences): 782,004 bytes. // ADR 0461 (its entry, the open-work line, a rule-page paragraph): 780,658 bytes. // Merge of ADR 0456 (PR #123) with ADR 0457: 778,757 bytes. // ADR 0456 (its entry, open-work lines, a rule-page paragraph): 775,714 bytes. // ADR 0457 review amendment (its sentences, one open-work line): 774,199 bytes against 773,500. // ADR 0457 (its entry, a rule-page sentence): 773,270 bytes against 771,500. // ADR 0455 fourth-review amendment: 771,408 bytes. // ADR 0455 third-review amendment: 770,819 bytes. // ADR 0455 cleanup amendment: 769,241 bytes. // ADR 0455 named-closure follow-up: 767,101 bytes. // ADR 0455 follow-up: 766,106 bytes against 766,000.
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
@@ -182,7 +186,10 @@ export const GROUP_BUDGETS = [
     // And its review amendment (Rejected.tsx, nullish links): 318,816 bytes: 319_000.
     // And the store-delete README's uncertifiable nested paths: 319,109 bytes: 319_500.
     // Merge of PR #129 with ADR 0461 (store-delete): 324,335 bytes: 324_500.
-    bytes: 324_500,
+    // Merge of PR #129 with PR #130: 322,672 bytes: 323_000.
+    // And ADR 0462's two fixtures (boundary-call-owner, async-boundary-call-attributed): 324,397 bytes: 324_500.
+    // And ADR 0462's fixtures (boundary-call-owner, async-boundary-call-attributed): 326,060 bytes: 326_500.
+    bytes: 326_500,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

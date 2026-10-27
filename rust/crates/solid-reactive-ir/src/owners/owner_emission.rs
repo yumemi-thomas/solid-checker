@@ -113,15 +113,19 @@ pub(super) fn emit_file(
         if candidate.in_parameter_list && context == 0 {
             context = OWNER_CONTEXT_UNOWNED;
         }
-        // As in the fragment: effects, cleanups and context reads, never a
-        // JSX boundary or `onSettled`'s returned cleanup. A context read after
-        // an `await` is unowned (ADR 0352).
-        let after_await = matches!(candidate.operation, "effect" | "cleanup" | "context-read")
-            && starts.contains(&u64::from(candidate.operation_span.start));
-        let possible_continuation = (!after_await
-            && matches!(candidate.operation, "effect" | "cleanup" | "context-read"))
-        .then(|| possible_await_continuation_context(file, candidate.operation_span, context))
-        .flatten();
+        // As in the fragment: effects, cleanups, context reads and boundary
+        // calls, never a JSX boundary or `onSettled`'s returned cleanup. A
+        // context read after an `await` is unowned (ADR 0352), and so is a
+        // `Loading(props)` call (ADR 0462).
+        let continuation_placed = matches!(
+            candidate.operation,
+            "effect" | "cleanup" | "context-read" | "boundary-call"
+        );
+        let after_await =
+            continuation_placed && starts.contains(&u64::from(candidate.operation_span.start));
+        let possible_continuation = (!after_await && continuation_placed)
+            .then(|| possible_await_continuation_context(file, candidate.operation_span, context))
+            .flatten();
         let context = if after_await {
             await_continuation_context(context)
         } else {

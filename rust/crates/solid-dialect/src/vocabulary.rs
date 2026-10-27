@@ -184,6 +184,9 @@ pub enum OwnerRequirementRole {
     /// `useContext(context)`: the read throws `NoOwnerError` when no owner is
     /// current, whatever default the context was created with (ADR 0352).
     ContextRead,
+    /// `Loading(props)` or `Errored(props)` called as a function: the boundary
+    /// it creates warns `NO_OWNER_BOUNDARY` when no owner is current (ADR 0462).
+    Boundary,
 }
 
 /// What one call's arguments prove about one boolean option key, as the

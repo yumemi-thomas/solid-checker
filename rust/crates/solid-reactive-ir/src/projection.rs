@@ -1056,6 +1056,15 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if read.server_rendering_unresolved {
                 finding.kind = "uncertifiable".into();
             }
+            // ADR 0462: a call whose callee's summary reads the source does
+            // not prove the read runs while the call renders.
+            if read.call_attributed && matches!(finding.id.as_str(), "SC5003" | "SC5005") {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "this call reaches a read of the async source through a project function, and whether that read runs while the call renders is not proven; if it does: {}",
+                    finding.message
+                );
+            }
             // A missing boundary is proven only for a function whose every
             // render chain was followed to a mount root. Where a chain ends at
             // a function the project never renders, the boundary above it may
