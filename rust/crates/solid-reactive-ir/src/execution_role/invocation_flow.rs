@@ -695,6 +695,15 @@ pub(super) fn write_flow_role(
     if !innermost.body.contains(span) {
         return None;
     }
+    // A default value runs when its function is called without the argument,
+    // not when the function around it does: those invocations place nothing
+    // for it (a nested function's parameter list lies in the outer body).
+    if functions_around(file, span)
+        .into_iter()
+        .any(|function| parameter_slot(function, span).is_some())
+    {
+        return None;
+    }
     let answers = lookup.write_flow_answers();
     let mut enclosing = file.ast.functions_body_containing(span).collect::<Vec<_>>();
     enclosing.sort_by_key(|function| function.span.end - function.span.start);

@@ -73,18 +73,20 @@ pub(super) fn call_argument_invocation_unproven(
 /// default value (`(x = set(1)) => x`, `({ a = count() }) => a`) lies outside
 /// its function's body but runs only when that function is called, so for
 /// every question about the closure around a site it is inside it.
-pub(super) fn functions_around(
+pub(crate) fn functions_around(
     file: &solid_facts::FileFacts,
     span: Span,
 ) -> Vec<&solid_facts::ast::FunctionFact> {
-    let region = containing_ast_function(&file.ast, span)
-        .map_or_else(|| Span::new(0, u32::MAX), |function| function.body);
+    // A function written inside a default value (an IIFE, an inline callback)
+    // sits outside the body of the function owning the default, so the
+    // parameter-list owners are found by their whole span, wherever the site
+    // is nested.
     let mut around: Vec<_> = file.ast.functions_body_containing(span).collect();
-    around.extend(file.ast.functions_within(region).filter(|function| {
-        function.span.contains(span)
-            && !function.body.contains(span)
-            && span.end <= function.body.start
-    }));
+    around.extend(
+        file.ast
+            .functions_containing(span)
+            .filter(|function| !function.body.contains(span) && span.end <= function.body.start),
+    );
     around
 }
 
@@ -92,7 +94,7 @@ pub(super) fn functions_around(
 /// the default value of parameter `index`, `Some(None)` elsewhere in the
 /// parameter list (a default inside a destructuring pattern, which no call
 /// argument decides).
-pub(super) fn parameter_slot(
+pub(crate) fn parameter_slot(
     function: &solid_facts::ast::FunctionFact,
     span: Span,
 ) -> Option<Option<usize>> {
@@ -407,7 +409,7 @@ pub(super) fn named_callbacks_within_component<'f>(
     lookup: &SemanticLookup<'_>,
 ) -> Vec<&'f solid_facts::ast::FunctionFact> {
     let roles = lookup.named_callback_roles(file);
-    let mut enclosing = file.ast.functions_body_containing(span).collect::<Vec<_>>();
+    let mut enclosing = functions_around(file, span);
     // Innermost first: a function nested in another starts later.
     enclosing.sort_by_key(|function| std::cmp::Reverse(function.span.start));
     enclosing

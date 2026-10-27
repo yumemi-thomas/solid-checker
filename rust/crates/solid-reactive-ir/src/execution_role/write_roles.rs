@@ -426,6 +426,21 @@ pub(super) fn semantic_write_role_walk(
     {
         return unknown;
     }
+    // A site in a parameter list (a default value) of a closure bound to a name
+    // runs when that closure is called without the argument. The function
+    // around the closure (the body that holds the list) does not run it, and
+    // the closure has no call sites: its parameter list is not inert, so the
+    // call graph withholds them (ADR 0339). Nothing places the write (ADR
+    // 0450); a lexical tracked or rendering role, or the surrounding function's
+    // calls, would claim a run the closure's own calls decide.
+    if functions_around(file, span).into_iter().any(|function| {
+        parameter_slot(function, span).is_some()
+            && function.method_name.is_none()
+            && function_binding_name(file, function).is_some()
+            && lookup.function_component_status(file, function) == ComponentStatus::No
+    }) {
+        return unknown;
+    }
     let innermost = crate::owners::containing_ast_function(&file.ast, span);
     // A permissive role read off the positions that name the function as a
     // callback (`onClick={reset}`) describes those entries only. Its calls and
@@ -456,16 +471,7 @@ pub(super) fn semantic_write_role_walk(
     // calls, and the write runs with it only through layers that run in place
     // (an IIFE, an inline standard-library callback). Any other layer keeps or
     // schedules the write's function, whose entries are not the closure's.
-    //
-    // A site in a parameter list (a default value) runs when its function is
-    // called without that argument. Such a function holds a call or a read, so
-    // its parameter list is not inert and the call graph withholds its call
-    // sites (ADR 0339): nothing places the write, which stays unplaced.
-    let in_default = functions_around(file, span)
-        .into_iter()
-        .any(|function| parameter_slot(function, span).is_some());
     let entry = match tracked_named {
-        Some(_) if in_default => return unknown,
         Some(closure) if closure.span == innermost.span => Some(closure),
         Some(closure) if runs_in_place_within(file, innermost, closure, lookup) => Some(closure),
         Some(_) => return unknown,

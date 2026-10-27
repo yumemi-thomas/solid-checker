@@ -31,8 +31,10 @@ pub(super) fn runs_in_retained_value_literal(
     span: Span,
     owner: &SummaryNode,
 ) -> bool {
-    file.ast.functions_body_containing(span).any(|literal| {
-        literal.span != owner.span
+    crate::execution_role::functions_around(file, span)
+        .into_iter()
+        .any(|literal| {
+            literal.span != owner.span
             && owner.body.contains(literal.span)
             && literal.name.is_none()
             && literal.method_name.is_none()
@@ -44,7 +46,7 @@ pub(super) fn runs_in_retained_value_literal(
                 .arguments_containing(literal.span)
                 .any(|(call, _)| owner.body.contains(call.span))
             && is_retained_value_position(file, literal.span, owner.body)
-    })
+        })
 }
 
 /// Whether the call at `span`, written inside a component, sits in a function

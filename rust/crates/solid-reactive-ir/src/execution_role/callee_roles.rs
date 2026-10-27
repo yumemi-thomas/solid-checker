@@ -141,7 +141,7 @@ pub(super) fn semantic_role_before_awaits(
     }
     // A function argument the primitive wraps in a memo of its own (2.0's
     // `merge`) runs inside that computation, not in the caller's body.
-    if file.ast.functions_body_containing(span).any(|function| {
+    if functions_around(file, span).into_iter().any(|function| {
         file.ast
             .arguments_containing(function.span)
             .any(|(call, index)| {

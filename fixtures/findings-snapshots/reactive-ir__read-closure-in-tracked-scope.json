@@ -140,6 +140,26 @@
       "start": 2995,
       "end": 2998,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-closure-in-tracked-scope/App.tsx",
+      "start": 3477,
+      "end": 3484,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-closure-in-tracked-scope/App.tsx",
+      "start": 3527,
+      "end": 3530,
+      "fixes": 0
     }
   ]
 }

@@ -118,3 +118,14 @@ export function InlineCallbackDefaultRead() {
   const m = createMemo(() => [undefined].map((x = count()) => x)[0]);
   return <div>{m()}</div>;
 }
+
+// A function written inside a default value is the closure's too.
+export function ReturnedIifeDefaultRead() {
+  const [count] = createSignal(1);
+  const m = createMemo(() => {
+    const f = (x = (() => count())()) => x;
+    return f;
+  });
+  const v = m()();
+  return <div>{v}</div>;
+}

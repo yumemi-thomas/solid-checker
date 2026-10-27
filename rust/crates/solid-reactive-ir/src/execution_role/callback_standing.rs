@@ -996,7 +996,7 @@ pub(super) fn context_provider_value_role(
     // The provider's implementation eagerly reads props.value inside
     // untrack. A function expression is the one exception: reading
     // the getter only creates/stores the function; its body is not run.
-    let stores_function = file.ast.functions_body_containing(span).any(|function| {
+    let stores_function = functions_around(file, span).into_iter().any(|function| {
         element.attributes.iter().any(|attribute| {
             attribute
                 .expression

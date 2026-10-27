@@ -276,3 +276,70 @@ export function CalledInComputeLiteralDefault() {
   });
   return <div>{String(doubled())}</div>;
 }
+
+// A function written inside a default value (an IIFE, an inline callback) runs
+// when the closure that owns the default is called, not when the closure is
+// built: rc.17 writes from the click and throws nothing for each of these.
+
+export function ReturnedIifeDefaultWrite() {
+  const [open, setOpen] = createSignal(false);
+  const api = createMemo(() => {
+    const f = (x = (() => setOpen(true))()) => x;
+    return f;
+  });
+  return <button onClick={() => api()()}>{String(open())}</button>;
+}
+
+export function ReturnedForEachDefaultWrite() {
+  const [open, setOpen] = createSignal(false);
+  const api = createMemo(() => {
+    const f = (x = [1].forEach(() => setOpen(true))) => x;
+    return f;
+  });
+  return <button onClick={() => api()()}>{String(open())}</button>;
+}
+
+export function ReturnedMapDefaultWrite() {
+  const [open, setOpen] = createSignal(false);
+  const api = createMemo(() => {
+    const f = (x = [1].map(() => setOpen(true))) => x;
+    return f;
+  });
+  return <button onClick={() => api()()}>{String(open())}</button>;
+}
+
+// Known miss, as for CalledInComputeDefaultWrite: the closure has no call sites.
+export function CalledInComputeIifeDefaultWrite() {
+  const [open, setOpen] = createSignal(false);
+  const doubled = createMemo(() => {
+    const f = (x = (() => setOpen(true))()) => x;
+    f();
+    return open();
+  });
+  return <div>{String(doubled())}</div>;
+}
+
+// A helper that builds the closure: its own calls (here in a memo) do not run
+// the closure's default, the click that calls the returned closure does.
+const [shared, setShared] = createSignal(false);
+
+function makeDefault() {
+  const f = (x = setShared(true)) => x;
+  return f;
+}
+
+export function HelperReturnsDefaultClosure() {
+  const api = createMemo(() => makeDefault());
+  return <button onClick={() => api()()}>{String(shared())}</button>;
+}
+
+// Control: the write in the body of the helper's closure.
+function makeBody() {
+  const f = () => setShared(true);
+  return f;
+}
+
+export function HelperReturnsBodyClosure() {
+  const api = createMemo(() => makeBody());
+  return <button onClick={() => api()()}>{String(shared())}</button>;
+}
