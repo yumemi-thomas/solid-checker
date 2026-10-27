@@ -401,6 +401,21 @@ pub(super) fn runs_in_disposal(
                 return match lookup.function_component_status(file, function) {
                     ComponentStatus::Proven => DisposalReach::NotIn,
                     ComponentStatus::Uncertain => DisposalReach::Unplaced,
+                    // On a release whose guard stands down in a disposal, an
+                    // effect's returned cleanup also runs when the effect's
+                    // owner is disposed (a memo that reruns, a `Show` turned
+                    // off, a removed row, a disposed root), inside a disposal.
+                    // A rerun that finds the owner alive is the only run
+                    // outside one, and nothing orders the owner's disposal
+                    // against it (an owner that tracks what the effect tracks
+                    // disposes it first): no proof, unplaced.
+                    ComponentStatus::No
+                        if lookup.dialect.write_guard_in_disposal()
+                            == solid_dialect::WriteGuardInDisposal::StandsDown
+                            && returns_effect_cleanup(file, function, lookup) =>
+                    {
+                        DisposalReach::Unplaced
+                    }
                     ComponentStatus::No
                         if returned_by_rerunning_effect(file, function, lookup)
                             || event_only_entries(file, function, lookup)
@@ -520,11 +535,35 @@ fn stored_function_called_only_by_events(
 }
 
 /// Whether `function` is the cleanup an effect's apply returns, which a rerun
-/// calls outside a disposal ([`solid_dialect::Dialect::returned_cleanup_runs_outside_disposal`]).
+/// calls outside a disposal ([`solid_dialect::Dialect::returned_cleanup_runs_outside_disposal`])
+/// and the owner's disposal or the final teardown calls inside one, and the
+/// effect provably reruns ([`effect_provably_reruns`]). That proof alone places
+/// no run outside a disposal where the guard stands down there (see
+/// [`returns_effect_cleanup`]); it is the proof for a release nobody read.
 fn returned_by_rerunning_effect(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
+) -> bool {
+    returned_effect_cleanup(file, function, lookup, true)
+}
+
+/// Whether `function` is returned by the apply (or tracked body) of an effect
+/// whose returned cleanup a rerun calls outside a disposal, with no claim that
+/// the effect reruns.
+fn returns_effect_cleanup(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    returned_effect_cleanup(file, function, lookup, false)
+}
+
+fn returned_effect_cleanup(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    prove_rerun: bool,
 ) -> bool {
     let Some(outer) = crate::owners::owning_function(&file.ast, function.span) else {
         return false;
@@ -563,15 +602,19 @@ fn returned_by_rerunning_effect(
                         lookup
                             .dialect
                             .returned_cleanup_runs_outside_disposal(primitive, index)
-                            && effect_provably_reruns(file, call, index, outer, function, lookup)
+                            && (!prove_rerun
+                                || effect_provably_reruns(
+                                    file, call, index, outer, function, lookup,
+                                ))
                     })
             })
 }
 
 /// Whether the effect whose apply (or tracked body) is `outer` provably tracks
-/// a source that can change, so that its returned cleanup `cleanup` is called
-/// by a rerun and not only by the final teardown (which runs it inside a
-/// disposal). The function that tracks (the compute of `createEffect` and
+/// a source that can change, so that its returned cleanup `cleanup` may be
+/// called by a rerun and not only by the final teardown (which runs it inside
+/// a disposal). Where the guard stands down in a disposal this is no proof of
+/// a run outside one: the owner may be disposed before the rerun. The function that tracks (the compute of `createEffect` and
 /// `createRenderEffect`, the body of `createTrackedEffect`) must call, on
 /// every completion, the accessor of a `createSignal` declared in this file
 /// whose setter is referenced outside `cleanup` or exported. An effect that

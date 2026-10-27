@@ -13,7 +13,10 @@
 // two-function shape (`dist/types/signals.d.ts:427`, `:457`) whose apply returns
 // `(() => void) | void`, as the package says; `createTrackedEffect`
 // (`:503`), `createMemo` (`:358`), `untrack` (`core.d.ts:167`) and `flush`
-// (`scheduler.d.ts:384`) to the overloads this fixture calls.
+// (`scheduler.d.ts:384`) to the overloads this fixture calls. `Show` is reduced
+// to the `when` and `children` its cases pass (`types/server/flow.d.ts:58`),
+// `createStore` to its plain form with `StoreSetter` (`store/store.d.ts:21`)
+// and `refresh` (`signals.d.ts:551`) to an accessor target.
 
 declare namespace JSX {
   interface IntrinsicElements {
@@ -59,6 +62,12 @@ declare module "solid-js" {
   export function runWithOwner<T>(owner: Owner | null, fn: () => T): T;
   export type Disposable = () => void;
   export function onCleanup(fn: Disposable): Disposable;
+  export function Show(props: { when: any; children?: any }): JSX.Element;
+  export type StoreSetter<T> = (fn: (state: T) => T | void) => void;
+  export function createStore<T extends object>(
+    value: T
+  ): [get: T, set: StoreSetter<T>];
+  export function refresh<T>(target: Accessor<T>): Promise<T>;
   export function action<Args extends any[], Y, R>(
     genFn: (...args: Args) => Generator<Y, R, any> | AsyncGenerator<Y, R, any>
   ): (...args: Args) => Promise<R>;

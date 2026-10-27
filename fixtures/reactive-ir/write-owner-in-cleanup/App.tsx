@@ -6,11 +6,14 @@ import {
   createRenderEffect,
   createRoot,
   createSignal,
+  createStore,
   createTrackedEffect,
   flush,
   getOwner,
   onCleanup,
+  refresh,
   runWithOwner,
+  Show,
   untrack,
   type Owner,
 } from "solid-js";
@@ -75,11 +78,15 @@ export function CleanupCallsRootHelper() {
   return <div>{v()}</div>;
 }
 
-// --- Violations: the same owner outside a disposal --------------------------
+// --- Uncertifiable: an effect's returned cleanup, no run proven outside a disposal --
 
-// An effect apply's returned cleanup is no registration: a rerun calls it
-// outside `runDisposal`, and the write throws. The effect tracks `n`, which a
-// button changes, so it can rerun.
+// An effect apply's returned cleanup is no registration: a rerun that finds the
+// owner alive calls it outside `runDisposal`, and the write throws. But the
+// owner's disposal (a memo that reruns, a `Show` turned off, a removed row, a
+// disposed root) calls it inside one, where the write lands, and nothing here
+// orders the owner's disposal against the rerun: the effect below tracks `n`,
+// which a button changes, and may rerun with its owner alive, yet no run is
+// proven outside a disposal.
 export function EffectReturnedCleanup() {
   const [v, setV] = createSignal(0);
   const [n, setN] = createSignal(0);
@@ -110,6 +117,116 @@ export function TrackedEffectReturnedCleanup() {
   });
   return <button onClick={() => setN(n() + 1)}>{v()}</button>;
 }
+// Fuzzer shapes (Chrome-confirmed legal on rc.17): the host is disposed before
+// the effect reruns, so the cleanup runs only in a disposal.
+
+// A memo host that tracks what its effect tracks: a bump disposes the effect
+// first.
+export function MemoHostTracksSame() {
+  const [w, setW] = createSignal(0);
+  const [t, setT] = createSignal(0);
+  createMemo(() => {
+    t();
+    createEffect(
+      () => {
+        t();
+        return 1;
+      },
+      () => () => {
+        runWithOwner(createOwner(), () => {
+          setW(17);
+        });
+      }
+    );
+    return 1;
+  });
+  return <button onClick={() => setT(1)}>{w()}</button>;
+}
+// The same under a root, with a store setter in try/finally.
+export function MemoHostStoreSetterInRoot() {
+  const [w, setW] = createStore({ v: 0 });
+  const [t, setT] = createSignal(0);
+  createMemo(() => {
+    t();
+    createEffect(
+      () => {
+        t();
+        return 1;
+      },
+      () => () => {
+        createRoot(() => {
+          try {
+          } finally {
+            setW((s) => {
+              s.v = 17;
+            });
+          }
+        });
+      }
+    );
+    return 1;
+  });
+  return <button onClick={() => setT(1)}>{w.v}</button>;
+}
+// A `Show` host turned off disposes the effect and runs the cleanup.
+export function ShowHostNestedOwner() {
+  const [w, setW] = createSignal(0);
+  const [t, setT] = createSignal(0);
+  const [on, setOn] = createSignal(1);
+  return (
+    <div>
+      <Show when={on()}>
+        {(() => {
+          createEffect(
+            () => {
+              t();
+              return 1;
+            },
+            () => () => {
+              runWithOwner(createOwner(), () => {
+                setW(17);
+              });
+            }
+          );
+          return 1;
+        })()}
+      </Show>
+      <button onClick={() => setOn(0)}>{w()}</button>
+      <button onClick={() => setT(1)}>go</button>
+    </div>
+  );
+}
+// A `Show` host, a refresh in a closure handed to `createRoot` by name.
+export function ShowHostRefreshInRoot() {
+  const m = createMemo(() => 1);
+  const [t, setT] = createSignal(0);
+  const [on, setOn] = createSignal(1);
+  return (
+    <div>
+      <Show when={on()}>
+        {(() => {
+          createEffect(
+            () => {
+              t();
+              return 1;
+            },
+            () => () => {
+              const f = () => {
+                refresh(m);
+              };
+              createRoot(f);
+            }
+          );
+          return 1;
+        })()}
+      </Show>
+      <button onClick={() => setOn(0)}>go</button>
+      <button onClick={() => setT(1)}>go</button>
+    </div>
+  );
+}
+// --- Violations: the same owner outside a disposal --------------------------
+
 // An effect apply that runs on a flush outside every cleanup runs outside a
 // disposal.
 export function EffectApplyUnderOwner() {

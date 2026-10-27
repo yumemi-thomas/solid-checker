@@ -243,10 +243,9 @@ On rc.17 the guard stands down while an owner is disposed, so a write an
 `onCleanup` callback runs under a proven owner (`runWithOwner(getOwner(), …)`,
 `createOwner()`, `createRoot`), also in an inline layer, is legal; a named
 function a cleanup calls or hands to `createRoot` is uncertifiable, and an action
-call stays a violation, as does an effect's returned cleanup when the effect
-provably reruns (a rerun throws; a compute that reads no signal a handler
-writes may never rerun, and its cleanup then runs only at teardown:
-uncertifiable). Earlier releases throw
+call stays a violation. An effect's returned cleanup also runs when the effect's
+owner is disposed (a memo rerun, a `Show` turned off), where the write is legal,
+and nothing orders that against a rerun: uncertifiable. Earlier releases throw
 (ADR 0455, `fixtures/reactive-ir/write-owner-in-cleanup`).
 
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
