@@ -28,6 +28,10 @@ impl DispatchReceiver {
 pub(crate) enum DispatchCaller {
     /// A callback a reviewed host scheduler runs from an empty stack.
     FreshStack,
+    /// Code an `await` of its own async function dominates (ADR 0320's
+    /// continuation): it resumes from the microtask queue on an empty stack,
+    /// with no owner and no strict-read window (ADR 0477).
+    AwaitContinuation,
     /// Module top level, outside every function, class and JSX element.
     ModuleInitialization,
     /// The callback of `runWithOwner(null, …)`: no owner, but a strict-read
@@ -50,6 +54,7 @@ impl DispatchCaller {
     pub(crate) const fn word(self) -> &'static str {
         match self {
             Self::FreshStack => "scheduled callback",
+            Self::AwaitContinuation => "await continuation",
             Self::ModuleInitialization => "module initialization",
             Self::DetachedOwner => "runWithOwner(null)",
             Self::TestRunner => "test runner callback",
@@ -84,6 +89,7 @@ impl DispatchSite {
                 self.caller,
                 Some(
                     DispatchCaller::FreshStack
+                        | DispatchCaller::AwaitContinuation
                         | DispatchCaller::ModuleInitialization
                         | DispatchCaller::TestRunner
                         | DispatchCaller::TestHelper
@@ -368,7 +374,15 @@ impl SemanticLookup<'_> {
         call: &solid_facts::ast::CallFact,
     ) -> Option<DispatchCaller> {
         if file.ast.any_function_body_containing(call.span) {
-            return self.dispatch_callback_caller(file, call.span);
+            // ADR 0477: after an await its own function reaches on every path
+            // to it, the call runs on a continuation, never on its caller's
+            // stack (a JSX expression, tracked region or field initializer
+            // there runs later under an owner, and is not a continuation).
+            // The callback classes name the caller first.
+            return self.dispatch_callback_caller(file, call.span).or_else(|| {
+                crate::execution_role::follows_dominating_await(file, call.span)
+                    .then_some(DispatchCaller::AwaitContinuation)
+            });
         }
         // Module evaluation: no reactive owner or window is current before a
         // function is invoked. A class element or JSX region is evaluated

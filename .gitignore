@@ -189,6 +189,14 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/event-dispatch-shadowed-window/node_modules/**
 !fixtures/reactive-ir/event-dispatch-timeout/node_modules/
 !fixtures/reactive-ir/event-dispatch-timeout/node_modules/**
+!fixtures/reactive-ir/event-dispatch-await-before/node_modules/
+!fixtures/reactive-ir/event-dispatch-await-before/node_modules/**
+!fixtures/reactive-ir/event-dispatch-await-closure/node_modules/
+!fixtures/reactive-ir/event-dispatch-await-closure/node_modules/**
+!fixtures/reactive-ir/event-dispatch-await-conditional/node_modules/
+!fixtures/reactive-ir/event-dispatch-await-conditional/node_modules/**
+!fixtures/reactive-ir/event-dispatch-await-continuation/node_modules/
+!fixtures/reactive-ir/event-dispatch-await-continuation/node_modules/**
 !fixtures/reactive-ir/event-dispatch-module-scope/node_modules/
 !fixtures/reactive-ir/event-dispatch-module-scope/node_modules/**
 !fixtures/reactive-ir/event-dispatch-detached-owner/node_modules/

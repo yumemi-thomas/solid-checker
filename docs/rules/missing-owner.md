@@ -128,8 +128,11 @@ not one also called from a component body, and outside a class element and JSX
 the compiler wraps; an exported function counts in a closed program on the
 terms above, and a literal handed to a helper only handlers call does too, ADR
 0442) leaves it too (ADR 0437): the delivery it makes runs on the stack of a
-delivery. A dispatch in any other function, or one in a
-function nothing places, keeps it. The remaining sites are listed in the
+delivery. A dispatch an `await` of its own async function dominates (ADR 0477:
+ADR 0320's continuation, so not one before the await, after a conditional one, or
+in a closure written after it) leaves it as class `await continuation`: it resumes
+from the microtask queue with no owner and no window. A dispatch in any other
+function, or one in a function nothing places, keeps it. The remaining sites are listed in the
 report's `premises`.
 
 Exact event members (including tuple slot zero) and intrinsic spreads join the
