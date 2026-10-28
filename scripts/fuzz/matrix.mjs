@@ -23,7 +23,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { withRuntimeCache } from "./cache.mjs";
-import { codeRules, ignoredRules, policyOf, withholdingRules } from "./codes.mjs";
+import { codeRules, codesForRule, ignoredRules, policyOf, withholdingRules } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
@@ -89,7 +89,12 @@ export function judge({ code, site, typecheck: typed, checker, runtime }) {
   const stray = relevant.filter((finding) => finding.kind === "violation" && !rules.includes(finding.rule) && !inLines(finding, region));
   const detail = { placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}) };
   if (claimingViolation) return { outcome: "agree", detail };
-  if (violations.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(violations.map((finding) => finding.rule))] } };
+  // A violation of another rule that the runtime substantiates on these lines (one of that rule's codes reported here: a store read
+  // in a body is a strict read too) is a second defect at the site, not a wrong rule; the code is judged as if it were absent.
+  const corroborated = (finding) => codesForRule(finding.rule).some((other) => known.some((event) => event.code === other && attributed(event).some((position) => region.includes(position.line))));
+  const wrong = violations.filter((finding) => !corroborated(finding));
+  if (violations.length > wrong.length) detail.corroborated = [...new Set(violations.filter(corroborated).map((finding) => finding.rule))];
+  if (wrong.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(wrong.map((finding) => finding.rule))] } };
   // A recall gap is the checker declining this code: an uncertifiable finding of a rule that claims it (or a withholding) at the site.
   // Another rule's uncertifiable finding on the same lines says nothing about this code; it is listed, and the program falls through.
   if (covering.some(claims)) return { outcome: "recall-gap", detail };
