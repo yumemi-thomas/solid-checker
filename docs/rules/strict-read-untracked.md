@@ -16,8 +16,9 @@ conditional premise.
 Flags reads of reactive values that happen outside every tracking scope: at the top
 level of a component body, inside an effect's apply phase, in a plain helper
 function called from an untracked position, or through a chain of calls that ends
-in one of those places. The finding's evidence trail shows where the value was
-declared and how the read reached the untracked scope.
+in one of those places, for a memo's accessor as for a signal's (ADR 0486). The
+finding's evidence trail shows where the value was declared and how the read
+reached the untracked scope.
 
 An apply read remains untracked even when the same effect's compute reads the
 same source. In that case the effect can re-run when the source changes, so the
