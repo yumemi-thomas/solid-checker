@@ -28,6 +28,7 @@ import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { assertFindingsMapped, keepWorkNamespace } from "./checker.mjs";
 import { requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
+import { withRuntimeCache } from "./cache.mjs";
 import { isSite, walk } from "./model.mjs";
 import { availableParallelism } from "node:os";
 import { createFastDaemon } from "./fast-daemon.mjs";
@@ -36,7 +37,7 @@ import { cleanupEvidence } from "./disposal.mjs";
 import { containerEvidence } from "./container.mjs";
 
 const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "containers", "real-clock", "help"]);
-const VALUES = new Set(["seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch", "shrink-control", "ledger", "code", "context", "binding", "layer", "variant"]);
+const VALUES = new Set(["cache-dir", "seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch", "shrink-control", "ledger", "code", "context", "binding", "layer", "variant"]);
 
 export function parseArgs(argv, { extraValues = [], extraFlags = [] } = {}) {
   const options = { seed: 1, count: 20, shrinkMode: "discovery", budget: 120 };
@@ -143,6 +144,7 @@ const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--
   [--shrink-control accepted|each]   with --control, ask for the control of each accepted reduction (default) or of every candidate tried
   [--real-clock]      the fast path waits on the wall clock (the default is the virtual clock, fast/virtual-clock.mjs); Chrome always uses its own
   [--no-daemon]       one Vitest process per batch instead of the long-lived fast host
+  [--cache-dir <dir>] [--no-cache]   the runtime cache: type checks and fast-path records by case files (cache.mjs; default $TMPDIR/solid-checker-fuzz-cache)
   [--no-instrument]   run the clean text with no hit ledger (the baseline of the neutrality regression)
   [--generate-only]   write and type-check the programs, run nothing else
   [--keep-work]       keep the materialized checker directories`;
@@ -155,7 +157,7 @@ async function main(options) {
   requireTypeChecker(resolveTsc(options.tsc));
   mkdirSync(out, { recursive: true });
 
-  const config = attachDaemon(configFrom(options, out), options);
+  const config = withRuntimeCache(attachDaemon(configFrom(options, out), options), options);
   try {
     return await sweep(options, config, out);
   } finally {
@@ -278,6 +280,11 @@ async function sweep(options, config, out) {
     knownOpen: falseClean.knownOpen, staleOpen: falseClean.staleOpen.map(({ code, coarseKey, ref }) => ({ code, coarseKey, ref })), recallGaps: falseClean.recallGaps,
   };
   writeFileSync(join(out, "findings.json"), `${JSON.stringify({ generator: GENERATOR_VERSION, seed: options.seed, count: options.count, groups, refuted: findings.filter((f) => f.signature === "-"), falseClean: falseCleanReport, unexecuted: unexecutedReport }, null, 2)}\n`);
+  if (config.runtimeCache) {
+    // Beside the run's files, not in them: a cached run's results are the uncached run's.
+    writeFileSync(join(out, "cache.json"), `${JSON.stringify(config.runtimeCache.stats(), null, 2)}\n`);
+    console.error(`runtime cache ${JSON.stringify(config.runtimeCache.stats())}`);
+  }
   writeFileSync(join(out, "summary.json"), `${JSON.stringify({ programs: rows.length, verdicts: tally("verdict"), items: itemTally, candidates: candidates.length, confirmed, groups: groups.length,
     unexecuted: unexecutedReport && { candidates: unexecutedReport.candidates, programs: unexecutedReport.programs, confirmed: unexecutedReport.confirmed, byStatus: unexecutedReport.byStatus, byBasis: unexecutedReport.byBasis },
     falseClean: falseClean && { groups: falseClean.groups.length, confirmed: falseClean.confirmed, knownOpen: falseClean.knownOpen, staleOpen: falseClean.staleOpen.length, recallGaps: falseClean.recallGaps.reduce((sum, row) => sum + row.count, 0) } }, null, 2)}\n`);

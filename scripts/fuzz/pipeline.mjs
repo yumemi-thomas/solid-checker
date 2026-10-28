@@ -10,6 +10,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { mapPoolSettled } from "../lib/pool.mjs";
+import { StaleCacheError, cacheableRecord, cacheableTypecheck, caseKey, recordDigest, typecheckDigest } from "./cache.mjs";
 import { materializeForChecker, runChecker, siteVerdicts } from "./checker.mjs";
 import { classify, runtimeEvents } from "./classify.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
@@ -33,37 +34,70 @@ const inconclusive = (reason, why) => ({ verdict: "inconclusive", reasons: [reas
  *   casesDir (where case dirs are written), concurrency, workers, keepWork,
  *   instrument (default true; false runs the clean text and classifies as before the hit ledger: the baseline of the neutrality regression),
  *   control (also run the clean twin and the checker on the twin's text, and compare),
- *   (`deadSite` is the strict confirmation of unexecuted candidates, read by run.mjs; it changes no verdict here) }
+ *   (`deadSite` is the strict confirmation of unexecuted candidates, read by run.mjs; it changes no verdict here),
+ *   runtimeCache (an `EntryCache` of cache.mjs under `runtimeEnvironmentKey`: the type checks and the fast-path records are taken from it
+ *   when the case's files match, and stored in it otherwise; only the checker runs again. Absent, every step runs, as before it existed) }
  * @returns {Promise<Map<string, object>>} id -> { program, built, typecheck, checker, runtime, classification, verdicts, control }
  */
 export async function evaluate(entries, config, deps = {}) {
+  return finishEntries(await prepareEntries(entries, config, deps), config, deps);
+}
+
+/**
+ * The first half of `evaluate`: writes the cases, type-checks them and runs the checker (step 1). `finishEntries` runs the fast path and
+ * classifies (steps 2 and 3). Apart, a caller can overlap one batch's checker work with the previous batch's fast path (matrix.mjs); the
+ * halves are `evaluate`'s, so the records and classifications are the same.
+ */
+export async function prepareEntries(entries, config, deps = {}) {
   const { runChecker: check = runChecker, typecheck: types = typecheck } = deps;
-  // The long-lived host (`config.fast`) serves the batches when there is one; tests inject `deps.runFast`.
-  const fast = deps.runFast ?? (config.fast ? (cases) => config.fast.run(cases) : runFast);
   const results = new Map();
   const { install, casesDir } = config;
   const instrument = config.instrument !== false;
   const control = instrument && Boolean(config.control);
+  const cache = config.runtimeCache ?? null;
+  // A type check (or a fast record) from the cache when the case's files match, else the real one, stored when it says something about the program.
+  const remembered = async (built, part, compute, keep) => {
+    if (!cache) return compute();
+    const key = caseKey(built.files, part);
+    const stored = cache.get(key);
+    if (stored !== undefined) {
+      // The first hits of a process are also run fresh: a cause the key does not cover shows here, and stops the run.
+      if (cache.takeSpot("typecheck")) {
+        const fresh = await compute();
+        if (cacheableTypecheck(fresh) && typecheckDigest(fresh) !== typecheckDigest(stored)) {
+          cache.spotMismatches.push(built.id);
+          throw new StaleCacheError(`the runtime cache's ${part} of ${built.id} differs from a fresh one (${typecheckDigest(stored)} vs ${typecheckDigest(fresh)}): something its key does not cover changed. Remove ${cache.root} or pass --no-cache`);
+        }
+      }
+      return stored;
+    }
+    const value = await compute();
+    if (keep(value)) cache.set(key, value);
+    return value;
+  };
   mkdirSync(casesDir, { recursive: true });
 
   // 1. Write the case, type-check it as the oracle compiles it, and ask the checker (on the clean text).
   const prepared = await mapPoolSettled(entries, async ({ program, built }) => {
     const caseDir = writeCase(join(casesDir, built.id), built);
     const dir = materializeForChecker(built, install, built.id);
-    const typed = await types(dir, { tsc: config.tsc });
+    const typed = await remembered(built, "typecheck", () => types(dir, { tsc: config.tsc }), cacheableTypecheck);
     if (!typed.ok) return { program, built, caseDir, dir, typecheck: typed };
     const ordinary = hasPackages(built);
     const checker = await check(dir, { bin: config.bin, typefacts: config.typefacts, ordinary });
     const value = { program, built, caseDir, dir, typecheck: typed, checker };
     if (instrument) {
       const twinDir = materializeForChecker(built, install, `${built.id}-run`, { twin: true });
-      value.twinTypecheck = await types(twinDir, { tsc: config.tsc });
+      value.twinTypecheck = await remembered(built, "typecheck-twin", () => types(twinDir, { tsc: config.tsc }), cacheableTypecheck);
       if (control && checker.ok && value.twinTypecheck.ok) value.twinChecker = await check(twinDir, { bin: config.bin, typefacts: config.typefacts, ordinary });
       if (!config.keepWork) rmSync(twinDir, { recursive: true, force: true });
     }
     return value;
   }, { concurrency: config.concurrency });
 
+  // A stale cache entry stops the run: it is not one program's error.
+  const stale = prepared.find((settled) => settled.error instanceof StaleCacheError);
+  if (stale) throw stale.error;
   const live = [];
   for (const [index, settled] of prepared.entries()) {
     const { program, built } = entries[index];
@@ -73,14 +107,23 @@ export async function evaluate(entries, config, deps = {}) {
     if (value.typecheck.ok && value.checker?.ok && (!instrument || (built.neutral && value.twinTypecheck?.ok))) live.push(value);
     if (!config.keepWork) rmSync(value.dir, { recursive: true, force: true });
   }
+  return { results, live };
+}
+
+/** The second half of `evaluate` (steps 2 and 3) on what `prepareEntries` returned. */
+export async function finishEntries({ results, live }, config, deps = {}) {
+  // The long-lived host (`config.fast`) serves the batches when there is one; tests inject `deps.runFast`.
+  const fast = deps.runFast ?? (config.fast ? (cases) => config.fast.run(cases) : runFast);
+  const instrument = config.instrument !== false;
+  const control = instrument && Boolean(config.control);
+  const cache = config.runtimeCache ?? null;
 
   // 2. Run everything the checker answered in one Vitest batch (the twin), and, as a control, the clean twin in a second.
   const variant = instrument ? "run" : "clean";
-  const records = live.length
-    ? await fast(live.map(({ built, caseDir }) => ({ id: built.id, dir: caseDir, variant })), { install: config.fastInstall, workers: config.workers, virtualClock: config.virtualClock })
-    : new Map();
+  const fastOptions = { install: config.fastInstall, workers: config.workers, virtualClock: config.virtualClock };
+  const records = live.length ? await fastCached(live.map(({ built, caseDir }) => ({ id: built.id, dir: caseDir, variant, built })), fast, fastOptions, cache) : new Map();
   const controls = control && live.length
-    ? await fast(live.map(({ built, caseDir }) => ({ id: `${built.id}-clean`, dir: caseDir, variant: "clean" })), { install: config.fastInstall, workers: config.workers, virtualClock: config.virtualClock })
+    ? await fastCached(live.map(({ built, caseDir }) => ({ id: `${built.id}-clean`, dir: caseDir, variant: "clean", built })), fast, fastOptions, cache)
     : new Map();
 
   // 3. Classify.
@@ -109,6 +152,59 @@ export async function evaluate(entries, config, deps = {}) {
     });
   }
   return results;
+}
+
+/**
+ * Whether the runtime cache holds every type check and fast record `evaluate` would ask of these entries: then no Vitest batch runs,
+ * and the workers' share of the machine is free for the checker (matrix.mjs). Counts no hit or miss.
+ */
+export function runtimeCached(entries, config) {
+  const cache = config.runtimeCache;
+  if (!cache) return false;
+  const instrument = config.instrument !== false;
+  const control = instrument && Boolean(config.control);
+  const variant = instrument ? "run" : "clean";
+  return entries.every(({ built }) => cache.has(caseKey(built.files, "typecheck"))
+    && (!instrument || cache.has(caseKey(built.files, "typecheck-twin")))
+    && cache.has(caseKey(built.files, `fast-${variant}|${built.id}`))
+    && (!control || cache.has(caseKey(built.files, `fast-clean|${built.id}-clean`))));
+}
+
+/** The fast path for `cases` (`{ id, dir, variant, built }`): the cached records, and one batch for the rest (stored when the runner wrote them). */
+async function fastCached(cases, fast, options, cache) {
+  const strip = (list) => list.map(({ id, dir, variant }) => ({ id, dir, variant }));
+  if (!cache) return fast(strip(cases), options);
+  const records = new Map();
+  const missing = [];
+  const checks = [];
+  for (const entry of cases) {
+    const key = caseKey(entry.built.files, `fast-${entry.variant}|${entry.id}`);
+    const stored = cache.get(key);
+    if (stored !== undefined) {
+      records.set(entry.id, stored);
+      if (cache.takeSpot("fast")) checks.push({ ...entry, stored });
+    } else missing.push({ ...entry, key });
+  }
+  // The first hits of a process run fresh beside the misses (the same batch), and must give the same record.
+  if (checks.length) {
+    const fresh = await fast(strip(checks), options);
+    for (const entry of checks) {
+      const record = fresh.get(entry.id);
+      if (cacheableRecord(record) && recordDigest(record) !== recordDigest(entry.stored)) {
+        cache.spotMismatches.push(entry.id);
+        throw new StaleCacheError(`the runtime cache's record of ${entry.id} differs from a fresh run: something its key does not cover changed. Remove ${cache.root} or pass --no-cache\n  stored ${recordDigest(entry.stored).slice(0, 300)}\n  fresh  ${recordDigest(record).slice(0, 300)}`);
+      }
+    }
+  }
+  if (missing.length) {
+    const ran = await fast(strip(missing), options);
+    for (const entry of missing) {
+      const record = ran.get(entry.id);
+      records.set(entry.id, record);
+      if (cacheableRecord(record)) cache.set(entry.key, record);
+    }
+  }
+  return records;
 }
 
 /**

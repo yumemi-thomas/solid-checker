@@ -184,6 +184,22 @@ ${observations.length ? "  await behave();\n" : ""}  await pause(200);
 void exercise();
 `;
 const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><div id="root"></div><p id="ready">running</p><script type="module" src="/main.tsx"></script></body></html>\n`;
+// `"haltMarker": true` in oracle.json (the differential fuzzer's cases): a second page module, loaded before the entry, appends
+// `<output id="sc-halted">` outside #root when Solid reports REACTIVITY_HALTED. Nothing renders after a halt, so a step that waits for an
+// element can name the marker as its alternative (`X, body:not(:has(X)) > #sc-halted`, scripts/fuzz/hits.mjs `haltable`) and end
+// at once instead of after the scenario's 12 s timeout. The module observes the diagnostics channel only (a listener changes nothing
+// Solid does), and it is not in the case's tsconfig, so the checker never reads it.
+const haltModule = `import { OBSERVE } from "solid-js";
+OBSERVE?.diagnostics.subscribe((event) => {
+  if (event.code !== "REACTIVITY_HALTED" || document.getElementById("sc-halted")) return;
+  const marker = document.createElement("output");
+  marker.id = "sc-halted";
+  marker.textContent = "sc-halted";
+  marker.setAttribute("style", "position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;opacity:0;z-index:2147483647");
+  document.body.append(marker);
+});
+`;
+const haltHtml = html.replace('<script type="module" src="/main.tsx">', '<script type="module" src="/sc-halt.ts"></script><script type="module" src="/main.tsx">');
 // The checker rules that claim each runtime diagnostic code. A code no rule
 // claims (REACTIVITY_HALTED, an uncaught error's consequence) is reported as
 // `no-rule`, never as a missing finding.
@@ -524,7 +540,9 @@ async function runCase(id) {
     cpSync(join(source, "node_modules", name), join(dir, "node_modules", name), { recursive: true });
   }
   writeFileSync(join(dir, "main.tsx"), mainSource(observations));
-  writeFileSync(join(dir, "index.html"), html);
+  assert(spec.haltMarker === undefined || typeof spec.haltMarker === "boolean", `${id}: haltMarker must be a boolean`);
+  if (spec.haltMarker) writeFileSync(join(dir, "sc-halt.ts"), haltModule);
+  writeFileSync(join(dir, "index.html"), spec.haltMarker ? haltHtml : html);
   writeFileSync(join(dir, "scenario.json"), JSON.stringify({ schemaVersion: 1, steps: [settle, ...(observations.length ? [probeStep] : []), ...(spec.steps ?? [])] }));
   writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions, files: ["main.tsx", ...files] }, null, 2));
   // The checker's program boundary follows the nearest manifest, which is the install's: it publishes

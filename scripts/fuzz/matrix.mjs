@@ -22,14 +22,15 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { withRuntimeCache } from "./cache.mjs";
 import { codeRules, ignoredRules, withholdingRules } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
-import { MISUSE_CODES, SPEC, TEMPLATE_CODES } from "./misuse.mjs";
+import { LAYERS, MISUSE_CODES, SPEC, TEMPLATE_CODES, bindingsOf, variantsOf } from "./misuse.mjs";
 import { isSite, walk } from "./model.mjs";
-import { evaluate } from "./pipeline.mjs";
+import { evaluate, finishEntries, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { legalTwin } from "./falseclean.mjs";
@@ -112,6 +113,23 @@ export function cellList({ codes, contexts } = {}) {
     for (const context of SPEC[code].contexts) if (!contexts || contexts.includes(context)) cells.push({ code, context });
   }
   return cells;
+}
+
+/**
+ * `--grid`: every shape of a cell, one program each. A shape is the variant, the binding and the layer; on the recorded matrices every
+ * program of one shape had the same outcome, and no smaller key did, so one program per shape judges what the random draw judges and
+ * reaches the shapes twenty random draws miss. In a fixed order: variants, then bindings, then layers.
+ */
+export const gridShapes = (code) => variantsOf(code).flatMap((variant) => bindingsOf(code, variant).flatMap((binding) => LAYERS.map((layer) => ({ variant, binding, layer }))));
+
+/** A shape's program seed depends on the run seed and the shape only, so a shape's program does not move when the grid grows. */
+export const shapeSeed = (base, code, context, { variant, binding, layer }) => programSeed((Number(base) ^ fnv(`${code}/${context}/${variant ?? "-"}/${binding}/${layer}`)) >>> 0, 0);
+
+export function generateShape(options, { code, context }, shape, index) {
+  const seed = shapeSeed(options.seed, code, context, shape);
+  const program = generateProgram(seed, { profile: "misuse", misusePlan: { code, context, ...shape } });
+  const id = `mx-${code.toLowerCase().replaceAll("_", "-")}-${context}-${shape.variant ?? "x"}-${shape.binding}-${shape.layer.replace("+", "-")}`;
+  return { program, built: buildCase(program, { id }), index };
 }
 
 export function generateCell(options, { code, context }, index) {
@@ -204,7 +222,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
   for (const row of rows) for (const label of row.detail?.stray ?? []) { const rule = label.split("@")[0]; strays[rule] = [...(strays[rule] ?? []), row.id]; }
   return {
     strays: Object.fromEntries(Object.entries(strays).map(([rule, ids]) => [rule, { programs: ids.length, examples: ids.slice(0, 3) }])),
-    generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.perCell, checker: header, total,
+    generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), checker: header, total,
     confirmed: CONFIRMED.reduce((sum, name) => sum + total[name], 0), typedAway, cells: out,
   };
 }
@@ -225,7 +243,7 @@ export function markdown(matrix, statuses) {
   const codes = [...new Set(keys.map((cell) => cell.code))];
   const lines = [];
   lines.push(`# Misuse recall matrix`, "");
-  lines.push(`Generator ${matrix.generator}, seed ${matrix.seed}, ${matrix.perCell} programs per cell. Checker: ${matrix.checker.label ?? "?"}${matrix.checker.bin ? ` (${matrix.checker.bin})` : ""}.`, "");
+  lines.push(`Generator ${matrix.generator}, seed ${matrix.seed}, ${matrix.sampling === "grid" ? "one program per shape (variant, binding, layer)" : `${matrix.perCell} programs per cell`}. Checker: ${matrix.checker.label ?? "?"}${matrix.checker.bin ? ` (${matrix.checker.bin})` : ""}.`, "");
   lines.push(`Each cell: \`agree/confirmed\`; then \`W\` wrong-rule, \`G\` recall-gap, \`F\` false-clean, \`n\` not-fired, \`t\` typed-away, \`h\` harness. \`†\`: Chrome reproduced none of the sampled programs of the cell. Blank: not a context of that code. Only runtime-confirmed programs count (confirmed = the runtime reported the code at the site).`, "");
   lines.push(`| code | ${contexts.join(" | ")} |`, `| --- | ${contexts.map(() => "---").join(" | ")} |`);
   for (const code of codes) {
@@ -296,8 +314,9 @@ const UNJUDGED = new Set(["typed-away", "harness"]);
  */
 export function gate(baseline, current) {
   const empty = { regressions: [], improvements: [], baselineUnjudged: [], infrastructure: [] };
-  for (const field of ["seed", "perCell", "generator"]) {
-    if (baseline[field] !== current[field]) return { ok: false, refused: `the matrices differ in ${field} (${baseline[field]} vs ${current[field]}): the gate compares the same programs`, ...empty };
+  for (const field of ["seed", "perCell", "generator", "sampling"]) {
+    // A matrix recorded before `sampling` existed drew at random.
+    if ((field === "sampling" ? baseline[field] ?? "random" : baseline[field]) !== (field === "sampling" ? current[field] ?? "random" : current[field])) return { ok: false, refused: `the matrices differ in ${field} (${baseline[field]} vs ${current[field]}): the gate compares the same programs`, ...empty };
   }
   const now = current.total ?? {};
   const all = Object.values(now).reduce((sum, n) => sum + n, 0);
@@ -339,6 +358,8 @@ function reportGate(result) {
 const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] [--per-cell N] [--codes A,B] [--contexts a,b]
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--checker-label <commit>] [--tsc <tsrs>] [--all-cores]
   [--confirm-with-chrome [--chrome-sample 3] [--chrome-false-clean 4] [--browser <chromium>]] [--shrink [--budget N]]
+  [--grid]                              one program per shape (variant x binding x layer) of every cell, instead of --per-cell random draws
+  [--cache-dir <dir>] [--no-cache]      the runtime cache (type checks and fast-path records; default $TMPDIR/solid-checker-fuzz-cache)
   [--baseline <matrix.json>]            fail when a judged program leaves agree or enters false-clean (same seeds); moves out of or into typed-away/harness are reported, not failed
   node scripts/fuzz/matrix.mjs --gate <baseline.json> <current.json>`;
 
@@ -349,7 +370,7 @@ export async function runMatrix(options) {
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
   requireTypeChecker(resolveTsc(options.tsc));
   mkdirSync(out, { recursive: true });
-  const config = attachDaemon(configFrom({ ...options, profile: "misuse" }, out), options);
+  const config = withRuntimeCache(attachDaemon(configFrom({ ...options, profile: "misuse" }, out), options), options);
   try {
     return await sweep(options, config, out);
   } finally {
@@ -360,13 +381,26 @@ export async function runMatrix(options) {
 async function sweep(options, config, out) {
   const cells = cellList({ codes: options.codes?.split(","), contexts: options.contexts?.split(",") });
   const entries = [];
-  for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
+  if (options.grid) for (const cell of cells) gridShapes(cell.code).forEach((shape, index) => entries.push({ cell, ...generateShape(options, cell, shape, index) }));
+  else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
   const started = Date.now();
-  for (let at = 0; at < entries.length; at += CHUNK) {
-    const chunk = entries.slice(at, at + CHUNK);
-    const results = await evaluate(chunk.map(({ program, built }) => ({ program, built })), config);
+  // With every program's runtime cached no Vitest batch runs, so the workers' share of the machine goes to the checker: the same budget.
+  const plain = (list) => list.map(({ program, built }) => ({ program, built }));
+  const run = runtimeCached(plain(entries), config) ? { ...config, concurrency: config.concurrency + config.workers } : config;
+  if (run !== config) console.error(`matrix: every program's runtime is cached; checker concurrency ${run.concurrency} (${config.concurrency} + the ${config.workers} idle workers)`);
+  // Chunk k's fast path runs while chunk k+1 is type-checked and checked: one checker pool and one Vitest batch at a time, as before, but
+  // never one waiting on the other. Each chunk's records and verdicts are what `evaluate` gives it.
+  const chunks = [];
+  for (let at = 0; at < entries.length; at += CHUNK) chunks.push(entries.slice(at, at + CHUNK));
+  const prepare = (chunk) => { const stage = prepareEntries(plain(chunk), run); stage.catch(() => {}); return stage; };
+  let next = chunks.length ? prepare(chunks[0]) : null;
+  for (const [number, chunk] of chunks.entries()) {
+    const stage = await next;
+    next = number + 1 < chunks.length ? prepare(chunks[number + 1]) : null;
+    const results = await finishEntries(stage, run);
+    const at = number * CHUNK;
     for (const { cell, index, program, built } of chunk) {
       const value = results.get(built.id);
       const site = siteOf(built);
@@ -453,6 +487,11 @@ async function sweep(options, config, out) {
   writeFileSync(join(out, "programs.jsonl"), rows.map((row) => JSON.stringify({ ...row, site: undefined, region: regionOf(row.site) })).join("\n") + "\n");
   writeFileSync(join(out, "matrix.json"), `${JSON.stringify({ ...matrix, statuses }, null, 2)}\n`);
   writeFileSync(join(out, "matrix.md"), markdown(matrix, statuses));
+  if (config.runtimeCache) {
+    // Beside the matrix, not in it: a cached run's matrix.json is the uncached run's, byte for byte.
+    writeFileSync(join(out, "cache.json"), `${JSON.stringify(config.runtimeCache.stats(), null, 2)}\n`);
+    console.error(`matrix: runtime cache ${JSON.stringify(config.runtimeCache.stats())}`);
+  }
   console.error(`matrix: wrote ${join(out, "matrix.md")}`);
   if (options.baseline) return reportGate(gate(JSON.parse(readFileSync(resolve(options.baseline), "utf8")), JSON.parse(JSON.stringify(matrix))));
   return 0;
@@ -465,7 +504,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "baseline", "checker-label"] });
+      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "baseline", "checker-label", "cache-dir"], extraFlags: ["grid"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

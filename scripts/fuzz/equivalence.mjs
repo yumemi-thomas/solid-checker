@@ -22,6 +22,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mapPoolSettled } from "../lib/pool.mjs";
+import { chromeCacheFor } from "./cache.mjs";
 import { runChrome } from "./chrome.mjs";
 import { assertFindingsMapped, materializeForChecker, runChecker, siteVerdicts } from "./checker.mjs";
 import { disturbances, runtimeEvents } from "./classify.mjs";
@@ -114,7 +115,7 @@ export const subsetChooser = (seed) => (all) => {
 };
 
 /** A program's checker run: type check, then the checker on the clean text. */
-async function judge(built, config, deps, label) {
+export async function judge(built, config, deps, label) {
   const { install } = config;
   const check = deps.runChecker ?? runChecker;
   const types = deps.typecheck ?? typecheck;
@@ -283,7 +284,8 @@ export async function confirmInChrome(divergences, groups, config, options, out)
       cases.push({ id: b.id, dir: writeCase(join(out, "cases", b.id), b), sites: b.sites });
     }
   }
-  const records = await runChrome(cases, { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency, withClean: true });
+  const cache = config.chromeCache ?? null;
+  const records = await runChrome(cases, { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency, withClean: true, cache });
   return chosen.map((found) => {
     const { originalBuilt, variantBuilt } = built.get(found.variantId);
     const originalRecord = records.get(found.id);
@@ -291,7 +293,9 @@ export async function confirmInChrome(divergences, groups, config, options, out)
     const map = siteMap(found.variantProgram, variantBuilt.sites);
     const missing = !originalRecord || !variantRecord || originalRecord.row === null || variantRecord.row === null;
     const judgement = missing ? { status: "chrome-inconclusive", why: "no oracle row" } : judgeDivergence(found, originalBuilt, variantBuilt, originalRecord, variantRecord, map);
-    return { signature: found.signature, variantId: found.variantId, id: found.id, rewrite: found.rewrite, bucket: found.bucket, cls: found.cls, site: found.siteId, original: found.original, variant: found.variant, ...judgement };
+    // A cached Chrome run is named on the row: a recheck never turns a fresh disagreement into agreement without saying so.
+    const cached = cache ? { chromeCache: originalRecord?.cached || variantRecord?.cached ? "hit" : "miss" } : {};
+    return { signature: found.signature, variantId: found.variantId, id: found.id, rewrite: found.rewrite, bucket: found.bucket, cls: found.cls, site: found.siteId, original: found.original, variant: found.variant, ...judgement, ...cached };
   });
 }
 
@@ -356,7 +360,8 @@ export async function shrinkGroups(divergences, groups, config, options, out) {
 const usage = `usage: node scripts/fuzz/equivalence.mjs --out <fresh dir> [--seed N] [--count N] [--profile name] [--equivalence N]
   [--rewrites a,b,c] [--exclude-rewrites a,b]   the rewrite kinds to draw (default all; see rewrite.mjs)
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--install <oracle install>] [--tsc <tsrs>] [--concurrency N]
-  [--confirm-with-chrome [--browser <chromium>]]   Chrome says which side of a high-bucket divergence matches the runtime
+  [--confirm-with-chrome [--browser <chromium>] [--no-chrome-cache] [--cache-dir <dir>]]   Chrome says which side of a high-bucket divergence
+                       matches the runtime; a case Chrome already ran (same files, installs, browser and judging sources) is answered from the cache (chromeCache: hit)
   [--shrink [--budget N] [--shrink-max N]]   reduce one program per high and certainty group (the rewrite applied at every place it fits)
   [--keep-work]`;
 
@@ -367,7 +372,8 @@ export async function main(options) {
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
   requireTypeChecker(resolveTsc(options.tsc));
   mkdirSync(out, { recursive: true });
-  const config = configFrom(options, out);
+  const base = configFrom(options, out);
+  const config = options.confirmWithChrome ? { ...base, chromeCache: chromeCacheFor(base, options) } : base;
   if (!existsSync(join(config.install, "node_modules/solid-js/package.json"))) throw new Error(`${config.install} has no node_modules/solid-js: run \`make runtime-oracle-install\``);
   const n = Number(options.equivalence ?? 3);
   if (!Number.isInteger(n) || n < 1) throw new Error("--equivalence needs a positive integer (variants per program)");
@@ -399,7 +405,7 @@ export async function main(options) {
   console.error(`divergences: ${BUCKETS.map((bucket) => `${bucket} ${summary.divergences[bucket]} in ${summary.groups[bucket]} group(s)`).join(", ")}`);
   for (const group of [...groups.high, ...groups["certainty-divergence"]]) console.error(`${group.cleanSide ? `certainty (${group.cleanSide} clean)` : "high"} ${group.count}x [${group.rewrite}] ${group.cls} ${group.original.verdict}:${group.original.rules.join("+") || "-"} -> ${group.variant.verdict}:${group.variant.rules.join("+") || "-"}\n    ${group.signature}\n    repro: ${join(out, "divergences", reproName(group.representative))}`);
   for (const row of shrunk) console.error(`shrink ${row.shrunk ? `${row.lines} lines -> ${row.dir}` : `not reduced${row.error ? ` (${row.error})` : ""}`}`);
-  for (const row of confirmations) console.error(`chrome [${row.status}] ${row.bucket} ${row.rewrite} ${row.variantId}${row.why ? ` (${row.why})` : ""}${row.sides ? ` sides ${row.sides.join(",")}` : ""}`);
+  for (const row of confirmations) console.error(`chrome [${row.status}] ${row.bucket} ${row.rewrite} ${row.variantId}${row.why ? ` (${row.why})` : ""}${row.sides ? ` sides ${row.sides.join(",")}` : ""}${row.chromeCache === "hit" ? " [chrome cache hit]" : ""}`);
   if (byStatus["violation-contradicted"]) {
     console.error("\nSTOP: Chrome shows a site the checker proves a violation at running with no diagnostic, while an equivalent form is judged otherwise (a false positive). Report the repro(s) above.");
     return 3;
@@ -447,7 +453,7 @@ export const digest = (text) => createHash("sha1").update(text).digest("hex").sl
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    process.exitCode = await main(parseArgs(process.argv.slice(2), { extraValues: ["equivalence", "rewrites", "exclude-rewrites", "chrome-max", "shrink-max"] }));
+    process.exitCode = await main(parseArgs(process.argv.slice(2), { extraValues: ["equivalence", "rewrites", "exclude-rewrites", "chrome-max", "shrink-max", "cache-dir"], extraFlags: ["no-chrome-cache"] }));
   } catch (error) {
     console.error(`equivalence: ${error.message}`);
     process.exitCode = 2;

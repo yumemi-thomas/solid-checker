@@ -8,7 +8,8 @@ import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { HITS_SELECTOR, findingsDiff, parseHitsText } from "./hits.mjs";
+import { caseFiles, caseKey, recordDigest } from "./cache.mjs";
+import { HALT_TEXT, HITS_SELECTOR, findingsDiff, haltable, parseHitsText } from "./hits.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const ORACLE = join(repo, "scripts/runtime-oracle.mjs");
@@ -31,11 +32,16 @@ export function chromeDiagnostics(row) {
  */
 export function chromeRuntime(row, checkpoints, sites) {
   // A row the oracle marks failed, or carrying an execution failure of its own, is a disturbed run whatever its verdict says.
+  // A step that resolved to the halt marker (emit.mjs `haltable`) found no element after REACTIVITY_HALTED: the run was cut short there,
+  // as a step that timed out cuts it short, and is a partial run (the judges never read a missing diagnostic past it as silence).
+  const halted = (checkpoints ?? []).filter((checkpoint) => (checkpoint.text ?? "").trim() === HALT_TEXT);
   const failure = ["harness-error", "type-error"].includes(row.verdict) ? { phase: row.verdict, message: row.error ?? row.failure ?? row.verdict }
-    : row.failure ? { phase: "execution", message: typeof row.failure === "string" ? row.failure : JSON.stringify(row.failure) } : null;
+    : row.failure ? { phase: "execution", message: typeof row.failure === "string" ? row.failure : JSON.stringify(row.failure) }
+      : halted.length ? { phase: "halted", message: `reactivity halted: ${halted.length} step(s) found no element (${halted[0].selector.split(",")[0]})` } : null;
   const text = (selector) => {
-    const found = (checkpoints ?? []).filter((checkpoint) => checkpoint.selector === selector).at(-1);
-    return found === undefined ? undefined : (found.text ?? "").trim().replace(/\s+/g, " ");
+    const found = (checkpoints ?? []).filter((checkpoint) => checkpoint.selector === selector || checkpoint.selector === haltable(selector)).at(-1);
+    if (found === undefined || (found.text ?? "").trim() === HALT_TEXT) return undefined;
+    return (found.text ?? "").trim().replace(/\s+/g, " ");
   };
   // The hit readout: the last two reads of #sc-hits (equal texts: nothing moved between them).
   const reads = (checkpoints ?? []).filter((checkpoint) => checkpoint.selector === HITS_SELECTOR);
@@ -123,9 +129,56 @@ async function oracleRows(root, { out, install, browser, concurrency, env, bin, 
  * A case may carry `checker` (a record as `chromeChecker` returns): the oracle's own run is `feedback run`, which does not read dependency
  * packages from source, so a case that ships a package is judged by the checker run as a user's is (checker.mjs ORDINARY_ARGS) and Chrome
  * supplies the runtime only.
+ * `cache` (an `EntryCache` of cache.mjs under `chromeEnvironmentKey`) answers a case whose files match a stored run from the store, with
+ * `cached: true` on its record, and runs the others. It is for confirmation only: the record's `checker` half is the one of the run
+ * that stored it, so a caller that judges the checker by Chrome's findings passes no cache. A run the machine spoiled (no row, a
+ * browser that would not close, a page that never loaded) is not stored.
  * @param {{ id: string, dir: string, sites: object[], findings?: object[], checker?: object }[]} cases
  */
-export async function runChrome(cases, { out, install = DEFAULT_ORACLE_INSTALL, bin, typefacts, browser, concurrency, control = false, withClean = false, closeRetries = 1, oracle, env = process.env }) {
+export async function runChrome(cases, options) {
+  const { cache, control = false, withClean = false } = options;
+  if (!cache) return runChromeCases(cases, options);
+  const mode = control ? "control" : withClean ? "twin+clean" : "twin";
+  const records = new Map();
+  const missing = [];
+  const hits = [];
+  for (const entry of cases) {
+    const key = caseKey(caseFiles(entry.dir), `chrome-${mode}|${entry.id}`);
+    const stored = cache.get(key);
+    if (stored !== undefined) {
+      records.set(entry.id, { ...stored, checker: entry.checker ?? stored.checker, cached: true });
+      hits.push({ entry, key, stored, spot: cache.takeSpot("chrome") });
+    } else missing.push({ entry, key });
+  }
+  // The first hit of a process runs fresh in the same oracle call as the misses. Chrome can flake under load, so a difference does not stop
+  // the run: it drops the cache for this call, and every hit runs fresh (named `cached: false`, the mismatch in the cache's stats).
+  const spots = hits.filter((hit) => hit.spot);
+  const ran = missing.length || spots.length ? await runChromeCases([...missing, ...spots].map(({ entry }) => entry), options) : new Map();
+  const mismatch = spots.find((hit) => cacheableChrome(ran.get(hit.entry.id)) && recordDigest(ran.get(hit.entry.id).runtime) !== recordDigest(hit.stored.runtime));
+  if (mismatch) {
+    cache.spotMismatches.push(mismatch.entry.id);
+    console.error(`chrome cache: a fresh run of ${mismatch.entry.id} differs from its stored record; this call runs every case fresh`);
+    const rest = hits.filter((hit) => !hit.spot);
+    const again = rest.length ? await runChromeCases(rest.map(({ entry }) => entry), options) : new Map();
+    for (const hit of hits) {
+      const record = hit.spot ? ran.get(hit.entry.id) : again.get(hit.entry.id);
+      records.set(hit.entry.id, { ...record, cached: false });
+      if (cacheableChrome(record)) cache.set(hit.key, record);
+    }
+  }
+  for (const { entry, key } of missing) {
+    const record = ran.get(entry.id);
+    records.set(entry.id, { ...record, cached: false });
+    if (cacheableChrome(record)) cache.set(key, record);
+  }
+  return records;
+}
+
+/** A Chrome record that says something about the program, not about the machine: an oracle row that is not a harness error, a page that loaded. */
+export const cacheableChrome = (record) => Boolean(record?.row) && record.row.verdict !== "harness-error"
+  && !/page\.goto|bootstrap did not bind|close timed out|Target (page, context or browser )?closed|browserType\.launch/i.test(String(record.runtime?.failure?.message ?? ""));
+
+async function runChromeCases(cases, { out, install = DEFAULT_ORACLE_INSTALL, bin, typefacts, browser, concurrency, control = false, withClean = false, closeRetries = 1, oracle, env = process.env }) {
   if (!bin || !typefacts) throw new Error("Chrome confirmation needs the checker binary and typefacts (--checker-bin, --typefacts)");
   const root = join(resolve(out), "chrome-cases");
   rmSync(root, { recursive: true, force: true });

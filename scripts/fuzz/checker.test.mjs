@@ -146,14 +146,17 @@ describe.skipIf(!installed)("two runs with the same seed and different profiles"
     const root = mkdtempSync(join(tmpdir(), "fuzz-concurrent-"));
     const work = join(DEFAULT_ORACLE_INSTALL, ".solid-checker-fuzz");
     const before = new Set(existsSync(work) ? readdirSync(work) : []);
+    const pids = [];
     const go = (profile) => new Promise((resolveRun) => {
-      const run = spawn(process.execPath, [join(here, "run.mjs"), "--generate-only", "--keep-work", "--seed", "5", "--count", "6", "--profile", profile, "--out", join(root, profile)], { stdio: ["ignore", "ignore", "pipe"] });
+      const run = spawn(process.execPath, [join(here, "run.mjs"), "--generate-only", "--keep-work", "--no-cache", "--seed", "5", "--count", "6", "--profile", profile, "--out", join(root, profile)], { stdio: ["ignore", "ignore", "pipe"] });
+      pids.push(run.pid);
       let err = "";
       run.stderr.on("data", (chunk) => { err += chunk; });
       run.on("close", (status) => resolveRun({ status, err }));
     });
     const results = await Promise.all([go("closure-escape"), go("containers")]);
-    const made = readdirSync(work).filter((name) => !before.has(name));
+    // Only these two runs' namespaces (`run-<pid>-...`): other test files materialize cases in the same install meanwhile.
+    const made = readdirSync(work).filter((name) => !before.has(name) && pids.some((pid) => name.startsWith(`run-${pid}-`)));
     try {
       for (const result of results) { expect(result.err).not.toMatch(/ENOTEMPTY/); expect(result.status).toBe(0); }
       expect(made.length).toBe(2);

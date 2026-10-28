@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { OWNER_PROFILES, generateProgram } from "./generate.mjs";
 import { buildCase, scenarioSteps } from "./emit.mjs";
+import { haltable } from "./hits.mjs";
 import { validate } from "./model.mjs";
 import { printProgram } from "./print.mjs";
 
@@ -135,8 +136,16 @@ describe("buildCase", () => {
     const steps = scenarioSteps({ clicks: ["b1", "b2"] }, [
       { witness: { selector: "[data-probe=\"w1\"]" } }, { witness: { selector: "[data-probe=\"w1\"]" } }, { witness: null },
     ]);
+    // Each is haltable (hits.mjs): after REACTIVITY_HALTED a missing element resolves to the oracle's halt marker at once.
     expect(steps.map((s) => `${s.action} ${s.selector}`)).toEqual([
-      'click [data-act="b1"]', 'click [data-act="b2"]', 'wait-for-selector [data-probe="w1"]',
+      `click ${haltable('[data-act="b1"]')}`, `click ${haltable('[data-act="b2"]')}`, `wait-for-selector ${haltable('[data-probe="w1"]')}`,
     ]);
+    expect(haltable('[data-act="b1"]')).toBe('[data-act="b1"], body:not(:has([data-act="b1"])) > #sc-halted');
+  });
+
+  it("asks the oracle for the halt marker in both scenarios", () => {
+    const built = buildCase(generateProgram(2802362291), { id: "fuzz-x" });
+    expect(JSON.parse(built.files["oracle.json"]).haltMarker).toBe(true);
+    expect(JSON.parse(built.files["oracle.run.json"]).haltMarker).toBe(true);
   });
 });

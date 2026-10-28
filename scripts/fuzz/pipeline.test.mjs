@@ -2,9 +2,10 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { EntryCache } from "./cache.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
-import { evaluate, judgeEntries, lazyControl, signaturesOf } from "./pipeline.mjs";
+import { evaluate, finishEntries, judgeEntries, lazyControl, prepareEntries, runtimeCached, signaturesOf } from "./pipeline.mjs";
 
 // The wiring with fakes for the three expensive steps: the type checker, the checker, the Happy DOM batch.
 const entry = (seed) => { const program = generateProgram(seed, { profile: "in-place" }); return { program, built: buildCase(program, { id: `fuzz-${seed}` }) }; };
@@ -225,5 +226,123 @@ describe("judgeEntries: the control of a shrink", () => {
     expect(lazyControl({ control: true })).toBe(true);
     expect(lazyControl({ control: false })).toBe(false);
     expect(lazyControl({ control: true, shrinkControl: "each" })).toBe(false);
+  });
+});
+
+// The runtime cache (cache.mjs EntryCache): a second evaluation of the same case files takes the type checks and the fast records from
+// it and runs only the checker; a changed program misses.
+describe("evaluate: the runtime cache", () => {
+  const counting = () => {
+    const calls = { typecheck: 0, checker: 0, fast: 0 };
+    const deps = {
+      typecheck: async () => { calls.typecheck += 1; return { ok: true, errors: [] }; },
+      runChecker: async () => { calls.checker += 1; return { ok: true, findings: [] }; },
+      runFast: async (cases) => { calls.fast += cases.length; return new Map(cases.map((c) => [c.id, { diagnostics: [], errors: [], witnesses: [], hits: {}, quiescent: true }])); },
+    };
+    return { calls, deps };
+  };
+
+  it("reruns only the checker on a cached case, with the same classification", async () => {
+    const cache = new EntryCache(mkdtempSync(join(tmpdir(), "fuzz-rcache-")), "runtime", "e".repeat(64), { spots: {} });
+    const e = entry(5);
+    const first = counting();
+    const one = await evaluate([e], { ...config(), runtimeCache: cache }, first.deps);
+    expect(first.calls).toEqual({ typecheck: 2, checker: 1, fast: 1 });
+    const second = counting();
+    const two = await evaluate([e], { ...config(), runtimeCache: cache }, second.deps);
+    expect(second.calls).toEqual({ typecheck: 0, checker: 1, fast: 0 });
+    expect(two.get(e.built.id).classification).toEqual(one.get(e.built.id).classification);
+    const other = entry(6);
+    const third = counting();
+    await evaluate([other], { ...config(), runtimeCache: cache }, third.deps);
+    expect(third.calls).toEqual({ typecheck: 2, checker: 1, fast: 1 });
+  });
+
+  it("does not store a record the runner did not write, and without a cache runs every step", async () => {
+    const cache = new EntryCache(mkdtempSync(join(tmpdir(), "fuzz-rcache-")), "runtime", "e".repeat(64), { spots: {} });
+    const e = entry(7);
+    const broken = counting();
+    broken.deps.runFast = async (cases) => { broken.calls.fast += cases.length; return new Map(cases.map((c) => [c.id, { failure: { phase: "vitest", message: "no record written" }, diagnostics: [], errors: [], witnesses: [] }])); };
+    await evaluate([e], { ...config(), runtimeCache: cache }, broken.deps);
+    const again = counting();
+    await evaluate([e], { ...config(), runtimeCache: cache }, again.deps);
+    expect(again.calls).toEqual({ typecheck: 0, checker: 1, fast: 1 });
+    const plain = counting();
+    await evaluate([e], config(), plain.deps);
+    await evaluate([e], config(), plain.deps);
+    expect(plain.calls).toEqual({ typecheck: 4, checker: 2, fast: 2 });
+  });
+});
+
+describe("evaluate in two halves", () => {
+  const deps = () => ({
+    typecheck: async () => ({ ok: true, errors: [] }),
+    runChecker: async () => ({ ok: true, findings: [] }),
+    runFast: async (cases) => new Map(cases.map((c) => [c.id, { diagnostics: [], errors: [], witnesses: [], hits: {}, quiescent: true }])),
+  });
+
+  it("prepareEntries then finishEntries classify as evaluate does", async () => {
+    const entries = [entry(8), entry(9)];
+    const whole = await evaluate(entries, config(), deps());
+    const halves = await finishEntries(await prepareEntries(entries, config(), deps()), config(), deps());
+    for (const { built } of entries) expect(halves.get(built.id).classification).toEqual(whole.get(built.id).classification);
+  });
+
+  it("knows when the runtime cache covers every entry, without counting hits", async () => {
+    const cache = new EntryCache(mkdtempSync(join(tmpdir(), "fuzz-rcache-")), "runtime", "e".repeat(64));
+    const [a, b] = [entry(10), entry(11)];
+    expect(runtimeCached([a], { ...config(), runtimeCache: cache })).toBe(false);
+    await evaluate([a], { ...config(), runtimeCache: cache }, deps());
+    const before = cache.stats();
+    expect(runtimeCached([a], { ...config(), runtimeCache: cache })).toBe(true);
+    expect(runtimeCached([a, b], { ...config(), runtimeCache: cache })).toBe(false);
+    expect(runtimeCached([a], { ...config(), runtimeCache: cache, control: true })).toBe(false);   // the clean control was never run
+    expect(runtimeCached([a], config())).toBe(false);
+    expect(cache.stats()).toEqual(before);
+  });
+});
+
+describe("evaluate: the runtime cache's spot checks", () => {
+  const deps = (record) => {
+    const calls = { typecheck: 0, fast: 0 };
+    return { calls, deps: {
+      typecheck: async () => { calls.typecheck += 1; return { ok: true, errors: [] }; },
+      runChecker: async () => ({ ok: true, findings: [] }),
+      runFast: async (cases) => { calls.fast += cases.length; return new Map(cases.map((c) => [c.id, record()])); },
+    } };
+  };
+  const quiet = () => ({ diagnostics: [], errors: [], witnesses: [], hits: {}, quiescent: true });
+
+  it("runs the first hits fresh too, and a fresh record equal to the stored one passes", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "fuzz-rcache-"));
+    const e = entry(12);
+    await evaluate([e], { ...config(), runtimeCache: new EntryCache(dir, "runtime", "e".repeat(64)) }, deps(quiet).deps);
+    const cache = new EntryCache(dir, "runtime", "e".repeat(64), { spots: { typecheck: 1, fast: 1 } });
+    const second = deps(quiet);
+    await evaluate([e], { ...config(), runtimeCache: cache }, second.deps);
+    expect(second.calls).toEqual({ typecheck: 1, fast: 1 });                      // one type check and one record, run fresh and compared
+    expect(cache.stats()).toMatchObject({ spotChecked: 2, spotMismatches: [] });
+    const third = deps(quiet);
+    await evaluate([e], { ...config(), runtimeCache: cache }, third.deps);
+    expect(third.calls).toEqual({ typecheck: 0, fast: 0 });                       // the budget is per process
+  });
+
+  it("stops the run when a fresh record differs from the stored one", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "fuzz-rcache-"));
+    const e = entry(13);
+    await evaluate([e], { ...config(), runtimeCache: new EntryCache(dir, "runtime", "e".repeat(64)) }, deps(quiet).deps);
+    const changed = deps(() => ({ ...quiet(), diagnostics: [{ code: "NO_OWNER_CLEANUP", positions: [{ file: "App.tsx", line: 3 }] }] }));
+    const cache = new EntryCache(dir, "runtime", "e".repeat(64), { spots: { fast: 1 } });
+    await expect(evaluate([e], { ...config(), runtimeCache: cache }, changed.deps)).rejects.toThrow(/differs from a fresh run/);
+    expect(cache.spotMismatches).toEqual([e.built.id]);
+  });
+
+  it("stops the run when a fresh type check differs from the stored one", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "fuzz-rcache-"));
+    const e = entry(14);
+    await evaluate([e], { ...config(), runtimeCache: new EntryCache(dir, "runtime", "e".repeat(64)) }, deps(quiet).deps);
+    const failing = deps(quiet);
+    failing.deps.typecheck = async () => ({ ok: false, errors: ["App.tsx(1,1): error TS2322: no"] });
+    await expect(evaluate([e], { ...config(), runtimeCache: new EntryCache(dir, "runtime", "e".repeat(64), { spots: { typecheck: 1 } }) }, failing.deps)).rejects.toThrow(/typecheck of .* differs/);
   });
 });
