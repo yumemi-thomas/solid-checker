@@ -1422,14 +1422,14 @@ fn write_windows(
             // (`setStore(flag ? a : b)`, a function inside an object), is a
             // region of the window whose run this does not prove.
             for function in file.ast.functions_within(argument.span) {
-                windows.functions.push(WriteWindow {
+                windows.regions.push(WriteWindow {
                     function: function.span,
                     direct: function.span == direct,
                 });
             }
         }
     }
-    windows.functions.extend(
+    windows.regions.extend(
         own_compute_functions(file, context, store_symbol)
             .into_iter()
             .map(|function| WriteWindow {
@@ -1441,16 +1441,16 @@ fn write_windows(
 }
 
 /// The windows of one store in one file: the functions they run
-/// ([`WriteWindow`]) and the argument positions of its own setter's calls.
+/// ([`WriteWindow`], `regions`) and the argument positions of its own setter's calls.
 #[derive(Default)]
 struct Windows {
-    functions: Vec<WriteWindow>,
+    regions: Vec<WriteWindow>,
     arguments: Vec<Span>,
 }
 
 impl Windows {
     fn is_empty(&self) -> bool {
-        self.functions.is_empty() && self.arguments.is_empty()
+        self.regions.is_empty() && self.arguments.is_empty()
     }
 }
 
@@ -1538,14 +1538,14 @@ fn write_window_standing(
         owner = Some(function);
         if function.generator
             || windows
-                .functions
+                .regions
                 .iter()
                 .any(|window| window.direct && window.function == function.span)
         {
             break;
         }
         let inside = windows
-            .functions
+            .regions
             .iter()
             .any(|window| window.function.contains(function.span));
         match crate::execution_role::layer_run(file, function, context.lookup) {
@@ -1555,7 +1555,7 @@ fn write_window_standing(
             crate::execution_role::LayerRun::InPlace(call)
                 if inside
                     && file.ast.jsx_containing(call).any(|element| {
-                        !windows.functions.iter().any(|window| {
+                        !windows.regions.iter().any(|window| {
                             window.direct
                                 && window.function.contains(function.span)
                                 && element.span.contains(window.function)
@@ -1586,7 +1586,7 @@ fn write_window_standing(
         return WriteStanding::Dropped;
     };
     if windows
-        .functions
+        .regions
         .iter()
         .any(|window| window.direct && window.function == owner.span)
     {
@@ -1610,7 +1610,7 @@ fn write_window_standing(
         };
     }
     let in_window = windows
-        .functions
+        .regions
         .iter()
         .any(|window| window.function.contains(owner.span));
     if in_window
@@ -1650,7 +1650,7 @@ fn called_in_window(
     let method = function.method_name.is_some();
     file.ast.calls.iter().any(|call| {
         if !windows
-            .functions
+            .regions
             .iter()
             .any(|window| window.function.contains(call.span))
         {
