@@ -3155,7 +3155,10 @@ fn local_alias_members_record_reads_of_an_exclusive_arrow_result() {
         "thing.set();\n",
         "thing.set;\n",
         "thing.other;\n",
-        "thing.missing;\n",
+        // ADR 0500 review: a key the literal lacks reads `Object.prototype`.
+        "const probed = make();\n",
+        "probed.set;\n",
+        "probed.missing;\n",
         "const written = make();\n",
         "written.set;\n",
         "(written as any).set = () => 2;\n",
@@ -3175,6 +3178,10 @@ fn local_alias_members_record_reads_of_an_exclusive_arrow_result() {
         "const promised = later();\n",
         "promised.set;\n",
         "const { set: fromPromise } = later();\n",
+        // ADR 0500 review: a `function` value runs with the holder as `this`.
+        "const withThis = () => ({ set: r, reset: function () {} });\n",
+        "const viaThis = withThis();\n",
+        "viaThis.set;\n",
     );
     let facts = extract("members.ts", source).unwrap();
     let text = |span: Span| &source[span.start as usize..span.end as usize];
