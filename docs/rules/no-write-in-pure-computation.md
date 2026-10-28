@@ -32,11 +32,21 @@ write there throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in a component body, a
 `createRoot` body or a computation exactly as a write at the call site would.
 That run is withheld, though, when the call passes `defer` or `schedule`, when the compute returns a
 promise or reads a source that is still pending, and (on rc.9) when the first
-pass was staged into a transaction; it then runs later from the flush, where
-the write is legal, as every later run is. The checker cannot prove the compute
-settles synchronously, so it reports nothing for such a write rather than
-claiming either answer. A `createRenderEffect` created where writes are legal
-(an event handler, module scope) leaves every run of its apply legal.
+pass was staged into a transaction, or on rc.17 seated in a lane (a component
+mounted by a lane's pass); it then runs later from the flush, where the write is
+legal, as every later run is. The checker cannot prove the first run is
+synchronous, so such a write is uncertifiable rather than either answer, also
+through layers the apply runs in place (an IIFE, a helper calling its callback,
+a named closure the apply calls; ADR 0460). A `createRenderEffect` created where
+writes are legal (an event handler, module scope) leaves every run of its apply
+legal.
+
+A control-flow component's children callback (`For`'s row) runs under an
+owner, and its JSX children are render computations. A write in a function the
+row's code runs in place (an IIFE in a JSX child, a helper calling its callback,
+`untrack`, a named closure the row calls) is placed where that code runs, so it
+is a violation (ADR 0460). An event handler, a timer or an effect apply in a row
+keeps its own legal role.
 
 A `createRoot` body is not a write region either. It runs during the call
 with the new root as the ambient owner, and a root is a children-capable
@@ -259,6 +269,10 @@ handler is legal. A handle stored, passed, returned or aliased, and a write in a
 member the callback builds, are uncertifiable, and so is every called handle on
 a release whose `onCleanup` was not read (ADR 0456,
 `fixtures/reactive-ir/write-cleanup-handle-call`).
+
+A write no execution reaches (`false && setV(1)`, after a `return`, in a
+closure only an unreferenced child calls) is uncertifiable (ADR 0458,
+`fixtures/reactive-ir/dead-code-sites`).
 
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.

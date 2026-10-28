@@ -25,7 +25,7 @@ symbol:
 - a `delete` of a bare or parenthesized static member path (`delete
   store.a.b`) whose property Type Facts proves optional and not readonly, and
   whose objects past the root (`store.a`) it proves never `null` or
-  `undefined` (ADR 0460); a missing fact makes it uncertifiable;
+  `undefined` (ADR 0461); a missing fact makes it uncertifiable;
 - a call of one of the nine in-place `Array.prototype` methods (`push`, `pop`,
   `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`) on a
   path of the store. The callee must resolve through Type Facts to the

@@ -114,6 +114,64 @@ fn string_statement(
 }
 
 impl Collector<'_, '_> {
+    /// The declaration the binder resolves `identifier` to, if any.
+    fn declaration_of(&self, identifier: &IdentifierReference<'_>) -> Option<Span> {
+        identifier
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+            .map(|symbol| span(self.scoping.symbol_span(symbol)))
+    }
+
+    /// The declaration of the binding an `export default` or `export =`
+    /// value is, when the value is an identifier under any wrappers.
+    fn exported_identifier(&self, expression: &Expression<'_>) -> Option<Span> {
+        let Expression::Identifier(identifier) = unwrapped(expression) else {
+            return None;
+        };
+        self.declaration_of(identifier)
+    }
+
+    /// Records the static slots of a non-ambient `const` object pattern whose
+    /// initializer is an identifier the binder resolves, with the declaration
+    /// it resolves to (`namespace_member_candidates`; `finish` keeps the ones
+    /// that are namespace import bindings). A computed key, a default value,
+    /// a nested pattern and the rest element bind no single member and are
+    /// skipped; a `let`, a `var` and an ambient declarator record nothing.
+    fn record_namespace_member_candidates(&mut self, declaration: &VariableDeclarator<'_>) {
+        if declaration.kind != oxc_ast::ast::VariableDeclarationKind::Const
+            || self.ambient_variable
+            || self.ambient_module_depth != 0
+        {
+            return;
+        }
+        let BindingPattern::ObjectPattern(pattern) = &declaration.id else {
+            return;
+        };
+        let Some(Expression::Identifier(initializer)) = declaration.init.as_ref().map(unwrapped)
+        else {
+            return;
+        };
+        let Some(namespace) = self.declaration_of(initializer) else {
+            return;
+        };
+        for property in &pattern.properties {
+            if property.computed {
+                continue;
+            }
+            let BindingPattern::BindingIdentifier(local) = &property.value else {
+                continue;
+            };
+            let key = match &property.key {
+                PropertyKey::StaticIdentifier(identifier) => identifier.name.as_str(),
+                PropertyKey::StringLiteral(literal) => literal.value.as_str(),
+                _ => continue,
+            };
+            self.namespace_member_candidates
+                .push((span(local.span), namespace, key.into()));
+        }
+    }
+
     /// Remembers which string and template statements are direct children of
     /// a program or function body (`direct_string_statements`).
     fn note_direct_string_statements(&mut self, statements: &[oxc_ast::ast::Statement<'_>]) {
@@ -385,6 +443,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             self.pattern_values
                 .push((span(declaration.id.span()), span(init.span())));
         }
+        self.record_namespace_member_candidates(declaration);
         // `const { a, b } = await import(x)`: the export names the pattern reads.
         if let BindingPattern::ObjectPattern(pattern) = &declaration.id
             && let Some(init) = &declaration.init
@@ -826,6 +885,22 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         // for a named export of a same-file default function/class declaration:
         // TypeScript gives that declaration the canonical export identity
         // `default`, even though its local binding has a source-level name.
+        if declaration.source.is_none() {
+            for specifier in &declaration.specifiers {
+                if let ModuleExportName::IdentifierReference(identifier) = &specifier.local
+                    && let Some(target) = self.declaration_of(identifier)
+                {
+                    self.exported_declarations.push(target);
+                }
+            }
+        }
+        if let Some(exported) = &declaration.declaration {
+            self.exported_declarations.extend(
+                export_declaration_names(exported)
+                    .into_iter()
+                    .map(|name| name.local.span),
+            );
+        }
         for specifier in &declaration.specifiers {
             if let ModuleExportName::IdentifierReference(identifier) = &specifier.local
                 && let Some(target) = identifier
@@ -904,6 +979,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_ts_module_block(self, block);
     }
 
+    fn visit_ts_export_assignment(&mut self, assignment: &oxc_ast::ast::TSExportAssignment<'a>) {
+        if let Some(declaration) = self.exported_identifier(&assignment.expression) {
+            self.exported_declarations.push(declaration);
+        }
+        walk::walk_ts_export_assignment(self, assignment);
+    }
+
     fn visit_export_default_declaration(&mut self, declaration: &ExportDefaultDeclaration<'a>) {
         let local = match &declaration.declaration {
             ExportDefaultDeclarationKind::FunctionDeclaration(function) => {
@@ -914,6 +996,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             }
             declaration => declaration.span(),
         };
+        if let Some(expression) = declaration.declaration.as_expression()
+            && let Some(exported) = self.exported_identifier(expression)
+        {
+            self.exported_declarations.push(exported);
+        }
         self.exports.push(ExportFact {
             span: span(declaration.span),
             kind: ExportKind::Default,

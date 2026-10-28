@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { chromeChecker, chromeDiagnostics, chromeRuntime, chromeStatus } from "./chrome.mjs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { CLEAN_ID, chromeChecker, chromeDiagnostics, chromeRuntime, chromeStatus, isCloseTimeout, runChrome } from "./chrome.mjs";
 import { classify } from "./classify.mjs";
 
 // A row as scripts/runtime-oracle.mjs writes it (the fields the fuzzer reads).
@@ -138,5 +141,78 @@ describe("the checker on the instrumented text must give the clean findings", ()
     expect(judged.verdict).toBe("inconclusive");
     expect(judged.reasons[0]).toMatch(/instrumentation-perturbed-checker/);
     expect(chromeStatus(judged)).toBe("chrome-inconclusive");
+  });
+});
+
+// runChrome against a fake oracle (a script with the oracle's command line that writes rows from a plan in the environment).
+describe("runChrome: one call for the twin and the clean control, and one retry for a close timeout", () => {
+  const fakeOracle = (dir) => {
+    const path = join(dir, "oracle.mjs");
+    writeFileSync(path, `import { appendFileSync, readFileSync, readdirSync, writeFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+const arg = (name) => process.argv[process.argv.indexOf(name) + 1];
+const cases = arg("--cases"), only = process.argv.includes("--only") ? arg("--only").split(",") : null;
+const plan = JSON.parse(readFileSync(process.env.FAKE_PLAN, "utf8"));
+const ids = readdirSync(cases).filter((id) => !only || only.includes(id)).sort();
+appendFileSync(process.env.FAKE_LOG, JSON.stringify({ ids, twin: ids.map((id) => readFileSync(join(cases, id, "App.tsx"), "utf8").trim()) }) + "\\n");
+const attempt = existsSync(process.env.FAKE_LOG) ? readFileSync(process.env.FAKE_LOG, "utf8").trim().split("\\n").length : 1;
+const results = ids.map((id) => {
+  const row = (plan[id] ?? {})[Math.min(attempt, (plan[id] ?? [{}]).length) - 1] ?? {};
+  return { id, verdict: "static-only", findings: [], diagnostics: [], pageErrors: [], ...row };
+});
+writeFileSync(arg("--out"), JSON.stringify({ results }));
+`);
+    return path;
+  };
+  const setup = (plan) => {
+    const dir = mkdtempSync(join(tmpdir(), "fuzz-chrome-"));
+    const caseDir = join(dir, "case");
+    mkdirSync(caseDir);
+    writeFileSync(join(caseDir, "App.tsx"), "clean");
+    writeFileSync(join(caseDir, "App.run.txt"), "twin");
+    writeFileSync(join(caseDir, "oracle.json"), "{}");
+    writeFileSync(join(caseDir, "oracle.run.json"), "{}");
+    writeFileSync(join(dir, "plan.json"), JSON.stringify(plan));
+    const log = join(dir, "log.jsonl");
+    return { dir, caseDir, log, env: { ...process.env, FAKE_PLAN: join(dir, "plan.json"), FAKE_LOG: log }, oracle: fakeOracle(dir), install: join(dir, "install") };
+  };
+  const finding = { file: "App.tsx", rule: "r", id: "SC1", kind: "violation", line: 3, endLine: 3 };
+  const closeTimeout = { verdict: "harness-error", error: "Feedback resource cleanup failed: browser close timed out after 2000 ms" };
+
+  it("recognizes a close timeout and nothing else", () => {
+    expect(isCloseTimeout(closeTimeout)).toBe(true);
+    expect(isCloseTimeout({ verdict: "harness-error", error: "boom" })).toBe(false);
+    expect(isCloseTimeout({ verdict: "static-only", error: "browser close timed out after 2000 ms" })).toBe(false);
+  });
+
+  it("runs the twin and the clean case in one oracle call, and compares the twin's findings with the clean case's", async () => {
+    const t = setup({ "fuzz-1": [{ findings: [finding] }], [CLEAN_ID("fuzz-1")]: [{ findings: [{ ...finding, line: 4, endLine: 4 }] }] });
+    const records = await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }], { out: t.dir, install: t.install, bin: "b", typefacts: "t", withClean: true, oracle: t.oracle, env: t.env });
+    const calls = readFileSync(t.log, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toEqual({ ids: ["fuzz-1", CLEAN_ID("fuzz-1")], twin: ["twin", "clean"] });
+    expect(records.get("fuzz-1").checker.perturbed.join()).toMatch(/./);
+    const same = setup({ "fuzz-1": [{ findings: [finding] }], [CLEAN_ID("fuzz-1")]: [{ findings: [finding] }] });
+    const equal = await runChrome([{ id: "fuzz-1", dir: same.caseDir, sites: [] }], { out: same.dir, install: same.install, bin: "b", typefacts: "t", withClean: true, oracle: same.oracle, env: same.env });
+    expect(equal.get("fuzz-1").checker).toMatchObject({ ok: true, perturbed: [] });
+  });
+
+  it("runs a case that ended in a close timeout once more, alone, and keeps the second row", async () => {
+    const t = setup({ "fuzz-1": [closeTimeout, { findings: [finding] }], "fuzz-2": [{}] });
+    const records = await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }, { id: "fuzz-2", dir: t.caseDir, sites: [] }], { out: t.dir, install: t.install, bin: "b", typefacts: "t", oracle: t.oracle, env: t.env });
+    const calls = readFileSync(t.log, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    expect(calls.map((call) => call.ids)).toEqual([["fuzz-1", "fuzz-2"], ["fuzz-1"]]);
+    expect(records.get("fuzz-1")).toMatchObject({ retries: 1, checker: { ok: true, findings: [finding] } });
+    expect(records.get("fuzz-2").retries).toBeUndefined();
+  });
+
+  it("does not retry more than asked, and a case that keeps failing keeps its row", async () => {
+    const t = setup({ "fuzz-1": [closeTimeout] });
+    const records = await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }], { out: t.dir, install: t.install, bin: "b", typefacts: "t", oracle: t.oracle, env: t.env });
+    expect(readFileSync(t.log, "utf8").trim().split("\n")).toHaveLength(2);
+    expect(records.get("fuzz-1").checker.ok).toBe(false);
+    const none = setup({ "fuzz-1": [closeTimeout] });
+    await runChrome([{ id: "fuzz-1", dir: none.caseDir, sites: [] }], { out: none.dir, install: none.install, bin: "b", typefacts: "t", closeRetries: 0, oracle: none.oracle, env: none.env });
+    expect(readFileSync(none.log, "utf8").trim().split("\n")).toHaveLength(1);
   });
 });

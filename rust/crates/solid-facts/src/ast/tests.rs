@@ -3031,3 +3031,114 @@ async function* body(items: AsyncIterable<number>, inner: () => AsyncGenerator<n
         ["await 0"]
     );
 }
+
+/// Facts schema 78: a `const` destructuring slot of a namespace import binding
+/// names one export; every other form names nothing.
+#[test]
+fn namespace_member_bindings_record_only_exact_const_slots_of_an_import_namespace() {
+    let source = concat!(
+        "import * as S from \"solid-js\";\n",
+        "import type * as T from \"solid-js\";\n",
+        "import { flush } from \"solid-js\";\n",
+        "const { onCleanup: a, \"flush\": b, createMemo, [\"x\"]: c, d = 1, e: { f }, ...rest } = S;\n",
+        "const { createEffect: g } = (S as typeof S);\n",
+        "let { onSettled: h } = S;\n",
+        "var { onSettled: i } = S;\n",
+        "const { onSettled: j } = flush as any;\n",
+        "const { onSettled: k } = T;\n",
+        "function body() { const { useContext: l } = S; return l; }\n",
+        "function shadow(S: any) { const { onCleanup: m } = S; return m; }\n",
+        "declare const { n }: typeof S;\n",
+        "export const { onCleanup: o } = S;\n",
+        "const { onCleanup: p } = S;\n",
+        "export { p };\n",
+        "const { onCleanup: q } = S;\n",
+        "export default q;\n",
+        "export function inside() { const { onCleanup: r } = S; return r; }\n",
+        "const { onCleanup: t } = S;\n",
+        "export function usesT() { return t; }\n",
+    );
+    let facts = extract("namespace.ts", source).unwrap();
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let recorded = facts
+        .namespace_member_bindings
+        .iter()
+        .map(|fact| (text(fact.local), fact.key.as_str(), text(fact.namespace)))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        recorded,
+        [
+            ("a", "onCleanup", "S"),
+            ("b", "flush", "S"),
+            ("createMemo", "createMemo", "S"),
+            ("g", "createEffect", "S"),
+            ("l", "useContext", "S"),
+            ("r", "onCleanup", "S"),
+            ("t", "onCleanup", "S"),
+        ]
+    );
+    let local = facts.namespace_member_bindings[0].local;
+    assert_eq!(
+        facts
+            .namespace_member_binding(local)
+            .map(|fact| fact.key.as_str()),
+        Some("onCleanup")
+    );
+}
+
+/// ADR 0458 (facts schema 77): the regions no execution reaches, from the
+/// syntax alone, and the live code around them.
+#[test]
+fn extracts_unreachable_regions() {
+    let source = "function f(c: boolean) {\n\
+  false && a();\n\
+  true || b();\n\
+  ({}) ?? c2();\n\
+  const t = 0 ? d() : e();\n\
+  if (!1) { g(); } else { h(); }\n\
+  if (c) { i(); }\n\
+  c && j();\n\
+  while (false) { k(); }\n\
+  setTimeout(() => {\n\
+    return;\n\
+    class K { static { l(); } }\n\
+    function hoisted() { m(); }\n\
+    n();\n\
+  }, 0);\n\
+  if (c) { return; } else { throw 1; }\n\
+  o();\n\
+}\n\
+lab: { break lab; }\n\
+p();\n";
+    let facts = extract("/project/App.tsx", source).unwrap();
+    let text = |span: &Span| &source[span.start as usize..span.end as usize];
+    let regions = facts
+        .unreachable_regions
+        .iter()
+        .map(text)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        regions,
+        [
+            "a()",
+            "b()",
+            "c2()",
+            "d()",
+            "{ g(); }",
+            "{ k(); }",
+            "class K { static { l(); } }",
+            "n();",
+            "o();",
+        ]
+    );
+    let at = |needle: &str| {
+        let start = u32::try_from(source.find(needle).unwrap()).unwrap();
+        Span::new(start, start + u32::try_from(needle.len()).unwrap())
+    };
+    for dead in ["a()", "l()", "n()", "o()", "g()"] {
+        assert!(facts.unreachable_contains(at(dead)), "{dead} is dead");
+    }
+    for live in ["e()", "h()", "i()", "j()", "m()", "p()", "setTimeout"] {
+        assert!(!facts.unreachable_contains(at(live)), "{live} is live");
+    }
+}

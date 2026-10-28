@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { configFrom, defaultParallelism, parseArgs } from "./run.mjs";
+import { configFrom, defaultParallelism, defaultWorkers, parseArgs, witnessesPresent } from "./run.mjs";
 
 describe("parseArgs", () => {
   it("has defaults", () => {
@@ -28,5 +28,23 @@ describe("parallelism", () => {
     const half = configFrom(parseArgs([]), "out");
     expect(all.concurrency).toBeGreaterThanOrEqual(half.concurrency);
     expect(configFrom(parseArgs(["--all-cores", "--workers", "2"]), "out").workers).toBe(2);
+  });
+  it("gives the Vitest workers twice the cores while programs sleep on timers, one a core on the virtual clock", () => {
+    expect(defaultWorkers(14)).toBe(28);
+    expect(defaultWorkers(14, { virtualClock: true })).toBe(14);
+    expect(defaultWorkers(1, { virtualClock: true })).toBe(1);
+    expect(configFrom(parseArgs(["--workers", "5"]), "out").workers).toBe(5);
+    expect(configFrom(parseArgs([]), "out")).toMatchObject({ virtualClock: true, workers: defaultWorkers(undefined, { virtualClock: true }) });
+    expect(configFrom(parseArgs(["--real-clock"]), "out")).toMatchObject({ virtualClock: false, workers: defaultWorkers(undefined) });
+  });
+});
+
+describe("witnessesPresent (a reduction of an unexecuted candidate must stay runnable in Chrome)", () => {
+  const built = (text, selectors) => ({ text, sites: selectors.map((selector) => ({ witness: selector ? { selector } : null })) });
+  it("needs every witness selector's attribute in the text", () => {
+    expect(witnessesPresent(built("<output data-probe=\"w1\">{w1()}</output>", ['[data-probe="w1"]']))).toBe(true);
+    expect(witnessesPresent(built("<div />", ['[data-probe="w1"]']))).toBe(false);
+    expect(witnessesPresent(built("<div />", [null]))).toBe(true);
+    expect(witnessesPresent(built("<div />", []))).toBe(true);
   });
 });

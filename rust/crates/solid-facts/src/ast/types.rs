@@ -63,6 +63,12 @@ pub struct AstFacts {
     /// (`import S = Other.Name`) loads no module and is not recorded.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub import_equals: Vec<ImportEqualsFact>,
+    /// Every `const` object-destructuring slot that reads one member of a
+    /// runtime namespace import binding (facts schema 78), sorted by local:
+    /// `const { onCleanup: cleanup } = Solid` given `import * as Solid`.
+    /// See [`NamespaceMemberBindingFact`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub namespace_member_bindings: Vec<NamespaceMemberBindingFact>,
     /// Every `import("…")` written in a type position (facts schema 46):
     /// `import("m").Name`, `typeof import("m").name`, `typeof import("m")`.
     /// Erased at run time and loading nothing, but resolved through the same
@@ -395,6 +401,14 @@ pub struct AstFacts {
     /// Every other comment is absent.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub suppression_comments: Vec<SuppressionCommentFact>,
+    /// Code no execution reaches, from the syntax alone (facts schema 77, ADR
+    /// 0458): every statement after one that never completes normally in the
+    /// same list (a `function` declaration excepted, it is hoisted), and every
+    /// arm a literal test rules out (`if`, `?:`, `while`, `for`, the right of
+    /// `&&`, `||`, `??`). Sorted; regions may nest. Everything written inside
+    /// one, nested functions and classes included, never runs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unreachable_regions: Vec<Span>,
     /// Every tagged template, with its substitutions in order (facts schema
     /// 61, ADR 0309). The template calls its tag with the template object
     /// as argument 0 and substitution `i` as argument `i + 1`; no call fact
@@ -1135,6 +1149,36 @@ pub struct TypeImportFact {
     pub member: Option<CompactString>,
 }
 
+/// One slot of a `const` object destructuring whose initializer is a runtime
+/// namespace import binding (facts schema 78): `local` holds exactly the
+/// export `key` of the module `namespace` binds, as `namespace.key` would
+/// read it.
+///
+/// The binder decides the initializer (an identifier, under transparent
+/// TypeScript wrappers, that resolves to an `import * as S` binding of a
+/// value import), so a shadowing local `S` is not this. Recorded only for a
+/// non-ambient `const` and a slot whose key is static (an identifier or a
+/// string literal, cooked) and whose value is a bare binding identifier: a
+/// computed key, a default value, a rest element, a nested pattern, and a
+/// `let` or `var` are absent, and so is a slot the module exports (`export
+/// const { … } = S`, `export { local }`, `export default local`, `export =
+/// local`), so no other module imports the binding itself: every reference
+/// to `local` is in this file. Only a direct export of the binding is
+/// excluded; its value may still escape (`export default { local }`, an
+/// argument, a store), and such a slot is recorded. Absence is not a fact
+/// about the slot. A read of `local` before the declarator ran throws;
+/// whether one may is the consumer's question.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NamespaceMemberBindingFact {
+    /// The slot's binding identifier.
+    pub local: Span,
+    /// The namespace import binding's own span (`S` in `import * as S`).
+    pub namespace: Span,
+    /// The export the slot reads.
+    pub key: CompactString,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ModuleHazardKind {
@@ -1685,6 +1729,19 @@ impl AstFacts {
         Self::at_span(&self.array_literal_elements, span, |fact| fact.span)
     }
 
+    /// Whether `span` lies in one of [`Self::unreachable_regions`]: no
+    /// execution runs it.
+    #[must_use]
+    pub fn unreachable_contains(&self, span: Span) -> bool {
+        // Sorted by start: only a region starting at or before `span` can hold it.
+        let end = self
+            .unreachable_regions
+            .partition_point(|region| region.start <= span.start);
+        self.unreachable_regions[..end]
+            .iter()
+            .any(|region| region.contains(span))
+    }
+
     /// The declaration the binder resolved the reference at `span` to.
     ///
     /// `None` when `span` is not an identifier reference, or when the binder
@@ -1696,6 +1753,16 @@ impl AstFacts {
             .binary_search_by_key(&span, |(reference, _)| *reference)
             .ok()
             .map(|index| self.reference_declarations[index].1)
+    }
+
+    /// The namespace member a `const` destructuring slot binds, by the slot's
+    /// binding identifier span. See [`NamespaceMemberBindingFact`].
+    #[must_use]
+    pub fn namespace_member_binding(&self, local: Span) -> Option<&NamespaceMemberBindingFact> {
+        self.namespace_member_bindings
+            .binary_search_by_key(&local, |fact| fact.local)
+            .ok()
+            .map(|index| &self.namespace_member_bindings[index])
     }
 
     /// Whether `span` is *exactly* a class's binding name, or exactly the class
@@ -1881,6 +1948,7 @@ impl AstFacts {
             module_loads: Vec::new(),
             sequences: Vec::new(),
             import_equals: Vec::new(),
+            namespace_member_bindings: Vec::new(),
             type_imports: Vec::new(),
             type_queries: Vec::new(),
             type_names: Vec::new(),
@@ -1933,6 +2001,7 @@ impl AstFacts {
             module_directives: Vec::new(),
             stray_directives: Vec::new(),
             suppression_comments: Vec::new(),
+            unreachable_regions: Vec::new(),
             tagged_templates: Vec::new(),
             array_literal_elements: Vec::new(),
             pattern_elements: Vec::new(),

@@ -126,12 +126,11 @@ const tally = (rows) => rows.reduce((counts, row) => { counts[row.outcome] += 1;
 // ---------------------------------------------------------------------------------------------------------------------
 // Chrome
 
-/** Chrome's records for evaluated values: the clean case first (its findings are what the twin's must equal), then the twin. */
+/** Chrome's records for evaluated values: the twin, judged against the clean case's findings, which run beside it in the same oracle call. */
 async function chromeRecords(values, config, options, out) {
   const chromeOptions = { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency };
   const cases = values.map((value) => ({ id: value.built.id, dir: value.caseDir, sites: value.built.sites }));
-  const cleanRuns = await runChrome(cases, { ...chromeOptions, control: true });
-  return runChrome(cases.map((c) => ({ ...c, findings: cleanRuns.get(c.id)?.checker?.ok ? cleanRuns.get(c.id).checker.findings : null })), chromeOptions);
+  return runChrome(cases, { ...chromeOptions, withClean: true });
 }
 
 /** Chrome's outcome for a program, and whether it equals the fast path's. */
