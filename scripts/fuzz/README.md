@@ -170,6 +170,17 @@ The gate compares the baseline's programs: a program only the current run has (a
 
 **Gate.** A cell's program seeds depend on the run seed, the code, the context and the index only (`cellSeed`), so a baseline and a later run with the same `--seed` and `--per-cell` judge the same programs. The gate fails (exit 1) when a judged program leaves `agree` for another judged outcome or enters `false-clean`, or a baseline cell is missing; it names the seeds that moved. `typed-away` and `harness` are not verdicts, they are what a loaded machine produces: a program that moves out of one of them is reported as "baseline unjudged" and never fails the gate, and a program that moves into one is an "infrastructure warning" (the run is suspect), also not a failure. A current run in which more than half the programs are typed-away or harness is refused (exit 2). Different seeds, per-cell counts or generator versions are refused (exit 2). A cell where the checker improved is reported, not failed.
 
+## The legal-context matrix
+
+`node scripts/fuzz/legal.mjs --out <fresh> [--per-cell N | --grid] [--confirm-with-chrome]` is the misuse matrix's twin for false positives. Each template's `legal` contexts (misuse.mjs) place the same call where it is correct Solid: a write in a handler, a timer or an effect apply; `onCleanup`, `createEffect`, `useContext` and `onSettled` in an owned body; a strict read in a memo, a compute, JSX or `untrack`; `flush`, `resolve` and an action call in a handler; and a store write through its draft or through the read proxy inside its own setter (`legalVariants`). A program is judged at its site:
+- `not-legal`: the runtime reports the code, so the template is wrong there;
+- `false-positive`: a violation covers a site the hit ledger shows ran, and the runtime reports none of its rule's codes;
+- `unexecuted`: the site never ran;
+- `disturbed`: the program threw or halted;
+- otherwise `uncertifiable` or `clean`.
+
+Chrome rejudges the candidates on the twin with its ledger, and a confirmed one exits 3 (stop and report). Codes whose legal form needs more than a context (a provider, a settled async value, a non-sync option) have no `legal` list.
+
 ## The packages profile
 
 `--profile packages` gives a program one or two exports of a generated dependency package, `fz-lib`, so the fuzzer tests how the checker reads dependency source (ADRs 0291, 0297, 0300). The same tree, host and disposition machinery builds the program; the helper layer is an export of the package. `package.mjs` is the single place that says what each behaviour does at run time (call the callback inline or N times; in `setTimeout`, `queueMicrotask` or `Promise.then`; under `untrack`, `runWithOwner(null | getOwner())` or `createRoot`; pass it to `createEffect`, `createMemo`, `onCleanup` or `onSettled`; return it, a wrapper of it, or `{ cb }`; store it in a module variable, array or object, with or without its owner, for a second export, `fire`, to call later; never call it) and in which export form (named, arrow, default, an index re-exporting `impl.js` by name, renamed or `export *`, a class method, a static method, an object method, a namespace import). The generator knows each behaviour, so each shape's runtime truth is determined; `packages-seeds.mjs` pins sixteen of them and `node scripts/fuzz/packages-check.mjs --out <fresh>` runs them through the fast path and exits 1 when the runtime contradicts one.
