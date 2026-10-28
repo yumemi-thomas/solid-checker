@@ -87,3 +87,21 @@ const [shared] = createStore({ a: { v: 0 } });
 export function ModuleScope() {
   shared.a.v = 1;
 }
+
+// Uncertifiable: a regular expression is served raw, so the write lands.
+export function RegexLink() {
+  const [store] = createStore({ r: /x/g });
+  store.r.lastIndex = 5;
+}
+
+// Uncertifiable: a primitive cast to an object is served raw (the write throws).
+export function CastPrimitive() {
+  const [store] = createStore({ a: 0 as unknown as { v: number } });
+  store.a.v = 1;
+}
+
+// Uncertifiable: `reverse` may write nothing.
+export function Reverse() {
+  const [store] = createStore({ items: [0] });
+  store.items.reverse();
+}

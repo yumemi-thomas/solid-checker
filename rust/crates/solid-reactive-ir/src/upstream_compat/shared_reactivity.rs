@@ -2032,17 +2032,11 @@ fn optional_free(ast: &solid_facts::ast::AstFacts, member: Span, links: &[Span])
 }
 
 /// The in-place array methods [`links_proven_wrappable`] lets a store path
-/// call: [`ARRAY_MUTATORS`] less `sort`, whose comparator receives elements.
-const CALLBACK_FREE_ARRAY_MUTATORS: [&str; 8] = [
-    "push",
-    "pop",
-    "shift",
-    "unshift",
-    "splice",
-    "reverse",
-    "fill",
-    "copyWithin",
-];
+/// call: those of [`ARRAY_MUTATORS`] that take no callback and always write
+/// `length` (`Array.prototype` §23.1.3), so the call meets the `set` trap
+/// whatever the array holds; `reverse`, `fill` and `copyWithin` may write
+/// nothing, and `sort`'s comparator receives elements.
+const LENGTH_WRITING_ARRAY_MUTATORS: [&str; 5] = ["push", "pop", "shift", "unshift", "splice"];
 
 /// ADR 0491: every link the write at `member` reads past the store root holds
 /// the object or array literal the store's own initializer wrote there, so the
@@ -2072,6 +2066,11 @@ fn links_proven_wrappable(
     root: Span,
 ) -> bool {
     let ast = &file.ast;
+    // A direct `eval` can reach the setter or the store with no reference
+    // the binder sees.
+    if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
+        return false;
+    }
     let Some(root_declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(root)) else {
         return false;
     };
@@ -2177,14 +2176,32 @@ fn links_proven_wrappable(
     }
     // The written path's links resolve to literals (the use check above
     // already walked it; this pins the links themselves).
-    let Some(path) = static_path(
-        file,
-        ast.peel_ts_sugar_span(member),
-        ast.peel_ts_sugar_span(root),
-    ) else {
+    let member = ast.peel_ts_sugar_span(member);
+    let Some(path) = static_path(file, member, ast.peel_ts_sugar_span(root)) else {
         return false;
     };
-    path.len() >= 2 && resolve_literal_path(file, initial, &path[..path.len() - 1]).is_some()
+    let (last, prefix) = match path.split_last() {
+        Some((last, prefix)) if !prefix.is_empty() => (last, prefix),
+        _ => return false,
+    };
+    let called = ast
+        .calls
+        .iter()
+        .any(|call| ast.peel_ts_sugar_span(call.callee) == member);
+    if called
+        && !file
+            .source_text(*last)
+            .is_some_and(|name| LENGTH_WRITING_ARRAY_MUTATORS.contains(&name))
+    {
+        return false;
+    }
+    holds_object(resolve_literal_path(file, initial, prefix))
+}
+
+/// The value is an object or array literal: a primitive (or a regular
+/// expression, which the facts class with them) is served raw.
+fn holds_object(value: Option<LiteralValue>) -> bool {
+    matches!(value, Some(LiteralValue::Object(_) | LiteralValue::Array))
 }
 
 /// What a literal value resolved from a store's initializer is.
@@ -2295,7 +2312,7 @@ fn contained_store_use(file: &FileFacts, reference: Span, initial: Span) -> bool
             .iter()
             .any(|&target| file.peel_parentheses(target) == Some(top));
     if written {
-        return resolve_literal_path(file, initial, prefix).is_some();
+        return holds_object(resolve_literal_path(file, initial, prefix));
     }
     let called = ast
         .calls
@@ -2304,7 +2321,7 @@ fn contained_store_use(file: &FileFacts, reference: Span, initial: Span) -> bool
     if called {
         return file
             .source_text(*last)
-            .is_some_and(|name| CALLBACK_FREE_ARRAY_MUTATORS.contains(&name))
+            .is_some_and(|name| LENGTH_WRITING_ARRAY_MUTATORS.contains(&name))
             && resolve_literal_path(file, initial, prefix) == Some(LiteralValue::Array);
     }
     resolve_literal_path(file, initial, &path) == Some(LiteralValue::Primitive)

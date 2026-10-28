@@ -150,6 +150,46 @@
       "start": 2411,
       "end": 2421,
       "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 2580,
+      "end": 2597,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 2793,
+      "end": 2802,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 2935,
+      "end": 2956,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/Eval.ts",
+      "start": 259,
+      "end": 268,
+      "fixes": 0
     }
   ]
 }
