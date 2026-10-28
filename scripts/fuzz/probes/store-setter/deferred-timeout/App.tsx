@@ -4,12 +4,16 @@ import { createStore } from "solid-js";
 export function C1() {
   const [store, setStore] = createStore({ n: 0 });
   return (
-    <button onClick={() => {
-        setStore(() => {
-          setTimeout(() => {
-            store.n = 1;
-          }, 0);
-        });
-      }}>{store.n}</button>
+    <div>
+      <button onClick={() => {
+          setStore(() => {
+            setTimeout(() => {
+              store.n = 1;
+            }, 0);
+          });
+          setTimeout(() => { document.getElementById("w")!.textContent = String(store.n); }, 20);
+        }}>go</button>
+      <output id="w">-</output>
+    </div>
   );
 }
