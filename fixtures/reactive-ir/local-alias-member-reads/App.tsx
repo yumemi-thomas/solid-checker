@@ -128,3 +128,47 @@ export function MemberReadAfterAwaitInClosure() {
   createEffect(() => m(), () => {});
   return <div></div>;
 }
+
+declare const flag: boolean;
+
+// ADR 0499: a store link read for a write in a closure the body calls once
+// runs during that call, in the body's strict-read window (violation), also
+// through a member alias.
+export function StoreLinkInClosure() {
+  const [state] = createStore({ v: 0, nested: { v: 0 } });
+  const write = () => {
+    state.nested.v = 1;
+  };
+  write();
+  return <div>{state.v}</div>;
+}
+
+export function StoreLinkInClosureThroughMember() {
+  const [state, setState] = createStore({ v: 0, nested: { v: 0 } });
+  const useState = () => ({ state, setState });
+  const holder = useState();
+  const write = () => {
+    holder.state.nested.v = 1;
+  };
+  write();
+  return <div>{state.v}</div>;
+}
+
+// Uncertifiable: the write is on one path of the closure only.
+export function StoreLinkInClosureConditional() {
+  const [state] = createStore({ v: 0, nested: { v: 0 } });
+  const write = () => {
+    if (flag) state.nested.v = 1;
+  };
+  write();
+  return <div>{state.v}</div>;
+}
+
+// Negative: the closure runs only from a handler.
+export function StoreLinkInHandlerClosure() {
+  const [state] = createStore({ v: 0, nested: { v: 0 } });
+  const write = () => {
+    state.nested.v = 1;
+  };
+  return <button onClick={() => write()}>{state.v}</button>;
+}
