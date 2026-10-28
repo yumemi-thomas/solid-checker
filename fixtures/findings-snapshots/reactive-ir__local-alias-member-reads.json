@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
-      "start": 499,
-      "end": 513,
+      "start": 513,
+      "end": 527,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
-      "start": 1162,
-      "end": 1174,
+      "start": 1176,
+      "end": 1188,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
-      "start": 1904,
-      "end": 1918,
+      "start": 1918,
+      "end": 1932,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
-      "start": 1926,
-      "end": 1952,
+      "start": 1940,
+      "end": 1966,
       "fixes": 0
     },
     {
@@ -47,8 +47,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
-      "start": 3234,
-      "end": 3246,
+      "start": 3248,
+      "end": 3260,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
+      "start": 3654,
+      "end": 3665,
       "fixes": 0
     }
   ]

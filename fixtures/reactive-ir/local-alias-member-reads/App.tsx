@@ -1,4 +1,4 @@
-import { action, createMemo, createSignal, createStore } from "solid-js";
+import { action, createEffect, createMemo, createSignal, createStore } from "solid-js";
 
 // ADR 0481: `thing.key`, where `thing` holds an object-literal arrow's fresh
 // result and is only ever read that way, is the `const` the key names.
@@ -108,5 +108,23 @@ export function StoreMemberDelete() {
   const useOpt = () => ({ opt });
   const holder = useOpt();
   delete holder.opt.v;
+  return <div></div>;
+}
+
+// Violation (SC1002 through ADR 0481): the member read runs in a closure after
+// the memo's await, untracked.
+export function MemberReadAfterAwaitInClosure() {
+  const [count] = createSignal(0);
+  const useCount = () => ({ read: count });
+  const holder = useCount();
+  const m = createMemo(async () => {
+    await Promise.resolve();
+    const peek = () => {
+      holder.read();
+    };
+    peek();
+    return 1;
+  });
+  createEffect(() => m(), () => {});
   return <div></div>;
 }

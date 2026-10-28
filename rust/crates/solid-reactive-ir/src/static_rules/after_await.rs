@@ -580,6 +580,13 @@ impl<'f, 'a> Reach<'f, 'a> {
             // a reactive receiver does not prove its method invokes that
             // receiver or reads an accessor.
             let symbol = ast_call.and_then(|(file, candidate)| {
+                // ADR 0481: a member read that is exactly a `const` names it.
+                if let Some(alias) = file
+                    .ast
+                    .local_alias_member(file.ast.peel_ts_sugar_span(candidate.callee))
+                {
+                    return ctx.entities.at(file.path.as_str(), alias.source);
+                }
                 if let Some(member) = file
                     .ast
                     .members
