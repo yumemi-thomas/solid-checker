@@ -48,6 +48,11 @@ other owner-creating callback, as much as under a component body: the root owns
 the first run only. Under an unowned call site every run is unowned, and the
 operation stays a proven violation.
 
+A function returned by its function (a factory's result, or a value returned
+through `runWithOwner`, `createRoot`, `untrack` or a memo) runs where its caller
+later calls it. The owner walk does not follow the returned value to those
+calls, so an owner operation in it is uncertifiable, never certified (ADR 0472).
+
 An owner-creating callback owns only what runs in its synchronous extent. A
 callback written inside it that runs with no owner on every run -- a
 `createEffect` apply, an ownerless event handler, a `createReaction` invalidation, a

@@ -147,6 +147,16 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/object-member-import/negative.ts",
+      "start": 540,
+      "end": 549,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/negative.ts",
       "start": 672,
       "end": 681,
       "fixes": 0
