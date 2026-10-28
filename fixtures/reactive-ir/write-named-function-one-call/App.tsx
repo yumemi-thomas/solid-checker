@@ -63,3 +63,23 @@ export function ExportedCalledOnce() {
   });
   return <div>{m()}</div>;
 }
+
+// Violation (ADR 0489): a read in a component-level closure, called only from
+// a closure written in a createEffect apply and called once there, runs in the
+// apply, untracked (SC1001).
+export function ReadThroughNestedClosures() {
+  const [count] = createSignal(0);
+  const peek = () => {
+    count();
+  };
+  createEffect(
+    () => 1,
+    () => {
+      const relay = () => {
+        peek();
+      };
+      relay();
+    },
+  );
+  return <div></div>;
+}

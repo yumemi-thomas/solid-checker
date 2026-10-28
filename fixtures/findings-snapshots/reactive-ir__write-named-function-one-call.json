@@ -40,6 +40,16 @@
       "start": 1780,
       "end": 1792,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/write-named-function-one-call/App.tsx",
+      "start": 2332,
+      "end": 2338,
+      "fixes": 0
     }
   ]
 }
