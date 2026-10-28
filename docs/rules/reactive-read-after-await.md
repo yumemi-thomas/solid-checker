@@ -84,6 +84,10 @@ there, and the reads in it are then reported with the same two proofs:
     passing its second parameter, `Promise.all` of one, `then`/`finally` of
     one), or whose outcome is unknown (any other executor, an `async` helper's
     promise), leaves the handler uncertifiable. `.finally` runs on both paths.
+- **A helper's callback (ADR 0485).** A function literal a project helper calls
+  in its own synchronous body on every completion (`run(() => count())`) runs on
+  the continuation's stack: its reads after the computation's `await` are
+  reported. A helper that keeps or hands on the callback is not claimed.
 - **An `async` helper the computation awaits.** An exactly resolved `async`
   project function whose promise the computation returns or awaits, directly
   or through `Promise.all`/`allSettled` (of calls, or of `items.map(async ...)`

@@ -63,7 +63,9 @@ export function PromiseCallbackAfterAwait() {
 }
 
 // This is a project-defined method with the same spelling as the built-in.
-// Name-only or regex matching would incorrectly certify its callback.
+// Name-only matching would certify its callback; the exact method (ADR 0351)
+// calls it in its own synchronous body, so the read runs after the await
+// (ADR 0485): SC1002 by that proof, not by the name.
 export function ShadowedFilterAfterAwait() {
   const [id] = createSignal("42");
   const posts = createMemo(async () => {
