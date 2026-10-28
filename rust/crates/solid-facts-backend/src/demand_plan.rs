@@ -41,6 +41,10 @@ struct DemandSpans {
     tuple_shape_spans: HashSet<Span>,
     library_type_spans: HashSet<Span>,
     declared_key_spans: HashSet<Span>,
+    writable_optional_property_spans: HashSet<Span>,
+    /// The member objects a `delete` operand's chain reads (ADR 0461), asked
+    /// for their primitive value domain without a symbol observation.
+    delete_object_spans: HashSet<Span>,
     async_symbol_spans: HashSet<Span>,
     async_value_spans: Vec<Span>,
 }
@@ -89,6 +93,7 @@ fn plan_file(
     collect_return_spans(file, &mut spans, demands, (&path, &returned_callees));
     collect_argument_spans(dialect, file, &mut spans);
     collect_member_spans(file, &mut spans);
+    collect_delete_spans(dialect, file, &mut spans);
     emit_span_demands(
         file,
         spans,
@@ -98,6 +103,38 @@ fn plan_file(
     )?;
     plan_call_demands(dialect, file, demands, (&path, &returned_callees));
     Ok(())
+}
+
+/// ADR 0461: whether a `delete` operand that is a static member names a
+/// property TypeScript lets it delete (optional, not readonly), and whether
+/// each object the member chain reads on the way may be `null` or `undefined`
+/// (TS18047/TS18048 under strictNullChecks), which
+/// `no-store-mutation-outside-setter` asks before reporting a store delete.
+/// TypeScript sees through parentheses only: `delete store.v!` and `delete
+/// (store.v as T)` are TS2703, so a type assertion on the operand asks nothing.
+fn collect_delete_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut DemandSpans) {
+    if !dialect.semantic_demands.delete_operand_optionality {
+        return;
+    }
+    for &target in &file.ast.deleted_targets {
+        let Some(member) = file.peel_parentheses(target) else {
+            continue;
+        };
+        let Some(access) = file.ast.member_at(member) else {
+            continue;
+        };
+        if file.ast.computed_members.binary_search(&member).is_ok() {
+            continue;
+        }
+        spans.writable_optional_property_spans.insert(member);
+        // The intermediate links: every member object below the operand that
+        // is itself a member read (the chain's root is not one).
+        let mut object = access.object;
+        while let Some(link) = file.ast.member_at(object) {
+            spans.delete_object_spans.insert(object);
+            object = link.object;
+        }
+    }
 }
 
 fn collect_symbol_spans(
@@ -820,6 +857,8 @@ fn emit_span_demands(
         tuple_shape_spans,
         library_type_spans,
         declared_key_spans,
+        writable_optional_property_spans,
+        delete_object_spans,
         async_symbol_spans,
         async_value_spans,
     } = spans;
@@ -873,6 +912,16 @@ fn emit_span_demands(
     for span in declared_key_spans {
         let mut planned = demand(file_location(path, span));
         planned.declared_keys = true;
+        demands.push(planned);
+    }
+    for span in writable_optional_property_spans {
+        let mut planned = demand(file_location(path, span));
+        planned.writable_optional_property = true;
+        demands.push(planned);
+    }
+    for span in delete_object_spans {
+        let mut planned = demand(file_location(path, span));
+        planned.primitive_value_domain = true;
         demands.push(planned);
     }
 
@@ -1275,6 +1324,7 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         reference_space: false,
         runtime_identity: false,
         declared_keys: false,
+        writable_optional_property: false,
     }
 }
 
@@ -1342,6 +1392,7 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.reference_space |= demand.reference_space;
             current.runtime_identity |= demand.runtime_identity;
             current.declared_keys |= demand.declared_keys;
+            current.writable_optional_property |= demand.writable_optional_property;
         } else {
             merged.push(demand);
         }

@@ -144,6 +144,7 @@ fn every_demanded_family_is_answered_and_none_is_counted_unavailable() {
         type_descriptor: true,
         runtime_identity: true,
         declared_keys: false,
+        writable_optional_property: false,
         call_result_domain: true,
         ..EntityDemand::default()
     };

@@ -12,7 +12,7 @@ use super::table::ProducerTable;
 use super::writer::{RowWriter, append_packed_dictionary};
 use crate::v3::{
     self, SUPPORTED_TABLE_SCHEMAS, TABLE_TRANSITION_VERSION, TYPE_FACTS_SCHEMA_V1,
-    TYPE_FACTS_TABLE_SCHEMA_V23, TransitionMode,
+    TYPE_FACTS_TABLE_SCHEMA_V24, TransitionMode,
 };
 use crate::v3::{PathOp, SlotOp, SymbolOp};
 
@@ -106,7 +106,7 @@ impl TransitionEncoder {
     pub const fn new(table_schema: u64) -> Self {
         Self {
             table_schema: if table_schema == 0 {
-                TYPE_FACTS_TABLE_SCHEMA_V23
+                TYPE_FACTS_TABLE_SCHEMA_V24
             } else {
                 table_schema
             },

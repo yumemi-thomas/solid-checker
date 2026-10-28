@@ -84,6 +84,7 @@ pub fn blank_entity(location: Location) -> EntityFact {
         tuple_shape: None,
         library_types: None,
         declared_keys: None,
+        writable_optional_property: false,
         reference_space: None,
         runtime_identity: "".into(),
     }

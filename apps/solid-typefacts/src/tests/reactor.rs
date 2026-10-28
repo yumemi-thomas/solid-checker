@@ -298,6 +298,7 @@ fn a_symlinked_project_root_names_the_same_runtime_symbol() {
             symbol: true,
             runtime_identity: true,
             declared_keys: false,
+            writable_optional_property: false,
             ..EntityDemand::default()
         };
         entities(&mut project, file, &[demand])

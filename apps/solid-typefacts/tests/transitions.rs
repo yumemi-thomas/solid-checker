@@ -112,7 +112,7 @@ fn full_then_sparse_then_reuse() {
     assert_eq!(full.path_operations, 2);
     // Symbol closure belongs to the client: the demand table has no symbol rows.
     assert_eq!(full.symbol_operations, 0);
-    assert_eq!(full.table_schema, typefacts::v3::TYPE_FACTS_SCHEMA_V1 + 22);
+    assert_eq!(full.table_schema, typefacts::v3::TYPE_FACTS_SCHEMA_V1 + 23);
     assert!(reencode_table_transition(&first.table_transition).unwrap() == first.table_transition);
 
     // Nothing new in the same generation: the retained table answers.

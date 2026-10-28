@@ -7,24 +7,7 @@ impl<'a> SemanticLookup<'a> {
     /// type assertion (`as`, `<T>`, `!`, `satisfies`) wraps it on the way,
     /// which changes the declared type and never the value.
     pub(crate) fn peel_parentheses(file: &FileFacts, value: Span) -> Option<Span> {
-        let mut value = value;
-        while let Ok(index) = file
-            .ast
-            .transparent_wrappers
-            .binary_search_by_key(&value, |wrapper| wrapper.span)
-        {
-            let wrapper = &file.ast.transparent_wrappers[index];
-            if wrapper.inner == value {
-                break;
-            }
-            let parenthesized = wrapper.inner.start > value.start
-                && file.source.as_bytes().get(value.start as usize) == Some(&b'(');
-            if !parenthesized {
-                return None;
-            }
-            value = wrapper.inner;
-        }
-        Some(value)
+        file.peel_parentheses(value)
     }
 
     /// ADR 0320: whether the expression at `value` evaluates to a primitive

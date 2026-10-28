@@ -143,6 +143,9 @@ pub fn prepare_rows(
         if entity.declared_keys.is_some() {
             target.declared_keys = entity.declared_keys;
         }
+        if entity.writable_optional_property {
+            target.writable_optional_property = true;
+        }
         if entity.reference_space.is_some() {
             target.reference_space = entity.reference_space;
         }

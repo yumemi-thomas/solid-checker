@@ -134,6 +134,7 @@ fn every_family(location: Location) -> EntityDemand {
         reference_space: true,
         runtime_identity: true,
         declared_keys: false,
+        writable_optional_property: false,
         ..EntityDemand::default()
     }
 }

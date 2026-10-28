@@ -1167,8 +1167,30 @@
       "allow": [
         2790
       ],
-      "why": "Upstream's `delete store.path` shape, not adopted (ADR 0381, 0425). The proxy drops it outside a setter (rc.17 `deleteProperty` trap `dist/dev.js:5761-5767`; probed), but for a required property under strictNullChecks `tsc` reports TS2790 (\"The operand of a 'delete' operator must be optional\"), so the write is TypeScript's. The property whose type includes `undefined` (`nick` below, or an optional one) type-checks, and no Type Fact says that at a delete operand, so the checker stays silent on both (docs/open-work.md). Not strict-only in the checker's favour: a non-strict project is silent in `tsc` too, and the checker's silence there is the fail-closed default.",
+      "why": "`delete store.path` on a property TypeScript rejects (ADR 0461 keeps it out). The proxy drops it outside a setter (rc.17 `deleteProperty` trap `dist/dev.js:5761-5767`; probed), but for a required property under strictNullChecks `tsc` reports TS2790 (\"The operand of a 'delete' operator must be optional\"), so the write is TypeScript's. `nick` below type-checks here (its type includes `undefined`) but is TS2790 under `exactOptionalPropertyTypes`, so the checker reports only a property the Type Fact `writableOptionalProperty` marks optional and not readonly, and stays silent on both. Not strict-only in the checker's favour: a non-strict project is silent in `tsc` too, and the checker's silence there is the fail-closed default.",
       "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ req: { id: 1 }, user: { nick: undefined as string | undefined } });\nexport function Remove() {\n  delete store.req.id;\n  delete store.user.nick;\n}\n"
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "removed-because-redundant",
+      "checker": "silent",
+      "allow": [
+        2703
+      ],
+      "why": "SC2003's delete arm (ADR 0461) on an optional property TypeScript still rejects: it sees through parentheses only, so a type assertion on the operand (`delete store.v!`, `delete (store.v as number | undefined)`) is TS2703 (\"must be a property reference\"). The checker peels parentheses only and stays silent on both. A link that may be nullish (TS18047/TS18048 under strictNullChecks) is silent too and pinned in the `store-delete` fixture's `Rejected.tsx`; without strictNullChecks a deeper chain is uncertifiable.",
+      "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore<{ v?: number }>({ v: 0 });\nexport function Remove() {\n  delete store.v!;\n  delete (store.v as number | undefined);\n}\n"
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerCount": 1,
+      "why": "SC2003's delete arm (ADR 0461). `delete` of an optional, non-readonly property of a store path type-checks under every compiler option (TS2790 needs a non-optional operand, TS2704 a readonly one), and rc.17's `deleteProperty` trap drops it outside a setter with `STORE_WRITE_OUTSIDE_SETTER` (`dist/dev.js:5761-5767`, the `set` trap's `inDraft` gate). The Type Fact `writableOptionalProperty` carries the optionality the checker reads.",
+      "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore<{ v?: number }>({ v: 0 });\nexport function Remove() {\n  delete store.v;\n}\n"
     },
     {
       "rule": "valid-use-server",

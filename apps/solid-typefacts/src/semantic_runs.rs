@@ -38,6 +38,7 @@ use crate::type_facts::{
     DescriptorMemo, array_shape_at, callability_of_type, constructability_of_type,
     declared_keys_at, library_types_at, primitive_literal_candidates_of_type,
     primitive_value_domain_of_type, runtime_value_domain_of_type, tuple_shape_at,
+    writable_optional_property_at,
 };
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
@@ -115,6 +116,7 @@ fn wants_beyond_symbol(demand: &EntityDemand) -> bool {
         || demand.tuple_shape
         || demand.library_types
         || demand.declared_keys
+        || demand.writable_optional_property
         || demand.reference_space
         || demand.runtime_identity
 }
@@ -435,6 +437,11 @@ pub fn run(
             && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
         {
             entity.declared_keys = declared_keys_at(env.checker, node).map(Arc::new);
+        }
+        if demand.writable_optional_property
+            && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
+        {
+            entity.writable_optional_property = writable_optional_property_at(env.checker, node);
         }
         note_unported(demand, unavailable);
         if demand.resolved_call {
