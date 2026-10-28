@@ -87,7 +87,17 @@ export function judge({ code, site, typecheck: typed, checker, runtime }) {
   const remote = Boolean(claimingViolation) && !inLines(claimingViolation, region);
   const violations = covering.filter((finding) => finding.kind === "violation");
   const stray = relevant.filter((finding) => finding.kind === "violation" && !rules.includes(finding.rule) && !inLines(finding, region));
-  const detail = { placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}) };
+  // Another claimed code Chrome reports on the site's lines (a store link written in a body is a strict read too): the checker
+  // missed it when no finding of its rules is in the file (`false-clean`), or declined it (`recall-gap`). The target's outcome
+  // does not see it, so it is counted on its own.
+  const secondary = Object.fromEntries([...new Set(known
+    .filter((event) => event.code !== code && (codeRules[event.code] ?? []).length && attributed(event).some((position) => region.includes(position.line)))
+    .map((event) => event.code))]
+    .map((other) => [other, relevant.some((finding) => finding.kind === "violation" && codeRules[other].includes(finding.rule))
+      ? "agree"
+      : relevant.some((finding) => codeRules[other].includes(finding.rule)) ? "recall-gap" : "false-clean"])
+    .filter(([, verdict]) => verdict !== "agree"));
+  const detail = { placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(Object.keys(secondary).length ? { secondary } : {}) };
   if (claimingViolation) return { outcome: "agree", detail };
   // A violation of another rule that the runtime substantiates on these lines (one of that rule's codes reported here: a store read
   // in a body is a strict read too) is a second defect at the site, not a wrong rule; the code is judged as if it were absent.
@@ -251,8 +261,15 @@ export function buildMatrix(rows, { options, header, typedAway }) {
   // Violations away from the site, per rule: they need a look (a template's second defect, or a false positive).
   const strays = {};
   for (const row of rows) for (const label of row.detail?.stray ?? []) { const rule = label.split("@")[0]; strays[rule] = [...(strays[rule] ?? []), row.id]; }
+  // Second codes Chrome reported at a site that the checker missed or declined, per code and verdict.
+  const secondary = {};
+  for (const row of rows) for (const [other, verdict] of Object.entries(row.detail?.secondary ?? {})) {
+    const entry = (secondary[other] ??= { "false-clean": [], "recall-gap": [] });
+    entry[verdict].push(row.id);
+  }
   return {
     strays: Object.fromEntries(Object.entries(strays).map(([rule, ids]) => [rule, { programs: ids.length, examples: ids.slice(0, 3) }])),
+    secondary: Object.fromEntries(Object.entries(secondary).map(([other, entry]) => [other, Object.fromEntries(Object.entries(entry).map(([verdict, ids]) => [verdict, { programs: ids.length, examples: ids.slice(0, 3) }]))])),
     generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), checker: header, total,
     confirmed: CONFIRMED.reduce((sum, name) => sum + total[name], 0),
     falseCleanCertified: rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,

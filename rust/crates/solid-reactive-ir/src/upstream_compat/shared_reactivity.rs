@@ -2079,6 +2079,13 @@ fn links_proven_wrappable(
     let mut store = None;
     for _ in 0..4 {
         let declaration = *names.last().expect("one name");
+        // ADR 0497: an exact local alias (ADR 0463, 0480: a `const` alias, a
+        // literal slot, a tuple holder's slot, an object-literal arrow's slot)
+        // holds the store itself.
+        if let Some(alias) = ast.local_alias_binding(declaration) {
+            names.push(alias.source);
+            continue;
+        }
         let Some(binding) = ast
             .bindings
             .iter()
@@ -2146,6 +2153,20 @@ fn links_proven_wrappable(
     if slot(1).is_some_and(|setter| referenced(setter.span)) {
         return false;
     }
+    // ADR 0497: every exact alias of the store, not only those on the root's
+    // chain, is the store; its references are checked like the store's own.
+    for _ in 0..4 {
+        let more: Vec<Span> = ast
+            .local_alias_bindings
+            .iter()
+            .filter(|alias| names.contains(&alias.source) && !names.contains(&alias.local))
+            .map(|alias| alias.local)
+            .collect();
+        if more.is_empty() {
+            break;
+        }
+        names.extend(more);
+    }
     // Alias initializers are the references the alias walk already took.
     let alias_sources: Vec<Span> = ast
         .bindings
@@ -2170,7 +2191,9 @@ fn links_proven_wrappable(
         {
             continue;
         }
-        if !contained_store_use(file, identifier.span, initial) {
+        if !contained_store_use(file, identifier.span, initial)
+            && !consumed_by_alias_slots(file, identifier.span, &names)
+        {
             return false;
         }
     }
@@ -2202,6 +2225,181 @@ fn links_proven_wrappable(
 /// expression, which the facts class with them) is served raw.
 fn holds_object(value: Option<LiteralValue>) -> bool {
     matches!(value, Some(LiteralValue::Object(_) | LiteralValue::Array))
+}
+
+/// ADR 0497: the store reference `reference` is a direct element of an array
+/// literal, or the value of a static data property of an object literal, that
+/// only `const` destructuring consumes, each slot receiving the store being an
+/// exact alias in `names` (ADR 0480): a tuple holder `const pair = [0, store]`
+/// every reference of which initializes a `const [, a] = pair`, or the
+/// expression body of a `const` arrow `() => ({ a: store })` every reference
+/// of which is the callee of a call initializing a `const { a } = …`. No
+/// pattern has a rest element, a default or a nested pattern, so nothing but
+/// those aliases receives the proxy.
+fn consumed_by_alias_slots(file: &FileFacts, reference: Span, names: &[Span]) -> bool {
+    let ast = &file.ast;
+    let plain_pattern = |binding: &solid_facts::ast::BindingFact, open: char| {
+        binding.immutable
+            && file.source_text(binding.pattern).is_some_and(|pattern| {
+                !pattern.contains("...")
+                    && !pattern.contains('=')
+                    && pattern.matches(['{', '[']).count() == 1
+                    && pattern.trim_start().starts_with(open)
+            })
+    };
+    let references_to = |declaration: Span| -> Vec<Span> {
+        ast.identifiers
+            .iter()
+            .filter(|identifier| {
+                identifier.role == solid_facts::ast::IdentifierRole::Reference
+                    && ast.reference_declaration(identifier.span) == Some(declaration)
+            })
+            .map(|identifier| identifier.span)
+            .collect()
+    };
+    // An object literal property whose value is the reference.
+    if let Some(property) = ast.object_properties.iter().find(|property| {
+        ast.peel_ts_sugar_span(property.value) == reference && property.data && !property.computed
+    }) {
+        // ADR 0497 review: a key compared as written, so it must be a plain
+        // identifier (no quotes, no escape) for the comparison with each
+        // pattern slot's key to be exact.
+        let Some(key) = file
+            .source_text(property.key)
+            .filter(|key| plain_identifier(key))
+        else {
+            return false;
+        };
+        let Some(literal) = ast
+            .object_get_shapes
+            .iter()
+            .filter(|shape| shape.span.contains(property.span))
+            .min_by_key(|shape| shape.span.end - shape.span.start)
+            .filter(|shape| shape.closed && shape.properties.iter().all(|p| p.getter.is_none()))
+        else {
+            return false;
+        };
+        // The literal is an arrow's whole expression body.
+        let Some(arrow) = ast.functions.iter().find(|function| {
+            ast.peel_ts_sugar_span(function.body) == literal.span
+                && !function.r#async
+                && !function.generator
+        }) else {
+            return false;
+        };
+        let Some(binding) = ast.bindings.iter().find(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding
+                    .initializer
+                    .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == arrow.span)
+        }) else {
+            return false;
+        };
+        let Some(name) = binding.names.first() else {
+            return false;
+        };
+        let uses = references_to(name.span);
+        return !uses.is_empty()
+            && uses.iter().all(|&callee| {
+                let Some(call) = ast
+                    .calls
+                    .iter()
+                    .find(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == callee)
+                else {
+                    return false;
+                };
+                ast.bindings.iter().any(|pattern| {
+                    pattern.shape == solid_facts::ast::BindingShape::Object
+                        && pattern.initializer.is_some_and(|initializer| {
+                            ast.peel_ts_sugar_span(initializer) == call.span
+                        })
+                        && plain_pattern(pattern, '{')
+                        && pattern.object_slots.iter().all(|slot| {
+                            // Every slot's key is a plain identifier too,
+                            // so one that receives the store is found, and
+                            // each that does is an alias in the set.
+                            slot.plain_identifier_key
+                                && plain_identifier(slot.property.as_str())
+                                && (slot.property.as_str() != key
+                                    || names.contains(&slot.local.span))
+                        })
+                })
+            });
+    }
+    // A direct element of an array literal held by a tuple holder.
+    let Some(literal) = ast
+        .array_literals
+        .iter()
+        .copied()
+        .filter(|literal| literal.contains(reference))
+        .min_by_key(|literal| literal.end - literal.start)
+    else {
+        return false;
+    };
+    let Some(text) = file.source_text(literal) else {
+        return false;
+    };
+    // A spread shifts every later element's index, and a generic or JSX
+    // comma the depth count does not see; both are refused (ADR 0497
+    // review).
+    if text.contains(['`', '\'', '"', '/', '<']) || text.contains("...") {
+        return false;
+    }
+    // The element index at depth one, and that the reference is the whole
+    // element.
+    let offset = (reference.start - literal.start) as usize;
+    let (mut depth, mut index, mut element_start) = (0_i32, 0_usize, 1_usize);
+    for (at, character) in text.char_indices() {
+        if at == offset {
+            break;
+        }
+        match character {
+            '[' | '(' | '{' => depth += 1,
+            ']' | ')' | '}' => depth -= 1,
+            ',' if depth == 1 => {
+                index += 1;
+                element_start = at + 1;
+            }
+            _ => {}
+        }
+    }
+    let end = (reference.end - literal.start) as usize;
+    let whole = text
+        .get(element_start..offset)
+        .is_some_and(|lead| lead.trim().is_empty())
+        && text
+            .get(end..)
+            .is_some_and(|rest| rest.trim_start().starts_with([',', ']']));
+    if !whole {
+        return false;
+    }
+    let Some(holder) = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == literal)
+    }) else {
+        return false;
+    };
+    let Some(name) = holder.names.first() else {
+        return false;
+    };
+    let uses = references_to(name.span);
+    !uses.is_empty()
+        && uses.iter().all(|&use_span| {
+            ast.bindings.iter().any(|pattern| {
+                pattern.shape == solid_facts::ast::BindingShape::Array
+                    && pattern
+                        .initializer
+                        .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == use_span)
+                    && plain_pattern(pattern, '[')
+                    && pattern.array_slots.get(index).is_none_or(|slot| {
+                        slot.as_ref().is_none_or(|slot| names.contains(&slot.span))
+                    })
+            })
+        })
 }
 
 /// What a literal value resolved from a store's initializer is.
@@ -2679,4 +2877,14 @@ fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
     // TS2538 ("Type 'Accessor<string>' cannot be used as an index type") in
     // both dialects, so it never reaches this function's callers any more.
     None
+}
+
+/// A key written as a plain identifier: ASCII letters, digits, `_` or `$`, not
+/// starting with a digit, so its source text is its value.
+fn plain_identifier(text: &str) -> bool {
+    let mut characters = text.chars();
+    characters
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_' || first == '$')
+        && characters.all(|rest| rest.is_ascii_alphanumeric() || rest == '_' || rest == '$')
 }

@@ -212,6 +212,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
+      "start": 7879,
+      "end": 7891,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
@@ -249,6 +259,16 @@
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
       "start": 8768,
       "end": 8790,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
+      "start": 8768,
+      "end": 8785,
       "fixes": 0
     },
     {

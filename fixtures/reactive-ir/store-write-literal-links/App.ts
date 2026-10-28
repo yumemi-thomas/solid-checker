@@ -105,3 +105,79 @@ export function Reverse() {
   const [store] = createStore({ items: [0] });
   store.items.reverse();
 }
+
+// Violation (ADR 0497): the store reaches the write through an object-literal
+// arrow's slot and a tuple holder's slot, consumed only by destructuring.
+export function HookSlot() {
+  const [store] = createStore({ a: { v: 0 } });
+  const useThing = () => ({ useIt: store });
+  const { useIt } = useThing();
+  useIt.a.v = 1;
+}
+
+export function TupleSlot() {
+  const [store] = createStore({ items: [0] });
+  const pair = [0, store] as const;
+  const [, held] = pair;
+  held.items.push(1);
+}
+
+// Uncertifiable: a rest element receives the holder's tail, store included.
+export function TupleRest() {
+  const [store] = createStore({ a: { v: 0 } });
+  const pair = [0, store] as const;
+  const [, held] = pair;
+  const [...all] = pair;
+  consume(all);
+  held.a.v = 1;
+}
+
+// Uncertifiable: one call of the hook keeps the whole object.
+export function HookKept() {
+  const [store] = createStore({ a: { v: 0 } });
+  const useThing = () => ({ useIt: store });
+  const { useIt } = useThing();
+  consume(useThing());
+  useIt.a.v = 1;
+}
+
+// Uncertifiable: a nested pattern reads a proxy below the store out.
+export function HookNested() {
+  const [store] = createStore({ a: { v: 0 } });
+  const useThing = () => ({ useIt: store });
+  const { useIt } = useThing();
+  const {
+    useIt: { a },
+  } = useThing();
+  consume(a);
+  useIt.a.v = 1;
+}
+
+// Uncertifiable (ADR 0497 review): a spread ahead of the store shifts its
+// index, so a slot that may receive it is no alias.
+export function TupleSpread(xs: number[]) {
+  const [store] = createStore({ a: { v: 0 } });
+  const pair = [...xs, store] as const;
+  const [first] = pair;
+  consume(first);
+  store.a.v = 1;
+}
+
+// Uncertifiable: a quoted key next to a method; the slot receiving the store
+// is no recorded alias.
+export function HookQuotedKey() {
+  const [store] = createStore({ a: { v: 0 } });
+  const useThing = () => ({ "useIt": store, m() {} });
+  const { useIt } = useThing();
+  consume(useIt);
+  store.a.v = 1;
+}
+
+// Uncertifiable: an escaped pattern key next to a method.
+export function HookEscapedKey() {
+  const [store] = createStore({ a: { v: 0 } });
+  const useThing = () => ({ useIt: store, m() {} });
+  const { useIt: held } = useThing();
+  consume(held);
+  store.a.v = 1;
+}

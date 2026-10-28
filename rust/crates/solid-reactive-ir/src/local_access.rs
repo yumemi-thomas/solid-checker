@@ -1949,13 +1949,24 @@ impl LocalAccessContext<'_, '_> {
                     self.prop_sources.contains_key(symbol)
                         && self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
                 });
-        if !prop_head
-            && file
-                .ast
-                .members
-                .iter()
-                .any(|candidate| file.ast.peel_ts_sugar_span(candidate.object) == member.span)
-        {
+        // ADR 0498: a member that is the object of a written, deleted or
+        // iterated member (`store.a` in `store.a.v = 1`) is read on its own:
+        // the longer path is no read, so the Get of this one is the chain's.
+        let read_as_part = |candidate: &solid_facts::ast::MemberFact| {
+            file.ast.peel_ts_sugar_span(candidate.object) == member.span
+                && !(file.ast.is_plain_assignment_target(candidate.span)
+                    || file
+                        .ast
+                        .deleted_targets
+                        .iter()
+                        .any(|target| file.ast.peel_ts_sugar_span(*target) == candidate.span)
+                    || file
+                        .ast
+                        .iteration_targets
+                        .iter()
+                        .any(|target| file.ast.peel_ts_sugar_span(*target) == candidate.span))
+        };
+        if !prop_head && file.ast.members.iter().any(read_as_part) {
             return;
         }
         // A plain assignment writes this exact member without reading its
@@ -2005,8 +2016,34 @@ impl LocalAccessContext<'_, '_> {
             } else {
                 None
             };
-        let Some(symbol) = inline_root
+        // ADR 0498: a receiver that is a member read holding exactly a
+        // `const` (ADR 0481, `thing.useIt`) is that `const`.
+        // The receiver may be the alias itself or a static path below it
+        // (`thing.useIt.items` in `thing.useIt.items.push(1)`).
+        let member_alias_symbol = {
+            let mut at = file.ast.peel_ts_sugar_span(member.object);
+            let mut found = None;
+            for _ in 0..8 {
+                if let Some(alias) = file.ast.local_alias_member(at) {
+                    found = self.entities.at(file.path.as_str(), alias.source).cloned();
+                    break;
+                }
+                let Some(inner) = file
+                    .ast
+                    .member_at(at)
+                    .filter(|_| file.ast.computed_members.binary_search(&at).is_err())
+                else {
+                    break;
+                };
+                at = file.ast.peel_ts_sugar_span(inner.object);
+            }
+            found
+        };
+        // The alias fact is exact, so it comes before the entity at the
+        // member (the property's own symbol, no source).
+        let Some(symbol) = member_alias_symbol
             .as_ref()
+            .or(inline_root.as_ref())
             .or(self.entities.get(&object))
             .or(binder_symbol.as_ref())
         else {
