@@ -1,0 +1,3 @@
+# SC2003: the setter window is a dynamic extent (ADR 0476)
+
+A write the own setter's callback schedules (`queueMicrotask`, `setTimeout`, `.then`, after an `await`) is a violation; one on the callback's stack (an IIFE, `forEach`, a helper calling its callback) is silent, and so is a function defined outside whose every call is inside the setter (`CalledInside`). Called outside too: violation (`CalledBoth`). Handed on, or given to an unknown function: uncertifiable. Past the root (`PastFrozenLink`): uncertifiable; the root write is a violation. See `docs/rules/no-store-mutation-outside-setter.md`.

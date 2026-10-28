@@ -1942,7 +1942,7 @@ fn layers_run_inline(
 }
 
 /// How a function layer is run by the code around it.
-pub(super) enum LayerRun {
+pub(crate) enum LayerRun {
     /// An IIFE, an argument a standard-library call runs inline
     /// (`[x].forEach(fn)`), or one a function calls in its own body
     /// ([`helper_runs_layer_inline`]): it runs on the stack of the call, which
@@ -1962,7 +1962,7 @@ pub(super) enum LayerRun {
     Elsewhere,
 }
 
-pub(super) fn layer_run(
+pub(crate) fn layer_run(
     file: &solid_facts::FileFacts,
     layer: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
@@ -2242,7 +2242,7 @@ fn plain_call_outside_jsx(
 
 /// Whether the module publishes `function` itself: an export declaration of
 /// it, with no other function between, or Type Facts' export flag on it.
-fn module_exports(
+pub(crate) fn module_exports(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
