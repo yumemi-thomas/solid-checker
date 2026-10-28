@@ -2006,18 +2006,18 @@ pub(crate) fn layer_run(
 
 /// Where a site runs once the function layers around it that run in place
 /// ([`layer_run`]) are crossed (ADR 0469).
-pub(super) struct InPlaceClimb {
+pub(crate) struct InPlaceClimb {
     /// The call of the outermost layer crossed: the site runs on its stack.
-    pub(super) at: Span,
+    pub(crate) at: Span,
     /// A layer holds the climbed site in its parameter list (ADR 0454): it
     /// runs only when its call omits the argument.
-    pub(super) in_list: bool,
+    pub(crate) in_list: bool,
     /// A helper on the way also hands its callback on or keeps it
     /// ([`LayerRun::InPlaceAmongOthers`]): one run is in place.
-    pub(super) among_others: bool,
+    pub(crate) among_others: bool,
     /// A site on the way follows an await in its layer: on every path
     /// (`Some(true)`), or possibly (`Some(false)`).
-    pub(super) suspended: Option<bool>,
+    pub(crate) suspended: Option<bool>,
 }
 
 /// Climbs from `span` through the function layers that run in place: an IIFE,
@@ -2025,7 +2025,7 @@ pub(super) struct InPlaceClimb {
 /// body ([`layer_run`], the walk the write roles take). Stops at the first
 /// function that is not such a layer (a primitive's callback, a stored or
 /// handed-on function, a generator); `None` when `span` is in none.
-pub(super) fn climb_in_place_layers(
+pub(crate) fn climb_in_place_layers(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,

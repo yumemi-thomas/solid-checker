@@ -781,16 +781,25 @@ fn action_step_body(
     call: &solid_facts::ast::CallFact,
     context: &StaticApiContext<'_>,
 ) -> Option<&'static str> {
-    let (container, index) =
-        file.ast
-            .arguments_containing(call.span)
-            .find(|(container, index)| {
-                crate::execution_role::direct_callback_runs(
-                    file,
-                    container.arguments[*index].span,
-                    call.span,
-                )
-            })?;
+    // ADR 0478: a call in function layers that run in place inside the body
+    // (an IIFE, an inline standard-library callback, a helper's callback it
+    // calls in its own body; ADR 0469's climb) runs on the stack of the
+    // outermost layer's call, so that call is the position the step proof
+    // reads. A layer in a parameter list runs only when its argument is
+    // omitted, and a site after an await in its layer runs on a later task:
+    // neither is claimed. One in-place run proves the throw, so a helper that
+    // also hands its callback on still counts.
+    let at = match crate::execution_role::climb_in_place_layers(file, call.span, context.lookup) {
+        Some(climb) if !climb.in_list && climb.suspended.is_none() => climb.at,
+        Some(_) => return None,
+        None => call.span,
+    };
+    let (container, index) = file
+        .ast
+        .arguments_containing(at)
+        .find(|(container, index)| {
+            crate::execution_role::direct_callback_runs(file, container.arguments[*index].span, at)
+        })?;
     let argument = &container.arguments[index];
     if argument.spread {
         return None;
@@ -809,13 +818,12 @@ fn action_step_body(
     let written = argument.value_span.unwrap_or(argument.span);
     // ADR 0454: a call in the generator's parameter list runs when the
     // generator is created, before its first step.
-    let body = crate::owners::containing_body_function(&file.ast, call.span)
+    let body = crate::owners::containing_body_function(&file.ast, at)
         .filter(|function| function.span == written && function.generator)?;
     if !body.r#async {
         return Some("sync generator");
     }
-    crate::effect_phase::runs_before_first_suspension(file, body, call.span)
-        .then_some("async generator")
+    crate::effect_phase::runs_before_first_suspension(file, body, at).then_some("async generator")
 }
 
 /// The root expression span of a member/call chain: `state.user` and

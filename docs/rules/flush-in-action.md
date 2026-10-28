@@ -117,9 +117,14 @@ the result, read after the action resolves (`await save(); …`).
   § 3, probe R), so on them — including the audited rc.3 — the rule is silent.
   A signals release no review read, or one that does not resolve, is not
   claimed to throw (its `SC9014` notice says so).
-- **Nested functions.** The proof is lexical: a `flush` inside a helper,
-  an `untrack` callback, or any other function written in the body is not
-  claimed, although the probes show the synchronous ones throw.
+- **Nested functions.** A `flush` in function layers that run in place in a
+  step is claimed (ADR 0478): an IIFE, an inline standard-library callback
+  (`[x].forEach`), and a helper (in any module) that calls its callback in its
+  own body, nested or not; the layers' outermost call is the position the step
+  proof reads. Not claimed: an `untrack` callback, a named closure called in
+  place, a call after an await in its layer, a layer in a parameter list, and
+  any other function written in the body, although the probes show the
+  synchronous ones throw.
 - **After a suspension.** In an async generator, a call that any `await`,
   `for await`, `yield*` or `await using` of the body can run before — or that
   a loop can reach again after one — is not claimed. A later `yield` re-enters

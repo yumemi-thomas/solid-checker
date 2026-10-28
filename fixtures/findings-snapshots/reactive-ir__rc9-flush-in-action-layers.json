@@ -1,0 +1,65 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-flush-in-action-layers/App.tsx",
+      "start": 510,
+      "end": 515,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-flush-in-action-layers/App.tsx",
+      "start": 656,
+      "end": 661,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-flush-in-action-layers/App.tsx",
+      "start": 799,
+      "end": 804,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-flush-in-action-layers/App.tsx",
+      "start": 925,
+      "end": 930,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-flush-in-action-layers/App.tsx",
+      "start": 1090,
+      "end": 1095,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc9-flush-in-action-layers/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}
