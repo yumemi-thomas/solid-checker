@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
-      "start": 486,
-      "end": 500,
+      "start": 499,
+      "end": 513,
       "fixes": 0
     },
     {
@@ -17,8 +17,28 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
-      "start": 1149,
-      "end": 1161,
+      "start": 1162,
+      "end": 1174,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
+      "start": 1904,
+      "end": 1918,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
+      "start": 1926,
+      "end": 1952,
       "fixes": 0
     }
   ]

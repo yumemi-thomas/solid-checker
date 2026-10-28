@@ -1,4 +1,4 @@
-import { action, createMemo, createSignal } from "solid-js";
+import { action, createMemo, createSignal, createStore } from "solid-js";
 
 // ADR 0481: `thing.key`, where `thing` holds an object-literal arrow's fresh
 // result and is only ever read that way, is the `const` the key names.
@@ -49,4 +49,54 @@ export function HolderPassed() {
     return 1;
   });
   return <div>{count()}{m()}</div>;
+}
+
+// ADR 0482: a store written through such a member.
+// Violation: outside its setter, the write is dropped (rc.17 warns).
+export function StoreMemberWrite() {
+  const [state, setState] = createStore({ v: 0, items: [0] });
+  const useState = () => ({ state, setState });
+  const holder = useState();
+  holder.state.v = 1;
+  holder.state.items.push(1);
+  return <div>{state.v}</div>;
+}
+
+// Clean: inside its own setter, called directly or through the member.
+export function StoreMemberInSetter() {
+  const [state, setState] = createStore({ v: 0 });
+  const useState = () => ({ state, setState });
+  const holder = useState();
+  return (
+    <button
+      onClick={() => {
+        setState(() => {
+          holder.state.v = 2;
+        });
+        holder.setState(() => {
+          holder.state.v = 3;
+        });
+      }}
+    >
+      {state.v}
+    </button>
+  );
+}
+
+// Clean (review case): an alias of an imported store, read through a member,
+// written inside that store's own setter.
+import { setShared, shared } from "./store";
+const sharedAlias = shared;
+const useShared = () => ({ state: sharedAlias });
+export function ImportedStoreAliasInSetter() {
+  const holder = useShared();
+  return (
+    <button
+      onClick={() => {
+        setShared(() => {
+          holder.state.v = 4;
+        });
+      }}
+    ></button>
+  );
 }

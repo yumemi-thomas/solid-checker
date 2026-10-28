@@ -6,7 +6,7 @@ Case ids name directories under `fixtures/runtime-oracle/`; each `oracle.json` `
 
 ## 1. Known open detections
 
-- A store written through a member of a hook's result (`const thing = useThing(); thing.store.v = 1`: the store rule's ported root walk wants a bare identifier), a block-bodied or imported hook, and a literal holder read any other way are not followed to the primitive (ADRs 0480 and 0481 cover destructured slots and member calls): the misuse matrix's `hook-member` store writes are 366 of its 572 certified false cleans.
+- A block-bodied or imported hook, a hook result read any other way than a static member, and a literal holder read any other way are not followed to the primitive (ADRs 0480-0482 cover destructured slots, member calls and member store roots). On rc.0-rc.6 the readonly-root exemption trusts the declared type, so a hook or alias annotated with a non-readonly type (`(): { state: { v: number } } => ({ state })`) erases TS2540 and the root write is a false clean (also for `const s2: { v: number } = state`). A store imported from another module and aliased (`const a = shared`) is not seen as a store at all.
 Defects the runtime reports and the checker does not. Each is a missing violation, not a false positive; the named rule should claim it. Codes are the runtime's.
 
 Strict read in a setup body (`strict-read-untracked`, SC1001):

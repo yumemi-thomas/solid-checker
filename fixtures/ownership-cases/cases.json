@@ -2829,6 +2829,61 @@
     "absent": []
    },
    "note": "Upstream case 35 (`a dynamic not imported from Solid is not a tracked scope`). Undecided on rc.17: nothing here describes a `dynamic` that is not Solid's, so whether it runs the arrow in a tracking scope is unknown, and the checker neither reports it as a violation nor certifies it: the read is an internal uncertifiable result (a callback handed to a consumer not proven to invoke it). Solid's own `dynamic` is legal (probe 3g: the source re-ran, the output changed, `observers` held the computed)."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/hook-member-write/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [store, setStore] = createStore({ count: 0 });\nconst useState = () => ({ store, setStore });\nconst holder = useState();\nexport function Write() {\n  holder.store.count = 5;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "holder.store.count"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "ADR 0482: a member read of an exclusive object-literal arrow result is the `const` it names (ADR 0481), so `holder.store` is the store's root and `.count` its own property. Upstream eslint-plugin-solid 0.14.5 roots a write at the identifier `holder` and never reports it: a kept divergence, since rc.17's proxy drops the write outside the setter (`dist/dev.js:5691-5700`) exactly as it does for `store.count = 5`. Found by the misuse matrix's `hook-member` binding (certified false cleans)."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/hook-member-write-in-setter/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [store, setStore] = createStore({ count: 0 });\nconst useState = () => ({ store, setStore });\nconst holder = useState();\nholder.setStore(() => {\n  holder.store.count = 5;\n});\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "no-store-mutation-outside-setter"
+     }
+    ]
+   },
+   "note": "ADR 0482: the same write through the member inside the store's own setter, itself called through the member (`holder.setStore`), commits (rc.17 `inDraft` holds for the same proxy). The setter check pairs a member alias with the setter slot it names. The legal-context matrix found this class of false positive in ADR 0480's first cut."
   }
  ]
 }

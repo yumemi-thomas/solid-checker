@@ -35,6 +35,11 @@ symbol:
 - the same writes through a `createProjection` result, reported as a
   projection write (it has no setter to name).
 
+**Through a hook result (ADR 0482).** A member read that is exactly the store
+(`const holder = useState(); holder.state`, ADR 0481) is the write's root, so
+`holder.state.v = 1` is reported like `state.v = 1`, and a write inside the
+store's own setter called as `holder.setState(…)` is exempt.
+
 **Past the root (ADR 0465, 0476).** A write that reads no link past the root
 (`store.v = 1`, `list.push(1)` on a store that is the array, a cast root) is a
 violation: `createStore` wraps its initial value whatever it is

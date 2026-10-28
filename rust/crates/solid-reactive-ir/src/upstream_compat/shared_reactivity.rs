@@ -1294,6 +1294,18 @@ fn no_direct_mutation(
 /// target or a mutator call), the member expression whose object it writes
 /// through (the assignment target itself, or the mutator's callee), and the
 /// root identifier that member chain starts at.
+/// Whether `span` is a bare identifier, or a member read that is exactly a
+/// `const` (ADR 0481), which [`super::member_root`] returns as a root and
+/// [`super::source_symbol_at`] resolves to that `const` (ADR 0482).
+fn bare_root(file: &FileFacts, span: Span) -> bool {
+    file.ast.local_alias_member(span).is_some()
+        || file
+            .ast
+            .identifiers
+            .iter()
+            .any(|identifier| identifier.span == span)
+}
+
 #[derive(Clone, Copy)]
 struct StoreWriteSite {
     span: Span,
@@ -1366,11 +1378,7 @@ fn store_write_standing(
             .ast
             .member_at(site.member)
             .is_some_and(|member| member.object == site.root)
-        && file
-            .ast
-            .identifiers
-            .iter()
-            .any(|identifier| identifier.span == site.root)
+        && bare_root(file, site.root)
     {
         return WriteStanding::Exempt;
     }
@@ -1412,7 +1420,7 @@ fn write_windows(
 ) -> Windows {
     let mut windows = Windows::default();
     for call in &file.ast.calls {
-        if !is_own_setter(context, file.path.as_str(), call.callee, stores, 4) {
+        if !is_own_setter(context, file, call.callee, stores, 4) {
             continue;
         }
         for argument in &call.arguments {
@@ -1470,6 +1478,26 @@ fn store_and_aliases(
     let path = file.path.as_str();
     let mut stores = vec![symbol.clone()];
     let mut at = (path.to_owned(), root);
+    // ADR 0482: a member alias root is no reference the index knows; the walk
+    // starts from the binding its `const` declares, which is in this file.
+    if let Some(alias) = file
+        .ast
+        .local_alias_member(file.ast.peel_ts_sugar_span(root))
+    {
+        let Some(source) = file
+            .ast
+            .bindings
+            .iter()
+            .find(|binding| binding.names.iter().any(|name| name.span == alias.source))
+            .filter(|binding| {
+                binding.shape == solid_facts::ast::BindingShape::Identifier && binding.immutable
+            })
+            .and_then(|binding| binding.initializer_identifier.as_ref())
+        else {
+            return close_over_local_aliases(context, file, stores);
+        };
+        at = (path.to_owned(), source.span);
+    }
     for _ in 0..4 {
         let Some((binding_file, binding, bound)) = context.lookup.binding_at_reference(&at.0, at.1)
         else {
@@ -1495,9 +1523,18 @@ fn store_and_aliases(
     {
         stores.push(bound);
     }
-    // ADR 0480: the exact aliases of `local_alias_bindings` (an object or array
-    // literal's slot, an object-literal arrow's slot) hold the same store, in
-    // either direction, to a fixpoint within the site's file.
+    close_over_local_aliases(context, file, stores)
+}
+
+/// ADR 0480: the exact aliases of `local_alias_bindings` (an object or array
+/// literal's slot, an object-literal arrow's slot) hold the same store, in
+/// either direction, to a fixpoint within the site's file.
+fn close_over_local_aliases(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    mut stores: Vec<crate::SymbolId>,
+) -> Vec<crate::SymbolId> {
+    let path = file.path.as_str();
     {
         let pairs = file
             .ast
@@ -1537,13 +1574,22 @@ fn store_and_aliases(
 /// most `depth` of them). Another store's setter or a same-spelled local is not.
 fn is_own_setter(
     context: &UpstreamCompatContext<'_>,
-    path: &str,
+    file: &solid_facts::FileFacts,
     callee: Span,
     stores: &[crate::SymbolId],
     depth: usize,
 ) -> bool {
-    let Some((binding_file, binding, callee_symbol)) =
-        context.lookup.binding_at_reference(path, callee)
+    // ADR 0482: a member read that is exactly a `const` (ADR 0481) calls that
+    // `const`: the setter slot of one of `stores`' patterns, or an alias of it.
+    if let Some(alias) = file
+        .ast
+        .local_alias_member(file.ast.peel_ts_sugar_span(callee))
+    {
+        return setter_declaration_is_own(context, file, alias.source, stores, depth);
+    }
+    let Some((binding_file, binding, callee_symbol)) = context
+        .lookup
+        .binding_at_reference(file.path.as_str(), callee)
     else {
         return false;
     };
@@ -1564,13 +1610,7 @@ fn is_own_setter(
                 .initializer_identifier
                 .as_ref()
                 .is_some_and(|source| {
-                    is_own_setter(
-                        context,
-                        binding_file.path.as_str(),
-                        source.span,
-                        stores,
-                        depth - 1,
-                    )
+                    is_own_setter(context, binding_file, source.span, stores, depth - 1)
                 })
                 || literal_alias_is_own_setter(context, binding_file, &callee_symbol, stores, depth)
         }
@@ -1600,15 +1640,26 @@ fn literal_alias_is_own_setter(
     else {
         return false;
     };
-    // The source is a declaration: the setter slot of a store's array
-    // pattern, or another alias.
+    setter_declaration_is_own(context, file, alias.source, stores, depth)
+}
+
+/// Whether the binding declared at `declaration` is the setter slot of one of
+/// `stores`' `createStore` patterns, or an exact local alias of one.
+fn setter_declaration_is_own(
+    context: &UpstreamCompatContext<'_>,
+    file: &solid_facts::FileFacts,
+    declaration: Span,
+    stores: &[crate::SymbolId],
+    depth: usize,
+) -> bool {
+    let path = file.path.as_str();
     if let Some(binding) = file.ast.bindings.iter().find(|binding| {
         binding.shape == solid_facts::ast::BindingShape::Array
             && binding
                 .array_slots
                 .get(1)
                 .and_then(Option::as_ref)
-                .is_some_and(|name| name.span == alias.source)
+                .is_some_and(|name| name.span == declaration)
     }) {
         return binding
             .array_slots
@@ -1617,7 +1668,7 @@ fn literal_alias_is_own_setter(
             .and_then(|name| context.entities.at(path, name.span))
             .is_some_and(|store| stores.contains(store));
     }
-    let Some(source) = context.entities.at(path, alias.source) else {
+    let Some(source) = context.entities.at(path, declaration) else {
         return false;
     };
     depth > 0 && literal_alias_is_own_setter(context, file, source, stores, depth - 1)
@@ -1928,7 +1979,16 @@ fn chain_links_verdict(
 ) -> Option<bool> {
     let ast = &file.ast;
     let member = ast.peel_ts_sugar_span(member);
-    let links = ast.member_chain_links(member);
+    let mut links = ast.member_chain_links(member);
+    // ADR 0482: a member read that is exactly a `const` (ADR 0481) is the root
+    // (`super::member_root`), so it and the links inside it are not past it.
+    if let Some(root) = links
+        .iter()
+        .map(|&link| ast.peel_ts_sugar_span(link))
+        .find(|&link| ast.local_alias_member(link).is_some())
+    {
+        links.retain(|&link| !root.contains(ast.peel_ts_sugar_span(link)));
+    }
     if links.is_empty() {
         return Some(false);
     }
@@ -2038,11 +2098,7 @@ fn no_store_mutator_call(
             .ast
             .call_at(file.ast.peel_ts_sugar_span(root))
             .is_some()
-            || !file
-                .ast
-                .identifiers
-                .iter()
-                .any(|identifier| identifier.span == root)
+            || !bare_root(file, root)
         {
             continue;
         }
@@ -2125,14 +2181,7 @@ fn no_store_delete(
             }
             link = current.object;
         }
-        if !plain
-            || link != root
-            || !file
-                .ast
-                .identifiers
-                .iter()
-                .any(|identifier| identifier.span == root)
-        {
+        if !plain || link != root || !bare_root(file, root) {
             continue;
         }
         let Some(symbol) = source_symbol_at(context, file, root) else {
