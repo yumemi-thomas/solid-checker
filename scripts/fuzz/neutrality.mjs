@@ -27,6 +27,7 @@ import { compareVerdictRuns } from "./hits.mjs";
 import { evaluate } from "./pipeline.mjs";
 import { BaselineCache, MismatchHistory, environmentKey, programKey } from "./cache.mjs";
 import { requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
+import { assertFindingsMapped } from "./checker.mjs";
 import { attachDaemon, configFrom, generateEntries, parseArgs, resultRows } from "./run.mjs";
 
 export const BLIND = "the finding spans no site of interest";
@@ -105,6 +106,7 @@ export async function runProfile({ options, profile, config, cache, history, out
     if (options.stopOnMismatch && (!compared.equal || (compared.control?.mismatches.length ?? 0))) stopped = true;
     cache?.save();
   }
+  assertFindingsMapped();
   const typeRefusal = typeErrorRefusal(baseRows.filter((row) => row.verdict === "type-error").length, baseRows.length, { first: baseRows.find((row) => row.verdict === "type-error")?.reasons?.[0] });
   if (typeRefusal) throw new Error(`${profile ?? "default"}: ${typeRefusal}`);
   const report = compareRuns(baseRows, instrRows);

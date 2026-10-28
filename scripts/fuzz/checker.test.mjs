@@ -1,10 +1,10 @@
 import { spawn } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { MAIN_SOURCE, WORK_NAMESPACE, materializeForChecker, oracleMainSource, parseFindings, runChecker, siteVerdicts } from "./checker.mjs";
+import { MAIN_SOURCE, UnmappedFindingsError, WORK_NAMESPACE, assertFindingsMapped, materializeForChecker, oracleMainSource, parseFindings, runChecker, siteVerdicts } from "./checker.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { DEFAULT_ORACLE_INSTALL } from "./chrome.mjs";
@@ -162,4 +162,38 @@ describe.skipIf(!installed)("two runs with the same seed and different profiles"
       rmSync(root, { recursive: true, force: true });
     }
   }, 120000);
+});
+
+// The checker reports real paths; a project directory reached through a symlink (`/tmp` on macOS) must still map.
+describe("parseFindings through a symlinked directory", () => {
+  const root = mkdtempSync(join(tmpdir(), "fuzz-links-"));
+  const real = join(root, "real");
+  const link = join(root, "link");
+  mkdirSync(real);
+  writeFileSync(join(real, "App.tsx"), "");
+  symlinkSync(real, link);
+  const finding = (path) => ({ rule: "no-write-in-pure-computation", id: "SC2001", kind: "violation", primaryLocation: { path, line: 3, endLine: 3 } });
+  it("maps a finding at the real path when the project was given as the link, and the other way round", () => {
+    const real_ = realpathSync(real);
+    expect(parseFindings({ findings: [finding(join(real_, "App.tsx"))] }, link)).toHaveLength(1);
+    expect(parseFindings({ findings: [finding(join(link, "App.tsx"))] }, real)).toHaveLength(1);
+  });
+  it("still drops a finding in another file of the program, and keeps the files it maps to", () => {
+    writeFileSync(join(real, "main.tsx"), "");
+    const found = parseFindings({ findings: [finding(join(real, "main.tsx")), finding(join(link, "App.tsx"))] }, link);
+    expect(found.map((row) => row.file)).toEqual(["App.tsx"]);
+  });
+  it("refuses findings that map to no file of the program instead of reading them as clean", () => {
+    expect(() => parseFindings({ findings: [finding("/elsewhere/App.tsx")] }, link)).toThrow(UnmappedFindingsError);
+    expect(parseFindings({ findings: [] }, link)).toEqual([]);
+  });
+  it("makes the run refuse (assertFindingsMapped) once a checker run saw such findings", async () => {
+    expect(() => assertFindingsMapped()).not.toThrow();
+    const bin = join(root, "checker.sh");
+    writeFileSync(bin, `#!/bin/sh\necho '${JSON.stringify({ findings: [finding("/elsewhere/App.tsx")] })}'\n`);
+    chmodSync(bin, 0o755);
+    const result = await runChecker(real, { bin });
+    expect(result.ok).toBe(false);
+    expect(() => assertFindingsMapped()).toThrow(/map to no file of the program/);
+  });
 });

@@ -26,7 +26,7 @@ import { applyLedgerToResults, falseCleanStream } from "./falseclean-run.mjs";
 import { LEDGER_PATH, loadLedger } from "./falseclean.mjs";
 import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
-import { keepWorkNamespace } from "./checker.mjs";
+import { assertFindingsMapped, keepWorkNamespace } from "./checker.mjs";
 import { requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 import { isSite, walk } from "./model.mjs";
 import { availableParallelism } from "node:os";
@@ -183,6 +183,7 @@ async function sweep(options, config, out) {
   const tally = (key) => rows.reduce((counts, row) => ({ ...counts, [row[key]]: (counts[row[key]] ?? 0) + 1 }), {});
   const itemTally = rows.flatMap((row) => row.items).reduce((counts, item) => ({ ...counts, [item.kind]: (counts[item.kind] ?? 0) + 1 }), {});
   console.error(`programs ${rows.length}: ${JSON.stringify(tally("verdict"))}; items ${JSON.stringify(itemTally)}`);
+  assertFindingsMapped();
   const refusal = typeErrorRefusal(rows.filter((row) => row.verdict === "type-error" || row.typeErrors).length, rows.length, { first: rows.find((row) => row.typeErrors)?.typeErrors[0] ?? rows.find((row) => row.verdict === "type-error")?.reasons?.[0] });
   if (refusal) throw new Error(refusal);
 

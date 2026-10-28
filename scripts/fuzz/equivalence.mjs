@@ -23,7 +23,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mapPoolSettled } from "../lib/pool.mjs";
 import { runChrome } from "./chrome.mjs";
-import { materializeForChecker, runChecker, siteVerdicts } from "./checker.mjs";
+import { assertFindingsMapped, materializeForChecker, runChecker, siteVerdicts } from "./checker.mjs";
 import { disturbances, runtimeEvents } from "./classify.mjs";
 import { codesForRule, isDefectCode } from "./codes.mjs";
 import { hitCount } from "./hits.mjs";
@@ -377,6 +377,7 @@ export async function main(options) {
   if (entries.length && !result.programs.some((row) => row.status === "ok")) {
     throw new Error(`invalid run: no program was checked (${JSON.stringify(result.programs.reduce((counts, row) => ({ ...counts, [row.status]: (counts[row.status] ?? 0) + 1 }), {}))}; first error: ${result.programs[0]?.error ?? "see results.jsonl"})`);
   }
+  assertFindingsMapped();
   const typeRefusal = typeErrorRefusal(result.programs.filter((row) => row.status === "type-error").length, result.programs.length);
   if (typeRefusal) throw new Error(typeRefusal);
   const groups = groupDivergences(result.divergences);
