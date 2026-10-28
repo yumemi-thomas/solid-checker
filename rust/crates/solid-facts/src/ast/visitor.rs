@@ -275,12 +275,21 @@ impl Collector<'_, '_> {
                 let Some(symbol) = local.symbol_id.get() else {
                     return;
                 };
+                // ADR 0481: a holder of an arrow call's fresh object.
+                if let Expression::CallExpression(call) = unwrapped(init)
+                    && !call.optional
+                    && let Some(arrow) = self.const_symbol_of(&call.callee)
+                {
+                    self.member_holders.push((symbol, arrow));
+                }
                 match unwrapped(init) {
                     Expression::ArrayExpression(array) => {
                         let slots = self.array_literal_slots(array);
                         self.const_array_slots.push((symbol, slots));
                     }
-                    Expression::ArrowFunctionExpression(arrow) if arrow.expression => {
+                    Expression::ArrowFunctionExpression(arrow)
+                        if arrow.expression && !arrow.r#async =>
+                    {
                         let Some(oxc_ast::ast::Statement::ExpressionStatement(body)) =
                             arrow.body.statements.first()
                         else {
@@ -2315,6 +2324,21 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         });
         if member.optional {
             self.optional_members.push(span(member.span));
+        }
+        // ADR 0481: a static member read of a bare identifier (not under a
+        // wrapper: `(thing as T).set` still names `thing`, but is left out).
+        if let Expression::Identifier(object) = &member.object
+            && let Some(symbol) = object
+                .reference_id
+                .get()
+                .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+        {
+            self.identifier_member_reads.push((
+                symbol,
+                span(member.span),
+                CompactString::from(member.property.name.as_str()),
+                member.optional,
+            ));
         }
         self.record_completion_site(member.span);
         walk::walk_static_member_expression(self, member);

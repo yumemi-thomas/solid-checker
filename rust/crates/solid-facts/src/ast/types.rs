@@ -74,6 +74,10 @@ pub struct AstFacts {
     /// and `const { useIt } = { useIt: r1 }`. See [`LocalAliasBindingFact`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub local_alias_bindings: Vec<LocalAliasBindingFact>,
+    /// ADR 0481: static member reads that are exactly a `const` variable
+    /// (`const thing = useThing(); thing.set`). See [`LocalAliasMemberFact`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub local_alias_members: Vec<LocalAliasMemberFact>,
     /// Every `import("…")` written in a type position (facts schema 46):
     /// `import("m").Name`, `typeof import("m").name`, `typeof import("m")`.
     /// Erased at run time and loading nothing, but resolved through the same
@@ -1218,6 +1222,23 @@ pub struct LocalAliasBindingFact {
     pub source: Span,
 }
 
+/// ADR 0481: a static member read `holder.key` that holds exactly the `const`
+/// variable `source`: `holder` is a non-ambient, unexported `const` bound to a
+/// non-optional call of a `const` arrow whose expression body is an object
+/// literal of static data properties (ADR 0480's arrows), every reference to
+/// `holder` is the object of a static member read that is not optional,
+/// written, updated or deleted, and the literal's `key` is a `const` variable.
+/// Each call builds the literal fresh and nothing else reaches the object, so
+/// the property keeps the value it was built with. Absence is not a fact.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalAliasMemberFact {
+    /// The member expression.
+    pub member: Span,
+    /// The binding identifier of the `const` variable it holds.
+    pub source: Span,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ModuleHazardKind {
@@ -1818,6 +1839,14 @@ impl AstFacts {
     /// The `const` binding a local alias holds, by the alias's binding
     /// identifier span. See [`LocalAliasBindingFact`].
     #[must_use]
+    pub fn local_alias_member(&self, member: Span) -> Option<&LocalAliasMemberFact> {
+        self.local_alias_members
+            .binary_search_by_key(&member, |fact| fact.member)
+            .ok()
+            .map(|index| &self.local_alias_members[index])
+    }
+
+    /// The local alias fact of the binding identifier `local`.
     pub fn local_alias_binding(&self, local: Span) -> Option<&LocalAliasBindingFact> {
         self.local_alias_bindings
             .binary_search_by_key(&local, |fact| fact.local)
@@ -2079,6 +2108,7 @@ impl AstFacts {
             import_equals: Vec::new(),
             namespace_member_bindings: Vec::new(),
             local_alias_bindings: Vec::new(),
+            local_alias_members: Vec::new(),
             type_imports: Vec::new(),
             type_queries: Vec::new(),
             type_names: Vec::new(),

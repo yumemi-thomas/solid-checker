@@ -3147,6 +3147,46 @@ p();\n";
 /// variable, directly or through one data property of an object literal it
 /// destructures; every other form names nothing.
 #[test]
+fn local_alias_members_record_reads_of_an_exclusive_arrow_result() {
+    let source = concat!(
+        "const r = () => 1;\n",
+        "const make = () => ({ set: r, other: 1 });\n",
+        "const thing = make();\n",
+        "thing.set();\n",
+        "thing.set;\n",
+        "thing.other;\n",
+        "thing.missing;\n",
+        "const written = make();\n",
+        "written.set;\n",
+        "(written as any).set = () => 2;\n",
+        "const passed = make();\n",
+        "passed.set;\n",
+        "console.log(passed);\n",
+        "const deleted = make();\n",
+        "deleted.set;\n",
+        "delete (deleted as any).other;\n",
+        "const optional = make();\n",
+        "optional?.set;\n",
+        "export const shared = make();\n",
+        "shared.set;\n",
+        "let held = make();\n",
+        "held.set;\n",
+        "const later = async () => ({ set: r });\n",
+        "const promised = later();\n",
+        "promised.set;\n",
+        "const { set: fromPromise } = later();\n",
+    );
+    let facts = extract("members.ts", source).unwrap();
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let recorded = facts
+        .local_alias_members
+        .iter()
+        .map(|fact| (text(fact.member), fact.source.start))
+        .collect::<Vec<_>>();
+    assert_eq!(recorded, [("thing.set", 6), ("thing.set", 6)]);
+}
+
+#[test]
 fn local_alias_bindings_follow_const_array_holders_and_object_literal_arrows() {
     let source = concat!(
         "const r = () => 1;\n",

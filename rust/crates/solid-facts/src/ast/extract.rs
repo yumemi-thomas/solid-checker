@@ -114,6 +114,10 @@ pub(super) struct Collector<'s, 'semantic> {
     /// `(local, arrow, key)`: a slot of a `const` object pattern over a call of
     /// a `const` identifier, resolved in `finish` against `const_object_arrows`.
     pub(super) pending_call_aliases: Vec<(Span, oxc_semantic::SymbolId, CompactString)>,
+    /// ADR 0481: `(holder, arrow)` of each `const holder = arrow()`, and every
+    /// static member read of an identifier: `(object, member, key, optional)`.
+    pub(super) member_holders: Vec<(oxc_semantic::SymbolId, oxc_semantic::SymbolId)>,
+    pub(super) identifier_member_reads: Vec<(oxc_semantic::SymbolId, Span, CompactString, bool)>,
     /// The declarations of the bindings this module exports by name or as
     /// its default or `export =` value.
     pub(super) exported_declarations: Vec<Span>,
@@ -365,6 +369,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             pending_array_aliases: Vec::new(),
             const_object_arrows: Vec::new(),
             pending_call_aliases: Vec::new(),
+            member_holders: Vec::new(),
+            identifier_member_reads: Vec::new(),
             exported_declarations: Vec::new(),
             type_imports: Vec::new(),
             type_queries: Vec::new(),
@@ -584,6 +590,53 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                 self.local_alias_candidates.push((local, *source));
             }
         }
+        // ADR 0481: the member reads of a holder every reference of which is
+        // such a read, none written, updated, deleted or optional.
+        let mut local_alias_members = Vec::new();
+        {
+            let written = self
+                .write_targets
+                .iter()
+                .chain(self.deleted_targets.iter())
+                .copied()
+                .collect::<std::collections::HashSet<_>>();
+            let mut reads = std::collections::HashMap::<
+                oxc_semantic::SymbolId,
+                Vec<(Span, CompactString, bool)>,
+            >::new();
+            for (object, member, key, optional) in std::mem::take(&mut self.identifier_member_reads)
+            {
+                reads
+                    .entry(object)
+                    .or_default()
+                    .push((member, key, optional));
+            }
+            for (holder, arrow) in std::mem::take(&mut self.member_holders) {
+                let (Some(values), Some(holder_reads)) =
+                    (object_arrows.get(&arrow), reads.get(&holder))
+                else {
+                    continue;
+                };
+                if holder_reads.len() != self.scoping.get_resolved_reference_ids(holder).len()
+                    || exported.contains(&span(self.scoping.symbol_span(holder)))
+                    || holder_reads
+                        .iter()
+                        .any(|(member, _, optional)| *optional || written.contains(member))
+                {
+                    continue;
+                }
+                for (member, key, _) in holder_reads {
+                    let mut matching = values.iter().filter(|(name, _)| name == key);
+                    if let (Some((_, Some(source))), None) = (matching.next(), matching.next()) {
+                        local_alias_members.push(LocalAliasMemberFact {
+                            member: *member,
+                            source: *source,
+                        });
+                    }
+                }
+            }
+            local_alias_members.sort_by_key(|fact| fact.member);
+        }
         let mut local_alias_bindings = std::mem::take(&mut self.local_alias_candidates)
             .into_iter()
             .filter(|(local, _)| !exported.contains(local))
@@ -613,6 +666,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             import_equals: self.import_equals,
             namespace_member_bindings,
             local_alias_bindings,
+            local_alias_members,
             type_imports: self.type_imports,
             type_queries: self.type_queries,
             type_names: self.type_names,
