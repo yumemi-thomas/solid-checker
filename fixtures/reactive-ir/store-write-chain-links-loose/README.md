@@ -1,3 +1,3 @@
 # store-write-chain-links-loose
 
-`store-write-chain-links` without `strict` (ADR 0465). `store.v = 1` stays a violation. The writes through an optional or nullable link are uncertifiable here, not silent: without strictNullChecks the links' types drop `undefined` and `null`, and the facts record neither the option nor a property's optionality, so nothing says strict `tsc` would report TS18048/TS18047 on them. The residual is internal only (no violation) and listed in docs/open-work.md.
+`store-write-chain-links` with `strict: false` (ADR 0465): Type Facts says the program does not apply strictNullChecks, so a link's type says nothing about its runtime value. `store.v = 1` stays a violation; every write through a link is uncertifiable. The nullable ones are where strict `tsc` would report TS18048/TS18047; here `tsc` is silent, and the result is internal only. No tsc-oracle case can pin this: its loose pass would need the checker silent (docs/open-work.md).

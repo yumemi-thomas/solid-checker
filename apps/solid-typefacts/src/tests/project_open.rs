@@ -182,3 +182,48 @@ fn the_fact_families_answer_or_fail_never_empty() {
     assert_eq!(&*facts[0].id, "symbol:h:x");
     assert!(facts[0].alias_target.is_empty() && facts[0].declarations.is_empty());
 }
+
+/// ADR 0465: the program's effective `strictNullChecks` is the checker's own
+/// resolution: the option when set, else `strict`, which this compiler turns
+/// on unless it is set to `false` (no `strict` key is strict). `extends`
+/// supplies either the same way.
+#[test]
+fn strict_null_checks_is_resolved_as_the_checker_resolves_it() {
+    let cases: [(&str, bool); 7] = [
+        (r#"{"compilerOptions":{},"include":["*.ts"]}"#, true),
+        (
+            r#"{"compilerOptions":{"strict":true},"include":["*.ts"]}"#,
+            true,
+        ),
+        (
+            r#"{"compilerOptions":{"strict":false},"include":["*.ts"]}"#,
+            false,
+        ),
+        (
+            r#"{"compilerOptions":{"strict":false,"strictNullChecks":true},"include":["*.ts"]}"#,
+            true,
+        ),
+        (
+            r#"{"compilerOptions":{"strict":true,"strictNullChecks":false},"include":["*.ts"]}"#,
+            false,
+        ),
+        (
+            r#"{"compilerOptions":{"strictNullChecks":false},"include":["*.ts"]}"#,
+            false,
+        ),
+        (r#"{"extends":"./base.json","include":["*.ts"]}"#, false),
+    ];
+    for (config, want) in cases {
+        let scratch = Scratch::new(&[
+            ("tsconfig.json", config),
+            ("base.json", r#"{"compilerOptions":{"strict":false}}"#),
+            ("a.ts", "export const a = 1;\n"),
+        ]);
+        let mut project = scratch.open();
+        assert_eq!(
+            project.strict_null_checks(&Context::new()).unwrap(),
+            Some(want),
+            "{config}"
+        );
+    }
+}

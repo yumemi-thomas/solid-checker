@@ -1365,30 +1365,65 @@ fn store_write_is_exempt(
 
 /// What the links a store write's member chain reads past its root
 /// ([`solid_facts::ast::AstFacts::member_chain_links`]) leave of its proof
-/// (ADR 0465; ADR 0460 for `delete`). `None`: a link whose primitive value
-/// domain may hold `null` or `undefined` is TS18047/TS18048 under
-/// strictNullChecks, so the write is TypeScript's and the rule is silent.
-/// `Some(true)`: some link, none of them proven nullish, so uncertifiable: a
-/// type says nothing about a link's runtime value without strictNullChecks,
-/// which the facts do not record, and an undefined link throws `TypeError`
-/// before any write (a link whose domain was not served is the same).
-/// `Some(false)`: no link past the root, the write's proof stands.
+/// (ADR 0465; ADR 0460 for `delete`). `None`: the rule is silent. `Some(true)`:
+/// uncertifiable. `Some(false)`: the write's proof stands.
+///
+/// - No link past the root: the proof stands.
+/// - The program applies `strictNullChecks` (Type Facts' table answer): a link
+///   whose primitive value domain may hold `null` or `undefined` is
+///   TS18047/TS18048, so the write is TypeScript's and the rule is silent; a
+///   link whose domain excludes both is held to its type, so the proof stands;
+///   a link whose domain was not served or is unknown is uncertifiable, and so
+///   is one whose type is not its declared one: an element access (no
+///   `undefined` without `noUncheckedIndexedAccess`) or a chain under a type
+///   assertion (`store.n!.b`, `(store.o as T).b`, `(store as T).a.b`).
+/// - It does not, or the table does not say: a type says nothing about a
+///   link's runtime value, and an undefined link throws `TypeError` before
+///   any write, so the write is uncertifiable.
 fn chain_links_verdict(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
     links: &[Span],
 ) -> Option<bool> {
+    if links.is_empty() {
+        return Some(false);
+    }
+    if context.strict_null_checks != Some(true) {
+        return Some(true);
+    }
     let path = file.path.as_str();
-    let nullable = links.iter().any(|&link| {
-        context
+    let ast = &file.ast;
+    // Every object the chain reads, the root included, must be its own
+    // declared value: no assertion around it and no computed key.
+    let root = links
+        .last()
+        .and_then(|&link| ast.member_at(ast.peel_ts_sugar_span(link)))
+        .map(|member| member.object);
+    let asserted = links
+        .iter()
+        .chain(root.iter())
+        .any(|&object| crate::indexes::SemanticLookup::peel_parentheses(file, object).is_none());
+    let computed = links.iter().any(|&link| {
+        ast.computed_members
+            .binary_search(&ast.peel_ts_sugar_span(link))
+            .is_ok()
+    });
+    let mut open = asserted || computed;
+    for &link in links {
+        match context
             .lookup
             .entity_at(path, link)
             .and_then(|entity| entity.primitive_value_domain.present())
-            .is_some_and(|domain| {
-                !domain.unknown() && (domain.may_be_null() || domain.may_be_undefined())
-            })
-    });
-    (!nullable).then_some(!links.is_empty())
+        {
+            Some(domain) if !domain.unknown() => {
+                if domain.may_be_null() || domain.may_be_undefined() {
+                    return None;
+                }
+            }
+            _ => open = true,
+        }
+    }
+    Some(open)
 }
 
 /// The nine in-place `Array.prototype` methods upstream names

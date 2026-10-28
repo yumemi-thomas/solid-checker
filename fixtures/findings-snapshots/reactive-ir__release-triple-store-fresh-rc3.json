@@ -24,7 +24,7 @@
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
-      "kind": "uncertifiable",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/release-triple-store-fresh-rc3/store.ts",
       "start": 597,

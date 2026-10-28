@@ -347,17 +347,8 @@
       "expect": "silent",
       "checker": "reports",
       "checkerCount": 1,
-      "why": "SC2003's surviving store arms in 2.0, each a write TypeScript accepts while the runtime drops it. The cast is the one that constrains the implementation: `member_root` resolves through it, so the narrowing must require the written member's object to be a bare *identifier* rather than merely equal to the resolved root span. The capitalized ordinary helper with no JSX result is a negative control: its parameter is not component props merely because the function is named `Props`. The nested write is the next case (ADR 0465).",
+      "why": "SC2003's surviving store arms in 2.0, each a write TypeScript accepts while the runtime drops it. The cast is the one that constrains the implementation: `member_root` resolves through it, so the narrowing must require the written member's object to be a bare *identifier* rather than merely equal to the resolved root span. The capitalized ordinary helper with no JSX result is a negative control: its parameter is not component props merely because the function is named `Props`. A nested write (`profile.user.name = ...`) is a violation only under strictNullChecks (ADR 0465), so its kinds differ by pass; it is pinned by the fixtures `store-write-chain-links` and `store-write-chain-links-loose`.",
       "code": "import { createStore } from \"solid-js\";\nconst [profile] = createStore({ count: 0, user: { name: \"Ada\" } });\n// A cast erases the root's readonly-ness from a root property.\nexport function Cast() {\n  (profile as { count: number }).count = 1;\n}\n// A props member is not readonly at all.\nexport function Props(props: { n: number }) {\n  props.n = 1;\n}\n"
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "dialect": "v2",
-      "expect": "silent",
-      "checker": "reports",
-      "checkerKind": "uncertifiable",
-      "why": "SC2003 past the root (ADR 0465, as ADR 0460 for `delete`): a write through a link (`profile.user` in `profile.user.name = ...`) type-checks when the link's type excludes `null` and `undefined`, and the proxy drops it, but without strictNullChecks (which the facts do not record) the type proves nothing about the link's runtime value, and an undefined link throws `TypeError` before any write. So the claim is an uncertifiable result, never a violation; a single-link write (`profile.count = 1`, the cases above) stays one. A possibly nullish link is TypeScript's (the `removed-because-redundant` case below).",
-      "code": "import { createStore } from \"solid-js\";\nconst [profile] = createStore({ count: 0, user: { name: \"Ada\" } });\n// The readonly-ness is shallow.\nexport function Nested() {\n  profile.user.name = \"Grace\";\n}\n"
     },
     {
       "rule": "reactive-dispatch-unresolved",
@@ -1117,18 +1108,8 @@
       "expect": "silent",
       "checker": "reports",
       "checkerCount": 9,
-      "why": "SC2003's in-place array arm (ADR 0425). All nine `Array.prototype` mutators on a store path type-check on the audited rc.17 (`Store<T> = T`, and a nested array is mutable on every release), while the proxy's `set` trap returns without storing outside a setter (rc.17 `dist/dev.js:5691-5700`; probed: every mutator dropped, STORE_WRITE_OUTSIDE_SETTER warned). The call must resolve to the standard library's `Array` method: the project fixture `store-mutators` pins the silent spellings. Each receiver (`store.items`) is a link past the root, so each finding is uncertifiable (ADR 0465): without strictNullChecks a link's type proves nothing about its runtime value; the root-array case below stays a violation.",
-      "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ items: [3, 1, 2] });\nexport function Mutators() {\n  store.items.push(1);\n  store.items.pop();\n  store.items.shift();\n  store.items.unshift(0);\n  store.items.splice(0, 1);\n  store.items.sort();\n  store.items.reverse();\n  store.items.fill(7);\n  store.items.copyWithin(0, 1);\n}\n",
-      "checkerKind": "uncertifiable"
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "dialect": "v2",
-      "sourceExtension": "ts",
-      "expect": "silent",
-      "checker": "reports",
-      "why": "SC2003's in-place array arm on a store that is itself the array (ADR 0425, 0465): `list.push(1)` reads no link past the root, the proxy, so it stays a violation. TypeScript accepts it (`Store<T> = T`) and the `set` trap drops every element and `length` write outside a setter (rc.17 `dist/dev.js:5691-5700`).",
-      "code": "import { createStore } from \"solid-js\";\nconst [list] = createStore([3, 1, 2]);\nexport function Mutate() {\n  list.push(1);\n}\n"
+      "why": "SC2003's in-place array arm (ADR 0425). All nine `Array.prototype` mutators on a store that is itself the array type-check on the audited rc.17 (`Store<T> = T`), while the proxy's `set` trap returns without storing outside a setter (rc.17 `dist/dev.js:5691-5700`; probed: every mutator dropped, STORE_WRITE_OUTSIDE_SETTER warned). The call must resolve to the standard library's `Array` method: the project fixture `store-mutators` pins the silent spellings. The receiver reads no link past the root, so the finding is a violation in both passes; a mutator through a link (`store.items.push(1)`) is a violation only under strictNullChecks (ADR 0465), so its kinds differ by pass and it is pinned by the fixtures `store-mutators`, `store-write-chain-links` and `store-write-chain-links-loose`.",
+      "code": "import { createStore } from \"solid-js\";\nconst [list] = createStore([3, 1, 2]);\nexport function Mutators() {\n  list.push(1);\n  list.pop();\n  list.shift();\n  list.unshift(0);\n  list.splice(0, 1);\n  list.sort();\n  list.reverse();\n  list.fill(7);\n  list.copyWithin(0, 1);\n}\n"
     },
     {
       "rule": "no-store-mutation-outside-setter",
@@ -1137,18 +1118,8 @@
       "expect": "silent",
       "checker": "reports",
       "checkerCount": 1,
-      "why": "SC2003's projection arm (ADR 0425). A `createProjection` result is a derived store: an assignment or an in-place mutator through it outside its compute function type-checks (`Store<T> = T`) and is dropped (rc.17 `dist/dev.js:5691-5700`; probed). The finding names the projection, not a setter. The mutator through a link is the next case.",
+      "why": "SC2003's projection arm (ADR 0425). A `createProjection` result is a derived store: an assignment or an in-place mutator through it outside its compute function type-checks (`Store<T> = T`) and is dropped (rc.17 `dist/dev.js:5691-5700`; probed). The finding names the projection, not a setter. The mutator through the link `selected.list` is pinned by the fixture `projection-writes` (ADR 0465).",
       "code": "import { createProjection } from \"solid-js\";\nconst selected = createProjection<{ list: number[]; other?: boolean }>((draft) => {\n  draft.other = true;\n}, { list: [] });\nexport function Outside() {\n  selected.other = true;\n}\n"
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "dialect": "v2",
-      "sourceExtension": "ts",
-      "expect": "silent",
-      "checker": "reports",
-      "checkerKind": "uncertifiable",
-      "why": "SC2003's projection arm past the root (ADR 0465): `selected.list.push(1)` reads the link `selected.list`, whose type excludes `null` and `undefined` but, without strictNullChecks (unrecorded), proves nothing at run time, so the finding is uncertifiable.",
-      "code": "import { createProjection } from \"solid-js\";\nconst selected = createProjection<{ list: number[]; other?: boolean }>((draft) => {\n  draft.other = true;\n}, { list: [] });\nexport function Outside() {\n  selected.list.push(1);\n}\n"
     },
     {
       "rule": "no-store-mutation-outside-setter",

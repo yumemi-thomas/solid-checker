@@ -31,15 +31,18 @@ symbol:
 - the same writes through a `createProjection` result, reported as a
   projection write (it has no setter to name).
 
-**Past the root (ADR 0465).** Only a write that reads no link past the root
+**Past the root (ADR 0465).** A write that reads no link past the root
 (`store.v = 1`, `list.push(1)` on a store that is the array, a cast root) is a
-violation. A write through a link (`store.a.b = 1`, `store.items.push(1)`,
-`store.rows[0].done = true`, `store.n!.b = 1`) is silent where the link's type
-may hold `null` or `undefined` (TS18048/TS18047 under strictNullChecks: the
-write is TypeScript's), and uncertifiable otherwise: the facts do not record
-strictNullChecks, so a link's type proves nothing about its runtime value, and
-an undefined link throws `TypeError` before the proxy sees a write. Fixtures
-`store-write-chain-links`, `store-write-chain-links-loose`.
+violation. A write through a link (`store.a.b = 1`, `store.items.push(1)`)
+depends on the program's `strictNullChecks`, which Type Facts reports as the
+compiler resolves it (the option, else `strict`, on unless `false`). Under it,
+a link whose type may hold `null` or `undefined` is TS18048/TS18047, so the
+rule is silent; a link whose type excludes both keeps the violation; an
+element-access link (`store.rows[0].done`) and a chain under a type assertion
+(`store.n!.b`, `(store.o as T).b`) are uncertifiable. Without it every write
+through a link is uncertifiable: the type then proves nothing about the link's
+runtime value, and an undefined link throws `TypeError` before the proxy sees
+a write. Fixtures `store-write-chain-links`, `store-write-chain-links-loose`.
 
 The runtime drops all of them outside a setter: the proxy's `set` trap
 returns `true` without storing (`@solidjs/signals@2.0.0-rc.17`

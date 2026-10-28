@@ -445,6 +445,12 @@ impl Session {
             timings.non_durable_files = stats.retention.non_durable_files as u64;
         }
         response.timings = Some(timings);
+        // ADR 0465: the program's effective `strictNullChecks`, which the
+        // client keeps with the table.
+        response.strict_null_checks = match closure.backend_mut().strict_null_checks(ctx) {
+            Ok(value) => value,
+            Err(error) => bail!("analysis-failed", error.0),
+        };
         let next_token = *token + 1;
         let next_token_text = next_token.to_string();
         response.state_token.clone_from(&next_token_text);

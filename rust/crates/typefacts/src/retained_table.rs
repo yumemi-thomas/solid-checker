@@ -354,6 +354,10 @@ pub struct FactTable {
     source_count: usize,
     entity_count: usize,
     file_count: usize,
+    /// The program's effective `strictNullChecks` (ADR 0465), as the analyze
+    /// answer that published this table states it; `None` when no answer
+    /// said (a table assembled from parts, a producer that did not answer).
+    strict_null_checks: Option<bool>,
 }
 
 impl FactTable {
@@ -483,6 +487,19 @@ impl FactTable {
     #[must_use]
     pub fn project_id(&self) -> &str {
         &self.project_id
+    }
+
+    /// Whether the program the table was analyzed under applies
+    /// `strictNullChecks`, resolved by the compiler's own rule (the option,
+    /// else `strict`, which is on unless set to `false`). `None` is no answer,
+    /// never a claim that the option is off (ADR 0465).
+    #[must_use]
+    pub const fn strict_null_checks(&self) -> Option<bool> {
+        self.strict_null_checks
+    }
+
+    pub(crate) const fn set_strict_null_checks(&mut self, value: Option<bool>) {
+        self.strict_null_checks = value;
     }
 
     #[must_use]
@@ -675,6 +692,7 @@ impl FactTable {
             source_count,
             entity_count,
             file_count,
+            strict_null_checks: None,
         }
     }
 
@@ -736,6 +754,7 @@ impl FactTable {
             source_count,
             entity_count,
             file_count,
+            strict_null_checks: None,
         }
     }
 
@@ -959,6 +978,7 @@ impl fmt::Debug for FactTable {
             .field("schema", &self.schema)
             .field("generation", &self.generation)
             .field("project_id", &self.project_id)
+            .field("strict_null_checks", &self.strict_null_checks)
             .field("paths", &self.paths.iter().collect::<Vec<_>>())
             .field("symbols", &self.symbols.iter().collect::<Vec<_>>())
             .finish()
@@ -970,6 +990,7 @@ impl PartialEq for FactTable {
         self.schema == other.schema
             && self.generation == other.generation
             && self.project_id == other.project_id
+            && self.strict_null_checks == other.strict_null_checks
             && self.paths.len() == other.paths.len()
             && self.paths.iter().eq(other.paths.iter())
             && self.symbols.len() == other.symbols.len()

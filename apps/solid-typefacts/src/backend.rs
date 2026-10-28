@@ -124,6 +124,11 @@ pub trait ClosureBackend {
     /// Releases the program (Go: `Close`).
     fn close(&mut self) -> Result<(), BackendError>;
 
+    /// Whether the program applies `strictNullChecks` (ADR 0465), resolved by
+    /// the compiler's own rule: the option when set, else `strict`, which is
+    /// on unless set to `false`. `None` is no answer.
+    fn strict_null_checks(&mut self, ctx: &Context) -> Result<Option<bool>, BackendError>;
+
     /// Forgets every answer and identity claim derived from earlier queries:
     /// the source-fact memo, the reference contributions and the claims of
     /// symbol ids. A table is built from nothing but the program and the
