@@ -136,15 +136,12 @@ describe("classify: the checker is quiet, uncertifiable or failed", () => {
       expect(result.items.map((item) => item.kind)).toEqual(["agree"]);
       expect(result.verdict).toBe("agree");
     });
-    it("is a recall gap when the claiming findings in the file all decline", () => {
-      const result = placeless([uncertifiable("async-outside-loading-boundary", 8)]);
-      expect(result.verdict).toBe("recall-gap");
-      expect(result.items[0]).toMatchObject({ kind: "recall-gap", diagnostic: { code: "ASYNC_OUTSIDE_LOADING_BOUNDARY", line: null, unplaced: true, rule: "async-outside-loading-boundary" } });
-    });
-    it("is a false clean only when the file has no claiming finding at all", () => {
-      expect(placeless([]).verdict).toBe("candidate-false-clean");
-      expect(placeless([]).items[0].diagnostic).toMatchObject({ line: null, unplaced: true });
-      expect(placeless([violation("no-write-in-pure-computation", 8)]).items.map((item) => item.kind)).toContain("candidate-false-clean");
+    // The one placeless code is advisory (Solid documents the boundary-less mount as legal), so silence on it is no miss.
+    it("is neither a recall gap nor a false clean: the code is advisory", () => {
+      expect(placeless([uncertifiable("async-outside-loading-boundary", 8)]).verdict).toBe("agree");
+      expect(placeless([]).verdict).toBe("agree");
+      expect(placeless([]).items.map((item) => item.kind)).not.toContain("candidate-false-clean");
+      expect(placeless([violation("no-write-in-pure-computation", 8)]).items.map((item) => item.kind)).not.toContain("candidate-false-clean");
     });
     it("leaves a code reported at its call to the line", () => {
       const result = classify({ sites, checker: checker([uncertifiable("reactive-dispatch-unresolved", 8)]), runtime: runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 3)] }), plan });

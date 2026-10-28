@@ -139,6 +139,13 @@ describe("gate", () => {
     expect(gate(base, matrixOf([row("B", "body", 1, "agree")])).regressions[0].why).toMatch(/missing/);
     expect(gate(base, { ...base, seed: 2 }).refused).toMatch(/differ in seed/);
   });
+  it("retires a baseline cell whose code the policy table no longer counts as a defect, and still fails an unknown code's", () => {
+    const async = { code: "ASYNC_OUTSIDE_LOADING_BOUNDARY", context: "jsx", agree: 0, "false-clean": 1, verdicts: { 1: "false-clean" } };
+    const result = gate({ ...base, cells: { ...base.cells, "ASYNC_OUTSIDE_LOADING_BOUNDARY|jsx": async } }, base);
+    expect(result.ok).toBe(true);
+    expect(result.retired).toEqual([{ cell: "ASYNC_OUTSIDE_LOADING_BOUNDARY|jsx", why: "ASYNC_OUTSIDE_LOADING_BOUNDARY is advisory now, not measured" }]);
+    expect(gate({ ...base, cells: { ...base.cells, "NOT_A_CODE|jsx": { ...async, code: "NOT_A_CODE" } } }, base).regressions[0].why).toMatch(/missing/);
+  });
 });
 
 describe("the grid", () => {
