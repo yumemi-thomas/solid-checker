@@ -2217,16 +2217,9 @@ fn helper_runs_layer_inline(
                 && file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
         })
         .find_map(|(call, index)| {
-            if lookup.primitive_at_call(file, call.span).is_some() {
-                return None;
-            }
-            let (callee_file, callee, exact) =
-                project_callee_at_parameter(file, call, index, lookup)?;
-            if !exact {
-                return None;
-            }
-            parameter_uses_during_call(callee_file, callee, index, lookup)
-                .map(|uses| (call.span, uses))
+            helper_argument_run(file, call, index, lookup)
+                .filter(|run| run.every_completion)
+                .map(|run| (call.span, run.uses))
         })
 }
 

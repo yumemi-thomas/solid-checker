@@ -709,7 +709,7 @@ pub(crate) fn invokes_parameter_during_call(
 }
 
 /// What a callee does with a parameter it calls on every completion
-/// ([`parameter_uses_during_call`]).
+/// ([`helper_argument_run`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ParameterUses {
     /// Every use of the parameter is a direct call in the callee's own
@@ -721,20 +721,55 @@ pub(crate) enum ParameterUses {
     AlsoElsewhere,
 }
 
-/// ADR 0457: [`invokes_parameter_during_call`], and whether every use of the
-/// parameter is such a call. Nothing is claimed for a callee that reassigns
-/// the parameter or reads `arguments` (`None`): the call may reach another
+/// How a helper call runs its function argument ([`helper_argument_run`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct HelperArgumentRun {
+    /// The helper calls the parameter on every completion
+    /// ([`invokes_parameter_during_call`]); otherwise only on some paths
+    /// ([`calls_parameter_in_body`]).
+    pub(crate) every_completion: bool,
+    pub(crate) uses: ParameterUses,
+}
+
+/// ADR 0457, 0474: how the exact project or dependency-source function `call`
+/// runs (not a primitive) uses its argument `index`, when it calls that
+/// parameter directly in its own synchronous body: each such call runs the
+/// argument on the call's stack, under the caller's owner. `None` when no
+/// exact callee resolves, the argument is spread, or the callee never calls
+/// the parameter in its body (or reassigns it, or reads `arguments`).
+pub(crate) fn helper_argument_run(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> Option<HelperArgumentRun> {
+    if call.arguments.get(index)?.spread || lookup.primitive_at_call(file, call.span).is_some() {
+        return None;
+    }
+    let (callee_file, callee, exact) = project_callee_at_parameter(file, call, index, lookup)?;
+    if !exact {
+        return None;
+    }
+    let every_completion = invokes_parameter_during_call(callee_file, callee, index, lookup);
+    if !every_completion && !calls_parameter_in_body(callee_file, callee, index, lookup) {
+        return None;
+    }
+    Some(HelperArgumentRun {
+        every_completion,
+        uses: parameter_uses(callee_file, callee, index)?,
+    })
+}
+
+/// ADR 0457: whether every use of `function`'s parameter `index` is a direct
+/// call in its own body. Nothing is claimed for a callee that reassigns the
+/// parameter or reads `arguments` (`None`): the call may reach another
 /// function. A source scan backs the binder's references, so a use the binder
 /// does not list (a shorthand property `{ cb }`) still counts as a use.
-pub(crate) fn parameter_uses_during_call(
+fn parameter_uses(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     index: usize,
-    lookup: &SemanticLookup<'_>,
 ) -> Option<ParameterUses> {
-    if !invokes_parameter_during_call(file, function, index, lookup) {
-        return None;
-    }
     let name = function.parameters.get(index)?.names.first()?;
     let source = file
         .source

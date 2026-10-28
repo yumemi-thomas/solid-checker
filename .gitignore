@@ -113,6 +113,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/owner-returned-callable/node_modules/**
 !fixtures/reactive-ir/read-in-place-layers/node_modules/
 !fixtures/reactive-ir/read-in-place-layers/node_modules/**
+!fixtures/reactive-ir/owner-helper-callback/node_modules/
+!fixtures/reactive-ir/owner-helper-callback/node_modules/**
 !fixtures/reactive-ir/read-jsx-in-callbacks/node_modules/
 !fixtures/reactive-ir/read-jsx-in-callbacks/node_modules/**
 !fixtures/reactive-ir/strict-read-async-apply/node_modules/

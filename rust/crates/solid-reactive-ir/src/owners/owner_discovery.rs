@@ -215,7 +215,10 @@ pub(crate) fn discover_owner_file(
                 });
             }
         }
-        for edge in owner_callback_edges(file, call, &call_primitives[call_index], lookup) {
+        let callback_edges = owner_callback_edges(file, call, &call_primitives[call_index], lookup);
+        let helper_call =
+            callback_edges.is_empty() && known_primitive(&call_primitives[call_index]).is_none();
+        for edge in callback_edges {
             let kind = callback_call_owner_edge(lookup, &edge.source_path, edge.source, edge.kind);
             if let Some(target) = call
                 .arguments
@@ -254,6 +257,42 @@ pub(crate) fn discover_owner_file(
                     target,
                     kind,
                 });
+            }
+        }
+        // ADR 0474: a function literal an exact helper calls in its own body
+        // runs in the helper's call, on its stack and under the caller's owner
+        // (ADR 0457's census, `helper_argument_run`). A call on some paths
+        // only may run it; a helper that also stores or hands it on may run it
+        // elsewhere too, with no owner this proves.
+        if helper_call {
+            for index in 0..call.arguments.len() {
+                let Some(target) = callback_target(call.arguments[index].span, false)
+                    .filter(|target| matches!(target, OwnerTarget::LocalSpan(_)))
+                else {
+                    continue;
+                };
+                let Some(run) =
+                    crate::execution_role::helper_argument_run(file, call, index, lookup)
+                else {
+                    continue;
+                };
+                let (in_place_source, in_place_kind) = if run.every_completion && !unproven_callee {
+                    (source.clone(), kind)
+                } else {
+                    may_run()
+                };
+                edges.push(SymbolicOwnerEdge {
+                    source: in_place_source,
+                    target: target.clone(),
+                    kind: in_place_kind,
+                });
+                if run.uses == crate::execution_role::ParameterUses::AlsoElsewhere {
+                    edges.push(SymbolicOwnerEdge {
+                        source: None,
+                        target,
+                        kind: OwnerEdgeKind::MayBeUnowned,
+                    });
+                }
             }
         }
         // Not skipped here: whether the region answers the operation needs the
