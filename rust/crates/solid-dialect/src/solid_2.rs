@@ -1653,6 +1653,18 @@ impl Dialect for Solid2 {
             .then_some(2)
     }
 
+    // ADR 0502: `effect()` enqueues the first run when `options?.schedule`
+    // (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:1865-1868`; rc.3
+    // `dist/dev.js:5285-5289`). Only `createRenderEffect` runs it on the call
+    // otherwise (`createEffect` always enqueues).
+    fn effect_apply_schedule_options(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> Option<usize> {
+        (primitive == Primitive::CreateRenderEffect && argument == 1).then_some(2)
+    }
+
     fn browser_children_dead(
         &self,
         primitive: Primitive,

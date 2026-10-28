@@ -362,6 +362,17 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// Options slot whose `schedule` key moves an apply's first run from the
+    /// call into the queue (ADR 0502): the run still happens, but not on the
+    /// caller's stack or under its owner.
+    fn effect_apply_schedule_options(
+        &self,
+        _primitive: Primitive,
+        _argument: usize,
+    ) -> Option<usize> {
+        None
+    }
+
     /// A dialect control-flow condition can prove children never selected.
     fn browser_children_dead(
         &self,

@@ -62,6 +62,21 @@ pub(crate) fn callback_owner_at_call(
         // A deferred apply has no inherited first run, including render effects.
         return Some(solid_dialect::CallbackOwner::None);
     }
+    // ADR 0502: `schedule` moves the first run into the queue on the releases
+    // read; which releases honour it is not modelled per release, so a set
+    // (or unreadable) `schedule` leaves the owner conditional, never none.
+    if lookup
+        .dialect
+        .effect_apply_schedule_options(primitive, argument)
+        .is_some_and(|options| {
+            !matches!(
+                crate::call_option_literal(file, call, options, "schedule"),
+                solid_dialect::OptionLiteral::False | solid_dialect::OptionLiteral::Absent
+            )
+        })
+    {
+        return Some(solid_dialect::CallbackOwner::Conditional);
+    }
     let semantics = lookup
         .dialect
         .callback_semantics_at(primitive, argument, call.arguments.len());
