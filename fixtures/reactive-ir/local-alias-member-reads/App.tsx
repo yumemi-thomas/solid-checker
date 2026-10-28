@@ -100,3 +100,13 @@ export function ImportedStoreAliasInSetter() {
     ></button>
   );
 }
+
+// Violation (ADR 0461 through ADR 0482): deleting an optional store property
+// through such a member, outside its setter, is dropped.
+export function StoreMemberDelete() {
+  const [opt] = createStore<{ v?: number }>({ v: 0 });
+  const useOpt = () => ({ opt });
+  const holder = useOpt();
+  delete holder.opt.v;
+  return <div></div>;
+}

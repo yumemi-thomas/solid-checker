@@ -2172,9 +2172,13 @@ fn no_store_delete(
         };
         // Every link from the operand down to the root is a plain member read:
         // no `?.` (which may skip the delete) and no wrapper between links.
+        // The walk ends at the root `member_root` found: a member alias root
+        // (ADR 0482) is itself a member, and its own links are not the chain's.
         let mut link = member;
         let mut plain = true;
-        while let Some(current) = file.ast.member_at(link) {
+        while link != root
+            && let Some(current) = file.ast.member_at(link)
+        {
             if file.ast.optional_members.binary_search(&link).is_ok() {
                 plain = false;
                 break;
