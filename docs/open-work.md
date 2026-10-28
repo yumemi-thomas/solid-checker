@@ -132,6 +132,7 @@ Leaf body (`leaf-owner-forbidden-call`, SC3001):
 - A file system lookup cache that outlives a build (ADR 0418 keeps answers for one build only): exact only if every path it answers is observed by the resolution witness or the tracked stamps, failed probes included (extension probing, `@types` and typeRoots lookups, tsconfig `extends`); otherwise an install or a new file stays hidden. Would save the rebuild's 23,500 distinct lookups (about 150 ms of thread time per app-game import edit). Reopen with a test that lists the cache's keys and checks that each is witnessed.
 ## 3. Recorded precision trades
 
+- A `createEffect` apply is taken to run with no owner (`missing-owner`, `primitive-in-effect-callback`): a `flush()` called synchronously under an owner, in project or dependency code, drains the queue under that owner, and an effect or memo the apply creates is then owned and does not throw (review of ADR 0483). Not vetoed: no census of synchronous flushes exists, and dependency calls are not in the facts.
 A violation withheld, or turned uncertifiable, to keep zero false positives. Each loses recall on purpose.
 
 - A refused file (ADR 0360) withholds each violation located or evidenced in it, even one its compiler facts cannot change.

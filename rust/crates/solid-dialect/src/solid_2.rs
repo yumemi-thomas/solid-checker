@@ -2517,6 +2517,36 @@ impl Dialect for Solid2 {
         self.flush_in_effect_callback && primitive == Primitive::Flush
     }
 
+    /// `@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:3947-3957`
+    /// (`assertNotInEffectCallback`: `inEffectCallback && context === null`
+    /// throws `PRIMITIVE_IN_EFFECT_CALLBACK`) is called by `createOwner`
+    /// (`:1496`, which `createRoot` calls first, `:1537-1538`) and by
+    /// `setupComputedNode` (`:4927`), which every computation reaches at its
+    /// creation: `computed` (`:4689`: `createMemo`, `dist/dev.js:2433-2434`;
+    /// function-form `createSignal`, `:2412-2414`; `createProjection` and
+    /// function-form `createStore`, `:6744-6793`, `:8438-8440`) and
+    /// `createEffectNode` (`:4891`: `createEffect` and `createRenderEffect`
+    /// through `effect`, `dist/dev.js:1851-1858`). Value-form state creates no
+    /// computation. Read on rc.17 only; the release answer it rests on is
+    /// `disposal_write_guard`, which is `StandsDown` exactly when the read
+    /// signals release is rc.17 (`releases.rs`, tested beside it).
+    fn throws_creating_in_effect_callback(
+        &self,
+        primitive: Primitive,
+        first_argument_is_function: bool,
+    ) -> bool {
+        self.disposal_write_guard == crate::WriteGuardInDisposal::StandsDown
+            && match primitive {
+                Primitive::CreateMemo
+                | Primitive::CreateEffect
+                | Primitive::CreateRenderEffect
+                | Primitive::CreateRoot
+                | Primitive::CreateProjection => true,
+                Primitive::CreateSignal | Primitive::CreateStore => first_argument_is_function,
+                _ => false,
+            }
+    }
+
     /// `createSignal` and `createOptimistic` both return
     /// `Signal<T> = [get: SourceAccessor<T>, set: Setter<T>]`; `createStore`
     /// and `createOptimisticStore` both return

@@ -1,0 +1,145 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 370,
+      "end": 382,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 426,
+      "end": 436,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 554,
+      "end": 566,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 605,
+      "end": 615,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 738,
+      "end": 750,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 801,
+      "end": 813,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 935,
+      "end": 947,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 1000,
+      "end": 1010,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 1253,
+      "end": 1265,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 1332,
+      "end": 1342,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 1626,
+      "end": 1638,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 1739,
+      "end": 1751,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 1821,
+      "end": 1833,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.tsx",
+      "start": 1893,
+      "end": 1911,
+      "fixes": 0
+    }
+  ]
+}

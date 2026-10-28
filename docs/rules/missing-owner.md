@@ -37,7 +37,9 @@ scope, and detached callbacks. Exported functions with unseen callers, nullable
 allocation paths are uncertifiable rather than proven violations.
 
 The apply callback of `createEffect(compute, apply)` is always a detached
-callback: the runtime queues it, and it runs from the flush with no owner. The
+callback: the runtime queues it, and it runs from the flush with no owner. (Premise: a
+`flush()` called synchronously under an owner would drain the queue under it;
+see docs/open-work.md.) The
 apply callback of `createRenderEffect(compute, apply)` is not. Its first run
 happens before `createRenderEffect` returns, under the caller's owner, and only
 its later runs come from the flush with no owner. An operation in that callback

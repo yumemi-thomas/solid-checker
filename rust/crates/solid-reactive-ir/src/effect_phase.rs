@@ -74,6 +74,8 @@ pub(crate) struct EffectPhaseOrigin {
     pub(crate) path: String,
     /// Project functions the walk entered through a call, outermost last.
     pub(crate) helper_calls: usize,
+    /// The apply callback argument the walk ended at.
+    pub(crate) apply: Span,
 }
 
 /// The effect call whose apply callback provably runs the code at `span`
@@ -85,7 +87,34 @@ pub(crate) fn effect_phase_origin(
     instances: &crate::PackageInstanceEvidence,
     lookup: &SemanticLookup<'_>,
 ) -> Option<EffectPhaseOrigin> {
+    walk_to_effect_phase(file, span, package_root, instances, lookup, false)
+}
+
+/// [`effect_phase_origin`] through layers that keep the apply callback's
+/// owner (ADR 0483): no primitive callback but `untrack`'s is crossed, since
+/// `runWithOwner`, `createRoot` and the rest set an owner (or may) before
+/// their callback runs. The apply runs with none (`createEffect`'s is queued
+/// to the flush), so code reached this way runs with no owner.
+pub(crate) fn ownerless_effect_phase_origin(
+    file: &FileFacts,
+    span: Span,
+    package_root: &str,
+    instances: &crate::PackageInstanceEvidence,
+    lookup: &SemanticLookup<'_>,
+) -> Option<EffectPhaseOrigin> {
+    walk_to_effect_phase(file, span, package_root, instances, lookup, true)
+}
+
+fn walk_to_effect_phase(
+    file: &FileFacts,
+    span: Span,
+    package_root: &str,
+    instances: &crate::PackageInstanceEvidence,
+    lookup: &SemanticLookup<'_>,
+    owner_preserving: bool,
+) -> Option<EffectPhaseOrigin> {
     let mut walk = Walk {
+        owner_preserving,
         lookup,
         package_root,
         flush_instance: "",
@@ -103,6 +132,8 @@ pub(crate) fn effect_phase_origin(
 }
 
 struct Walk<'l, 'a> {
+    /// Cross only layers that keep the owner ([`ownerless_effect_phase_origin`]).
+    owner_preserving: bool,
     lookup: &'l SemanticLookup<'a>,
     /// The package instance the starting call's declaration is in: the effect
     /// call must resolve to the same one, or its queue is not the one running.
@@ -179,7 +210,11 @@ impl<'l, 'a> Walk<'l, 'a> {
                     .then(|| EffectPhaseOrigin {
                         path: file.path.to_string(),
                         helper_calls,
+                        apply: call.arguments[index].span,
                     });
+            }
+            if self.owner_preserving && primitive != solid_dialect::Primitive::Untrack {
+                return None;
             }
             return if dialect.synchronous_callback_slot(primitive, index, call.arguments.len()) {
                 self.layer(file, call.span, helper_calls)
@@ -221,12 +256,19 @@ impl<'l, 'a> Walk<'l, 'a> {
         call: &solid_facts::ast::CallFact,
     ) -> bool {
         self.instance_of(file, call.callee) == Some(self.flush_instance)
-            && self
-                .lookup
-                .resolved_callee_call(file, call.callee)
-                .and_then(|resolved| resolved.declaration.as_ref())
-                .and_then(|declaration| package_root(declaration.location.path.as_ref()))
-                .is_some_and(|root| root == self.package_root)
+            // ADR 0483: in the owner-preserving walk the creating call and the
+            // effect may be declared in different files of one installation
+            // (rc.17's `createMemo` is `solid-js`'s own overload object, its
+            // `createEffect` is `typeof` signals'); both imports loading the
+            // same installed `solid-js` copy is what makes them share the
+            // signals copy, and with it the marker and the owner.
+            && (self.owner_preserving
+                || self
+                    .lookup
+                    .resolved_callee_call(file, call.callee)
+                    .and_then(|resolved| resolved.declaration.as_ref())
+                    .and_then(|declaration| package_root(declaration.location.path.as_ref()))
+                    .is_some_and(|root| root == self.package_root))
     }
 
     /// The installed `solid-js` the file that imports the function `callee`

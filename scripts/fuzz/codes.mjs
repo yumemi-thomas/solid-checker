@@ -58,7 +58,7 @@ export const codePolicy = {
   DYNAMIC_STATIC_PROMISE: claimed(["static-dynamic-async-source"], "error"),
 
   // Defects no rule claims.
-  PRIMITIVE_IN_EFFECT_CALLBACK: unclaimed("error"),
+  PRIMITIVE_IN_EFFECT_CALLBACK: claimed(["primitive-in-effect-callback"], "error"),
   RUN_WITH_DISPOSED_OWNER: unclaimed("warn", "decided not to build: docs/open-work.md, `runWithOwner` with a disposed owner"),
   ASYNC_STORE_SETTER: unclaimed("error"),
   UNCOMMITTED_INPUT_OVERWRITTEN: unclaimed("warn", "decided not to build: docs/open-work.md, `UNCOMMITTED_INPUT_OVERWRITTEN`"),

@@ -13,7 +13,7 @@ describe("the misuse spec", () => {
   it("covers every claimed code of the policy table once, and the unclaimed defects that have a template", () => {
     const claimed = Object.entries(codePolicy).filter(([, policy]) => policy.disposition === "defect-claimed").map(([code]) => code);
     expect(MISUSE_CODES.filter((code) => policyOf(code).disposition === "defect-claimed").sort()).toEqual([...claimed].sort());
-    expect(MISUSE_CODES.filter((code) => policyOf(code).disposition === "defect-unclaimed").sort()).toEqual(["ASYNC_STORE_SETTER", "PRIMITIVE_IN_EFFECT_CALLBACK"]);
+    expect(MISUSE_CODES.filter((code) => policyOf(code).disposition === "defect-unclaimed").sort()).toEqual(["ASYNC_STORE_SETTER"]);
     expect(Object.keys(codeRules).filter((code) => policyOf(code).disposition === "defect-claimed" && !SPEC[code])).toEqual([]);
   });
   it("gives every code with no template the reason the typings reject it", () => {

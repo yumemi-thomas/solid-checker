@@ -1016,6 +1016,15 @@
       "code": "import { createEffect, createRoot, createSignal, flush } from \"solid-js\";\nexport const dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  createEffect(value, () => {\n    flush();\n  });\n  return dispose;\n});\n"
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "sourceExtension": "ts",
+      "why": "`EffectFunction` is `(v, p?) => (() => void) | void` and `createMemo` takes any compute, so creating a memo in a createEffect apply type-checks; the claim is the runtime's: the apply runs with no owner, so rc.17's dev build throws PRIMITIVE_IN_EFFECT_CALLBACK (`assertNotInEffectCallback`), which no type expresses.",
+      "code": "import { createEffect, createMemo, createRoot, createSignal } from \"solid-js\";\nexport const dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  createEffect(value, (v) => {\n    createMemo(() => v * 2);\n  });\n  return dispose;\n});\n"
+    },
+    {
       "rule": "flush-in-effect-callback",
       "dialect": "v2",
       "expect": "silent",
