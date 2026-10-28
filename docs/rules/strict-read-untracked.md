@@ -213,6 +213,14 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   that may run before the alias's declarator throws there and is
   uncertifiable. A `let`, conditional, parameter, imported or exported alias is
   not followed.
+- **A read through layers that run in place is placed where they run (ADR 0469).**
+  A read in an IIFE, an inline `forEach` callback or a helper that calls its
+  callback, inside a `createRoot` or `runWithOwner` body or an effect apply, is
+  read as one written at the outermost layer's call: a violation where that
+  is. An await on every path before it makes it legal, a possible await or a
+  site in a layer's parameter list uncertifiable; a primitive's callback, a
+  stored or handed-on function, a fresh stack or a layer called inside JSX
+  ends the climb.
 - **An effect apply reading an async source stays here (ADR 0467).** A run
   that meets the source pending throws `PENDING_ASYNC_UNTRACKED_READ` instead
   of the warning; when the apply first runs against the source's settling is

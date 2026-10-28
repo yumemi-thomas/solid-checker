@@ -334,6 +334,33 @@ pub(super) fn semantic_role_before_awaits(
         return role;
     }
     if allowed.iter().any(|region| region.contains(span)) {
+        // ADR 0469: a read in a layer that runs in place (an IIFE, a
+        // `forEach` callback, a helper's callback) runs on the stack of the
+        // layer's call, so it is placed as a read written at that call: in a
+        // created root's body or an effect apply, where the strict-read window
+        // is open. The writes take the same climb (`detached_in_place`). A
+        // layer past an await, or a site in a layer's parameter list, has no
+        // proven run there: a reporting role there is unplaced.
+        if !classifying.contains(&write_classification_marker())
+            && let Some(climb) = super::write_roles::climb_in_place_layers(file, span, lookup)
+        {
+            let role = semantic_execution_role_within(
+                file,
+                climb.at,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                classifying,
+            );
+            return match climb.suspended {
+                _ if !role.reports_untracked_read() => role,
+                Some(true) => ExecutionRole::Unreported,
+                Some(false) => ExecutionRole::Unknown,
+                None if climb.in_list => ExecutionRole::Unknown,
+                None => role,
+            };
+        }
         return ExecutionRole::DeferredCallback;
     }
     if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, dialect) {

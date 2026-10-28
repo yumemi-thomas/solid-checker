@@ -1846,6 +1846,76 @@ pub(super) fn layer_run(
     }
 }
 
+/// Where a site runs once the function layers around it that run in place
+/// ([`layer_run`]) are crossed (ADR 0469).
+pub(super) struct InPlaceClimb {
+    /// The call of the outermost layer crossed: the site runs on its stack.
+    pub(super) at: Span,
+    /// A layer holds the climbed site in its parameter list (ADR 0454): it
+    /// runs only when its call omits the argument.
+    pub(super) in_list: bool,
+    /// A helper on the way also hands its callback on or keeps it
+    /// ([`LayerRun::InPlaceAmongOthers`]): one run is in place.
+    pub(super) among_others: bool,
+    /// A site on the way follows an await in its layer: on every path
+    /// (`Some(true)`), or possibly (`Some(false)`).
+    pub(super) suspended: Option<bool>,
+}
+
+/// Climbs from `span` through the function layers that run in place: an IIFE,
+/// an inline standard-library callback, a helper's callback it calls in its own
+/// body ([`layer_run`], the walk the write roles take). Stops at the first
+/// function that is not such a layer (a primitive's callback, a stored or
+/// handed-on function, a generator); `None` when `span` is in none.
+pub(super) fn climb_in_place_layers(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<InPlaceClimb> {
+    let mut climb = InPlaceClimb {
+        at: span,
+        in_list: false,
+        among_others: false,
+        suspended: None,
+    };
+    // Bounded: each step moves to the call that holds the previous function.
+    for _ in 0..16 {
+        let Some(function) = crate::owners::owning_function(&file.ast, climb.at) else {
+            break;
+        };
+        if function.generator {
+            break;
+        }
+        let call = match layer_run(file, function, lookup) {
+            LayerRun::InPlace(call) => call,
+            LayerRun::InPlaceAmongOthers(call) => {
+                climb.among_others = true;
+                call
+            }
+            LayerRun::FreshStack | LayerRun::Elsewhere => break,
+        };
+        // A layer called in a JSX expression runs where the compiler places
+        // that expression (an insert's tracked computation), which the
+        // compiler roles decide, not the code around the element.
+        if file.ast.jsx_containing(call).next().is_some() {
+            break;
+        }
+        climb.in_list |= !function.body.contains(climb.at);
+        if follows_unconditional_await(file, climb.at)
+            || follows_dominating_await(file, climb.at)
+            || follows_try_head_await(file, climb.at, lookup)
+        {
+            climb.suspended = Some(true);
+        } else if climb.suspended.is_none()
+            && (follows_any_suspension(file, climb.at) || may_follow_own_await(file, climb.at))
+        {
+            climb.suspended = Some(false);
+        }
+        climb.at = call;
+    }
+    (climb.at != span).then_some(climb)
+}
+
 /// ADR 0466: a primitive call that names a function as its callback by its
 /// binding (`createRoot(init)`, `untrack(write)`, `runWithOwner(null, run)`),
 /// which runs it as it runs an inline callback in the same position.
