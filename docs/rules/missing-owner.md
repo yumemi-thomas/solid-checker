@@ -197,7 +197,10 @@ Withheld, and so uncertain or silent: a generator (calling it runs no body), and
 a call placed under another owner, which is an instance field initializer (it
 runs at construction) or JSX in the owner's own body (a child or an attribute).
 The code after an async IIFE's first `await` is a continuation with no owner
-(ADR 0333), as for any async function. An operation in a literal that a
+(ADR 0333), as for any async function, and so is an operation in function layers
+that run in place there (an IIFE, a project helper's callback, a function bound
+to a name and called once) when the outermost layer's call follows an `await` on
+every path (ADR 0493). An operation in a literal that a
 synchronous guard invokes is guarded: `if (getOwner()) (() => { … })()` runs
 only under an owner, so it is not reported; the guard must be Solid's
 `getOwner`, and no `await` may separate it from the operation (ADR 0347).

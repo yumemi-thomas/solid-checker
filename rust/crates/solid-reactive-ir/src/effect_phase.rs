@@ -76,6 +76,11 @@ pub(crate) struct EffectPhaseOrigin {
     pub(crate) helper_calls: usize,
     /// The apply callback argument the walk ended at.
     pub(crate) apply: Span,
+    /// ADR 0495: a call written before the walk's path in a layer it crossed
+    /// (the apply, an IIFE, a named function, a helper's callback) or in a
+    /// helper's own body before it calls its parameter, so one that may run
+    /// before the span does.
+    pub(crate) earlier_call: bool,
 }
 
 /// The effect call whose apply callback provably runs the code at `span`
@@ -122,6 +127,7 @@ fn walk_to_effect_phase(
         files: std::cell::OnceCell::new(),
         visiting: HashSet::default(),
         budget: BUDGET,
+        earlier: false,
     };
     // The instance the flush call's own import loads, followed through
     // re-exports to the file that imports the package; unresolved is no proof.
@@ -147,6 +153,8 @@ struct Walk<'l, 'a> {
     /// Functions the walk is inside through a call, so a call cycle ends.
     visiting: HashSet<(String, Span)>,
     budget: usize,
+    /// A call that may run before the path ([`EffectPhaseOrigin::earlier_call`]).
+    earlier: bool,
 }
 
 impl<'l, 'a> Walk<'l, 'a> {
@@ -175,6 +183,20 @@ impl<'l, 'a> Walk<'l, 'a> {
         if literal.r#async && !runs_before_first_suspension(file, literal, span) {
             return None;
         }
+        // A call inside a function nested in this layer runs only when that
+        // function is called, and that call is this layer's own.
+        let own = |at: Span| {
+            literal.body.contains(at)
+                && containing_ast_function(&file.ast, at)
+                    .is_some_and(|function| function.span == literal.span)
+        };
+        self.earlier |= file.ast.calls.iter().any(|other| {
+            own(other.span) && other.span.end <= span.start && !other.span.contains(span)
+        }) || file
+            .ast
+            .tagged_template_tags
+            .iter()
+            .any(|tag| own(*tag) && tag.end <= span.start);
         if let Some((call, index)) = argument_position(file, literal) {
             if let Some(origin) = self.argument_layer(file, call, index, helper_calls) {
                 return Some(origin);
@@ -186,6 +208,12 @@ impl<'l, 'a> Walk<'l, 'a> {
             // an unknown callee's argument is not such a layer.
             return match crate::execution_role::layer_run(file, literal, self.lookup) {
                 crate::execution_role::LayerRun::InPlace(at) if at == call.span => {
+                    self.earlier |= !crate::execution_role::parameter_called_first(
+                        file,
+                        call,
+                        index,
+                        self.lookup,
+                    );
                     self.layer(file, at, helper_calls + 1)
                 }
                 _ => None,
@@ -224,6 +252,7 @@ impl<'l, 'a> Walk<'l, 'a> {
                         path: file.path.to_string(),
                         helper_calls,
                         apply: call.arguments[index].span,
+                        earlier_call: self.earlier,
                     });
             }
             if self.owner_preserving && primitive != solid_dialect::Primitive::Untrack {

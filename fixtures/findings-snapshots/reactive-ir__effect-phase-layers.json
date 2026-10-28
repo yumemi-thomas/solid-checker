@@ -47,18 +47,18 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
-      "start": 1088,
-      "end": 1100,
+      "start": 1152,
+      "end": 1164,
       "fixes": 0
     },
     {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
-      "kind": "uncertifiable",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
-      "start": 1152,
-      "end": 1162,
+      "start": 1216,
+      "end": 1226,
       "fixes": 0
     },
     {
@@ -67,8 +67,48 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
-      "start": 1336,
-      "end": 1348,
+      "start": 1400,
+      "end": 1412,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 1800,
+      "end": 1812,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 1868,
+      "end": 1878,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 2097,
+      "end": 2109,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 2177,
+      "end": 2187,
       "fixes": 0
     }
   ]

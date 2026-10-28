@@ -145,8 +145,18 @@ pub(super) fn emit_file(
                     .is_some_and(|argument| argument.span == candidate.operation_span)
                     && starts.contains(&u64::from(call.callee.start))
             });
+        // ADR 0493: an operation in function layers that run in place (an
+        // IIFE, a helper's callback, a function bound to a name called once;
+        // ADR 0469's climb) runs on the stack of the outermost layer's call,
+        // so where that call follows an await on every path, so does it.
+        let climbed_after_await = || {
+            crate::execution_role::climb_in_place_layers(file, candidate.operation_span, lookup)
+                .is_some_and(|climb| !climb.in_list && climb.suspended == Some(true))
+        };
         let after_await = settled_after_await
-            || (continuation_placed && starts.contains(&u64::from(candidate.operation_span.start)));
+            || (continuation_placed
+                && (starts.contains(&u64::from(candidate.operation_span.start))
+                    || climbed_after_await()));
         let possible_continuation = (!after_await && continuation_placed)
             .then(|| possible_await_continuation_context(file, candidate.operation_span, context))
             .flatten();

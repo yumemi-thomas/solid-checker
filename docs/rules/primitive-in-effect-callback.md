@@ -36,7 +36,9 @@ in dependency code (docs/open-work.md).
 The marker is one global: an effect run synchronously inside the callback
 (a render effect created under `runWithOwner`) lowers it when it returns. So the
 claim is a violation only when no call runs in the apply before the creating
-call (or tagged template); after one, or through a helper, it is uncertifiable. Only
+call (or tagged template): in the apply and in each layer the walk crosses, and
+in a helper's own body before it calls its callback (ADR 0495); after one it is
+uncertifiable. Only
 rc.17's bytes were read: other releases are not claimed.
 
 ## Examples

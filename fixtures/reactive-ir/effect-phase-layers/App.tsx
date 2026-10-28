@@ -43,7 +43,8 @@ export function FlushThroughHelper() {
   return null;
 }
 
-// SC6002 through a layer: uncertifiable (an earlier call may lower the marker).
+// SC6002 through a layer: a violation (ADR 0495): `runNow` calls its callback
+// before anything else, so no earlier call can lower the marker.
 export function MemoThroughHelper() {
   const [count] = createSignal(0);
   createEffect(
@@ -62,6 +63,41 @@ export function FlushKept() {
     () => count(),
     () => {
       keep(() => flush());
+    },
+  );
+  return null;
+}
+
+function logThenRun(cb: () => unknown) {
+  console.log("run");
+  cb();
+}
+
+// SC6002 uncertifiable (ADR 0495): the helper calls something before its
+// callback, which may run an effect synchronously and lower the marker.
+export function MemoAfterHelperCall() {
+  const [count] = createSignal(0);
+  createEffect(
+    () => count(),
+    () => {
+      logThenRun(() => createMemo(() => 1));
+    },
+  );
+  return null;
+}
+
+// SC6002 uncertifiable (ADR 0495): a call runs between the closure's
+// declaration and its call.
+export function MemoAfterEarlierCall() {
+  const [count] = createSignal(0);
+  createEffect(
+    () => count(),
+    () => {
+      const make = () => {
+        createMemo(() => 1);
+      };
+      console.log("before");
+      make();
     },
   );
   return null;

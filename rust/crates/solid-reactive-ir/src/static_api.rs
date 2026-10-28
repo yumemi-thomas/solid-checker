@@ -398,18 +398,20 @@ impl StaticApiContext<'_> {
                     self.lookup,
                 )
             {
-                // A tagged template runs its tag function too.
-                let earlier_call = origin.helper_calls > 0
-                    || file.ast.calls.iter().any(|other| {
-                        origin.apply.contains(other.span)
-                            && other.span.end <= call.span.start
-                            && !other.span.contains(call.span)
-                    })
-                    || file
-                        .ast
-                        .tagged_template_tags
-                        .iter()
-                        .any(|tag| origin.apply.contains(*tag) && tag.end <= call.span.start);
+                // ADR 0495: each layer the walk crossed, and each helper's own
+                // body before it calls its parameter (a tagged template runs
+                // its tag function too). Within the apply's own text the
+                // positional test stands as before.
+                let earlier_call =
+                    origin.earlier_call
+                        || (origin.helper_calls == 0
+                            && (file.ast.calls.iter().any(|other| {
+                                origin.apply.contains(other.span)
+                                    && other.span.end <= call.span.start
+                                    && !other.span.contains(call.span)
+                            }) || file.ast.tagged_template_tags.iter().any(|tag| {
+                                origin.apply.contains(*tag) && tag.end <= call.span.start
+                            })));
                 let reached = match origin.helper_calls {
                     0 => "directly in the apply callback of a createEffect".to_owned(),
                     1 => format!(
@@ -626,14 +628,22 @@ fn resolve_tracked_scope(
     allowed: &[Span],
     context: &StaticApiContext<'_>,
 ) -> Option<String> {
+    // ADR 0494: a call in function layers that run in place inside the
+    // callback (ADR 0469's climb, as ADR 0478 reads it) runs on the stack of
+    // the outermost layer's call, with the callback's observer active; not in
+    // a parameter list, not after an await.
+    let at = match crate::execution_role::climb_in_place_layers(file, call.span, context.lookup) {
+        Some(climb) if !climb.in_list && climb.suspended.is_none() => climb.at,
+        _ => call.span,
+    };
     if let Some((container, index)) =
         file.ast
-            .arguments_containing(call.span)
+            .arguments_containing(at)
             .find(|(container, index)| {
                 crate::execution_role::direct_callback_runs(
                     file,
                     container.arguments[*index].span,
-                    call.span,
+                    at,
                 )
             })
     {
