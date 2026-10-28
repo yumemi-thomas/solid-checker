@@ -27,7 +27,12 @@ Exactly resolved project helpers are followed transitively: a function or
 method declared in `C` of a `const` bound to `new C(...)`. Conditional,
 aliased, wrapper-built, package, or otherwise unresolved callbacks produce
 `reactive-dispatch-unresolved` instead of being guessed. A nested function
-merely created by the callback executes outside the leaf extent.
+merely created by the callback executes outside the leaf extent, except a
+callback a project helper calls in its own body (`run(() => createMemo(…))`,
+through further such helpers, not in a parameter list or after an `await`):
+it runs during the helper call, so an operation written in it is reported
+where it is written (ADR 0492). A helper that defers, stores or hands on its
+callback is not followed.
 
 A standard-library call in that extent is judged by its exact declaration,
 optional (`el?.scrollIntoView()`) or not (ADR 0439). One that dispatches an
