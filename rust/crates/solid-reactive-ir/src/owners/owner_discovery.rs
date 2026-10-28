@@ -123,18 +123,75 @@ pub(crate) fn discover_owner_file(
                     .map(OwnerTarget::Symbol)
             });
         let in_list = list_site(call.span);
+        let source = owner.filter(|_| !in_list).map(|span| OwnerSource {
+            path: file.path.to_string(),
+            span,
+        });
+        let kind = if in_list {
+            OwnerEdgeKind::MayBeUnowned
+        } else {
+            call_owner_edge(file, call.callee)
+        };
+        // ADR 0468: an edge to a function the call may run, not one it does:
+        // the source's owner without its proof ([`OwnerEdgeKind::MayRun`]).
+        // In a parameter list or after the function's own `await` the owner
+        // is not the source's, so it is the bare uncertain bit there.
+        let may_run = || {
+            if kind == OwnerEdgeKind::Preserve {
+                (source.clone(), OwnerEdgeKind::MayRun)
+            } else {
+                (None, OwnerEdgeKind::MayBeUnowned)
+            }
+        };
+        // ADR 0468: a comma, conditional or logical callee (`(c && f)()`)
+        // names no target, so it had no edge, and a function it may evaluate
+        // to no owner context: proof that its body never runs. Each identifier
+        // or object member the callee may evaluate to may run here
+        // (`(0, o.m)()` calls `o.m` without its receiver).
+        if target.is_none() {
+            for operand in file.ast.composite_callee_operands(call.callee) {
+                let target = lookup
+                    .object_member_function(file, operand)
+                    .map(|(file, function)| {
+                        OwnerTarget::Function(file.path.to_string(), function.span)
+                    })
+                    .or_else(|| {
+                        crate::owners::is_identifier_span(file, operand)
+                            .then(|| entities.get(&location(file.path.shared(), operand)))
+                            .flatten()
+                            .cloned()
+                            .map(OwnerTarget::Symbol)
+                    });
+                if let Some(target) = target {
+                    let (source, kind) = may_run();
+                    edges.push(SymbolicOwnerEdge {
+                        source,
+                        target,
+                        kind,
+                    });
+                }
+            }
+        }
+        // ADR 0468: a binding written anywhere may hold another value at this
+        // call (`let k = () => …; k = other; k()`), and a mention that may run
+        // before its binding's declarator throws instead of calling (ADR 0339),
+        // so the function the binding was declared with may run here.
+        let unproven_callee = matches!(target, Some(OwnerTarget::Symbol(_)))
+            && (lookup.may_precede_initialization(file.path.as_str(), call.callee)
+                || file
+                    .ast
+                    .reference_declaration(file.ast.peel_ts_sugar_span(call.callee))
+                    .is_some_and(|declaration| crate::indexes::binding_written(file, declaration)));
         if let Some(target) = target {
+            let (source, kind) = if unproven_callee {
+                may_run()
+            } else {
+                (source.clone(), kind)
+            };
             edges.push(SymbolicOwnerEdge {
-                source: owner.filter(|_| !in_list).map(|span| OwnerSource {
-                    path: file.path.to_string(),
-                    span,
-                }),
+                source,
                 target,
-                kind: if in_list {
-                    OwnerEdgeKind::MayBeUnowned
-                } else {
-                    call_owner_edge(file, call.callee)
-                },
+                kind,
             });
         }
         // ADR 0347: an invoked function literal runs in the call, under the

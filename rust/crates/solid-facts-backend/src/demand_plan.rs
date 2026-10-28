@@ -1183,6 +1183,26 @@ fn plan_call_demands(
             demands.push(outer);
         }
         demands.push(planned);
+        // ADR 0468: a TypeScript wrapper keeps the called value (`setX!(1)`,
+        // `(setX as any)(1)`), and the lookup names it at the peeled
+        // identifier, so the identifier's own symbol is demanded there.
+        let peeled = file.ast.peel_ts_sugar_span(call.callee);
+        if peeled != call.callee && file.ast.reference_declaration(peeled).is_some() {
+            demands.push(demand(file_location(path, peeled)).symbol(false));
+        }
+        // ADR 0468: a comma, conditional or logical callee names no value,
+        // and each identifier it may evaluate to is a call target to account
+        // for, so its symbol is demanded, and a member's receiver's symbol
+        // (`(0, o.m)()`), which names the object whose member it holds.
+        for operand in file.ast.composite_callee_operands(call.callee) {
+            let operand = file
+                .ast
+                .member_at(operand)
+                .map_or(operand, |member| file.ast.peel_ts_sugar_span(member.object));
+            if file.ast.reference_declaration(operand).is_some() {
+                demands.push(demand(file_location(path, operand)).symbol(false));
+            }
+        }
         if property != callee {
             let mut member = demand(property).symbol(false);
             member.type_descriptor = call.arguments.is_empty();

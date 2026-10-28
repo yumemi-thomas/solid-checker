@@ -318,13 +318,26 @@ fn discover_reachability_file(
         // binding's declarator reaches nothing; the same holds for each edge
         // below that names a function by a mention.
         let withheld = |span: Span| lookup.may_precede_initialization(file.path.as_str(), span);
-        if let Some(symbol) = entities.get(&callee)
+        if crate::owners::callee_entity_names_value(file, call.callee)
+            && let Some(symbol) = entities.get(&callee)
             && !withheld(call.callee)
         {
             edges.push(ReachabilityEdge {
                 owner,
                 target: ReachabilityTarget::Symbol(symbol.clone()),
             });
+        }
+        // ADR 0468: each identifier a comma, conditional or logical callee
+        // may evaluate to may run here.
+        for reference in file.ast.composite_callee_references(call.callee) {
+            if let Some(symbol) = entities.get(&location(file.path.shared(), reference))
+                && !withheld(reference)
+            {
+                edges.push(ReachabilityEdge {
+                    owner,
+                    target: ReachabilityTarget::Symbol(symbol.clone()),
+                });
+            }
         }
         let primitive = crate::call_primitive_name_cached(
             lookup,

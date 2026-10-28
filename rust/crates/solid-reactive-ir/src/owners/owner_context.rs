@@ -227,6 +227,7 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
         }
         OwnerEdgeKind::RefApplied => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
         OwnerEdgeKind::MayBeUnowned => OWNER_CONTEXT_UNOWNED,
+        OwnerEdgeKind::MayRun => source & !OWNER_CONTEXT_PROVEN_UNOWNED,
     }
 }
 
@@ -858,6 +859,19 @@ pub(crate) fn is_identifier_span(file: &solid_facts::FileFacts, span: Span) -> b
         .next()
         .is_some_and(|c| c.is_alphabetic() || c == '_' || c == '$')
         && chars.all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+}
+
+/// ADR 0468: whether the entity at a call's callee, which names the symbol at
+/// its first token, can name the value the call runs. It can for an
+/// identifier, a member (whose leading token is its receiver: callers tell
+/// the two apart) and a call (`make()()`: the inner call's callee runs too).
+/// For any other callee the leading token is some operand: `(f && h)()` and
+/// `(x = h)()` call `h`, not `f` or `x`.
+pub(crate) fn callee_entity_names_value(file: &solid_facts::FileFacts, callee: Span) -> bool {
+    let callee = file.ast.peel_ts_sugar_span(callee);
+    is_identifier_span(file, callee)
+        || file.ast.member_at(callee).is_some()
+        || file.ast.call_at(callee).is_some()
 }
 
 /// The owner edges of callbacks handed to a reviewed fresh-stack host

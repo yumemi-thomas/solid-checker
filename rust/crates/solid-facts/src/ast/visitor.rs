@@ -468,11 +468,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         {
             self.lazy_import_glob_callees.push(span(member.span));
         }
-        let callee_span = call.callee.span();
+        // ADR 0468: `(void 0, f)()` calls `f` as `f()` does.
+        let invoked = invoked_identifier(&call.callee);
+        let callee_span = invoked.map_or_else(|| call.callee.span(), |identifier| identifier.span);
         self.calls.push(CallFact {
             span: span(call.span),
             callee: span(callee_span),
-            direct_callee: matches!(call.callee, Expression::Identifier(_)),
+            direct_callee: invoked.is_some(),
             type_arguments: call.type_arguments.is_some(),
             arguments: call
                 .arguments
@@ -498,11 +500,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             self.straight_line_constructs.push(span(expression.span));
         }
         self.record_completion_site(expression.span);
-        let callee_span = expression.callee.span();
+        let invoked = invoked_identifier(&expression.callee);
+        let callee_span =
+            invoked.map_or_else(|| expression.callee.span(), |identifier| identifier.span);
         self.calls.push(CallFact {
             span: span(expression.span),
             callee: span(callee_span),
-            direct_callee: matches!(expression.callee, Expression::Identifier(_)),
+            direct_callee: invoked.is_some(),
             type_arguments: expression.type_arguments.is_some(),
             arguments: expression
                 .arguments

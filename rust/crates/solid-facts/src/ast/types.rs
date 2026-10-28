@@ -1919,6 +1919,65 @@ impl AstFacts {
         span
     }
 
+    /// ADR 0468: the operands a callee may evaluate to when it is a comma
+    /// (`(g(), f)()`), conditional (`(c ? f : h)()`) or logical (`(c && f)()`)
+    /// expression, through transparent wrappers. Its value is one of them: a
+    /// comma's last operand, either branch of a conditional, either side of
+    /// `||` or `??` and the right of `&&` (its left is the value only when
+    /// falsy, and no function is). Each is followed through the same forms and
+    /// answered as written otherwise: an identifier, a member, a call, any
+    /// other expression. Empty for every other callee: an identifier, a
+    /// member, a call or a function names its value through other facts.
+    #[must_use]
+    pub fn composite_callee_operands(&self, callee: Span) -> Vec<Span> {
+        let sequence_tail = |span: Span| {
+            self.sequences
+                .iter()
+                .find(|sequence| sequence.span == span)
+                .map(|sequence| sequence.tail)
+        };
+        let root = self.peel_ts_sugar_span(callee);
+        if sequence_tail(root).is_none()
+            && self.conditional_at(root).is_none()
+            && self.logical_at(root).is_none()
+        {
+            return Vec::new();
+        }
+        let mut pending = vec![root];
+        let mut operands = Vec::new();
+        while let Some(span) = pending.pop() {
+            let span = self.peel_ts_sugar_span(span);
+            if let Some(tail) = sequence_tail(span) {
+                pending.push(tail);
+            } else if let Some(conditional) = self.conditional_at(span) {
+                pending.extend([conditional.consequent, conditional.alternate]);
+            } else if let Some(logical) = self.logical_at(span) {
+                if logical.operator != LogicalOperatorKind::And {
+                    pending.push(logical.left);
+                }
+                pending.push(logical.right);
+            } else {
+                operands.push(span);
+            }
+        }
+        operands.sort_unstable();
+        operands.dedup();
+        operands
+    }
+
+    /// The operands of [`Self::composite_callee_operands`] that are identifier
+    /// references: each is a value the call may invoke.
+    #[must_use]
+    pub fn composite_callee_references(&self, callee: Span) -> Vec<Span> {
+        let mut operands = self.composite_callee_operands(callee);
+        operands.retain(|span| {
+            self.identifiers
+                .binary_search_by_key(span, |identifier| identifier.span)
+                .is_ok_and(|index| self.identifiers[index].role == IdentifierRole::Reference)
+        });
+        operands
+    }
+
     /// Whether `span` lies inside a `namespace`, `module`, or `declare global`
     /// body — see [`AstFacts::module_blocks`].
     #[must_use]

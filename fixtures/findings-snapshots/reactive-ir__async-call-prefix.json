@@ -284,6 +284,16 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",
+      "start": 6944,
+      "end": 6971,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",

@@ -1,0 +1,295 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 305,
+      "end": 314,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 452,
+      "end": 463,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 594,
+      "end": 611,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 745,
+      "end": 754,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 887,
+      "end": 895,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 1030,
+      "end": 1068,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 1206,
+      "end": 1224,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 1328,
+      "end": 1333,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 1458,
+      "end": 1471,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 1599,
+      "end": 1604,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 1735,
+      "end": 1748,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 1853,
+      "end": 1862,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 2002,
+      "end": 2011,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 2145,
+      "end": 2154,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 2285,
+      "end": 2294,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 2440,
+      "end": 2449,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 2604,
+      "end": 2613,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 2715,
+      "end": 2728,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 2978,
+      "end": 2985,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 3178,
+      "end": 3185,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 3380,
+      "end": 3387,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 4706,
+      "end": 4718,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 4931,
+      "end": 4949,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 5125,
+      "end": 5137,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 5259,
+      "end": 5268,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 5408,
+      "end": 5417,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 5557,
+      "end": 5566,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 5748,
+      "end": 5757,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 6646,
+      "end": 6655,
+      "fixes": 0
+    }
+  ]
+}

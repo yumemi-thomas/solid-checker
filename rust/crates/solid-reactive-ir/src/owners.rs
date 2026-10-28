@@ -361,6 +361,13 @@ pub(crate) enum OwnerEdgeKind {
     /// The callback may run with no owner, and nothing proves it: the bare
     /// open-world unowned bit, a caller obligation that stays uncertifiable.
     MayBeUnowned,
+    /// ADR 0468: the call may run the target, under the source's owner, and
+    /// nothing proves that it does: a callee binding that is written, or that
+    /// is mentioned where it may not be initialized yet, and a value a comma,
+    /// conditional or logical callee may evaluate to. The source's context
+    /// without the proven unowned bit: owned where the source is, never a
+    /// proof of an unowned run.
+    MayRun,
     /// A function a ref expression calls while the expression evaluates
     /// (ADR 0345). It runs under its enclosing function's owner, as
     /// [`OwnerEdgeKind::Preserve`] does, and a source with no owner context

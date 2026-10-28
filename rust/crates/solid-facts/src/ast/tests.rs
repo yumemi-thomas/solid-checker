@@ -3222,5 +3222,93 @@ fn reads_typescript_directive_comments_only_from_comments() {
     assert!(directive("/**\n * @ts-ignore\n */\nexport const a = 1;\n"));
     assert!(!directive("export const a = \"@ts-nocheck\";\n"));
     assert!(!directive("export const a = `// @ts-ignore`;\n"));
-    assert!(!directive("// see the @ts-nocheck note\nexport const a = 1;\n"));
+    assert!(!directive(
+        "// see the @ts-nocheck note\nexport const a = 1;\n"
+    ));
+}
+
+/// ADR 0468: a callee that spells an identifier behind inert comma operands
+/// is recorded as that identifier, a direct callee (the parser drops
+/// parentheses, so `(f)()` already was); a member after a comma, an effectful
+/// operand, `eval` after a comma and a TypeScript wrapper keep the callee as
+/// written.
+#[test]
+fn records_the_invoked_identifier_of_a_callee_spelling() {
+    let source = "declare const f: () => void;\n\
+                  declare const o: { m(): void };\n\
+                  declare function g(): void;\n\
+                  f(); (f)(); ((f))(); (void 0, f)(); (0, f)(); (0, void 0, (f))(); f?.(); new (f as any)();\n\
+                  (0, o.m)(); (o.m)(); (g(), f)(); (0, eval)(\"1\"); (f as any)(); f!();\n";
+    let facts = extract("/project/App.ts", source).unwrap();
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let callees = facts
+        .calls
+        .iter()
+        .filter(|call| text(call.span) != "g()")
+        .map(|call| (text(call.callee), call.direct_callee))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        callees,
+        vec![
+            ("f", true),
+            ("f", true),
+            ("f", true),
+            ("f", true),
+            ("f", true),
+            ("f", true),
+            ("f", true),
+            ("f as any", false),
+            ("0, o.m", false),
+            ("o.m", false),
+            ("g(), f", false),
+            ("0, eval", false),
+            ("f as any", false),
+            ("f!", false),
+        ]
+    );
+}
+
+/// ADR 0468: the operands a comma, conditional or logical callee may evaluate
+/// to, and the identifier references among them; `&&`'s left is never one.
+#[test]
+fn lists_the_operands_a_composite_callee_may_evaluate_to() {
+    let source = "declare const c: boolean;\n\
+                  declare const f: () => void, h: () => void;\n\
+                  declare const o: { m(): void };\n\
+                  declare function g(): () => void;\n\
+                  (c ? f : h)(); (f && h)(); (f || h)(); (f ?? o.m)(); (g(), (f as any))(); (c ? g() : f)(); f(); (f)();\n";
+    let facts = extract("/project/App.ts", source).unwrap();
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let answers = facts
+        .calls
+        .iter()
+        .filter(|call| text(call.span) != "g()")
+        .map(|call| {
+            (
+                facts
+                    .composite_callee_operands(call.callee)
+                    .into_iter()
+                    .map(text)
+                    .collect::<Vec<_>>(),
+                facts
+                    .composite_callee_references(call.callee)
+                    .into_iter()
+                    .map(text)
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        answers,
+        vec![
+            (vec!["f", "h"], vec!["f", "h"]),
+            (vec!["h"], vec!["h"]),
+            (vec!["f", "h"], vec!["f", "h"]),
+            (vec!["f", "o.m"], vec!["f"]),
+            (vec!["f"], vec!["f"]),
+            (vec!["g()", "f"], vec!["f"]),
+            (vec![], vec![]),
+            (vec![], vec![]),
+        ]
+    );
 }

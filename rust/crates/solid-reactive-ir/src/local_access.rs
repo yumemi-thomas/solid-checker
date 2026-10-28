@@ -1370,6 +1370,45 @@ impl LocalAccessContext<'_, '_> {
         result
     }
 
+    /// ADR 0468: a comma, conditional or logical callee (`(c && setX)(1)`)
+    /// resolves to no symbol, so the call has no row; when an identifier it
+    /// may evaluate to is a local setter, action or accessor, the call may
+    /// write, act or read here, and an absent row would say it does not. The
+    /// call is an obligation instead.
+    fn push_composite_callee_obligation(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        result: &mut LocalAccessResult,
+    ) {
+        let reactive = file
+            .ast
+            .composite_callee_references(call.callee)
+            .into_iter()
+            .filter_map(|reference| self.lookup.callee_symbol(file, reference))
+            .any(|symbol| {
+                self.setters.contains_key(symbol)
+                    || self.actions.contains_key(symbol)
+                    || self.accessors.contains_key(symbol)
+            });
+        if !reactive {
+            return;
+        }
+        result.dispatch_obligations.push(crate::StaticDefect {
+            kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                callee: file
+                    .source_text(call.callee)
+                    .unwrap_or("this callee")
+                    .to_owned(),
+                member: None,
+            },
+            location: location(file.path.shared(), call.callee),
+            analysis_context: "composite-callee-unresolved".to_owned(),
+            fixes: vec![],
+            uncertain: true,
+        });
+    }
+
     fn discover_call(
         &self,
         file: &solid_facts::FileFacts,
@@ -1380,6 +1419,7 @@ impl LocalAccessContext<'_, '_> {
     ) {
         let callee = location(file.path.shared(), call.callee);
         let Some(symbol) = self.lookup.callee_symbol(file, call.callee) else {
+            self.push_composite_callee_obligation(file, call, result);
             return;
         };
         if inside_known_value_function_argument(file, call.callee, self.lookup) {
