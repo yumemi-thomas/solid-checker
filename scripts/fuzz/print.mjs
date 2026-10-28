@@ -45,6 +45,16 @@ export function nodeLabel(node) {
 }
 const INDENT = "  ";
 
+/** Statement wrappers of the equivalence rewrites: `[prefix, suffix]` of the text they enclose (rewrite.mjs states why each is sound). */
+const WRAPPERS = {
+  block: () => ["{ ", " }"],
+  iife: () => ["(() => { ", " })();"],
+  "if-true": () => ["if (true) { ", " }"],
+  "try-finally": () => ["try { ", " } finally {}"],
+  "outline-arrow": (w) => [`const ${w.name} = () => { `, ` }; ${w.name}();`],
+  "outline-function": (w) => [`function ${w.name}() { `, ` } ${w.name}();`],
+};
+
 /** Node kinds whose print is a call the runtime executes: each is an auto-site (glue) in the twin. */
 export const GLUE_KINDS = ["call", "set", "iife", "iter", "prim", "getOwner"];
 
@@ -224,17 +234,29 @@ function render(program, instrument) {
     const text = entry === null ? inner() : within({ entry, inDefault: false }, inner);
     return `{${hit ? ` ${hit}` : ""}\n${text}\n${ind(depth)}}`;
   }
-  function stmtText(stmt, depth) { return span(stmt, statement(stmt, depth)); }
+  function stmtText(stmt, depth) { return span(stmt, wrapped(stmt, statement(stmt, depth))); }
+  /**
+   * Equivalence rewrites (rewrite.mjs): `stmt.wrap` is a list of wrappers applied inner to outer to the statement's text, each
+   * prefixing its first line and suffixing its last, so a one-line statement stays on one line and a site keeps its line.
+   */
+  function wrapped(stmt, text) {
+    let out = text;
+    for (const w of stmt.wrap ?? []) {
+      const [open, close] = WRAPPERS[w.w](w);
+      out = `${open}${out}${close}`;
+    }
+    return out;
+  }
   function statement(stmt, depth) {
     switch (stmt.k) {
-      case "expr": return counting(stmt.e, () => `${expr(stmt.e, depth)};`);
+      case "expr": return counting(stmt.e, () => `${stmt.extract ? `const ${stmt.extract} = ` : ""}${expr(stmt.e, depth)};`);
       case "decl":
         if (stmt.e.k === "fn" && stmt.e.form === "function") {
           const { head, body } = fnParts(stmt.e, depth, null);
           return `${stmt.e.async ? "async " : ""}function ${stmt.name}${head} ${body}`;
         }
         return counting(stmt.e, () => `${stmt.kw ?? "const"} ${stmt.name} = ${expr(stmt.e, depth)};`);
-      case "return": return counting(stmt.e, () => `return ${expr(stmt.e, depth)};`);
+      case "return": return counting(stmt.e, () => (stmt.extract ? `const ${stmt.extract} = ${expr(stmt.e, depth)}; return ${stmt.extract};` : `return ${expr(stmt.e, depth)};`));
       case "await": return "await Promise.resolve();";
       case "try": return `try ${block(stmt.body, depth)} finally ${block(stmt.fin, depth)}`;
       case "contain": return containText(stmt, depth);
@@ -245,7 +267,7 @@ function render(program, instrument) {
   function expression(e, depth) {
     switch (e.k) {
       case "num": return String(e.n);
-      case "read": return siteCall(e, `${e.sig}()`);
+      case "read": return siteCall(e, viaCall(e.sig, "", e.eqVia));
       case "write": return siteCall(e, writeText(e));
       case "own": return siteCall(e, ownText(e, depth));
       case "use": return siteCall(e, uses.get(e).text);
@@ -269,22 +291,24 @@ function render(program, instrument) {
       default: throw new Error(`cannot print expression ${e.k}`);
     }
   }
+  /** A call written in one of the equivalent call forms (`via`); the same call at run time. */
+  function viaCall(callee, args, via) {
+    switch (via) {
+      case undefined: case null: return `${callee}(${args})`;
+      case "optional": return `${callee}?.(${args})`;
+      case "as": return `(${callee} as typeof ${callee})(${args})`;
+      case "comma": return `(void 0, ${callee})(${args})`;
+      case "and": return `(true && ${callee})(${args})`;
+      case "paren": return `(${callee})(${args})`;
+      default: throw new Error(`unknown call form ${via}`);
+    }
+  }
   /** A callee that is a name or a member chain of names: the forms a `via` can rewrite without changing what is called. */
   const plainCallee = (callee) => callee.k === "ref" || (callee.k === "member" && plainCallee(callee.obj));
   function callText(e, depth) {
     const callee = e.callee.k === "fn" || e.callee.k === "prim" ? `(${expr(e.callee, depth)})` : expr(e.callee, depth);
     const args = e.args.map((a) => expr(a, depth)).join(", ");
-    if (e.via && plainCallee(e.callee)) {
-      switch (e.via) {
-        case "optional": return `${callee}?.(${args})`;
-        case "as": return `(${callee} as typeof ${callee})(${args})`;
-        case "comma": return `(void 0, ${callee})(${args})`;
-        case "and": return `(true && ${callee})(${args})`;
-        case "paren": return `(${callee})(${args})`;
-        default: throw new Error(`unknown call form ${e.via}`);
-      }
-    }
-    return `${callee}(${args})`;
+    return e.via && plainCallee(e.callee) ? viaCall(callee, args, e.via) : `${callee}(${args})`;
   }
   /** An effect's apply: a function literal with the value as its parameter, or a declared name. */
   const applyText = (apply, depth) => (apply.k === "ref" ? apply.name : fnText(apply, depth, { header: "(v)" }));
@@ -329,10 +353,10 @@ function render(program, instrument) {
   function writeText(e) {
     const sig = signals.get(e.sig);
     switch (sig.kind) {
-      case "store": used.add("createStore"); return `${sig.setter}((s) => { s.v = ${e.value}; })`;
-      case "memo": used.add("refresh"); return `refresh(${sig.name})`;
-      case "action": return `${sig.name}()`;
-      default: return `${sig.setter}(${e.value})`;
+      case "store": used.add("createStore"); return viaCall(sig.setter, `(s) => { s.v = ${e.value}; }`, e.eqVia);
+      case "memo": used.add("refresh"); return viaCall("refresh", sig.name, e.eqVia);
+      case "action": return viaCall(sig.name, "", e.eqVia);
+      default: return viaCall(sig.setter, String(e.value), e.eqVia);
     }
   }
   function ownText(e, depth) {
