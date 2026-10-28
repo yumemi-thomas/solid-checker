@@ -7,7 +7,8 @@
 // Uncertifiable is an internal result (ADR 0328); here it means "the checker said
 // nothing it can prove", which is never evidence either way.
 import { spawn } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ignoredRules } from "./codes.mjs";
@@ -41,8 +42,26 @@ export function installPackages(dir, packages = {}) {
   }
 }
 
-/** Where checker cases live: inside the install, which the oracle's own cases also use. */
-export const checkerWorkDir = (install, id) => join(resolve(install), ".solid-checker-fuzz", id);
+/**
+ * This process's share of the install's work area. Program ids are derived from the seed and the index alone (`fuzz-<n>`), so two runs
+ * with the same seed and different profiles, or two checkouts on one install, name the same ids; one run's `rmSync` and `App.tsx` would
+ * then land in the other's directory (ENOTEMPTY, and a program judged on another profile's text). Ids stay as they are, because
+ * `compare-runs.mjs`, the baseline cache and every recorded repro find a program by its id; the directories are what is isolated.
+ */
+export const WORK_NAMESPACE = `run-${process.pid}-${randomBytes(3).toString("hex")}`;
+let keepNamespace = false;
+const roots = new Set();
+process.on("exit", () => { if (!keepNamespace) for (const root of roots) rmSync(root, { recursive: true, force: true }); });
+
+/** `--keep-work`: leave this process's checker directories in place when it exits. */
+export const keepWorkNamespace = () => { keepNamespace = true; };
+
+/** Where checker cases live: inside the install (so its node_modules is an ancestor), in this process's own namespace. */
+export function checkerWorkDir(install, id) {
+  const root = join(resolve(install), ".solid-checker-fuzz", WORK_NAMESPACE);
+  roots.add(root);
+  return join(root, id);
+}
 
 /**
  * Writes App.tsx, main.tsx and tsconfig.json for `id` under the install; returns the directory.
@@ -115,18 +134,45 @@ export function runChecker(dir, { bin, typefacts, timeoutMs = 180000, env = proc
         const analysis = JSON.parse(stdout);
         done({ ok: true, findings: parseFindings(analysis, dir), wallMs, exitStatus: status });
       } catch (error) {
-        done({ ok: false, findings: [], wallMs, exitStatus: status, error: `malformed checker output: ${error.message}` });
+        if (error instanceof UnmappedFindingsError) unmapped.push(error.message);
+        done({ ok: false, findings: [], wallMs, exitStatus: status, error: error instanceof UnmappedFindingsError ? error.message : `malformed checker output: ${error.message}` });
       }
     });
   });
 }
 
-/** The findings in App.tsx, as the oracle reads them (path, rule, id, kind, line range). */
+/** The checker answered with findings and none of them is a file of the program it was asked about (see `parseFindings`). */
+export class UnmappedFindingsError extends Error {}
+
+const unmapped = [];
+/**
+ * Stops a run (the entry points call this, exit 2) in which the checker returned findings that mapped to no program file. Such a run
+ * has checked nothing: every program would come out clean, and "no false positives" would be a silent pass.
+ */
+export function assertFindingsMapped() {
+  if (unmapped.length) throw new Error(`invalid run: ${unmapped.length} checker run(s) returned findings that map to no file of the program (first: ${unmapped[0]})`);
+}
+
+/** A path with its symlinks resolved (the checker reports real paths; `/tmp` is a link to `/private/tmp` on macOS), through its nearest existing ancestor when the file itself is not there. */
+function canonical(path) {
+  const absolute = resolve(path);
+  try { return realpathSync(absolute); } catch { /* not there: resolve the directory it would be in */ }
+  const parent = dirname(absolute);
+  return parent === absolute ? absolute : join(canonical(parent), absolute.slice(parent.length + 1));
+}
+
+/** The findings in App.tsx, as the oracle reads them (path, rule, id, kind, line range). Paths are compared by realpath on both sides. */
 export function parseFindings(analysis, dir) {
   if (!analysis || !Array.isArray(analysis.findings)) throw new Error("no findings array");
-  const prefix = `${resolve(dir)}/`;
-  return analysis.findings
-    .filter((finding) => finding.primaryLocation?.path?.startsWith(prefix) && relative(dir, finding.primaryLocation.path) === "App.tsx")
+  const root = canonical(dir);
+  const prefix = `${root}/`;
+  const located = analysis.findings.map((finding) => ({ finding, path: finding.primaryLocation?.path ? canonical(finding.primaryLocation.path) : null }));
+  if (located.length && !located.some(({ path }) => path?.startsWith(prefix))) {
+    throw new UnmappedFindingsError(`the checker returned ${located.length} finding(s) and none is under ${root} (first: ${located[0].path ?? "no path"})`);
+  }
+  return located
+    .filter(({ path }) => path?.startsWith(prefix) && relative(root, path) === "App.tsx")
+    .map(({ finding }) => finding)
     .map((finding) => ({
       file: "App.tsx", rule: finding.rule, id: finding.id, kind: finding.kind,
       line: finding.primaryLocation.line, endLine: finding.primaryLocation.endLine ?? finding.primaryLocation.line,

@@ -142,6 +142,17 @@ export const consequenceCodes = Object.entries(codePolicy).filter(([, policy]) =
 export const defectFamilies = [["missing-owner", "leaf-owner-forbidden-call", "primitive-in-directive-application"]];
 export const sameDefectFamily = (a, b) => defectFamilies.some((family) => family.includes(a) && family.includes(b));
 
+/**
+ * Defect codes Solid reports from the scheduler, not from the offending call: the stack is the flush's, so no authored line belongs to
+ * the diagnostic (Chrome lists it as unattributed; the fast path's frames are the mount's, not the read's). They are judged by file,
+ * as the matrix does (`placeless` in misuse.mjs), never by line. `ASYNC_OUTSIDE_LOADING_BOUNDARY` is reported "located at the first
+ * pending effect's owner path" once per mount. Every other claimed code is reported at its call with the caller's stack
+ * (checked in the pinned `@solidjs/signals` dev dist); `LOADING_ON_OUTSIDE_HOLD` is flush-time too but no rule claims it, so a line
+ * never decided its verdict.
+ */
+export const placelessCodes = ["ASYNC_OUTSIDE_LOADING_BOUNDARY"];
+export const isPlacelessCode = (code) => placelessCodes.includes(code);
+
 /** Findings of these rules cover any runtime diagnostic at their site (the checker withheld an answer). */
 export const withholdingRules = ["reactive-dispatch-unresolved"];
 /** Violations the oracle never holds against the runtime (style rules with no dev diagnostic). */

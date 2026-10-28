@@ -34,8 +34,8 @@ import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { legalTwin } from "./falseclean.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
-import { materializeForChecker } from "./checker.mjs";
-import { typecheck } from "./typecheck.mjs";
+import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
+import { TYPE_ERROR_REFUSAL_SHARE, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
 export const OUTCOMES = ["typed-away", "harness", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean"];
 const CONFIRMED = ["agree", "wrong-rule", "recall-gap", "false-clean"];
@@ -281,35 +281,53 @@ export function codeStatuses(matrix) {
 // ---------------------------------------------------------------------------------------------------------------------
 // The gate
 
+/** Outcomes that judge nothing about the checker: the type check rejected the program, or the run failed (the machine, not the program). */
+const UNJUDGED = new Set(["typed-away", "harness"]);
+
 /**
- * Compares a recorded matrix with a baseline for the same seeds. A cell fails when its agree count drops or its false-clean count rises;
- * a baseline cell missing from the current matrix fails too. Different seeds, per-cell counts or generator versions are refused.
- * @returns {{ ok: boolean, refused?: string, regressions: object[], improvements: object[] }}
+ * Compares a recorded matrix with a baseline for the same seeds. A cell fails when a program that was judged moves out of `agree`
+ * (to a judged outcome) or into `false-clean`; a baseline cell missing from the current matrix fails too. Different seeds, per-cell
+ * counts or generator versions are refused, and so is a current run in which most programs are unjudged.
+ *
+ * A baseline `typed-away` or `harness` is a machine-load artifact, not a verdict: a program that moves out of it is reported as
+ * `baselineUnjudged` and never as a regression. A program that moves into one of them is reported as `infrastructure` (a warning:
+ * the run, not the checker, changed). Neither fails the gate.
+ * @returns {{ ok: boolean, refused?: string, regressions: object[], improvements: object[], baselineUnjudged: object[], infrastructure: object[] }}
  */
 export function gate(baseline, current) {
+  const empty = { regressions: [], improvements: [], baselineUnjudged: [], infrastructure: [] };
   for (const field of ["seed", "perCell", "generator"]) {
-    if (baseline[field] !== current[field]) return { ok: false, refused: `the matrices differ in ${field} (${baseline[field]} vs ${current[field]}): the gate compares the same programs`, regressions: [], improvements: [] };
+    if (baseline[field] !== current[field]) return { ok: false, refused: `the matrices differ in ${field} (${baseline[field]} vs ${current[field]}): the gate compares the same programs`, ...empty };
   }
-  const regressions = []; const improvements = [];
+  const now = current.total ?? {};
+  const all = Object.values(now).reduce((sum, n) => sum + n, 0);
+  const unjudged = (now["typed-away"] ?? 0) + (now.harness ?? 0);
+  if (all && unjudged / all > TYPE_ERROR_REFUSAL_SHARE) return { ok: false, refused: `${unjudged} of ${all} programs of the current run are typed-away or harness: it judged nothing (the limit is ${TYPE_ERROR_REFUSAL_SHARE * 100}%)`, ...empty };
+  const regressions = []; const improvements = []; const baselineUnjudged = []; const infrastructure = [];
   for (const [key, base] of Object.entries(baseline.cells)) {
-    const now = current.cells[key];
-    if (!now) { regressions.push({ cell: key, why: "cell missing from the current matrix" }); continue; }
-    if (now.agree < base.agree) regressions.push({ cell: key, why: `agree ${base.agree} -> ${now.agree}`, programs: moved(base, now, (v) => v === "agree") });
-    if (now["false-clean"] > base["false-clean"]) regressions.push({ cell: key, why: `false-clean ${base["false-clean"]} -> ${now["false-clean"]}`, programs: moved(base, now, (v) => v === "false-clean", true) });
-    if (now.agree > base.agree) improvements.push({ cell: key, why: `agree ${base.agree} -> ${now.agree}` });
-    if (now["false-clean"] < base["false-clean"]) improvements.push({ cell: key, why: `false-clean ${base["false-clean"]} -> ${now["false-clean"]}` });
+    const cell = current.cells[key];
+    if (!cell) { regressions.push({ cell: key, why: "cell missing from the current matrix" }); continue; }
+    const seeds = [...new Set([...Object.keys(base.verdicts), ...Object.keys(cell.verdicts)])];
+    const list = (keep) => seeds.filter((seed) => keep(base.verdicts[seed], cell.verdicts[seed])).map((seed) => `${seed}: ${base.verdicts[seed] ?? "missing"} -> ${cell.verdicts[seed] ?? "missing"}`);
+    const lost = list((was, is) => was === "agree" && is !== "agree" && !UNJUDGED.has(is));
+    const gained = list((was, is) => is === "false-clean" && was !== "false-clean" && !UNJUDGED.has(was));
+    if (lost.length) regressions.push({ cell: key, why: `agree ${base.agree} -> ${cell.agree}`, programs: lost });
+    if (gained.length) regressions.push({ cell: key, why: `false-clean ${base["false-clean"]} -> ${cell["false-clean"]}`, programs: gained });
+    const fromUnjudged = list((was, is) => UNJUDGED.has(was) && is !== was);
+    if (fromUnjudged.length) baselineUnjudged.push({ cell: key, programs: fromUnjudged });
+    const intoUnjudged = list((was, is) => UNJUDGED.has(is) && !UNJUDGED.has(was));
+    if (intoUnjudged.length) infrastructure.push({ cell: key, programs: intoUnjudged });
+    if (cell.agree > base.agree) improvements.push({ cell: key, why: `agree ${base.agree} -> ${cell.agree}` });
+    if (cell["false-clean"] < base["false-clean"]) improvements.push({ cell: key, why: `false-clean ${base["false-clean"]} -> ${cell["false-clean"]}` });
   }
-  return { ok: regressions.length === 0, regressions, improvements };
-}
-
-/** The program seeds whose verdict moved into (or out of) a state, for the report. */
-function moved(base, now, is, into = false) {
-  return Object.keys(base.verdicts).filter((seed) => (into ? !is(base.verdicts[seed]) && is(now.verdicts[seed]) : is(base.verdicts[seed]) && !is(now.verdicts[seed]))).map((seed) => `${seed}: ${base.verdicts[seed]} -> ${now.verdicts[seed]}`);
+  return { ok: regressions.length === 0, regressions, improvements, baselineUnjudged, infrastructure };
 }
 
 function reportGate(result) {
   if (result.refused) { console.error(`gate refused: ${result.refused}`); return 2; }
   for (const item of result.improvements) console.error(`gate: improved ${item.cell}: ${item.why}`);
+  for (const item of result.baselineUnjudged ?? []) console.error(`gate: baseline unjudged ${item.cell} (not a regression, the baseline was typed-away or harness):\n    ${item.programs.slice(0, 5).join("\n    ")}`);
+  for (const item of result.infrastructure ?? []) console.error(`gate: INFRASTRUCTURE WARNING ${item.cell}: ${item.programs.length} program(s) are now typed-away or harness (the run is suspect, not the checker):\n    ${item.programs.slice(0, 5).join("\n    ")}`);
   for (const item of result.regressions) console.error(`gate: REGRESSION ${item.cell}: ${item.why}${item.programs?.length ? `\n    ${item.programs.slice(0, 5).join("\n    ")}` : ""}`);
   console.error(result.ok ? "gate: ok" : `gate: ${result.regressions.length} regression(s)`);
   return result.ok ? 0 : 1;
@@ -321,7 +339,7 @@ function reportGate(result) {
 const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] [--per-cell N] [--codes A,B] [--contexts a,b]
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--checker-label <commit>] [--tsc <tsrs>] [--all-cores]
   [--confirm-with-chrome [--chrome-sample 3] [--chrome-false-clean 4] [--browser <chromium>]] [--shrink [--budget N]]
-  [--baseline <matrix.json>]            fail when a cell's agree count drops or its false-clean count rises (same seeds)
+  [--baseline <matrix.json>]            fail when a judged program leaves agree or enters false-clean (same seeds); moves out of or into typed-away/harness are reported, not failed
   node scripts/fuzz/matrix.mjs --gate <baseline.json> <current.json>`;
 
 const CHUNK = 150;
@@ -329,6 +347,7 @@ const CHUNK = 150;
 export async function runMatrix(options) {
   const out = resolve(options.out);
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
+  requireTypeChecker(resolveTsc(options.tsc));
   mkdirSync(out, { recursive: true });
   const config = attachDaemon(configFrom({ ...options, profile: "misuse" }, out), options);
   try {
@@ -358,6 +377,10 @@ async function sweep(options, config, out) {
     }
     console.error(`matrix: ${Math.min(at + CHUNK, entries.length)}/${entries.length} programs, ${Math.round((Date.now() - started) / 1000)}s, ${JSON.stringify(tally(rows))}`);
   }
+
+  assertFindingsMapped();
+  const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length, { first: rows.find((row) => row.outcome === "typed-away")?.detail?.errors?.[0] });
+  if (refusal) throw new Error(refusal);
 
   // Chrome: a sample of agree programs per cell, every wrong-rule and false-clean one.
   if (options.confirmWithChrome) {

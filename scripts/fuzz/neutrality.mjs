@@ -26,6 +26,8 @@ import { fileURLToPath } from "node:url";
 import { compareVerdictRuns } from "./hits.mjs";
 import { evaluate } from "./pipeline.mjs";
 import { BaselineCache, MismatchHistory, environmentKey, programKey } from "./cache.mjs";
+import { requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
+import { assertFindingsMapped } from "./checker.mjs";
 import { attachDaemon, configFrom, generateEntries, parseArgs, resultRows } from "./run.mjs";
 
 export const BLIND = "the finding spans no site of interest";
@@ -104,6 +106,9 @@ export async function runProfile({ options, profile, config, cache, history, out
     if (options.stopOnMismatch && (!compared.equal || (compared.control?.mismatches.length ?? 0))) stopped = true;
     cache?.save();
   }
+  assertFindingsMapped();
+  const typeRefusal = typeErrorRefusal(baseRows.filter((row) => row.verdict === "type-error").length, baseRows.length, { first: baseRows.find((row) => row.verdict === "type-error")?.reasons?.[0] });
+  if (typeRefusal) throw new Error(`${profile ?? "default"}: ${typeRefusal}`);
   const report = compareRuns(baseRows, instrRows);
   const mismatched = new Set([...report.failures.map((f) => f.id), ...(report.control?.mismatches ?? []).map((m) => m.id)]);
   for (const entry of programs) history?.record("programs", programKey({ seed: entry.program.seed, profile, components: options.components }), mismatched.has(entry.built.id));
@@ -124,6 +129,7 @@ async function main(argv) {
   if (options.order !== undefined && !["natural", "failing-first"].includes(options.order)) throw new Error("--order is natural or failing-first");
   const out = resolve(options.out);
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
+  requireTypeChecker(resolveTsc(options.tsc));
   mkdirSync(out, { recursive: true });
   const config = attachDaemon(configFrom(options, out), options);
   const cacheDir = resolve(options.cacheDir ?? join(tmpdir(), "solid-checker-fuzz-cache"));

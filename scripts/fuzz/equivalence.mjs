@@ -23,7 +23,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mapPoolSettled } from "../lib/pool.mjs";
 import { runChrome } from "./chrome.mjs";
-import { materializeForChecker, runChecker, siteVerdicts } from "./checker.mjs";
+import { assertFindingsMapped, materializeForChecker, runChecker, siteVerdicts } from "./checker.mjs";
 import { disturbances, runtimeEvents } from "./classify.mjs";
 import { codesForRule, isDefectCode } from "./codes.mjs";
 import { hitCount } from "./hits.mjs";
@@ -37,7 +37,7 @@ import { hasPackages } from "./pipeline.mjs";
 import { REWRITE_KINDS, SITE_TAG, applicableKinds, rewriteProgram } from "./rewrite.mjs";
 import { createRng } from "./rng.mjs";
 import { configFrom, generateEntries, parseArgs } from "./run.mjs";
-import { typecheck } from "./typecheck.mjs";
+import { requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
 /** The buckets, most severe first. */
 export const BUCKETS = ["high", "certainty-divergence", "low"];
@@ -365,6 +365,7 @@ export async function main(options) {
   if (!options.out) throw new Error(`--out <fresh directory> is required\n${usage}`);
   const out = resolve(options.out);
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
+  requireTypeChecker(resolveTsc(options.tsc));
   mkdirSync(out, { recursive: true });
   const config = configFrom(options, out);
   if (!existsSync(join(config.install, "node_modules/solid-js/package.json"))) throw new Error(`${config.install} has no node_modules/solid-js: run \`make runtime-oracle-install\``);
@@ -376,6 +377,9 @@ export async function main(options) {
   if (entries.length && !result.programs.some((row) => row.status === "ok")) {
     throw new Error(`invalid run: no program was checked (${JSON.stringify(result.programs.reduce((counts, row) => ({ ...counts, [row.status]: (counts[row.status] ?? 0) + 1 }), {}))}; first error: ${result.programs[0]?.error ?? "see results.jsonl"})`);
   }
+  assertFindingsMapped();
+  const typeRefusal = typeErrorRefusal(result.programs.filter((row) => row.status === "type-error").length, result.programs.length);
+  if (typeRefusal) throw new Error(typeRefusal);
   const groups = groupDivergences(result.divergences);
   writeDivergences(out, result.divergences, groups);
   const shrunk = options.shrink ? await shrinkGroups(result.divergences, groups, config, options, out) : [];

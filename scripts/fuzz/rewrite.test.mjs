@@ -11,7 +11,7 @@ import { stripInstrumentation } from "./hits.mjs";
 import { call, component, decl, expr, fn, helper, iife, program as makeProgram, read, ref, ret, signal, write, validate, walk } from "./model.mjs";
 import { printProgram } from "./print.mjs";
 import { REWRITES, REWRITE_KINDS, SITE_TAG, applicableKinds, rewriteProgram, tagSites } from "./rewrite.mjs";
-import { DEFAULT_TSC, typecheck } from "./typecheck.mjs";
+import { resolveTsc, typecheck } from "./typecheck.mjs";
 
 const PROFILES = ["closure-escape", "helper-closure", "in-place", "async", "owner-cleanup", "disposal", "misuse", "packages", "containers"];
 const seeds = Array.from({ length: 40 }, (_, i) => i + 1);
@@ -130,7 +130,7 @@ describe("rewrites: the printed shapes", () => {
 });
 
 // The rewritten programs type-check against the published typings with tsrs; skipped where tsrs or the install is not there.
-const TSC = process.env.FUZZ_TSC ?? DEFAULT_TSC;
+const TSC = resolveTsc();
 const typed = existsSync(TSC) && existsSync(join(DEFAULT_ORACLE_INSTALL, "node_modules/solid-js/package.json"));
 describe.skipIf(!typed)("rewrites type-check with tsrs", () => {
   it("every kind, on a sample of each profile", async () => {

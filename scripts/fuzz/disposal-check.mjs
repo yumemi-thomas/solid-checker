@@ -10,10 +10,12 @@ import { SEEDS } from "./disposal-seeds.mjs";
 import { generateProgram } from "./generate.mjs";
 import { evaluate } from "./pipeline.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
+import { requireTypeChecker, resolveTsc } from "./typecheck.mjs";
 import { runtimeEvents } from "./classify.mjs";
 
 const options = parseArgs(process.argv.slice(2));
 const out = resolve(options.out);
+try { requireTypeChecker(resolveTsc(options.tsc)); } catch (error) { console.error(`fuzz: ${error.message}`); process.exit(2); }
 mkdirSync(out, { recursive: true });
 const config = attachDaemon(configFrom(options, out), options);
 try {
