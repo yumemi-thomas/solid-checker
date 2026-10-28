@@ -3207,3 +3207,20 @@ fn local_alias_bindings_record_only_exact_const_copies_of_a_const_variable() {
         Some(r)
     );
 }
+
+/// Facts schema 80: a TypeScript checking directive is read from the
+/// parser's comments, so the same words in a string literal are no directive.
+#[test]
+fn reads_typescript_directive_comments_only_from_comments() {
+    let directive = |source: &str| {
+        extract("/project/App.ts", source)
+            .unwrap()
+            .typescript_directive_comment
+    };
+    assert!(directive("// @ts-nocheck\nexport const a = 1;\n"));
+    assert!(directive("const a = 1;\n// @ts-expect-error\na.b;\n"));
+    assert!(directive("/**\n * @ts-ignore\n */\nexport const a = 1;\n"));
+    assert!(!directive("export const a = \"@ts-nocheck\";\n"));
+    assert!(!directive("export const a = `// @ts-ignore`;\n"));
+    assert!(!directive("// see the @ts-nocheck note\nexport const a = 1;\n"));
+}

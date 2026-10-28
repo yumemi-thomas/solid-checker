@@ -37,6 +37,22 @@ pub(super) fn suppression_comments(
     facts
 }
 
+/// Whether any comment reads as a TypeScript checking directive
+/// (`AstFacts::typescript_directive_comment`).
+pub(super) fn typescript_directive_comment(source: &str, comments: &[Comment]) -> bool {
+    comments.iter().any(|comment| {
+        let content = comment.content_span();
+        source
+            .get(content.start as usize..content.end as usize)
+            .is_some_and(|text| {
+                let text = text.trim_start_matches(|c: char| c.is_whitespace() || c == '*');
+                ["@ts-nocheck", "@ts-ignore", "@ts-expect-error"]
+                    .iter()
+                    .any(|directive| text.starts_with(directive))
+            })
+    })
+}
+
 /// The suppression a comment's text (delimiters removed) spells, if it spells
 /// one.
 fn parse_suppression(

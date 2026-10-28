@@ -406,6 +406,15 @@ pub struct AstFacts {
     /// Every other comment is absent.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub suppression_comments: Vec<SuppressionCommentFact>,
+    /// Whether a comment of the file (facts schema 80) reads as a TypeScript
+    /// checking directive: its text, past whitespace and a block comment's
+    /// leading `*`s, starts with `@ts-nocheck`, `@ts-ignore` or
+    /// `@ts-expect-error`. Read from the parser's comments, so a string
+    /// literal holding those words is no directive. Over-inclusive on
+    /// purpose (TypeScript honours some only in some positions): it may only
+    /// withhold the premise that `tsc` reports an error in the file.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub typescript_directive_comment: bool,
     /// Code no execution reaches, from the syntax alone (facts schema 77, ADR
     /// 0458): every statement after one that never completes normally in the
     /// same list (a `function` declaration excepted, it is hoisted), and every
@@ -2063,6 +2072,7 @@ impl AstFacts {
             module_directives: Vec::new(),
             stray_directives: Vec::new(),
             suppression_comments: Vec::new(),
+            typescript_directive_comment: false,
             unreachable_regions: Vec::new(),
             tagged_templates: Vec::new(),
             array_literal_elements: Vec::new(),
