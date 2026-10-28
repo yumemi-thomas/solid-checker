@@ -213,6 +213,12 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   that may run before the alias's declarator throws there and is
   uncertifiable. A `let`, conditional, parameter, imported or exported alias is
   not followed.
+- **A read in JSX a callback writes is tracked where the compiler tracks it (ADR 0470).**
+  `createRoot(() => <div>{r()}</div>)`, an attribute, a component prop or
+  child in a `createRoot`, `runWithOwner`, `untrack` or handler callback:
+  the compiler wraps the expression in `insert`, `effect` or a getter, so the
+  read is tracked and silent. A read in the callback's body beside the JSX is
+  still reported.
 - **A read through layers that run in place is placed where they run (ADR 0469).**
   A read in an IIFE, an inline `forEach` callback or a helper that calls its
   callback, inside a `createRoot` or `runWithOwner` body or an effect apply, is

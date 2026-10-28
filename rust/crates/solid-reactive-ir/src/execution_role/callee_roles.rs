@@ -40,6 +40,44 @@ fn directly_in_tracked_compute(
         })
 }
 
+/// ADR 0470: the role the compiler gives `span` when its narrowest placement
+/// (as [`execution_role`] ranks them) lies in the function that owns `span`
+/// ([`crate::owners::owning_function`]), or at module level when no function
+/// does, so no function stands between the JSX and the read. A tracked region
+/// is the render computation the expression is wrapped in (`insert`, `effect`);
+/// a deferred callback role is a component prop or child getter, read where
+/// the receiving component reads it. Either runs wherever the JSX is evaluated
+/// and never in the window of the call that evaluates it. Any other narrowest
+/// placement (an untracked once-evaluated value, a handler factory) is `None`.
+fn own_jsx_compiler_role(file: &solid_facts::FileFacts, span: Span) -> Option<ExecutionRole> {
+    let compiler = &file.compiler;
+    let tracked = compiler
+        .tracked_regions
+        .iter()
+        .map(|region| (region.span, Some(ExecutionRole::TrackedJsx), 2_u8));
+    let untracked = compiler
+        .untracked_regions
+        .iter()
+        .map(|region| (region.span, None, 1_u8));
+    let callbacks = compiler.callback_roles.iter().map(|callback| {
+        (
+            callback.span,
+            (callback.role == solid_facts::compiler::CallbackRoleKind::Deferred)
+                .then_some(ExecutionRole::DeferredCallback),
+            0_u8,
+        )
+    });
+    let (narrowest, role, _) = tracked
+        .chain(untracked)
+        .chain(callbacks)
+        .filter(|(region, _, _)| region.contains(span))
+        .min_by_key(|(region, _, tie_break)| (region.end - region.start, *tie_break))?;
+    crate::owners::owning_function(&file.ast, span)
+        .is_none_or(|function| function.body.contains(narrowest))
+        .then_some(role)
+        .flatten()
+}
+
 /// Whether a compiler-tracked JSX region that lies inside `argument` holds
 /// `span`: the callback wrote JSX, and that JSX tracks its own expressions.
 fn tracked_region_within(file: &solid_facts::FileFacts, argument: Span, span: Span) -> bool {
@@ -179,6 +217,18 @@ pub(super) fn semantic_role_before_awaits(
         return role;
     }
     if let Some(role) = inline_callback_execution_role(file, span, allowed, lookup, classifying) {
+        return role;
+    }
+    // ADR 0470: a read in a JSX expression the compiler wraps, written in the
+    // read's own function, runs in the render computation or getter the
+    // compiler makes of it, wherever the JSX itself is evaluated: a
+    // `createRoot` or `runWithOwner` callback, an effect apply, a handler, an
+    // in-place layer. The paths below place the function, not the JSX, and
+    // would hand the read the window of the function's call. Writes keep their
+    // own classification.
+    if !classifying.contains(&write_classification_marker())
+        && let Some(role) = own_jsx_compiler_role(file, span)
+    {
         return role;
     }
     let dialect = lookup.dialect;
