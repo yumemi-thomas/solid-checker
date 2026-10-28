@@ -906,42 +906,12 @@ fn no_owner_guard(
     site: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<bool> {
-    let probe = |test: Span| {
-        let test = file.ast.peel_ts_sugar_span(test);
-        file.ast.calls.iter().find(|probe| {
-            probe.span.end == test.end
-                && probe.span.start > test.start
-                && probe.arguments.is_empty()
-                && file
-                    .source
-                    .get(test.start as usize..probe.span.start as usize)
-                    .is_some_and(|prefix| prefix.trim_end() == "!")
-                && crate::owners::owned_by_body(&file.ast, function, probe.span)
-                && lookup.primitive_at_call(file, probe.span) == Some(Primitive::GetOwner)
-        })
-    };
-    file.ast
-        .conditional_expressions
-        .iter()
-        .filter(|conditional| conditional.consequent.contains(site))
-        .find_map(|conditional| {
-            probe(conditional.test).map(|probe| {
-                file.ast.peel_ts_sugar_span(conditional.consequent) == site
-                    && crate::interproc::site_on_every_completion(
-                        lookup,
-                        file,
-                        function.span,
-                        probe.span,
-                    )
-            })
-        })
-        .or_else(|| {
-            file.ast
-                .if_regions
-                .iter()
-                .any(|region| region.consequent.contains(site) && probe(region.test).is_some())
-                .then_some(false)
-        })
+    // The facts record no unary expression, and reading `!` from the source
+    // text is no exact fact (owner policy: no text matching), so no call is
+    // taken as guarded by `!getOwner()`: it keeps ADR 0474's "on some paths"
+    // edge (uncertifiable from an unowned caller, never a proof).
+    let _ = (file, function, site, lookup);
+    None
 }
 
 /// ADR 0457: whether every use of `function`'s parameter `index` is a direct

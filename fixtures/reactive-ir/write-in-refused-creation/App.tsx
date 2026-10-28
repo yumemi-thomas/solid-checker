@@ -77,3 +77,40 @@ export function TimerRoot() {
 export function HandlerRoot() {
   return <button onClick={() => createRoot(() => { setW(12); })}>{w()}</button>;
 }
+
+function runNow(fn: () => void) {
+  fn();
+}
+
+// Uncertifiable (review of ADR 0471/0475): the root call sits in a layer the
+// apply runs in place; rc.17's guard holds for the whole apply run, so the
+// root throws before its body runs.
+export function ApplyRootInIife() {
+  createEffect(() => 1, () => {
+    const f1 = () => { setW(1); };
+    (() => { createRoot(f1); })();
+  });
+  return <div>{w()}</div>;
+}
+
+export function ApplyRootInHelper() {
+  createEffect(() => 1, () => {
+    runNow(() => createRoot(() => { setW(1); }));
+  });
+  return <div>{w()}</div>;
+}
+
+export function ApplyRootInlineIife() {
+  createEffect(() => 1, () => {
+    (() => createRoot(() => { setW(1); }))();
+  });
+  return <div>{w()}</div>;
+}
+
+// Violation (control): the same IIFE root in a timer; rc.17 warns.
+export function TimerRootInIife() {
+  setTimeout(() => {
+    (() => { createRoot(() => { setW(1); }); })();
+  }, 0);
+  return <div>{w()}</div>;
+}

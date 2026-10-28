@@ -333,24 +333,49 @@ fn creation_refused_at(
     site: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    let Some(function) = crate::owners::owning_function(&file.ast, site) else {
-        return false;
-    };
-    file.ast
-        .arguments_containing(function.span)
-        .filter(|(call, index)| {
-            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
-        })
-        .any(|(call, index)| {
-            lookup
-                .primitive_at_call(file, call.span)
-                .is_some_and(|primitive| {
-                    effect_apply_argument(lookup.dialect, primitive, call.arguments.len())
-                        == Some(index)
-                        || callback_owner_at_call(file, call, primitive, index, lookup)
-                            == Some(solid_dialect::CallbackOwner::Leaf)
-                })
-        })
+    // The creation may sit in layers the apply or leaf callback runs in place
+    // (an IIFE, a helper calling its callback): rc.17's guard holds for the
+    // whole callback run, so those layers are refused too. A layer that also
+    // runs elsewhere, or a site past an await or a possible suspension (the
+    // guard is off by then), keeps today's answer.
+    let mut at = site;
+    // Bounded: each step moves to the call that runs the previous function.
+    for _ in 0..16 {
+        let Some(function) = crate::owners::owning_function(&file.ast, at) else {
+            return false;
+        };
+        if function.generator
+            || super::body_roles::follows_dominating_await(file, at)
+            || super::body_roles::follows_try_head_await(file, at, lookup)
+            || super::body_roles::may_follow_suspension(file, at)
+        {
+            return false;
+        }
+        let refused = file
+            .ast
+            .arguments_containing(function.span)
+            .filter(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+            })
+            .any(|(call, index)| {
+                lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        effect_apply_argument(lookup.dialect, primitive, call.arguments.len())
+                            == Some(index)
+                            || callback_owner_at_call(file, call, primitive, index, lookup)
+                                == Some(solid_dialect::CallbackOwner::Leaf)
+                    })
+            });
+        if refused {
+            return true;
+        }
+        match super::write_roles::layer_run(file, function, lookup) {
+            super::write_roles::LayerRun::InPlace(call) => at = call,
+            _ => return false,
+        }
+    }
+    false
 }
 
 /// The class whose constructor, method or accessor `function` is.

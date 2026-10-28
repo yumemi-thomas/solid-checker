@@ -66,7 +66,8 @@ export const FILE_BUDGETS = {
   // And the batch review notes (assignment callees; RC3, RC1b, SC3001 JSX left open): 51,955 bytes: 52_000.
   // And the batch review notes on the batch: 52,848 bytes: 53_000.
   // And the RC8/RC10 note (component execution boundary, left open): 53,828 bytes: 54_000.
-  "docs/open-work.md": 54_000,
+  // And the second batch review (ADR 0475 climb, ADR 0472 fail-open shapes): 54,303 bytes: 54_500.
+  "docs/open-work.md": 54_500,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for the
   // catalog review's ADRs 0381 and 0424-0434, 4 bytes under 115_600; and for ADR 0435,
@@ -147,7 +148,8 @@ export const FILE_BUDGETS = {
   // And ADR 0474 picked onto the batch: 295,368 bytes: 295_500.
   // And ADR 0475 (a creation the runtime refuses enters nothing): 297,044 bytes: 297_500.
   // And the ADR 0474 guard amendment: 297,529 bytes: 298_000.
-  "docs/decisions.md": 298_000,
+  // And the second batch review amendments (ADRs 0474, 0475): 298,019 bytes: 298_500.
+  "docs/decisions.md": 298_500,
 };
 
 export const GROUP_BUDGETS = [
@@ -182,7 +184,7 @@ export const GROUP_BUDGETS = [
   // With main's ADR 0451 (PR #119) merged in: 753,780 bytes: 754_500.
   // And for ADR 0454 (its entry, the open-work lines, a rule-page paragraph): 758,425 bytes against 754,500: 759_000; its owner-graph follow-up: 760,511 bytes: 761_000; its reachability follow-up: 761,579 bytes: 762_500.
   // And for ADR 0455 (its entry, one open-work line, a rule-page paragraph): 765,586 bytes against 762,500: 766_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 835_500 }, // ADR 0474 guard amendment (its sentence, a rule-page sentence): 835,097 bytes. // RC8/RC10 open-work note: 834,391 bytes. // ADR 0475 (its entry, a rule-page sentence, one open-work line): 833,477 bytes. // Batch review notes on the batch: 831,469 bytes. // ADR 0474 on the batch: 829,668 bytes. // ADR 0472 (its entry, a rule-page paragraph, open-work): 827,781 bytes. // ADR 0471 (its entry, a rule-page sentence, one open-work line): 825,165 bytes. // ADR 0470 (its entry, a rule-page bullet, one open-work line): 822,681 bytes. // ADR 0469 (its entry, a rule-page bullet): 820,739 bytes. // ADR 0468 (its entry, one open-work line): 818,373 bytes. // Merge of main (PR #135) into the batch: 815,691 bytes. // ADR 0467 (its entry, two rule-page paragraphs, one open-work line): 807,212 bytes. // ADR 0466 (its entry, one open-work line, a rule-page paragraph): 804,218 bytes. // ADR 0463 (its entry, open-work lines, rule-page sentences): 800,445 bytes. // ADR 0462 (its entry, two rule-page paragraphs, one open-work line): 796,067 bytes. // Merge of PR #129 with ADR 0461 (PR #130): 792,496 bytes. // ADR 0461 review amendment (ADR sentences, open-work lines, rule-page sentences): 782,004 bytes. // ADR 0461 (its entry, the open-work line, a rule-page paragraph): 780,658 bytes. // Merge of ADR 0456 (PR #123) with ADR 0457: 778,757 bytes. // ADR 0456 (its entry, open-work lines, a rule-page paragraph): 775,714 bytes. // ADR 0457 review amendment (its sentences, one open-work line): 774,199 bytes against 773,500. // ADR 0457 (its entry, a rule-page sentence): 773,270 bytes against 771,500. // ADR 0455 fourth-review amendment: 771,408 bytes. // ADR 0455 third-review amendment: 770,819 bytes. // ADR 0455 cleanup amendment: 769,241 bytes. // ADR 0455 named-closure follow-up: 767,101 bytes. // ADR 0455 follow-up: 766,106 bytes against 766,000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 836_500 }, // Second batch review: 836,062 bytes. // ADR 0474 guard amendment (its sentence, a rule-page sentence): 835,097 bytes. // RC8/RC10 open-work note: 834,391 bytes. // ADR 0475 (its entry, a rule-page sentence, one open-work line): 833,477 bytes. // Batch review notes on the batch: 831,469 bytes. // ADR 0474 on the batch: 829,668 bytes. // ADR 0472 (its entry, a rule-page paragraph, open-work): 827,781 bytes. // ADR 0471 (its entry, a rule-page sentence, one open-work line): 825,165 bytes. // ADR 0470 (its entry, a rule-page bullet, one open-work line): 822,681 bytes. // ADR 0469 (its entry, a rule-page bullet): 820,739 bytes. // ADR 0468 (its entry, one open-work line): 818,373 bytes. // Merge of main (PR #135) into the batch: 815,691 bytes. // ADR 0467 (its entry, two rule-page paragraphs, one open-work line): 807,212 bytes. // ADR 0466 (its entry, one open-work line, a rule-page paragraph): 804,218 bytes. // ADR 0463 (its entry, open-work lines, rule-page sentences): 800,445 bytes. // ADR 0462 (its entry, two rule-page paragraphs, one open-work line): 796,067 bytes. // Merge of PR #129 with ADR 0461 (PR #130): 792,496 bytes. // ADR 0461 review amendment (ADR sentences, open-work lines, rule-page sentences): 782,004 bytes. // ADR 0461 (its entry, the open-work line, a rule-page paragraph): 780,658 bytes. // Merge of ADR 0456 (PR #123) with ADR 0457: 778,757 bytes. // ADR 0456 (its entry, open-work lines, a rule-page paragraph): 775,714 bytes. // ADR 0457 review amendment (its sentences, one open-work line): 774,199 bytes against 773,500. // ADR 0457 (its entry, a rule-page sentence): 773,270 bytes against 771,500. // ADR 0455 fourth-review amendment: 771,408 bytes. // ADR 0455 third-review amendment: 770,819 bytes. // ADR 0455 cleanup amendment: 769,241 bytes. // ADR 0455 named-closure follow-up: 767,101 bytes. // ADR 0455 follow-up: 766,106 bytes against 766,000.
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),

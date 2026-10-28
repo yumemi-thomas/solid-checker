@@ -120,6 +120,46 @@
       "start": 2165,
       "end": 2173,
       "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
+      "start": 2525,
+      "end": 2532,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
+      "start": 2714,
+      "end": 2721,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
+      "start": 2866,
+      "end": 2873,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
+      "start": 3075,
+      "end": 3082,
+      "fixes": 0
     }
   ]
 }
