@@ -20,16 +20,21 @@ import { tsconfigFor } from "./typecheck.mjs";
  * the checker reads that driver (ADR 0435: a synchronous dispatch withholds event-handler owner proofs), so a verdict
  * computed without it is not the verdict Chrome's run sees.
  */
-export function oracleMainSource(oracleText = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../runtime-oracle.mjs"), "utf8")) {
+export function oracleMainSource(oracleText = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../runtime-oracle.mjs"), "utf8"), mount) {
   const open = "const mainSource = ";
   const start = oracleText.indexOf(open);
   const end = oracleText.indexOf("\n`;", start);
   if (start < 0 || end < 0) throw new Error("scripts/runtime-oracle.mjs no longer defines mainSource as a template literal");
   // eslint-disable-next-line no-new-func
   // `behaviourProbe` is "" without observations (scripts/runtime-oracle.mjs: `if (!observations.length) return ""`).
-  return new Function("behaviourProbe", `return (${oracleText.slice(start + open.length, end + 2)});`)(() => "")([]);
+  return new Function("behaviourProbe", `return (${oracleText.slice(start + open.length, end + 2)});`)(() => "")([], mount);
 }
 export const MAIN_SOURCE = oracleMainSource();
+/** The entry a case's oracle.json `mount` gives (ADR 0501), the one the oracle writes for it; MAIN_SOURCE without one. */
+export const mainSourceFor = (oracleJson) => {
+  const mount = oracleJson ? JSON.parse(oracleJson).mount : undefined;
+  return mount ? oracleMainSource(undefined, mount) : MAIN_SOURCE;
+};
 
 /** Writes a case's generated packages (`{ name: { file: text } }`) into `<dir>/node_modules/<name>`: the project's own dependency, never the shared install's. */
 export function installPackages(dir, packages = {}) {
@@ -74,7 +79,7 @@ export function materializeForChecker(built, install, id = built.id, { twin = fa
   writeFileSync(join(dir, "App.tsx"), twin ? built.files["App.run.txt"] : built.files["App.tsx"]);
   const modules = projectModules(built.files);
   for (const name of modules) writeFileSync(join(dir, name), built.files[name]);
-  writeFileSync(join(dir, "main.tsx"), MAIN_SOURCE);
+  writeFileSync(join(dir, "main.tsx"), mainSourceFor(built.files["oracle.json"]));
   writeFileSync(join(dir, "tsconfig.json"), tsconfigFor(["main.tsx", "App.tsx", ...modules]));
   installPackages(dir, built.packages);
   return dir;
@@ -89,7 +94,7 @@ export function materializeFromDirectory(caseDir, install, id) {
   const modules = readdirSync(caseDir).filter((name) => isProjectModule(name));
   for (const name of modules) cpSync(join(caseDir, name), join(dir, name));
   if (existsSync(join(caseDir, "node_modules"))) cpSync(join(caseDir, "node_modules"), join(dir, "node_modules"), { recursive: true });
-  writeFileSync(join(dir, "main.tsx"), MAIN_SOURCE);
+  writeFileSync(join(dir, "main.tsx"), mainSourceFor(existsSync(join(caseDir, "oracle.json")) ? readFileSync(join(caseDir, "oracle.json"), "utf8") : undefined));
   writeFileSync(join(dir, "tsconfig.json"), tsconfigFor(["main.tsx", "App.tsx", ...modules]));
   return dir;
 }

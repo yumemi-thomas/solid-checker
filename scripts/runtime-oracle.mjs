@@ -131,9 +131,44 @@ const compilerOptions = {
   jsxImportSource: "@solidjs/web", lib: ["ES2022", "DOM", "DOM.Iterable"], types: [],
   skipLibCheck: true, strict: true, noEmit: true,
 };
-const mainSource = (observations) => `${observations.length ? 'import { flush } from "solid-js";\n' : ""}import { render } from "@solidjs/web";
+const mainSource = (observations, mount) => `${observations.length ? 'import { flush } from "solid-js";\n' : ""}import { render } from "@solidjs/web";
 import * as mod from "./App";
+${mount ? `import { ${[...mount].sort().join(", ")} } from "./App";
 
+// Each exported component is rendered as a component, so Solid creates it the
+// way an application does, with the component's strict-read window open, and
+// in its own root, so one component's failure does not hide the others. The
+// exports the case's "mount" names are rendered by their own top-level render
+// call, in the namespace's (sorted) order, so a reader of this entry sees where
+// they mount (ADR 0501); the loop renders every other export as before.
+const root = document.getElementById("root")!;
+const host = (name: string) => {
+  const section = document.createElement("section");
+  section.dataset.export = name;
+  root.append(section);
+  return section;
+};
+${[...mount].sort().map((name) => `try {
+  render(() => <${name} />, host("${name}"));
+} catch (error) {
+  console.error("render failed", "${name}", error);
+  setTimeout(() => { throw error; });
+}
+`).join("")}const mounted = new Set<string>(${JSON.stringify([...mount].sort())});
+for (const [name, value] of Object.entries(mod as Record<string, unknown>)) {
+  if (typeof value !== "function" || !(name === "default" || /^[A-Z]/.test(name)) || mounted.has(name)) continue;
+  const Component = value as (props: {}) => any;
+  try {
+    render(() => <Component />, host(name));
+  } catch (error) {
+    console.error("render failed", name, error);
+    // Rethrown from a timer, so the uncaught error reaches the feedback run's
+    // source mapping as a runtime exception (ADR 0352); the others still render.
+    setTimeout(() => { throw error; });
+  }
+}
+
+` : `
 // Each exported component is rendered as a component, so Solid creates it the
 // way an application does, with the component's strict-read window open, and
 // in its own root, so one component's failure does not hide the others.
@@ -154,7 +189,7 @@ for (const [name, value] of Object.entries(mod as Record<string, unknown>)) {
   }
 }
 
-${behaviourProbe(observations)}// Drive every handler: bubbling events on every element, two passes apart.
+`}${behaviourProbe(observations)}// Drive every handler: bubbling events on every element, two passes apart.
 const events: Array<[string, (type: string) => Event]> = [
   ...["click", "dblclick", "mousedown", "mouseup", "mouseover", "mouseout", "pointerdown", "pointerup", "contextmenu"]
     .map((type): [string, (type: string) => Event] => [type, (t) => new MouseEvent(t, { bubbles: true, cancelable: true })]),
@@ -543,7 +578,9 @@ async function runCase(id) {
     assert(!existsSync(join(install, "node_modules", name)), `${id}: package ${name} is already in the install`);
     cpSync(join(source, "node_modules", name), join(dir, "node_modules", name), { recursive: true });
   }
-  writeFileSync(join(dir, "main.tsx"), mainSource(observations));
+  // `mount` lists the exported components to render by name (ADR 0501): the differential fuzzer's cases.
+  assert(spec.mount === undefined || (Array.isArray(spec.mount) && spec.mount.length > 0 && spec.mount.every((name) => /^[A-Z][A-Za-z0-9_]*$/.test(name))), `${id}: mount must be a non-empty list of component names`);
+  writeFileSync(join(dir, "main.tsx"), mainSource(observations, spec.mount));
   assert(spec.haltMarker === undefined || typeof spec.haltMarker === "boolean", `${id}: haltMarker must be a boolean`);
   if (spec.haltMarker) writeFileSync(join(dir, "sc-halt.ts"), haltModule);
   writeFileSync(join(dir, "index.html"), spec.haltMarker ? haltHtml : html);
