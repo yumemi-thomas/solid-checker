@@ -1,12 +1,14 @@
-import { mkdtempSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { MAIN_SOURCE, materializeForChecker, oracleMainSource, parseFindings, runChecker, siteVerdicts } from "./checker.mjs";
+import { MAIN_SOURCE, WORK_NAMESPACE, materializeForChecker, oracleMainSource, parseFindings, runChecker, siteVerdicts } from "./checker.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
-import { DEFAULT_TSC, tsconfigFor, typecheck } from "./typecheck.mjs";
+import { DEFAULT_ORACLE_INSTALL } from "./chrome.mjs";
+import { DEFAULT_TSC, resolveTsc, tsconfigFor, typecheck } from "./typecheck.mjs";
 
 const oracle = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../runtime-oracle.mjs"), "utf8");
 
@@ -29,7 +31,7 @@ describe("materializeForChecker", () => {
     const install = mkdtempSync(join(tmpdir(), "fuzz-install-"));
     const built = buildCase(generateProgram(11), { id: "fuzz-11" });
     const dir = materializeForChecker(built, install);
-    expect(dir).toBe(join(install, ".solid-checker-fuzz", "fuzz-11"));
+    expect(dir).toBe(join(install, ".solid-checker-fuzz", WORK_NAMESPACE, "fuzz-11"));
     expect(readFileSync(join(dir, "App.tsx"), "utf8")).toBe(built.text);
     expect(readFileSync(join(dir, "main.tsx"), "utf8")).toBe(MAIN_SOURCE);
     const tsconfig = JSON.parse(readFileSync(join(dir, "tsconfig.json"), "utf8"));
@@ -106,4 +108,58 @@ describe("typecheck", () => {
   it("defaults to tsrs, never to tsc from node_modules", () => {
     expect(DEFAULT_TSC).toMatch(/tsrs\/target\/release\/tsrs$/);
   });
+});
+
+// Two runs with the same seed and a different profile name the same program ids (`fuzz-<n>`): their work directories must not be shared.
+describe("work directories of concurrent runs", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const child = (install, text) => new Promise((resolveChild, reject) => {
+    const source = `
+      import { materializeForChecker } from ${JSON.stringify(join(here, "checker.mjs"))};
+      import { readFileSync, existsSync } from "node:fs";
+      const dir = materializeForChecker({ files: { "App.tsx": ${JSON.stringify(text)} } }, ${JSON.stringify(install)}, "fuzz-1");
+      await new Promise((r) => setTimeout(r, 500));
+      console.log(JSON.stringify({ dir, text: readFileSync(dir + "/App.tsx", "utf8") }));`;
+    const run = spawn(process.execPath, ["--input-type=module", "-e", source], { stdio: ["ignore", "pipe", "inherit"] });
+    let out = "";
+    run.stdout.on("data", (chunk) => { out += chunk; });
+    run.on("error", reject);
+    run.on("close", (status) => (status === 0 ? resolveChild(JSON.parse(out)) : reject(new Error(`child exited ${status}`))));
+  });
+
+  it("gives each process its own directory for the same id, which holds its own text and is removed when it exits", async () => {
+    const install = mkdtempSync(join(tmpdir(), "fuzz-install-"));
+    const [a, b] = await Promise.all([child(install, "export default 1; // closure-escape"), child(install, "export default 2; // containers")]);
+    expect(a.dir).not.toBe(b.dir);
+    expect(a.text).toContain("closure-escape");
+    expect(b.text).toContain("containers");
+    expect(existsSync(a.dir)).toBe(false);
+    expect(existsSync(b.dir)).toBe(false);
+  });
+});
+
+// The same, through the command line: needs the oracle install and a type checker.
+const installed = existsSync(join(DEFAULT_ORACLE_INSTALL, "node_modules/solid-js/package.json")) && existsSync(resolveTsc());
+describe.skipIf(!installed)("two runs with the same seed and different profiles", () => {
+  it("both finish and keep distinct work namespaces", async () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const root = mkdtempSync(join(tmpdir(), "fuzz-concurrent-"));
+    const work = join(DEFAULT_ORACLE_INSTALL, ".solid-checker-fuzz");
+    const before = new Set(existsSync(work) ? readdirSync(work) : []);
+    const go = (profile) => new Promise((resolveRun) => {
+      const run = spawn(process.execPath, [join(here, "run.mjs"), "--generate-only", "--keep-work", "--seed", "5", "--count", "6", "--profile", profile, "--out", join(root, profile)], { stdio: ["ignore", "ignore", "pipe"] });
+      let err = "";
+      run.stderr.on("data", (chunk) => { err += chunk; });
+      run.on("close", (status) => resolveRun({ status, err }));
+    });
+    const results = await Promise.all([go("closure-escape"), go("containers")]);
+    const made = readdirSync(work).filter((name) => !before.has(name));
+    try {
+      for (const result of results) { expect(result.err).not.toMatch(/ENOTEMPTY/); expect(result.status).toBe(0); }
+      expect(made.length).toBe(2);
+    } finally {
+      for (const name of made) rmSync(join(work, name), { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 120000);
 });

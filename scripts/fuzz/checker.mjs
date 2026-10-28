@@ -7,6 +7,7 @@
 // Uncertifiable is an internal result (ADR 0328); here it means "the checker said
 // nothing it can prove", which is never evidence either way.
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,8 +42,26 @@ export function installPackages(dir, packages = {}) {
   }
 }
 
-/** Where checker cases live: inside the install, which the oracle's own cases also use. */
-export const checkerWorkDir = (install, id) => join(resolve(install), ".solid-checker-fuzz", id);
+/**
+ * This process's share of the install's work area. Program ids are derived from the seed and the index alone (`fuzz-<n>`), so two runs
+ * with the same seed and different profiles, or two checkouts on one install, name the same ids; one run's `rmSync` and `App.tsx` would
+ * then land in the other's directory (ENOTEMPTY, and a program judged on another profile's text). Ids stay as they are, because
+ * `compare-runs.mjs`, the baseline cache and every recorded repro find a program by its id; the directories are what is isolated.
+ */
+export const WORK_NAMESPACE = `run-${process.pid}-${randomBytes(3).toString("hex")}`;
+let keepNamespace = false;
+const roots = new Set();
+process.on("exit", () => { if (!keepNamespace) for (const root of roots) rmSync(root, { recursive: true, force: true }); });
+
+/** `--keep-work`: leave this process's checker directories in place when it exits. */
+export const keepWorkNamespace = () => { keepNamespace = true; };
+
+/** Where checker cases live: inside the install (so its node_modules is an ancestor), in this process's own namespace. */
+export function checkerWorkDir(install, id) {
+  const root = join(resolve(install), ".solid-checker-fuzz", WORK_NAMESPACE);
+  roots.add(root);
+  return join(root, id);
+}
 
 /**
  * Writes App.tsx, main.tsx and tsconfig.json for `id` under the install; returns the directory.

@@ -26,6 +26,7 @@ import { applyLedgerToResults, falseCleanStream } from "./falseclean-run.mjs";
 import { LEDGER_PATH, loadLedger } from "./falseclean.mjs";
 import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
+import { keepWorkNamespace } from "./checker.mjs";
 import { requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 import { isSite, walk } from "./model.mjs";
 import { availableParallelism } from "node:os";
@@ -74,6 +75,7 @@ export function attachDaemon(config, options) {
 
 /** The run's configuration from parsed options (`out` is the fresh output directory). */
 export function configFrom(options, out) {
+  if (options.keepWork) keepWorkNamespace();
   return {
     install: resolve(options.install ?? DEFAULT_ORACLE_INSTALL),
     fastInstall: resolve(options.fastInstall ?? DEFAULT_FAST_INSTALL),
