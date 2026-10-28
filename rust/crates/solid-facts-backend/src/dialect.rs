@@ -441,7 +441,7 @@ pub struct SemanticDemandCapabilities {
     /// element, which `missing-owner` asks to prove the spread holds no
     /// listener key.
     pub spread_declared_keys: bool,
-    /// ADR 0460: whether a `delete` operand's property is optional and not
+    /// ADR 0461: whether a `delete` operand's property is optional and not
     /// readonly, which `no-store-mutation-outside-setter` asks to report a
     /// store delete TypeScript accepts.
     pub delete_operand_optionality: bool,

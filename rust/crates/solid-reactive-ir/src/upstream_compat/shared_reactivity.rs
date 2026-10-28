@@ -1448,7 +1448,7 @@ fn no_store_mutator_call(
     }
 }
 
-/// `delete` of a static member path of a proven store (ADR 0460): the proxy's
+/// `delete` of a static member path of a proven store (ADR 0461): the proxy's
 /// `deleteProperty` trap drops it outside a setter like the `set` trap drops an
 /// assignment (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5761-5767`), with
 /// the same exemptions ([`store_write_is_exempt`]).

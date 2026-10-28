@@ -758,7 +758,7 @@ pub fn declared_keys_at(checker: &mut Checker, node: P<Node>) -> Option<Vec<Arc<
     Some(names.into_iter().map(Arc::from).collect())
 }
 
-/// ADR 0460: whether `node` is a property access whose property symbol the
+/// ADR 0461: whether `node` is a property access whose property symbol the
 /// checker marks optional and not readonly, the condition under which `delete
 /// node` (or `delete (node)`) raises neither TS2704 (readonly operand) nor
 /// TS2790 (non-optional operand) under any compiler option; a type assertion

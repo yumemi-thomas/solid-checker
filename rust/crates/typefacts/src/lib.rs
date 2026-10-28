@@ -1033,7 +1033,7 @@ pub struct EntityFact {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared_keys: Option<Arc<Vec<Arc<str>>>>,
     /// The demanded expression is a property access (`o.p`) whose property
-    /// symbol the checker marks optional (`p?:`) and not readonly (ADR 0460).
+    /// symbol the checker marks optional (`p?:`) and not readonly (ADR 0461).
     /// As a bare or parenthesized `delete` operand it raises neither TS2704
     /// (a readonly symbol) nor TS2790 (a non-optional one, with or without
     /// `exactOptionalPropertyTypes`) under any compiler option; a type

@@ -565,7 +565,7 @@ fn symbol_rows_digest(view: &FileView<'_>) -> [u8; 32] {
 
 /// The declaration each resolved call of `entities` names (a callee's
 /// symbol), the declared key set each carries (ADR 0436) and its
-/// writable-optional-property flag (ADR 0460), digested.
+/// writable-optional-property flag (ADR 0461), digested.
 fn declarations_digest(entities: &[typefacts::EntityFact]) -> [u8; 32] {
     let mut digest = Sha256::new();
     for entity in entities {

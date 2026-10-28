@@ -16,7 +16,7 @@ use super::*;
 // 0436) is the same thin `Arc` and raises it by 8 more: it is demanded only at
 // an intrinsic element's spread arguments, so a bare `Option` is the cheapest
 // way to carry its absence on every other row. `writable_optional_property`
-// (ADR 0460) is one `bool`, but the row had no padding byte left, so it raises
+// (ADR 0461) is one `bool`, but the row had no padding byte left, so it raises
 // the ceiling by one alignment step, 8 bytes.
 #[test]
 fn retained_entity_rows_keep_optional_evidence_bounded() {

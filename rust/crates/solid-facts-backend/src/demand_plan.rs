@@ -42,7 +42,7 @@ struct DemandSpans {
     library_type_spans: HashSet<Span>,
     declared_key_spans: HashSet<Span>,
     writable_optional_property_spans: HashSet<Span>,
-    /// The member objects a `delete` operand's chain reads (ADR 0460), asked
+    /// The member objects a `delete` operand's chain reads (ADR 0461), asked
     /// for their primitive value domain without a symbol observation.
     delete_object_spans: HashSet<Span>,
     async_symbol_spans: HashSet<Span>,
@@ -105,7 +105,7 @@ fn plan_file(
     Ok(())
 }
 
-/// ADR 0460: whether a `delete` operand that is a static member names a
+/// ADR 0461: whether a `delete` operand that is a static member names a
 /// property TypeScript lets it delete (optional, not readonly), and whether
 /// each object the member chain reads on the way may be `null` or `undefined`
 /// (TS18047/TS18048 under strictNullChecks), which

@@ -56,7 +56,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V22: u64 = 22;
 /// v23 adds the declared-keys entity field (ADR 0436): row flag bit 16 followed,
 /// when set, by a count and that many strings, after the runtime binding kind.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V23: u64 = 23;
-/// v24 adds the writable-optional-property entity flag (ADR 0460): row flag
+/// v24 adds the writable-optional-property entity flag (ADR 0461): row flag
 /// bit 17, with no payload.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V24: u64 = 24;
 /// Every Wire table schema a transition may carry (v10 is retired).
@@ -503,7 +503,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // the first, and a protocol-84 client would reject the second.
 // Protocol 86 (ADR 0436) adds the `declaredKeys` demand and entity field, carried
 // by Wire table schema v23; a protocol-85 consumer would refuse the new bit.
-// Protocol 87 (ADR 0460) adds the `writableOptionalProperty` demand and entity
+// Protocol 87 (ADR 0461) adds the `writableOptionalProperty` demand and entity
 // flag, carried by Wire table schema v24.
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 87;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {

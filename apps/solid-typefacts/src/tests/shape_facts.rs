@@ -685,7 +685,7 @@ bare;\n";
     assert!(undemanded[0].declared_keys.is_none(), "undemanded");
 }
 
-/// ADR 0460: a property access names a writable optional property only when
+/// ADR 0461: a property access names a writable optional property only when
 /// its resolved property symbol is optional and not readonly, the condition
 /// under which `delete` of it raises neither TS2790 nor TS2704.
 #[test]

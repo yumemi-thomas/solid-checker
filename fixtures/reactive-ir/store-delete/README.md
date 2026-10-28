@@ -5,7 +5,7 @@
 `deleteProperty` trap warns `STORE_WRITE_OUTSIDE_SETTER` and stores nothing
 (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5761-5767`). The rule reports it
 where it reports the assignment `store.path = x`, with the same exemptions
-(ADR 0460).
+(ADR 0461).
 
 TypeScript reports `delete` of a required property (TS2790 under
 strictNullChecks) and of a readonly one (TS2704), so the operand must carry the
