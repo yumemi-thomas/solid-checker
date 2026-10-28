@@ -406,7 +406,7 @@ function render(program, instrument) {
   }
   function view(item, depth) {
     switch (item.k) {
-      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${signals.get(item.sig)?.kind === "store" ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
+      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-nested"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
       case "button": {
         const lines = [`${ind(depth)}<button data-act="${item.id}" onClick={() => ${block(item.handler, depth, entryFor(item, "handler"))}}>go</button>`];
         return lines;
@@ -434,6 +434,7 @@ function render(program, instrument) {
       case "action": used.add("action"); return `const ${sig.name} = action(function* () { ${signals.get(sig.target).setter}(${sig.value}); });`;
       case "async": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => 1);`;
       case "store-opt": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({ v: ${sig.init} });`;
+      case "store-nested": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, a: { v: ${sig.init} }, items: [${sig.init}] });`;
       default: return `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
     }
   };

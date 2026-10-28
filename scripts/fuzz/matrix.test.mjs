@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildMatrix, codeStatuses, featureTable, gate, generateShape, gridShapes, judge, markdown, regionOf, shapeSeed } from "./matrix.mjs";
-import { LAYERS, SPEC, TEMPLATE_CODES, VALUE_BINDINGS, bindingsOf, gridBindingsOf, variantsOf } from "./misuse.mjs";
+import { LAYERS, SPEC, TEMPLATE_CODES, VALUE_BINDINGS, bindingsOf, gridBindingsOf, gridVariantsOf, variantsOf } from "./misuse.mjs";
 
 const site = { line: 10, aux: [4] };
 const ok = { ok: true, findings: [] };
@@ -180,6 +180,25 @@ describe("gate", () => {
   });
 });
 
+describe("the grid's store variants", () => {
+  it("adds the past-root and deferred writes to the grid only, each deferred one only where calling the setter is legal", () => {
+    expect(variantsOf("STORE_WRITE_OUTSIDE_SETTER")).toEqual(["assign", "delete"]);
+    expect(gridVariantsOf("STORE_WRITE_OUTSIDE_SETTER")).toEqual(["assign", "delete", "nested-assign", "nested-push", "deferred-micro", "deferred-timer", "deferred-then"]);
+    const variants = (context) => [...new Set(gridShapes("STORE_WRITE_OUTSIDE_SETTER", context).map((shape) => shape.variant))];
+    expect(variants("handler")).toContain("deferred-micro");
+    expect(variants("body")).not.toContain("deferred-micro");
+    expect(variants("body")).toContain("nested-push");
+  });
+  it("prints a deferred write inside the store's own setter callback, on the site's line", () => {
+    const { built } = generateShape({ seed: 1 }, { code: "STORE_WRITE_OUTSIDE_SETTER", context: "handler" }, { variant: "deferred-micro", binding: "direct", layer: "none" }, 0);
+    const site = built.sites.find((s) => s.code);
+    expect(built.text.split("\n")[site.line - 1]).toMatch(/setS1\(\(\) => \{ queueMicrotask\(\(\) => \{ s1\.v = 7; \}\); \}\)/);
+    const nested = generateShape({ seed: 1 }, { code: "STORE_WRITE_OUTSIDE_SETTER", context: "body" }, { variant: "nested-assign", binding: "direct", layer: "none" }, 0).built.text;
+    expect(nested).toContain("createStore({ v: 0, a: { v: 0 }, items: [0] })");
+    expect(nested).toContain("s1.a.v = 7");
+  });
+});
+
 describe("the grid", () => {
   it("adds the value bindings (hook, hook member, tuple slot) to values only, never to APIs and never to the random draw", () => {
     expect(gridBindingsOf("STRICT_READ_UNTRACKED", "signal")).toEqual([...bindingsOf("STRICT_READ_UNTRACKED", "signal"), ...VALUE_BINDINGS]);
@@ -193,7 +212,7 @@ describe("the grid", () => {
       const shapes = gridShapes(code);
       const keys = shapes.map((shape) => `${shape.variant}|${shape.binding}|${shape.layer}`);
       expect(new Set(keys).size).toBe(keys.length);
-      expect(shapes.length).toBe(variantsOf(code).reduce((n, variant) => n + gridBindingsOf(code, variant).length * LAYERS.length, 0));
+      expect(shapes.length).toBe(gridVariantsOf(code).reduce((n, variant) => n + gridBindingsOf(code, variant).length * LAYERS.length, 0));
     }
   });
 

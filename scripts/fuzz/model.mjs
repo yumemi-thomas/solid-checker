@@ -118,6 +118,8 @@ export const memoSignal = (name) => ({ ...signal(name, 0, "src"), kind: "memo" }
 /** An async memo (`createMemo(async () => 1)`): reading it is pending until the promise settles. */
 /** A store whose property may be deleted (`createStore<{ v?: number }>`). */
 export const storeOptSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-opt" });
+/** A store with a nested record and an array (`{ v, a: { v }, items: [v] }`): writes past its root. */
+export const storeNestedSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-nested" });
 export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
 export const actionSignal = (name, target, value) => ({ ...signal(name, 0, "src"), kind: "action", target, value });
 
