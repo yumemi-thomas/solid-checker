@@ -2280,11 +2280,13 @@ fn consumed_by_alias_slots(file: &FileFacts, reference: Span, names: &[Span]) ->
             return false;
         };
         // The literal is an arrow's whole expression body.
-        let Some(arrow) = ast.functions.iter().find(|function| {
-            ast.peel_ts_sugar_span(function.body) == literal.span
-                && !function.r#async
-                && !function.generator
-        }) else {
+        let Some(arrow) =
+            crate::owners::containing_ast_function(ast, literal.span).filter(|function| {
+                ast.peel_ts_sugar_span(function.body) == literal.span
+                    && !function.r#async
+                    && !function.generator
+            })
+        else {
             return false;
         };
         let Some(binding) = ast.bindings.iter().find(|binding| {
