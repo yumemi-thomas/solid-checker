@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildMatrix, codeStatuses, gate, judge, markdown, regionOf } from "./matrix.mjs";
+import { buildMatrix, codeStatuses, gate, generateShape, gridShapes, judge, markdown, regionOf, shapeSeed } from "./matrix.mjs";
+import { LAYERS, SPEC, TEMPLATE_CODES, bindingsOf, variantsOf } from "./misuse.mjs";
 
 const site = { line: 10, aux: [4] };
 const ok = { ok: true, findings: [] };
@@ -137,5 +138,35 @@ describe("gate", () => {
   it("fails a baseline cell that vanished and refuses different seeds", () => {
     expect(gate(base, matrixOf([row("B", "body", 1, "agree")])).regressions[0].why).toMatch(/missing/);
     expect(gate(base, { ...base, seed: 2 }).refused).toMatch(/differ in seed/);
+  });
+});
+
+describe("the grid", () => {
+  it("lists every shape of a code once, in a fixed order", () => {
+    for (const code of TEMPLATE_CODES) {
+      const shapes = gridShapes(code);
+      const keys = shapes.map((shape) => `${shape.variant}|${shape.binding}|${shape.layer}`);
+      expect(new Set(keys).size).toBe(keys.length);
+      expect(shapes.length).toBe(variantsOf(code).reduce((n, variant) => n + bindingsOf(code, variant).length * LAYERS.length, 0));
+    }
+  });
+
+  it("builds the program of the shape asked, with a seed and id of the shape alone", () => {
+    const cell = { code: "NO_OWNER_CLEANUP", context: SPEC.NO_OWNER_CLEANUP.contexts[0] };
+    const shape = { variant: null, binding: "namespace", layer: "closure+helper" };
+    const { program, built } = generateShape({ seed: 1 }, cell, shape, 7);
+    expect(program.components[0].misuse).toMatchObject({ code: cell.code, context: cell.context, ...shape });
+    expect(built.id).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(generateShape({ seed: 1 }, cell, shape, 3).built.text).toBe(built.text);              // the index does not move it
+    expect(shapeSeed(1, cell.code, cell.context, shape)).not.toBe(shapeSeed(2, cell.code, cell.context, shape));
+    expect(shapeSeed(1, cell.code, cell.context, shape)).not.toBe(shapeSeed(1, cell.code, cell.context, { ...shape, layer: "iife" }));
+  });
+
+  it("the gate refuses to compare a grid matrix with a random one", () => {
+    const random = { seed: 1, perCell: 20, generator: "g", total: {}, cells: {} };
+    const grid = { seed: 1, perCell: null, sampling: "grid", generator: "g", total: {}, cells: {} };
+    expect(gate(random, grid).refused).toMatch(/perCell|sampling/);
+    expect(gate(grid, grid).ok).toBe(true);
+    expect(gate(random, { ...random }).ok).toBe(true);
   });
 });
