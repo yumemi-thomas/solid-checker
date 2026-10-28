@@ -30,7 +30,7 @@ import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import { MISUSE_CODES, SPEC, TEMPLATE_CODES } from "./misuse.mjs";
 import { isSite, walk } from "./model.mjs";
-import { evaluate } from "./pipeline.mjs";
+import { evaluate, finishEntries, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { legalTwin } from "./falseclean.mjs";
@@ -376,9 +376,21 @@ async function sweep(options, config, out) {
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
   const started = Date.now();
-  for (let at = 0; at < entries.length; at += CHUNK) {
-    const chunk = entries.slice(at, at + CHUNK);
-    const results = await evaluate(chunk.map(({ program, built }) => ({ program, built })), config);
+  // With every program's runtime cached no Vitest batch runs, so the workers' share of the machine goes to the checker: the same budget.
+  const plain = (list) => list.map(({ program, built }) => ({ program, built }));
+  const run = runtimeCached(plain(entries), config) ? { ...config, concurrency: config.concurrency + config.workers } : config;
+  if (run !== config) console.error(`matrix: every program's runtime is cached; checker concurrency ${run.concurrency} (${config.concurrency} + the ${config.workers} idle workers)`);
+  // Chunk k's fast path runs while chunk k+1 is type-checked and checked: one checker pool and one Vitest batch at a time, as before, but
+  // never one waiting on the other. Each chunk's records and verdicts are what `evaluate` gives it.
+  const chunks = [];
+  for (let at = 0; at < entries.length; at += CHUNK) chunks.push(entries.slice(at, at + CHUNK));
+  const prepare = (chunk) => { const stage = prepareEntries(plain(chunk), run); stage.catch(() => {}); return stage; };
+  let next = chunks.length ? prepare(chunks[0]) : null;
+  for (const [number, chunk] of chunks.entries()) {
+    const stage = await next;
+    next = number + 1 < chunks.length ? prepare(chunks[number + 1]) : null;
+    const results = await finishEntries(stage, run);
+    const at = number * CHUNK;
     for (const { cell, index, program, built } of chunk) {
       const value = results.get(built.id);
       const site = siteOf(built);

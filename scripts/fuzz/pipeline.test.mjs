@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { EntryCache } from "./cache.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
-import { evaluate, judgeEntries, lazyControl, signaturesOf } from "./pipeline.mjs";
+import { evaluate, finishEntries, judgeEntries, lazyControl, prepareEntries, runtimeCached, signaturesOf } from "./pipeline.mjs";
 
 // The wiring with fakes for the three expensive steps: the type checker, the checker, the Happy DOM batch.
 const entry = (seed) => { const program = generateProgram(seed, { profile: "in-place" }); return { program, built: buildCase(program, { id: `fuzz-${seed}` }) }; };
@@ -271,5 +271,33 @@ describe("evaluate: the runtime cache", () => {
     await evaluate([e], config(), plain.deps);
     await evaluate([e], config(), plain.deps);
     expect(plain.calls).toEqual({ typecheck: 4, checker: 2, fast: 2 });
+  });
+});
+
+describe("evaluate in two halves", () => {
+  const deps = () => ({
+    typecheck: async () => ({ ok: true, errors: [] }),
+    runChecker: async () => ({ ok: true, findings: [] }),
+    runFast: async (cases) => new Map(cases.map((c) => [c.id, { diagnostics: [], errors: [], witnesses: [], hits: {}, quiescent: true }])),
+  });
+
+  it("prepareEntries then finishEntries classify as evaluate does", async () => {
+    const entries = [entry(8), entry(9)];
+    const whole = await evaluate(entries, config(), deps());
+    const halves = await finishEntries(await prepareEntries(entries, config(), deps()), config(), deps());
+    for (const { built } of entries) expect(halves.get(built.id).classification).toEqual(whole.get(built.id).classification);
+  });
+
+  it("knows when the runtime cache covers every entry, without counting hits", async () => {
+    const cache = new EntryCache(mkdtempSync(join(tmpdir(), "fuzz-rcache-")), "runtime", "e".repeat(64));
+    const [a, b] = [entry(10), entry(11)];
+    expect(runtimeCached([a], { ...config(), runtimeCache: cache })).toBe(false);
+    await evaluate([a], { ...config(), runtimeCache: cache }, deps());
+    const before = cache.stats();
+    expect(runtimeCached([a], { ...config(), runtimeCache: cache })).toBe(true);
+    expect(runtimeCached([a, b], { ...config(), runtimeCache: cache })).toBe(false);
+    expect(runtimeCached([a], { ...config(), runtimeCache: cache, control: true })).toBe(false);   // the clean control was never run
+    expect(runtimeCached([a], config())).toBe(false);
+    expect(cache.stats()).toEqual(before);
   });
 });

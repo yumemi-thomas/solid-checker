@@ -197,6 +197,9 @@ export class EntryCache {
     return undefined;
   }
 
+  /** Whether an entry is stored under `key` (counts no hit or miss). */
+  has(key) { return existsSync(this.pathOf(key)); }
+
   set(key, value) {
     const path = this.pathOf(key);
     mkdirSync(dirname(path), { recursive: true });

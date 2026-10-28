@@ -40,9 +40,16 @@ const inconclusive = (reason, why) => ({ verdict: "inconclusive", reasons: [reas
  * @returns {Promise<Map<string, object>>} id -> { program, built, typecheck, checker, runtime, classification, verdicts, control }
  */
 export async function evaluate(entries, config, deps = {}) {
+  return finishEntries(await prepareEntries(entries, config, deps), config, deps);
+}
+
+/**
+ * The first half of `evaluate`: writes the cases, type-checks them and runs the checker (step 1). `finishEntries` runs the fast path and
+ * classifies (steps 2 and 3). Apart, a caller can overlap one batch's checker work with the previous batch's fast path (matrix.mjs); the
+ * halves are `evaluate`'s, so the records and classifications are the same.
+ */
+export async function prepareEntries(entries, config, deps = {}) {
   const { runChecker: check = runChecker, typecheck: types = typecheck } = deps;
-  // The long-lived host (`config.fast`) serves the batches when there is one; tests inject `deps.runFast`.
-  const fast = deps.runFast ?? (config.fast ? (cases) => config.fast.run(cases) : runFast);
   const results = new Map();
   const { install, casesDir } = config;
   const instrument = config.instrument !== false;
@@ -87,6 +94,16 @@ export async function evaluate(entries, config, deps = {}) {
     if (value.typecheck.ok && value.checker?.ok && (!instrument || (built.neutral && value.twinTypecheck?.ok))) live.push(value);
     if (!config.keepWork) rmSync(value.dir, { recursive: true, force: true });
   }
+  return { results, live };
+}
+
+/** The second half of `evaluate` (steps 2 and 3) on what `prepareEntries` returned. */
+export async function finishEntries({ results, live }, config, deps = {}) {
+  // The long-lived host (`config.fast`) serves the batches when there is one; tests inject `deps.runFast`.
+  const fast = deps.runFast ?? (config.fast ? (cases) => config.fast.run(cases) : runFast);
+  const instrument = config.instrument !== false;
+  const control = instrument && Boolean(config.control);
+  const cache = config.runtimeCache ?? null;
 
   // 2. Run everything the checker answered in one Vitest batch (the twin), and, as a control, the clean twin in a second.
   const variant = instrument ? "run" : "clean";
@@ -122,6 +139,22 @@ export async function evaluate(entries, config, deps = {}) {
     });
   }
   return results;
+}
+
+/**
+ * Whether the runtime cache holds every type check and fast record `evaluate` would ask of these entries: then no Vitest batch runs,
+ * and the workers' share of the machine is free for the checker (matrix.mjs). Counts no hit or miss.
+ */
+export function runtimeCached(entries, config) {
+  const cache = config.runtimeCache;
+  if (!cache) return false;
+  const instrument = config.instrument !== false;
+  const control = instrument && Boolean(config.control);
+  const variant = instrument ? "run" : "clean";
+  return entries.every(({ built }) => cache.has(caseKey(built.files, "typecheck"))
+    && (!instrument || cache.has(caseKey(built.files, "typecheck-twin")))
+    && cache.has(caseKey(built.files, `fast-${variant}|${built.id}`))
+    && (!control || cache.has(caseKey(built.files, `fast-clean|${built.id}-clean`))));
 }
 
 /** The fast path for `cases` (`{ id, dir, variant, built }`): the cached records, and one batch for the rest (stored when the runner wrote them). */
