@@ -85,7 +85,7 @@ pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 21] = [
 ];
 
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:51a9424775216933a7e676b17e723c770c6b9ffc5b852326ed476df42fe0edb4";
+    "sha256:3a373545fd152a6b98bb36d7f04980075f55a606e67583f0e762c41837ff673d";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -505,7 +505,9 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // by Wire table schema v23; a protocol-85 consumer would refuse the new bit.
 // Protocol 87 (ADR 0461) adds the `writableOptionalProperty` demand and entity
 // flag, carried by Wire table schema v24.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 87;
+// Protocol 88 (ADR 0465) adds the analyze answer's `strictNullChecks`, the
+// program's effective option, which the retained table keeps.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 88;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -750,6 +752,11 @@ pub struct Response {
     pub symbol_evidence: Vec<SymbolFact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty", with = "serde_bytes")]
     pub table_transition: Vec<u8>,
+    /// An `Analyze` answer: whether the program applies `strictNullChecks`,
+    /// resolved as the compiler does (protocol 87, ADR 0465). Absent from
+    /// every other answer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strict_null_checks: Option<bool>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reference_evidence: Vec<SymbolFact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

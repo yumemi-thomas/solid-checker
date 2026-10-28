@@ -183,6 +183,7 @@ pub fn first_difference(incremental: &Program, fresh: &Program) -> Option<Shadow
         async_reads,
         undecided_component_regions,
         unreached_sites,
+        early_mention_sites,
     );
     if incremental.obligation_counts != fresh.obligation_counts {
         return Some(ShadowMismatch {

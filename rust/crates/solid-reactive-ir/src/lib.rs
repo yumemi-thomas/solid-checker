@@ -1311,6 +1311,11 @@ pub struct Program {
     /// [`site_unreached`]), sorted by location.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unreached_sites: Vec<UnreachedSite>,
+    /// The locations of reportable rows whose site mentions a binding at a
+    /// point not proven to follow its declarator (ADR 0464,
+    /// [`site_may_precede_initialization`]), sorted.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub early_mention_sites: Vec<Location>,
 }
 
 /// The site of a reportable row that no execution of the program reaches
@@ -1339,6 +1344,24 @@ pub fn site_unreached<'p>(
             && site.location.start_byte == start
             && site.location.end_byte == end
     })
+}
+
+/// Whether the report location exactly `start..end` of `path` holds a mention
+/// that may run before its binding's declarator (ADR 0464): the site may
+/// throw a `ReferenceError` there in place of what a rule claims.
+#[must_use]
+pub fn site_may_precede_initialization(
+    program: &Program,
+    path: &str,
+    start: u64,
+    end: u64,
+) -> bool {
+    program
+        .early_mention_sites
+        .binary_search_by(|site| {
+            (site.path.as_ref(), site.start_byte, site.end_byte).cmp(&(path, start, end))
+        })
+        .is_ok()
 }
 
 /// One call of `EventTarget.dispatchEvent` or `HTMLElement.click`.

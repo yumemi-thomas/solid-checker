@@ -11,23 +11,22 @@ type State = {
 const [store, setStore] = createStore<State>({ v: 0, a: { b: 1 }, nick: undefined, rec: {} });
 const [other, setOther] = createStore({ n: 0 });
 
-// Positive: an optional property of the store deleted in the component body.
-// Uncertifiable: one on a nested store path (a link's type proves nothing at
-// run time without strictNullChecks, which the facts do not record).
+// Positive: an optional property of the store deleted in the component body,
+// and one on a nested store path (strictNullChecks holds the link, ADR 0465).
 export function Body() {
   delete store.v;
   delete store.a.b;
 }
 
-// Positive: a parenthesized operand. Uncertifiable: an optional link narrowed
-// to its object (TypeScript accepts both).
+// Positive: a parenthesized operand, and an optional link narrowed to its
+// object (TypeScript accepts both).
 export function Narrowed() {
   delete (store.v);
   if (store.o) delete store.o.b;
 }
 
-// Positive: in an effect's apply function; uncertifiable: a nested path in an
-// event handler.
+// Positive: in an effect's apply function, and a nested path in an event
+// handler.
 export function Deferred() {
   createEffect(() => other.n, () => {
     delete store.v;

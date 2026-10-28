@@ -112,6 +112,7 @@ fn response(generation: u64, state_token: &str, table_transition: Vec<u8>) -> Re
         state_token: state_token.into(),
         affected: Vec::new(),
         graph_kept: false,
+        strict_null_checks: None,
         sources: Vec::new(),
         source_arena: String::new(),
         source_lengths: Vec::new(),

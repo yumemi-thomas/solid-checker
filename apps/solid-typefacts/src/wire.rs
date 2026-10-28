@@ -150,6 +150,7 @@ pub fn blank_response(schema: u64, request_id: u64, project_id: &str, generation
         state_token: String::new(),
         affected: Vec::new(),
         graph_kept: false,
+        strict_null_checks: None,
         sources: Vec::new(),
         source_arena: String::new(),
         source_lengths: Vec::new(),
@@ -385,6 +386,7 @@ mod encode_tests {
             source: b"let a = 1;".to_vec(),
         }];
         response.source_arena = "arena".to_owned();
+        response.strict_null_checks = Some(true);
         response.source_lengths =
             vec![0, 23, 24, 255, 256, 65_535, 65_536, u64::from(u32::MAX) + 1];
         response.timings = Some(ServerTimings {

@@ -528,6 +528,17 @@ fn lossy(source: &[u8]) -> String {
 }
 
 impl ClosureBackend for Project {
+    /// The checker's own `strict_null_checks`
+    /// (`compiler_options.get_strict_option_value(compiler_options.strict_null_checks)`
+    /// in tsrs `checker.rs`), read from the live program's options.
+    fn strict_null_checks(&mut self, ctx: &Context) -> Result<Option<bool>, BackendError> {
+        check(ctx)?;
+        let options = self.live()?.program().options();
+        Ok(Some(
+            options.get_strict_option_value(options.strict_null_checks),
+        ))
+    }
+
     /// Go: `SourceFiles`: every non-declaration program file with its text,
     /// path-ordered.
     fn source_files(&mut self, ctx: &Context) -> Result<Vec<SourceFile>, BackendError> {

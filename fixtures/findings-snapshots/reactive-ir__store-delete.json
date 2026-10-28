@@ -7,18 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 613,
-      "end": 620,
-      "fixes": 0
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 631,
-      "end": 640,
+      "start": 544,
+      "end": 551,
       "fixes": 0
     },
     {
@@ -27,18 +17,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 807,
-      "end": 814,
-      "fixes": 0
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 839,
-      "end": 848,
+      "start": 562,
+      "end": 571,
       "fixes": 0
     },
     {
@@ -47,18 +27,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 1028,
-      "end": 1035,
-      "fixes": 0
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 1084,
-      "end": 1093,
+      "start": 727,
+      "end": 734,
       "fixes": 0
     },
     {
@@ -67,8 +37,38 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 1218,
-      "end": 1225,
+      "start": 759,
+      "end": 768,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete/App.tsx",
+      "start": 937,
+      "end": 944,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete/App.tsx",
+      "start": 993,
+      "end": 1002,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete/App.tsx",
+      "start": 1127,
+      "end": 1134,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 1345,
-      "end": 1386,
+      "start": 1254,
+      "end": 1295,
       "fixes": 0
     },
     {
@@ -87,8 +87,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 1373,
-      "end": 1380,
+      "start": 1282,
+      "end": 1289,
       "fixes": 0
     },
     {
@@ -97,8 +97,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 1573,
-      "end": 1583,
+      "start": 1482,
+      "end": 1492,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 1736,
-      "end": 1777,
+      "start": 1645,
+      "end": 1686,
       "fixes": 0
     },
     {
@@ -117,8 +117,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 1781,
-      "end": 1849,
+      "start": 1690,
+      "end": 1758,
       "fixes": 0
     },
     {
@@ -127,8 +127,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 2248,
-      "end": 2255,
+      "start": 2157,
+      "end": 2164,
       "fixes": 0
     },
     {

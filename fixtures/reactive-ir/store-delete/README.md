@@ -11,18 +11,19 @@ TypeScript reports `delete` of a required property (TS2790 under
 strictNullChecks) and of a readonly one (TS2704), so the operand must carry the
 Type Fact `writableOptionalProperty`: the checker resolves the property symbol
 and marks it optional and not readonly, which type-checks under every compiler
-option for a bare or parenthesized operand. A chain past the root (`store.a.b`) is
-silent when a link's domain may hold `null` or `undefined` (TS18047/TS18048)
-and otherwise uncertifiable: without strictNullChecks, which the facts do not
-record, a link's type proves nothing about its runtime value. A missing fact
-also makes the delete uncertifiable.
+option for a bare or parenthesized operand. A chain past the root (`store.a.b`) gets the
+assignment form's verdict (ADR 0465): silent when a link's domain may hold
+`null` or `undefined` (TS18047/TS18048), a violation under strictNullChecks
+(this project is strict) when every link excludes both, uncertifiable without
+it. A missing fact also makes the delete uncertifiable.
 
 Reported: an optional property of the store deleted in the body, an effect's
 apply, inside a wrapper function, a parenthesized operand, inside another
 store's setter, through a namespace-imported `S.createStore` (`Namespace.tsx`),
-through a projection result, and through a `const` alias of the store (ADR
-0462). Uncertifiable: the nested paths
-(`store.a.b` in the body and a handler, `store.o.b` narrowed by `if (store.o)`).
+through a projection result, through a `const` alias of the store (ADR
+0463), and the nested paths (`store.a.b` in the body and a handler,
+`store.o.b` narrowed by `if (store.o)`; rc.17 in Chrome:
+`STORE_WRITE_OUTSIDE_SETTER` for all three).
 
 Silent: inside the store's own setter callback (commits, rc.17 probe), on the
 setter's draft, on a plain object, through a shadowing parameter. Refused, also

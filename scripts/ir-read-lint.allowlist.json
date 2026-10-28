@@ -135,7 +135,7 @@
   },
   "rust/crates/solid-reactive-ir/src/indexes/initialization.rs": {
     "facts.files": 6,
-    "file_by_path": 1,
+    "file_by_path": 2,
     "hashmap-iteration": 2
   },
   "rust/crates/solid-reactive-ir/src/indexes/intrinsics.rs": {

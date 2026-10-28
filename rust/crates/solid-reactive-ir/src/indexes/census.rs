@@ -232,8 +232,8 @@ impl Memo<BuildSchema> for UninitializedMentions {
         Ok(Arc::new(
             rejected
                 .iter()
-                .find(|(candidate, _)| candidate.as_str() == path)
-                .map(|(_, spans)| spans.clone())
+                .find(|(candidate, _, _)| candidate.as_str() == path)
+                .map(|(_, spans, _)| spans.clone())
                 .unwrap_or_default(),
         ))
     }

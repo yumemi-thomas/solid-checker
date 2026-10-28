@@ -671,6 +671,9 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// ADR 0370: analyzed functions' parameters that reach an undescribed
     /// callee, for SC9012's `package-callee` context at their callers.
     pub(super) forwarded_uncaptured: shared_reactivity::ForwardedUncaptured,
+    /// Whether the program applies `strictNullChecks`, from the Type Facts
+    /// table (ADR 0465); `None` is no answer.
+    pub(super) strict_null_checks: Option<bool>,
 }
 
 /// Runs every upstream-compat rule the dialect's catalog declares over one
@@ -731,6 +734,7 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         prefer_for_enabled,
         prefer_show_enabled,
         forwarded_uncaptured: shared_reactivity::ForwardedUncaptured::default(),
+        strict_null_checks: ctx.facts.typescript.strict_null_checks(),
     };
     context.forwarded_uncaptured =
         shared_reactivity::ForwardedUncaptured::build(&ctx.facts.files, &context);

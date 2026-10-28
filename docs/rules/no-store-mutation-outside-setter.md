@@ -23,9 +23,9 @@ symbol:
 - an assignment, compound assignment or update (`store.a.b = x`,
   `store.n++`);
 - a `delete` of a bare or parenthesized static member path (`delete
-  store.a.b`) whose property Type Facts proves optional and not readonly, and
-  whose objects past the root (`store.a`) it proves never `null` or
-  `undefined` (ADR 0461); a missing fact makes it uncertifiable;
+  store.a.b`) whose property Type Facts proves optional and not readonly
+  (ADR 0461), its links past the root judged as an assignment's (ADR 0465,
+  below); a missing fact makes it uncertifiable;
 - a call of one of the nine in-place `Array.prototype` methods (`push`, `pop`,
   `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`) on a
   path of the store. The callee must resolve through Type Facts to the
@@ -34,6 +34,19 @@ symbol:
   `no-store-mutation-outside-setter` matches the method name);
 - the same writes through a `createProjection` result, reported as a
   projection write (it has no setter to name).
+
+**Past the root (ADR 0465).** A write that reads no link past the root
+(`store.v = 1`, `list.push(1)` on a store that is the array, a cast root) is a
+violation. A write through a link (`store.a.b = 1`, `store.items.push(1)`)
+depends on the program's `strictNullChecks`, which Type Facts reports as the
+compiler resolves it (the option, else `strict`, on unless `false`). Under it,
+a link whose type may hold `null` or `undefined` is TS18048/TS18047, so the
+rule is silent; a link whose type excludes both keeps the violation; an
+element-access link (`store.rows[0].done`) and a chain under a type assertion
+(`store.n!.b`, `(store.o as T).b`) are uncertifiable. Without it every write
+through a link is uncertifiable: the type then proves nothing about the link's
+runtime value, and an undefined link throws `TypeError` before the proxy sees
+a write. Fixtures `store-write-chain-links`, `store-write-chain-links-loose`.
 
 The runtime drops all of them outside a setter: the proxy's `set` trap
 returns `true` without storing (`@solidjs/signals@2.0.0-rc.17`
