@@ -105,6 +105,28 @@ describe("classify: the checker is quiet, uncertifiable or failed", () => {
     expect(result.items[0]).toMatchObject({ kind: "candidate-false-clean", diagnostic: { code: "REACTIVE_WRITE_IN_OWNED_SCOPE", line: 8, severity: "error" } });
   });
 
+  // `const cb1 = () => { ...line 8... }; onSettled(cb1);` registered on line 30: the callback runs later, so line 30 is not on the stack.
+  describe("a finding on the line where the callback was registered", () => {
+    const registrations = (line) => (line >= 7 && line <= 9 ? [30] : []);
+    const withRegistration = (findings, code = "CLEANUP_IN_FORBIDDEN_SCOPE", lines = [8, 9]) => classify({ sites: [], checker: checker(findings), runtime: runtime({ diagnostics: [diag(code, ...lines)] }), plan, evidence: { registrationLines: registrations } });
+    it("covers the diagnostic: a withholding finding is a recall gap, a violation an agree", () => {
+      const declined = withRegistration([uncertifiable("reactive-dispatch-unresolved", 30)]);
+      expect(declined.verdict).toBe("recall-gap");
+      expect(declined.items.find((item) => item.kind === "recall-gap")).toMatchObject({ diagnostic: { code: "CLEANUP_IN_FORBIDDEN_SCOPE", line: 8, rule: "reactive-dispatch-unresolved" } });
+      const proven = withRegistration([violation("leaf-owner-forbidden-call", 30, 30, "SC3001")]);
+      expect(proven.items.map((item) => item.kind)).not.toContain("candidate-false-clean");
+      expect(proven.items.find((item) => item.kind === "agree")).toMatchObject({ diagnostic: { code: "CLEANUP_IN_FORBIDDEN_SCOPE" } });
+    });
+    it("is still a false clean without the registration link, or when the finding's rule does not claim the code", () => {
+      expect(classify({ sites: [], checker: checker([uncertifiable("reactive-dispatch-unresolved", 30)]), runtime: runtime({ diagnostics: [diag("CLEANUP_IN_FORBIDDEN_SCOPE", 8, 9)] }), plan }).verdict).toBe("candidate-false-clean");
+      expect(withRegistration([uncertifiable("no-write-in-pure-computation", 30)]).verdict).toBe("candidate-false-clean");
+    });
+    it("is still a false clean when the stack is in another function (no link to line 30) or the finding is on another line", () => {
+      expect(withRegistration([uncertifiable("reactive-dispatch-unresolved", 30)], "CLEANUP_IN_FORBIDDEN_SCOPE", [40]).verdict).toBe("candidate-false-clean");
+      expect(withRegistration([uncertifiable("reactive-dispatch-unresolved", 31)]).verdict).toBe("candidate-false-clean");
+    });
+  });
+
   it("a withholding finding at the diagnostic is a recall gap: the checker declined", () => {
     const result = classify({ sites, checker: checker([uncertifiable("reactive-dispatch-unresolved", 8)]), runtime: runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 8)] }), plan });
     expect(result.verdict).toBe("recall-gap");

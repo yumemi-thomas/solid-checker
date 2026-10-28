@@ -161,7 +161,7 @@ export function classify({ sites, glue = [], checker, runtime, plan, evidence = 
     }
   }
 
-  items.push(...diagnosticItems(events, findings));
+  items.push(...diagnosticItems(events, findings, evidence.registrationLines));
 
   if (!items.length) add("agree", disturbed.length ? `no claims to compare (${disturbed[0]})` : "the checker and the runtime are both silent");
   return result(items);
@@ -182,8 +182,11 @@ export function classify({ sites, glue = [], checker, runtime, plan, evidence = 
  *   nothing, or no finding that could claim it    `candidate-false-clean`.
  * A diagnostic with no authored line (Solid spoke, the harness could not place it) is a false clean only when the checker has
  * no finding of a claiming rule anywhere in the file; with one it is left alone (nothing says which line it was).
+ * `registrationLines(line)` (registration.mjs) gives, for a stack line, the lines of the calls that registered the callback the line
+ * is in: a callback that runs later has no registering call on its stack, and the checker answers there (`onSettled(cb1)`). A finding
+ * of a claiming rule on such a line covers the diagnostic like one on a stack line.
  */
-export function diagnosticItems(events, findings) {
+export function diagnosticItems(events, findings, registrationLines = () => []) {
   const items = [];
   for (const event of events) {
     if (!isDefectCode(event.code)) continue;
@@ -197,10 +200,19 @@ export function diagnosticItems(events, findings) {
         diagnostic: { code: event.code, line: null, message: event.message, severity, source: event.source, unplaced: true, frames: [] } });
       continue;
     }
-    const covering = findings.filter((finding) => attributed.some((position) => inSpan(finding, position.line)) && claims(finding));
-    if (covering.some((finding) => finding.kind === "violation")) continue; // already an agree through the finding
+    const registered = attributed.flatMap((position) => registrationLines(position.line));
+    const onStack = (finding) => attributed.some((position) => inSpan(finding, position.line));
+    const covering = findings.filter((finding) => (onStack(finding) || registered.some((line) => inSpan(finding, line))) && claims(finding));
+    if (covering.some((finding) => finding.kind === "violation")) {
+      // A violation on a stack line is already an agree through the finding; one on a registration line is not met by that pass.
+      const viaRegistration = covering.find((finding) => finding.kind === "violation" && !onStack(finding));
+      if (viaRegistration && !covering.some((finding) => finding.kind === "violation" && onStack(finding))) {
+        items.push({ kind: "agree", reason: `${event.code} at line ${attributed[0].line}: the checker's violation ${viaRegistration.rule} (${viaRegistration.id ?? "?"}) is at line ${viaRegistration.line}, where the callback is registered`, diagnostic: { code: event.code, line: attributed[0].line } });
+      }
+      continue;
+    }
     // A violation of the same defect family at the diagnostic is a wrong-rule item from the finding, not a missing finding.
-    if (!covering.length && findings.some((finding) => finding.kind === "violation" && attributed.some((position) => inSpan(finding, position.line)) && rules.some((rule) => sameDefectFamily(rule, finding.rule)))) continue;
+    if (!covering.length && findings.some((finding) => finding.kind === "violation" && (onStack(finding) || registered.some((line) => inSpan(finding, line))) && rules.some((rule) => sameDefectFamily(rule, finding.rule)))) continue;
     // `frames`: the App lines of the diagnostic's stack, innermost first (the dynamic stack shape of the coarse key reads them).
     const diagnostic = { code: event.code, line: attributed[0].line, message: event.message, severity, source: event.source, frames: attributed.map((position) => position.line) };
     if (covering.length) {
