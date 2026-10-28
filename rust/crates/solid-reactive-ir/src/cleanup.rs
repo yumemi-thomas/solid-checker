@@ -308,9 +308,27 @@ pub(super) fn leaf_owner_operations_for_file(
                 }
                 false
             };
+            // Only a call whose function is itself an argument can be in a
+            // helper's callback, a syntactic test that spares the climb for
+            // every other call (this pass runs on every build).
+            let handed = || {
+                crate::owners::owning_function(&callback_file.ast, call.span).is_some_and(
+                    |function| {
+                        function.span != leaf_callback.span
+                            && callback_file.ast.arguments_containing(function.span).any(
+                                |(container, index)| {
+                                    callback_file
+                                        .ast
+                                        .peel_ts_sugar_span(container.arguments[index].span)
+                                        == function.span
+                                },
+                            )
+                    },
+                )
+            };
             if !own_list
                 && !direct_callback_runs(callback_file, leaf_callback.span, call.span)
-                && !in_place()
+                && !(handed() && in_place())
             {
                 continue;
             }
