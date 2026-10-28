@@ -142,6 +142,7 @@ impl ProgramDraft {
             async_reads: self.async_reads,
             undecided_component_regions: self.undecided_component_regions,
             event_dispatch_sites: self.event_dispatch_sites,
+            unreached_sites: Vec::new(),
             obligation_counts: ObligationCounts {
                 strict_reads: self.strict_read_obligations,
                 writes_and_actions: self.write_action_obligations.len(),
@@ -664,12 +665,16 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &typescript_indexes.symbols_by_root,
         &mut draft.static_defects,
     );
+    let mut program = draft.into_program(factory_instances);
+    // ADR 0458: after every producer and gate, over the rows that may be
+    // reported, while the lookup's memos are still open.
+    program.unreached_sites =
+        crate::execution_role::unreached_report_sites(&program, semantic_lookup);
     if defer_memo_end {
         semantic_lookup.defer_end_memos();
     } else if let Some(report) = semantic_lookup.end_memos() {
         report_memos(&report, &mut build_timings, emit_timings);
     }
-    let mut program = draft.into_program(factory_instances);
     program.runtime_configuration = runtime_configuration;
     clock.finish(&mut build_timings, ReactiveIrStage::FinalOrdering);
     build_timings.total = total_started.elapsed();

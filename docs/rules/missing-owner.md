@@ -188,6 +188,10 @@ In a closed program (a project whose boundary is declared closed, or whose manif
 
 A cleanup registered in a leaf whose leaf is itself owned runs in that leaf, which `leaf-owner-forbidden-call` reports, so it is not reported here. A `createTrackedEffect` body runs under its tracked node whatever the effect's owner, so its cleanup is that rule's claim too. A cleanup in an `onSettled` callback queued with no owner never runs, and that claim stays here (ADR 0347).
 
+A primitive no execution reaches (after a `return`, in a class declared there,
+in an async child nothing renders or names) is uncertifiable (ADR 0458,
+`fixtures/reactive-ir/dead-code-sites`).
+
 The proven `onSettled` cleanup variant has **error** severity because Solid 2.0
 throws `SETTLED_CLEANUP_UNOWNED` in development and silently drops the cleanup
 in production. Other proven variants are warnings: an effect keeps its

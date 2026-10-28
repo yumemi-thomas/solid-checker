@@ -1928,7 +1928,7 @@ fn semantic_demands(
 /// The dialect primitives a file imports, by the spelling a static callee names
 /// them with: a named import from a module the vocabulary owns and exports the
 /// primitive from, a member of a namespace import of one, or a `const`
-/// destructuring slot of such a namespace (ADR 0458).
+/// destructuring slot of such a namespace (ADR 0459).
 ///
 /// Syntax only, so it decides *demands* and never what a callee is: a local that
 /// shadows the import answers too, which costs the producer one more question

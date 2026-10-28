@@ -22,7 +22,7 @@ import * as Solid from "solid-js";
 import { flush as signalsFlush } from "@solidjs/signals";
 import { commitFromOtherFile } from "./commit";
 
-// ADR 0458: a `const` destructuring of the namespace binds the export itself;
+// ADR 0459: a `const` destructuring of the namespace binds the export itself;
 // a `let` one may be reassigned, so it binds nothing this proof names.
 const { flush: destructuredFlush } = Solid;
 let { flush: reassignableFlush } = Solid;

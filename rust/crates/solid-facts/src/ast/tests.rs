@@ -3032,7 +3032,7 @@ async function* body(items: AsyncIterable<number>, inner: () => AsyncGenerator<n
     );
 }
 
-/// Facts schema 77: a `const` destructuring slot of a namespace import binding
+/// Facts schema 78: a `const` destructuring slot of a namespace import binding
 /// names one export; every other form names nothing.
 #[test]
 fn namespace_member_bindings_record_only_exact_const_slots_of_an_import_namespace() {
@@ -3084,4 +3084,61 @@ fn namespace_member_bindings_record_only_exact_const_slots_of_an_import_namespac
             .map(|fact| fact.key.as_str()),
         Some("onCleanup")
     );
+}
+
+/// ADR 0458 (facts schema 77): the regions no execution reaches, from the
+/// syntax alone, and the live code around them.
+#[test]
+fn extracts_unreachable_regions() {
+    let source = "function f(c: boolean) {\n\
+  false && a();\n\
+  true || b();\n\
+  ({}) ?? c2();\n\
+  const t = 0 ? d() : e();\n\
+  if (!1) { g(); } else { h(); }\n\
+  if (c) { i(); }\n\
+  c && j();\n\
+  while (false) { k(); }\n\
+  setTimeout(() => {\n\
+    return;\n\
+    class K { static { l(); } }\n\
+    function hoisted() { m(); }\n\
+    n();\n\
+  }, 0);\n\
+  if (c) { return; } else { throw 1; }\n\
+  o();\n\
+}\n\
+lab: { break lab; }\n\
+p();\n";
+    let facts = extract("/project/App.tsx", source).unwrap();
+    let text = |span: &Span| &source[span.start as usize..span.end as usize];
+    let regions = facts
+        .unreachable_regions
+        .iter()
+        .map(text)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        regions,
+        [
+            "a()",
+            "b()",
+            "c2()",
+            "d()",
+            "{ g(); }",
+            "{ k(); }",
+            "class K { static { l(); } }",
+            "n();",
+            "o();",
+        ]
+    );
+    let at = |needle: &str| {
+        let start = u32::try_from(source.find(needle).unwrap()).unwrap();
+        Span::new(start, start + u32::try_from(needle.len()).unwrap())
+    };
+    for dead in ["a()", "l()", "n()", "o()", "g()"] {
+        assert!(facts.unreachable_contains(at(dead)), "{dead} is dead");
+    }
+    for live in ["e()", "h()", "i()", "j()", "m()", "p()", "setTimeout"] {
+        assert!(!facts.unreachable_contains(at(live)), "{live} is live");
+    }
 }

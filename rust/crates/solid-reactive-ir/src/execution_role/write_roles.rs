@@ -234,7 +234,7 @@ fn detached_in_place(
         }
         in_list |= !function.body.contains(at);
         // An await before the site in a layer: the rest of that layer runs
-        // later, on a stack the apply's first run is not on (ADR 0459).
+        // later, on a stack the apply's first run is not on (ADR 0460).
         suspended |= follows_dominating_await(file, at)
             || follows_try_head_await(file, at, lookup)
             || may_follow_suspension(file, at);
@@ -279,7 +279,7 @@ fn detached_in_place(
                     _ => {}
                 }
             }
-            // ADR 0459: the layers run on the stack of a callback that shares
+            // ADR 0460: the layers run on the stack of a callback that shares
             // its call's owner on its first run (`createRenderEffect`'s apply),
             // so the write is placed as one written directly in it. A site in a
             // list, or a callback a helper also hands on, has runs this climb
@@ -846,7 +846,7 @@ fn named_closure_in_owner_keeping_callback<'a>(
 }
 
 /// How the functions between a site and the control-flow children callback
-/// around it run (ADR 0459).
+/// around it run (ADR 0460).
 enum ControlFlowLayers {
     /// Every one runs in place, on the stack of the call at this span, written
     /// in the callback itself; `true` when a helper also hands one on.
@@ -921,7 +921,7 @@ fn control_flow_nested_layers(
 /// Whether the callback at `call`'s `index` places the writes written in it by
 /// its call's owner: one that keeps that owner and runs during the call
 /// (`untrack`, ADR 0455), or one that shares it on its first run
-/// (`createRenderEffect`'s apply, ADR 0459). Its lexical role (deferred) is
+/// (`createRenderEffect`'s apply, ADR 0460). Its lexical role (deferred) is
 /// then no proof for a function it builds.
 fn callback_takes_call_owner(
     file: &solid_facts::FileFacts,
@@ -1253,7 +1253,7 @@ fn write_role_walk(
     } else {
         ExecutionRole::Unknown
     };
-    // ADR 0459: the deferred role a control-flow component's children callback
+    // ADR 0460: the deferred role a control-flow component's children callback
     // gives every function nested in it is no proof for a write. A function
     // the callback's code runs in place (an IIFE, a helper calling it) runs
     // where that code does; any other is placed by its own entries.

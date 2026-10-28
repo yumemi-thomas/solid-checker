@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
-import { evaluate, signaturesOf } from "./pipeline.mjs";
+import { evaluate, judgeEntries, lazyControl, signaturesOf } from "./pipeline.mjs";
 
 // The wiring with fakes for the three expensive steps: the type checker, the checker, the Happy DOM batch.
 const entry = (seed) => { const program = generateProgram(seed, { profile: "in-place" }); return { program, built: buildCase(program, { id: `fuzz-${seed}` }) }; };
@@ -158,5 +158,66 @@ describe("evaluate: the instrumented twin", () => {
       expect(candidates.length).toBe(1);
       expect(signaturesOf(e.program, e.built, result.classification)).toHaveLength(1);
     }
+  });
+});
+
+// The shrink's control: asked of the candidates the plain pass accepts, and the answers equal the every-round control's.
+describe("judgeEntries: the control of a shrink", () => {
+  const records = (e, over = {}) => async (cases) => new Map(cases.map((c) => [c.id, {
+    diagnostics: [], errors: [], witnesses: e.built.sites.map((s) => ({ siteId: s.id, reached: true, actual: s.witness?.text })), hits: Object.fromEntries(e.built.ledger.map((r) => [r.hit, 1])), quiescent: true, ...over,
+  }]));
+  // A fake that reports a violation at the first site of every program and, on the clean twin of chosen ids, a diagnostic that moves the outcome.
+  const world = (entries, perturbed) => {
+    const calls = { fast: [] };
+    const deps = {
+      typecheck: okTypes,
+      runChecker: async (dir) => {
+        const e = entries.find(({ built }) => dir.endsWith(built.id) || dir.endsWith(`${built.id}-run`));
+        const [site] = e.built.sites;
+        return { ok: true, findings: [{ file: "App.tsx", rule: "strict-read-untracked", id: "SC", kind: "violation", line: site.line, endLine: site.line }] };
+      },
+      runFast: async (cases) => {
+        calls.fast.push(cases.map((c) => `${c.id}:${c.variant}`));
+        const out = new Map();
+        for (const c of cases) {
+          const e = entries.find(({ built }) => c.id.startsWith(built.id));
+          const moved = c.variant === "clean" && perturbed.has(e.built.id);
+          for (const [id, rec] of await records(e, moved ? { diagnostics: [{ code: "STRICT_READ_UNTRACKED", positions: [{ line: 5 }] }] } : {})([c])) out.set(id, rec);
+        }
+        return out;
+      },
+    };
+    return { deps, calls };
+  };
+  const holds = (_entry, result) => result.classification.items.some((item) => item.kind === "candidate-false-positive");
+
+  it("answers as the every-round control does, whichever candidates the control refuses", async () => {
+    const entries = [entry(21), entry(22), entry(23), entry(24)];
+    for (const refused of [[], [entries[0].built.id], [entries[0].built.id, entries[1].built.id], entries.map((e) => e.built.id)]) {
+      const each = world(entries, new Set(refused));
+      const lazy = world(entries, new Set(refused));
+      const old = await judgeEntries(entries, { ...config(), control: true, shrinkControl: "each" }, holds, each.deps);
+      const now = await judgeEntries(entries, { ...config(), control: true }, holds, lazy.deps);
+      // The answers agree up to the first true: the candidates after the one taken are unreached.
+      const taken = old.indexOf(true);
+      expect(now.slice(0, taken < 0 ? undefined : taken + 1)).toEqual(old.slice(0, taken < 0 ? undefined : taken + 1));
+      expect(now.filter(Boolean).length).toBe(taken < 0 ? 0 : 1);
+    }
+  });
+
+  it("runs the control only for the candidates the plain pass accepts, and not past the first that passes it", async () => {
+    const entries = [entry(25), entry(26), entry(27)];
+    const { deps, calls } = world(entries, new Set([entries[0].built.id]));
+    const answers = await judgeEntries(entries, { ...config(), control: true }, holds, deps);
+    expect(answers).toEqual([false, true, false]);
+    // One plain batch (the twins), then the controlled run of candidate 0 (refused) and of candidate 1 (taken); candidate 2 is never run again.
+    expect(calls.fast.filter((batch) => batch.some((call) => call.endsWith(":clean"))).map((batch) => batch.map((call) => call.split(":")[0]))).toEqual([[`${entries[0].built.id}-clean`], [`${entries[1].built.id}-clean`]]);
+  });
+
+  it("keeps the control in every round for the dead-site subkind, without a control, or when asked", () => {
+    expect(lazyControl({ control: true })).toBe(true);
+    expect(lazyControl({ control: true, deadSite: true })).toBe(false);
+    expect(lazyControl({ control: false })).toBe(false);
+    expect(lazyControl({ control: true, shrinkControl: "each" })).toBe(false);
   });
 });

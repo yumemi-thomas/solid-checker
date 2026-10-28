@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DEFAULT_FAST_INSTALL, collectRecords, installedVersions, pinnedProblems, prepareWork, stageCases } from "./fast.mjs";
 
-export function createFastDaemon({ install = DEFAULT_FAST_INSTALL, workers = 4, pauseMs, finalMs, requestTimeoutMs = 600000 } = {}) {
+export function createFastDaemon({ install = DEFAULT_FAST_INSTALL, workers = 4, pauseMs, finalMs, virtualClock = false, requestTimeoutMs = 600000 } = {}) {
   const root = resolve(install);
   let child = null;
   let ready = null;
@@ -30,6 +30,7 @@ export function createFastDaemon({ install = DEFAULT_FAST_INSTALL, workers = 4, 
       env: {
         ...process.env, NODE_ENV: "development", FUZZ_FAST_WORKERS: String(workers),
         ...(pauseMs === undefined ? {} : { FUZZ_PAUSE_MS: String(pauseMs) }), ...(finalMs === undefined ? {} : { FUZZ_FINAL_MS: String(finalMs) }),
+        ...(virtualClock ? { FUZZ_VIRTUAL_CLOCK: "1" } : {}),
       },
     });
     ready = new Promise((done, fail) => {

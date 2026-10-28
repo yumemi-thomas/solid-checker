@@ -1299,6 +1299,38 @@ pub struct Program {
     /// withholds, so a report can list what keeps event proofs out of reach.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub event_dispatch_sites: Vec<EventDispatchSite>,
+    /// The sites of reportable rows no execution reaches (ADR 0458,
+    /// [`site_unreached`]), sorted by location.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unreached_sites: Vec<UnreachedSite>,
+}
+
+/// The site of a reportable row that no execution of the program reaches
+/// (ADR 0458): whatever a rule claims happens there does not happen there.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnreachedSite {
+    pub location: Location,
+    /// The syntax rules it out (after an unconditional exit, in an arm a
+    /// literal test rules out); else the function running it never runs.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dead_code: bool,
+}
+
+/// The [`UnreachedSite`] at exactly the byte range `start..end` of `path`,
+/// when `program` proved no execution reaches it.
+#[must_use]
+pub fn site_unreached<'p>(
+    program: &'p Program,
+    path: &str,
+    start: u64,
+    end: u64,
+) -> Option<&'p UnreachedSite> {
+    program.unreached_sites.iter().find(|site| {
+        site.location.path.as_ref() == path
+            && site.location.start_byte == start
+            && site.location.end_byte == end
+    })
 }
 
 /// One call of `EventTarget.dispatchEvent` or `HTMLElement.click`.
@@ -2149,7 +2181,7 @@ fn referenced_primitive(
     };
     let known = |name: Option<PrimitiveName>| name.filter(|name| name.primitive().is_some());
     if let Some(declaration) = ast.reference_declaration(span) {
-        // `const { onCleanup: cleanup } = Solid` (ADR 0458): the slot's
+        // `const { onCleanup: cleanup } = Solid` (ADR 0459): the slot's
         // symbol carries the member's name (`add_solid_import_names`).
         if ast.namespace_member_binding(declaration).is_some() {
             return known(primitive_name(

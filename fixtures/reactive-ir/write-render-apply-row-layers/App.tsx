@@ -1,4 +1,4 @@
-// ADR 0459: a write in a function a `createRenderEffect` apply or a `For` row
+// ADR 0460: a write in a function a `createRenderEffect` apply or a `For` row
 // runs in place is placed where that code runs, never by the deferred role
 // the callback's lexical scope would lend it.
 import {
@@ -286,7 +286,7 @@ export function RowEffect() {
 
 // Uncertifiable (legal at run time): past an await the rest of the layer runs as
 // a continuation with no owner; the row's placement is withheld there (review of
-// ADR 0459), and the continuation is not proven.
+// ADR 0460), and the continuation is not proven.
 export function RowAsyncAwait() {
   const [w, setW] = createSignal(0);
   const load = () => Promise.resolve(1);
@@ -328,7 +328,7 @@ export function RowAsyncAwait() {
   );
 }
 
-// Silent, as before ADR 0459: the layer past an await in a render effect's apply.
+// Silent, as before ADR 0460: the layer past an await in a render effect's apply.
 export function RenderApplyAsyncAwait() {
   const [, setW] = createSignal(0);
   const load = () => Promise.resolve(1);

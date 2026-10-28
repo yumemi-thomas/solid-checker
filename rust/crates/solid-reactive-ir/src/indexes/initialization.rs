@@ -200,7 +200,7 @@ impl<'a> SemanticLookup<'a> {
     }
 
     /// Whether a slot of `binding` holds a dialect primitive read from a
-    /// namespace import (ADR 0458): a mention of it before the declarator
+    /// namespace import (ADR 0459): a mention of it before the declarator
     /// ran throws rather than calling the primitive.
     fn names_namespace_primitive(&self, file: &FileFacts, binding: &BindingFact) -> bool {
         binding.names.iter().any(|name| {
@@ -212,7 +212,7 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
-    /// Whether the mention `span` of a namespace member slot (ADR 0458) may
+    /// Whether the mention `span` of a namespace member slot (ADR 0459) may
     /// run before the slot's declarator: a call or tag there throws rather
     /// than reaching the primitive, so it names none. Every reference to a
     /// slot is in its own file: a directly exported slot is not a fact, and a

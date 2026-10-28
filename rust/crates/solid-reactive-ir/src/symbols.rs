@@ -59,7 +59,7 @@ pub(super) fn add_solid_import_names(
                 }
             }
         }
-        // `const { onCleanup: cleanup } = Solid` (ADR 0458): the slot holds
+        // `const { onCleanup: cleanup } = Solid` (ADR 0459): the slot holds
         // the namespace's member, so it names what `Solid.onCleanup` does.
         for member in &file.ast.namespace_member_bindings {
             let Some(import) = file.ast.imports.iter().find(|import| {

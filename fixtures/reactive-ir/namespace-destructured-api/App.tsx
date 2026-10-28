@@ -1,4 +1,4 @@
-// ADR 0458: a `const` object destructuring of a namespace import binding, with
+// ADR 0459: a `const` object destructuring of a namespace import binding, with
 // a static key and a bare binding, holds exactly the export `S.key` reads, so
 // the slot names that primitive wherever it is called. Every other shape stays
 // unresolved, which is never a violation.

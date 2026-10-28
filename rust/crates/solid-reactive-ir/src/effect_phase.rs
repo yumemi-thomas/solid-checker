@@ -295,7 +295,7 @@ impl<'l, 'a> Walk<'l, 'a> {
             None => (callee, None),
         };
         let mut declaration = file.ast.reference_declaration(object)?;
-        // `const { flush: drain } = Solid` (ADR 0458): `drain()` calls the
+        // `const { flush: drain } = Solid` (ADR 0459): `drain()` calls the
         // namespace's member, as `Solid.flush()` does.
         let mut name = name;
         if let Some(member) = file.ast.namespace_member_binding(declaration) {
