@@ -1,0 +1,125 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 551,
+      "end": 555,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 949,
+      "end": 953,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 1351,
+      "end": 1355,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 1758,
+      "end": 1762,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 2190,
+      "end": 2194,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 2647,
+      "end": 2651,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 3149,
+      "end": 3153,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 3529,
+      "end": 3533,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 3904,
+      "end": 3908,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 6858,
+      "end": 6862,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 7275,
+      "end": 7279,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 7882,
+      "end": 7886,
+      "fixes": 0
+    }
+  ]
+}

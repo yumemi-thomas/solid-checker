@@ -40,6 +40,10 @@ pub(super) struct NamedCallbackRole {
     /// the read-context wording only.
     pub(super) effect_apply_primitive: EffectApplyPrimitive,
     pub(super) tracked: bool,
+    /// Named, as the whole argument, at an effect's tracked compute: a
+    /// computation the effect owns, where a write is rejected as in a memo
+    /// (ADR 0466). Reads are not admitted by it (see `admitted`).
+    pub(super) effect_compute: bool,
     pub(super) deferred: bool,
     /// Named at a position whose callback runs when the call's returned
     /// object is read ([`Dialect::callback_runs_on_result_access`]). That
@@ -322,6 +326,11 @@ pub(crate) fn named_callback_roles(
             for candidate in index.identity_at(file, entities, argument.span) {
                 let entry = roles.entry(index.functions[*candidate]);
                 entry.tracked |= proven && tracked;
+                entry.effect_compute |= proven
+                    && is_effect(primitive)
+                    && dialect
+                        .callback_semantics_at(primitive, argument_index, count)
+                        .tracks_reads;
                 entry.deferred |= proven && deferred;
             }
         }

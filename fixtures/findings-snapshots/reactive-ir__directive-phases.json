@@ -22,6 +22,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-phases/App.tsx",
+      "start": 721,
+      "end": 733,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-directive-application",
       "code": "SC6001",
       "kind": "violation",

@@ -61,6 +61,10 @@ pub(super) struct EffectRow {
 pub(super) struct AliasRow {
     pub(super) source: SymbolId,
     pub(super) immutable: bool,
+    /// ADR 0463: the binding is a [`solid_facts::ast::LocalAliasBindingFact`]
+    /// (a `const` that holds exactly the `const` variable `source`), so it
+    /// is the source's value for every rule, a read included.
+    pub(super) exact: bool,
     /// Each name with a symbol: (symbol, display).
     pub(super) names: Vec<(SymbolId, SymbolId)>,
 }
@@ -321,6 +325,7 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
     }
     // Passes 5, 6 and 8: bindings that may alias a setter, an action, a
     // store or a props object.
+    let mut exact_rows = HashSet::<Span>::default();
     for binding in &file.ast.bindings {
         let source = binding
             .initializer_identifier
@@ -338,9 +343,19 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
             continue;
         }
         if let Some(source) = source {
+            let exact = binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && file
+                    .ast
+                    .local_alias_binding(binding.names[0].span)
+                    .is_some();
+            if exact {
+                exact_rows.insert(binding.names[0].span);
+            }
             rows.aliases.push(AliasRow {
                 source: source.clone(),
                 immutable: binding.immutable,
+                exact,
                 names: names.clone(),
             });
         }
@@ -353,6 +368,26 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
         let mut candidates = source.cloned().into_iter().collect::<Vec<_>>();
         candidates.extend(views);
         rows.prop_aliases.push(ViewRow { candidates, names });
+    }
+    // Pass 5, ADR 0463: every other local alias, a slot of a destructured
+    // object literal (`const { a } = { a: count }`) or a wrapped initializer
+    // (`const a = count!`), holds the `const` its fact names.
+    for alias in &file.ast.local_alias_bindings {
+        if exact_rows.contains(&alias.local) {
+            continue;
+        }
+        let (Some(source), Some(symbol)) = (
+            entities.get(&location(path.clone(), alias.source)),
+            entities.get(&location(path.clone(), alias.local)),
+        ) else {
+            continue;
+        };
+        rows.aliases.push(AliasRow {
+            source: source.clone(),
+            immutable: true,
+            exact: true,
+            names: vec![(symbol.clone(), name_of(alias.local))],
+        });
     }
     // Pass 7: props parameters of possible components.
     let statuses = file_statuses(lookup, slot, file);

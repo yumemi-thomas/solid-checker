@@ -18,8 +18,8 @@
 
 use super::native_promise::{direct_builtin, native_promise};
 use super::{
-    call_accessor_symbol, store_path_tracked, tracked_before_first_suspension,
-    tracked_store_paths_before_first_suspension,
+    call_accessor_symbol, same_source, source_identity, store_path_tracked,
+    tracked_before_first_suspension, tracked_store_paths_before_first_suspension,
 };
 use crate::HashSet;
 use crate::cleanup::callback_argument_literal;
@@ -182,7 +182,7 @@ impl<'f, 'a> PreAwait<'f, 'a> {
         let mut possible = false;
         for index in 1..steps.len() {
             let prefix = steps[..=index].join(".");
-            if store_path_tracked(&tracked, symbol, &prefix) {
+            if store_path_tracked(&tracked, source_identity(self.ctx, symbol), &prefix) {
                 continue;
             }
             // Not the same path read before. Another path reaches the same
@@ -336,7 +336,11 @@ impl<'f, 'a> PreAwait<'f, 'a> {
         {
             if identifier.role != IdentifierRole::Reference
                 || skipped(identifier.span)
-                || ctx.entities.at(file.path.as_str(), identifier.span) != Some(symbol)
+                || !same_source(
+                    ctx,
+                    ctx.entities.at(file.path.as_str(), identifier.span),
+                    symbol,
+                )
             {
                 continue;
             }
@@ -366,7 +370,8 @@ impl<'f, 'a> PreAwait<'f, 'a> {
         for call in file.ast.calls_within(region) {
             if skipped(call.span)
                 || (reads.opaque && depth > 0)
-                || (is_own(call.span) && call_accessor_symbol(ctx, file, call) == Some(symbol))
+                || (is_own(call.span)
+                    && same_source(ctx, call_accessor_symbol(ctx, file, call), symbol))
             {
                 continue;
             }
@@ -442,7 +447,7 @@ impl<'f, 'a> PreAwait<'f, 'a> {
     ) -> bool {
         let ctx = self.ctx;
         let callee_symbol = call_accessor_symbol(ctx, file, call);
-        if callee_symbol == Some(symbol) {
+        if same_source(ctx, callee_symbol, symbol) {
             return true;
         }
         // The source passed along, or a function passed that may read it.
@@ -455,7 +460,7 @@ impl<'f, 'a> PreAwait<'f, 'a> {
                 .identifiers
                 .binary_search_by_key(&span, |identifier| identifier.span)
                 .is_ok()
-                && ctx.entities.at(file.path.as_str(), span) == Some(symbol)
+                && same_source(ctx, ctx.entities.at(file.path.as_str(), span), symbol)
             {
                 return true;
             }

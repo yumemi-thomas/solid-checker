@@ -64,7 +64,7 @@
     {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/setter-in-root-rc3/root.ts",
       "start": 1715,

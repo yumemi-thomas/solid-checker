@@ -40,6 +40,44 @@ fn directly_in_tracked_compute(
         })
 }
 
+/// ADR 0470: the role the compiler gives `span` when its narrowest placement
+/// (as [`execution_role`] ranks them) lies in the function that owns `span`
+/// ([`crate::owners::owning_function`]), or at module level when no function
+/// does, so no function stands between the JSX and the read. A tracked region
+/// is the render computation the expression is wrapped in (`insert`, `effect`);
+/// a deferred callback role is a component prop or child getter, read where
+/// the receiving component reads it. Either runs wherever the JSX is evaluated
+/// and never in the window of the call that evaluates it. Any other narrowest
+/// placement (an untracked once-evaluated value, a handler factory) is `None`.
+fn own_jsx_compiler_role(file: &solid_facts::FileFacts, span: Span) -> Option<ExecutionRole> {
+    let compiler = &file.compiler;
+    let tracked = compiler
+        .tracked_regions
+        .iter()
+        .map(|region| (region.span, Some(ExecutionRole::TrackedJsx), 2_u8));
+    let untracked = compiler
+        .untracked_regions
+        .iter()
+        .map(|region| (region.span, None, 1_u8));
+    let callbacks = compiler.callback_roles.iter().map(|callback| {
+        (
+            callback.span,
+            (callback.role == solid_facts::compiler::CallbackRoleKind::Deferred)
+                .then_some(ExecutionRole::DeferredCallback),
+            0_u8,
+        )
+    });
+    let (narrowest, role, _) = tracked
+        .chain(untracked)
+        .chain(callbacks)
+        .filter(|(region, _, _)| region.contains(span))
+        .min_by_key(|(region, _, tie_break)| (region.end - region.start, *tie_break))?;
+    crate::owners::owning_function(&file.ast, span)
+        .is_none_or(|function| function.body.contains(narrowest))
+        .then_some(role)
+        .flatten()
+}
+
 /// Whether a compiler-tracked JSX region that lies inside `argument` holds
 /// `span`: the callback wrote JSX, and that JSX tracks its own expressions.
 fn tracked_region_within(file: &solid_facts::FileFacts, argument: Span, span: Span) -> bool {
@@ -179,6 +217,18 @@ pub(super) fn semantic_role_before_awaits(
         return role;
     }
     if let Some(role) = inline_callback_execution_role(file, span, allowed, lookup, classifying) {
+        return role;
+    }
+    // ADR 0470: a read in a JSX expression the compiler wraps, written in the
+    // read's own function, runs in the render computation or getter the
+    // compiler makes of it, wherever the JSX itself is evaluated: a
+    // `createRoot` or `runWithOwner` callback, an effect apply, a handler, an
+    // in-place layer. The paths below place the function, not the JSX, and
+    // would hand the read the window of the function's call. Writes keep their
+    // own classification.
+    if !classifying.contains(&write_classification_marker())
+        && let Some(role) = own_jsx_compiler_role(file, span)
+    {
         return role;
     }
     let dialect = lookup.dialect;
@@ -334,6 +384,33 @@ pub(super) fn semantic_role_before_awaits(
         return role;
     }
     if allowed.iter().any(|region| region.contains(span)) {
+        // ADR 0469: a read in a layer that runs in place (an IIFE, a
+        // `forEach` callback, a helper's callback) runs on the stack of the
+        // layer's call, so it is placed as a read written at that call: in a
+        // created root's body or an effect apply, where the strict-read window
+        // is open. The writes take the same climb (`detached_in_place`). A
+        // layer past an await, or a site in a layer's parameter list, has no
+        // proven run there: a reporting role there is unplaced.
+        if !classifying.contains(&write_classification_marker())
+            && let Some(climb) = super::write_roles::climb_in_place_layers(file, span, lookup)
+        {
+            let role = semantic_execution_role_within(
+                file,
+                climb.at,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                classifying,
+            );
+            return match climb.suspended {
+                _ if !role.reports_untracked_read() => role,
+                Some(true) => ExecutionRole::Unreported,
+                Some(false) => ExecutionRole::Unknown,
+                None if climb.in_list => ExecutionRole::Unknown,
+                None => role,
+            };
+        }
         return ExecutionRole::DeferredCallback;
     }
     if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, dialect) {

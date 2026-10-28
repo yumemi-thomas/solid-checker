@@ -417,6 +417,38 @@ pub(super) fn props_root_unaccounted_uses(
     Some(escapes)
 }
 
+/// Whether `site` runs while a call of `function` does: written directly in
+/// its body (no nested function), not in JSX the body writes (it may lower to
+/// a getter), not in a binding or assignment pattern, and the function neither
+/// async nor a generator (ADR 0462). The function may itself sit in JSX.
+fn site_runs_during_local_call(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    site: solid_facts::core::Span,
+) -> bool {
+    !function.r#async
+        && !function.generator
+        && crate::owners::written_directly_in(&file.ast, function, site)
+        && !file
+            .ast
+            .jsx_containing(site)
+            .any(|element| function.body.contains(element.span))
+        && !file
+            .ast
+            .bindings
+            .iter()
+            .any(|binding| binding.pattern.contains(site))
+        && !file
+            .ast
+            .assignments
+            .iter()
+            .any(|assignment| assignment.target.contains(site))
+}
+
+/// How many named local functions an async read is followed through to the
+/// rendered call that runs it (ADR 0462).
+const CALL_ATTRIBUTED_DEPTH: usize = 4;
+
 pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) facts: &'a ProjectFacts,
     pub(crate) lookup: &'a SemanticLookup<'facts>,
@@ -1338,6 +1370,45 @@ impl LocalAccessContext<'_, '_> {
         result
     }
 
+    /// ADR 0468: a comma, conditional or logical callee (`(c && setX)(1)`)
+    /// resolves to no symbol, so the call has no row; when an identifier it
+    /// may evaluate to is a local setter, action or accessor, the call may
+    /// write, act or read here, and an absent row would say it does not. The
+    /// call is an obligation instead.
+    fn push_composite_callee_obligation(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        result: &mut LocalAccessResult,
+    ) {
+        let reactive = file
+            .ast
+            .composite_callee_references(call.callee)
+            .into_iter()
+            .filter_map(|reference| self.lookup.callee_symbol(file, reference))
+            .any(|symbol| {
+                self.setters.contains_key(symbol)
+                    || self.actions.contains_key(symbol)
+                    || self.accessors.contains_key(symbol)
+            });
+        if !reactive {
+            return;
+        }
+        result.dispatch_obligations.push(crate::StaticDefect {
+            kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                callee: file
+                    .source_text(call.callee)
+                    .unwrap_or("this callee")
+                    .to_owned(),
+                member: None,
+            },
+            location: location(file.path.shared(), call.callee),
+            analysis_context: "composite-callee-unresolved".to_owned(),
+            fixes: vec![],
+            uncertain: true,
+        });
+    }
+
     fn discover_call(
         &self,
         file: &solid_facts::FileFacts,
@@ -1348,6 +1419,7 @@ impl LocalAccessContext<'_, '_> {
     ) {
         let callee = location(file.path.shared(), call.callee);
         let Some(symbol) = self.lookup.callee_symbol(file, call.callee) else {
+            self.push_composite_callee_obligation(file, call, result);
             return;
         };
         if inside_known_value_function_argument(file, call.callee, self.lookup) {
@@ -1370,14 +1442,31 @@ impl LocalAccessContext<'_, '_> {
                 callee.end_byte,
             ));
         }
-        let execution = semantic_execution_role(
-            file,
-            call.callee,
-            allowed,
-            self.entities,
-            self.symbol_names,
-            self.lookup,
-        );
+        // ADR 0463: a mention of a local alias that may run before the
+        // alias's declarator throws there instead of reaching the value, so
+        // nothing places what it does: every claim about it is unplaced.
+        let alias_withheld = self.lookup.local_alias_mention_withheld(file, call.callee);
+        let execution = if alias_withheld {
+            ExecutionRole::Unknown
+        } else {
+            semantic_execution_role(
+                file,
+                call.callee,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            )
+        };
+        if self.async_sources.contains(symbol)
+            && !alias_withheld
+            && self.accessors.contains_key(symbol)
+            && inside_non_component_function(file, call.callee, self.lookup)
+            && named_callback_execution_role(file, call.callee, self.lookup).is_none()
+            && !pending_accessor_probe(file, call.callee, self.lookup)
+        {
+            self.push_call_attributed_async_reads(file, call, symbol, allowed, result);
+        }
         // A universal callback-context proof can certify an accessor
         // read even when invocation is optional or resource-triggered.
         // Keep write/action and owner classification on their existing
@@ -1474,15 +1563,19 @@ impl LocalAccessContext<'_, '_> {
                 }
                 ReactiveSourceKind::Store => RootBodyGuard::Exempts,
             };
-            let mut write_execution = semantic_write_execution_role(
-                file,
-                call.callee,
-                allowed,
-                self.entities,
-                self.symbol_names,
-                self.lookup,
-                root_body,
-            );
+            let mut write_execution = if alias_withheld {
+                ExecutionRole::Unknown
+            } else {
+                semantic_write_execution_role(
+                    file,
+                    call.callee,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    root_body,
+                )
+            };
             // Where the resolved release's optimistic-store setter meets no
             // owned-scope guard (rc.0), a store setter is reported only when
             // it is proven to be `createStore`'s, whose writes do reach the
@@ -1542,15 +1635,19 @@ impl LocalAccessContext<'_, '_> {
             // it throws `ACTION_CALLED_IN_OWNED_SCOPE` directly in a
             // `createRoot` body, and in a memo nested in one (probed
             // rc.0-rc.9, dev).
-            let action_execution = semantic_write_execution_role(
-                file,
-                call.callee,
-                allowed,
-                self.entities,
-                self.symbol_names,
-                self.lookup,
-                RootBodyGuard::Rejects,
-            );
+            let action_execution = if alias_withheld {
+                ExecutionRole::Unknown
+            } else {
+                semantic_write_execution_role(
+                    file,
+                    call.callee,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    RootBodyGuard::Rejects,
+                )
+            };
             for _ in 0..multiplicity {
                 result.action_invocations.push(Arc::new(ActionInvocation {
                     action: name.to_string().into(),
@@ -1566,6 +1663,133 @@ impl LocalAccessContext<'_, '_> {
                         self.lookup,
                     )
                     .into(),
+                }));
+            }
+        }
+    }
+
+    /// ADR 0462: an async source read written directly in a named local
+    /// function (`const wrapUse = () => { a1(); }`) is rendered where a call
+    /// of that function sits in rendered JSX, through at most
+    /// [`CALL_ATTRIBUTED_DEPTH`] such functions. Each row sits at the
+    /// rendering call and is `call_attributed`: nothing proves the call reads
+    /// the source pending while it renders, so the missing-boundary finding is
+    /// uncertifiable, never proven. A reference that is not a direct call, a
+    /// function whose binding is written, a generator, or a site that may not
+    /// run during its function's call stops the walk (no row, as before).
+    fn push_call_attributed_async_reads(
+        &self,
+        file: &solid_facts::FileFacts,
+        read: &solid_facts::ast::CallFact,
+        symbol: &str,
+        allowed: &[solid_facts::core::Span],
+        result: &mut LocalAccessResult,
+    ) {
+        let Some((name, declaration)) = self.accessors.get(symbol) else {
+            return;
+        };
+        let options = self.effective_async_options(symbol);
+        let mut sites = vec![(read.span, 0_usize)];
+        let mut visited = HashSet::<solid_facts::core::Span>::default();
+        while let Some((site, depth)) = sites.pop() {
+            let Some(function) = containing_ast_function(&file.ast, site) else {
+                continue;
+            };
+            if depth >= CALL_ATTRIBUTED_DEPTH
+                || !visited.insert(function.span)
+                || function.generator
+                || self.lookup.function_may_be_component(file, function)
+                || !site_runs_during_local_call(file, function, site)
+            {
+                continue;
+            }
+            let Some(binding) = function_binding_name(file, function) else {
+                continue;
+            };
+            if self
+                .entities
+                .at(file.path.as_str(), binding.span)
+                .is_none_or(|binding| {
+                    crate::value_identity::binding_has_write(file, self.entities, binding)
+                })
+            {
+                continue;
+            }
+            for reference in file.ast.identifiers.iter().filter(|identifier| {
+                identifier.role == solid_facts::ast::IdentifierRole::Reference
+                    && file.ast.reference_declaration(identifier.span) == Some(binding.span)
+            }) {
+                let Some(call) = file.ast.calls.iter().find(|call| {
+                    call.direct_callee
+                        && !call.construct
+                        && file.ast.peel_ts_sugar_span(call.callee) == reference.span
+                }) else {
+                    continue;
+                };
+                if crate::execution_role::discarded_region_contains(file, call.span)
+                    || pending_accessor_probe(file, call.span, self.lookup)
+                {
+                    continue;
+                }
+                let execution = semantic_execution_role(
+                    file,
+                    call.callee,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                );
+                let execution = async_read_role(
+                    file,
+                    call.callee,
+                    async_execution_role(file, call.callee, execution),
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                );
+                if execution != ExecutionRole::TrackedJsx {
+                    // The call may itself sit in a named local function a
+                    // rendered call runs.
+                    sites.push((call.span, depth + 1));
+                    continue;
+                }
+                if containing_leaf_owner(
+                    file,
+                    call.callee,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                )
+                .is_some()
+                {
+                    continue;
+                }
+                let call_location = location(file.path.shared(), call.span);
+                if result
+                    .async_reads
+                    .iter()
+                    .any(|existing| existing.location == call_location)
+                {
+                    continue;
+                }
+                let cover = read_loading_cover(self.lookup, file, call.callee, self.symbol_names);
+                result.async_reads.push(Arc::new(AsyncRead {
+                    accessor: format!("{name}()").into(),
+                    location: call_location,
+                    declaration: declaration.clone(),
+                    execution,
+                    leaf_owner: None,
+                    under_loading: cover == LoadingCover::Covered,
+                    mount_unresolved: cover == LoadingCover::Unresolved,
+                    call_attributed: true,
+                    async_provenance: true,
+                    declared_loading: options.declared_loading,
+                    options_opaque: options.opaque,
+                    ssr_client_hole: options.ssr_client_bare,
+                    server_rendering_unresolved: options.server_rendering_unresolved,
+                    host_callback_timing: false,
+                    callee_callback_timing: false,
+                    invocation_context_unproven: false,
                 }));
             }
         }
@@ -1646,6 +1870,7 @@ impl LocalAccessContext<'_, '_> {
                 .map(Into::into),
                 under_loading: cover == LoadingCover::Covered,
                 mount_unresolved: cover == LoadingCover::Unresolved,
+                call_attributed: false,
                 async_provenance,
                 declared_loading: async_options.declared_loading,
                 options_opaque: async_options.opaque,
@@ -1767,14 +1992,19 @@ impl LocalAccessContext<'_, '_> {
         else {
             return;
         };
-        let execution = semantic_execution_role(
-            file,
-            member.span,
-            allowed,
-            self.entities,
-            self.symbol_names,
-            self.lookup,
-        );
+        // ADR 0463: as for a call, an alias mention before its declarator.
+        let execution = if self.lookup.local_alias_mention_withheld(file, object_span) {
+            ExecutionRole::Unknown
+        } else {
+            semantic_execution_role(
+                file,
+                member.span,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            )
+        };
         let helper = self
             .prop_sources
             .get(symbol)
@@ -2065,6 +2295,7 @@ impl LocalAccessContext<'_, '_> {
                 .map(Into::into),
                 under_loading: cover == LoadingCover::Covered,
                 mount_unresolved: cover == LoadingCover::Unresolved,
+                call_attributed: false,
                 async_provenance: member_async,
                 declared_loading: member_options.declared_loading,
                 options_opaque: member_options.opaque,
@@ -2243,6 +2474,7 @@ impl LocalAccessContext<'_, '_> {
                 .map(Into::into),
                 under_loading: cover == LoadingCover::Covered,
                 mount_unresolved: cover == LoadingCover::Unresolved,
+                call_attributed: false,
                 async_provenance: true,
                 declared_loading: false,
                 options_opaque: false,

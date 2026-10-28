@@ -87,6 +87,15 @@ fn function_valued(binding: &BindingFact) -> bool {
         && (binding.initializer_function || binding.call_initializer.is_some())
 }
 
+/// Whether a name of `binding` is a local alias (ADR 0463): a mention of it
+/// before the declarator ran throws rather than reaching the value it holds.
+fn names_local_alias(file: &FileFacts, binding: &BindingFact) -> bool {
+    binding
+        .names
+        .iter()
+        .any(|name| file.ast.local_alias_binding(name.span).is_some())
+}
+
 /// ADR 0464: a binding an array or object pattern declares with an
 /// initializer (`const [r, setR] = createSignal(0)`). A loop's
 /// `for (const [k, v] of ...)` has none: it is bound before each iteration
@@ -223,7 +232,10 @@ impl<'a> SemanticLookup<'a> {
                     let binding = &declaring.ast.bindings[resolution.binding];
                     // ADR 0459's namespace primitive slots are pattern
                     // bindings, so `decided` holds them already.
-                    if !decided(binding) && !self.names_namespace_primitive(declaring, binding) {
+                    if !decided(binding)
+                        && !self.names_namespace_primitive(declaring, binding)
+                        && !names_local_alias(declaring, binding)
+                    {
                         continue;
                     }
                     let (Ok(start), Ok(end)) = (u32::try_from(*start), u32::try_from(*end)) else {
@@ -390,6 +402,21 @@ impl<'a> SemanticLookup<'a> {
         file.ast
             .reference_declaration(span)
             .is_some_and(|declaration| file.ast.namespace_member_binding(declaration).is_some())
+            && self.may_precede_initialization(file.path.as_str(), span)
+    }
+
+    /// ADR 0463: whether the mention `span` of a local alias
+    /// ([`solid_facts::ast::LocalAliasBindingFact`]) may run before the
+    /// alias's declarator, where it throws instead of reading or calling the
+    /// value it would hold. Every reference to an alias is in its own file.
+    pub(crate) fn local_alias_mention_withheld(&self, file: &FileFacts, span: Span) -> bool {
+        if file.ast.local_alias_bindings.is_empty() {
+            return false;
+        }
+        let span = file.ast.peel_ts_sugar_span(span);
+        file.ast
+            .reference_declaration(span)
+            .is_some_and(|declaration| file.ast.local_alias_binding(declaration).is_some())
             && self.may_precede_initialization(file.path.as_str(), span)
     }
 

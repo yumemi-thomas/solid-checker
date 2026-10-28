@@ -1,0 +1,5 @@
+# write-in-refused-creation
+
+**Claim (ADR 0475).** rc.17 refuses to create a root or primitive in an effect apply (`PRIMITIVE_IN_EFFECT_CALLBACK`) or in a leaf callback (`createTrackedEffect`, owner-backed `onSettled`: `PRIMITIVE_IN_FORBIDDEN_SCOPE`), and rendering a component creates a root first, so the body of a `createRoot` called there, and of a component rendered only there, never runs. A write or action in it is uncertifiable, not a violation (it was one before): `ApplyRootInline`, `ApplyRootNamedClosure`, `ApplyRootByName`, `ApplyRootAction` (SC2002), `RenderInSettled`, `RenderInApply`, `RenderInTrackedEffect`, `NestedChildInSettled`. Fast path: only the refusal is raised, never the write's guard.
+
+Violations (rc.17 throws `REACTIVE_WRITE_IN_OWNED_SCOPE`, fast path): a component rendered in a component body (`RenderInBody`), also when it is rendered in `onSettled` too (`RenderInSettledAndBody`: the run that happens keeps the violation), and a root created in a timer or a handler (`TimerRoot`, `HandlerRoot`). Stub: copied from `write-named-closure-in-root`, plus `onSettled` (`signals.d.ts:737`).

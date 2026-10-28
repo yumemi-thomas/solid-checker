@@ -1,0 +1,75 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/boundary-call-owner/App.tsx",
+      "start": 260,
+      "end": 267,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/boundary-call-owner/App.tsx",
+      "start": 443,
+      "end": 450,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/boundary-call-owner/App.tsx",
+      "start": 635,
+      "end": 647,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/boundary-call-owner/App.tsx",
+      "start": 808,
+      "end": 817,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/boundary-call-owner/App.tsx",
+      "start": 1097,
+      "end": 1105,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/boundary-call-owner/App.tsx",
+      "start": 1318,
+      "end": 1325,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/boundary-call-owner/App.tsx",
+      "start": 1493,
+      "end": 1500,
+      "fixes": 0
+    }
+  ]
+}

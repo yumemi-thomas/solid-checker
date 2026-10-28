@@ -50,6 +50,15 @@ Subscription findings retain their own facts, and an ordinary `NotReadyError`
 may still propagate as graph suspension. Store proxy reads follow a different
 runtime path and do not inherit this accessor exemption.
 
+An effect or render-effect apply that reads an async source is not claimed
+here (ADR 0467). rc.17 throws `PENDING_ASYNC_UNTRACKED_READ` when a run of the
+apply meets the source pending, and warns `STRICT_READ_UNTRACKED` when it meets
+it settled; whether the first run comes before the source settles depends on a
+mount held by async anywhere above it, a compute that waits on async, or a later
+run, none of which a local fact orders. The read is reported as a
+[strict-read-untracked](strict-read-untracked.md) violation whose message names
+the pending case (`fixtures/reactive-ir/strict-read-async-apply`).
+
 ## Examples
 
 Incorrect:

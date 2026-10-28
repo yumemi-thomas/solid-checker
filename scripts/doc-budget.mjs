@@ -54,7 +54,20 @@ export const FILE_BUDGETS = {
   // And ADR 0465's past-the-root line, replacing the root-identifier one (46,136 bytes): 46_200.
   // And the ADR 0464/0465 review residuals (46,766 bytes): 46_800.
   // Merge of main (PR #129, #130) with fix/tdz-pattern-and-store-chain (ADRs 0464/0465): 48,027 bytes: 48_100.
-  "docs/open-work.md": 48_100,
+  // And ADR 0460's review amendment (the setter-exemption note, the assignment form's TS18048 overlap): 45,497 bytes: 45_500.
+  // Merge of ADR 0458/0459 (PR #129) with ADR 0460 (PR #130): 46,075 bytes: 46_500.
+  // And ADR 0463's refused alias forms and the direct-read TDZ false positive it found: 46,714 bytes: 46_800.
+  // And ADR 0463 (local alias bindings; the open shapes): 47,311 bytes: 47_500.
+  // And ADR 0466 (callbacks passed by name; the unresolved name forms): 47,774 bytes: 48_000.
+  // And ADR 0467 (the apply read of an async source): 48,113 bytes: 48_500.
+  // Merge of main (PR #135, ADRs 0464/0465) into the batch: 49,611 bytes: 50_000.
+  // And ADR 0470 (the unclaimed apply-JSX code): 50,158 bytes: 50_500.
+  // And ADR 0472 (the widened review-r1-owner-mix entry): 51,051 bytes: 51_500.
+  // And the batch review notes (assignment callees; RC3, RC1b, SC3001 JSX left open): 51,955 bytes: 52_000.
+  // And the batch review notes on the batch: 52,848 bytes: 53_000.
+  // And the RC8/RC10 note (component execution boundary, left open): 53,828 bytes: 54_000.
+  // And the second batch review (ADR 0475 climb, ADR 0472 fail-open shapes): 54,303 bytes: 54_500.
+  "docs/open-work.md": 54_500,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for the
   // catalog review's ADRs 0381 and 0424-0434, 4 bytes under 115_600; and for ADR 0435,
@@ -116,7 +129,27 @@ export const FILE_BUDGETS = {
   // And its strictNullChecks amendment (Type Facts reports the option): 267,442 bytes: 267_500.
   // And the ADR 0464/0465 review sentences: 268,384 bytes: 268_400.
   // Merge of main (PR #129, #130) with ADRs 0464/0465 and the delete verdict sentence: 274,803 bytes: 274_900.
-  "docs/decisions.md": 274_900,
+  // And ADR 0460's chain-past-the-root sentence (strictNullChecks unrecorded): 261,863 bytes: 262_000.
+  // Merge of ADR 0458/0459 (PR #129) with ADR 0460 (PR #130): 266,031 bytes: 266_500.
+  // And ADR 0462, boundary calls and call-attributed async reads: 268,514 bytes: 269_000.
+  // And ADR 0462 (Loading/Errored as calls; call-attributed async reads): 271,721 bytes: 272_000.
+  // And ADR 0461, boundary calls and call-attributed async reads: 268,514 bytes: 269_000.
+  // And ADR 0463, exact `const` aliases of local reactive bindings: 271,577 bytes: 272_000.
+  // And ADR 0463 (local alias bindings): 274,784 bytes: 275_000.
+  // And ADR 0466 (callbacks passed by name): 277,426 bytes: 277_500.
+  // And ADR 0467: 279,103 bytes: 279_500.
+  // Merge of main (PR #135, ADRs 0464/0465) into the batch: 284,667 bytes: 285_000.
+  // And ADR 0468 (callee spelling; unnamed callees are obligations): 287,038 bytes: 287_500.
+  // And ADR 0469 (reads through in-place layers): 288,842 bytes: 289_000.
+  // And ADR 0470 (a read in JSX a callback writes): 290,136 bytes: 290_500.
+  // And ADR 0471 (a closure in a root's body): 292,179 bytes: 292_500.
+  // And ADR 0472 (returned callables are uncertifiable): 293,882 bytes: 294_000.
+  // And ADR 0474 (helper-called callbacks in the owner graph): 291,622 bytes: 292_000.
+  // And ADR 0474 picked onto the batch: 295,368 bytes: 295_500.
+  // And ADR 0475 (a creation the runtime refuses enters nothing): 297,044 bytes: 297_500.
+  // And the ADR 0474 guard amendment: 297,529 bytes: 298_000.
+  // And the second batch review amendments (ADRs 0474, 0475): 298,019 bytes: 298_500.
+  "docs/decisions.md": 298_500,
 };
 
 export const GROUP_BUDGETS = [
@@ -151,7 +184,7 @@ export const GROUP_BUDGETS = [
   // With main's ADR 0451 (PR #119) merged in: 753,780 bytes: 754_500.
   // And for ADR 0454 (its entry, the open-work lines, a rule-page paragraph): 758,425 bytes against 754,500: 759_000; its owner-graph follow-up: 760,511 bytes: 761_000; its reachability follow-up: 761,579 bytes: 762_500.
   // And for ADR 0455 (its entry, one open-work line, a rule-page paragraph): 765,586 bytes against 762,500: 766_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 801_000 }, // Merge of fix/tdz-pattern-and-store-chain (ADRs 0464/0465): 800,976 bytes. // Merge of PR #129 with ADR 0461 (PR #130): 792,496 bytes. // ADR 0461 review amendment (ADR sentences, open-work lines, rule-page sentences): 782,004 bytes. // ADR 0461 (its entry, the open-work line, a rule-page paragraph): 780,658 bytes. // Merge of ADR 0456 (PR #123) with ADR 0457: 778,757 bytes. // ADR 0456 (its entry, open-work lines, a rule-page paragraph): 775,714 bytes. // ADR 0457 review amendment (its sentences, one open-work line): 774,199 bytes against 773,500. // ADR 0457 (its entry, a rule-page sentence): 773,270 bytes against 771,500. // ADR 0455 fourth-review amendment: 771,408 bytes. // ADR 0455 third-review amendment: 770,819 bytes. // ADR 0455 cleanup amendment: 769,241 bytes. // ADR 0455 named-closure follow-up: 767,101 bytes. // ADR 0455 follow-up: 766,106 bytes against 766,000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 836_500 }, // Second batch review: 836,062 bytes. // ADR 0474 guard amendment (its sentence, a rule-page sentence): 835,097 bytes. // RC8/RC10 open-work note: 834,391 bytes. // ADR 0475 (its entry, a rule-page sentence, one open-work line): 833,477 bytes. // Batch review notes on the batch: 831,469 bytes. // ADR 0474 on the batch: 829,668 bytes. // ADR 0472 (its entry, a rule-page paragraph, open-work): 827,781 bytes. // ADR 0471 (its entry, a rule-page sentence, one open-work line): 825,165 bytes. // ADR 0470 (its entry, a rule-page bullet, one open-work line): 822,681 bytes. // ADR 0469 (its entry, a rule-page bullet): 820,739 bytes. // ADR 0468 (its entry, one open-work line): 818,373 bytes. // Merge of main (PR #135) into the batch: 815,691 bytes. // ADR 0467 (its entry, two rule-page paragraphs, one open-work line): 807,212 bytes. // ADR 0466 (its entry, one open-work line, a rule-page paragraph): 804,218 bytes. // ADR 0463 (its entry, open-work lines, rule-page sentences): 800,445 bytes. // ADR 0462 (its entry, two rule-page paragraphs, one open-work line): 796,067 bytes. // Merge of PR #129 with ADR 0461 (PR #130): 792,496 bytes. // ADR 0461 review amendment (ADR sentences, open-work lines, rule-page sentences): 782,004 bytes. // ADR 0461 (its entry, the open-work line, a rule-page paragraph): 780,658 bytes. // Merge of ADR 0456 (PR #123) with ADR 0457: 778,757 bytes. // ADR 0456 (its entry, open-work lines, a rule-page paragraph): 775,714 bytes. // ADR 0457 review amendment (its sentences, one open-work line): 774,199 bytes against 773,500. // ADR 0457 (its entry, a rule-page sentence): 773,270 bytes against 771,500. // ADR 0455 fourth-review amendment: 771,408 bytes. // ADR 0455 third-review amendment: 770,819 bytes. // ADR 0455 cleanup amendment: 769,241 bytes. // ADR 0455 named-closure follow-up: 767,101 bytes. // ADR 0455 follow-up: 766,106 bytes against 766,000.
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
@@ -194,7 +227,25 @@ export const GROUP_BUDGETS = [
     // And ADR 0464's destructured-binding-tdz fixture: 320,170 bytes: 320_300.
     // And ADR 0465's store-write-chain-links fixtures and the moved READMEs: 323,215 bytes: 323_300.
     // Merge with fix/tdz-pattern-and-store-chain (destructured-binding-tdz, store-write-chain-links, store-delete): 328,710 bytes: 328_800.
-    bytes: 328_800,
+    // Merge of PR #129 with PR #130: 322,672 bytes: 323_000.
+    // And ADR 0462's two fixtures (boundary-call-owner, async-boundary-call-attributed): 324,397 bytes: 324_500.
+    // And ADR 0462's fixtures (boundary-call-owner, async-boundary-call-attributed): 326,060 bytes: 326_500.
+    // And ADR 0461's two fixtures (boundary-call-owner, async-boundary-call-attributed): 324,397 bytes: 324_500.
+    // And ADR 0463's fixture (local-alias-bindings) and two README sentences: 326,391 bytes: 326_500.
+    // And ADR 0463's fixture (local-alias-bindings): 328,102 bytes: 328_500.
+    // And ADR 0466's fixture (write-callback-by-name) and two README updates: 330,275 bytes: 330_500.
+    // And ADR 0467's fixture (strict-read-async-apply): 331,534 bytes: 332_000.
+    // Merge of main (PR #135) into the batch: 335,905 bytes: 336_500.
+    // And ADR 0468's fixture (callee-spelling): 337,833 bytes: 338_000.
+    // And ADR 0469's fixture (read-in-place-layers): 339,576 bytes: 340_000.
+    // And ADR 0470's fixture (read-jsx-in-callbacks): 340,841 bytes: 341_000.
+    // And ADR 0471's fixture (write-named-closure-in-root): 342,615 bytes: 343_000.
+    // And ADR 0472's fixture (owner-returned-callable): 343,860 bytes: 344_000.
+    // And ADR 0474's fixture (owner-helper-callback): 342,136 bytes: 342_500.
+    // And ADR 0474's fixture on the batch: 345,155 bytes: 345_500.
+    // And ADR 0475's fixture (write-in-refused-creation): 346,275 bytes: 346_500.
+    // And the ADR 0474 guard amendment (owner-helper-callback): 346,892 bytes: 347_000.
+    bytes: 347_000,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

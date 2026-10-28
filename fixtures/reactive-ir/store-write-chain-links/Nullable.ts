@@ -16,3 +16,7 @@ export function NullableLink() {
   store.list.push(1);
   store.maybe.b = 1;
 }
+
+// A string literal naming a directive is no directive: the nullable links
+// above stay TypeScript's (silent).
+export const note = "@ts-ignore and @ts-nocheck are text here";

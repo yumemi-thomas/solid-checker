@@ -44,6 +44,54 @@ pub(super) fn transparent_inner_expression<'a>(
     }
 }
 
+/// ADR 0468: the identifier a call's callee invokes when only the inert leading
+/// operands of a comma expression (and parentheses, which the parser drops)
+/// stand in front of it: `(void 0, f)()`, `(0, f)()`. Each calls the identifier's
+/// value with an undefined receiver, as `f()` does: a comma applies GetValue,
+/// but an identifier's Reference has no base object to lose, and `0` or
+/// `void 0` evaluates to a constant with no effect. Not peeled, so the callee
+/// stays the spelling as written:
+///
+/// - a member after a comma, which loses its receiver (`(0, obj.m)()` is not
+///   `obj.m()`), and any other expression;
+/// - a leading operand that can run code (`(change(), f)()`);
+/// - `eval` after a comma: an indirect eval, not the direct one;
+/// - a TypeScript wrapper: the facts ask for the type at the callee, and the
+///   wrapper's type is not the identifier's.
+pub(super) fn invoked_identifier<'b, 'a>(
+    callee: &'b Expression<'a>,
+) -> Option<&'b oxc_ast::ast::IdentifierReference<'a>> {
+    fn inert(operand: &Expression<'_>) -> bool {
+        match operand {
+            Expression::NumericLiteral(_) => true,
+            Expression::UnaryExpression(unary) => {
+                unary.operator == oxc_ast::ast::UnaryOperator::Void
+                    && matches!(unary.argument, Expression::NumericLiteral(_))
+            }
+            _ => false,
+        }
+    }
+    let mut expression = callee;
+    let mut through_comma = false;
+    loop {
+        match expression {
+            Expression::ParenthesizedExpression(inner) => expression = &inner.expression,
+            Expression::SequenceExpression(sequence) => {
+                let (tail, prefix) = sequence.expressions.split_last()?;
+                if !prefix.iter().all(inert) {
+                    return None;
+                }
+                through_comma = true;
+                expression = tail;
+            }
+            Expression::Identifier(identifier) => {
+                return (!(through_comma && identifier.name == "eval")).then_some(identifier);
+            }
+            _ => return None,
+        }
+    }
+}
+
 /// What a binding-pattern element binds, and its default initializer.
 pub(super) fn binding_target_and_default(pattern: &BindingPattern<'_>) -> (Span, Option<Span>) {
     match pattern {

@@ -709,7 +709,7 @@ pub(crate) fn invokes_parameter_during_call(
 }
 
 /// What a callee does with a parameter it calls on every completion
-/// ([`parameter_uses_during_call`]).
+/// ([`helper_argument_run`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ParameterUses {
     /// Every use of the parameter is a direct call in the callee's own
@@ -721,20 +721,209 @@ pub(crate) enum ParameterUses {
     AlsoElsewhere,
 }
 
-/// ADR 0457: [`invokes_parameter_during_call`], and whether every use of the
-/// parameter is such a call. Nothing is claimed for a callee that reassigns
-/// the parameter or reads `arguments` (`None`): the call may reach another
+/// How a helper call runs its function argument ([`helper_argument_run`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct HelperArgumentRun {
+    /// The helper calls the parameter on every completion
+    /// ([`invokes_parameter_during_call`]); otherwise only on some paths
+    /// ([`calls_parameter_in_body`]).
+    pub(crate) every_completion: bool,
+    pub(crate) uses: ParameterUses,
+}
+
+/// ADR 0457, 0474: how the exact project or dependency-source function `call`
+/// runs (not a primitive) uses its argument `index`, when it calls that
+/// parameter directly in its own synchronous body: each such call runs the
+/// argument on the call's stack, under the caller's owner. `None` when no
+/// exact callee resolves, the argument is spread, or the callee never calls
+/// the parameter in its body (or reassigns it, or reads `arguments`).
+pub(crate) fn helper_argument_run(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> Option<HelperArgumentRun> {
+    if call.arguments.get(index)?.spread || lookup.primitive_at_call(file, call.span).is_some() {
+        return None;
+    }
+    let (callee_file, callee, exact) = project_callee_at_parameter(file, call, index, lookup)?;
+    if !exact {
+        return None;
+    }
+    let every_completion = invokes_parameter_during_call(callee_file, callee, index, lookup);
+    if !every_completion && !calls_parameter_in_body(callee_file, callee, index, lookup) {
+        return None;
+    }
+    Some(HelperArgumentRun {
+        every_completion,
+        uses: parameter_uses(callee_file, callee, index)?,
+    })
+}
+
+/// ADR 0474 amendment: the owner each run of a helper's function argument has,
+/// for the owner graph ([`helper_argument_owner_runs`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct HelperOwnerRuns {
+    /// A direct call in the helper's body under no owner guard. With
+    /// `every_completion`, one such call runs on every completion.
+    pub(crate) unguarded: bool,
+    pub(crate) every_completion: bool,
+    /// A direct call that runs only once the same invocation has seen an owner
+    /// (`getOwner() ? fn() : …`, the guard `push_owner_requirement` reads).
+    pub(crate) owner_guarded: bool,
+    /// A direct call in the consequent of a `!getOwner()` test: it runs only
+    /// with no owner. `Some(true)` when each such call is the conditional's
+    /// whole consequent and the test is on the helper's every completion, so an
+    /// invocation with no owner makes it.
+    pub(crate) no_owner_guarded: Option<bool>,
+    /// The helper hands the parameter to a primitive's callback position whose
+    /// callback runs under an owner the call creates (`createRoot(fn)`).
+    pub(crate) rooted: bool,
+    /// Any other use: a run elsewhere, at another time or owner.
+    pub(crate) elsewhere: bool,
+}
+
+/// ADR 0474 amendment: [`helper_argument_run`]'s census, for the owner graph,
+/// with each direct call split by the owner guard around it and the parameter
+/// handed to an owner-creating callback position counted as an owned run.
+/// `None` where [`helper_argument_run`] proves nothing, except that a helper
+/// whose only uses are such hand-ons is answered.
+pub(crate) fn helper_argument_owner_runs(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> Option<HelperOwnerRuns> {
+    if call.arguments.get(index)?.spread || lookup.primitive_at_call(file, call.span).is_some() {
+        return None;
+    }
+    let (callee_file, callee, exact) = project_callee_at_parameter(file, call, index, lookup)?;
+    if !exact || callee.r#async || callee.generator {
+        return None;
+    }
+    let parameter = callee.parameters.get(index)?;
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier {
+        return None;
+    }
+    let name = parameter.names.first()?;
+    let symbol = lookup.entities().at(callee_file.path.as_str(), name.span)?;
+    let ast = &callee_file.ast;
+    let source = callee_file
+        .source
+        .get(callee.span.start as usize..callee.span.end as usize)?;
+    let text = callee_file
+        .source
+        .get(name.span.start as usize..name.span.end as usize)?;
+    if identifier_occurrences(source, "arguments") > 0 {
+        return None;
+    }
+    let references = ast.references_to(name.span);
+    if references
+        .iter()
+        .any(|reference| ast.any_write_target_containing(*reference))
+    {
+        return None;
+    }
+    // Direct calls in the body by the parameter's symbol, as
+    // `calls_parameter_in_body` finds them.
+    let direct = ast
+        .calls
+        .iter()
+        .filter(|inner| {
+            !inner.construct
+                && crate::owners::owned_by_body(ast, callee, inner.span)
+                && lookup.callee_symbol(callee_file, inner.callee) == Some(symbol.as_str())
+        })
+        .collect::<Vec<_>>();
+    let rooted = references
+        .iter()
+        .filter(|reference| {
+            ast.calls.iter().any(|outer| {
+                lookup
+                    .primitive_at_call(callee_file, outer.span)
+                    .is_some_and(|primitive| {
+                        outer.arguments.iter().enumerate().any(|(at, argument)| {
+                            !argument.spread
+                                && ast.peel_ts_sugar_span(argument.span) == **reference
+                                && crate::owners::callback_owner_at_call(
+                                    callee_file,
+                                    outer,
+                                    primitive,
+                                    at,
+                                    lookup,
+                                ) == Some(solid_dialect::CallbackOwner::Creates)
+                        })
+                    })
+            })
+        })
+        .count();
+    if direct.is_empty() && rooted == 0 {
+        return None;
+    }
+    let mut runs = HelperOwnerRuns {
+        unguarded: false,
+        every_completion: false,
+        owner_guarded: false,
+        no_owner_guarded: None,
+        rooted: rooted > 0,
+        elsewhere: identifier_occurrences(source, text) != direct.len() + rooted + 1,
+    };
+    let mut unguarded_on_every_completion = false;
+    for inner in &direct {
+        if crate::owners::guarded_by_owner_probe(callee_file, inner.span, lookup) {
+            runs.owner_guarded = true;
+        } else if let Some(proven) = no_owner_guard(callee_file, callee, inner.span, lookup) {
+            runs.no_owner_guarded = Some(runs.no_owner_guarded.unwrap_or(true) && proven);
+        } else {
+            runs.unguarded = true;
+            unguarded_on_every_completion |= crate::interproc::site_on_every_completion(
+                lookup,
+                callee_file,
+                callee.span,
+                inner.span,
+            );
+        }
+    }
+    // ADR 0277's table also counts a parameter passed on to a function that
+    // calls it; with a guarded call beside, the every-completion call must be
+    // an unguarded one.
+    runs.every_completion = runs.unguarded
+        && invokes_parameter_during_call(callee_file, callee, index, lookup)
+        && ((!runs.owner_guarded && runs.no_owner_guarded.is_none())
+            || unguarded_on_every_completion);
+    Some(runs)
+}
+
+/// ADR 0474 amendment: whether the direct call at `site` in `function` sits in
+/// the consequent of a conditional or `if` whose test is `!getOwner()`, a
+/// negated call of Solid's own `getOwner` resolved by symbol, written in
+/// `function` itself: the call runs only with no owner. `Some(true)` when the
+/// call is the conditional's whole consequent and the test is on `function`'s
+/// every completion, so every invocation with no owner makes the call.
+fn no_owner_guard(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<bool> {
+    // The facts record no unary expression, and reading `!` from the source
+    // text is no exact fact (owner policy: no text matching), so no call is
+    // taken as guarded by `!getOwner()`: it keeps ADR 0474's "on some paths"
+    // edge (uncertifiable from an unowned caller, never a proof).
+    let _ = (file, function, site, lookup);
+    None
+}
+
+/// ADR 0457: whether every use of `function`'s parameter `index` is a direct
+/// call in its own body. Nothing is claimed for a callee that reassigns the
+/// parameter or reads `arguments` (`None`): the call may reach another
 /// function. A source scan backs the binder's references, so a use the binder
 /// does not list (a shorthand property `{ cb }`) still counts as a use.
-pub(crate) fn parameter_uses_during_call(
+fn parameter_uses(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     index: usize,
-    lookup: &SemanticLookup<'_>,
 ) -> Option<ParameterUses> {
-    if !invokes_parameter_during_call(file, function, index, lookup) {
-        return None;
-    }
     let name = function.parameters.get(index)?.names.first()?;
     let source = file
         .source

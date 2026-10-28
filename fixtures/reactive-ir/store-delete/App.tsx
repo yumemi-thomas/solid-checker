@@ -76,13 +76,17 @@ export function Shadowed(store: { v?: number }) {
   delete store.v;
 }
 
-// Refused (silent): a property whose type includes `undefined` but is not
-// optional (TS2790 under `exactOptionalPropertyTypes`), a computed key, an
-// optional chain, a cast root, and a `const` alias (the assignment form does
-// not follow one either).
-export function Refused(key: string) {
+// Positive (ADR 0463): through an exact `const` alias of the store, which
+// holds the same proxy.
+export function Alias() {
   const alias = store;
   delete alias.v;
+}
+
+// Refused (silent): a property whose type includes `undefined` but is not
+// optional (TS2790 under `exactOptionalPropertyTypes`), a computed key, an
+// optional chain and a cast root.
+export function Refused(key: string) {
   delete store.nick;
   delete store.rec[key];
   delete store?.v;

@@ -505,7 +505,9 @@ impl DiagnosticSession {
                 )
             {
                 finding.kind = "uncertifiable".into();
-                finding.message.push_str(if site.dead_code {
+                finding.message.push_str(if site.refused_creation {
+                    "; this code runs only in a root, primitive or component created in an effect apply or a leaf callback (`createTrackedEffect`, `onSettled`), where the runtime refuses the creation before it runs, so this is not proven"
+                } else if site.dead_code {
                     "; no execution reaches this code (it follows an unconditional return, throw, break or continue, or sits in a branch a literal condition rules out), so this is not proven"
                 } else {
                     "; this code is in a function no execution enters (nothing that runs calls, renders or keeps a reference to it, or it is never created), so this is not proven"

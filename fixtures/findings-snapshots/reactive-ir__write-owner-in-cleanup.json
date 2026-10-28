@@ -7,8 +7,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 1969,
-      "end": 1977,
+      "start": 2240,
+      "end": 2248,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 2170,
-      "end": 2178,
+      "start": 2419,
+      "end": 2427,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 2349,
-      "end": 2357,
+      "start": 3284,
+      "end": 3291,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 3214,
-      "end": 3221,
+      "start": 3584,
+      "end": 3592,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 3514,
-      "end": 3522,
+      "start": 3889,
+      "end": 3897,
       "fixes": 0
     },
     {
@@ -57,8 +57,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 3819,
-      "end": 3827,
+      "start": 4491,
+      "end": 4499,
       "fixes": 0
     },
     {
@@ -67,8 +67,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 4421,
-      "end": 4429,
+      "start": 4994,
+      "end": 5046,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 4924,
-      "end": 4976,
+      "start": 5647,
+      "end": 5655,
       "fixes": 0
     },
     {
@@ -87,18 +87,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 5577,
-      "end": 5585,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 6266,
-      "end": 6275,
+      "start": 6336,
+      "end": 6345,
       "fixes": 0
     },
     {
@@ -107,8 +97,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 6861,
-      "end": 6869,
+      "start": 6931,
+      "end": 6939,
       "fixes": 0
     },
     {
@@ -117,8 +107,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 7087,
-      "end": 7095,
+      "start": 7157,
+      "end": 7165,
       "fixes": 0
     },
     {
@@ -127,8 +117,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 7390,
-      "end": 7397,
+      "start": 7460,
+      "end": 7467,
       "fixes": 0
     },
     {
@@ -137,8 +127,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 7656,
-      "end": 7663,
+      "start": 7726,
+      "end": 7733,
       "fixes": 0
     },
     {
@@ -147,8 +137,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 8169,
-      "end": 8176,
+      "start": 8239,
+      "end": 8246,
       "fixes": 0
     },
     {
@@ -157,8 +147,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 8556,
-      "end": 8561,
+      "start": 8626,
+      "end": 8631,
       "fixes": 0
     },
     {
@@ -167,8 +157,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 8959,
-      "end": 8967,
+      "start": 9029,
+      "end": 9037,
       "fixes": 0
     },
     {
@@ -177,8 +167,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 9147,
-      "end": 9155,
+      "start": 9217,
+      "end": 9225,
       "fixes": 0
     },
     {
@@ -187,8 +177,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 9357,
-      "end": 9365,
+      "start": 9427,
+      "end": 9435,
       "fixes": 0
     },
     {
@@ -197,8 +187,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 9599,
-      "end": 9607,
+      "start": 9669,
+      "end": 9677,
       "fixes": 0
     },
     {
@@ -207,8 +197,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 9835,
-      "end": 9843,
+      "start": 9905,
+      "end": 9913,
       "fixes": 0
     },
     {
@@ -217,8 +207,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 10112,
-      "end": 10120,
+      "start": 10182,
+      "end": 10190,
       "fixes": 0
     },
     {
@@ -227,8 +217,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 10324,
-      "end": 10332,
+      "start": 10394,
+      "end": 10402,
       "fixes": 0
     },
     {
@@ -237,8 +227,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 10779,
-      "end": 10787,
+      "start": 10849,
+      "end": 10857,
       "fixes": 0
     },
     {
@@ -247,8 +237,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 10974,
-      "end": 10982,
+      "start": 11044,
+      "end": 11052,
       "fixes": 0
     },
     {
@@ -257,8 +247,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 11295,
-      "end": 11303,
+      "start": 11365,
+      "end": 11373,
       "fixes": 0
     },
     {
@@ -267,8 +257,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 11516,
-      "end": 11524,
+      "start": 11586,
+      "end": 11594,
       "fixes": 0
     },
     {
@@ -277,8 +267,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 11985,
-      "end": 11993,
+      "start": 12055,
+      "end": 12063,
       "fixes": 0
     },
     {
@@ -287,8 +277,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 12176,
-      "end": 12189,
+      "start": 12246,
+      "end": 12259,
       "fixes": 0
     },
     {
@@ -297,8 +287,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 12592,
-      "end": 12600,
+      "start": 12841,
+      "end": 12849,
       "fixes": 0
     },
     {
@@ -307,8 +297,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 12771,
-      "end": 12779,
+      "start": 13406,
+      "end": 13414,
       "fixes": 0
     },
     {
@@ -317,8 +307,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 13336,
-      "end": 13344,
+      "start": 13639,
+      "end": 13647,
       "fixes": 0
     },
     {
@@ -327,8 +317,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 13569,
-      "end": 13577,
+      "start": 13848,
+      "end": 13856,
       "fixes": 0
     },
     {
@@ -337,8 +327,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 13778,
-      "end": 13786,
+      "start": 14207,
+      "end": 14215,
       "fixes": 0
     },
     {
@@ -347,8 +337,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 14137,
-      "end": 14145,
+      "start": 14516,
+      "end": 14524,
       "fixes": 0
     },
     {
@@ -357,8 +347,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 14446,
-      "end": 14454,
+      "start": 14852,
+      "end": 14860,
       "fixes": 0
     },
     {
@@ -367,18 +357,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 14782,
-      "end": 14790,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-owner-in-cleanup/App.tsx",
-      "start": 15145,
-      "end": 15153,
+      "start": 15215,
+      "end": 15223,
       "fixes": 0
     }
   ]

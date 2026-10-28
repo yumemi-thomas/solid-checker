@@ -206,6 +206,32 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   (ADR 0337, `fixtures/reactive-ir/omit-view-props-root`). A read through the
   view or alias (`rest.x`, `local.x`), a destructured binding, a `merge` that may
   return its only source, and a spread onto a component stay uncertifiable.
+- **An exact `const` alias is its source (ADR 0463).** `const read = count` and
+  `const { read } = { read: count }` (a literal of static data properties only)
+  hold the module-local `const` `count`, so `read()` is reported where
+  `count()` is, for an accessor, a memo, an async memo and a store. A mention
+  that may run before the alias's declarator throws there and is
+  uncertifiable. A `let`, conditional, parameter, imported or exported alias is
+  not followed.
+- **A read in JSX a callback writes is tracked where the compiler tracks it (ADR 0470).**
+  `createRoot(() => <div>{r()}</div>)`, an attribute, a component prop or
+  child in a `createRoot`, `runWithOwner`, `untrack` or handler callback:
+  the compiler wraps the expression in `insert`, `effect` or a getter, so the
+  read is tracked and silent. A read in the callback's body beside the JSX is
+  still reported.
+- **A read through layers that run in place is placed where they run (ADR 0469).**
+  A read in an IIFE, an inline `forEach` callback or a helper that calls its
+  callback, inside a `createRoot` or `runWithOwner` body or an effect apply, is
+  read as one written at the outermost layer's call: a violation where that
+  is. An await on every path before it makes it legal, a possible await or a
+  site in a layer's parameter list uncertifiable; a primitive's callback, a
+  stored or handed-on function, a fresh stack or a layer called inside JSX
+  ends the climb.
+- **An effect apply reading an async source stays here (ADR 0467).** A run
+  that meets the source pending throws `PENDING_ASYNC_UNTRACKED_READ` instead
+  of the warning; when the apply first runs against the source's settling is
+  not proven, so the untracked read is the claim and the message names the
+  pending case (`fixtures/reactive-ir/strict-read-async-apply`).
 
 ## Why is this bad?
 

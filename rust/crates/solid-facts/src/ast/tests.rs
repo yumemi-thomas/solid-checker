@@ -3142,3 +3142,175 @@ p();\n";
         assert!(!facts.unreachable_contains(at(live)), "{live} is live");
     }
 }
+
+/// Facts schema 79: a `const` that holds exactly another local `const`
+/// variable, directly or through one data property of an object literal it
+/// destructures; every other form names nothing.
+#[test]
+fn local_alias_bindings_record_only_exact_const_copies_of_a_const_variable() {
+    let source = concat!(
+        "const r = () => 1;\n",
+        "let v = () => 2;\n",
+        "function f() {}\n",
+        "const a = r;\n",
+        "const b = (r as any)!;\n",
+        "const { c } = { c: r };\n",
+        "const { k: d, \"s\": e } = { k: r, \"s\": r };\n",
+        "const { r: g } = { r };\n",
+        "const { h } = { h: r, ...{} };\n",
+        "const { i } = { i: r, i: r };\n",
+        "const { j } = { [\"j\"]: r };\n",
+        "const { l } = { l: r, get m() { return 1; } };\n",
+        "const { n } = { n: r, o() {} };\n",
+        "const { p } = { p: r, __proto__: null };\n",
+        "const { q = r } = { q: r };\n",
+        "const { t } = { t: v };\n",
+        "const { u } = { u: f };\n",
+        "const { w } = { w: r }, x = c;\n",
+        "let y = r;\n",
+        "var z = r;\n",
+        "const cond = Math.random() ? r : r;\n",
+        "const fromLet = v;\n",
+        "function param(r: () => number) { const shadowed = r; return shadowed; }\n",
+        "export const exported = r;\n",
+        "const later = r;\n",
+        "export { later };\n",
+        "declare const ambient: typeof r;\n",
+    );
+    let facts = extract("alias.ts", source).unwrap();
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let recorded = facts
+        .local_alias_bindings
+        .iter()
+        .map(|fact| (text(fact.local), fact.source.start))
+        .collect::<Vec<_>>();
+    let r = 6;
+    let c = u32::try_from(source.find("{ c }").unwrap() + 2).unwrap();
+    assert_eq!(
+        recorded,
+        [
+            ("a", r),
+            ("b", r),
+            ("c", r),
+            ("d", r),
+            ("e", r),
+            ("g", r),
+            ("w", r),
+            ("x", c),
+        ]
+    );
+    let local = facts.local_alias_bindings[0].local;
+    assert_eq!(
+        facts
+            .local_alias_binding(local)
+            .map(|fact| fact.source.start),
+        Some(r)
+    );
+}
+
+/// Facts schema 80: a TypeScript checking directive is read from the
+/// parser's comments, so the same words in a string literal are no directive.
+#[test]
+fn reads_typescript_directive_comments_only_from_comments() {
+    let directive = |source: &str| {
+        extract("/project/App.ts", source)
+            .unwrap()
+            .typescript_directive_comment
+    };
+    assert!(directive("// @ts-nocheck\nexport const a = 1;\n"));
+    assert!(directive("const a = 1;\n// @ts-expect-error\na.b;\n"));
+    assert!(directive("/**\n * @ts-ignore\n */\nexport const a = 1;\n"));
+    assert!(directive("/// @ts-ignore\nexport const a = 1;\n"));
+    assert!(directive("/// @ts-nocheck\nexport const a = 1;\n"));
+    assert!(!directive("export const a = \"@ts-nocheck\";\n"));
+    assert!(!directive("export const a = `// @ts-ignore`;\n"));
+    assert!(!directive(
+        "// see the @ts-nocheck note\nexport const a = 1;\n"
+    ));
+}
+
+/// ADR 0468: a callee that spells an identifier behind inert comma operands
+/// is recorded as that identifier, a direct callee (the parser drops
+/// parentheses, so `(f)()` already was); a member after a comma, an effectful
+/// operand, `eval` after a comma and a TypeScript wrapper keep the callee as
+/// written.
+#[test]
+fn records_the_invoked_identifier_of_a_callee_spelling() {
+    let source = "declare const f: () => void;\n\
+                  declare const o: { m(): void };\n\
+                  declare function g(): void;\n\
+                  f(); (f)(); ((f))(); (void 0, f)(); (0, f)(); (0, void 0, (f))(); f?.(); new (f as any)();\n\
+                  (0, o.m)(); (o.m)(); (g(), f)(); (0, eval)(\"1\"); (f as any)(); f!();\n";
+    let facts = extract("/project/App.ts", source).unwrap();
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let callees = facts
+        .calls
+        .iter()
+        .filter(|call| text(call.span) != "g()")
+        .map(|call| (text(call.callee), call.direct_callee))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        callees,
+        vec![
+            ("f", true),
+            ("f", true),
+            ("f", true),
+            ("f", true),
+            ("f", true),
+            ("f", true),
+            ("f", true),
+            ("f as any", false),
+            ("0, o.m", false),
+            ("o.m", false),
+            ("g(), f", false),
+            ("0, eval", false),
+            ("f as any", false),
+            ("f!", false),
+        ]
+    );
+}
+
+/// ADR 0468: the operands a comma, conditional or logical callee may evaluate
+/// to, and the identifier references among them; `&&`'s left is never one.
+#[test]
+fn lists_the_operands_a_composite_callee_may_evaluate_to() {
+    let source = "declare const c: boolean;\n\
+                  declare const f: () => void, h: () => void;\n\
+                  declare const o: { m(): void };\n\
+                  declare function g(): () => void;\n\
+                  (c ? f : h)(); (f && h)(); (f || h)(); (f ?? o.m)(); (g(), (f as any))(); (c ? g() : f)(); f(); (f)();\n";
+    let facts = extract("/project/App.ts", source).unwrap();
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let answers = facts
+        .calls
+        .iter()
+        .filter(|call| text(call.span) != "g()")
+        .map(|call| {
+            (
+                facts
+                    .composite_callee_operands(call.callee)
+                    .into_iter()
+                    .map(text)
+                    .collect::<Vec<_>>(),
+                facts
+                    .composite_callee_references(call.callee)
+                    .into_iter()
+                    .map(text)
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        answers,
+        vec![
+            (vec!["f", "h"], vec!["f", "h"]),
+            (vec!["h"], vec!["h"]),
+            (vec!["f", "h"], vec!["f", "h"]),
+            (vec!["f", "o.m"], vec!["f"]),
+            (vec!["f"], vec!["f"]),
+            (vec!["g()", "f"], vec!["f"]),
+            (vec![], vec![]),
+            (vec![], vec![]),
+        ]
+    );
+}

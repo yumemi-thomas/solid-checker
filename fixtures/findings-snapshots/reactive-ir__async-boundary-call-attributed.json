@@ -1,0 +1,65 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-boundary-call-attributed/App.tsx",
+      "start": 593,
+      "end": 602,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-boundary-call-attributed/App.tsx",
+      "start": 838,
+      "end": 842,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-boundary-call-attributed/App.tsx",
+      "start": 1137,
+      "end": 1146,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-boundary-call-attributed/App.tsx",
+      "start": 1462,
+      "end": 1471,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-boundary-call-attributed/App.tsx",
+      "start": 1524,
+      "end": 1533,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-boundary-call-attributed/App.tsx",
+      "start": 1748,
+      "end": 1754,
+      "fixes": 0
+    }
+  ]
+}

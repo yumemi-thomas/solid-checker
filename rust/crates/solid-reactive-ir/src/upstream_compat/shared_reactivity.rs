@@ -1442,7 +1442,8 @@ fn chain_links_verdict(
 
 /// Whether `tsc` reports a type error written in `file` at all: not a
 /// JavaScript file (whether `checkJs` applies is not in the facts) and no
-/// `@ts-nocheck`, `@ts-ignore` or `@ts-expect-error` anywhere in its text (a
+/// comment reading as `@ts-nocheck`, `@ts-ignore` or `@ts-expect-error`
+/// (`AstFacts::typescript_directive_comment`, from the parser's comments; a
 /// conservative veto: a directive anywhere withholds the premise for the
 /// whole file).
 fn tsc_reports_in(file: &FileFacts) -> bool {
@@ -1450,10 +1451,7 @@ fn tsc_reports_in(file: &FileFacts) -> bool {
     let javascript = [".js", ".jsx", ".mjs", ".cjs"]
         .iter()
         .any(|extension| path.ends_with(extension));
-    !javascript
-        && !["@ts-nocheck", "@ts-ignore", "@ts-expect-error"]
-            .iter()
-            .any(|directive| file.source.contains(directive))
+    !javascript && !file.ast.typescript_directive_comment
 }
 
 /// The nine in-place `Array.prototype` methods upstream names

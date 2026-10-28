@@ -794,7 +794,13 @@ pub(super) fn run(
     }
     timer.lap("effectStoreParameters");
     let position = |(key, ordinal): &RowAt| (slots[key], *ordinal);
-    resolve_setter_action_aliases(&rows, state.alias_index.values(), &position, tables);
+    resolve_setter_action_aliases(
+        &rows,
+        state.alias_index.values(),
+        &position,
+        tables,
+        &mut runtime_sources,
+    );
     timer.lap("setterActionAliases");
     resolve_store_view_aliases(&rows, state.view_index.values(), &position, tables);
     timer.lap("storeViewAliases");
@@ -882,21 +888,38 @@ pub(super) fn run(
 /// its source got one (every name it could add was added then), so a round
 /// visits just the bindings whose source the round before added, in
 /// position order, and adds exactly what a round over every binding would.
+///
+/// ADR 0463: an exact alias (`AliasRow::exact`) of an accessor is that
+/// accessor too, with every fact the source has: its kind, primitive, phase,
+/// async provenance and options, origin, runtime standing, and whether
+/// summaries and returns carry it.
 fn resolve_setter_action_aliases(
     rows: &[Arc<FileRows>],
     index: &BTreeMap<SymbolId, Arc<Vec<RowAt>>>,
     position: &dyn Fn(&RowAt) -> (usize, u32),
     tables: &mut SourceTables,
+    runtime_sources: &mut HashSet<SymbolId>,
 ) {
     let SourceTables {
+        accessors,
+        accessor_origins,
         setters,
         actions,
+        source_kinds,
         source_primitives,
+        source_phases,
+        source_owned_write,
+        async_sources,
+        source_async_options,
+        value_form_stores,
+        returned_source_symbols,
+        summary_source_symbols,
         ..
     } = tables;
     let mut frontier = setters
         .keys()
         .chain(actions.keys())
+        .chain(accessors.keys())
         .filter(|symbol| index.contains_key(*symbol))
         .cloned()
         .collect::<BTreeSet<_>>();
@@ -911,11 +934,17 @@ fn resolve_setter_action_aliases(
         // An alias of a setter was made by the same primitive, which an
         // owned-scope guard can depend on (`optimistic_*_setter_guarded`).
         let mut primitive_aliases = Vec::new();
+        // (alias, source, the alias's accessor entry).
+        let mut accessor_aliases = Vec::new();
         for (slot, ordinal) in touched {
             let row = &rows[slot].aliases[ordinal as usize];
             let setter = setters.get(&row.source).cloned();
             let action = actions.get(&row.source).cloned();
-            if setter.is_none() && action.is_none() {
+            let accessor = row
+                .exact
+                .then(|| accessors.get(&row.source).cloned())
+                .flatten();
+            if setter.is_none() && action.is_none() && accessor.is_none() {
                 continue;
             }
             for (symbol, display) in &row.names {
@@ -937,20 +966,135 @@ fn resolve_setter_action_aliases(
                 {
                     action_aliases.push((symbol.clone(), (display.clone(), source.clone())));
                 }
+                // An alias the typed pass (ADR 0294) already proved to hold
+                // this source has its entry; it still takes the source's facts.
+                if let Some((_, declaration)) = &accessor
+                    && accessors
+                        .get(symbol)
+                        .is_none_or(|(_, existing)| existing == declaration)
+                {
+                    accessor_aliases.push((
+                        symbol.clone(),
+                        row.source.clone(),
+                        (display.clone(), declaration.clone()),
+                    ));
+                }
             }
-        }
-        if setter_aliases.is_empty() && action_aliases.is_empty() {
-            break;
         }
         frontier = setter_aliases
             .iter()
             .map(|(symbol, _)| symbol.clone())
             .chain(action_aliases.iter().map(|(symbol, _)| symbol.clone()))
             .collect();
+        // Every per-source fact is read as the round began: a source's own
+        // entries were all made before the round that added the source.
+        let copies = accessor_aliases
+            .iter()
+            .map(|(symbol, source, _)| {
+                (
+                    symbol.clone(),
+                    accessor_origins.get(source).cloned(),
+                    source_kinds.get(source).copied(),
+                    source_primitives.get(source).cloned(),
+                    source_phases.get(source).copied(),
+                    source_owned_write.get(source).copied(),
+                    async_sources.contains(source),
+                    source_async_options.get(source).cloned(),
+                    value_form_stores.contains(source),
+                    runtime_sources.contains(source),
+                    (
+                        returned_source_symbols.contains(source),
+                        summary_source_symbols.contains(source),
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
         setters.extend(setter_aliases);
         actions.extend(action_aliases);
         for (symbol, primitive) in primitive_aliases {
             source_primitives.entry(symbol).or_insert(primitive);
+        }
+        // An alias joins the next round when it gained anything: its own
+        // aliases then read what it holds now. Facts only grow, so the rounds
+        // end.
+        for (symbol, _, entry) in accessor_aliases {
+            if !accessors.contains_key(&symbol) {
+                accessors.insert(symbol.clone(), entry);
+                frontier.insert(symbol);
+            }
+        }
+        for (
+            symbol,
+            origin,
+            kind,
+            primitive,
+            phase,
+            owned,
+            asynchronous,
+            options,
+            value_form,
+            runtime,
+            (returned, summary),
+        ) in copies
+        {
+            let mut gained = false;
+            if let Some(origin) = origin
+                && !accessor_origins.contains_key(&symbol)
+            {
+                accessor_origins.insert(symbol.clone(), origin);
+                gained = true;
+            }
+            if let Some(kind) = kind
+                && !source_kinds.contains_key(&symbol)
+            {
+                source_kinds.insert(symbol.clone(), kind);
+                gained = true;
+            }
+            if let Some(primitive) = primitive
+                && !source_primitives.contains_key(&symbol)
+            {
+                source_primitives.insert(symbol.clone(), primitive);
+                gained = true;
+            }
+            if let Some(phase) = phase
+                && !source_phases.contains_key(&symbol)
+            {
+                source_phases.insert(symbol.clone(), phase);
+                gained = true;
+            }
+            if let Some(owned) = owned
+                && !source_owned_write.contains_key(&symbol)
+            {
+                source_owned_write.insert(symbol.clone(), owned);
+                gained = true;
+            }
+            if asynchronous {
+                gained |= async_sources.insert(symbol.clone());
+            }
+            if let Some(options) = options
+                && !source_async_options.contains_key(&symbol)
+            {
+                source_async_options.insert(symbol.clone(), options);
+                gained = true;
+            }
+            if value_form {
+                gained |= value_form_stores.insert(symbol.clone());
+            }
+            if runtime {
+                gained |= runtime_sources.insert(symbol.clone());
+            }
+            if returned {
+                gained |= returned_source_symbols.insert(symbol.clone());
+            }
+            if summary {
+                gained |= summary_source_symbols.insert(symbol.clone());
+            }
+            if gained {
+                frontier.insert(symbol);
+            }
+        }
+        if frontier.is_empty() {
+            break;
         }
     }
 }

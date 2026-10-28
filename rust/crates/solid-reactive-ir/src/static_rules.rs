@@ -652,6 +652,31 @@ fn typed_after_await_obligation(
     }
 }
 
+/// ADR 0463: the symbol that identifies the source `symbol` reads: the one
+/// declared where its accessor entry says the source is. An exact alias
+/// (`const view = count`) shares its source's entry, so a read through
+/// either is a read of one dependency; any other symbol is its own.
+pub(super) fn source_identity<'s>(
+    ctx: &'s AnalysisContext<'_>,
+    symbol: &'s SymbolId,
+) -> &'s SymbolId {
+    ctx.accessors
+        .get(symbol)
+        .and_then(|(_, declaration)| ctx.entities.get(declaration))
+        .unwrap_or(symbol)
+}
+
+/// Whether `candidate` and `symbol` read one source ([`source_identity`]).
+pub(super) fn same_source(
+    ctx: &AnalysisContext<'_>,
+    candidate: Option<&SymbolId>,
+    symbol: &SymbolId,
+) -> bool {
+    candidate.is_some_and(|candidate| {
+        candidate == symbol || source_identity(ctx, candidate) == source_identity(ctx, symbol)
+    })
+}
+
 /// The resolved location of an async function's member-read analysis: its
 /// file, its AST function, and the end of the first await in the function's
 /// own unconditional flow. `None` means the function has no straight-line
@@ -722,8 +747,7 @@ fn tracked_before_first_suspension(
             && file
                 .ast
                 .call_at(*span)
-                .and_then(|call| call_accessor_symbol(ctx, file, call))
-                .is_some_and(|candidate| candidate == symbol)
+                .is_some_and(|call| same_source(ctx, call_accessor_symbol(ctx, file, call), symbol))
     })
 }
 
@@ -790,7 +814,7 @@ pub(super) fn tracked_store_paths_before_first_suspension(
             continue;
         }
         if let Some(path) = store_path_text(file, member.span) {
-            paths.push((symbol.clone(), path));
+            paths.push((source_identity(ctx, symbol).clone(), path));
         }
     }
     paths
@@ -809,11 +833,21 @@ fn store_path_text(file: &solid_facts::FileFacts, span: Span) -> Option<String> 
 /// Whether the path `read` is already a dependency given the paths `tracked`
 /// read before the first suspension: the same root and a tracked path that is
 /// `read` or extends it (reading `a.b` tracks the key of `a` too).
+///
+/// `symbol` is a [`source_identity`], and both paths are compared after their
+/// root's own name: `view.a` reads the key `store.a` read when `view` is an
+/// exact alias of `store` (ADR 0463).
 fn store_path_tracked(tracked: &[(SymbolId, String)], symbol: &SymbolId, read: &str) -> bool {
+    let keys = |path: &str| path.split_once('.').map(|(_, keys)| keys.to_owned());
+    let Some(read) = keys(read) else {
+        return false;
+    };
     tracked.iter().any(|(root, path)| {
         root == symbol
-            && path.starts_with(read)
-            && (path.len() == read.len() || path[read.len()..].starts_with('.'))
+            && keys(path).is_some_and(|path| {
+                path.starts_with(&read)
+                    && (path.len() == read.len() || path[read.len()..].starts_with('.'))
+            })
     })
 }
 

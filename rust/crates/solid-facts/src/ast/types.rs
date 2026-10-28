@@ -69,6 +69,11 @@ pub struct AstFacts {
     /// See [`NamespaceMemberBindingFact`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub namespace_member_bindings: Vec<NamespaceMemberBindingFact>,
+    /// Every `const` binding that holds exactly the value of another local
+    /// `const` binding (facts schema 79), sorted by local: `const useIt = r1`
+    /// and `const { useIt } = { useIt: r1 }`. See [`LocalAliasBindingFact`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub local_alias_bindings: Vec<LocalAliasBindingFact>,
     /// Every `import("…")` written in a type position (facts schema 46):
     /// `import("m").Name`, `typeof import("m").name`, `typeof import("m")`.
     /// Erased at run time and loading nothing, but resolved through the same
@@ -401,6 +406,15 @@ pub struct AstFacts {
     /// Every other comment is absent.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub suppression_comments: Vec<SuppressionCommentFact>,
+    /// Whether a comment of the file (facts schema 80) reads as a TypeScript
+    /// checking directive: its text, past whitespace and a block comment's
+    /// leading `*`s, starts with `@ts-nocheck`, `@ts-ignore` or
+    /// `@ts-expect-error`. Read from the parser's comments, so a string
+    /// literal holding those words is no directive. Over-inclusive on
+    /// purpose (TypeScript honours some only in some positions): it may only
+    /// withhold the premise that `tsc` reports an error in the file.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub typescript_directive_comment: bool,
     /// Code no execution reaches, from the syntax alone (facts schema 77, ADR
     /// 0458): every statement after one that never completes normally in the
     /// same list (a `function` declaration excepted, it is hoisted), and every
@@ -1179,6 +1193,31 @@ pub struct NamespaceMemberBindingFact {
     pub key: CompactString,
 }
 
+/// A `const` binding whose value is, from its declarator on, exactly the
+/// value of another binding of this module that is a `const` variable (the
+/// binder resolves the reference, so a shadowing name is that name's binding):
+/// `const local = source` (the initializer an identifier under parentheses and
+/// TypeScript wrappers), or a slot `const { key: local } = { key: source }` of
+/// an object pattern initialized by an object literal that holds only data
+/// properties with static keys (identifiers, string literals; no spread, no
+/// computed or numeric key, no getter, setter or method, no `__proto__`), the
+/// key exactly once, its value an identifier (shorthand or not). The literal
+/// is consumed by the destructuring and reachable from nowhere else, so the
+/// slot reads the value the property was given. The slot's key is static, its
+/// value a bare binding (no default, no nested pattern). Recorded only for a
+/// non-ambient declarator and a local the module does not export directly
+/// (as [`NamespaceMemberBindingFact`]), so every reference to `local` is in
+/// this file. A mention of `local` before its declarator ran throws; whether
+/// one may is the consumer's question. Absence is not a fact.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalAliasBindingFact {
+    /// The alias's binding identifier.
+    pub local: Span,
+    /// The binding identifier of the `const` variable it holds.
+    pub source: Span,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ModuleHazardKind {
@@ -1776,6 +1815,16 @@ impl AstFacts {
             .map(|index| self.reference_declarations[index].1)
     }
 
+    /// The `const` binding a local alias holds, by the alias's binding
+    /// identifier span. See [`LocalAliasBindingFact`].
+    #[must_use]
+    pub fn local_alias_binding(&self, local: Span) -> Option<&LocalAliasBindingFact> {
+        self.local_alias_bindings
+            .binary_search_by_key(&local, |fact| fact.local)
+            .ok()
+            .map(|index| &self.local_alias_bindings[index])
+    }
+
     /// The namespace member a `const` destructuring slot binds, by the slot's
     /// binding identifier span. See [`NamespaceMemberBindingFact`].
     #[must_use]
@@ -1868,6 +1917,65 @@ impl AstFacts {
             span = wrapper.inner;
         }
         span
+    }
+
+    /// ADR 0468: the operands a callee may evaluate to when it is a comma
+    /// (`(g(), f)()`), conditional (`(c ? f : h)()`) or logical (`(c && f)()`)
+    /// expression, through transparent wrappers. Its value is one of them: a
+    /// comma's last operand, either branch of a conditional, either side of
+    /// `||` or `??` and the right of `&&` (its left is the value only when
+    /// falsy, and no function is). Each is followed through the same forms and
+    /// answered as written otherwise: an identifier, a member, a call, any
+    /// other expression. Empty for every other callee: an identifier, a
+    /// member, a call or a function names its value through other facts.
+    #[must_use]
+    pub fn composite_callee_operands(&self, callee: Span) -> Vec<Span> {
+        let sequence_tail = |span: Span| {
+            self.sequences
+                .iter()
+                .find(|sequence| sequence.span == span)
+                .map(|sequence| sequence.tail)
+        };
+        let root = self.peel_ts_sugar_span(callee);
+        if sequence_tail(root).is_none()
+            && self.conditional_at(root).is_none()
+            && self.logical_at(root).is_none()
+        {
+            return Vec::new();
+        }
+        let mut pending = vec![root];
+        let mut operands = Vec::new();
+        while let Some(span) = pending.pop() {
+            let span = self.peel_ts_sugar_span(span);
+            if let Some(tail) = sequence_tail(span) {
+                pending.push(tail);
+            } else if let Some(conditional) = self.conditional_at(span) {
+                pending.extend([conditional.consequent, conditional.alternate]);
+            } else if let Some(logical) = self.logical_at(span) {
+                if logical.operator != LogicalOperatorKind::And {
+                    pending.push(logical.left);
+                }
+                pending.push(logical.right);
+            } else {
+                operands.push(span);
+            }
+        }
+        operands.sort_unstable();
+        operands.dedup();
+        operands
+    }
+
+    /// The operands of [`Self::composite_callee_operands`] that are identifier
+    /// references: each is a value the call may invoke.
+    #[must_use]
+    pub fn composite_callee_references(&self, callee: Span) -> Vec<Span> {
+        let mut operands = self.composite_callee_operands(callee);
+        operands.retain(|span| {
+            self.identifiers
+                .binary_search_by_key(span, |identifier| identifier.span)
+                .is_ok_and(|index| self.identifiers[index].role == IdentifierRole::Reference)
+        });
+        operands
     }
 
     /// Whether `span` lies inside a `namespace`, `module`, or `declare global`
@@ -1970,6 +2078,7 @@ impl AstFacts {
             sequences: Vec::new(),
             import_equals: Vec::new(),
             namespace_member_bindings: Vec::new(),
+            local_alias_bindings: Vec::new(),
             type_imports: Vec::new(),
             type_queries: Vec::new(),
             type_names: Vec::new(),
@@ -2022,6 +2131,7 @@ impl AstFacts {
             module_directives: Vec::new(),
             stray_directives: Vec::new(),
             suppression_comments: Vec::new(),
+            typescript_directive_comment: false,
             unreachable_regions: Vec::new(),
             tagged_templates: Vec::new(),
             array_literal_elements: Vec::new(),

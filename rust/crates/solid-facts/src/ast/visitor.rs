@@ -172,6 +172,93 @@ impl Collector<'_, '_> {
         }
     }
 
+    /// The binding identifier of the `const` variable the binder resolves
+    /// `expression` (under parentheses and TypeScript wrappers) to.
+    fn const_variable_of(&self, expression: &Expression<'_>) -> Option<Span> {
+        let Expression::Identifier(identifier) = unwrapped(expression) else {
+            return None;
+        };
+        let symbol = identifier
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())?;
+        self.scoping
+            .symbol_flags(symbol)
+            .contains(oxc_semantic::SymbolFlags::ConstVariable)
+            .then(|| span(self.scoping.symbol_span(symbol)))
+    }
+
+    /// Records the local aliases of a non-ambient `const` declarator
+    /// (`local_alias_candidates`, [`LocalAliasBindingFact`]): `const a = b`,
+    /// and each static slot of an object pattern over an object literal whose
+    /// properties are all static data properties, the slot's key present once
+    /// with an identifier value. A `let`, a `var` and an ambient declarator
+    /// record nothing.
+    fn record_local_alias_candidates(&mut self, declaration: &VariableDeclarator<'_>) {
+        if declaration.kind != oxc_ast::ast::VariableDeclarationKind::Const
+            || self.ambient_variable
+            || self.ambient_module_depth != 0
+        {
+            return;
+        }
+        let Some(init) = declaration.init.as_ref() else {
+            return;
+        };
+        match &declaration.id {
+            BindingPattern::BindingIdentifier(local) => {
+                if let Some(source) = self.const_variable_of(init) {
+                    self.local_alias_candidates.push((span(local.span), source));
+                }
+            }
+            BindingPattern::ObjectPattern(pattern) => {
+                let Expression::ObjectExpression(literal) = unwrapped(init) else {
+                    return;
+                };
+                // Every property a static data property, by its runtime key.
+                let mut values = Vec::<(&str, &Expression<'_>)>::new();
+                for property in &literal.properties {
+                    let ObjectPropertyKind::ObjectProperty(property) = property else {
+                        return;
+                    };
+                    if property.computed || property.method || property.kind != PropertyKind::Init {
+                        return;
+                    }
+                    let key = match &property.key {
+                        PropertyKey::StaticIdentifier(identifier) => identifier.name.as_str(),
+                        PropertyKey::StringLiteral(literal) => literal.value.as_str(),
+                        _ => return,
+                    };
+                    // `__proto__: v` sets the prototype rather than a property.
+                    if key == "__proto__" {
+                        return;
+                    }
+                    values.push((key, &property.value));
+                }
+                for slot in &pattern.properties {
+                    if slot.computed {
+                        continue;
+                    }
+                    let BindingPattern::BindingIdentifier(local) = &slot.value else {
+                        continue;
+                    };
+                    let key = match &slot.key {
+                        PropertyKey::StaticIdentifier(identifier) => identifier.name.as_str(),
+                        PropertyKey::StringLiteral(literal) => literal.value.as_str(),
+                        _ => continue,
+                    };
+                    let mut matching = values.iter().filter(|(name, _)| *name == key);
+                    let (Some((_, value)), None) = (matching.next(), matching.next()) else {
+                        continue;
+                    };
+                    if let Some(source) = self.const_variable_of(value) {
+                        self.local_alias_candidates.push((span(local.span), source));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Remembers which string and template statements are direct children of
     /// a program or function body (`direct_string_statements`).
     fn note_direct_string_statements(&mut self, statements: &[oxc_ast::ast::Statement<'_>]) {
@@ -381,11 +468,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         {
             self.lazy_import_glob_callees.push(span(member.span));
         }
-        let callee_span = call.callee.span();
+        // ADR 0468: `(void 0, f)()` calls `f` as `f()` does.
+        let invoked = invoked_identifier(&call.callee);
+        let callee_span = invoked.map_or_else(|| call.callee.span(), |identifier| identifier.span);
         self.calls.push(CallFact {
             span: span(call.span),
             callee: span(callee_span),
-            direct_callee: matches!(call.callee, Expression::Identifier(_)),
+            direct_callee: invoked.is_some(),
             type_arguments: call.type_arguments.is_some(),
             arguments: call
                 .arguments
@@ -411,11 +500,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             self.straight_line_constructs.push(span(expression.span));
         }
         self.record_completion_site(expression.span);
-        let callee_span = expression.callee.span();
+        let invoked = invoked_identifier(&expression.callee);
+        let callee_span =
+            invoked.map_or_else(|| expression.callee.span(), |identifier| identifier.span);
         self.calls.push(CallFact {
             span: span(expression.span),
             callee: span(callee_span),
-            direct_callee: matches!(expression.callee, Expression::Identifier(_)),
+            direct_callee: invoked.is_some(),
             type_arguments: expression.type_arguments.is_some(),
             arguments: expression
                 .arguments
@@ -444,6 +535,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .push((span(declaration.id.span()), span(init.span())));
         }
         self.record_namespace_member_candidates(declaration);
+        self.record_local_alias_candidates(declaration);
         // `const { a, b } = await import(x)`: the export names the pattern reads.
         if let BindingPattern::ObjectPattern(pattern) = &declaration.id
             && let Some(init) = &declaration.init

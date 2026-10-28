@@ -497,6 +497,16 @@ fn receiver_closed(
                         && crate::owners::handler_value_span(file, callback.span) == member.span
                 })
             });
+        // ADR 0468: so is a member a comma, conditional or logical callee may
+        // evaluate to (`(0, o.m)()`): the call may invoke it, with no receiver.
+        let invoked = invoked
+            || file.ast.calls.iter().any(|call| {
+                !call.construct
+                    && file
+                        .ast
+                        .composite_callee_operands(call.callee)
+                        .contains(&member.span)
+            });
         if !invoked {
             return false;
         }
@@ -609,6 +619,17 @@ impl Memo<BuildSchema> for ObjectMemberTargets {
             .iter()
             .filter(|call| !call.construct)
             .map(|call| (call.callee, call.callee))
+            // ADR 0468: a member a comma, conditional or logical callee may
+            // evaluate to (`(0, o.m)()`), which the call invokes without its
+            // receiver: the owner walk asks which function it holds.
+            .chain(
+                file.ast
+                    .calls
+                    .iter()
+                    .filter(|call| !call.construct)
+                    .flat_map(|call| file.ast.composite_callee_operands(call.callee))
+                    .map(|operand| (operand, operand)),
+            )
             .chain(
                 read.compiler()
                     .callback_roles

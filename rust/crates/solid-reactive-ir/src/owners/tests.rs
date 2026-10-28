@@ -189,6 +189,20 @@ fn owner_edge_context_transforms_the_source_bits_per_edge_kind() {
         owner_edge_context(OwnerEdgeKind::MayBeUnowned, OWNER_CONTEXT_OWNED),
         OWNER_CONTEXT_UNOWNED
     );
+    // ADR 0468: a call that may run its target passes the source's owner on
+    // without the proof of an unowned run.
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::MayRun, OWNER_CONTEXT_OWNED),
+        OWNER_CONTEXT_OWNED
+    );
+    assert_eq!(
+        owner_edge_context(
+            OwnerEdgeKind::MayRun,
+            OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+        ),
+        OWNER_CONTEXT_UNOWNED
+    );
+    assert_eq!(owner_edge_context(OwnerEdgeKind::MayRun, 0), 0);
 }
 
 #[test]
@@ -489,8 +503,9 @@ mod kept_graph {
 
     const PATHS: [&str; 5] = ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"];
 
-    const KINDS: [OwnerEdgeKind; 11] = [
+    const KINDS: [OwnerEdgeKind; 12] = [
         OwnerEdgeKind::Preserve,
+        OwnerEdgeKind::MayRun,
         OwnerEdgeKind::MayResumeUnowned,
         OwnerEdgeKind::Owned,
         OwnerEdgeKind::Unowned,

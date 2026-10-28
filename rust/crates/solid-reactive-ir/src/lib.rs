@@ -1179,7 +1179,8 @@ impl OwnerRequirementOperation {
         match operation {
             "effect" => Self::Effect,
             "cleanup" => Self::Cleanup,
-            "boundary" => Self::Boundary,
+            // ADR 0462: a boundary component called as a function.
+            "boundary" | "boundary-call" => Self::Boundary,
             "settled-cleanup" => Self::SettledCleanup,
             "context-read" => Self::ContextRead,
             "context-provider" => Self::ContextProvider,
@@ -1259,6 +1260,13 @@ pub struct AsyncRead {
     /// missing-boundary findings are uncertifiable then, not proven.
     #[serde(default, skip_serializing_if = "is_false")]
     pub mount_unresolved: bool,
+    /// The read is a project function call in rendered JSX whose callee's
+    /// interprocedural summary reads the async source (ADR 0462): a wrapper,
+    /// a local closure, a callback a helper calls. The summary does not prove
+    /// the read runs while the call renders, so the missing-boundary findings
+    /// are uncertifiable, never proven.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub call_attributed: bool,
 }
 
 fn default_async_provenance() -> bool {
@@ -1320,6 +1328,11 @@ pub struct UnreachedSite {
     /// literal test rules out); else the function running it never runs.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub dead_code: bool,
+    /// Unreached only because the runtime refuses a creation on the way: a
+    /// root, primitive or component created in an effect apply or a leaf
+    /// callback (ADR 0475).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub refused_creation: bool,
 }
 
 /// The [`UnreachedSite`] at exactly the byte range `start..end` of `path`,

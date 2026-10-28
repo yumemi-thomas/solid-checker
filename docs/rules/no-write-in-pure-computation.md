@@ -69,6 +69,16 @@ same-named module function. A root body taken from another module, or from a
 value the checker cannot resolve to one declaration, is not judged as a root
 body.
 
+The same holds for every callback position (ADR 0466): a function a memo, an
+effect or render-effect compute, `createRoot`, `untrack`, `runWithOwner` or
+`onCleanup` names by its binding runs what it runs in place (an IIFE, an inline
+`forEach`, a helper that calls its callback) as the inline arrow does
+(`fixtures/reactive-ir/write-callback-by-name`). When the function has other
+entries (a handler, a call), a rejecting run at the position is a violation,
+and a legal one is no proof; the position is resolved only when one primitive
+position names the binding, the binding holds that function now, and the
+argument follows a `const` declarator in its own function.
+
 `render(code, el)` and `hydrate(code, el)` run `code` the same way on
 `@solidjs/web` rc.13 and rc.17 (ADR 0353). `render` calls `code()` inside the
 `createRoot` it makes (rc.17 `dist/web.dev.js:551-558`), and `hydrate` reaches
@@ -273,6 +283,10 @@ a release whose `onCleanup` was not read (ADR 0456,
 A write no execution reaches (`false && setV(1)`, after a `return`, in a
 closure only an unreferenced child calls) is uncertifiable (ADR 0458,
 `fixtures/reactive-ir/dead-code-sites`).
+So is a write in a `createRoot` body, or in a component rendered only there,
+when the root call or the render is written in an effect apply or a leaf
+callback: rc.17 refuses the creation before the body runs (ADR 0475,
+`fixtures/reactive-ir/write-in-refused-creation`).
 
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.

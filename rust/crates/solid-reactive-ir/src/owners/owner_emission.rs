@@ -113,15 +113,32 @@ pub(super) fn emit_file(
         if candidate.in_parameter_list && context == 0 {
             context = OWNER_CONTEXT_UNOWNED;
         }
-        // As in the fragment: effects, cleanups and context reads, never a
-        // JSX boundary or `onSettled`'s returned cleanup. A context read after
-        // an `await` is unowned (ADR 0352).
-        let after_await = matches!(candidate.operation, "effect" | "cleanup" | "context-read")
-            && starts.contains(&u64::from(candidate.operation_span.start));
-        let possible_continuation = (!after_await
-            && matches!(candidate.operation, "effect" | "cleanup" | "context-read"))
-        .then(|| possible_await_continuation_context(file, candidate.operation_span, context))
-        .flatten();
+        // ADR 0472: context zero is no proof for a function whose value its
+        // function returns: the caller of that function may call it later, on
+        // a timer or in a handler, and no owner edge follows the returned
+        // value (through `runWithOwner`, `createRoot`, `untrack`, a memo or a
+        // plain factory call). The operation is unplaced, never certified.
+        let returned_unplaced = context == 0
+            && !candidate.in_parameter_list
+            && candidate
+                .owner
+                .is_some_and(|span| returned_unreached_function(graph, pid, file, span));
+        if returned_unplaced {
+            context = OWNER_CONTEXT_UNOWNED;
+        }
+        // As in the fragment: effects, cleanups, context reads and boundary
+        // calls, never a JSX boundary or `onSettled`'s returned cleanup. A
+        // context read after an `await` is unowned (ADR 0352), and so is a
+        // `Loading(props)` call (ADR 0462).
+        let continuation_placed = matches!(
+            candidate.operation,
+            "effect" | "cleanup" | "context-read" | "boundary-call"
+        );
+        let after_await =
+            continuation_placed && starts.contains(&u64::from(candidate.operation_span.start));
+        let possible_continuation = (!after_await && continuation_placed)
+            .then(|| possible_await_continuation_context(file, candidate.operation_span, context))
+            .flatten();
         let context = if after_await {
             await_continuation_context(context)
         } else {
@@ -141,6 +158,7 @@ pub(super) fn emit_file(
         // resolve would withhold the lexical answer, not grant it.
         let root_owned = possible_continuation.is_none()
             && !candidate.in_parameter_list
+            && !returned_unplaced
             && root_owned_at(candidate.providing_region_chain.as_deref(), |span| {
                 graph
                     .context(pid, *span)
@@ -236,8 +254,10 @@ pub(super) fn emit_file(
                     CleanupReturnProof::OptionalFunction | CleanupReturnProof::Unresolved
                 )
             });
-        let runtime_uncertain =
-            candidate.runtime_uncertain || cleanup_return_uncertain || candidate.in_parameter_list;
+        let runtime_uncertain = candidate.runtime_uncertain
+            || cleanup_return_uncertain
+            || candidate.in_parameter_list
+            || returned_unplaced;
         let uncertain = runtime_uncertain
             || conditional_owner
             || later_run_unowned
@@ -268,4 +288,47 @@ pub(super) fn emit_file(
         );
     }
     emission
+}
+
+/// Whether the function at `span`, or a function around it that also holds
+/// context zero and so runs it only from where it runs, is the value its
+/// enclosing function returns (a `return` argument or a concise arrow body).
+fn returned_unreached_function(
+    graph: &OwnerGraph,
+    pid: PathId,
+    file: &solid_facts::FileFacts,
+    span: Span,
+) -> bool {
+    let returned = |function: &solid_facts::ast::FunctionFact| {
+        let target = function.span;
+        file.ast
+            .returns
+            .iter()
+            .filter_map(|returned| returned.argument)
+            .chain(
+                file.ast
+                    .functions
+                    .iter()
+                    .filter_map(|outer| outer.expression_return.as_ref()?.argument),
+            )
+            .any(|argument| file.ast.peel_ts_sugar_span(argument) == target)
+    };
+    let mut at = span;
+    // Bounded: each step moves to the function that holds the previous one.
+    for _ in 0..16 {
+        let Some(function) = file.ast.function_at(at) else {
+            return false;
+        };
+        if returned(function) {
+            return true;
+        }
+        let Some(outer) = crate::owners::owning_function(&file.ast, function.span) else {
+            return false;
+        };
+        if graph.context(pid, outer.span) != Some(0) {
+            return false;
+        }
+        at = outer.span;
+    }
+    false
 }

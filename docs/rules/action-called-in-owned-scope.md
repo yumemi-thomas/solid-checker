@@ -25,7 +25,9 @@ owner, and the action guard has no root exemption on any release: an action
 called directly in the body, or in a memo compute nested in it, throws
 `ACTION_CALLED_IN_OWNED_SCOPE` (probed on every published `2.0.0-rc.0` to
 `rc.9` triple, dev client builds). A function passed to `createRoot` by name
-is the root body too, resolved by symbol to its same-file declaration. An
+is the root body too, resolved by symbol to its same-file declaration. A
+closure bound to a name in a root body runs under the root where it is called,
+even when a cleanup or a handler holds the root call (ADR 0471). An
 effect apply, `onSettled` or an event listener inside the root keeps its own,
 legal, answer.
 

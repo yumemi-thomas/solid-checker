@@ -10,6 +10,16 @@
       "start": 1023,
       "end": 1033,
       "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/own-setter-wrapper-identity/setter.ts",
+      "start": 202,
+      "end": 259,
+      "fixes": 0
     }
   ]
 }

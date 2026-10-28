@@ -105,6 +105,22 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/write-owner-in-cleanup-unread/node_modules/**
 !fixtures/reactive-ir/write-owner-in-cleanup-rc13/node_modules/
 !fixtures/reactive-ir/write-owner-in-cleanup-rc13/node_modules/**
+!fixtures/reactive-ir/write-callback-by-name/node_modules/
+!fixtures/reactive-ir/write-callback-by-name/node_modules/**
+!fixtures/reactive-ir/write-named-closure-in-root/node_modules/
+!fixtures/reactive-ir/write-named-closure-in-root/node_modules/**
+!fixtures/reactive-ir/write-in-refused-creation/node_modules/
+!fixtures/reactive-ir/write-in-refused-creation/node_modules/**
+!fixtures/reactive-ir/owner-returned-callable/node_modules/
+!fixtures/reactive-ir/owner-returned-callable/node_modules/**
+!fixtures/reactive-ir/read-in-place-layers/node_modules/
+!fixtures/reactive-ir/read-in-place-layers/node_modules/**
+!fixtures/reactive-ir/owner-helper-callback/node_modules/
+!fixtures/reactive-ir/owner-helper-callback/node_modules/**
+!fixtures/reactive-ir/read-jsx-in-callbacks/node_modules/
+!fixtures/reactive-ir/read-jsx-in-callbacks/node_modules/**
+!fixtures/reactive-ir/strict-read-async-apply/node_modules/
+!fixtures/reactive-ir/strict-read-async-apply/node_modules/**
 !fixtures/reactive-ir/write-detached-owner-helper/node_modules/
 !fixtures/reactive-ir/write-detached-owner-helper/node_modules/**
 !fixtures/reactive-ir/write-cleanup-handle-call/node_modules/
@@ -113,6 +129,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/write-render-apply-row-layers/node_modules/**
 !fixtures/reactive-ir/dead-code-sites/node_modules/
 !fixtures/reactive-ir/dead-code-sites/node_modules/**
+!fixtures/reactive-ir/local-alias-bindings/node_modules/
+!fixtures/reactive-ir/local-alias-bindings/node_modules/**
 !fixtures/reactive-ir/rc17-callback-exports-mixed/node_modules/
 !fixtures/reactive-ir/rc17-callback-exports-mixed/node_modules/**
 !fixtures/reactive-ir/rc17-create-deferred/node_modules/
@@ -674,3 +692,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-write-chain-links/node_modules/**
 !fixtures/reactive-ir/store-write-chain-links-loose/node_modules/
 !fixtures/reactive-ir/store-write-chain-links-loose/node_modules/**
+!fixtures/reactive-ir/callee-spelling/node_modules/
+!fixtures/reactive-ir/callee-spelling/node_modules/**

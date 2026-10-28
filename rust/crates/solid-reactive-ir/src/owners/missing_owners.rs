@@ -13,6 +13,9 @@ pub(super) fn call_edge_symbol<'e>(
     entities: &'e EntitySymbols,
     lookup: &SemanticLookup<'_>,
 ) -> Option<&'e SymbolId> {
+    if !callee_entity_names_value(file, call.callee) {
+        return None;
+    }
     let symbol = entities.get(&location(file.path.shared(), call.callee))?;
     let callee = file.ast.peel_ts_sugar_span(call.callee);
     let receiver = file

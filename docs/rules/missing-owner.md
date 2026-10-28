@@ -20,6 +20,14 @@ not this rule's.
 A callback of an `onSettled` called inside another leaf body runs with no owner
 (rc.13 queues it), so an `onCleanup` there is this rule's claim.
 
+`Loading(props)` or `Errored(props)` called as a function creates its boundary
+in the call, and rc.17 warns `NO_OWNER_BOUNDARY` when no owner is current. The
+call is placed as an effect is: an ownerless handler, a timer or promise
+callback, a microtask, module scope, code after an `await`, or a
+`runWithOwner(null)` callback is unowned (ADR 0462). A JSX `<Loading>` in a
+handler is not claimed: rc.17 dev runs the component in a transparent root,
+so the runtime does not warn there.
+
 ## What it does
 
 The checker reports an operation when no component, computation, or root owner
@@ -39,6 +47,11 @@ compute's sources changing. That holds under a `createRoot` callback, or any
 other owner-creating callback, as much as under a component body: the root owns
 the first run only. Under an unowned call site every run is unowned, and the
 operation stays a proven violation.
+
+A function returned by its function (a factory's result, or a value returned
+through `runWithOwner`, `createRoot`, `untrack` or a memo) runs where its caller
+later calls it. The owner walk does not follow the returned value to those
+calls, so an owner operation in it is uncertifiable, never certified (ADR 0472).
 
 An owner-creating callback owns only what runs in its synchronous extent. A
 callback written inside it that runs with no owner on every run -- a
@@ -251,3 +264,13 @@ analysis; unresolved callers and ownership remain uncertifiable.
 A callback passed to a primitive, a handler or a ref is the function the argument is: a function literal, a bare identifier, element 0 of an event handler's tuple, or the literal an identity wrapper hands back (`wrap(() => …)`, where `wrap` returns its parameter unchanged on every completion and reads it no other way; ADR 0346). A TypeScript wrapper keeps the identifier's identity (`h as X`, `h!`, `h satisfies X`), and a wrapper around the identity wrapper's call is that call. A declaration written later in its module (`wrap = function …`) is no wrapper. A call, an IIFE or `untrack(…)` names no callback: its value is not the literal it contains.
 
 A package function whose same-operation creation calls cover every exit between them (`if (c) createEffect(…); else createRenderEffect(…);`) requires an owner as one fact (ADR 0359). Any exit without a creation, async/generator bodies, try, loops, `never` calls and member/namespace callees keep the requirement uncertifiable.
+
+- **A helper that calls its callback runs it at the call (ADR 0474).** An
+  `onCleanup` (or another owner-requiring call) in a callback handed to a
+  project helper that calls it is placed at the helper's call: in a timer, a
+  promise callback, a handler or `runWithOwner(null)` it is a violation. A
+  helper that calls it on some paths only, or also keeps or hands it on,
+  leaves it uncertifiable. A call behind `getOwner()` runs owned and a
+  hand-on to `createRoot(fn)` runs under the root (`getOwner() ? fn() :
+  createRoot(fn)` is clean); `!getOwner() ? fn() : …` runs it with no owner,
+  a violation in a timer.

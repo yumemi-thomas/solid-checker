@@ -1,0 +1,265 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 412,
+      "end": 419,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 536,
+      "end": 543,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 676,
+      "end": 683,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 723,
+      "end": 730,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 770,
+      "end": 781,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 939,
+      "end": 947,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 1121,
+      "end": 1127,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 1269,
+      "end": 1276,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 1449,
+      "end": 1456,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 1598,
+      "end": 1605,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 1756,
+      "end": 1762,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 1951,
+      "end": 1956,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 1981,
+      "end": 1987,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 2122,
+      "end": 2130,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 2293,
+      "end": 2334,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 2466,
+      "end": 2473,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 2674,
+      "end": 2681,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 2969,
+      "end": 2978,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 3001,
+      "end": 3011,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 3749,
+      "end": 3757,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 4151,
+      "end": 4157,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 4433,
+      "end": 4439,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 4490,
+      "end": 4498,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 4583,
+      "end": 4586,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 4640,
+      "end": 4649,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-bindings/App.tsx",
+      "start": 4967,
+      "end": 4974,
+      "fixes": 0
+    }
+  ]
+}
