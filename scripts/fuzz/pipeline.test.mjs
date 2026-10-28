@@ -243,7 +243,7 @@ describe("evaluate: the runtime cache", () => {
   };
 
   it("reruns only the checker on a cached case, with the same classification", async () => {
-    const cache = new EntryCache(mkdtempSync(join(tmpdir(), "fuzz-rcache-")), "runtime", "e".repeat(64));
+    const cache = new EntryCache(mkdtempSync(join(tmpdir(), "fuzz-rcache-")), "runtime", "e".repeat(64), { spots: {} });
     const e = entry(5);
     const first = counting();
     const one = await evaluate([e], { ...config(), runtimeCache: cache }, first.deps);
@@ -259,7 +259,7 @@ describe("evaluate: the runtime cache", () => {
   });
 
   it("does not store a record the runner did not write, and without a cache runs every step", async () => {
-    const cache = new EntryCache(mkdtempSync(join(tmpdir(), "fuzz-rcache-")), "runtime", "e".repeat(64));
+    const cache = new EntryCache(mkdtempSync(join(tmpdir(), "fuzz-rcache-")), "runtime", "e".repeat(64), { spots: {} });
     const e = entry(7);
     const broken = counting();
     broken.deps.runFast = async (cases) => { broken.calls.fast += cases.length; return new Map(cases.map((c) => [c.id, { failure: { phase: "vitest", message: "no record written" }, diagnostics: [], errors: [], witnesses: [] }])); };
@@ -299,5 +299,50 @@ describe("evaluate in two halves", () => {
     expect(runtimeCached([a], { ...config(), runtimeCache: cache, control: true })).toBe(false);   // the clean control was never run
     expect(runtimeCached([a], config())).toBe(false);
     expect(cache.stats()).toEqual(before);
+  });
+});
+
+describe("evaluate: the runtime cache's spot checks", () => {
+  const deps = (record) => {
+    const calls = { typecheck: 0, fast: 0 };
+    return { calls, deps: {
+      typecheck: async () => { calls.typecheck += 1; return { ok: true, errors: [] }; },
+      runChecker: async () => ({ ok: true, findings: [] }),
+      runFast: async (cases) => { calls.fast += cases.length; return new Map(cases.map((c) => [c.id, record()])); },
+    } };
+  };
+  const quiet = () => ({ diagnostics: [], errors: [], witnesses: [], hits: {}, quiescent: true });
+
+  it("runs the first hits fresh too, and a fresh record equal to the stored one passes", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "fuzz-rcache-"));
+    const e = entry(12);
+    await evaluate([e], { ...config(), runtimeCache: new EntryCache(dir, "runtime", "e".repeat(64)) }, deps(quiet).deps);
+    const cache = new EntryCache(dir, "runtime", "e".repeat(64), { spots: { typecheck: 1, fast: 1 } });
+    const second = deps(quiet);
+    await evaluate([e], { ...config(), runtimeCache: cache }, second.deps);
+    expect(second.calls).toEqual({ typecheck: 1, fast: 1 });                      // one type check and one record, run fresh and compared
+    expect(cache.stats()).toMatchObject({ spotChecked: 2, spotMismatches: [] });
+    const third = deps(quiet);
+    await evaluate([e], { ...config(), runtimeCache: cache }, third.deps);
+    expect(third.calls).toEqual({ typecheck: 0, fast: 0 });                       // the budget is per process
+  });
+
+  it("stops the run when a fresh record differs from the stored one", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "fuzz-rcache-"));
+    const e = entry(13);
+    await evaluate([e], { ...config(), runtimeCache: new EntryCache(dir, "runtime", "e".repeat(64)) }, deps(quiet).deps);
+    const changed = deps(() => ({ ...quiet(), diagnostics: [{ code: "NO_OWNER_CLEANUP", positions: [{ file: "App.tsx", line: 3 }] }] }));
+    const cache = new EntryCache(dir, "runtime", "e".repeat(64), { spots: { fast: 1 } });
+    await expect(evaluate([e], { ...config(), runtimeCache: cache }, changed.deps)).rejects.toThrow(/differs from a fresh run/);
+    expect(cache.spotMismatches).toEqual([e.built.id]);
+  });
+
+  it("stops the run when a fresh type check differs from the stored one", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "fuzz-rcache-"));
+    const e = entry(14);
+    await evaluate([e], { ...config(), runtimeCache: new EntryCache(dir, "runtime", "e".repeat(64)) }, deps(quiet).deps);
+    const failing = deps(quiet);
+    failing.deps.typecheck = async () => ({ ok: false, errors: ["App.tsx(1,1): error TS2322: no"] });
+    await expect(evaluate([e], { ...config(), runtimeCache: new EntryCache(dir, "runtime", "e".repeat(64), { spots: { typecheck: 1 } }) }, failing.deps)).rejects.toThrow(/typecheck of .* differs/);
   });
 });

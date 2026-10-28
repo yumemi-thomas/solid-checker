@@ -239,7 +239,7 @@ writeFileSync(arg("--out"), JSON.stringify({ results: ids.map((id) => ({ id, ver
     writeFileSync(join(dir, "plan.json"), JSON.stringify(plan));
     const log = join(dir, "log.jsonl");
     writeFileSync(log, "");
-    const cache = new EntryCache(join(dir, "cache"), "chrome", "e".repeat(64));
+    const cache = new EntryCache(join(dir, "cache"), "chrome", "e".repeat(64), { spots: {} });
     const options = { out: dir, install: join(dir, "install"), bin: "b", typefacts: "t", control: true, oracle: fakeOracle(dir), env: { ...process.env, FAKE_PLAN: join(dir, "plan.json"), FAKE_LOG: log }, cache };
     const calls = () => readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
     return { dir, caseDir, options, calls, cache };
@@ -300,5 +300,52 @@ describe("chromeRuntime: the halt marker", () => {
     expect(plain.witnesses.map((w) => w.reached)).toEqual([true, true]);
     // A failure the oracle recorded stays the failure.
     expect(chromeRuntime({ ...row, failure: { message: "locator.click: Timeout" } }, [{ selector: haltable("#w2"), text: HALT_TEXT }], sites).failure.phase).toBe("execution");
+  });
+});
+
+describe("runChrome: the Chrome cache's spot check", () => {
+  const fakeOracle = (dir) => {
+    const path = join(dir, "oracle.mjs");
+    writeFileSync(path, `import { appendFileSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+const arg = (name) => process.argv[process.argv.indexOf(name) + 1];
+const ids = readdirSync(arg("--cases")).sort();
+appendFileSync(process.env.FAKE_LOG, JSON.stringify(ids) + "\\n");
+const plan = JSON.parse(readFileSync(process.env.FAKE_PLAN, "utf8"));
+writeFileSync(arg("--out"), JSON.stringify({ results: ids.map((id) => ({ id, verdict: "static-only", findings: [], diagnostics: [], pageErrors: [], ...(plan[id] ?? {}) })) }));
+`);
+    return path;
+  };
+  const setup = () => {
+    const dir = mkdtempSync(join(tmpdir(), "fuzz-chrome-spot-"));
+    for (const id of ["a", "b"]) { mkdirSync(join(dir, id)); writeFileSync(join(dir, id, "App.tsx"), id); }
+    const log = join(dir, "log.jsonl"); writeFileSync(log, "");
+    const plan = (rows) => writeFileSync(join(dir, "plan.json"), JSON.stringify(rows));
+    plan({});
+    const options = (spots) => ({ out: dir, install: join(dir, "install"), bin: "b", typefacts: "t", control: true, oracle: fakeOracle(dir), env: { ...process.env, FAKE_PLAN: join(dir, "plan.json"), FAKE_LOG: log }, cache: new EntryCache(join(dir, "cache"), "chrome", "e".repeat(64), { spots }) });
+    const cases = ["a", "b"].map((id) => ({ id, dir: join(dir, id), sites: [] }));
+    const calls = () => readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    return { plan, options, cases, calls };
+  };
+
+  it("runs the first hit fresh; an equal run keeps every hit cached", async () => {
+    const t = setup();
+    await runChrome(t.cases, t.options({}));
+    const options = t.options({ chrome: 1 });
+    const records = await runChrome(t.cases, options);
+    expect(t.calls()).toEqual([["a", "b"], ["a"]]);
+    expect([records.get("a").cached, records.get("b").cached]).toEqual([true, true]);
+    expect(options.cache.stats()).toMatchObject({ spotChecked: 1, spotMismatches: [] });
+  });
+
+  it("drops the cache for the call when the fresh run differs, and runs every hit fresh", async () => {
+    const t = setup();
+    await runChrome(t.cases, t.options({}));
+    t.plan({ a: { diagnostics: [{ code: "NO_OWNER_CLEANUP", file: "App.tsx", line: 2 }] } });
+    const options = t.options({ chrome: 1 });
+    const records = await runChrome(t.cases, options);
+    expect(t.calls()).toEqual([["a", "b"], ["a"], ["b"]]);
+    expect([records.get("a").cached, records.get("b").cached]).toEqual([false, false]);
+    expect(records.get("a").runtime.diagnostics.map((d) => d.code)).toEqual(["NO_OWNER_CLEANUP"]);
+    expect(options.cache.stats().spotMismatches).toEqual(["a"]);
   });
 });

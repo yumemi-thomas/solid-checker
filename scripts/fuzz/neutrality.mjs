@@ -79,7 +79,7 @@ export async function runProfile({ options, profile, config, cache, history, out
   for (let start = 0; start < ordered.length && !stopped; start += chunkSize) {
     const chunk = ordered.slice(start, start + chunkSize);
     const name = `${profile ?? "default"}-${start / chunkSize}`;
-    const keyOf = (entry) => ({ seed: entry.program.seed, profile, components: options.components });
+    const keyOf = (entry) => ({ seed: entry.program.seed, profile, components: options.components, files: entry.built.files });
     const cached = new Map();
     const missing = [];
     for (const entry of chunk) {

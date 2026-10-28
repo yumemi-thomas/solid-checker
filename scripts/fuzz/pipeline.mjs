@@ -10,7 +10,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { mapPoolSettled } from "../lib/pool.mjs";
-import { cacheableRecord, cacheableTypecheck, caseKey } from "./cache.mjs";
+import { StaleCacheError, cacheableRecord, cacheableTypecheck, caseKey, recordDigest, typecheckDigest } from "./cache.mjs";
 import { materializeForChecker, runChecker, siteVerdicts } from "./checker.mjs";
 import { classify, runtimeEvents } from "./classify.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
@@ -60,7 +60,17 @@ export async function prepareEntries(entries, config, deps = {}) {
     if (!cache) return compute();
     const key = caseKey(built.files, part);
     const stored = cache.get(key);
-    if (stored !== undefined) return stored;
+    if (stored !== undefined) {
+      // The first hits of a process are also run fresh: a cause the key does not cover shows here, and stops the run.
+      if (cache.takeSpot("typecheck")) {
+        const fresh = await compute();
+        if (cacheableTypecheck(fresh) && typecheckDigest(fresh) !== typecheckDigest(stored)) {
+          cache.spotMismatches.push(built.id);
+          throw new StaleCacheError(`the runtime cache's ${part} of ${built.id} differs from a fresh one (${typecheckDigest(stored)} vs ${typecheckDigest(fresh)}): something its key does not cover changed. Remove ${cache.root} or pass --no-cache`);
+        }
+      }
+      return stored;
+    }
     const value = await compute();
     if (keep(value)) cache.set(key, value);
     return value;
@@ -85,6 +95,9 @@ export async function prepareEntries(entries, config, deps = {}) {
     return value;
   }, { concurrency: config.concurrency });
 
+  // A stale cache entry stops the run: it is not one program's error.
+  const stale = prepared.find((settled) => settled.error instanceof StaleCacheError);
+  if (stale) throw stale.error;
   const live = [];
   for (const [index, settled] of prepared.entries()) {
     const { program, built } = entries[index];
@@ -163,10 +176,25 @@ async function fastCached(cases, fast, options, cache) {
   if (!cache) return fast(strip(cases), options);
   const records = new Map();
   const missing = [];
+  const checks = [];
   for (const entry of cases) {
     const key = caseKey(entry.built.files, `fast-${entry.variant}|${entry.id}`);
     const stored = cache.get(key);
-    if (stored !== undefined) records.set(entry.id, stored); else missing.push({ ...entry, key });
+    if (stored !== undefined) {
+      records.set(entry.id, stored);
+      if (cache.takeSpot("fast")) checks.push({ ...entry, stored });
+    } else missing.push({ ...entry, key });
+  }
+  // The first hits of a process run fresh beside the misses (the same batch), and must give the same record.
+  if (checks.length) {
+    const fresh = await fast(strip(checks), options);
+    for (const entry of checks) {
+      const record = fresh.get(entry.id);
+      if (cacheableRecord(record) && recordDigest(record) !== recordDigest(entry.stored)) {
+        cache.spotMismatches.push(entry.id);
+        throw new StaleCacheError(`the runtime cache's record of ${entry.id} differs from a fresh run: something its key does not cover changed. Remove ${cache.root} or pass --no-cache\n  stored ${recordDigest(entry.stored).slice(0, 300)}\n  fresh  ${recordDigest(record).slice(0, 300)}`);
+      }
+    }
   }
   if (missing.length) {
     const ran = await fast(strip(missing), options);

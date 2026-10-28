@@ -22,7 +22,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { EntryCache, cacheDirectory, runtimeEnvironmentKey } from "./cache.mjs";
+import { withRuntimeCache } from "./cache.mjs";
 import { codeRules, ignoredRules, withholdingRules } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
@@ -376,16 +376,6 @@ export async function runMatrix(options) {
   } finally {
     await config.fast?.close();
   }
-}
-
-/**
- * The runtime cache of a matrix run (cache.mjs): Solid's answer on a program (its type checks and fast-path records) does not depend on
- * the checker, so a run after a checker fix takes them from the cache and reruns only the checker. Off with `--no-cache` and on the real
- * clock (whose records depend on the machine).
- */
-export function withRuntimeCache(config, options) {
-  if (options.noCache || !config.virtualClock) return config;
-  return { ...config, runtimeCache: new EntryCache(cacheDirectory(options), "runtime", runtimeEnvironmentKey(config)) };
 }
 
 async function sweep(options, config, out) {
