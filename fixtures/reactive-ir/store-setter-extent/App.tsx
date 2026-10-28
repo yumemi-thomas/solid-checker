@@ -1,4 +1,4 @@
-import { createStore } from "solid-js";
+import { createProjection, createStore } from "solid-js";
 
 declare function later(callback: () => void): void;
 
@@ -77,4 +77,48 @@ export function PastMapEntry() {
 // Positive: the root's own property, wrapped whatever the initial value is.
 export function RootWrite() {
   return <button onClick={() => { store.n = 1; }}>{store.n}</button>;
+}
+
+// Negative: the callback named by the setter's argument runs in the window.
+const byName = () => {
+  store.n = 4;
+};
+export function CallbackByName() {
+  return <button onClick={() => setStore(byName)}>{store.n}</button>;
+}
+// Negative: a function run through a method call inside the setter.
+const viaMethod = () => {
+  store.n = 5;
+};
+const api = { run() { viaMethod(); } };
+export function MethodCaller() {
+  return <button onClick={() => setStore(() => { api.run(); })}>{store.n}</button>;
+}
+// Negative: an exact const alias of the setter opens the same window.
+const viaAlias = () => {
+  store.n = 6;
+};
+const setAlias = setStore;
+export function SetterAlias() {
+  return <button onClick={() => { setStore(() => { viaAlias(); }); setAlias(() => { viaAlias(); }); }}>{store.n}</button>;
+}
+// Uncertifiable: a chain of callers deeper than is followed.
+function deep0() { store.n = 7; }
+function deep1() { deep0(); }
+function deep2() { deep1(); }
+function deep3() { deep2(); }
+export function DeepChain() {
+  return <button onClick={() => setStore(() => { deep3(); })}>{store.n}</button>;
+}
+// Uncertifiable: an IIFE in JSX written inside the callback runs when the compiler renders it, after the setter returned.
+export function JsxInWindow() {
+  return <button onClick={() => setStore(() => { const v = <p>{(() => { store.n = 8; return 1; })()}</p>; void v; })}>{store.n}</button>;
+}
+// Uncertifiable: an async compute function closes its window at the first await.
+const projected = createProjection<{ n: number }>(async () => {
+  await Promise.resolve();
+  projected.n = 1;
+}, { n: 0 });
+export function AsyncCompute() {
+  return <p>{projected.n}</p>;
 }

@@ -1401,51 +1401,35 @@ struct WriteWindow {
 }
 
 /// The windows of the store `store_symbol` in this file. The pairing is
-/// proven, not guessed: a setter call's callee must resolve to the second slot
-/// of the exact array destructuring whose first slot is `store_symbol`
-/// (`const [store, setStore] = createStore(...)`); another store's setter or a
-/// same-spelled local is no window. The compute function is
+/// proven, not guessed ([`is_own_setter`]). The compute function is
 /// [`own_compute_functions`]'s.
 fn write_windows(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
     store_symbol: &crate::SymbolId,
-) -> Vec<WriteWindow> {
-    let mut windows = Vec::new();
+) -> Windows {
+    let mut windows = Windows::default();
     for call in &file.ast.calls {
-        let Some((binding_file, binding, callee_symbol)) = context
-            .lookup
-            .binding_at_reference(file.path.as_str(), call.callee)
-        else {
-            continue;
-        };
-        if binding.shape != solid_facts::ast::BindingShape::Array {
-            continue;
-        }
-        let slot_symbol = |slot: usize| {
-            binding
-                .array_slots
-                .get(slot)
-                .and_then(Option::as_ref)
-                .and_then(|name| context.entities.at(binding_file.path.as_str(), name.span))
-        };
-        if slot_symbol(1) != Some(&callee_symbol) || slot_symbol(0) != Some(store_symbol) {
+        if !is_own_setter(context, file.path.as_str(), call.callee, store_symbol, 4) {
             continue;
         }
         for argument in &call.arguments {
             let direct = file.ast.peel_ts_sugar_span(argument.span);
+            // A function named by the argument (`setStore(bump)`) is invoked
+            // by the setter like an inline one ([`named_function_standing`]).
+            windows.arguments.push(direct);
             // A function written in the argument, not the argument itself
             // (`setStore(flag ? a : b)`, a function inside an object), is a
             // region of the window whose run this does not prove.
             for function in file.ast.functions_within(argument.span) {
-                windows.push(WriteWindow {
+                windows.functions.push(WriteWindow {
                     function: function.span,
                     direct: function.span == direct,
                 });
             }
         }
     }
-    windows.extend(
+    windows.functions.extend(
         own_compute_functions(file, context, store_symbol)
             .into_iter()
             .map(|function| WriteWindow {
@@ -1454,6 +1438,63 @@ fn write_windows(
             }),
     );
     windows
+}
+
+/// The windows of one store in one file: the functions they run
+/// ([`WriteWindow`]) and the argument positions of its own setter's calls.
+#[derive(Default)]
+struct Windows {
+    functions: Vec<WriteWindow>,
+    arguments: Vec<Span>,
+}
+
+impl Windows {
+    fn is_empty(&self) -> bool {
+        self.functions.is_empty() && self.arguments.is_empty()
+    }
+}
+
+/// Whether the callee at `callee` (in `path`) is the setter destructured beside
+/// the store `store_symbol` (`const [store, setStore] = createStore(...)`),
+/// directly or through exact `const` aliases of it (`const set = setStore`, at
+/// most `depth` of them). Another store's setter or a same-spelled local is not.
+fn is_own_setter(
+    context: &UpstreamCompatContext<'_>,
+    path: &str,
+    callee: Span,
+    store_symbol: &crate::SymbolId,
+    depth: usize,
+) -> bool {
+    let Some((binding_file, binding, callee_symbol)) =
+        context.lookup.binding_at_reference(path, callee)
+    else {
+        return false;
+    };
+    match binding.shape {
+        solid_facts::ast::BindingShape::Array => {
+            let slot_symbol = |slot: usize| {
+                binding
+                    .array_slots
+                    .get(slot)
+                    .and_then(Option::as_ref)
+                    .and_then(|name| context.entities.at(binding_file.path.as_str(), name.span))
+            };
+            slot_symbol(1) == Some(&callee_symbol) && slot_symbol(0) == Some(store_symbol)
+        }
+        solid_facts::ast::BindingShape::Identifier if depth > 0 && binding.immutable => binding
+            .initializer_identifier
+            .as_ref()
+            .is_some_and(|source| {
+                is_own_setter(
+                    context,
+                    binding_file.path.as_str(),
+                    source.span,
+                    store_symbol,
+                    depth - 1,
+                )
+            }),
+        _ => false,
+    }
 }
 
 /// Where the site at `span` (a store write, or the call of a function that
@@ -1478,7 +1519,7 @@ fn write_windows(
 fn write_window_standing(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
-    windows: &[WriteWindow],
+    windows: &Windows,
     span: Span,
     depth: usize,
 ) -> WriteStanding {
@@ -1497,15 +1538,31 @@ fn write_window_standing(
         owner = Some(function);
         if function.generator
             || windows
+                .functions
                 .iter()
                 .any(|window| window.direct && window.function == function.span)
         {
             break;
         }
         let inside = windows
+            .functions
             .iter()
             .any(|window| window.function.contains(function.span));
         match crate::execution_role::layer_run(file, function, context.lookup) {
+            // A layer called in JSX written inside the window runs where the
+            // compiler places that expression (a render effect, after the
+            // setter returned); only JSX around the whole window is crossed.
+            crate::execution_role::LayerRun::InPlace(call)
+                if inside
+                    && file.ast.jsx_containing(call).any(|element| {
+                        !windows
+                            .functions
+                            .iter()
+                            .any(|window| window.direct && element.span.contains(window.function))
+                    }) =>
+            {
+                return WriteStanding::Unproven;
+            }
             crate::execution_role::LayerRun::InPlace(call) => {
                 in_list |= !function.body.contains(at);
                 if function.r#async {
@@ -1528,9 +1585,19 @@ fn write_window_standing(
         return WriteStanding::Dropped;
     };
     if windows
+        .functions
         .iter()
         .any(|window| window.direct && window.function == owner.span)
     {
+        // An async window (a compute function `async () => { await …; }`)
+        // closes at its first await.
+        if owner.r#async {
+            if crate::execution_role::follows_unconditional_await(file, at) {
+                suspended = Some(true);
+            } else if crate::execution_role::may_follow_own_await(file, at) {
+                suspended.get_or_insert(false);
+            }
+        }
         return if in_list || !owner.body.contains(at) {
             WriteStanding::Unproven
         } else {
@@ -1542,6 +1609,7 @@ fn write_window_standing(
         };
     }
     let in_window = windows
+        .functions
         .iter()
         .any(|window| window.function.contains(owner.span));
     if in_window
@@ -1554,19 +1622,64 @@ fn write_window_standing(
     }
     match named_function_standing(file, context, windows, owner, depth) {
         Some(standing) => standing,
-        None if in_window => WriteStanding::Unproven,
+        None if in_window || called_in_window(file, context, windows, owner) => {
+            WriteStanding::Unproven
+        }
         None => WriteStanding::Dropped,
     }
 }
 
+/// Whether a call written in a window may run the project function `function`,
+/// so that one of its runs is in the window and a write in it is not proven
+/// dropped, whatever its references show:
+///
+/// - the call resolves, exactly, to it
+///   ([`crate::execution_role::project_callee_at_parameter`], the resolution
+///   the write rules take);
+/// - `function` is a method, which has no binding whose references list its
+///   calls, and the call is through a member that resolves to no project
+///   function (`api.run()` where the receiver's resolution is withheld, ADR
+///   0299): it may be this method.
+fn called_in_window(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    windows: &Windows,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    let method = function.method_name.is_some();
+    file.ast.calls.iter().any(|call| {
+        if !windows
+            .functions
+            .iter()
+            .any(|window| window.function.contains(call.span))
+        {
+            return false;
+        }
+        match crate::execution_role::project_callee_at_parameter(file, call, 0, context.lookup) {
+            Some((callee_file, callee, _)) => {
+                callee_file.path == file.path && callee.span == function.span
+            }
+            None => {
+                method
+                    && file
+                        .ast
+                        .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                        .is_some()
+            }
+        }
+    })
+}
+
 /// The standing of a write in the named function `function`, from the calls
-/// that run it: `None` when no call of it runs in a window (nothing to say;
-/// the caller keeps its own answer).
+/// that run it: `None` when every call of it is outside every window, or it
+/// has none (nothing to say; the caller keeps its own answer). Callers deeper
+/// than [`WINDOW_DEPTH`] are unknown.
 ///
 /// Every reference to its binding must be its declaration, a type query or
-/// the callee of a call; a reference that passes the function on, an export,
-/// or one in another file may run it anywhere, so with a call in a window the
-/// write is unproven. Each call is placed by [`write_window_standing`]: one
+/// the callee of a call (by name, or as a method), or the store setter's own
+/// argument; a reference that passes the function on, an export, or one in
+/// another file may run it anywhere, so with a call in a window the write is
+/// unproven. Each call is placed by [`write_window_standing`]: one
 /// call with no window open drops the write on that run, every call in a
 /// window exempts it, anything else leaves it unproven. An async function's
 /// body may run past an await, so it proves no exemption; nor does a
@@ -1574,19 +1687,23 @@ fn write_window_standing(
 fn named_function_standing(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
-    windows: &[WriteWindow],
+    windows: &Windows,
     function: &solid_facts::ast::FunctionFact,
     depth: usize,
 ) -> Option<WriteStanding> {
-    if depth == 0 || function.generator {
+    if function.generator {
         return None;
+    }
+    // The chain of callers is longer than this follows: unknown, not dropped.
+    if depth == 0 {
+        return Some(WriteStanding::Unproven);
     }
     let name = crate::owners::function_binding_name(file, function)?;
     let path = file.path.as_str();
     let symbol = context.lookup.entities().at(path, name.span)?;
-    if !context.lookup.function_value_is_current(file, function) {
-        return None;
-    }
+    // A binding that may hold another function by the time a call runs (an
+    // object's method, a reassignable `let`) proves no exemption.
+    let current = context.lookup.function_value_is_current(file, function);
     let references = context
         .lookup
         .symbol_references_if_present(symbol.as_str())?;
@@ -1609,12 +1726,22 @@ fn named_function_standing(
         if at == name.span || file.ast.type_queries.iter().any(|query| query.contains(at)) {
             continue;
         }
-        match file
-            .ast
-            .calls
-            .iter()
-            .find(|call| file.ast.peel_ts_sugar_span(call.callee) == at)
-        {
+        // The function named as the setter's own argument (`setStore(bump)`):
+        // the setter invokes it while its window is open.
+        if windows.arguments.contains(&at) {
+            standings.push(WriteStanding::Exempt);
+            continue;
+        }
+        // A call of it: by its name, or as a method (`api.run()`, whose
+        // reference is the member's property).
+        match file.ast.calls.iter().find(|call| {
+            let callee = file.ast.peel_ts_sugar_span(call.callee);
+            callee == at
+                || file
+                    .ast
+                    .member_at(callee)
+                    .is_some_and(|member| member.property == at)
+        }) {
             Some(call) => standings.push(write_window_standing(
                 file,
                 context,
@@ -1625,10 +1752,14 @@ fn named_function_standing(
             None => handed = true,
         }
     }
-    if !standings.contains(&WriteStanding::Exempt) {
+    // No run of it is in a window, or unknown: nothing to say here.
+    if standings
+        .iter()
+        .all(|standing| *standing == WriteStanding::Dropped)
+    {
         return None;
     }
-    Some(if handed || function.r#async {
+    Some(if handed || function.r#async || !current {
         WriteStanding::Unproven
     } else if standings.contains(&WriteStanding::Dropped) {
         WriteStanding::Dropped

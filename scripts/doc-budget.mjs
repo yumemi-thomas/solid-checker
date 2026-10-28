@@ -246,8 +246,8 @@ export const GROUP_BUDGETS = [
     // And ADR 0474's fixture on the batch: 345,155 bytes: 345_500.
     // And ADR 0475's fixture (write-in-refused-creation): 346,275 bytes: 346_500.
     // And the ADR 0474 guard amendment (owner-helper-callback): 346,892 bytes: 347_000.
-    // And ADR 0476's store-setter-extent fixture: 347,542 bytes: 347_600.
-    bytes: 347_600,
+    // And ADR 0476's store-setter-extent fixture, with its review cases: 347,798 bytes: 347_900.
+    bytes: 347_900,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];
