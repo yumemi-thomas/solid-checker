@@ -221,6 +221,8 @@ const codeRules = {
   PRIMITIVE_IN_FORBIDDEN_SCOPE: ["leaf-owner-forbidden-call"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["async-outside-loading-boundary"],
   PENDING_ASYNC_UNTRACKED_READ: ["pending-async-unsuspendable-read"],
+  // A pending read in createTrackedEffect or onSettled: SC5001's leaf-owner variant.
+  PENDING_ASYNC_FORBIDDEN_SCOPE: ["pending-async-unsuspendable-read"],
   SYNC_NODE_RECEIVED_ASYNC: ["sync-computation-received-async"],
   UNTRACKED_READ_AFTER_AWAIT: ["reactive-read-after-await"],
   MISSING_EFFECT_FN: ["missing-effect-function"],

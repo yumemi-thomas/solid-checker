@@ -43,6 +43,9 @@ export const codePolicy = {
   // `effect.ts`; SPEC-ASYNC-SEMANTICS A6 "warn-only", 08-dev-diagnostics "FYI, not an error"). SC5003 reports it as a warning.
   ASYNC_OUTSIDE_LOADING_BOUNDARY: advisory("warn", ["async-outside-loading-boundary"], "legal: SPEC-ASYNC-SEMANTICS A6; the rule is an optional warning"),
   PENDING_ASYNC_UNTRACKED_READ: claimed(["pending-async-unsuspendable-read"], "error"),
+  // A pending read in a leaf owner (createTrackedEffect, onSettled): SC5001's leaf-owner variant, warning severity like Solid's
+  // (docs/rules/pending-async-unsuspendable-read.md; @solidjs/signals rc.17 dev-shared.js).
+  PENDING_ASYNC_FORBIDDEN_SCOPE: claimed(["pending-async-unsuspendable-read"], "warn"),
   SYNC_NODE_RECEIVED_ASYNC: claimed(["sync-computation-received-async"], "error"),
   UNTRACKED_READ_AFTER_AWAIT: claimed(["reactive-read-after-await"], "warn"),
   MISSING_EFFECT_FN: claimed(["missing-effect-function"], "error"),
@@ -57,7 +60,6 @@ export const codePolicy = {
   // Defects no rule claims.
   PRIMITIVE_IN_EFFECT_CALLBACK: unclaimed("error"),
   RUN_WITH_DISPOSED_OWNER: unclaimed("warn", "decided not to build: docs/open-work.md, `runWithOwner` with a disposed owner"),
-  PENDING_ASYNC_FORBIDDEN_SCOPE: unclaimed("warn"),
   ASYNC_STORE_SETTER: unclaimed("error"),
   UNCOMMITTED_INPUT_OVERWRITTEN: unclaimed("warn"),
   LOADING_ON_OUTSIDE_HOLD: unclaimed("warn"),

@@ -102,11 +102,13 @@ describe("the policy table", () => {
     }
   });
   it("classifies the ones the proposal lists", () => {
-    expect(Object.values(codePolicy).filter((policy) => policy.disposition === "defect-claimed")).toHaveLength(22);
+    expect(Object.values(codePolicy).filter((policy) => policy.disposition === "defect-claimed")).toHaveLength(23);
+    // SC5001 claims the leaf-owner pending read (docs/rules/pending-async-unsuspendable-read.md).
+    expect(policyOf("PENDING_ASYNC_FORBIDDEN_SCOPE")).toMatchObject({ disposition: "defect-claimed", rules: ["pending-async-unsuspendable-read"], severity: "warn" });
     // Solid documents a boundary-less async mount as legal (SPEC-ASYNC-SEMANTICS A6): advisory, still claimed by SC5003 as a warning.
     expect(policyOf("ASYNC_OUTSIDE_LOADING_BOUNDARY")).toMatchObject({ disposition: "advisory", rules: ["async-outside-loading-boundary"] });
     expect(isDefectCode("ASYNC_OUTSIDE_LOADING_BOUNDARY")).toBe(false);
-    for (const code of ["PRIMITIVE_IN_EFFECT_CALLBACK", "RUN_WITH_DISPOSED_OWNER", "PENDING_ASYNC_FORBIDDEN_SCOPE", "ASYNC_STORE_SETTER", "UNCOMMITTED_INPUT_OVERWRITTEN", "LOADING_ON_OUTSIDE_HOLD"]) {
+    for (const code of ["PRIMITIVE_IN_EFFECT_CALLBACK", "RUN_WITH_DISPOSED_OWNER", "ASYNC_STORE_SETTER", "UNCOMMITTED_INPUT_OVERWRITTEN", "LOADING_ON_OUTSIDE_HOLD"]) {
       expect(policyOf(code).disposition, code).toBe("defect-unclaimed");
       expect(isDefectCode(code), code).toBe(true);
     }

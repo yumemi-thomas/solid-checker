@@ -27,7 +27,7 @@ import { chromeCacheFor } from "./cache.mjs";
 import { runChrome } from "./chrome.mjs";
 import { siteVerdicts } from "./checker.mjs";
 import { runtimeEvents } from "./classify.mjs";
-import { codeRules, codesForRule, ignoredRules, isDefectCode, withholdingRules } from "./codes.mjs";
+import { codeRules, codesForRule, ignoredRules, isDefectCode, ruleHasRuntimeCounterpart, withholdingRules } from "./codes.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { classifyDivergence, compareVariant, judge, judgeDivergence, siteMap, siteSummary } from "./equivalence.mjs";
 import { configFrom, parseArgs } from "./run.mjs";
@@ -202,8 +202,14 @@ export function judgeWithChrome(row, records) {
           : !lines.length && input.findings.some((finding) => finding.kind === "violation" && rules.includes(finding.rule)) ? "agree" : "false-clean";
       return { code: event.code, line: lines[0] ?? null, status };
     });
-    const status = !judged.length ? (record.runtime.failure ? "chrome-inconclusive" : "no-defect") : judged.every((entry) => entry.status === "agree") ? "agree" : judged.some((entry) => entry.status === "false-clean") ? "false-clean" : "recall-gap";
-    return { ...row, chrome: { status, diagnostics: judged, ...(record.runtime.failure ? { partial: true } : {}) }, chromeCache: cachedOf(input.built.id), fixed: status === "agree" };
+    // A violation of a rule a runtime diagnostic can contradict, where Chrome reports no defect of its codes on its lines: a candidate
+    // false positive. A bare text has no witness, so nothing shows the site ran: it is for a person to read, never confirmed here.
+    const unmatched = input.findings.filter((finding) => finding.kind === "violation" && ruleHasRuntimeCounterpart(finding.rule)
+      && !events.some((event) => codesForRule(finding.rule).includes(event.code)));
+    const base = !judged.length ? (record.runtime.failure ? "chrome-inconclusive" : "no-defect") : judged.every((entry) => entry.status === "agree") ? "agree" : judged.some((entry) => entry.status === "false-clean") ? "false-clean" : "recall-gap";
+    const status = unmatched.length && !record.runtime.failure && ["no-defect", "agree"].includes(base) ? "violation-without-diagnostic" : base;
+    return { ...row, chrome: { status, diagnostics: judged, ...(unmatched.length ? { unmatched: unmatched.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(record.runtime.failure ? { partial: true } : {}) },
+      chromeCache: cachedOf(input.built.id), fixed: status === "agree" };
   }
   const originalRecord = records.get(input.originalBuilt.id);
   const variantRecord = records.get(input.variantBuilt.id);

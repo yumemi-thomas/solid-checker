@@ -68,6 +68,21 @@ describe("judging", () => {
     expect(uncached.chromeCache).toBeUndefined();
   });
 
+  it("names a violation Chrome shows no diagnostic of its codes for (a candidate false positive for a person to read)", () => {
+    const built = { id: "rp-y" };
+    const quiet = { row: {}, runtime: { diagnostics: [], errors: [], failure: null } };
+    const store = { file: "App.tsx", rule: "no-store-mutation-outside-setter", id: "SC2003", kind: "violation", line: 8, endLine: 8 };
+    const row = judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [store] } }, new Map([["rp-y", quiet]]));
+    expect(row.chrome).toMatchObject({ status: "violation-without-diagnostic", unmatched: ["no-store-mutation-outside-setter@8"] });
+    expect(row.fixed).toBe(false);
+    // A partial run never says so: the part that did not run could hold the diagnostic.
+    const partial = judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [store] } }, new Map([["rp-y", { row: {}, runtime: { ...quiet.runtime, failure: { phase: "halted" } } }]]));
+    expect(partial.chrome.status).not.toBe("violation-without-diagnostic");
+    // A rule with no runtime counterpart is never contradicted by silence.
+    const noCounterpart = judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [{ ...store, rule: "a-static-only-rule" }] } }, new Map([["rp-y", quiet]]));
+    expect(noCounterpart.chrome.status).toBe("no-defect");
+  });
+
   it("never reads Chrome's silence on a bare text pair as evidence: it has no driver plan", () => {
     const site = { site: "s1", line: 4, variantLine: 4, now: "high", original: { verdict: "violation", rules: ["action-called-in-owned-scope"] } };
     const row = { kind: "text-pair", chromeInput: { originalBuilt: { id: "o" }, variantBuilt: { id: "v" }, sites: [site] } };

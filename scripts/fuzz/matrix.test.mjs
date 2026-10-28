@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildMatrix, codeStatuses, gate, generateShape, gridShapes, judge, markdown, regionOf, shapeSeed } from "./matrix.mjs";
-import { LAYERS, SPEC, TEMPLATE_CODES, bindingsOf, variantsOf } from "./misuse.mjs";
+import { buildMatrix, codeStatuses, featureTable, gate, generateShape, gridShapes, judge, markdown, regionOf, shapeSeed } from "./matrix.mjs";
+import { LAYERS, SPEC, TEMPLATE_CODES, VALUE_BINDINGS, bindingsOf, gridBindingsOf, variantsOf } from "./misuse.mjs";
 
 const site = { line: 10, aux: [4] };
 const ok = { ok: true, findings: [] };
@@ -41,6 +41,22 @@ describe("judge", () => {
     expect(verdict({ checker: { ok: true, findings: [finding("reactive-dispatch-unresolved", "uncertifiable")] } }).outcome).toBe("recall-gap");
     // A claiming finding elsewhere in the file still makes it a gap.
     expect(verdict({ checker: { ok: true, findings: [finding("no-write-in-pure-computation", "uncertifiable"), finding("flush-in-effect-callback", "uncertifiable", 30)] } }).outcome).toBe("recall-gap");
+  });
+  it("marks a false clean certified when the file has no uncertifiable finding at all (a fail-closed break)", () => {
+    expect(verdict({}).detail.certified).toBe(true);
+    expect(verdict({ checker: { ok: true, findings: [finding("no-write-in-pure-computation", "violation", 30)] } }).detail.certified).toBe(true);
+    expect(verdict({ checker: { ok: true, findings: [finding("missing-owner", "uncertifiable", 30)] } }).detail.certified).toBe(false);
+  });
+  it("tables outcomes by binding and layer across codes", () => {
+    const rows = [
+      { code: "A", binding: "alias", layer: "none", outcome: "false-clean", detail: { certified: true } },
+      { code: "B", binding: "alias", layer: "none", outcome: "false-clean", detail: { certified: false } },
+      { code: "B", binding: "alias", layer: "none", outcome: "agree", detail: {} },
+      { code: "A", binding: "direct", layer: "none", outcome: "agree", detail: {} },
+    ];
+    const table = featureTable(rows);
+    expect(table["alias|none"]).toMatchObject({ programs: 3, agree: 1, "false-clean": 2, falseCleanCertified: 1, codes: ["A", "B"] });
+    expect(table["direct|none"]).toMatchObject({ programs: 1, agree: 1, "false-clean": 0, codes: [] });
   });
   it("recall-gap: only an uncertifiable finding covers the site", () => {
     expect(verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "uncertifiable")] } }).outcome).toBe("recall-gap");
@@ -109,9 +125,17 @@ describe("gate", () => {
     expect(result.regressions[0]).toMatchObject({ cell: "A|body", why: "agree 2 -> 1" });
     expect(result.regressions[0].programs).toEqual(["2: agree -> recall-gap"]);
   });
-  it("fails when a cell's false-clean count rises", () => {
+  it("fails when a baseline program enters false-clean", () => {
+    const result = gate(base, matrixOf([row("A", "body", 1, "agree"), row("A", "body", 2, "false-clean"), row("A", "body", 3, "false-clean")]));
+    expect(result.regressions.map((r) => r.why)).toEqual(["agree 2 -> 1", "false-clean 1 -> 2"]);
+    expect(result.regressions[1].programs).toEqual(["2: agree -> false-clean"]);
+  });
+  it("reports a program the baseline does not have (a grid shape added since) as new, never as a regression", () => {
     const result = gate(base, matrixOf([row("A", "body", 1, "agree"), row("A", "body", 2, "agree"), row("A", "body", 3, "false-clean"), row("A", "body", 4, "false-clean")]));
-    expect(result.regressions.map((r) => r.why)).toEqual(["false-clean 1 -> 2"]);
+    expect(result.ok).toBe(true);
+    expect(result.newPrograms).toEqual([{ cell: "A|body", programs: 1 }]);
+    // A baseline program the current run lacks still fails.
+    expect(gate(base, matrixOf([row("A", "body", 1, "agree"), row("A", "body", 3, "false-clean")])).ok).toBe(false);
   });
   it("passes and reports an improvement", () => {
     const result = gate(base, matrixOf([row("A", "body", 1, "agree"), row("A", "body", 2, "agree"), row("A", "body", 3, "agree")]));
@@ -157,12 +181,19 @@ describe("gate", () => {
 });
 
 describe("the grid", () => {
+  it("adds the value bindings (hook, hook member, tuple slot) to values only, never to APIs and never to the random draw", () => {
+    expect(gridBindingsOf("STRICT_READ_UNTRACKED", "signal")).toEqual([...bindingsOf("STRICT_READ_UNTRACKED", "signal"), ...VALUE_BINDINGS]);
+    expect(gridBindingsOf("STORE_WRITE_OUTSIDE_SETTER", "assign")).toEqual([...bindingsOf("STORE_WRITE_OUTSIDE_SETTER", "assign"), ...VALUE_BINDINGS]);
+    expect(gridBindingsOf("NO_OWNER_CLEANUP", null)).toEqual(bindingsOf("NO_OWNER_CLEANUP", null));
+    expect(gridBindingsOf("REACTIVE_WRITE_IN_OWNED_SCOPE", "refresh")).toEqual(bindingsOf("REACTIVE_WRITE_IN_OWNED_SCOPE", "refresh"));   // refresh() is an API
+    for (const code of TEMPLATE_CODES) for (const variant of variantsOf(code)) for (const binding of VALUE_BINDINGS) expect(bindingsOf(code, variant)).not.toContain(binding);
+  });
   it("lists every shape of a code once, in a fixed order", () => {
     for (const code of TEMPLATE_CODES) {
       const shapes = gridShapes(code);
       const keys = shapes.map((shape) => `${shape.variant}|${shape.binding}|${shape.layer}`);
       expect(new Set(keys).size).toBe(keys.length);
-      expect(shapes.length).toBe(variantsOf(code).reduce((n, variant) => n + bindingsOf(code, variant).length * LAYERS.length, 0));
+      expect(shapes.length).toBe(variantsOf(code).reduce((n, variant) => n + gridBindingsOf(code, variant).length * LAYERS.length, 0));
     }
   });
 

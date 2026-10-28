@@ -176,6 +176,12 @@ describe("classify: the checker is quiet, uncertifiable or failed", () => {
     }
   });
 
+  it("marks a false clean certified when the checker has no uncertifiable finding in the file", () => {
+    const fired = runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 8)] });
+    expect(classify({ sites, checker: checker([]), runtime: fired, plan }).items.find((item) => item.kind === "candidate-false-clean").certified).toBe(true);
+    expect(classify({ sites, checker: checker([uncertifiable("missing-owner", 30)]), runtime: fired, plan }).items.find((item) => item.kind === "candidate-false-clean").certified).toBe(false);
+  });
+
   it("a diagnostic with no line is a false clean only when no claiming finding exists anywhere", () => {
     const unplaced = runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED")] });
     const none = classify({ sites, checker: checker([]), runtime: unplaced, plan });

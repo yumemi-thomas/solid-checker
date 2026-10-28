@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codePolicy, codeRules } from "./codes.mjs";
+import { codePolicy, codeRules, policyOf } from "./codes.mjs";
 import { generateProgram } from "./generate.mjs";
 import { stripInstrumentation } from "./hits.mjs";
 import { BINDINGS, LAYERS, MISUSE_CODES, SPEC, TEMPLATE_CODES } from "./misuse.mjs";
@@ -10,14 +10,15 @@ const plan = (code, extra = {}) => ({ code, ...extra });
 const cellList = () => TEMPLATE_CODES.flatMap((code) => SPEC[code].contexts.map((context) => ({ code, context })));
 
 describe("the misuse spec", () => {
-  it("covers every claimed code of the policy table, once", () => {
-    const claimed = Object.entries(codePolicy).filter(([, policy]) => policy.disposition === "defect-claimed").map(([code]) => code).sort();
-    expect([...MISUSE_CODES].sort()).toEqual(claimed);
-    expect(Object.keys(codeRules).filter((code) => !SPEC[code])).toEqual([]);
+  it("covers every claimed code of the policy table once, and the unclaimed defects that have a template", () => {
+    const claimed = Object.entries(codePolicy).filter(([, policy]) => policy.disposition === "defect-claimed").map(([code]) => code);
+    expect(MISUSE_CODES.filter((code) => policyOf(code).disposition === "defect-claimed").sort()).toEqual([...claimed].sort());
+    expect(MISUSE_CODES.filter((code) => policyOf(code).disposition === "defect-unclaimed").sort()).toEqual(["ASYNC_STORE_SETTER", "PRIMITIVE_IN_EFFECT_CALLBACK"]);
+    expect(Object.keys(codeRules).filter((code) => policyOf(code).disposition === "defect-claimed" && !SPEC[code])).toEqual([]);
   });
   it("gives every code with no template the reason the typings reject it", () => {
     const typedAway = MISUSE_CODES.filter((code) => SPEC[code].typedAway);
-    expect(typedAway).toEqual(["MISSING_EFFECT_FN"]);
+    expect(typedAway).toEqual(["MISSING_EFFECT_FN", "ASYNC_STORE_SETTER"]);
     for (const code of typedAway) { expect(SPEC[code].why).toMatch(/typings reject/); expect(SPEC[code].probe).toContain("export function"); }
   });
   it("lists the contexts, bindings and a call for every template", () => {
