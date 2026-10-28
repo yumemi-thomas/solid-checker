@@ -44,15 +44,3 @@ export function AssertedLink() {
 export function CastLink() {
   (store.opt as { b: number }).b = 2;
 }
-
-// Silent: a link that may be nullish is TS18048/TS18047 under strictNullChecks.
-export function NullableLink() {
-  // @ts-expect-error TS18048: 'store.opt' is possibly 'undefined'.
-  store.opt.b = 1;
-  // @ts-expect-error TS18048: 'store.list' is possibly 'undefined'.
-  store.list.push(1);
-  // @ts-expect-error TS18047: 'store.maybe' is possibly 'null'.
-  store.maybe.b = 1;
-  // Type-checks, and the call may not run.
-  store.list?.push(2);
-}

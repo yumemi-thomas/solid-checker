@@ -70,6 +70,46 @@
       "start": 1109,
       "end": 1139,
       "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-chain-links/NoCheck.ts",
+      "start": 314,
+      "end": 325,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-chain-links/Optional.ts",
+      "start": 392,
+      "end": 411,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-chain-links/Optional.ts",
+      "start": 415,
+      "end": 439,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-chain-links/Suppressed.ts",
+      "start": 415,
+      "end": 426,
+      "fixes": 0
     }
   ]
 }

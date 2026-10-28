@@ -47,7 +47,8 @@ export const FILE_BUDGETS = {
   // And ADR 0458's unreached-site misses and the SC3001 note (45,337 bytes): 45_400.
   // And ADR 0464's extension of the ADR 0339 line (45,650 bytes): 45_700.
   // And ADR 0465's past-the-root line, replacing the root-identifier one (46,136 bytes): 46_200.
-  "docs/open-work.md": 46_200,
+  // And the ADR 0464/0465 review residuals (46,766 bytes): 46_800.
+  "docs/open-work.md": 46_800,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for the
   // catalog review's ADRs 0381 and 0424-0434, 4 bytes under 115_600; and for ADR 0435,
@@ -99,7 +100,8 @@ export const FILE_BUDGETS = {
   // And ADR 0464 (a site naming a binding before its declarator): 265,215 bytes: 265_300.
   // And ADR 0465 (a store write past the root): 267,212 bytes: 267_300.
   // And its strictNullChecks amendment (Type Facts reports the option): 267,442 bytes: 267_500.
-  "docs/decisions.md": 267_500,
+  // And the ADR 0464/0465 review sentences: 268,384 bytes: 268_400.
+  "docs/decisions.md": 268_400,
 };
 
 export const GROUP_BUDGETS = [
@@ -134,7 +136,7 @@ export const GROUP_BUDGETS = [
   // With main's ADR 0451 (PR #119) merged in: 753,780 bytes: 754_500.
   // And for ADR 0454 (its entry, the open-work lines, a rule-page paragraph): 758,425 bytes against 754,500: 759_000; its owner-graph follow-up: 760,511 bytes: 761_000; its reachability follow-up: 761,579 bytes: 762_500.
   // And for ADR 0455 (its entry, one open-work line, a rule-page paragraph): 765,586 bytes against 762,500: 766_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 790_000 }, // ADR 0465 strictNullChecks amendment: 789,967 bytes. // ADR 0465 (its entry, an open-work line, a rule-page paragraph): 789,680 bytes. // ADR 0464 (its entry, an open-work line, a rules README section): 786,518 bytes. // ADR 0458 (its entry, open-work lines, rule-page paragraphs): 783,681 bytes. // Merge of ADR 0456 (PR #123) with ADR 0457: 778,757 bytes. // ADR 0456 (its entry, open-work lines, a rule-page paragraph): 775,714 bytes. // ADR 0457 review amendment (its sentences, one open-work line): 774,199 bytes against 773,500. // ADR 0457 (its entry, a rule-page sentence): 773,270 bytes against 771,500. // ADR 0455 fourth-review amendment: 771,408 bytes. // ADR 0455 third-review amendment: 770,819 bytes. // ADR 0455 cleanup amendment: 769,241 bytes. // ADR 0455 named-closure follow-up: 767,101 bytes. // ADR 0455 follow-up: 766,106 bytes against 766,000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 791_800 }, // ADR 0464/0465 review: 791,723 bytes. // ADR 0465 strictNullChecks amendment: 789,967 bytes. // ADR 0465 (its entry, an open-work line, a rule-page paragraph): 789,680 bytes. // ADR 0464 (its entry, an open-work line, a rules README section): 786,518 bytes. // ADR 0458 (its entry, open-work lines, rule-page paragraphs): 783,681 bytes. // Merge of ADR 0456 (PR #123) with ADR 0457: 778,757 bytes. // ADR 0456 (its entry, open-work lines, a rule-page paragraph): 775,714 bytes. // ADR 0457 review amendment (its sentences, one open-work line): 774,199 bytes against 773,500. // ADR 0457 (its entry, a rule-page sentence): 773,270 bytes against 771,500. // ADR 0455 fourth-review amendment: 771,408 bytes. // ADR 0455 third-review amendment: 770,819 bytes. // ADR 0455 cleanup amendment: 769,241 bytes. // ADR 0455 named-closure follow-up: 767,101 bytes. // ADR 0455 follow-up: 766,106 bytes against 766,000.
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),

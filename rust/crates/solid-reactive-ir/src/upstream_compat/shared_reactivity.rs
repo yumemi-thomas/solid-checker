@@ -1260,10 +1260,7 @@ fn no_direct_mutation(
         // ADR 0465: a store write past the root (`store.a.b = 1`) is
         // TypeScript's where a link may be nullish, and unproven otherwise.
         let past_root = if store {
-            let links = file
-                .ast
-                .member_chain_links(file.ast.peel_ts_sugar_span(assignment.target));
-            let Some(past_root) = chain_links_verdict(file, context, &links) else {
+            let Some(past_root) = chain_links_verdict(file, context, assignment.target) else {
                 continue;
             };
             past_root
@@ -1364,27 +1361,34 @@ fn store_write_is_exempt(
 }
 
 /// What the links a store write's member chain reads past its root
-/// ([`solid_facts::ast::AstFacts::member_chain_links`]) leave of its proof
-/// (ADR 0465; ADR 0460 for `delete`). `None`: the rule is silent. `Some(true)`:
-/// uncertifiable. `Some(false)`: the write's proof stands.
+/// ([`solid_facts::ast::AstFacts::member_chain_links`] of the written member
+/// `member`) leave of its proof (ADR 0465; ADR 0460 for `delete`). `None`: the
+/// rule is silent. `Some(true)`: uncertifiable. `Some(false)`: the write's
+/// proof stands.
 ///
 /// - No link past the root: the proof stands.
 /// - The program applies `strictNullChecks` (Type Facts' table answer): a link
 ///   whose primitive value domain may hold `null` or `undefined` is
-///   TS18047/TS18048, so the write is TypeScript's and the rule is silent; a
-///   link whose domain excludes both is held to its type, so the proof stands;
-///   a link whose domain was not served or is unknown is uncertifiable, and so
-///   is one whose type is not its declared one: an element access (no
-///   `undefined` without `noUncheckedIndexedAccess`) or a chain under a type
-///   assertion (`store.n!.b`, `(store.o as T).b`, `(store as T).a.b`).
+///   TS18047/TS18048 in a chain with no optional access, in a file `tsc`
+///   checks, so the write is TypeScript's and the rule is silent; in an
+///   optional chain (`store.list?.push(1)`, `store.deep?.list.push(1)`), or
+///   in a file `tsc` may not report in, it is uncertifiable. A link whose domain excludes both is
+///   held to its type, so the proof stands; one whose domain was not served
+///   or is unknown is uncertifiable, and so is one whose type is not its
+///   declared one: an element access (no `undefined` without
+///   `noUncheckedIndexedAccess`) or a chain under a type assertion
+///   (`store.n!.b`, `(store.o as T).b`, `(store as T).a.b`).
 /// - It does not, or the table does not say: a type says nothing about a
 ///   link's runtime value, and an undefined link throws `TypeError` before
 ///   any write, so the write is uncertifiable.
 fn chain_links_verdict(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
-    links: &[Span],
+    member: Span,
 ) -> Option<bool> {
+    let ast = &file.ast;
+    let member = ast.peel_ts_sugar_span(member);
+    let links = ast.member_chain_links(member);
     if links.is_empty() {
         return Some(false);
     }
@@ -1392,13 +1396,12 @@ fn chain_links_verdict(
         return Some(true);
     }
     let path = file.path.as_str();
-    let ast = &file.ast;
     // Every object the chain reads, the root included, must be its own
     // declared value: no assertion around it and no computed key.
     let root = links
         .last()
         .and_then(|&link| ast.member_at(ast.peel_ts_sugar_span(link)))
-        .map(|member| member.object);
+        .map(|access| access.object);
     let asserted = links
         .iter()
         .chain(root.iter())
@@ -1408,8 +1411,15 @@ fn chain_links_verdict(
             .binary_search(&ast.peel_ts_sugar_span(link))
             .is_ok()
     });
+    let checked = tsc_reports_in(file);
+    // An optional access anywhere in the chain (`store.list?.push(1)`,
+    // `store.deep?.list.push(1)`) short-circuits it, so tsc reports no
+    // nullish link of it.
+    let optional = std::iter::once(member)
+        .chain(links.iter().map(|&link| ast.peel_ts_sugar_span(link)))
+        .any(|access| ast.optional_members.binary_search(&access).is_ok());
     let mut open = asserted || computed;
-    for &link in links {
+    for &link in &links {
         match context
             .lookup
             .entity_at(path, link)
@@ -1417,13 +1427,32 @@ fn chain_links_verdict(
         {
             Some(domain) if !domain.unknown() => {
                 if domain.may_be_null() || domain.may_be_undefined() {
-                    return None;
+                    if checked && !optional {
+                        return None;
+                    }
+                    open = true;
                 }
             }
             _ => open = true,
         }
     }
     Some(open)
+}
+
+/// Whether `tsc` reports a type error written in `file` at all: not a
+/// JavaScript file (whether `checkJs` applies is not in the facts) and no
+/// `@ts-nocheck`, `@ts-ignore` or `@ts-expect-error` anywhere in its text (a
+/// conservative veto: a directive anywhere withholds the premise for the
+/// whole file).
+fn tsc_reports_in(file: &FileFacts) -> bool {
+    let path = file.path.as_str();
+    let javascript = [".js", ".jsx", ".mjs", ".cjs"]
+        .iter()
+        .any(|extension| path.ends_with(extension));
+    !javascript
+        && !["@ts-nocheck", "@ts-ignore", "@ts-expect-error"]
+            .iter()
+            .any(|directive| file.source.contains(directive))
 }
 
 /// The nine in-place `Array.prototype` methods upstream names
@@ -1515,8 +1544,7 @@ fn no_store_mutator_call(
         }
         // ADR 0465: the receiver of `store.items.push(1)` is a link past the
         // root; only a store that is itself the array (`list.push(1)`) has none.
-        let links = file.ast.member_chain_links(callee);
-        let Some(past_root) = chain_links_verdict(file, context, &links) else {
+        let Some(past_root) = chain_links_verdict(file, context, callee) else {
             continue;
         };
         defects.push(StaticDefect {

@@ -95,6 +95,15 @@ fn pattern_declared(binding: &BindingFact) -> bool {
     binding.shape != BindingShape::Identifier && binding.initializer.is_some()
 }
 
+/// A `var` declarator whose initializer is a call written in its function's
+/// straight-line flow: that call, and so the declarator, runs on every
+/// execution of the function that reaches it.
+fn var_initialized_in_line(file: &FileFacts, binding: &BindingFact) -> bool {
+    binding
+        .call_initializer
+        .is_some_and(|call| file.ast.straight_line_calls.contains(&call))
+}
+
 /// The bindings whose mentions the proof decides.
 fn decided(binding: &BindingFact) -> bool {
     function_valued(binding) || pattern_declared(binding)
@@ -157,10 +166,24 @@ impl<'a> SemanticLookup<'a> {
     /// for a `var`, a read of `undefined`) in place of the read, write or call
     /// a rule sees. A mention withheld only because the function it names has
     /// a default parameter that may throw is ordered, so it is not one.
+    ///
+    /// A mention inside a function written within the site (`f({ cb: () =>
+    /// late() })`) is not evaluated by evaluating the site: it runs when that
+    /// function is called, and a claim resting on it is located there, so it
+    /// does not count (ADR 0464 review).
     pub(crate) fn mention_may_precede_initialization_within(&self, path: &str, span: Span) -> bool {
-        self.uninitialized_references()
-            .get(path)
-            .is_some_and(|(_, unordered)| unordered.iter().any(|mention| span.contains(*mention)))
+        let Some((_, unordered)) = self.uninitialized_references().get(path) else {
+            return false;
+        };
+        let file = self.file_by_path(path);
+        unordered.iter().any(|&mention| {
+            span.contains(mention)
+                && file.is_none_or(|file| {
+                    executing_function(&file.ast, mention).is_none_or(|function| {
+                        function.span == span || !span.contains(function.span)
+                    })
+                })
+        })
     }
 
     /// Every withheld mention, by path. Bound into the cross-file proof
@@ -190,7 +213,7 @@ impl<'a> SemanticLookup<'a> {
             // Every mention of each decided binding, by binding, with whether
             // the binding is pattern-declared and whether the defaults of the
             // function it names may throw ahead of the mention.
-            let mut mentions = Vec::<(usize, usize, usize, Span, bool, bool)>::new();
+            let mut mentions = Vec::<(&str, usize, usize, usize, Span, bool, bool)>::new();
             for (path, references) in self.bindings_by_reference() {
                 let Some(caller) = self.files_by_path_index(path) else {
                     continue;
@@ -216,6 +239,7 @@ impl<'a> SemanticLookup<'a> {
                         .or_default()
                         .push((caller, span));
                     mentions.push((
+                        path.as_str(),
                         caller,
                         resolution.file,
                         resolution.binding,
@@ -231,7 +255,34 @@ impl<'a> SemanticLookup<'a> {
                 }
             }
             let mut rejected = HashMap::<String, (HashSet<Span>, HashSet<Span>)>::default();
-            for (caller, declaring, binding, span, pattern, defaults_throw) in mentions {
+            // A decided binding none of whose names carries the compiler's
+            // reference list has mentions the table above cannot see (ADR
+            // 0464 review): its same-file mentions, from the binder, are
+            // withheld and unordered. Another module's mention of it has no
+            // such fallback (docs/open-work.md).
+            for file in &self.facts.files {
+                let path = file.path.as_str();
+                for binding in file.ast.bindings.iter().filter(|binding| decided(binding)) {
+                    let listed = binding.names.iter().any(|name| {
+                        self.entities.at(path, name.span).is_some_and(|symbol| {
+                            self.symbol_references_if_present(symbol.as_str()).is_some()
+                        })
+                    });
+                    if listed {
+                        continue;
+                    }
+                    for &(mention, declaration) in &file.ast.reference_declarations {
+                        if binding.names.iter().any(|name| name.span == declaration)
+                            && binding.names.iter().all(|name| name.span != mention)
+                        {
+                            let entry = rejected.entry(path.to_owned()).or_default();
+                            entry.0.insert(mention);
+                            entry.1.insert(mention);
+                        }
+                    }
+                }
+            }
+            for (path, caller, declaring, binding, span, pattern, defaults_throw) in mentions {
                 // The call graph's order: the full order only for a
                 // pattern-declared binding (ADR 0464), ADR 0339's for a
                 // function-valued one.
@@ -260,9 +311,7 @@ impl<'a> SemanticLookup<'a> {
                 if graph_ordered && !defaults_throw {
                     continue;
                 }
-                let entry = rejected
-                    .entry(self.facts.files[caller].path.to_string())
-                    .or_default();
+                let entry = rejected.entry(path.to_owned()).or_default();
                 entry.0.insert(span);
                 if !ordered {
                     entry.1.insert(span);
@@ -392,7 +441,15 @@ impl<'a> SemanticLookup<'a> {
         // its declarator running, and so by source position alone. A `var` is
         // initialized only if its initializer executed (a loop, branch or
         // caught throw may skip it) and reads `undefined` until then.
-        if !(binding_fact.immutable || binding_fact.runtime_let) {
+        //
+        // ADR 0464 review: under the full order a `var` whose initializer is
+        // a call in its function's straight-line flow (`straight_line_calls`)
+        // is initialized whenever that function reaches the declarator, so it
+        // is ordered by position like a `const`.
+        if !(binding_fact.immutable
+            || binding_fact.runtime_let
+            || (scratch.full_order && var_initialized_in_line(declaring_file, binding_fact)))
+        {
             return false;
         }
         // A direct `eval` calls any function, or rebinds any binding, visible
