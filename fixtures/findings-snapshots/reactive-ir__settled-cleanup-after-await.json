@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
+      "start": 409,
+      "end": 423,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
+      "start": 679,
+      "end": 693,
+      "fixes": 0
+    }
+  ]
+}

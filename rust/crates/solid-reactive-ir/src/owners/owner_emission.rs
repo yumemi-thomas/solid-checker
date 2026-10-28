@@ -134,8 +134,19 @@ pub(super) fn emit_file(
             candidate.operation,
             "effect" | "cleanup" | "context-read" | "boundary-call"
         );
-        let after_await =
-            continuation_placed && starts.contains(&u64::from(candidate.operation_span.start));
+        // ADR 0488: a settled cleanup's operation span is its callback; the
+        // `onSettled` call that takes it runs after the await when its callee
+        // does, and with no owner the callback's returned cleanup throws
+        // SETTLED_CLEANUP_UNOWNED (rc.17) as anywhere unowned.
+        let settled_after_await = candidate.operation == "settled-cleanup"
+            && file.ast.calls.iter().any(|call| {
+                call.arguments
+                    .first()
+                    .is_some_and(|argument| argument.span == candidate.operation_span)
+                    && starts.contains(&u64::from(call.callee.start))
+            });
+        let after_await = settled_after_await
+            || (continuation_placed && starts.contains(&u64::from(candidate.operation_span.start)));
         let possible_continuation = (!after_await && continuation_placed)
             .then(|| possible_await_continuation_context(file, candidate.operation_span, context))
             .flatten();
