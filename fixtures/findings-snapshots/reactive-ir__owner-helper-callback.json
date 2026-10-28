@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-helper-callback/App.tsx",
-      "start": 644,
-      "end": 653,
+      "start": 654,
+      "end": 663,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-helper-callback/App.tsx",
-      "start": 755,
-      "end": 764,
+      "start": 765,
+      "end": 774,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-helper-callback/App.tsx",
-      "start": 880,
-      "end": 889,
+      "start": 890,
+      "end": 899,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-helper-callback/App.tsx",
-      "start": 1023,
-      "end": 1032,
+      "start": 1033,
+      "end": 1042,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-helper-callback/App.tsx",
-      "start": 1153,
-      "end": 1162,
+      "start": 1163,
+      "end": 1172,
       "fixes": 0
     },
     {
@@ -57,8 +57,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-helper-callback/App.tsx",
-      "start": 1282,
-      "end": 1291,
+      "start": 1292,
+      "end": 1301,
       "fixes": 0
     },
     {
@@ -67,8 +67,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-helper-callback/App.tsx",
-      "start": 2429,
-      "end": 2438,
+      "start": 2439,
+      "end": 2448,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-helper-callback/App.tsx",
-      "start": 2534,
-      "end": 2543,
+      "start": 2544,
+      "end": 2553,
       "fixes": 0
     },
     {
@@ -87,8 +87,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-helper-callback/App.tsx",
-      "start": 2750,
-      "end": 2759,
+      "start": 2760,
+      "end": 2769,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-helper-callback/App.tsx",
+      "start": 3689,
+      "end": 3698,
       "fixes": 0
     }
   ]

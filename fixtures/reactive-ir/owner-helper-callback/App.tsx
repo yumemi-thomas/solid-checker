@@ -1,4 +1,4 @@
-import { createEffect, createRoot, onCleanup, runWithOwner } from "solid-js";
+import { createEffect, createRoot, getOwner, onCleanup, runWithOwner } from "solid-js";
 import { runNow } from "./helpers";
 
 function call(cb: () => unknown) {
@@ -144,4 +144,45 @@ export function Handler() {
       go
     </button>
   );
+}
+
+// ADR 0474 amendment: an owner guard and a hand-on to an owner-creating
+// position. Legal: `fn()` runs only under an owner, else under the root.
+function withOwner(fn: () => unknown) {
+  return getOwner() ? fn() : createRoot(fn);
+}
+
+function inRoot(fn: () => unknown) {
+  return createRoot(fn);
+}
+
+function bare(fn: () => unknown) {
+  return !getOwner() ? fn() : createRoot(fn);
+}
+
+export function GuardTimer() {
+  setTimeout(() => {
+    withOwner(() => onCleanup(() => {}));
+  }, 0);
+  return <div />;
+}
+
+export function RootTimer() {
+  setTimeout(() => {
+    inRoot(() => onCleanup(() => {}));
+  }, 0);
+  return <div />;
+}
+
+export function NegatedBody() {
+  bare(() => onCleanup(() => {}));
+  return <div />;
+}
+
+// Violation: `!getOwner()` holds in a timer, so `fn()` runs with no owner.
+export function NegatedTimer() {
+  setTimeout(() => {
+    bare(() => onCleanup(() => {}));
+  }, 0);
+  return <div />;
 }

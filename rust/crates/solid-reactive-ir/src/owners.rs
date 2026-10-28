@@ -373,6 +373,18 @@ pub(crate) enum OwnerEdgeKind {
     /// [`OwnerEdgeKind::Preserve`] does, and a source with no owner context
     /// settles to the uncertain unowned bit ([`settle_eager_owners`]).
     EagerCall,
+    /// ADR 0474 amendment: a call that runs only once the same invocation has
+    /// seen an owner (`getOwner() ? fn() : …`): the source's context without
+    /// its unowned part, nothing where the source has no owner.
+    OwnerGuarded,
+    /// ADR 0474 amendment: a call that runs only with no owner (`!getOwner() ?
+    /// fn() : …`): the source's unowned part without its proof, nothing where
+    /// the source is owned.
+    NoOwnerGuarded,
+    /// [`OwnerEdgeKind::NoOwnerGuarded`] where every invocation with no owner
+    /// makes the call: the proven unowned bit is kept, except from a leaf
+    /// source (a leaf body has an owner).
+    ProvenNoOwnerGuarded,
     /// The callback of a leaf owner that `onSettled` is, when the call sits in
     /// another leaf body (the dialect's `leaf_owner_requires_owned_call_site`).
     /// rc.13 queues `onSettled` under a children-forbidden owner, so the callback

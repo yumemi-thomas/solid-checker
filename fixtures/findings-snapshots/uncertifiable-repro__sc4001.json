@@ -14,16 +14,6 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/clean-owner-or-root.tsx",
-      "start": 559,
-      "end": 571,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/cleanup-after-await.tsx",

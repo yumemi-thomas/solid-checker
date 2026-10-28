@@ -760,6 +760,190 @@ pub(crate) fn helper_argument_run(
     })
 }
 
+/// ADR 0474 amendment: the owner each run of a helper's function argument has,
+/// for the owner graph ([`helper_argument_owner_runs`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct HelperOwnerRuns {
+    /// A direct call in the helper's body under no owner guard. With
+    /// `every_completion`, one such call runs on every completion.
+    pub(crate) unguarded: bool,
+    pub(crate) every_completion: bool,
+    /// A direct call that runs only once the same invocation has seen an owner
+    /// (`getOwner() ? fn() : …`, the guard `push_owner_requirement` reads).
+    pub(crate) owner_guarded: bool,
+    /// A direct call in the consequent of a `!getOwner()` test: it runs only
+    /// with no owner. `Some(true)` when each such call is the conditional's
+    /// whole consequent and the test is on the helper's every completion, so an
+    /// invocation with no owner makes it.
+    pub(crate) no_owner_guarded: Option<bool>,
+    /// The helper hands the parameter to a primitive's callback position whose
+    /// callback runs under an owner the call creates (`createRoot(fn)`).
+    pub(crate) rooted: bool,
+    /// Any other use: a run elsewhere, at another time or owner.
+    pub(crate) elsewhere: bool,
+}
+
+/// ADR 0474 amendment: [`helper_argument_run`]'s census, for the owner graph,
+/// with each direct call split by the owner guard around it and the parameter
+/// handed to an owner-creating callback position counted as an owned run.
+/// `None` where [`helper_argument_run`] proves nothing, except that a helper
+/// whose only uses are such hand-ons is answered.
+pub(crate) fn helper_argument_owner_runs(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> Option<HelperOwnerRuns> {
+    if call.arguments.get(index)?.spread || lookup.primitive_at_call(file, call.span).is_some() {
+        return None;
+    }
+    let (callee_file, callee, exact) = project_callee_at_parameter(file, call, index, lookup)?;
+    if !exact || callee.r#async || callee.generator {
+        return None;
+    }
+    let parameter = callee.parameters.get(index)?;
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier {
+        return None;
+    }
+    let name = parameter.names.first()?;
+    let symbol = lookup.entities().at(callee_file.path.as_str(), name.span)?;
+    let ast = &callee_file.ast;
+    let source = callee_file
+        .source
+        .get(callee.span.start as usize..callee.span.end as usize)?;
+    let text = callee_file
+        .source
+        .get(name.span.start as usize..name.span.end as usize)?;
+    if identifier_occurrences(source, "arguments") > 0 {
+        return None;
+    }
+    let references = ast.references_to(name.span);
+    if references
+        .iter()
+        .any(|reference| ast.any_write_target_containing(*reference))
+    {
+        return None;
+    }
+    // Direct calls in the body by the parameter's symbol, as
+    // `calls_parameter_in_body` finds them.
+    let direct = ast
+        .calls
+        .iter()
+        .filter(|inner| {
+            !inner.construct
+                && crate::owners::owned_by_body(ast, callee, inner.span)
+                && lookup.callee_symbol(callee_file, inner.callee) == Some(symbol.as_str())
+        })
+        .collect::<Vec<_>>();
+    let rooted = references
+        .iter()
+        .filter(|reference| {
+            ast.calls.iter().any(|outer| {
+                lookup
+                    .primitive_at_call(callee_file, outer.span)
+                    .is_some_and(|primitive| {
+                        outer.arguments.iter().enumerate().any(|(at, argument)| {
+                            !argument.spread
+                                && ast.peel_ts_sugar_span(argument.span) == **reference
+                                && crate::owners::callback_owner_at_call(
+                                    callee_file,
+                                    outer,
+                                    primitive,
+                                    at,
+                                    lookup,
+                                ) == Some(solid_dialect::CallbackOwner::Creates)
+                        })
+                    })
+            })
+        })
+        .count();
+    if direct.is_empty() && rooted == 0 {
+        return None;
+    }
+    let mut runs = HelperOwnerRuns {
+        unguarded: false,
+        every_completion: false,
+        owner_guarded: false,
+        no_owner_guarded: None,
+        rooted: rooted > 0,
+        elsewhere: identifier_occurrences(source, text) != direct.len() + rooted + 1,
+    };
+    let mut unguarded_on_every_completion = false;
+    for inner in &direct {
+        if crate::owners::guarded_by_owner_probe(callee_file, inner.span, lookup) {
+            runs.owner_guarded = true;
+        } else if let Some(proven) = no_owner_guard(callee_file, callee, inner.span, lookup) {
+            runs.no_owner_guarded = Some(runs.no_owner_guarded.unwrap_or(true) && proven);
+        } else {
+            runs.unguarded = true;
+            unguarded_on_every_completion |= crate::interproc::site_on_every_completion(
+                lookup,
+                callee_file,
+                callee.span,
+                inner.span,
+            );
+        }
+    }
+    // ADR 0277's table also counts a parameter passed on to a function that
+    // calls it; with a guarded call beside, the every-completion call must be
+    // an unguarded one.
+    runs.every_completion = runs.unguarded
+        && invokes_parameter_during_call(callee_file, callee, index, lookup)
+        && ((!runs.owner_guarded && runs.no_owner_guarded.is_none())
+            || unguarded_on_every_completion);
+    Some(runs)
+}
+
+/// ADR 0474 amendment: whether the direct call at `site` in `function` sits in
+/// the consequent of a conditional or `if` whose test is `!getOwner()`, a
+/// negated call of Solid's own `getOwner` resolved by symbol, written in
+/// `function` itself: the call runs only with no owner. `Some(true)` when the
+/// call is the conditional's whole consequent and the test is on `function`'s
+/// every completion, so every invocation with no owner makes the call.
+fn no_owner_guard(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<bool> {
+    let probe = |test: Span| {
+        let test = file.ast.peel_ts_sugar_span(test);
+        file.ast.calls.iter().find(|probe| {
+            probe.span.end == test.end
+                && probe.span.start > test.start
+                && probe.arguments.is_empty()
+                && file
+                    .source
+                    .get(test.start as usize..probe.span.start as usize)
+                    .is_some_and(|prefix| prefix.trim_end() == "!")
+                && crate::owners::owned_by_body(&file.ast, function, probe.span)
+                && lookup.primitive_at_call(file, probe.span) == Some(Primitive::GetOwner)
+        })
+    };
+    file.ast
+        .conditional_expressions
+        .iter()
+        .filter(|conditional| conditional.consequent.contains(site))
+        .find_map(|conditional| {
+            probe(conditional.test).map(|probe| {
+                file.ast.peel_ts_sugar_span(conditional.consequent) == site
+                    && crate::interproc::site_on_every_completion(
+                        lookup,
+                        file,
+                        function.span,
+                        probe.span,
+                    )
+            })
+        })
+        .or_else(|| {
+            file.ast
+                .if_regions
+                .iter()
+                .any(|region| region.consequent.contains(site) && probe(region.test).is_some())
+                .then_some(false)
+        })
+}
+
 /// ADR 0457: whether every use of `function`'s parameter `index` is a direct
 /// call in its own body. Nothing is claimed for a callee that reassigns the
 /// parameter or reads `arguments` (`None`): the call may reach another

@@ -9,6 +9,15 @@ pub(super) const OWNER_CONTEXT_LEAVES_REGION: u8 = OWNER_CONTEXT_PROVEN_UNOWNED
     | OWNER_CONTEXT_LEAF
     | OWNER_CONTEXT_MAY_RESUME_UNOWNED;
 
+/// The bits that describe a context's unowned part and its provenance: what
+/// an owner guard removes ([`OwnerEdgeKind::OwnerGuarded`]) and a no-owner
+/// guard keeps ([`OwnerEdgeKind::NoOwnerGuarded`]).
+const OWNER_CONTEXT_UNOWNED_PART: u8 = OWNER_CONTEXT_UNOWNED
+    | OWNER_CONTEXT_PROVEN_UNOWNED
+    | OWNER_CONTEXT_LATER_RUN_UNOWNED
+    | OWNER_CONTEXT_MAY_RESUME_UNOWNED
+    | OWNER_CONTEXT_COMPONENT_UNCERTAIN;
+
 /// The functions standing between `span` and the innermost owner-providing
 /// region around it: every function whose body contains `span` and which is
 /// itself written inside that region, the region's own callback included.
@@ -228,6 +237,18 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
         OwnerEdgeKind::RefApplied => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
         OwnerEdgeKind::MayBeUnowned => OWNER_CONTEXT_UNOWNED,
         OwnerEdgeKind::MayRun => source & !OWNER_CONTEXT_PROVEN_UNOWNED,
+        OwnerEdgeKind::OwnerGuarded => source & !OWNER_CONTEXT_UNOWNED_PART,
+        OwnerEdgeKind::NoOwnerGuarded | OwnerEdgeKind::ProvenNoOwnerGuarded => {
+            if source & OWNER_CONTEXT_UNOWNED == 0 {
+                0
+            } else if matches!(kind, OwnerEdgeKind::ProvenNoOwnerGuarded)
+                && source & OWNER_CONTEXT_LEAF == 0
+            {
+                source & OWNER_CONTEXT_UNOWNED_PART
+            } else {
+                source & OWNER_CONTEXT_UNOWNED_PART & !OWNER_CONTEXT_PROVEN_UNOWNED
+            }
+        }
     }
 }
 
@@ -305,7 +326,7 @@ pub(super) fn callback_call_owner_edge(
 /// `await` is not current after it -- and nothing else is read as a guard:
 /// `owner && …` over a binding, `!getOwner() || …`, and early returns keep
 /// their requirement.
-pub(super) fn guarded_by_owner_probe(
+pub(crate) fn guarded_by_owner_probe(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,

@@ -209,10 +209,16 @@ pub(super) fn propagate_owner_contexts(
                 && matches!(kind, OwnerEdgeKind::Unowned | OwnerEdgeKind::RefApplied)
             {
                 OWNER_CONTEXT_UNOWNED
-            } else if uncertain[source] && kind == OwnerEdgeKind::QueuedLeaf {
+            } else if uncertain[source]
+                && matches!(
+                    kind,
+                    OwnerEdgeKind::QueuedLeaf | OwnerEdgeKind::ProvenNoOwnerGuarded
+                )
+            {
                 // The callback's proof is the leaf body that creates it, and an
                 // unnamed escape reaches that body without proof: the proof is
-                // withheld, as on an unowned edge out of the same node.
+                // withheld, as on an unowned edge out of the same node. A
+                // no-owner guarded call's proof is its source's, withheld alike.
                 owner_edge_context(kind, contexts[source]) & !OWNER_CONTEXT_PROVEN_UNOWNED
             } else {
                 owner_edge_context(kind, contexts[source])

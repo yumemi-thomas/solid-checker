@@ -5,3 +5,5 @@
 Legal (rc.17 silent): the helper called in a component body (`Body`, `MaybeBody`) or a created root (`InRoot`); a helper that only keeps the callback (`NeverCalledTimer`) or runs it under its own root (`OwnRootTimer`); a same-named local helper that only keeps it (`ShadowedTimer`).
 
 Uncertifiable (internal): a helper that calls it on some paths only (`MaybeTimer`, rc.17 warns: `on` holds), and one that also keeps it for a later run (`AlsoKeptBody`, rc.17 silent: nothing calls `kept`). Stub: rc.17 shapes (copied from `read-in-place-layers`).
+
+**Guard and root hand-on (ADR 0474 amendment).** A helper's call of its parameter behind `getOwner()` runs only under an owner, one behind `!getOwner()` only with none, and a hand-on to an owner-creating position (`createRoot(fn)`) runs under the root. Legal (rc.17 silent): `GuardTimer` (`getOwner() ? fn() : createRoot(fn)` in a timer), `RootTimer` (`createRoot(fn)` only), `NegatedBody` (`!getOwner() ? fn() : …` in a component body: `fn()` never runs). Violation (rc.17 warns `NO_OWNER_CLEANUP`): `NegatedTimer` (the same helper in a timer: the test is on every completion and `fn()` is the whole consequent).

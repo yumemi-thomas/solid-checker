@@ -270,4 +270,7 @@ A package function whose same-operation creation calls cover every exit between 
   project helper that calls it is placed at the helper's call: in a timer, a
   promise callback, a handler or `runWithOwner(null)` it is a violation. A
   helper that calls it on some paths only, or also keeps or hands it on,
-  leaves it uncertifiable.
+  leaves it uncertifiable. A call behind `getOwner()` runs owned and a
+  hand-on to `createRoot(fn)` runs under the root (`getOwner() ? fn() :
+  createRoot(fn)` is clean); `!getOwner() ? fn() : …` runs it with no owner,
+  a violation in a timer.

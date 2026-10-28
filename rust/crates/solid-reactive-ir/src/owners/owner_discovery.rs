@@ -272,21 +272,54 @@ pub(crate) fn discover_owner_file(
                     continue;
                 };
                 let Some(run) =
-                    crate::execution_role::helper_argument_run(file, call, index, lookup)
+                    crate::execution_role::helper_argument_owner_runs(file, call, index, lookup)
                 else {
                     continue;
                 };
-                let (in_place_source, in_place_kind) = if run.every_completion && !unproven_callee {
-                    (source.clone(), kind)
-                } else {
-                    may_run()
+                if run.unguarded {
+                    let (in_place_source, in_place_kind) =
+                        if run.every_completion && !unproven_callee {
+                            (source.clone(), kind)
+                        } else {
+                            may_run()
+                        };
+                    edges.push(SymbolicOwnerEdge {
+                        source: in_place_source,
+                        target: target.clone(),
+                        kind: in_place_kind,
+                    });
+                }
+                // Amendment: a call behind `getOwner()` runs only under an
+                // owner, one behind `!getOwner()` only with none; a hand-on to
+                // an owner-creating position (`createRoot(fn)`) runs under the
+                // owner that call creates.
+                let guarded = |guarded_kind| {
+                    if kind == OwnerEdgeKind::Preserve && !unproven_callee {
+                        (source.clone(), guarded_kind)
+                    } else {
+                        may_run()
+                    }
                 };
-                edges.push(SymbolicOwnerEdge {
-                    source: in_place_source,
-                    target: target.clone(),
-                    kind: in_place_kind,
-                });
-                if run.uses == crate::execution_role::ParameterUses::AlsoElsewhere {
+                let guarded_edges = [
+                    run.owner_guarded
+                        .then(|| guarded(OwnerEdgeKind::OwnerGuarded)),
+                    run.no_owner_guarded.map(|proven| {
+                        guarded(if proven {
+                            OwnerEdgeKind::ProvenNoOwnerGuarded
+                        } else {
+                            OwnerEdgeKind::NoOwnerGuarded
+                        })
+                    }),
+                    run.rooted.then(|| (source.clone(), OwnerEdgeKind::Owned)),
+                ];
+                for (guarded_source, guarded_kind) in guarded_edges.into_iter().flatten() {
+                    edges.push(SymbolicOwnerEdge {
+                        source: guarded_source,
+                        target: target.clone(),
+                        kind: guarded_kind,
+                    });
+                }
+                if run.elsewhere {
                     edges.push(SymbolicOwnerEdge {
                         source: None,
                         target,
