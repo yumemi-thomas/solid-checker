@@ -1,4 +1,4 @@
-import { createEffect, getOwner, onCleanup } from "solid-js";
+import { createEffect, getOwner, onCleanup, onSettled } from "solid-js";
 
 // ADR 0493: an operation in function layers that run in place after an await
 // runs on the await's continuation, where no owner is current.
@@ -110,6 +110,19 @@ export function ForEachAfterAwait(props: { items: number[] }) {
     props.items.forEach(() => {
       createEffect(() => 1, () => {});
     });
+  };
+  void load();
+  return <div />;
+}
+
+// Violation (ADR 0493 with ADR 0488): an onSettled whose callback returns a
+// cleanup, in an IIFE after the await, has no owner to register it on.
+export function SettledCleanupAfterAwait() {
+  const load = async () => {
+    await Promise.resolve();
+    (() => {
+      onSettled(() => () => {});
+    })();
   };
   void load();
   return <div />;
