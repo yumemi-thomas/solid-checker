@@ -90,10 +90,13 @@ export function judge({ code, site, typecheck: typed, checker, runtime }) {
   const detail = { placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}) };
   if (claimingViolation) return { outcome: "agree", detail };
   if (violations.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(violations.map((finding) => finding.rule))] } };
-  if (covering.length) return { outcome: "recall-gap", detail };
+  // A recall gap is the checker declining this code: an uncertifiable finding of a rule that claims it (or a withholding) at the site.
+  // Another rule's uncertifiable finding on the same lines says nothing about this code; it is listed, and the program falls through.
+  if (covering.some(claims)) return { outcome: "recall-gap", detail };
+  const unrelated = covering.length ? { unrelated: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`) } : {};
   const claimingElsewhere = relevant.find((finding) => claims(finding));
-  if (claimingElsewhere) return { outcome: "recall-gap", detail: { ...detail, remote: `${claimingElsewhere.rule}/${claimingElsewhere.kind}@${claimingElsewhere.line}` } };
-  return { outcome: "false-clean", detail };
+  if (claimingElsewhere) return { outcome: "recall-gap", detail: { ...detail, ...unrelated, remote: `${claimingElsewhere.rule}/${claimingElsewhere.kind}@${claimingElsewhere.line}` } };
+  return { outcome: "false-clean", detail: { ...detail, ...unrelated } };
 }
 
 /** The misuse site of a built case: its only `use` site. */

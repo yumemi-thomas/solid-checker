@@ -44,6 +44,13 @@ describe("classify: the checker claims a violation", () => {
     expect(result.reasons[0]).toMatch(/disturbed.*threw/);
   });
 
+  it("is inconclusive, never agreement, when a disturbed run leaves nothing to compare", () => {
+    const result = classify({ sites, checker: checker([]), runtime: runtime({ errors: [{ kind: "window-error", message: "boom", positions: [{ file: "App.tsx", line: 30 }] }] }), plan });
+    expect(result.verdict).toBe("inconclusive");
+    expect(result.items).toEqual([expect.objectContaining({ kind: "inconclusive", why: "disturbed" })]);
+    expect(classify({ sites, checker: checker([]), runtime: runtime({}), plan }).verdict).toBe("agree");      // a quiet run: both silent
+  });
+
   it("is inconclusive when reactivity halted", () => {
     const result = classify({ sites, checker: checker([violation("no-write-in-pure-computation", 8)]), runtime: runtime({ diagnostics: [diag("REACTIVITY_HALTED")] }), plan });
     expect(result.verdict).toBe("inconclusive");
@@ -175,7 +182,8 @@ describe("classify: the checker is quiet, uncertifiable or failed", () => {
     expect(none.items.find((item) => item.kind === "candidate-false-clean")?.diagnostic).toMatchObject({ code: "STRICT_READ_UNTRACKED", line: null, unplaced: true });
     const elsewhere = classify({ sites, checker: checker([violation("strict-read-untracked", 20, 20, "SC1001")]), runtime: unplaced, plan });
     expect(elsewhere.items.map((item) => item.kind)).not.toContain("candidate-false-clean");
-    expect(classify({ sites, checker: checker([]), runtime: runtime({ diagnostics: [diag("REACTIVITY_HALTED", 8)] }), plan }).verdict).toBe("agree");
+    // A halt is a consequence, never a false clean; with nothing else to compare the run is inconclusive, not agreement.
+    expect(classify({ sites, checker: checker([]), runtime: runtime({ diagnostics: [diag("REACTIVITY_HALTED", 8)] }), plan }).verdict).toBe("inconclusive");
   });
 
   it("ranks the tiers: false clean, wrong rule, known open, recall gap, unexecuted, inconclusive, agree", () => {

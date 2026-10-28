@@ -34,6 +34,14 @@ describe("judge", () => {
   it("wrong-rule: only another rule's violation covers the site", () => {
     expect(verdict({ checker: { ok: true, findings: [finding("missing-owner", "violation")] } }).outcome).toBe("wrong-rule");
   });
+  it("another rule's uncertifiable finding on the site is not a recall gap for this code: listed, and the program falls through", () => {
+    const result = verdict({ checker: { ok: true, findings: [finding("no-write-in-pure-computation", "uncertifiable")] } });
+    expect(result).toMatchObject({ outcome: "false-clean", detail: { unrelated: ["no-write-in-pure-computation/uncertifiable@10"] } });
+    // A withholding (dispatch unresolved) declines every rule at its site.
+    expect(verdict({ checker: { ok: true, findings: [finding("reactive-dispatch-unresolved", "uncertifiable")] } }).outcome).toBe("recall-gap");
+    // A claiming finding elsewhere in the file still makes it a gap.
+    expect(verdict({ checker: { ok: true, findings: [finding("no-write-in-pure-computation", "uncertifiable"), finding("flush-in-effect-callback", "uncertifiable", 30)] } }).outcome).toBe("recall-gap");
+  });
   it("recall-gap: only an uncertifiable finding covers the site", () => {
     expect(verdict({ checker: { ok: true, findings: [finding("flush-in-effect-callback", "uncertifiable")] } }).outcome).toBe("recall-gap");
   });

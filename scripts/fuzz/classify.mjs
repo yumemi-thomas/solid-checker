@@ -164,7 +164,12 @@ export function classify({ sites, glue = [], checker, runtime, plan, evidence = 
 
   items.push(...diagnosticItems(events, findings, evidence.registrationLines));
 
-  if (!items.length) add("agree", disturbed.length ? `no claims to compare (${disturbed[0]})` : "the checker and the runtime are both silent");
+  // A disturbed run (a throw, a halt, a runner failure) with nothing to compare proves nothing: the part that never ran could hold a
+  // diagnostic. It is inconclusive, never agreement (README, "What a finding means").
+  if (!items.length) {
+    if (disturbed.length) add("inconclusive", `the run was disturbed and nothing could be compared: ${disturbed[0]}`, { why: "disturbed" });
+    else add("agree", "the checker and the runtime are both silent");
+  }
   return result(items);
 
   function result(rows) {

@@ -132,6 +132,8 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
   } catch (e) { failure = { phase, ...describeError(e) }; }
   finally {
     clock?.restore(); clock = null;
+    // Unsubscribed before the roots are disposed, on purpose: Chrome's page is never disposed, so it never reports what a teardown
+    // raises, and a diagnostic only this runner saw could neither be confirmed nor compared.
     stop();
     for (const dispose of disposers) try { dispose(); } catch (e) { errors.push({ phase: 'dispose', kind: 'dispose', ...describeError(e) }); }
     window.removeEventListener('error', onError);
