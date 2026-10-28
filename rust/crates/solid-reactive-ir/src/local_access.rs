@@ -1747,21 +1747,31 @@ impl LocalAccessContext<'_, '_> {
                     self.symbol_names,
                     self.lookup,
                 );
-                if execution != ExecutionRole::TrackedJsx {
-                    // The call may itself sit in a named local function a
-                    // rendered call runs.
-                    sites.push((call.span, depth + 1));
-                    continue;
-                }
-                if containing_leaf_owner(
+                let leaf_owner = containing_leaf_owner(
                     file,
                     call.callee,
                     self.entities,
                     self.symbol_names,
                     self.lookup,
-                )
-                .is_some()
-                {
+                );
+                // ADR 0490: a call that runs where a direct read is
+                // unsuspendable (a component body's strict-read window,
+                // module evaluation, a leaf owner) reads there, as the
+                // direct read does.
+                let unsuspendable = leaf_owner.is_some()
+                    || execution == ExecutionRole::ModuleInitialization
+                    || (execution == ExecutionRole::UntrackedRendering
+                        && nested_literal_runs_during_body(
+                            file,
+                            call.callee,
+                            self.entities,
+                            self.symbol_names,
+                            self.lookup,
+                        ));
+                if execution != ExecutionRole::TrackedJsx && !unsuspendable {
+                    // The call may itself sit in a named local function a
+                    // rendered call runs.
+                    sites.push((call.span, depth + 1));
                     continue;
                 }
                 let call_location = location(file.path.shared(), call.span);
@@ -1778,7 +1788,7 @@ impl LocalAccessContext<'_, '_> {
                     location: call_location,
                     declaration: declaration.clone(),
                     execution,
-                    leaf_owner: None,
+                    leaf_owner: leaf_owner.map(Into::into),
                     under_loading: cover == LoadingCover::Covered,
                     mount_unresolved: cover == LoadingCover::Unresolved,
                     call_attributed: true,
@@ -1787,8 +1797,18 @@ impl LocalAccessContext<'_, '_> {
                     options_opaque: options.opaque,
                     ssr_client_hole: options.ssr_client_bare,
                     server_rendering_unresolved: options.server_rendering_unresolved,
-                    host_callback_timing: false,
-                    callee_callback_timing: false,
+                    host_callback_timing: host_callback_timing(
+                        file,
+                        call.callee,
+                        execution,
+                        self.lookup,
+                    ),
+                    callee_callback_timing: callee_callback_timing(
+                        file,
+                        call.callee,
+                        execution,
+                        self.lookup,
+                    ),
                     invocation_context_unproven: false,
                 }));
             }

@@ -21,6 +21,13 @@ with conditional wording. If the options object cannot be read, the untracked
 variant becomes uncertifiable because a declared first-paint value can neither
 be proven nor ruled out.
 
+A read written directly in a named local function (`const f1 = () => {
+user(); }`), whose binding is never written, is read where a call of that
+function runs, through up to four such functions. A call in the component
+body's strict-read window, at module scope, or in a leaf owner is reported at
+the call, as a direct read there is (ADR 0490); a call in an event handler or
+one that never runs is not.
+
 A pending read in a callback a host API retains (an `addEventListener`
 listener, a `bind` bound argument, a `PromiseLike.then` callback, a Geolocation
 callback) written in a component body is also uncertifiable: invoked inside the
