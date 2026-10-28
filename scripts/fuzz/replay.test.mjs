@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { caseIdOf, chromeCodesAt, collectItems, probeOf, fixedStatus, itemKind, judgeWithChrome, originalId, verdictAtLine } from "./replay.mjs";
+import { caseIdOf, chromeCodesAt, collectItems, probeOf, withBaseline, fixedStatus, itemKind, judgeWithChrome, originalId, verdictAtLine } from "./replay.mjs";
 
 const scratch = () => mkdtempSync(join(tmpdir(), "fuzz-replay-"));
 const write = (dir, files) => { mkdirSync(dir, { recursive: true }); for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text); return dir; };
@@ -122,5 +122,16 @@ describe("probe witnesses", () => {
   it("a false clean whose write did not land is a witnessed defect", () => {
     const fired = record("0", [{ code: "STORE_WRITE_OUTSIDE_SETTER", positions: [{ file: "App.tsx", line: 11 }] }]);
     expect(judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [] } }, new Map([["rp-z", fired]])).chrome).toMatchObject({ status: "false-clean", witness: "not-landed", witnessed: "defect-witnessed" });
+  });
+});
+
+describe("rediscovery", () => {
+  it("marks an item whose judgement differs under the earlier checker, and keeps the earlier one beside it", () => {
+    const now = { kind: "plain", now: "checked", findings: ["no-store-mutation-outside-setter/violation@13"] };
+    const fixed = withBaseline(now, { kind: "plain", now: "checked", findings: [], chromeInput: {} });
+    expect(fixed.before).toEqual({ now: "checked", findings: [], sites: undefined, changed: true });
+    expect(withBaseline(now, { ...now }).before.changed).toBe(false);
+    const pair = { kind: "pair", now: "high", sites: [{ site: "s1", now: "high", original: { verdict: "violation" }, variant: { verdict: "none" }, recorded: "high" }] };
+    expect(withBaseline(pair, { ...pair, now: "agree", sites: [{ ...pair.sites[0], now: "agree" }] }).before.changed).toBe(true);
   });
 });

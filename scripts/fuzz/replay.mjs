@@ -292,6 +292,7 @@ async function confirm(rows, config, options, out) {
 
 const usage = `usage: node scripts/fuzz/replay.mjs --out <fresh dir> <dir|list> [...]
   [--confirm-with-chrome [--browser <chromium>] [--no-chrome-cache] [--cache-dir <dir>]]
+  [--baseline-checker <earlier solid-checker> [--baseline-typefacts <its solid-typefacts>]]   rediscovery: judge each item by both checkers
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--install <oracle install>] [--tsc <tsrs>] [--concurrency N] [--keep-work]`;
 
 export async function main(argv) {
@@ -303,7 +304,7 @@ export async function main(argv) {
       if (!["--confirm-with-chrome", "--no-chrome-cache", "--keep-work", "--help", "--all-cores"].includes(argv[index]) && argv[index + 1] !== undefined) flags.push(argv[++index]);
     } else paths.push(argv[index]);
   }
-  const options = parseArgs(flags, { extraValues: ["cache-dir"], extraFlags: ["no-chrome-cache"] });
+  const options = parseArgs(flags, { extraValues: ["cache-dir", "baseline-checker", "baseline-typefacts"], extraFlags: ["no-chrome-cache"] });
   if (options.help) { console.log(usage); return 0; }
   if (!options.out || !paths.length) throw new Error(`--out <fresh directory> and at least one item are required\n${usage}`);
   const out = resolve(options.out);
@@ -315,14 +316,21 @@ export async function main(argv) {
   const base = configFrom(options, out);
   const config = options.confirmWithChrome ? { ...base, chromeCache: chromeCacheFor(base, options) } : base;
   const started = Date.now();
-  const settled = await mapPoolSettled(items, async (item) => (item.kind === "pair" ? replayPair(item, config, out) : item.kind === "text-pair" ? replayTextPair(item, config) : replayPlain(item, config)), { concurrency: config.concurrency });
-  let rows = settled.map((result, index) => result.value ?? { kind: items[index].kind, dir: items[index].dir, label: items[index].label, now: "error", why: String(result.error?.message ?? result.error) });
+  const judgeAll = async (settings) => (await mapPoolSettled(items, async (item) => (item.kind === "pair" ? replayPair(item, settings, out) : item.kind === "text-pair" ? replayTextPair(item, settings) : replayPlain(item, settings)), { concurrency: settings.concurrency }))
+    .map((result, index) => result.value ?? { kind: items[index].kind, dir: items[index].dir, label: items[index].label, now: "error", why: String(result.error?.message ?? result.error) });
+  let rows = await judgeAll(config);
+  // `--baseline-checker`: every item judged by an earlier checker too (one run after the other, so their work directories never meet).
+  if (options.baselineChecker) {
+    const before = await judgeAll({ ...config, bin: resolve(options.baselineChecker), typefacts: options.baselineTypefacts ? resolve(options.baselineTypefacts) : config.typefacts });
+    rows = rows.map((row, index) => withBaseline(row, before[index]));
+  }
   const checkerMs = Date.now() - started;
   if (options.confirmWithChrome) rows = await confirm(rows, config, options, out);
   const report = rows.map(({ chromeInput, ...row }) => row);
   const summary = {
     items: report.length, checkerMs, wallMs: Date.now() - started,
     now: tally(report, (row) => row.now), fixed: report.filter((row) => row.fixed).length,
+    ...(options.baselineChecker ? { changed: report.filter((row) => row.before?.changed).length } : {}),
     ...(options.confirmWithChrome ? { chrome: tally(report, (row) => row.chrome?.status), chromeCache: config.chromeCache ? config.chromeCache.stats() : null } : {}),
   };
   writeFileSync(join(out, "replay.jsonl"), `${report.map((row) => JSON.stringify(row)).join("\n")}\n`);
@@ -330,10 +338,22 @@ export async function main(argv) {
   for (const row of report) {
     const chrome = row.chrome ? ` chrome ${row.chrome.status}${row.chromeCache === "hit" ? " (cached)" : ""}` : "";
     const was = row.recorded?.buckets ? ` (recorded ${row.recorded.buckets.join(",")}${row.recorded.chrome?.length ? `; chrome ${row.recorded.chrome.join(",")}` : ""})` : "";
-    console.error(`${row.fixed ? "FIXED " : ""}${row.now}${chrome} ${row.label ?? row.variantId ?? basename(row.dir)}${was}${row.why ? ` [${row.why}]` : ""}`);
+    console.error(`${row.before?.changed ? "CHANGED " : ""}${row.fixed ? "FIXED " : ""}${row.now}${chrome} ${row.label ?? row.variantId ?? basename(row.dir)}${was}${row.why ? ` [${row.why}]` : ""}`);
   }
   console.error(`replay: ${JSON.stringify(summary)}`);
   return report.some((row) => row.chrome?.status === "violation-contradicted") ? 3 : 0;
+}
+
+/** What a judgement says, for comparing two checkers on one item: the bucket, the findings, and each recorded site's two sides. */
+const verdictOf = (row) => JSON.stringify({ now: row.now, findings: row.findings ?? null, sites: (row.sites ?? []).map(({ site, now, original, variant }) => ({ site, now, original, variant })) });
+
+/**
+ * Rediscovery (`--baseline-checker`): the earlier checker's judgement of the item beside this one's, and whether they differ. A
+ * fix's probes must come out `changed` against the binary from before it; a probe that does not change proves nothing about the fix.
+ */
+export function withBaseline(row, before) {
+  const { chromeInput, ...earlier } = before;
+  return { ...row, before: { now: earlier.now, findings: earlier.findings, sites: earlier.sites, changed: verdictOf(row) !== verdictOf(earlier) } };
 }
 
 const tally = (rows, keyOf) => rows.reduce((counts, row) => { const key = keyOf(row) ?? "-"; counts[key] = (counts[key] ?? 0) + 1; return counts; }, {});
