@@ -75,10 +75,10 @@ export async function evaluate(entries, config, deps = {}) {
   // 2. Run everything the checker answered in one Vitest batch (the twin), and, as a control, the clean twin in a second.
   const variant = instrument ? "run" : "clean";
   const records = live.length
-    ? await fast(live.map(({ built, caseDir }) => ({ id: built.id, dir: caseDir, variant })), { install: config.fastInstall, workers: config.workers })
+    ? await fast(live.map(({ built, caseDir }) => ({ id: built.id, dir: caseDir, variant })), { install: config.fastInstall, workers: config.workers, virtualClock: config.virtualClock })
     : new Map();
   const controls = control && live.length
-    ? await fast(live.map(({ built, caseDir }) => ({ id: `${built.id}-clean`, dir: caseDir, variant: "clean" })), { install: config.fastInstall, workers: config.workers })
+    ? await fast(live.map(({ built, caseDir }) => ({ id: `${built.id}-clean`, dir: caseDir, variant: "clean" })), { install: config.fastInstall, workers: config.workers, virtualClock: config.virtualClock })
     : new Map();
 
   // 3. Classify.
@@ -108,6 +108,38 @@ export async function evaluate(entries, config, deps = {}) {
     });
   }
   return results;
+}
+
+/**
+ * Whether a shrink asks for the neutrality control (`config.control`) of an accepted candidate only, not of every candidate it tries.
+ * The control can only turn a verdict into `inconclusive` (`perturbed-run`); it adds nothing to a verdict it lets stand. So a candidate
+ * holds under the control exactly when it holds without it and then passes it: `judgeEntries` runs the plain pass for the batch and the
+ * controlled pass for the candidates that hold, in order, until one passes, which is the one the search takes. The dead-site subkind
+ * reads the control inside its verdict, so it keeps the control in every round. `config.shrinkControl === "each"` restores the old rule.
+ */
+export const lazyControl = (config) => Boolean(config.control) && !config.deadSite && config.shrinkControl !== "each";
+
+/**
+ * Judges built entries as `evaluate` does and answers `holds(entry, result)` for each. With `lazyControl(config)` the batch runs
+ * without the control and the control runs on the entries that hold, one at a time in order, stopping at the first that still
+ * holds under it (the search takes the first that holds, so the entries after it are answered false, unreached).
+ */
+export async function judgeEntries(entries, config, holds, deps = {}) {
+  if (!lazyControl(config)) {
+    const results = await evaluate(entries, config, deps);
+    return entries.map((entry) => holds(entry, results.get(entry.built.id)));
+  }
+  const plain = await evaluate(entries, { ...config, control: false }, deps);
+  const answers = entries.map((entry) => holds(entry, plain.get(entry.built.id)));
+  let taken = false;
+  for (let index = 0; index < entries.length; index += 1) {
+    if (taken) { answers[index] = false; continue; }
+    if (!answers[index]) continue;
+    const controlled = await evaluate([entries[index]], config, deps);
+    answers[index] = holds(entries[index], controlled.get(entries[index].built.id));
+    taken = answers[index];
+  }
+  return answers;
 }
 
 /**

@@ -19,7 +19,7 @@ import { buildCase, writeCase } from "./emit.mjs";
 import { DEFAULT_FAST_INSTALL } from "./fast.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import { findingsDiff, hitSummary } from "./hits.mjs";
-import { classifyChrome, evaluate, hasPackages, signaturesOf } from "./pipeline.mjs";
+import { classifyChrome, evaluate, hasPackages, judgeEntries, signaturesOf } from "./pipeline.mjs";
 import { applyLedgerToResults, falseCleanStream } from "./falseclean-run.mjs";
 import { LEDGER_PATH, loadLedger } from "./falseclean.mjs";
 import { programSeed } from "./rng.mjs";
@@ -32,8 +32,8 @@ import { mapPoolSettled } from "../lib/pool.mjs";
 import { cleanupEvidence } from "./disposal.mjs";
 import { containerEvidence } from "./container.mjs";
 
-const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "containers", "help"]);
-const VALUES = new Set(["seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch", "ledger", "code", "context", "binding", "layer", "variant"]);
+const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "containers", "real-clock", "help"]);
+const VALUES = new Set(["seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch", "shrink-control", "ledger", "code", "context", "binding", "layer", "variant"]);
 
 export function parseArgs(argv, { extraValues = [], extraFlags = [] } = {}) {
   const options = { seed: 1, count: 20, shrinkMode: "discovery", budget: 120 };
@@ -51,15 +51,23 @@ export function parseArgs(argv, { extraValues = [], extraFlags = [] } = {}) {
   for (const key of ["seed", "count", "workers", "concurrency", "budget", "components", "shrinkJobs", "shrinkBatch"]) if (options[key] !== undefined) options[key] = Number(options[key]);
   for (const key of ["seed", "count", "budget"]) if (!Number.isInteger(options[key]) || options[key] < 0) throw new Error(`--${key} needs a non-negative integer`);
   if (!["discovery", "focused"].includes(options.shrinkMode)) throw new Error("--shrink-mode is discovery or focused");
+  if (options.shrinkControl !== undefined && !["accepted", "each"].includes(options.shrinkControl)) throw new Error("--shrink-control is accepted or each");
   return options;
 }
 
-/** Half the cores: every unit starts a checker and a type checker, and the runtime path sleeps on timers, so more than this only queues. */
+/** Half the cores for the checker and type-check pool: every unit starts a checker and a type checker (more than this gained nothing in the sweep). */
 export const defaultParallelism = (cores = availableParallelism(), { allCores = false } = {}) => (allCores ? Math.max(1, cores) : Math.max(1, Math.floor(cores / 2)));
+
+/**
+ * Vitest workers. A program waits on timers (about 0.7 s of sleeping against some 0.1 s of work), so workers do not compete for cores:
+ * the knee measured on 14 cores with 100 programs was at about twice the cores (8 workers 15 s, 16 workers 8.5 s, 32 workers 6.8 s, 48 workers 6.0 s,
+ * checker concurrency unchanged). On the virtual clock a program does not wait, so a worker is a core.
+ */
+export const defaultWorkers = (cores = availableParallelism(), { virtualClock = false } = {}) => Math.max(1, virtualClock ? cores : cores * 2);
 
 /** Starts the long-lived fast host unless `--no-daemon`; the caller closes it (`config.fast?.close()`). */
 export function attachDaemon(config, options) {
-  return options.noDaemon ? config : { ...config, fast: createFastDaemon({ install: config.fastInstall, workers: config.workers }) };
+  return options.noDaemon ? config : { ...config, fast: createFastDaemon({ install: config.fastInstall, workers: config.workers, virtualClock: config.virtualClock }) };
 }
 
 /** The run's configuration from parsed options (`out` is the fresh output directory). */
@@ -72,11 +80,13 @@ export function configFrom(options, out) {
     tsc: options.tsc ?? process.env.FUZZ_TSC ?? DEFAULT_TSC,
     casesDir: join(out, "cases"),
     concurrency: options.concurrency ?? defaultParallelism(undefined, { allCores: options.allCores }),
-    workers: options.workers ?? defaultParallelism(undefined, { allCores: options.allCores }),
+    workers: options.workers ?? defaultWorkers(undefined, { virtualClock: !options.realClock }),
     keepWork: Boolean(options.keepWork),
     // The checker's neutrality control on the twin is how a case with a generated package is vetted for Chrome (it cannot ask the oracle).
     control: Boolean(options.control) || options.profile === "packages",
     deadSite: Boolean(options.deadSite),
+    shrinkControl: options.shrinkControl ?? "accepted",
+    virtualClock: !options.realClock,
     instrument: !options.noInstrument,
   };
 }
@@ -124,8 +134,10 @@ const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--
   [--control]         neutrality control: also run the clean twin and the checker on the instrumented text, and compare
   [--dead-site]       EXPERIMENTAL, off by default: the dead-site false-positive subkind (implies --control)
   [--containers]      wrap statements in containers (container.mjs) on top of any profile; --profile containers draws the base profile too
-  [--all-cores]       every core for the concurrency and the Vitest workers (the default is half the cores)
+  [--all-cores]       every core for the checker/type-check concurrency (the default is half the cores); the Vitest workers default to twice the cores (--workers N)
   [--shrink-jobs N]   shrink N signature groups at once (default 4); [--shrink-batch N] candidates judged per round (default 8)
+  [--shrink-control accepted|each]   with --control, ask for the control of each accepted reduction (default) or of every candidate tried
+  [--real-clock]      the fast path waits on the wall clock (the default is the virtual clock, fast/virtual-clock.mjs); Chrome always uses its own
   [--no-daemon]       one Vitest process per batch instead of the long-lived fast host
   [--no-instrument]   run the clean text with no hit ledger (the baseline of the neutrality regression)
   [--generate-only]   write and type-check the programs, run nothing else
@@ -188,10 +200,9 @@ async function sweep(options, config, out) {
         id: value.built.id, dir: value.caseDir ?? join(config.casesDir, value.built.id), sites: value.built.sites,
         ...(hasPackages(value.built) ? { checker: { ok: true, findings: value.checker.findings, perturbed: value.twinChecker?.ok ? findingsDiff(value.checker.findings, value.twinChecker.findings) : ["no checker run on the twin (use --control)"] } } : {}),
       }));
-      // The clean case first, in Chrome: the oracle's own findings on the clean text are what its findings on the twin must equal
+      // Each case runs twice in Chrome in one oracle call: the twin, and the clean case, whose findings are what the twin's must equal
       // (the oracle reports kinds the fast checker adapter does not, so the fast pipeline's findings are not the reference).
-      const cleanRuns = await runChrome(chromeCases, { ...chromeOptions, control: true });
-      return runChrome(chromeCases.map((c) => ({ ...c, findings: cleanRuns.get(c.id)?.checker?.ok ? cleanRuns.get(c.id).checker.findings : null })), chromeOptions);
+      return runChrome(chromeCases, { ...chromeOptions, withClean: true });
     };
     const chrome = options.confirmWithChrome && candidates.length ? await chromeRecords(candidates) : new Map();
     for (const value of candidates) {
@@ -303,8 +314,7 @@ async function shrinkCandidate(value, config, options, out, { kind = "candidate-
   };
   const judgeBatch = async (programs) => {
     const entries = programs.map((program) => { counter += 1; return { program, built: buildCase(program, { id: `${base}-${counter}` }) }; });
-    const results = await evaluate(entries, { ...config, casesDir: join(out, "shrink") });
-    return entries.map(({ program, built }) => holds(program, built, results.get(built.id)));
+    return judgeEntries(entries, { ...config, casesDir: join(out, "shrink") }, ({ program, built }, result) => holds(program, built, result));
   };
   const cheap = (program) => [...walk(program)].some(({ node }) => isSite(node));
   const reduced = await shrink(value.program, async (program) => (await judgeBatch([program]))[0], { budget: options.budget, cheap, judgeBatch, batchSize: options.shrinkBatch ?? 8 });

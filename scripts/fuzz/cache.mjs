@@ -36,7 +36,7 @@ export function codeHash(directory = here) {
  */
 export function environmentKey(config, { code = codeHash() } = {}) {
   return sha256(JSON.stringify({
-    generator: GENERATOR_VERSION, code,
+    generator: GENERATOR_VERSION, code, virtualClock: Boolean(config.virtualClock),
     checker: fileHash(config.bin), typefacts: fileHash(config.typefacts),
     fastLock: fileHash(join(config.fastInstall, "package-lock.json")), oracleLock: fileHash(join(config.install, "package-lock.json")),
   }));
