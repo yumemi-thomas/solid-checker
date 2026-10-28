@@ -1555,10 +1555,11 @@ fn write_window_standing(
             crate::execution_role::LayerRun::InPlace(call)
                 if inside
                     && file.ast.jsx_containing(call).any(|element| {
-                        !windows
-                            .functions
-                            .iter()
-                            .any(|window| window.direct && element.span.contains(window.function))
+                        !windows.functions.iter().any(|window| {
+                            window.direct
+                                && window.function.contains(function.span)
+                                && element.span.contains(window.function)
+                        })
                     }) =>
             {
                 return WriteStanding::Unproven;

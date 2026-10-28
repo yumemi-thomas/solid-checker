@@ -122,3 +122,7 @@ const projected = createProjection<{ n: number }>(async () => {
 export function AsyncCompute() {
   return <p>{projected.n}</p>;
 }
+// Uncertifiable: the JSX the IIFE is in also holds another setter call's callback, not the window around this write.
+export function JsxAroundOtherWindow() {
+  return <button onClick={() => setStore(() => { const v = <div onClick={() => setStore(() => {})}>{(() => { store.n = 9; return 1; })()}</div>; void v; })}>{store.n}</button>;
+}
