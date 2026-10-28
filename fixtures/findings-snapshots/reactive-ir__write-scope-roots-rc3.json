@@ -144,16 +144,6 @@
     {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-scope-roots-rc3/roots.ts",
-      "start": 1770,
-      "end": 1809,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope-roots-rc3/roots.ts",

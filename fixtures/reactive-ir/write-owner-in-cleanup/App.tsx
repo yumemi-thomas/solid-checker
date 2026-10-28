@@ -53,10 +53,11 @@ export function CleanupCreateRoot() {
   return <div>{v()}</div>;
 }
 
-// --- Uncertifiable: a named function a cleanup may call --------------------
+// --- A named function a cleanup may call -----------------------------------
 
-// The function runs where it is called. A cleanup hands it on or calls it, but
-// nothing here reads its other callers: neither a violation nor legal.
+// The function runs where it is called. Named by `onCleanup` as its only entry
+// it runs only in the disposal (ADR 0466): legal. A cleanup that calls it does
+// not read its other callers: neither a violation nor legal.
 export function CleanupNamedOwnerHelper() {
   const [v, setV] = createSignal(0);
   const o = getOwner();

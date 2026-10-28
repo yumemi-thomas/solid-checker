@@ -86,6 +86,11 @@ pub(super) enum WriteRegionAdjustment {
     /// which clears tracking but keeps the caller's owner context; the write
     /// is exactly as legal as at the wrapped call itself, so classify there.
     CallSite(Span),
+    /// [`WriteRegionAdjustment::CallSite`] for a function with runs the climb
+    /// does not follow (a helper also hands it on, a primitive names it by a
+    /// binding that has other entries; ADR 0457, 0466): the run at the call
+    /// proves a rejection there, and no legal write.
+    CallSiteAmongOthers(Span),
     /// The write sits in a callback that shares its call site's owner only on
     /// its first run ([`solid_dialect::CallbackOwner::InheritsFirstRun`], 2.0
     /// `createRenderEffect`'s apply). Later runs come from the flush, where
@@ -249,6 +254,21 @@ fn detached_in_place(
                     .primitive_at_call(file, call.span)
                     .map(|primitive| (call, index, primitive))
             });
+        // ADR 0466: a function a primitive call names by its binding runs as an
+        // inline callback in that position would. A position that is not the
+        // function's only entry is one run among others.
+        let mut by_name = false;
+        let mut by_name_others = false;
+        // An owner-keeping call already crossed is placed at that call, whose own
+        // walk climbs on from there.
+        let primitive_call = primitive_call.or_else(|| {
+            let position =
+                by_name_position(file, function, lookup).filter(|_| first_hop.is_none())?;
+            by_name = true;
+            by_name_others = !position.sole;
+            among_others |= by_name_others;
+            Some((position.call, position.index, position.primitive))
+        });
         if let Some((call, index, primitive)) = primitive_call {
             let execution = callback_execution_at_call(file, call, primitive, index, lookup);
             if execution == Some(Execution::Inline)
@@ -257,6 +277,15 @@ fn detached_in_place(
                     .callback_inherits_calling_window(primitive, index)
             {
                 match callback_owner_at_call(file, call, primitive, index, lookup) {
+                    // A run that proves no rejection leaves a function named by a
+                    // binding with other entries to those entries: the position
+                    // is not one the entry census counts (the named-callback
+                    // index admits no `runWithOwner` callback), so the walk
+                    // proves a rejection at another entry or nothing.
+                    Some(
+                        solid_dialect::CallbackOwner::None
+                        | solid_dialect::CallbackOwner::Conditional,
+                    ) if by_name_others => return None,
                     // Every run is legal with no owner; another run of a callback a
                     // helper also hands on may be under one.
                     Some(solid_dialect::CallbackOwner::None) if among_others => {
@@ -284,7 +313,7 @@ fn detached_in_place(
             // so the write is placed as one written directly in it. A site in a
             // list, or a callback a helper also hands on, has runs this climb
             // does not follow, and so no placement.
-            if layered
+            if (layered || by_name)
                 && callback_owner_at_call(file, call, primitive, index, lookup)
                     == Some(solid_dialect::CallbackOwner::InheritsFirstRun)
             {
@@ -302,12 +331,14 @@ fn detached_in_place(
                     .callback_preserves_owner_write_context(primitive)
             {
                 // A write directly in the owner-keeping callback is
-                // `write_region_adjustment`'s own question, asked at the call.
-                if !layered {
+                // `write_region_adjustment`'s own question, asked at the call,
+                // unless the call names the callback.
+                if !layered && !by_name {
                     break;
                 }
                 first_hop.get_or_insert(call.span);
                 at = call.span;
+                layered = true;
                 continue;
             }
             break;
@@ -325,9 +356,13 @@ fn detached_in_place(
         }
         layered = true;
     }
-    first_hop
-        .filter(|_| !in_list && !among_others)
-        .map(WriteRegionAdjustment::CallSite)
+    first_hop.filter(|_| !in_list).map(|call| {
+        if among_others {
+            WriteRegionAdjustment::CallSiteAmongOthers(call)
+        } else {
+            WriteRegionAdjustment::CallSite(call)
+        }
+    })
 }
 
 /// Whether a write under a proven owner runs in a disposal, for the release
@@ -424,6 +459,13 @@ fn runs_in_disposal_within(
                 lookup
                     .primitive_at_call(file, call.span)
                     .map(|primitive| (call, index, primitive))
+            })
+            // ADR 0466: a primitive call that names the function by its binding
+            // runs it there; other entries are runs this climb does not follow.
+            .or_else(|| {
+                let position = by_name_position(file, function, lookup)?;
+                among_others |= !position.sole;
+                Some((position.call, position.index, position.primitive))
             });
         if let Some((call, index, primitive)) = primitive_call {
             if lookup
@@ -1110,6 +1152,23 @@ fn write_role_walk(
         match write_region_adjustment(file, span, lookup) {
             Some(WriteRegionAdjustment::LeafScope) => return ExecutionRole::DeferredCallback,
             Some(WriteRegionAdjustment::CallSite(outer)) => span = outer,
+            Some(WriteRegionAdjustment::CallSiteAmongOthers(outer)) => {
+                let role = semantic_write_execution_role_within(
+                    file,
+                    outer,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    root_body,
+                    visiting,
+                );
+                if role.reports_disallowed_write() {
+                    return role;
+                }
+                *decided = true;
+                return ExecutionRole::Unknown;
+            }
             // A root body is a one-shot, untracked run under a
             // children-capable owner -- in dev builds exactly what a
             // component body is, since `solid-js` runs every component body
@@ -1410,6 +1469,12 @@ fn write_role_walk(
             None => direct,
         }
     };
+    // ADR 0466: an effect's compute named by a binding runs in a computation
+    // the effect owns, as the same compute written inline does: a write it runs
+    // in place is rejected there, whatever the function's other entries do.
+    if !direct.reports_disallowed_write() && named_effect_compute_runs(file, span, lookup) {
+        return ExecutionRole::TrackedJsx;
+    }
     let innermost = crate::owners::containing_ast_function(&file.ast, span);
     // A permissive role read off the positions that name the function as a
     // callback (`onClick={reset}`) describes those entries only. Its calls and
@@ -1457,7 +1522,13 @@ fn write_role_walk(
     let function = named.or(entry).unwrap_or(innermost);
     // The write is in a closure nested in the named callback: a call of the
     // callback does not run it, so a disallowed entry proves nothing here.
-    let nested = entry.is_none() && function.span != innermost.span;
+    // ADR 0466: unless every layer between them runs in place on the
+    // callback's stack (an IIFE, an inline standard-library callback, a helper
+    // calling it in its own body), as the same layers do in an inline callback:
+    // then each run of the callback runs the write, under the callback's owner.
+    let nested = entry.is_none()
+        && function.span != innermost.span
+        && !runs_in_place_within(file, innermost, function, lookup);
     // A binding that may hold another function (`let reset = …; reset = …`)
     // names more than this one at its positions and calls, so none of them is
     // proof that this function runs in an owned scope.
@@ -1536,6 +1607,32 @@ fn write_role_walk(
     } else {
         unknown
     }
+}
+
+/// Whether `span` runs in place ([`runs_in_place_within`]) in a function an
+/// effect names, by its binding, as its tracked compute
+/// ([`NamedCallbackRole::effect_compute`]): a function that holds that binding's
+/// value now and is not a possible component.
+fn named_effect_compute_runs(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(innermost) = crate::owners::containing_ast_function(&file.ast, span) else {
+        return false;
+    };
+    if !innermost.body.contains(span) {
+        return false;
+    }
+    let roles = lookup.named_callback_roles(file);
+    file.ast
+        .functions_body_containing(span)
+        .find(|function| roles.get(function.span).effect_compute)
+        .is_some_and(|compute| {
+            lookup.function_value_is_current(file, compute)
+                && lookup.function_component_status(file, compute) == ComponentStatus::No
+                && runs_in_place_within(file, innermost, compute, lookup)
+        })
 }
 
 /// Whether every way of entering `function` is one the write-role walk sees: a
@@ -1747,6 +1844,98 @@ pub(super) fn layer_run(
             None => LayerRun::Elsewhere,
         },
     }
+}
+
+/// ADR 0466: a primitive call that names a function as its callback by its
+/// binding (`createRoot(init)`, `untrack(write)`, `runWithOwner(null, run)`),
+/// which runs it as it runs an inline callback in the same position.
+pub(super) struct ByNamePosition<'f> {
+    pub(super) call: &'f solid_facts::ast::CallFact,
+    pub(super) index: usize,
+    pub(super) primitive: Primitive,
+    /// The position is the function's only entry: every reference to its
+    /// binding is the declaration or this argument, and nothing hands it out
+    /// or exports it. Otherwise the function has runs this does not follow:
+    /// one run is at the position, which proves a violation and no legal write
+    /// ([`LayerRun::InPlaceAmongOthers`]).
+    pub(super) sole: bool,
+}
+
+/// The one primitive call position that names `function` by its binding: a
+/// bare identifier argument whose symbol is exactly the binding's, which holds
+/// this function now ([`SemanticLookup::function_value_is_current`]). A `const`
+/// named before its declarator is evaluated throws instead of passing the
+/// function, so the argument must follow the declarator in the same function.
+/// A method, a generator, a named function expression (entered by its own name
+/// too) and a function two primitive positions name answer nothing.
+pub(super) fn by_name_position<'f>(
+    file: &'f solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ByNamePosition<'f>> {
+    use solid_facts::ast::FunctionKind;
+    if function.method_name.is_some()
+        || function.generator
+        || (function.kind == FunctionKind::Expression && function.name.is_some())
+        || !lookup.function_value_is_current(file, function)
+    {
+        return None;
+    }
+    let name = function_binding_name(file, function)?;
+    let path = file.path.as_str();
+    let symbol = lookup.entities().at(path, name.span)?;
+    let mut found = None;
+    for call in &file.ast.calls {
+        for (index, argument) in call.arguments.iter().enumerate() {
+            if argument.spread
+                || argument.value != solid_facts::ast::ArgumentValueKind::Identifier
+                || lookup.entities().at(path, argument.span) != Some(symbol)
+            {
+                continue;
+            }
+            let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+                continue;
+            };
+            if found.is_some() {
+                return None;
+            }
+            found = Some((call, index, primitive, argument.span));
+        }
+    }
+    let (call, index, primitive, argument) = found?;
+    if function.kind != FunctionKind::Declaration {
+        let scope = |span: Span| {
+            crate::owners::containing_ast_function(&file.ast, span).map(|scope| scope.span)
+        };
+        if argument.start < function.span.end || scope(argument) != scope(name.span) {
+            return None;
+        }
+    }
+    let sole = !lookup.hands_out_by_name(path, function.span)
+        && !module_exports(file, function, lookup)
+        && lookup
+            .symbol_references_if_present(symbol.as_str())
+            .is_some_and(|references| {
+                references.iter().all(|reference| {
+                    let (Ok(start), Ok(end)) = (
+                        u32::try_from(reference.start_byte),
+                        u32::try_from(reference.end_byte),
+                    ) else {
+                        return false;
+                    };
+                    let at = Span::new(start, end);
+                    reference.path.as_ref() == path
+                        && (at == name.span
+                            || at == argument
+                            || file.ast.type_queries.iter().any(|query| query.contains(at)))
+                })
+            });
+    Some(ByNamePosition {
+        call,
+        index,
+        primitive,
+        sole,
+    })
 }
 
 /// ADR 0457: the call that runs `layer` in place because `layer` is its direct
