@@ -1909,6 +1909,27 @@
    "note": "ADR 0476: a function defined outside the setter whose every reference is a call inside the store's own setter callback runs inside the window, so its write commits (Chrome, witnessed: the value reads 5). docs/open-work.md recorded this as a false positive of the lexical exemption. A call of it outside any setter, or a reference that hands it on, keeps a finding (fixtures/reactive-ir/store-setter-extent `CalledBoth`, `CalledAndHanded`)."
   },
   {
+   "id": "no-store-mutation-outside-setter/own-setter-alias-write/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [store, setStore] = createStore({ count: 0 });\nconst alias = store;\nsetStore(() => {\n  alias.count = 5;\n});\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "no-store-mutation-outside-setter"
+     }
+    ]
+   },
+   "note": "ADR 0476: an exact `const` alias of the store is the store (ADR 0463), so a write through it inside the store's own setter callback commits (rc.17 `inDraft` holds for the same proxy; Chrome: the value reads 5, no diagnostic). The setter is paired with every symbol the write's root is bound to through exact `const` aliases. Found by the legal-context matrix (scripts/fuzz/legal.mjs) as a Chrome-confirmed false positive on main."
+  },
+  {
    "id": "no-store-mutation-outside-setter/projection-compute-write/001",
    "dialect": "solid-v2",
    "source": {

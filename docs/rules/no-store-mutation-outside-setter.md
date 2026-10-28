@@ -69,7 +69,8 @@ than a region of text (ADR 0476):
   callback (`dist/dev.js:5847-5866`), so the trap's `inDraft(target)` holds
   (`:4955-4957`). `setStore(draft => { store.value = 7 })` commits like a draft
   write. The pairing is proven, not guessed: the callee must resolve to the
-  setter destructured beside that exact store. Writing through *another*
+  setter destructured beside that exact store, the write's root and the callee
+  through exact `const` aliases (`const view = store`, `const set = setStore`). Writing through *another*
   store's proxy inside a setter is dropped (a different `scopeKey`) and stays a
   finding, as does any write outside a setter. Upstream reports the own-setter
   write; that divergence is pinned as ownership case

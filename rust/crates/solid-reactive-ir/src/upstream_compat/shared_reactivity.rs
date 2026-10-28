@@ -1377,7 +1377,8 @@ fn store_write_standing(
     if !context.dialect.store_setter_callback_enables_proxy_writes() {
         return WriteStanding::Dropped;
     }
-    let windows = write_windows(file, context, symbol);
+    let stores = store_and_aliases(context, file.path.as_str(), site.root, symbol);
+    let windows = write_windows(file, context, &stores, symbol);
     if windows.is_empty() {
         return WriteStanding::Dropped;
     }
@@ -1406,11 +1407,12 @@ struct WriteWindow {
 fn write_windows(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
+    stores: &[crate::SymbolId],
     store_symbol: &crate::SymbolId,
 ) -> Windows {
     let mut windows = Windows::default();
     for call in &file.ast.calls {
-        if !is_own_setter(context, file.path.as_str(), call.callee, store_symbol, 4) {
+        if !is_own_setter(context, file.path.as_str(), call.callee, stores, 4) {
             continue;
         }
         for argument in &call.arguments {
@@ -1454,15 +1456,56 @@ impl Windows {
     }
 }
 
+/// The symbols the store a write goes through may be bound to: the proven
+/// store `symbol`, and the exact `const` aliases its root identifier `root` is
+/// declared through (`const useIt = s1; useIt.v = 7` is a write through `s1`,
+/// ADR 0463), at most four. The setter destructured beside any of them is the
+/// write's own (ADR 0476).
+fn store_and_aliases(
+    context: &UpstreamCompatContext<'_>,
+    path: &str,
+    root: Span,
+    symbol: &crate::SymbolId,
+) -> Vec<crate::SymbolId> {
+    let mut stores = vec![symbol.clone()];
+    let mut at = (path.to_owned(), root);
+    for _ in 0..4 {
+        let Some((binding_file, binding, bound)) = context.lookup.binding_at_reference(&at.0, at.1)
+        else {
+            break;
+        };
+        if !stores.contains(&bound) {
+            stores.push(bound.clone());
+        }
+        let (solid_facts::ast::BindingShape::Identifier, true, Some(source)) = (
+            binding.shape,
+            binding.immutable,
+            binding.initializer_identifier.as_ref(),
+        ) else {
+            break;
+        };
+        at = (binding_file.path.as_str().to_owned(), source.span);
+    }
+    // The last alias's source, when four aliases ran out the loop.
+    if let Some((_, _, bound)) = context
+        .lookup
+        .binding_at_reference(&at.0, at.1)
+        .filter(|(_, _, bound)| !stores.contains(bound))
+    {
+        stores.push(bound);
+    }
+    stores
+}
+
 /// Whether the callee at `callee` (in `path`) is the setter destructured beside
-/// the store `store_symbol` (`const [store, setStore] = createStore(...)`),
+/// one of `stores` (`const [store, setStore] = createStore(...)`),
 /// directly or through exact `const` aliases of it (`const set = setStore`, at
 /// most `depth` of them). Another store's setter or a same-spelled local is not.
 fn is_own_setter(
     context: &UpstreamCompatContext<'_>,
     path: &str,
     callee: Span,
-    store_symbol: &crate::SymbolId,
+    stores: &[crate::SymbolId],
     depth: usize,
 ) -> bool {
     let Some((binding_file, binding, callee_symbol)) =
@@ -1479,7 +1522,8 @@ fn is_own_setter(
                     .and_then(Option::as_ref)
                     .and_then(|name| context.entities.at(binding_file.path.as_str(), name.span))
             };
-            slot_symbol(1) == Some(&callee_symbol) && slot_symbol(0) == Some(store_symbol)
+            slot_symbol(1) == Some(&callee_symbol)
+                && slot_symbol(0).is_some_and(|store| stores.contains(store))
         }
         solid_facts::ast::BindingShape::Identifier if depth > 0 && binding.immutable => binding
             .initializer_identifier
@@ -1489,7 +1533,7 @@ fn is_own_setter(
                     context,
                     binding_file.path.as_str(),
                     source.span,
-                    store_symbol,
+                    stores,
                     depth - 1,
                 )
             }),

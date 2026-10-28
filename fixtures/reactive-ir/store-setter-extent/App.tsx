@@ -126,3 +126,9 @@ export function AsyncCompute() {
 export function JsxAroundOtherWindow() {
   return <button onClick={() => setStore(() => { const v = <div onClick={() => setStore(() => {})}>{(() => { store.n = 9; return 1; })()}</div>; void v; })}>{store.n}</button>;
 }
+// Negative: a write through an exact const alias of the store inside its own setter is a write through the store (legal.mjs found
+// it reported; Chrome: it commits).
+const storeAlias = store;
+export function AliasInsideSetter() {
+  return <button onClick={() => setStore(() => { storeAlias.n = 10; })}>{store.n}</button>;
+}
