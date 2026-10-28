@@ -76,8 +76,9 @@ Not reported, deliberately:
   TS2703, and a link that may be `undefined` or `null` (`store.o.b` with `o?:`)
   is TS18048/TS18047: both silent. Any other chain past the root
   (`store.a.b`) is uncertifiable: without `strictNullChecks` a link's type
-  proves nothing at run time. An element access, an optional chain, a
-  cast root and a `const` alias of the store are refused. Pinned in the tsc oracle and ownership cases
+  proves nothing at run time. An element access, an optional chain and a
+  cast root are refused; an exact `const` alias of the store is the store
+  (ADR 0463), for an assignment and a `delete` alike. Pinned in the tsc oracle and ownership cases
   `…/delete-required-property/001`, `…/delete-optional-property/001`; fixture
   `store-delete`.
 - Reassigning an accessor binding (`count = 2`, this rule's former

@@ -69,6 +69,11 @@ pub struct AstFacts {
     /// See [`NamespaceMemberBindingFact`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub namespace_member_bindings: Vec<NamespaceMemberBindingFact>,
+    /// Every `const` binding that holds exactly the value of another local
+    /// `const` binding (facts schema 79), sorted by local: `const useIt = r1`
+    /// and `const { useIt } = { useIt: r1 }`. See [`LocalAliasBindingFact`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub local_alias_bindings: Vec<LocalAliasBindingFact>,
     /// Every `import("…")` written in a type position (facts schema 46):
     /// `import("m").Name`, `typeof import("m").name`, `typeof import("m")`.
     /// Erased at run time and loading nothing, but resolved through the same
@@ -1179,6 +1184,31 @@ pub struct NamespaceMemberBindingFact {
     pub key: CompactString,
 }
 
+/// A `const` binding whose value is, from its declarator on, exactly the
+/// value of another binding of this module that is a `const` variable (the
+/// binder resolves the reference, so a shadowing name is that name's binding):
+/// `const local = source` (the initializer an identifier under parentheses and
+/// TypeScript wrappers), or a slot `const { key: local } = { key: source }` of
+/// an object pattern initialized by an object literal that holds only data
+/// properties with static keys (identifiers, string literals; no spread, no
+/// computed or numeric key, no getter, setter or method, no `__proto__`), the
+/// key exactly once, its value an identifier (shorthand or not). The literal
+/// is consumed by the destructuring and reachable from nowhere else, so the
+/// slot reads the value the property was given. The slot's key is static, its
+/// value a bare binding (no default, no nested pattern). Recorded only for a
+/// non-ambient declarator and a local the module does not export directly
+/// (as [`NamespaceMemberBindingFact`]), so every reference to `local` is in
+/// this file. A mention of `local` before its declarator ran throws; whether
+/// one may is the consumer's question. Absence is not a fact.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalAliasBindingFact {
+    /// The alias's binding identifier.
+    pub local: Span,
+    /// The binding identifier of the `const` variable it holds.
+    pub source: Span,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ModuleHazardKind {
@@ -1755,6 +1785,16 @@ impl AstFacts {
             .map(|index| self.reference_declarations[index].1)
     }
 
+    /// The `const` binding a local alias holds, by the alias's binding
+    /// identifier span. See [`LocalAliasBindingFact`].
+    #[must_use]
+    pub fn local_alias_binding(&self, local: Span) -> Option<&LocalAliasBindingFact> {
+        self.local_alias_bindings
+            .binary_search_by_key(&local, |fact| fact.local)
+            .ok()
+            .map(|index| &self.local_alias_bindings[index])
+    }
+
     /// The namespace member a `const` destructuring slot binds, by the slot's
     /// binding identifier span. See [`NamespaceMemberBindingFact`].
     #[must_use]
@@ -1949,6 +1989,7 @@ impl AstFacts {
             sequences: Vec::new(),
             import_equals: Vec::new(),
             namespace_member_bindings: Vec::new(),
+            local_alias_bindings: Vec::new(),
             type_imports: Vec::new(),
             type_queries: Vec::new(),
             type_names: Vec::new(),

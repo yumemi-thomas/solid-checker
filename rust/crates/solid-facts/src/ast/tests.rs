@@ -3142,3 +3142,68 @@ p();\n";
         assert!(!facts.unreachable_contains(at(live)), "{live} is live");
     }
 }
+
+/// Facts schema 79: a `const` that holds exactly another local `const`
+/// variable, directly or through one data property of an object literal it
+/// destructures; every other form names nothing.
+#[test]
+fn local_alias_bindings_record_only_exact_const_copies_of_a_const_variable() {
+    let source = concat!(
+        "const r = () => 1;\n",
+        "let v = () => 2;\n",
+        "function f() {}\n",
+        "const a = r;\n",
+        "const b = (r as any)!;\n",
+        "const { c } = { c: r };\n",
+        "const { k: d, \"s\": e } = { k: r, \"s\": r };\n",
+        "const { r: g } = { r };\n",
+        "const { h } = { h: r, ...{} };\n",
+        "const { i } = { i: r, i: r };\n",
+        "const { j } = { [\"j\"]: r };\n",
+        "const { l } = { l: r, get m() { return 1; } };\n",
+        "const { n } = { n: r, o() {} };\n",
+        "const { p } = { p: r, __proto__: null };\n",
+        "const { q = r } = { q: r };\n",
+        "const { t } = { t: v };\n",
+        "const { u } = { u: f };\n",
+        "const { w } = { w: r }, x = c;\n",
+        "let y = r;\n",
+        "var z = r;\n",
+        "const cond = Math.random() ? r : r;\n",
+        "const fromLet = v;\n",
+        "function param(r: () => number) { const shadowed = r; return shadowed; }\n",
+        "export const exported = r;\n",
+        "const later = r;\n",
+        "export { later };\n",
+        "declare const ambient: typeof r;\n",
+    );
+    let facts = extract("alias.ts", source).unwrap();
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let recorded = facts
+        .local_alias_bindings
+        .iter()
+        .map(|fact| (text(fact.local), fact.source.start))
+        .collect::<Vec<_>>();
+    let r = 6;
+    let c = u32::try_from(source.find("{ c }").unwrap() + 2).unwrap();
+    assert_eq!(
+        recorded,
+        [
+            ("a", r),
+            ("b", r),
+            ("c", r),
+            ("d", r),
+            ("e", r),
+            ("g", r),
+            ("w", r),
+            ("x", c),
+        ]
+    );
+    let local = facts.local_alias_bindings[0].local;
+    assert_eq!(
+        facts
+            .local_alias_binding(local)
+            .map(|fact| fact.source.start),
+        Some(r)
+    );
+}

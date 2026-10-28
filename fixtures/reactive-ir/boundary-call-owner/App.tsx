@@ -27,7 +27,7 @@ export function Micro() {
 }
 
 // Positive: the code after an `await` is a continuation with no owner,
-// through a destructuring of the namespace (ADR 0458).
+// through a destructuring of the namespace (ADR 0459).
 export function AfterAwait() {
   const load = async () => {
     await Promise.resolve();

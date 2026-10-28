@@ -91,6 +91,9 @@ pub(super) struct Collector<'s, 'semantic> {
     /// identifier; kept in `finish` only where the declaration is a runtime
     /// namespace import binding.
     pub(super) namespace_member_candidates: Vec<(Span, Span, CompactString)>,
+    /// `(local, source)` of every local alias (`LocalAliasBindingFact`) but
+    /// the export test, which `finish` applies.
+    pub(super) local_alias_candidates: Vec<(Span, Span)>,
     /// The declarations of the bindings this module exports by name or as
     /// its default or `export =` value.
     pub(super) exported_declarations: Vec<Span>,
@@ -336,6 +339,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             sequences: Vec::new(),
             import_equals: Vec::new(),
             namespace_member_candidates: Vec::new(),
+            local_alias_candidates: Vec::new(),
             exported_declarations: Vec::new(),
             type_imports: Vec::new(),
             type_queries: Vec::new(),
@@ -522,6 +526,12 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             })
             .collect::<Vec<_>>();
         namespace_member_bindings.sort_by_key(|fact| fact.local);
+        let mut local_alias_bindings = std::mem::take(&mut self.local_alias_candidates)
+            .into_iter()
+            .filter(|(local, _)| !exported.contains(local))
+            .map(|(local, source)| LocalAliasBindingFact { local, source })
+            .collect::<Vec<_>>();
+        local_alias_bindings.sort_by_key(|fact| fact.local);
         AstFacts {
             schema: AST_FACTS_SCHEMA,
             source,
@@ -544,6 +554,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             sequences: self.sequences,
             import_equals: self.import_equals,
             namespace_member_bindings,
+            local_alias_bindings,
             type_imports: self.type_imports,
             type_queries: self.type_queries,
             type_names: self.type_names,

@@ -1402,15 +1402,24 @@ impl LocalAccessContext<'_, '_> {
                 callee.end_byte,
             ));
         }
-        let execution = semantic_execution_role(
-            file,
-            call.callee,
-            allowed,
-            self.entities,
-            self.symbol_names,
-            self.lookup,
-        );
+        // ADR 0463: a mention of a local alias that may run before the
+        // alias's declarator throws there instead of reaching the value, so
+        // nothing places what it does: every claim about it is unplaced.
+        let alias_withheld = self.lookup.local_alias_mention_withheld(file, call.callee);
+        let execution = if alias_withheld {
+            ExecutionRole::Unknown
+        } else {
+            semantic_execution_role(
+                file,
+                call.callee,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            )
+        };
         if self.async_sources.contains(symbol)
+            && !alias_withheld
             && self.accessors.contains_key(symbol)
             && inside_non_component_function(file, call.callee, self.lookup)
             && named_callback_execution_role(file, call.callee, self.lookup).is_none()
@@ -1514,15 +1523,19 @@ impl LocalAccessContext<'_, '_> {
                 }
                 ReactiveSourceKind::Store => RootBodyGuard::Exempts,
             };
-            let mut write_execution = semantic_write_execution_role(
-                file,
-                call.callee,
-                allowed,
-                self.entities,
-                self.symbol_names,
-                self.lookup,
-                root_body,
-            );
+            let mut write_execution = if alias_withheld {
+                ExecutionRole::Unknown
+            } else {
+                semantic_write_execution_role(
+                    file,
+                    call.callee,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    root_body,
+                )
+            };
             // Where the resolved release's optimistic-store setter meets no
             // owned-scope guard (rc.0), a store setter is reported only when
             // it is proven to be `createStore`'s, whose writes do reach the
@@ -1582,15 +1595,19 @@ impl LocalAccessContext<'_, '_> {
             // it throws `ACTION_CALLED_IN_OWNED_SCOPE` directly in a
             // `createRoot` body, and in a memo nested in one (probed
             // rc.0-rc.9, dev).
-            let action_execution = semantic_write_execution_role(
-                file,
-                call.callee,
-                allowed,
-                self.entities,
-                self.symbol_names,
-                self.lookup,
-                RootBodyGuard::Rejects,
-            );
+            let action_execution = if alias_withheld {
+                ExecutionRole::Unknown
+            } else {
+                semantic_write_execution_role(
+                    file,
+                    call.callee,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    RootBodyGuard::Rejects,
+                )
+            };
             for _ in 0..multiplicity {
                 result.action_invocations.push(Arc::new(ActionInvocation {
                     action: name.to_string().into(),
@@ -1935,14 +1952,19 @@ impl LocalAccessContext<'_, '_> {
         else {
             return;
         };
-        let execution = semantic_execution_role(
-            file,
-            member.span,
-            allowed,
-            self.entities,
-            self.symbol_names,
-            self.lookup,
-        );
+        // ADR 0463: as for a call, an alias mention before its declarator.
+        let execution = if self.lookup.local_alias_mention_withheld(file, object_span) {
+            ExecutionRole::Unknown
+        } else {
+            semantic_execution_role(
+                file,
+                member.span,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            )
+        };
         let helper = self
             .prop_sources
             .get(symbol)

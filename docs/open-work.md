@@ -51,7 +51,7 @@ Server directives (`valid-use-server`, SC7006; ADR 0427):
 Async read outside a loading boundary (`async-outside-loading-boundary`, SC5003):
 
 - `r9-b3-childrenasync` (App.tsx:15): an async memo read flows through `children()` into JSX with no `Loading`.
-- An alias (`const useIt = a1`) or object-literal destructuring of an async accessor read in JSX is silent; a read in a rendered local function is only uncertifiable (ADR 0462).
+- A read of an async accessor in a rendered local function is only uncertifiable (ADR 0462).
 
 Missing owner (`missing-owner`, SC4001):
 
@@ -72,7 +72,7 @@ Possible owner suspension (ADR 0357): skippable-await cleanups retain SC4001 obl
 
 Missing provider (`missing-context-provider`, SC4002, ADR 0352): a context is claimed only when no provider exists in the program. Not claimed: a reader above no provider when another provider exists (needs the closed component tree), open programs, escaped contexts, package contexts (kobalte, router, query), `createContext` through an alias.
 
-SC1002 (`after-await-open`): a handler on a promise held in a variable; a `.then` on a `Promise<T>` not proven native; `Promise.race` of helpers; an async IIFE the computation awaits; `Promise.all(x.map(async …))`; an accessor alias; a destructured or bound loader; router `query` flights; a catch join after statements; `Math.max(count())` after a functional setter. Each fires the runtime warning unproven (ADR 0340, 0349, 0350).
+SC1002 (`after-await-open`): a handler on a promise held in a variable; a `.then` on a `Promise<T>` not proven native; `Promise.race` of helpers; an async IIFE the computation awaits; `Promise.all(x.map(async …))`; a destructured or bound loader; router `query` flights; a catch join after statements; `Math.max(count())` after a functional setter. Each fires the runtime warning unproven (ADR 0340, 0349, 0350).
 
 
 Forwarded sources (ADR 0370) are SC9012 `forwarded-to-undescribed-callee` only: dead branches, killed values and no-op wrappers are not pruned, and the `package-callee` context (SC9011 before ADR 0440) needs proofs of callee currency, the value reaching the call, the call running and the final callee. Both are internal obligations: `--certify` ignores them for users and nothing disables them.
@@ -97,6 +97,7 @@ Other:
 - `strict-read-untracked` (SC1001), silent (ADR 0452, 0454): a helper whose own parameter list calls an accessor parameter (`function read(get, x = get()) {…}` called as `read(count)`) has no summary row, since the call graph enumerates no call in a list, so a component body that omits `x` is not reported; a closure the helper builds and calls whose *body* calls the accessor is silent as well (`fixtures/reactive-ir/parameter-list-owner`, `ReadBodyClosureCalled`; main is the same). A closure with the call in its *default* is uncertifiable (`calls_parameter_in_parameter_list`).
 
 - Every rule, silent (ADR 0459): a Solid API read through a destructuring other than a `const`, static-key, bare-slot destructuring of a value namespace import binding names no primitive: a nested pattern, a default, a rest element, a `let`, an exported slot, a namespace of a project module that re-exports Solid, a namespace held in another `const` (`const N = S; const { x } = N`), a pattern inside a pattern (`const { a: { b } } = { a: S }`), and a local value read through a literal (`const { useIt } = { useIt: read }`, the misuse fuzzer's local `destructured` binding).
+- Every rule, silent or SC9012 (ADR 0463): a local value reached through anything but an exact `const` alias of a module-local `const` (`const a = r`, `const { a } = { a: r }`) is not its source: a `let` or `var` alias, a conditional, a parameter, an import, an exported alias, a `let` source, a literal with a spread, a computed key, a getter, a method or a repeated key, a default, a nested pattern. A direct read of a source before its own declarator (`[1].forEach(() => r()); const [r] = createSignal(0)`) is still reported as a read where rc.17 throws `ReferenceError` (a false positive this slice found and did not fix: the TDZ proof covers only function-valued bindings, namespace slots and aliases).
 
 Leaf body (`leaf-owner-forbidden-call`, SC3001):
 

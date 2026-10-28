@@ -206,6 +206,13 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   (ADR 0337, `fixtures/reactive-ir/omit-view-props-root`). A read through the
   view or alias (`rest.x`, `local.x`), a destructured binding, a `merge` that may
   return its only source, and a spread onto a component stay uncertifiable.
+- **An exact `const` alias is its source (ADR 0463).** `const read = count` and
+  `const { read } = { read: count }` (a literal of static data properties only)
+  hold the module-local `const` `count`, so `read()` is reported where
+  `count()` is, for an accessor, a memo, an async memo and a store. A mention
+  that may run before the alias's declarator throws there and is
+  uncertifiable. A `let`, conditional, parameter, imported or exported alias is
+  not followed.
 
 ## Why is this bad?
 

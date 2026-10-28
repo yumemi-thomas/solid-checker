@@ -20,14 +20,14 @@ also makes the delete uncertifiable.
 Reported: an optional property of the store deleted in the body, an effect's
 apply, inside a wrapper function, a parenthesized operand, inside another
 store's setter, through a namespace-imported `S.createStore` (`Namespace.tsx`),
-and through a projection result. Uncertifiable: the nested paths
+through a projection result, and through a `const` alias of the store (ADR
+0462). Uncertifiable: the nested paths
 (`store.a.b` in the body and a handler, `store.o.b` narrowed by `if (store.o)`).
 
 Silent: inside the store's own setter callback (commits, rc.17 probe), on the
 setter's draft, on a plain object, through a shadowing parameter. Refused, also
 silent: a non-optional property whose type includes `undefined`, a computed
-key, an optional chain, a cast root and a `const` alias of the store, which
-the assignment form does not follow either (docs/open-work.md).
+key, an optional chain and a cast root.
 
 `Rejected.tsx` is TypeScript's and silent: `delete store.v!` and `delete
 (store.v as T)` (TS2703), and a link that may be `undefined` or `null`

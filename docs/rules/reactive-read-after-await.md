@@ -284,7 +284,7 @@ own synchronous computation and compose the two.
 ## Limits
 
 - **Each shape only adds reports.** A mistake in one shape can only add a false positive, so each has a runtime-oracle case: `after-await-settlement`, `after-await-tracked`, `after-await-disposed` and `after-await-owner` pin the reports. The other `after-await-*` cases (`after-await-quiet`, `after-await-possible`, `after-await-promises`, `after-await-adopted`) pin the silent shapes and the reads the checker leaves uncertifiable.
-- **Not modeled:** `race` and `any` of helpers, a promise held in a variable and handled later, member helpers outside a closed literal (a class, a spread or exported object; ADR 0351), an async IIFE the computation awaits, a `Promise.all` over a `.map` result (not an array literal), an accessor alias, and props already tracked. The open items are in `docs/open-work.md`.
+- **Not modeled:** `race` and `any` of helpers, a promise held in a variable and handled later, member helpers outside a closed literal (a class, a spread or exported object; ADR 0351), an async IIFE the computation awaits, a `Promise.all` over a `.map` result (not an array literal), and props already tracked. An exact `const` alias of an accessor or store (`const read = count`, `const { read } = { read: count }`) is its source, before the await and after it (ADR 0463). The open items are in `docs/open-work.md`.
 
 This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#adr-0428)): `reactivity` in `rule-options.json` or a disable comment reaches it, and `reactive-read-after-await` alone overrides the group.
 
