@@ -1627,6 +1627,11 @@ impl Session {
         // producer answers it from the analysis's own rows.
         let response = self.exchange(analyze)?;
         self.last_exchange_timings = Some(exchange_timings(&response));
+        // Read before the response mode takes the retained table.
+        let previous_strict = self
+            .retained_table
+            .as_ref()
+            .and_then(FactTable::strict_null_checks);
         let (mut candidate, mut changes, delta) = prepare_analyze_response_mode(
             &response,
             &self.project_id,
@@ -1663,10 +1668,6 @@ impl Session {
         }
         // ADR 0465: the program's effective `strictNullChecks` travels with
         // the table it was analyzed under. A change of it alone is a change.
-        let previous_strict = self
-            .retained_table
-            .as_ref()
-            .and_then(FactTable::strict_null_checks);
         candidate.set_strict_null_checks(response.strict_null_checks);
         if previous_strict != response.strict_null_checks {
             changes.unchanged = false;
