@@ -1579,8 +1579,10 @@ fn solid2_precision_corrections_are_end_to_end() {
         ("cleanup-return-unresolved", 0),
         // Five placed reads, and three reads in the Promise, wrapper-built and
         // unresolved callbacks after the await, which no role places and which
-        // are uncertifiable (ADR 0332).
-        ("strict-read-untracked", 8),
+        // are uncertifiable (ADR 0332). And the link Get of the nested store
+        // write in the body (`profile.user` of `profile.user.name = …`, ADR
+        // 0498).
+        ("strict-read-untracked", 9),
         // The nested, cast and props writes, plus the three root-record
         // writes: on the audited rc.17 `Store<T> = T`, so a root write
         // type-checks and is this checker's (asserted by span below).
