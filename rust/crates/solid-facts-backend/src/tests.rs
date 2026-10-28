@@ -509,6 +509,43 @@ fn declared_key_demands_are_limited_to_intrinsic_element_spreads() {
     );
 }
 
+/// ADR 0465: each link a member assignment or an in-place array call reads
+/// past its root is asked for its primitive value domain; the root and the
+/// written member are not links.
+#[test]
+fn store_write_chain_links_ask_for_their_primitive_value_domain() {
+    let source =
+        "store.v = 1; store.a.b = 2; store.n!.c.d = 3; store.items.push(1); store.items.slice(0);";
+    let file = test_file_facts("src/writes.ts", source);
+    let demands = semantic_demands(
+        dialect::default_dialect(),
+        std::slice::from_ref(&file),
+        SemanticDemandOptions::NONE,
+    )
+    .unwrap();
+    let asked = |text: &str, nth: usize| {
+        let start = source
+            .match_indices(text)
+            .nth(nth)
+            .unwrap_or_else(|| panic!("no {text}"))
+            .0;
+        let span = Span::new(
+            u32::try_from(start).unwrap(),
+            u32::try_from(start + text.len()).unwrap(),
+        );
+        let location = typefacts_location(file.path.as_str(), span);
+        demands
+            .iter()
+            .any(|demand| demand.location == location && demand.primitive_value_domain)
+    };
+    assert!(asked("store.a", 0), "an assignment's link");
+    assert!(asked("store.n!", 0), "a wrapped link, as written");
+    assert!(asked("store.n!.c", 0), "every link of a longer chain");
+    assert!(asked("store.items", 0), "a mutator's receiver");
+    assert!(!asked("store.v", 0), "the written member is no link");
+    assert!(!asked("store.items", 1), "a non-mutating call asks nothing");
+}
+
 #[test]
 fn returned_member_calls_combine_symbol_and_resolved_call_demands() {
     let file = test_file_facts(

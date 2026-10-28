@@ -31,6 +31,16 @@ symbol:
 - the same writes through a `createProjection` result, reported as a
   projection write (it has no setter to name).
 
+**Past the root (ADR 0465).** Only a write that reads no link past the root
+(`store.v = 1`, `list.push(1)` on a store that is the array, a cast root) is a
+violation. A write through a link (`store.a.b = 1`, `store.items.push(1)`,
+`store.rows[0].done = true`, `store.n!.b = 1`) is silent where the link's type
+may hold `null` or `undefined` (TS18048/TS18047 under strictNullChecks: the
+write is TypeScript's), and uncertifiable otherwise: the facts do not record
+strictNullChecks, so a link's type proves nothing about its runtime value, and
+an undefined link throws `TypeError` before the proxy sees a write. Fixtures
+`store-write-chain-links`, `store-write-chain-links-loose`.
+
 The runtime drops all of them outside a setter: the proxy's `set` trap
 returns `true` without storing (`@solidjs/signals@2.0.0-rc.17`
 `dist/dev.js:5691-5700`), and an in-place array method reaches it once per

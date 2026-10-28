@@ -1,10 +1,10 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-mutators/App.tsx",
       "start": 391,
@@ -14,7 +14,7 @@
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-mutators/App.tsx",
       "start": 414,
@@ -24,7 +24,7 @@
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-mutators/App.tsx",
       "start": 435,
@@ -34,7 +34,7 @@
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-mutators/App.tsx",
       "start": 458,
@@ -44,7 +44,7 @@
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-mutators/App.tsx",
       "start": 484,
@@ -54,7 +54,7 @@
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-mutators/App.tsx",
       "start": 512,
@@ -64,7 +64,7 @@
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-mutators/App.tsx",
       "start": 534,
@@ -74,7 +74,7 @@
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-mutators/App.tsx",
       "start": 559,
@@ -84,7 +84,7 @@
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-mutators/App.tsx",
       "start": 582,
@@ -94,7 +94,7 @@
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-mutators/App.tsx",
       "start": 760,

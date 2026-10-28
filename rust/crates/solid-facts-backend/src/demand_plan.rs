@@ -41,6 +41,10 @@ struct DemandSpans {
     tuple_shape_spans: HashSet<Span>,
     library_type_spans: HashSet<Span>,
     declared_key_spans: HashSet<Span>,
+    /// The links a store write's member chain reads past its root (ADR
+    /// 0465), asked for their primitive value domain without a symbol
+    /// observation.
+    chain_link_spans: HashSet<Span>,
     async_symbol_spans: HashSet<Span>,
     async_value_spans: Vec<Span>,
 }
@@ -89,6 +93,7 @@ fn plan_file(
     collect_return_spans(file, &mut spans, demands, (&path, &returned_callees));
     collect_argument_spans(dialect, file, &mut spans);
     collect_member_spans(file, &mut spans);
+    collect_chain_link_spans(dialect, file, &mut spans);
     emit_span_demands(
         file,
         spans,
@@ -753,6 +758,48 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
     }
 }
 
+/// The in-place `Array.prototype` methods `no-store-mutation-outside-setter`
+/// reports on a store path (its `ARRAY_MUTATORS`). Matched by spelling here,
+/// so a same-named method only over-demands, which decides nothing.
+const ARRAY_MUTATOR_NAMES: [&str; 9] = [
+    "push",
+    "pop",
+    "shift",
+    "unshift",
+    "splice",
+    "sort",
+    "reverse",
+    "fill",
+    "copyWithin",
+];
+
+/// ADR 0465: the links a member assignment target, or an in-place array
+/// method's callee, reads past its chain's root. Whether each may be `null` or
+/// `undefined` (TS18047/TS18048 under strictNullChecks) is what
+/// `no-store-mutation-outside-setter` asks before reporting a store write
+/// through a chain longer than one link (as ADR 0460 for `delete`).
+fn collect_chain_link_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut DemandSpans) {
+    if !dialect.semantic_demands.store_write_chain_links {
+        return;
+    }
+    let ast = &file.ast;
+    let assigned = ast
+        .assignments
+        .iter()
+        .map(|assignment| ast.peel_ts_sugar_span(assignment.target));
+    let mutated = ast.calls.iter().filter_map(|call| {
+        let callee = ast.peel_ts_sugar_span(call.callee);
+        let member = ast.member_at(callee)?;
+        let name = file.source_text(member.property)?;
+        ARRAY_MUTATOR_NAMES.contains(&name).then_some(callee)
+    });
+    for member in assigned.chain(mutated) {
+        spans
+            .chain_link_spans
+            .extend(ast.member_chain_links(member));
+    }
+}
+
 fn collect_member_spans(file: &FileFacts, spans: &mut DemandSpans) {
     let symbol_spans = &mut spans.symbol_spans;
     let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
@@ -820,6 +867,7 @@ fn emit_span_demands(
         tuple_shape_spans,
         library_type_spans,
         declared_key_spans,
+        chain_link_spans,
         async_symbol_spans,
         async_value_spans,
     } = spans;
@@ -873,6 +921,12 @@ fn emit_span_demands(
     for span in declared_key_spans {
         let mut planned = demand(file_location(path, span));
         planned.declared_keys = true;
+        demands.push(planned);
+    }
+
+    for span in chain_link_spans {
+        let mut planned = demand(file_location(path, span));
+        planned.primitive_value_domain = true;
         demands.push(planned);
     }
 

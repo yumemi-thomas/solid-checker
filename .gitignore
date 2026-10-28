@@ -666,3 +666,7 @@ packages/wasm/owned/
 /scripts/fuzz/install/.solid-checker-fuzz-fast/
 !fixtures/reactive-ir/destructured-binding-tdz/node_modules/
 !fixtures/reactive-ir/destructured-binding-tdz/node_modules/**
+!fixtures/reactive-ir/store-write-chain-links/node_modules/
+!fixtures/reactive-ir/store-write-chain-links/node_modules/**
+!fixtures/reactive-ir/store-write-chain-links-loose/node_modules/
+!fixtures/reactive-ir/store-write-chain-links-loose/node_modules/**

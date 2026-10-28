@@ -1239,21 +1239,37 @@ fn no_direct_mutation(
         } else {
             continue;
         };
-        if matches!(
+        let store = matches!(
             target,
             DirectMutationTarget::Store | DirectMutationTarget::Projection
-        ) && store_write_is_exempt(
-            file,
-            context,
-            StoreWriteSite {
-                span: assignment.target,
-                member: assignment.target,
-                root,
-            },
-            symbol,
-        ) {
+        );
+        if store
+            && store_write_is_exempt(
+                file,
+                context,
+                StoreWriteSite {
+                    span: assignment.target,
+                    member: assignment.target,
+                    root,
+                },
+                symbol,
+            )
+        {
             continue;
         }
+        // ADR 0465: a store write past the root (`store.a.b = 1`) is
+        // TypeScript's where a link may be nullish, and unproven otherwise.
+        let past_root = if store {
+            let links = file
+                .ast
+                .member_chain_links(file.ast.peel_ts_sugar_span(assignment.target));
+            let Some(past_root) = chain_links_verdict(file, context, &links) else {
+                continue;
+            };
+            past_root
+        } else {
+            false
+        };
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {
                 name: name.to_owned(),
@@ -1268,7 +1284,7 @@ fn no_direct_mutation(
             // `-writeomit`, `review-r1-alias-mutation`). Only a getter-backed
             // prop rejects it (a TypeError), and which props are getters is
             // not proven here, so the claim stays an obligation.
-            uncertain: props,
+            uncertain: props || past_root,
         });
     }
 }
@@ -1345,6 +1361,34 @@ fn store_write_is_exempt(
     context.dialect.store_setter_callback_enables_proxy_writes()
         && (inside_own_setter_callback(file, context, site.span, symbol)
             || inside_own_compute_function(file, context, site.span, symbol))
+}
+
+/// What the links a store write's member chain reads past its root
+/// ([`solid_facts::ast::AstFacts::member_chain_links`]) leave of its proof
+/// (ADR 0465; ADR 0460 for `delete`). `None`: a link whose primitive value
+/// domain may hold `null` or `undefined` is TS18047/TS18048 under
+/// strictNullChecks, so the write is TypeScript's and the rule is silent.
+/// `Some(true)`: some link, none of them proven nullish, so uncertifiable: a
+/// type says nothing about a link's runtime value without strictNullChecks,
+/// which the facts do not record, and an undefined link throws `TypeError`
+/// before any write (a link whose domain was not served is the same).
+/// `Some(false)`: no link past the root, the write's proof stands.
+fn chain_links_verdict(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    links: &[Span],
+) -> Option<bool> {
+    let path = file.path.as_str();
+    let nullable = links.iter().any(|&link| {
+        context
+            .lookup
+            .entity_at(path, link)
+            .and_then(|entity| entity.primitive_value_domain.present())
+            .is_some_and(|domain| {
+                !domain.unknown() && (domain.may_be_null() || domain.may_be_undefined())
+            })
+    });
+    (!nullable).then_some(!links.is_empty())
 }
 
 /// The nine in-place `Array.prototype` methods upstream names
@@ -1434,6 +1478,12 @@ fn no_store_mutator_call(
         ) {
             continue;
         }
+        // ADR 0465: the receiver of `store.items.push(1)` is a link past the
+        // root; only a store that is itself the array (`list.push(1)`) has none.
+        let links = file.ast.member_chain_links(callee);
+        let Some(past_root) = chain_links_verdict(file, context, &links) else {
+            continue;
+        };
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {
                 name: name.as_str().to_owned(),
@@ -1442,7 +1492,7 @@ fn no_store_mutator_call(
             location: location(file.path.shared(), call.span),
             analysis_context: String::new(),
             fixes: vec![],
-            uncertain: false,
+            uncertain: past_root,
         });
     }
 }
