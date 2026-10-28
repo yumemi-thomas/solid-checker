@@ -1,4 +1,4 @@
-import { createMemo, createTrackedEffect, isPending, onSettled } from "solid-js";
+import { createMemo, createRoot, createTrackedEffect, isPending, onSettled } from "solid-js";
 
 // ADR 0490: an async memo read in a named local function is read where a
 // call of that function runs. A call in the component body's strict-read
@@ -73,7 +73,8 @@ export function NeverCalled() {
   const f1 = () => {
     user();
   };
-  return <p onClick={f1} />;
+  void [f1];
+  return <p />;
 }
 
 // Negative: a written binding is not followed.
@@ -84,5 +85,40 @@ export function Reassigned() {
   };
   f1 = () => {};
   f1();
+  return <p />;
+}
+
+// Violation (ADR 0496): a closure called in a createRoot callback the body
+// runs, which reads untracked as the body does.
+export function RootClosure() {
+  const user = createMemo(async () => 1);
+  createRoot(() => {
+    const f1 = () => {
+      user();
+    };
+    f1();
+  });
+  return <p />;
+}
+
+// Negative: the closure is called in a memo compute, which suspends.
+export function MemoClosure() {
+  const user = createMemo(async () => 1);
+  const total = createMemo(() => {
+    const f1 = () => user();
+    return f1();
+  });
+  return <p>{total()}</p>;
+}
+
+// Negative: under the root, the closure is called only from a timer.
+export function RootTimer() {
+  const user = createMemo(async () => 1);
+  createRoot(() => {
+    const f1 = () => {
+      user();
+    };
+    setTimeout(f1, 0);
+  });
   return <p />;
 }

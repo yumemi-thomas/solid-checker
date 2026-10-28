@@ -83,6 +83,7 @@ declare module "solid-js" {
   export type NoInfer<T extends any> = [T][T extends any ? 0 : never];
   export function onCleanup(fn: Disposable): Disposable;
   export function createSignal<T>(value: Exclude<T, Function>, options?: SignalOptions<T>): Signal<T>;
+  export function createRoot<T>(init: ((dispose: () => void) => T) | (() => T), options?: { id?: string; transparent?: boolean }): T;
   export function createMemo<T>(compute: ComputeFunction<NoInfer<T>, T>, options: MemoOptions<T> & {
     loadingValue: T;
   }): SourceAccessor<T>;

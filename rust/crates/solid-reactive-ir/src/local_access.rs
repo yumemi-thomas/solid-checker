@@ -1461,7 +1461,7 @@ impl LocalAccessContext<'_, '_> {
         if self.async_sources.contains(symbol)
             && !alias_withheld
             && self.accessors.contains_key(symbol)
-            && inside_non_component_function(file, call.callee, self.lookup)
+            && read_in_named_local_function(file, call.callee, self.lookup)
             && named_callback_execution_role(file, call.callee, self.lookup).is_none()
             && !pending_accessor_probe(file, call.callee, self.lookup)
         {
@@ -2832,3 +2832,32 @@ pub(crate) fn function_literal_runs_nothing(
 }
 
 // Insert at the end of the existing local_access.rs module.
+
+/// ADR 0496: the read sits directly in a function that is no component, no
+/// compiler callback role and no primitive's callback argument, so the call-attributed
+/// walk ([`LocalAccessAnalyzer::push_call_attributed_async_reads`]) may follow
+/// its calls; that walk judges every call by its own role. A read in a named
+/// closure inside a `createRoot` callback is such a read, which
+/// `inside_non_component_function` (any primitive callback around it) refused.
+fn read_in_named_local_function(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(function) = containing_ast_function(&file.ast, span) else {
+        return false;
+    };
+    !file
+        .compiler
+        .callback_roles
+        .iter()
+        .any(|callback| callback.span == function.span)
+        && !file
+            .ast
+            .arguments_containing(function.span)
+            .any(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                    && lookup.primitive_at_call(file, call.span).is_some()
+            })
+        && !lookup.function_may_be_component(file, function)
+}
