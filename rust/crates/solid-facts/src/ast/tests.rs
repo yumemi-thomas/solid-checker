@@ -3220,6 +3220,8 @@ fn reads_typescript_directive_comments_only_from_comments() {
     assert!(directive("// @ts-nocheck\nexport const a = 1;\n"));
     assert!(directive("const a = 1;\n// @ts-expect-error\na.b;\n"));
     assert!(directive("/**\n * @ts-ignore\n */\nexport const a = 1;\n"));
+    assert!(directive("/// @ts-ignore\nexport const a = 1;\n"));
+    assert!(directive("/// @ts-nocheck\nexport const a = 1;\n"));
     assert!(!directive("export const a = \"@ts-nocheck\";\n"));
     assert!(!directive("export const a = `// @ts-ignore`;\n"));
     assert!(!directive(

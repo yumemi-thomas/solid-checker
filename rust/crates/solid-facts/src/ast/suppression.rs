@@ -45,7 +45,9 @@ pub(super) fn typescript_directive_comment(source: &str, comments: &[Comment]) -
         source
             .get(content.start as usize..content.end as usize)
             .is_some_and(|text| {
-                let text = text.trim_start_matches(|c: char| c.is_whitespace() || c == '*');
+                // `/// @ts-ignore` leaves a `/` in the content; TypeScript honours it.
+                let text =
+                    text.trim_start_matches(|c: char| c.is_whitespace() || c == '*' || c == '/');
                 ["@ts-nocheck", "@ts-ignore", "@ts-expect-error"]
                     .iter()
                     .any(|directive| text.starts_with(directive))
