@@ -6,8 +6,9 @@
 //
 // Pipeline per program: generate -> type-check (tsrs) -> checker verdicts -> Happy DOM runtime
 // records -> classify. Only candidates go to Chrome (scripts/runtime-oracle.mjs, the authority) and
-// to the shrinker. Exit status: 0 nothing to stop for, 3 a confirmed false positive (stop and report, see
-// the README), 4 a confirmed false clean with a coarse key the ledger does not know (report; the sweep
+// to the shrinker. A violation at a site the ledger shows never ran is a `candidate-false-positive: unexecuted`
+// (counted on every run); Chrome confirms it as `confirmed-unexecuted`. Exit status: 0 nothing to stop for, 3 a confirmed false
+// positive or a confirmed-unexecuted violation (stop and report, see the README), 4 a confirmed false clean with a coarse key the ledger does not know (report; the sweep
 // is complete), 2 a usage or harness error.
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -19,7 +20,8 @@ import { buildCase, writeCase } from "./emit.mjs";
 import { DEFAULT_FAST_INSTALL } from "./fast.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import { findingsDiff, hitSummary } from "./hits.mjs";
-import { classifyChrome, evaluate, hasPackages, judgeEntries, signaturesOf } from "./pipeline.mjs";
+import { classifyChrome, evaluate, hasPackages, judgeEntries, judgeUnexecutedInChrome, signaturesOf } from "./pipeline.mjs";
+import { summarizeUnexecuted } from "./unexecuted.mjs";
 import { applyLedgerToResults, falseCleanStream } from "./falseclean-run.mjs";
 import { LEDGER_PATH, loadLedger } from "./falseclean.mjs";
 import { programSeed } from "./rng.mjs";
@@ -132,7 +134,7 @@ const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--
   [--confirm-with-chrome [--browser <chromium>]] [--shrink [--shrink-mode discovery|focused] [--budget N]]
   [--ledger <known-open.json>] [--no-ledger]   the accepted false cleans (default scripts/fuzz/known-open.json)
   [--control]         neutrality control: also run the clean twin and the checker on the instrumented text, and compare
-  [--dead-site]       EXPERIMENTAL, off by default: the dead-site false-positive subkind (implies --control)
+  [--dead-site]       with --confirm-with-chrome: confirm an unexecuted candidate only under the strict closed grammar (no containers, no dead-code waiver)
   [--containers]      wrap statements in containers (container.mjs) on top of any profile; --profile containers draws the base profile too
   [--all-cores]       every core for the checker/type-check concurrency (the default is half the cores); the Vitest workers default to twice the cores (--workers N)
   [--shrink-jobs N]   shrink N signature groups at once (default 4); [--shrink-batch N] candidates judged per round (default 8)
@@ -182,6 +184,8 @@ async function sweep(options, config, out) {
   const candidates = [...results.values()].filter((value) => value.classification.verdict === "candidate-false-positive");
   const findings = [];
   let confirmed = 0;
+  let confirmedUnexecuted = 0;
+  const unexecuted = [];
   // Reductions asked for, one per (kind, signature): the first program of each signature is its representative.
   const wanted = new Map();
   const wantShrink = (value, spec) => {
@@ -204,7 +208,15 @@ async function sweep(options, config, out) {
       // (the oracle reports kinds the fast checker adapter does not, so the fast pipeline's findings are not the reference).
       return runChrome(chromeCases, { ...chromeOptions, withClean: true });
     };
-    const chrome = options.confirmWithChrome && candidates.length ? await chromeRecords(candidates) : new Map();
+    // Unexecuted candidates (a violation at a site the ledger shows never ran) are a hypothesis on every run; Chrome confirms them.
+    const unexecutedValues = [...results.values()].filter((value) => value.classification.items.some((item) => item.kind === "candidate-unexecuted"));
+    const chromeSet = [...new Set([...candidates, ...(options.confirmWithChrome ? unexecutedValues : [])])];
+    const chrome = options.confirmWithChrome && chromeSet.length ? await chromeRecords(chromeSet) : new Map();
+    // The clean-twin control Chrome's records cannot supply: run for the unexecuted candidates that were not controlled already.
+    const uncontrolled = options.confirmWithChrome ? unexecutedValues.filter((value) => !value.control) : [];
+    const controlled = uncontrolled.length
+      ? await evaluate(uncontrolled.map(({ program, built }) => ({ program, built })), { ...config, control: true, casesDir: join(out, "control-cases") })
+      : new Map();
     for (const value of candidates) {
       const record = chrome.get(value.built.id);
       const judged = record ? classifyChrome(value, record, config) : null;
@@ -216,6 +228,21 @@ async function sweep(options, config, out) {
           ...(reducible ? { shrinkKey: wantShrink(value, { kind: "candidate-false-positive", signature: found.signature }) } : {}) });
       }
       if (judged && ["refuted-by-chrome", "chrome-inconclusive"].includes(status)) findings.push({ id: value.built.id, signature: "-", status, reason: judged.reasons.join("; ") });
+    }
+    // The unexecuted candidates: Chrome's answer per item, one row each (a program can hold several).
+    for (const value of unexecutedValues) {
+      const record = chrome.get(value.built.id);
+      const matched = (value.control ?? controlled.get(value.built.id)?.control)?.matched ?? null;
+      for (const item of value.classification.items.filter((row) => row.kind === "candidate-unexecuted")) {
+        const judgement = !options.confirmWithChrome ? { status: "unconfirmed", why: "no-chrome" }
+          : record ? judgeUnexecutedInChrome(value, item, record, { controlMatched: matched, strict: Boolean(options.deadSite) }) : { status: "chrome-inconclusive", why: "no-record" };
+        if (judgement.status === "confirmed-unexecuted") confirmedUnexecuted += 1;
+        const reducible = options.shrink && !["refuted-by-chrome", "chrome-inconclusive"].includes(judgement.status);
+        const found = signaturesOf(value.program, value.built, { items: [item] })[0];
+        unexecuted.push({ id: value.built.id, signature: found?.signature ?? "-", rule: item.finding.rule, finding: item.finding.id, line: item.finding.line, bases: item.bases, ...judgement,
+          size: value.built.text.split("\n").length, repro: join(config.casesDir, value.built.id),
+          ...(reducible && found ? { shrinkKey: wantShrink(value, { kind: "candidate-unexecuted", signature: found.signature }) } : {}) });
+      }
     }
     // A real defect named by the wrong rule is reported, not confirmed or shrunk.
     for (const value of results.values()) {
@@ -229,7 +256,7 @@ async function sweep(options, config, out) {
     const reduced = await mapPoolSettled(keys, async (key) => shrinkCandidate(wanted.get(key).value, config, options, out, wanted.get(key)), { concurrency: options.shrinkJobs ?? Math.min(4, keys.length || 1) });
     const minimals = new Map(keys.map((key, index) => [key, reduced[index].value ?? null]));
     for (const [key, outcome] of keys.map((key, index) => [key, reduced[index]])) if (outcome.error) console.error(`shrink ${key} failed: ${outcome.error.message ?? outcome.error}`);
-    for (const finding of findings) {
+    for (const finding of [...findings, ...unexecuted]) {
       if (!finding.shrinkKey) continue;
       const minimal = minimals.get(finding.shrinkKey);
       if (minimal) { finding.size = minimal.size; finding.repro = minimal.dir; }
@@ -239,18 +266,25 @@ async function sweep(options, config, out) {
     falseClean = await falseCleanStream({ results, ledger, firedEntries, config, options, out, chromeRecords });
   }
   const groups = dedupe(findings.filter((f) => f.signature !== "-").map((f) => ({ ...f })));
+  const unexecutedReport = options.generateOnly ? null : summarizeUnexecuted(unexecuted, dedupe);
   const falseCleanReport = falseClean && {
     groups: falseClean.groups.map(({ coarseKey, code, severity, count, status, signature, repro, size, minimum, members }) => ({ coarseKey, code, severity, count, status, signature, repro, size, minimum, members })),
     knownOpen: falseClean.knownOpen, staleOpen: falseClean.staleOpen.map(({ code, coarseKey, ref }) => ({ code, coarseKey, ref })), recallGaps: falseClean.recallGaps,
   };
-  writeFileSync(join(out, "findings.json"), `${JSON.stringify({ generator: GENERATOR_VERSION, seed: options.seed, count: options.count, groups, refuted: findings.filter((f) => f.signature === "-"), falseClean: falseCleanReport }, null, 2)}\n`);
+  writeFileSync(join(out, "findings.json"), `${JSON.stringify({ generator: GENERATOR_VERSION, seed: options.seed, count: options.count, groups, refuted: findings.filter((f) => f.signature === "-"), falseClean: falseCleanReport, unexecuted: unexecutedReport }, null, 2)}\n`);
   writeFileSync(join(out, "summary.json"), `${JSON.stringify({ programs: rows.length, verdicts: tally("verdict"), items: itemTally, candidates: candidates.length, confirmed, groups: groups.length,
+    unexecuted: unexecutedReport && { candidates: unexecutedReport.candidates, programs: unexecutedReport.programs, confirmed: unexecutedReport.confirmed, byStatus: unexecutedReport.byStatus, byBasis: unexecutedReport.byBasis },
     falseClean: falseClean && { groups: falseClean.groups.length, confirmed: falseClean.confirmed, knownOpen: falseClean.knownOpen, staleOpen: falseClean.staleOpen.length, recallGaps: falseClean.recallGaps.reduce((sum, row) => sum + row.count, 0) } }, null, 2)}\n`);
   for (const group of groups) console.error(`${group.count}x [${group.representative.status}] ${group.signature}\n    repro: ${group.representative.repro}`);
   if (falseClean) reportFalseCleans(falseClean);
+  if (unexecutedReport?.candidates) reportUnexecuted(unexecutedReport);
 
   if (confirmed) {
     console.error("\nSTOP: Chrome confirms a checker violation the real runtime contradicts. Do not continue the sweep; report the repro(s) above (scripts/fuzz/README.md).");
+    return 3;
+  }
+  if (confirmedUnexecuted) {
+    console.error("\nSTOP: Chrome confirms a checker violation at a site no execution enters (confirmed-unexecuted: ADR 0458 says it is uncertifiable). Do not continue the sweep; report the repro(s) above (scripts/fuzz/README.md).");
     return 3;
   }
   if (falseClean?.confirmed) {
@@ -258,6 +292,12 @@ async function sweep(options, config, out) {
     return 4;
   }
   return 0;
+}
+
+/** The unexecuted candidates: the count by status and basis, then one line per construct group. */
+function reportUnexecuted(report) {
+  console.error(`unexecuted (candidate-false-positive: unexecuted): ${report.candidates} item(s) in ${report.programs} program(s); ${JSON.stringify(report.byStatus)}; basis ${JSON.stringify(report.byBasis)}`);
+  for (const group of report.groups) console.error(`${group.count}x [${group.representative.status}${group.representative.why ? `: ${group.representative.why}` : ""}] ${group.signature}\n    repro: ${group.representative.repro}`);
 }
 
 /** One line per coarse group (worst severity first), then the ledger and recall-gap counts. */
@@ -297,11 +337,14 @@ async function typecheckOnly(entries, config) {
   return results;
 }
 
+/** Whether every site's witness selector (`[data-probe="w1"]`) is still an attribute in the text: the scenario waits for it in Chrome. */
+export const witnessesPresent = (built) => built.sites.every((site) => !site.witness || built.text.includes(String(site.witness.selector).slice(1, -1).replace(/\\"/g, '"')));
+
 /**
  * Shrinks one candidate under the fast path (checker + Happy DOM); writes the minimal case.
  * Each round of candidates is judged in one `evaluate` (one fast-path run for the lot, the checker and type check in a pool).
  */
-async function shrinkCandidate(value, config, options, out, { kind = "candidate-false-positive" } = {}) {
+export async function shrinkCandidate(value, config, options, out, { kind = "candidate-false-positive" } = {}) {
   const target = value.classification.items.find((item) => item.kind === kind);
   const targetSignature = signaturesOf(value.program, value.built, { items: [target] })[0]?.signature;
   let counter = 0;
@@ -309,6 +352,9 @@ async function shrinkCandidate(value, config, options, out, { kind = "candidate-
   const holds = (program, built, result) => {
     const hit = result.classification.items.filter((item) => item.kind === kind);
     if (!hit.length) return false;
+    // An unexecuted site proves nothing about its witness, so a reduction could drop the probe the scenario waits for and leave a repro
+    // Chrome cannot run: every witness selector must still be in the text.
+    if (kind === "candidate-unexecuted" && !witnessesPresent(built)) return false;
     if (options.shrinkMode === "discovery") return hit.some((item) => item.finding.rule === target.finding.rule);
     return signaturesOf(program, built, { items: hit }).some((found) => found.signature === targetSignature);
   };

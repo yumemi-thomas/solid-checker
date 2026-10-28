@@ -50,6 +50,23 @@ describe("dead-site: the soundness conditions as code", () => {
     expect(check({ hits: { 1: 1, 2: 1, 3: 1, 4: 1 } }).ok).toBe(false);
   });
 
+  it("a site the text itself skips needs neither the closed grammar nor the no-throw reading, and one that is not brings them back", () => {
+    const lexicallyDead = new Set([4]);
+    const open = { closed: { closed: false, reasons: ["Show when is not a nonzero literal"] } };
+    // skipped inside an entered function (nearest ran) and outside the grammar: the text explains the skip
+    const skipped = check({ hits: { 1: 1, 2: 1, 3: 1 }, lexicallyDead, ...open });
+    expect(skipped.ok).toBe(true);
+    expect(skipped.dead).toEqual([{ site: "s1", never: 4 }]);
+    // without the exemption the same record is refused twice over
+    expect(unmet(check({ hits: { 1: 1, 2: 1, 3: 1 }, ...open }))).toEqual(["closed-grammar", "not-a-throw"]);
+    // every other condition still applies to a lexically dead site
+    expect(unmet(check({ hits: { 1: 1, 2: 1, 3: 1 }, lexicallyDead, neutral: false, ...open }))).toEqual(["neutral"]);
+    expect(unmet(check({ hits: {}, lexicallyDead, ...open }))).toEqual(["host-ran"]);
+    expect(unmet(check({ hits: { 1: 1, 2: 1, 3: 1, 4: 1 }, lexicallyDead, ...open }))).toEqual(["not-a-throw"]);
+    // a second site the text does not skip keeps the grammar condition for the whole finding
+    expect(unmet(deadSiteConditions({ sites: [site, { id: "s3", hit: 7 }], ledger: [...ledger, { hit: 7, kind: "site", node: "write", enclosing: 6, inDefault: false }], hits: { 1: 1, 2: 1 }, ...ok, ...open, lexicallyDead }))).toEqual(["closed-grammar"]);
+  });
+
   it("a site in a parameter default is argument-dependent: not provable", () => {
     expect(unmet(deadSiteConditions({ sites: [{ id: "s2", hit: 5 }], ledger, hits: { 1: 1, 2: 1 }, ...ok }))).toEqual(["not-a-default"]);
   });
@@ -66,35 +83,28 @@ describe("dead-site: the soundness conditions as code", () => {
   });
 });
 
-describe("dead-site in the comparator: off by default", () => {
+describe("the comparator only says what the ledger shows (confirmation is unexecuted.mjs, on Chrome's records)", () => {
   const sites = [{ ...site, kind: "write", witness: { selector: "[data-probe=\"w1\"]", text: "17" } }];
   const violation = { rule: "no-write-in-pure-computation", id: "SC2001", kind: "violation", line: 8, endLine: 8 };
   const runtime = (over = {}) => ({ failure: null, diagnostics: [], errors: [], witnesses: [{ siteId: "s1", reached: null, actual: null }], hits: { 1: 1, 2: 1 }, quiescent: true, ...over });
-  const run = (flags, extra = {}) => classify({ sites, checker: { ok: true, findings: [violation] }, runtime: runtime(), plan: { clicks: [] }, flags,
-    evidence: { ledger, closed: { closed: true, reasons: [] }, neutral: true, ...extra } });
+  const run = (extra = {}, over = {}) => classify({ sites, checker: { ok: true, findings: [violation] }, runtime: runtime(over), plan: { clicks: [] }, evidence: { ledger, ...extra } });
 
-  it("never-ran is inconclusive without the flag, whatever the evidence", () => {
-    const result = run({});
-    expect(result.verdict).toBe("inconclusive");
-    expect(result.items[0]).toMatchObject({ kind: "inconclusive", why: "never-ran" });
-    expect(run(undefined).verdict).toBe("inconclusive");
+  it("a provable never-ran is a candidate-unexecuted, never a candidate false positive", () => {
+    const result = run();
+    expect(result.verdict).toBe("candidate-unexecuted");
+    expect(result.items[0]).toMatchObject({ kind: "candidate-unexecuted", status: "candidate-false-positive: unexecuted", bases: ["function-not-entered"] });
+    expect(result.items[0].subkind).toBeUndefined();
   });
 
-  it("with the flag, a provable dead site is a dead-site candidate false positive", () => {
-    const result = run({ deadSite: true });
-    expect(result.verdict).toBe("candidate-false-positive");
-    expect(result.items[0]).toMatchObject({ subkind: "dead-site", siteIds: ["s1"] });
+  it("what the ledger cannot place or the page has not settled stays inconclusive: never-ran", () => {
+    expect(run({ ledger: [] }).items[0]).toMatchObject({ kind: "inconclusive", why: "never-ran" });
+    expect(run({}, { quiescent: false }).items[0]).toMatchObject({ kind: "inconclusive", why: "never-ran" });
+    expect(run({}, { quiescent: null }).items[0]).toMatchObject({ kind: "inconclusive", why: "never-ran" });
+    expect(run({}, { hits: {} }).items[0]).toMatchObject({ kind: "inconclusive", why: "never-ran" });
   });
 
-  it("with the flag but an unmet condition, it stays inconclusive and says which", () => {
-    const result = run({ deadSite: true }, { neutral: false });
-    expect(result.verdict).toBe("inconclusive");
-    expect(result.items[0]).toMatchObject({ why: "never-ran", unmet: ["neutral"] });
-    expect(classify({ sites, checker: { ok: true, findings: [violation] }, runtime: runtime({ quiescent: false }), plan: { clicks: [] }, flags: { deadSite: true }, evidence: { ledger, closed: { closed: true }, neutral: true } }).items[0].unmet).toEqual(["quiescent"]);
-  });
-
-  it("a disturbance or a diagnostic at the finding wins over a dead site", () => {
-    const disturbed = classify({ sites, checker: { ok: true, findings: [violation] }, runtime: runtime({ errors: [{ kind: "handler", message: "boom" }] }), plan: { clicks: [] }, flags: { deadSite: true }, evidence: { ledger, closed: { closed: true }, neutral: true } });
+  it("a disturbance wins over a never-ran site", () => {
+    const disturbed = run({}, { errors: [{ kind: "handler", message: "boom" }] });
     expect(disturbed.verdict).toBe("inconclusive");
     expect(disturbed.items[0].why).toBe("disturbed");
   });

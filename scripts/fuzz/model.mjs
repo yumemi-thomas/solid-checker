@@ -511,7 +511,7 @@ export const program = ({ seed = 0, helpers = [], moduleSignals = [], components
 // The closed grammar: the programs whose executed set is fixed by the driver.
 
 /**
- * Whether a program is closed and branch-free, the first condition of the `dead-site` verdict (deadsite.mjs).
+ * Whether a program is closed and branch-free, the first condition of the confirmation of an unexecuted violation (deadsite.mjs).
  * In such a program a re-run executes the same statements as the first run, so what the driver (render, every
  * button, timers of delay 0, microtasks, effect applies) did not enter, nothing will. It holds when:
  * no conditional or loop beyond `forEach`/`map` over `[1]`, `Show when={<nonzero literal>}` and `For each={[1]}`;
@@ -519,9 +519,15 @@ export const program = ({ seed = 0, helpers = [], moduleSignals = [], components
  * `await` per async function (bounded microtask depth); no props and no exports but the rendered components
  * (every component takes none, and the printer exports nothing else).
  * A future `Show when={sig()}` or any new construct clears the flag until this function says otherwise.
+ *
+ * `{ containers: true }` (the confirmation of an unexecuted violation, unexecuted.mjs; `--dead-site` stays strict) also admits the containers
+ * of container.mjs and the call forms it rewrites with. The lemma needs only that the driver, not the program, decides what runs: a
+ * dead-code container, a component nobody renders, a class constructed or never constructed, a function returned and discarded, and
+ * `f?.()` / `(f as T)()` / `(0, f)()` / `(true && f)()` / `(f)()` of a function declared in the file are all fixed by the text. Not
+ * admitted: `comp-prop` (`props.slot?.(Child)` runs when the caller supplies the prop, which the driver does not control).
  * @returns {{ closed: boolean, reasons: string[] }}
  */
-export function closedGrammar(program) {
+export function closedGrammar(program, { containers = false } = {}) {
   const reasons = [];
   const fail = (message) => { if (!reasons.includes(message)) reasons.push(message); };
   const declared = new Set(["owner", "v", ...(program.helpers ?? []).map((h) => h.name)]);
@@ -538,7 +544,7 @@ export function closedGrammar(program) {
         break;
       case "iter": if (!["map", "forEach"].includes(node.method)) fail(`iteration ${node.method}`); break;
       // A container changes whether or where its body runs (classes, dead code, components, optional calls): not yet in the grammar.
-      case "contain": fail(`container ${node.kind}`); break;
+      case "contain": if (!containers || node.kind === "comp-prop") fail(`container ${node.kind}`); break;
       case "prim": if (!PRIMS.includes(node.name)) fail(`primitive ${node.name} is not in the table`); break;
       case "fn": {
         const awaits = node.body.filter((stmt) => stmt.k === "await").length;
@@ -547,7 +553,7 @@ export function closedGrammar(program) {
         break;
       }
       case "call": {
-        if (node.via) fail(`call through ${node.via}`);
+        if (node.via && !containers) fail(`call through ${node.via}`);
         const root = (callee) => (callee.k === "member" ? root(callee.obj) : callee);
         const base = root(node.callee);
         if (base.k === "ref" && !declared.has(base.name)) fail(`call of undeclared ${base.name}`);

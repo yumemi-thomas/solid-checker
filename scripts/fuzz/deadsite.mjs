@@ -1,8 +1,7 @@
-// The `dead-site` false-positive subkind: OFF BY DEFAULT (classify's `flags.deadSite`, `run.mjs --dead-site`).
-//
-// A checker violation of an execution-claim rule (one a runtime diagnostic can contradict) at a site that
-// the whole driven run never entered is a false positive when ALL of these hold; each is an explicit
-// condition below, and an unmet one leaves the item `inconclusive`, typed with the condition:
+// The conditions under which a violation of an execution-claim rule (one a runtime diagnostic can contradict) at a site that the
+// whole driven run never entered is a false positive. They are the confirmation of an unexecuted candidate (unexecuted.mjs
+// `judgeUnexecuted`, run by `--confirm-with-chrome` on Chrome's records); `--dead-site` asks for exactly these and nothing looser.
+// Each is an explicit condition below, and an unmet one leaves the candidate `chrome-inconclusive`, typed with the condition:
 //
 //   closed-grammar   the program is closed and branch-free (model.mjs `closedGrammar`), so the executed
 //                    set is fixed by the external entries.
@@ -20,8 +19,13 @@
 // The lemma: under closed-grammar and quiescent, `entered(fn)` after the driver is true iff some execution
 // enters `fn`. A nearest enclosing function never entered while an enclosing function that built it ran is
 // "closure built, never invoked" (the ADR 0452 family): the checker proved a role for code no execution runs.
-// Two engines must agree: run.mjs confirms a dead-site candidate in Chrome, which must itself satisfy every
-// condition (hits == 0, no diagnostic) before the finding counts as confirmed.
+// Two engines must agree: the fast path proposes the candidate and Chrome must itself satisfy every condition (hits == 0, no
+// diagnostic of the rule's codes) before the finding counts as confirmed.
+//
+// Two narrowings of what a condition needs, both for a site the text itself never runs (`lexicallyDead`: below `if (false)`, after `return`,
+// in the right of `false &&`) and both off in the strict mode: `not-a-throw` does not apply (no throw is needed to explain a skip the
+// text makes), and `closed-grammar` is waived when every site is one (the lemma is about what the driver reaches; this code is not
+// reachable by any driver). Everything else holds unchanged.
 import { hitCount } from "./hits.mjs";
 
 export const CONDITIONS = ["closed-grammar", "quiescent", "neutral", "attributed", "host-ran", "not-a-throw", "not-a-default"];
@@ -35,12 +39,18 @@ export const CONDITIONS = ["closed-grammar", "quiescent", "neutral", "attributed
  * @param {boolean|null} [input.quiescent]
  * @param {boolean} [input.neutral]
  * @param {string[]} [input.disturbed] classify's disturbances (unattributed diagnostics included)
+ * @param {Set<number>} [input.lexicallyDead] hit ids below `if (false)`, after `return` or in `false && ...` (unexecuted.mjs): the text
+ *   skips them, so `not-a-throw` (a throw before the site as the explanation of a skip) does not apply, and when every site is one the
+ *   closed grammar is waived (the lemma about the driver is not needed for code the text never runs). Empty for the strict mode.
  * @returns {{ ok: boolean, unmet: { condition: string, detail: string }[], dead: { site: string, never: number }[] }}
  */
-export function deadSiteConditions({ sites, ledger, hits, closed, quiescent, neutral, disturbed = [] }) {
+export function deadSiteConditions({ sites, ledger, hits, closed, quiescent, neutral, disturbed = [], lexicallyDead = new Set() }) {
   const unmet = [];
   const need = (condition, detail) => { if (!unmet.some((u) => u.condition === condition)) unmet.push({ condition, detail }); };
-  if (!closed?.closed) need("closed-grammar", (closed?.reasons ?? ["not evaluated"]).join("; "));
+  // A site the text itself skips (`lexicallyDead`) needs no lemma about the driver: its non-execution is syntactic. Every site must be so for the
+  // closed grammar to be waived; one site that is not brings the condition back for the whole finding.
+  const syntactic = sites.length > 0 && sites.every((site) => lexicallyDead.has(site.hit));
+  if (!closed?.closed && !syntactic) need("closed-grammar", (closed?.reasons ?? ["not evaluated"]).join("; "));
   if (quiescent !== true) need("quiescent", quiescent === false ? "the hit counters moved late" : "no quiescence reading");
   if (neutral !== true) need("neutral", "the instrumented twin is not shown neutral");
   if (disturbed.length) need("attributed", disturbed[0]);
@@ -62,6 +72,7 @@ export function deadSiteConditions({ sites, ledger, hits, closed, quiescent, neu
     const nearest = chain[0];
     if (!nearest) { need("host-ran", `${site.id} has no enclosing function`); continue; }
     if (!chain.some((entry) => hitCount(hits, entry.hit) > 0)) { need("host-ran", `no function enclosing ${site.id} was entered`); continue; }
+    if (hitCount(hits, nearest.hit) > 0 && lexicallyDead.has(site.hit)) { dead.push({ site: site.id, never: site.hit }); continue; }
     if (hitCount(hits, nearest.hit) > 0) { need("not-a-throw", `${site.id} was skipped inside an entered function`); continue; }
     dead.push({ site: site.id, never: nearest.hit });
   }

@@ -132,16 +132,23 @@ describe("evaluate: the instrumented twin", () => {
     expect(results.get(e.built.id).classification.items[0].why).toBe("perturbed-run");
   });
 
-  it("dead-site stays off unless asked: a never-run site is inconclusive, and a dead-site needs every condition", async () => {
-    const e = entry(12);
+  it("a never-run payload site the ledger places is a candidate-unexecuted with a signature, and no readout keeps it inconclusive", async () => {
+    const e = entry(14);
     const [site] = e.built.sites;
     const finding = { file: "App.tsx", rule: site.kind === "write" ? "no-write-in-pure-computation" : "strict-read-untracked", id: "SC", kind: "violation", line: site.line, endLine: site.line };
-    const none = async (cases) => new Map(cases.map((c) => [c.id, { diagnostics: [], errors: [], witnesses: e.built.sites.map((s) => ({ siteId: s.id, reached: null })), hits: {}, quiescent: true }]));
-    const off = await evaluate([e], config(), { typecheck: okTypes, runChecker: async () => ({ ok: true, findings: [finding] }), runFast: none });
-    expect(off.get(e.built.id).classification.items.find((i) => i.finding)).toMatchObject({ kind: "inconclusive", why: "never-ran" });
-    const on = await evaluate([e], { ...config(), deadSite: true }, { typecheck: okTypes, runChecker: async () => ({ ok: true, findings: [finding] }), runFast: none });
-    // hits {} means not even the component ran: a harness fault, never a dead site.
-    expect(on.get(e.built.id).classification.items.find((i) => i.finding)).toMatchObject({ kind: "inconclusive", why: "never-ran", unmet: expect.arrayContaining(["host-ran"]) });
+    const entries = Object.fromEntries(e.built.ledger.filter((row) => row.kind === "entry").map((row) => [row.hit, 1]));
+    const record = (extra) => async (cases) => new Map(cases.map((c) => [c.id, { diagnostics: [], errors: [], witnesses: e.built.sites.map((s) => ({ siteId: s.id, reached: null })), quiescent: true, hits: entries, ...extra }]));
+    const run = (runFast) => evaluate([e], config(), { typecheck: okTypes, runChecker: async () => ({ ok: true, findings: [finding] }), runFast });
+    const result = (await run(record())).get(e.built.id);
+    const item = result.classification.items.find((i) => i.finding);
+    expect(item).toMatchObject({ kind: "candidate-unexecuted", status: "candidate-false-positive: unexecuted" });
+    expect(result.classification.verdict).toBe("candidate-unexecuted");
+    const [found] = signaturesOf(e.program, e.built, result.classification);
+    expect(found.signature).toMatch(/candidate-unexecuted/);
+    expect(found.site.id).toBe(site.id);
+    // the page not shown quiet, or no component entered: the old inconclusive stays
+    expect((await run(record({ quiescent: false }))).get(e.built.id).classification.items.find((i) => i.finding)).toMatchObject({ kind: "inconclusive", why: "never-ran" });
+    expect((await run(record({ hits: {} }))).get(e.built.id).classification.items.find((i) => i.finding)).toMatchObject({ kind: "inconclusive", why: "never-ran" });
   });
 
   it("signatures: a glue-only candidate has one too", async () => {
@@ -214,9 +221,8 @@ describe("judgeEntries: the control of a shrink", () => {
     expect(calls.fast.filter((batch) => batch.some((call) => call.endsWith(":clean"))).map((batch) => batch.map((call) => call.split(":")[0]))).toEqual([[`${entries[0].built.id}-clean`], [`${entries[1].built.id}-clean`]]);
   });
 
-  it("keeps the control in every round for the dead-site subkind, without a control, or when asked", () => {
+  it("keeps the control in every round without a control, or when asked", () => {
     expect(lazyControl({ control: true })).toBe(true);
-    expect(lazyControl({ control: true, deadSite: true })).toBe(false);
     expect(lazyControl({ control: false })).toBe(false);
     expect(lazyControl({ control: true, shrinkControl: "each" })).toBe(false);
   });

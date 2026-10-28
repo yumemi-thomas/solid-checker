@@ -134,8 +134,8 @@ describe("classify: the checker is quiet, uncertifiable or failed", () => {
     expect(classify({ sites, checker: checker([]), runtime: runtime({ diagnostics: [diag("REACTIVITY_HALTED", 8)] }), plan }).verdict).toBe("agree");
   });
 
-  it("ranks the tiers: false clean, wrong rule, known open, recall gap, inconclusive, agree", () => {
-    expect(VERDICTS).toEqual(["candidate-false-positive", "candidate-false-clean", "candidate-wrong-rule", "known-open", "recall-gap", "inconclusive", "agree"]);
+  it("ranks the tiers: false clean, wrong rule, known open, recall gap, unexecuted, inconclusive, agree", () => {
+    expect(VERDICTS).toEqual(["candidate-false-positive", "candidate-false-clean", "candidate-wrong-rule", "known-open", "recall-gap", "candidate-unexecuted", "inconclusive", "agree"]);
     const both = classify({ sites, checker: checker([uncertifiable("reactive-dispatch-unresolved", 8), violation("no-write-in-pure-computation", 20, 20)]),
       runtime: runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 8)], witnesses: [{ siteId: "s1", reached: true }, { siteId: "s2", reached: false }] }), plan });
     expect(both.items.map((item) => item.kind).sort()).toEqual(["inconclusive", "recall-gap"]);
