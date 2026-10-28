@@ -181,3 +181,75 @@ export function HookEscapedKey() {
   consume(held);
   store.a.v = 1;
 }
+
+// Violation (ADR 0500): through a hook holder read only by static members.
+export function HookMember() {
+  const [store] = createStore({ a: { v: 0 } });
+  const useThing = () => ({ useIt: store });
+  const thing = useThing();
+  thing.useIt.a.v = 1;
+}
+
+// Silent, a known miss (no ADR 0481 alias, so the root is not proven the
+// store): the holder object leaves as a value.
+export function HookMemberKept() {
+  const [store] = createStore({ a: { v: 0 } });
+  const useThing = () => ({ useIt: store });
+  const thing = useThing();
+  consume(thing);
+  thing.useIt.a.v = 1;
+}
+
+// Silent, a known miss (no ADR 0481 alias, so the root is not proven the
+// store): a member of the holder is written.
+export function HookMemberWritten() {
+  const [store] = createStore({ a: { v: 0 } });
+  const useThing = () => ({ useIt: store, n: 0 });
+  const thing = useThing();
+  thing.n = 1;
+  thing.useIt.a.v = 1;
+}
+
+// Silent, a known miss (no ADR 0481 alias, so the root is not proven the
+// store): a computed member reads the holder.
+export function HookMemberComputed() {
+  const [store] = createStore({ a: { v: 0 } });
+  const useThing = () => ({ useIt: store });
+  const thing = useThing();
+  consume(thing["useIt"]);
+  thing.useIt.a.v = 1;
+}
+
+// Uncertifiable: the store leaves through the member alias.
+export function HookMemberPassed() {
+  const [store] = createStore({ a: { v: 0 } });
+  const useThing = () => ({ useIt: store });
+  const thing = useThing();
+  consume(thing.useIt);
+  thing.useIt.a.v = 1;
+}
+
+// Silent (ADR 0500 review): `valueOf` is no key of the literal, so it reads
+// `Object.prototype` and hands the holder out; no member alias is recorded.
+export function HookMemberValueOf() {
+  const [store] = createStore({ a: { v: 0 } });
+  const useThing = () => ({ useIt: store });
+  const thing = useThing();
+  Object.assign(thing.valueOf(), { useIt: { a: { v: 0 } } });
+  thing.useIt.a.v = 1;
+}
+
+// Silent: a `function` value runs with the holder as `this` and may replace
+// the slot; no member alias is recorded.
+export function HookMemberThisReset() {
+  const [store] = createStore({ a: { v: 0 } });
+  const useThing = () => ({
+    useIt: store,
+    reset: function (this: { useIt: { a: { v: number } } }) {
+      this.useIt = { a: { v: 0 } };
+    },
+  });
+  const thing = useThing();
+  thing.reset();
+  thing.useIt.a.v = 1;
+}

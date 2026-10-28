@@ -264,6 +264,26 @@
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 5426,
+      "end": 5441,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-literal-links/App.ts",
+      "start": 6677,
+      "end": 6692,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-write-literal-links/Eval.ts",

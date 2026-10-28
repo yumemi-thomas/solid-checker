@@ -622,6 +622,12 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                     || holder_reads
                         .iter()
                         .any(|(member, _, optional)| *optional || written.contains(member))
+                    // ADR 0500 review: a key the literal does not define reads
+                    // `Object.prototype` (`thing.valueOf()` hands the holder
+                    // out).
+                    || holder_reads
+                        .iter()
+                        .any(|(_, key, _)| !values.iter().any(|(name, _)| name == key))
                 {
                     continue;
                 }

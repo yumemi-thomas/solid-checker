@@ -302,6 +302,17 @@ impl Collector<'_, '_> {
                         let Some(values) = static_data_properties(literal) else {
                             return;
                         };
+                        // ADR 0500 review: a `function` or class value is
+                        // called with the holder as `this` (`thing.reset()`),
+                        // which can replace a slot or hand the holder out.
+                        if values.iter().any(|(_, value)| {
+                            matches!(
+                                unwrapped(value),
+                                Expression::FunctionExpression(_) | Expression::ClassExpression(_)
+                            )
+                        }) {
+                            return;
+                        }
                         let values = values
                             .into_iter()
                             .map(|(key, value)| {

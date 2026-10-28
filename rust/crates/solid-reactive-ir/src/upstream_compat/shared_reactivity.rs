@@ -2071,7 +2071,13 @@ fn links_proven_wrappable(
     if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
         return false;
     }
-    let Some(root_declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(root)) else {
+    // ADR 0500: a member root that is exactly a `const` (ADR 0481,
+    // `thing.useIt`) starts the walk at that `const`.
+    let root_declaration = ast
+        .local_alias_member(ast.peel_ts_sugar_span(root))
+        .map(|alias| alias.source)
+        .or_else(|| ast.reference_declaration(ast.peel_ts_sugar_span(root)));
+    let Some(root_declaration) = root_declaration else {
         return false;
     };
     // The store pattern and its exact `const` aliases, by declared name span.
@@ -2192,7 +2198,7 @@ fn links_proven_wrappable(
             continue;
         }
         if !contained_store_use(file, identifier.span, initial)
-            && !consumed_by_alias_slots(file, identifier.span, &names)
+            && !consumed_by_alias_slots(file, identifier.span, &names, initial)
         {
             return false;
         }
@@ -2236,7 +2242,12 @@ fn holds_object(value: Option<LiteralValue>) -> bool {
 /// of which is the callee of a call initializing a `const { a } = …`. No
 /// pattern has a rest element, a default or a nested pattern, so nothing but
 /// those aliases receives the proxy.
-fn consumed_by_alias_slots(file: &FileFacts, reference: Span, names: &[Span]) -> bool {
+fn consumed_by_alias_slots(
+    file: &FileFacts,
+    reference: Span,
+    names: &[Span],
+    initial: Span,
+) -> bool {
     let ast = &file.ast;
     let plain_pattern = |binding: &solid_facts::ast::BindingFact, open: char| {
         binding.immutable
@@ -2311,22 +2322,23 @@ fn consumed_by_alias_slots(file: &FileFacts, reference: Span, names: &[Span]) ->
                 else {
                     return false;
                 };
-                ast.bindings.iter().any(|pattern| {
-                    pattern.shape == solid_facts::ast::BindingShape::Object
-                        && pattern.initializer.is_some_and(|initializer| {
-                            ast.peel_ts_sugar_span(initializer) == call.span
-                        })
-                        && plain_pattern(pattern, '{')
-                        && pattern.object_slots.iter().all(|slot| {
-                            // Every slot's key is a plain identifier too,
-                            // so one that receives the store is found, and
-                            // each that does is an alias in the set.
-                            slot.plain_identifier_key
-                                && plain_identifier(slot.property.as_str())
-                                && (slot.property.as_str() != key
-                                    || names.contains(&slot.local.span))
-                        })
-                })
+                held_by_member_holder(file, call.span, key, literal.span, initial)
+                    || ast.bindings.iter().any(|pattern| {
+                        pattern.shape == solid_facts::ast::BindingShape::Object
+                            && pattern.initializer.is_some_and(|initializer| {
+                                ast.peel_ts_sugar_span(initializer) == call.span
+                            })
+                            && plain_pattern(pattern, '{')
+                            && pattern.object_slots.iter().all(|slot| {
+                                // Every slot's key is a plain identifier too,
+                                // so one that receives the store is found, and
+                                // each that does is an alias in the set.
+                                slot.plain_identifier_key
+                                    && plain_identifier(slot.property.as_str())
+                                    && (slot.property.as_str() != key
+                                        || names.contains(&slot.local.span))
+                            })
+                    })
             });
     }
     // A direct element of an array literal held by a tuple holder.
@@ -2400,6 +2412,96 @@ fn consumed_by_alias_slots(file: &FileFacts, reference: Span, names: &[Span]) ->
                     && pattern.array_slots.get(index).is_none_or(|slot| {
                         slot.as_ref().is_none_or(|slot| names.contains(&slot.span))
                     })
+            })
+        })
+}
+
+/// ADR 0500: the arrow's call at `call` initializes a function-local `const`
+/// holder (`const thing = useThing()`) every reference of which is the object
+/// of a static, non-optional member read that is not written, deleted or
+/// iterated: so the object never leaves, and the store reaches code only
+/// through `thing.<key>`. Each such read at the store's `key` is an exact
+/// member alias (ADR 0481) and a contained store use, as a reference to the
+/// store itself must be ([`contained_store_use`]).
+fn held_by_member_holder(
+    file: &FileFacts,
+    call: Span,
+    key: &str,
+    literal: Span,
+    initial: Span,
+) -> bool {
+    let ast = &file.ast;
+    let Some(holder) = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call)
+    }) else {
+        return false;
+    };
+    let Some(name) = holder.names.first() else {
+        return false;
+    };
+    if !ast.any_function_body_containing(holder.declaration) {
+        return false;
+    }
+    let uses: Vec<Span> = ast
+        .identifiers
+        .iter()
+        .filter(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && ast.reference_declaration(identifier.span) == Some(name.span)
+        })
+        .map(|identifier| identifier.span)
+        .collect();
+    !uses.is_empty()
+        && uses.iter().all(|&use_span| {
+            let Some(member) = ast
+                .members
+                .iter()
+                .find(|member| ast.peel_ts_sugar_span(member.object) == use_span)
+            else {
+                return false;
+            };
+            if ast.computed_members.binary_search(&member.span).is_ok()
+                || ast.optional_members.binary_search(&member.span).is_ok()
+                || ast.write_targets.contains(&member.span)
+                || ast
+                    .deleted_targets
+                    .iter()
+                    .any(|target| file.peel_parentheses(*target) == Some(member.span))
+            {
+                return false;
+            }
+            let Some(property) = file
+                .source_text(member.property)
+                .filter(|key| plain_identifier(key))
+            else {
+                return false;
+            };
+            if property == key {
+                return ast.local_alias_member(member.span).is_some()
+                    && contained_store_use(file, member.span, initial);
+            }
+            // Another key's value must not run with the holder as `this`, nor
+            // be a function the analysis cannot see into: a primitive,
+            // object or array literal, or an arrow function (no own `this`).
+            ast.object_properties.iter().any(|candidate| {
+                literal.contains(candidate.span)
+                    && candidate.data
+                    && !candidate.computed
+                    && file.source_text(candidate.key) == Some(property)
+                    && (matches!(
+                        candidate.value_kind,
+                        solid_facts::ast::RuntimeValueKind::Primitive
+                            | solid_facts::ast::RuntimeValueKind::Object
+                            | solid_facts::ast::RuntimeValueKind::Array
+                    ) || ast
+                        .function_at(ast.peel_ts_sugar_span(candidate.value))
+                        .is_some_and(|function| {
+                            function.kind == solid_facts::ast::FunctionKind::Arrow
+                        }))
             })
         })
 }
