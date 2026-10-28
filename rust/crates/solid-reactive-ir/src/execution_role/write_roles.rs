@@ -887,6 +887,142 @@ fn named_closure_in_owner_keeping_callback<'a>(
         .min_by_key(|function| function.body.end - function.body.start)
 }
 
+/// ADR 0471: the innermost function around `span` that is bound to a name and
+/// whose innermost primitive callback is a created root's body, written inline
+/// or named by its binding (`createRoot(f1)`). The root's body is not one of
+/// the regions a write may treat as imperative ([`write_allowed_spans`]), but a
+/// cleanup or an effect apply around the root call is, and its lexical role
+/// covers the closure. Constructing the closure runs nothing: it runs where it
+/// is called, under the root when that is in the root's body, so its call
+/// sites decide. The climb crosses every function that is no primitive's
+/// callback (an IIFE, a helper's callback, another named closure, whose own
+/// calls the walk then follows).
+fn named_closure_in_root_callback<'a>(
+    file: &'a solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'a solid_facts::ast::FunctionFact> {
+    functions_around(file, span)
+        .into_iter()
+        .filter(|function| {
+            function.method_name.is_none()
+                && function_binding_name(file, function).is_some()
+                && lookup.function_component_status(file, function) == ComponentStatus::No
+                && innermost_primitive_callback_is_root(file, function, lookup)
+        })
+        .min_by_key(|function| function.body.end - function.body.start)
+}
+
+/// Whether the first function around `function` that a primitive call takes as
+/// its callback, by the literal or by its binding, is taken in a position whose
+/// callback runs in a root the call creates.
+fn innermost_primitive_callback_is_root(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let mut at = function.span;
+    // Bounded: each step moves to the function that holds the previous one.
+    for _ in 0..16 {
+        let Some(outer) = crate::owners::owning_function(&file.ast, at) else {
+            return false;
+        };
+        let positions = primitive_positions(file, outer, lookup);
+        if positions.is_empty() {
+            at = outer.span;
+            continue;
+        }
+        return positions.into_iter().any(|(primitive, index)| {
+            lookup
+                .dialect
+                .callback_runs_in_created_root(primitive, index)
+        });
+    }
+    false
+}
+
+/// ADR 0471: whether `span` runs, through layers that run in place (an IIFE,
+/// an inline standard-library callback, a helper's callback), in a function a
+/// primitive call names by its binding in a created root's position. A
+/// position the by-name climb does not admit (one in a nested function, which
+/// may run before a `const` is initialized) still runs the function under the
+/// root when it runs, so the permissive role of a region around the function
+/// is no proof for the site; the site's own entries decide.
+fn in_place_in_root_named_callback(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let path = file.path.as_str();
+    let mut at = span;
+    // Bounded: each step moves to the call that holds the previous function.
+    for _ in 0..16 {
+        let Some(function) = crate::owners::owning_function(&file.ast, at) else {
+            return false;
+        };
+        if function_binding_name(file, function)
+            .filter(|_| function.method_name.is_none())
+            .and_then(|name| lookup.entities().at(path, name.span))
+            .is_some()
+            && primitive_positions(file, function, lookup)
+                .into_iter()
+                .any(|(primitive, index)| {
+                    lookup
+                        .dialect
+                        .callback_runs_in_created_root(primitive, index)
+                })
+        {
+            return true;
+        }
+        match layer_run(file, function, lookup) {
+            LayerRun::InPlace(call) | LayerRun::InPlaceAmongOthers(call) => at = call,
+            LayerRun::FreshStack | LayerRun::Elsewhere => return false,
+        }
+    }
+    false
+}
+
+/// The primitive call positions that take `function`: as the literal argument,
+/// or by a bare identifier argument whose symbol is its binding's.
+fn primitive_positions(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<(Primitive, usize)> {
+    let path = file.path.as_str();
+    let mut positions = file
+        .ast
+        .arguments_containing(function.span)
+        .filter(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+        })
+        .filter_map(|(call, index)| {
+            lookup
+                .primitive_at_call(file, call.span)
+                .map(|primitive| (primitive, index))
+        })
+        .collect::<Vec<_>>();
+    let symbol = function_binding_name(file, function)
+        .filter(|_| function.method_name.is_none())
+        .and_then(|name| lookup.entities().at(path, name.span));
+    if let Some(symbol) = symbol {
+        for call in &file.ast.calls {
+            for (index, argument) in call.arguments.iter().enumerate() {
+                if argument.spread
+                    || argument.value != solid_facts::ast::ArgumentValueKind::Identifier
+                    || lookup.entities().at(path, argument.span) != Some(symbol)
+                {
+                    continue;
+                }
+                if let Some(primitive) = lookup.primitive_at_call(file, call.span) {
+                    positions.push((primitive, index));
+                }
+            }
+        }
+    }
+    positions
+}
+
 /// How the functions between a site and the control-flow children callback
 /// around it run (ADR 0460).
 enum ControlFlowLayers {
@@ -1393,7 +1529,29 @@ fn write_role_walk(
     } else {
         None
     };
-    let direct = if tracked_named.is_some() {
+    // ADR 0471: the same for a closure bound to a name in a created root's body
+    // that a cleanup, an effect apply or a handler holds: their permissive role
+    // is no proof for a closure that runs under the root where it is called.
+    // And for a site a function runs in place that a primitive names by its
+    // binding as a root's body in a position the by-name climb did not admit:
+    // the site's entries decide. Only a guard that rejects in a root asks.
+    let permissive_around_root = root_body != RootBodyGuard::Exempts
+        && matches!(
+            direct,
+            ExecutionRole::DeferredCallback
+                | ExecutionRole::UntrackedCallback
+                | ExecutionRole::UntrackedUnwindowed
+                | ExecutionRole::EffectApply
+                | ExecutionRole::EventCallback
+        );
+    let tracked_named = tracked_named.or_else(|| {
+        permissive_around_root
+            .then(|| named_closure_in_root_callback(file, span, lookup))
+            .flatten()
+    });
+    let tracked_named_or_root = tracked_named.is_some()
+        || (permissive_around_root && in_place_in_root_named_callback(file, span, lookup));
+    let direct = if tracked_named_or_root {
         ExecutionRole::Unknown
     } else {
         direct
@@ -1977,7 +2135,33 @@ pub(super) fn by_name_position<'f>(
         let scope = |span: Span| {
             crate::owners::containing_ast_function(&file.ast, span).map(|scope| scope.span)
         };
-        if argument.start < function.span.end || scope(argument) != scope(name.span) {
+        // ADR 0471: an argument in layers that run in place (an IIFE, an inline
+        // standard-library callback, a helper's callback) is evaluated when the
+        // outermost layer's call runs, which must follow the declarator.
+        let target = scope(name.span);
+        let mut at = argument;
+        for _ in 0..16 {
+            if scope(at) == target {
+                break;
+            }
+            let layer = crate::owners::containing_ast_function(&file.ast, at)?;
+            if layer.generator
+                || !layer.body.contains(at)
+                || may_follow_suspension(file, at)
+                || follows_dominating_await(file, at)
+                || follows_try_head_await(file, at, lookup)
+            {
+                return None;
+            }
+            let LayerRun::InPlace(call) = layer_run(file, layer, lookup) else {
+                return None;
+            };
+            if file.ast.jsx_containing(call).next().is_some() {
+                return None;
+            }
+            at = call;
+        }
+        if at.start < function.span.end || scope(at) != target {
             return None;
         }
     }

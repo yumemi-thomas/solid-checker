@@ -137,7 +137,8 @@ export const FILE_BUDGETS = {
   // And ADR 0468 (callee spelling; unnamed callees are obligations): 287,038 bytes: 287_500.
   // And ADR 0469 (reads through in-place layers): 288,842 bytes: 289_000.
   // And ADR 0470 (a read in JSX a callback writes): 290,136 bytes: 290_500.
-  "docs/decisions.md": 290_500,
+  // And ADR 0471 (a closure in a root's body): 292,179 bytes: 292_500.
+  "docs/decisions.md": 292_500,
 };
 
 export const GROUP_BUDGETS = [
@@ -172,7 +173,7 @@ export const GROUP_BUDGETS = [
   // With main's ADR 0451 (PR #119) merged in: 753,780 bytes: 754_500.
   // And for ADR 0454 (its entry, the open-work lines, a rule-page paragraph): 758,425 bytes against 754,500: 759_000; its owner-graph follow-up: 760,511 bytes: 761_000; its reachability follow-up: 761,579 bytes: 762_500.
   // And for ADR 0455 (its entry, one open-work line, a rule-page paragraph): 765,586 bytes against 762,500: 766_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 823_000 }, // ADR 0470 (its entry, a rule-page bullet, one open-work line): 822,681 bytes. // ADR 0469 (its entry, a rule-page bullet): 820,739 bytes. // ADR 0468 (its entry, one open-work line): 818,373 bytes. // Merge of main (PR #135) into the batch: 815,691 bytes. // ADR 0467 (its entry, two rule-page paragraphs, one open-work line): 807,212 bytes. // ADR 0466 (its entry, one open-work line, a rule-page paragraph): 804,218 bytes. // ADR 0463 (its entry, open-work lines, rule-page sentences): 800,445 bytes. // ADR 0462 (its entry, two rule-page paragraphs, one open-work line): 796,067 bytes. // Merge of PR #129 with ADR 0461 (PR #130): 792,496 bytes. // ADR 0461 review amendment (ADR sentences, open-work lines, rule-page sentences): 782,004 bytes. // ADR 0461 (its entry, the open-work line, a rule-page paragraph): 780,658 bytes. // Merge of ADR 0456 (PR #123) with ADR 0457: 778,757 bytes. // ADR 0456 (its entry, open-work lines, a rule-page paragraph): 775,714 bytes. // ADR 0457 review amendment (its sentences, one open-work line): 774,199 bytes against 773,500. // ADR 0457 (its entry, a rule-page sentence): 773,270 bytes against 771,500. // ADR 0455 fourth-review amendment: 771,408 bytes. // ADR 0455 third-review amendment: 770,819 bytes. // ADR 0455 cleanup amendment: 769,241 bytes. // ADR 0455 named-closure follow-up: 767,101 bytes. // ADR 0455 follow-up: 766,106 bytes against 766,000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 825_500 }, // ADR 0471 (its entry, a rule-page sentence, one open-work line): 825,165 bytes. // ADR 0470 (its entry, a rule-page bullet, one open-work line): 822,681 bytes. // ADR 0469 (its entry, a rule-page bullet): 820,739 bytes. // ADR 0468 (its entry, one open-work line): 818,373 bytes. // Merge of main (PR #135) into the batch: 815,691 bytes. // ADR 0467 (its entry, two rule-page paragraphs, one open-work line): 807,212 bytes. // ADR 0466 (its entry, one open-work line, a rule-page paragraph): 804,218 bytes. // ADR 0463 (its entry, open-work lines, rule-page sentences): 800,445 bytes. // ADR 0462 (its entry, two rule-page paragraphs, one open-work line): 796,067 bytes. // Merge of PR #129 with ADR 0461 (PR #130): 792,496 bytes. // ADR 0461 review amendment (ADR sentences, open-work lines, rule-page sentences): 782,004 bytes. // ADR 0461 (its entry, the open-work line, a rule-page paragraph): 780,658 bytes. // Merge of ADR 0456 (PR #123) with ADR 0457: 778,757 bytes. // ADR 0456 (its entry, open-work lines, a rule-page paragraph): 775,714 bytes. // ADR 0457 review amendment (its sentences, one open-work line): 774,199 bytes against 773,500. // ADR 0457 (its entry, a rule-page sentence): 773,270 bytes against 771,500. // ADR 0455 fourth-review amendment: 771,408 bytes. // ADR 0455 third-review amendment: 770,819 bytes. // ADR 0455 cleanup amendment: 769,241 bytes. // ADR 0455 named-closure follow-up: 767,101 bytes. // ADR 0455 follow-up: 766,106 bytes against 766,000.
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
@@ -227,7 +228,8 @@ export const GROUP_BUDGETS = [
     // And ADR 0468's fixture (callee-spelling): 337,833 bytes: 338_000.
     // And ADR 0469's fixture (read-in-place-layers): 339,576 bytes: 340_000.
     // And ADR 0470's fixture (read-jsx-in-callbacks): 340,841 bytes: 341_000.
-    bytes: 341_000,
+    // And ADR 0471's fixture (write-named-closure-in-root): 342,615 bytes: 343_000.
+    bytes: 343_000,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];
