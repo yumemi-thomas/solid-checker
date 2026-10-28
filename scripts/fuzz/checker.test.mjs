@@ -4,13 +4,24 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { MAIN_SOURCE, UnmappedFindingsError, WORK_NAMESPACE, assertFindingsMapped, materializeForChecker, oracleMainSource, parseFindings, runChecker, siteVerdicts } from "./checker.mjs";
+import { MAIN_SOURCE, UnmappedFindingsError, WORK_NAMESPACE, assertFindingsMapped, entryVeto, materializeForChecker, oracleMainSource, parseFindings, runChecker, siteVerdicts } from "./checker.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { DEFAULT_ORACLE_INSTALL } from "./chrome.mjs";
 import { DEFAULT_TSC, resolveTsc, tsconfigFor, typecheck } from "./typecheck.mjs";
 
 const oracle = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../runtime-oracle.mjs"), "utf8");
+
+describe("entryVeto", () => {
+  it("names the premise by which the harness entry withholds the event proofs, and nothing else", () => {
+    const dir = "/private/tmp/sc-case";
+    const veto = `synchronous dispatch (ADR 0435) at ${dir}/main.tsx:39 withholds event handler owner and read proofs: receiver unknown`;
+    expect(entryVeto({ premises: ["standard runtime configuration (ADRs 0266/0268)", veto] }, dir)).toBe(veto);
+    expect(entryVeto({ premises: [`synchronous dispatch (ADR 0435) at ${dir}/main.tsx:39 excluded: caller await continuation`] }, dir)).toBeNull();
+    expect(entryVeto({ premises: [`synchronous dispatch (ADR 0435) at ${dir}/App.tsx:9 withholds event handler owner and read proofs: receiver unknown`] }, dir)).toBeNull();
+    expect(entryVeto({}, dir)).toBeNull();
+  });
+});
 
 describe("MAIN_SOURCE", () => {
   it("is the oracle's whole entry, driver included: the checker reads the synchronous dispatch (ADR 0435), as it does in Chrome's run", () => {

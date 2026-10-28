@@ -61,7 +61,7 @@ export const codePolicy = {
   PRIMITIVE_IN_EFFECT_CALLBACK: unclaimed("error"),
   RUN_WITH_DISPOSED_OWNER: unclaimed("warn", "decided not to build: docs/open-work.md, `runWithOwner` with a disposed owner"),
   ASYNC_STORE_SETTER: unclaimed("error"),
-  UNCOMMITTED_INPUT_OVERWRITTEN: unclaimed("warn"),
+  UNCOMMITTED_INPUT_OVERWRITTEN: unclaimed("warn", "decided not to build: docs/open-work.md, `UNCOMMITTED_INPUT_OVERWRITTEN`"),
   LOADING_ON_OUTSIDE_HOLD: unclaimed("warn"),
 
   // The engine's reaction to an earlier failure.

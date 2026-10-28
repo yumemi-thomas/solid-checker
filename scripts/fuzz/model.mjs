@@ -503,7 +503,8 @@ export function exprTsType(e) {
 
 export { T, same };
 
-export const helper = (name, form) => ({ k: "helper", name, form });
+/** A helper function; `module: true` prints it in its own module (`helpers.ts`), which App.tsx imports. */
+export const helper = (name, form, { module = false } = {}) => ({ k: "helper", name, form, ...(module ? { module: true } : {}) });
 export const component = (name, signals, body, view) => ({ k: "component", name, signals, body, view });
 export const program = ({ seed = 0, helpers = [], moduleSignals = [], components }) => ({
   k: "program", version: VERSION, seed, helpers, moduleSignals, components,

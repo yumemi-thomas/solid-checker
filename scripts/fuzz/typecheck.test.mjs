@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
-import { DEFAULT_TSC, TYPE_ERROR_REFUSAL_SHARE, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
+import { DEFAULT_TSC, TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 import { configFrom, parseArgs } from "./run.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -38,6 +38,15 @@ describe("requireTypeChecker", () => {
     writeFileSync(real, "");
     chmodSync(real, 0o755);
     expect(() => requireTypeChecker(real)).not.toThrow();
+  });
+});
+
+describe("harnessRefusal", () => {
+  it("refuses a run the harness could not judge, more than half of it", () => {
+    expect(harnessRefusal(184, 184, { first: "could not start" })).toMatch(/invalid run: the harness could not judge 184 of 184.*could not start/);
+    expect(harnessRefusal(3, 5)).toMatch(/3 of 5/);
+    expect(harnessRefusal(1, 2)).toBeNull();
+    expect(harnessRefusal(0, 0)).toBeNull();
   });
 });
 

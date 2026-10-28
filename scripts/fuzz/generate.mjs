@@ -144,10 +144,10 @@ function name(ctx, prefix) { return `${prefix}${counter(ctx, prefix)}`; }
 const probeWitness = (sig, value) => ({ selector: `[data-probe="${sig}"]`, text: String(value) });
 const viewWitness = (id, value) => ({ selector: `[data-view="${id}"]`, text: String(value) });
 
-function ensureHelper(ctx, form) {
-  for (const existing of ctx.helpers.values()) if (existing.form === form) return existing.name;
+function ensureHelper(ctx, form, { module = false } = {}) {
+  for (const existing of ctx.helpers.values()) if (existing.form === form && Boolean(existing.module) === module) return existing.name;
   // With containers the helpers are `hfN`: a cleanup handle is `hN`, and a helper of the same name would shadow it (a type error).
-  const added = helper(`${ctx.containers ? "hf" : "h"}${ctx.helpers.size + 1}`, form);
+  const added = helper(`${ctx.containers ? "hf" : "h"}${ctx.helpers.size + 1}`, form, { module });
   ctx.helpers.set(added.name, added);
   return added.name;
 }
@@ -161,7 +161,7 @@ function buildComponent(ctx, index, control) {
   }
   if (profile === "misuse") {
     // Provokes one claimed diagnostic code at one marked site (misuse.mjs). Asked for with `--profile misuse`, never drawn at random.
-    const built = buildMisuse({ rng, name: (prefix) => name(ctx, prefix), ensureHelper: (form) => ensureHelper(ctx, form) }, ctx.misusePlan);
+    const built = buildMisuse({ rng, name: (prefix) => name(ctx, prefix), ensureHelper: (form, options) => ensureHelper(ctx, form, options) }, ctx.misusePlan);
     return { ...component(`C${index + 1}`, built.sigs, built.body, built.view), shape: built.shape, misuse: built.misuse };
   }
   const sigs = [];

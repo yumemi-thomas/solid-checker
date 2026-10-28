@@ -208,27 +208,40 @@ export function judgeWithChrome(row, records) {
   if (row.kind === "plain") {
     const record = records.get(input.built.id);
     if (!record?.row) return { ...row, chrome: { status: "chrome-inconclusive", why: "no oracle row" } };
-    const events = runtimeEvents(record.runtime).filter((event) => isDefectCode(event.code));
+    // A diagnostic Chrome could not place in the case file (the oracle's `unattributed`: a render check whose stack is all runtime
+    // frames, UNCOMMITTED_INPUT_OVERWRITTEN) still happened: it is judged with no lines.
+    const placed = runtimeEvents(record.runtime);
+    const unplaced = (record.runtime.unattributed ?? []).filter((code) => !placed.some((event) => event.code === code)).map((code) => ({ code, source: "unattributed", positions: [] }));
+    const events = [...placed, ...unplaced].filter((event) => isDefectCode(event.code));
     const judged = events.map((event) => {
       const lines = event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined).map((position) => position.line);
       const rules = codeRules[event.code] ?? [];
       const covering = input.findings.filter((finding) => lines.some((line) => finding.line <= line && line <= finding.endLine));
       const claims = (finding) => rules.includes(finding.rule) || withholdingRules.includes(finding.rule);
-      const status = covering.some((finding) => finding.kind === "violation" && rules.includes(finding.rule)) ? "agree"
+      // A code no rule claims (defect-unclaimed): a rule the checker does not have, neither agreement nor a false clean.
+      const status = !rules.length ? "unclaimed"
+        : covering.some((finding) => finding.kind === "violation" && rules.includes(finding.rule)) ? "agree"
         : covering.some((finding) => claims(finding)) ? "recall-gap"
           : !lines.length && input.findings.some((finding) => finding.kind === "violation" && rules.includes(finding.rule)) ? "agree" : "false-clean";
-      return { code: event.code, line: lines[0] ?? null, status };
+      return { code: event.code, line: lines[0] ?? null, status, ...(event.source === "unattributed" ? { unattributed: true } : {}) };
     });
     // A violation of a rule a runtime diagnostic can contradict, where Chrome reports no defect of its codes on its lines: a candidate
     // false positive. A bare text has no witness, so nothing shows the site ran: it is for a person to read, never confirmed here.
     const unmatched = input.findings.filter((finding) => finding.kind === "violation" && ruleHasRuntimeCounterpart(finding.rule)
       && !events.some((event) => codesForRule(finding.rule).includes(event.code)));
-    const base = !judged.length ? (record.runtime.failure ? "chrome-inconclusive" : "no-defect") : judged.every((entry) => entry.status === "agree") ? "agree" : judged.some((entry) => entry.status === "false-clean") ? "false-clean" : "recall-gap";
-    const status = unmatched.length && !record.runtime.failure && ["no-defect", "agree"].includes(base) ? "violation-without-diagnostic" : base;
-    // With a probe's witness: did the claimed effect happen? A violation Chrome is silent on, at code whose witness landed, is a
-    // witnessed false positive (stop and report); a false clean whose witness did not land is a witnessed defect.
+    const claimed = judged.filter((entry) => entry.status !== "unclaimed");
+    const base = !judged.length ? (record.runtime.failure ? "chrome-inconclusive" : "no-defect") : !claimed.length ? "unclaimed"
+      : claimed.every((entry) => entry.status === "agree") ? "agree" : claimed.some((entry) => entry.status === "false-clean") ? "false-clean" : "recall-gap";
+    const status = unmatched.length && !record.runtime.failure && ["no-defect", "agree", "unclaimed"].includes(base) ? "violation-without-diagnostic" : base;
+    // With a probe's witness: did the claimed effect happen (a write landed, a read updated)? A violation Chrome is silent on, at code
+    // whose witness landed, is a witnessed false positive (stop and report). A witness that did not land backs a violation the runtime
+    // is silent on (a stale read rc.17 does not warn about, ADR 0443: `violation-witnessed`), and with no violation it is a witnessed
+    // defect (a false clean, reported or silent).
     const witness = input.built.sites?.[0]?.witness ? (record.runtime.witnesses?.[0]?.reached === true ? "landed" : record.runtime.witnesses?.[0]?.present ? "not-landed" : "absent") : undefined;
-    const witnessed = witness === "landed" && status === "violation-without-diagnostic" ? "false-positive-witnessed" : witness === "not-landed" && status === "false-clean" ? "defect-witnessed" : undefined;
+    const witnessed = witness === "landed" && status === "violation-without-diagnostic" ? "false-positive-witnessed"
+      : witness !== "not-landed" ? undefined
+        : status === "violation-without-diagnostic" ? "violation-witnessed"
+          : ["false-clean", "no-defect"].includes(status) && !input.findings.some((finding) => finding.kind === "violation") ? "defect-witnessed" : undefined;
     return { ...row, chrome: { status, diagnostics: judged, ...(unmatched.length ? { unmatched: unmatched.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(record.runtime.failure ? { partial: true } : {}),
       ...(witness ? { witness, actual: record.runtime.witnesses?.[0]?.actual ?? null } : {}), ...(witnessed ? { witnessed } : {}) },
       chromeCache: cachedOf(input.built.id), fixed: status === "agree" };

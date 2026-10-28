@@ -110,6 +110,13 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
       }
       await pause(settings.finalMs);
       phase = 'plan';
+      // The user's edits first (Chrome's `fill`: the value set, then an input event), then the clicks.
+      for (const edit of plan.plan.edits ?? []) {
+        const target = document.querySelector(edit.selector);
+        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+          target.focus(); target.value = edit.text; target.dispatchEvent(new Event('input', { bubbles: true })); await flush(); await pause(settings.pauseMs);
+        } else errors.push({ phase, kind: 'plan', message: `no input ${edit.selector}`, stack: '' });
+      }
       for (const buttonId of plan.plan.clicks) {
         const target = document.querySelector(`[data-act="${buttonId}"]`);
         if (target instanceof HTMLElement) { target.click(); await flush(); await pause(settings.pauseMs); }
