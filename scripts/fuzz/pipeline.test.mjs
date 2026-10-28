@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { EntryCache } from "./cache.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { evaluate, judgeEntries, lazyControl, signaturesOf } from "./pipeline.mjs";
@@ -225,5 +226,50 @@ describe("judgeEntries: the control of a shrink", () => {
     expect(lazyControl({ control: true })).toBe(true);
     expect(lazyControl({ control: false })).toBe(false);
     expect(lazyControl({ control: true, shrinkControl: "each" })).toBe(false);
+  });
+});
+
+// The runtime cache (cache.mjs EntryCache): a second evaluation of the same case files takes the type checks and the fast records from
+// it and runs only the checker; a changed program misses.
+describe("evaluate: the runtime cache", () => {
+  const counting = () => {
+    const calls = { typecheck: 0, checker: 0, fast: 0 };
+    const deps = {
+      typecheck: async () => { calls.typecheck += 1; return { ok: true, errors: [] }; },
+      runChecker: async () => { calls.checker += 1; return { ok: true, findings: [] }; },
+      runFast: async (cases) => { calls.fast += cases.length; return new Map(cases.map((c) => [c.id, { diagnostics: [], errors: [], witnesses: [], hits: {}, quiescent: true }])); },
+    };
+    return { calls, deps };
+  };
+
+  it("reruns only the checker on a cached case, with the same classification", async () => {
+    const cache = new EntryCache(mkdtempSync(join(tmpdir(), "fuzz-rcache-")), "runtime", "e".repeat(64));
+    const e = entry(5);
+    const first = counting();
+    const one = await evaluate([e], { ...config(), runtimeCache: cache }, first.deps);
+    expect(first.calls).toEqual({ typecheck: 2, checker: 1, fast: 1 });
+    const second = counting();
+    const two = await evaluate([e], { ...config(), runtimeCache: cache }, second.deps);
+    expect(second.calls).toEqual({ typecheck: 0, checker: 1, fast: 0 });
+    expect(two.get(e.built.id).classification).toEqual(one.get(e.built.id).classification);
+    const other = entry(6);
+    const third = counting();
+    await evaluate([other], { ...config(), runtimeCache: cache }, third.deps);
+    expect(third.calls).toEqual({ typecheck: 2, checker: 1, fast: 1 });
+  });
+
+  it("does not store a record the runner did not write, and without a cache runs every step", async () => {
+    const cache = new EntryCache(mkdtempSync(join(tmpdir(), "fuzz-rcache-")), "runtime", "e".repeat(64));
+    const e = entry(7);
+    const broken = counting();
+    broken.deps.runFast = async (cases) => { broken.calls.fast += cases.length; return new Map(cases.map((c) => [c.id, { failure: { phase: "vitest", message: "no record written" }, diagnostics: [], errors: [], witnesses: [] }])); };
+    await evaluate([e], { ...config(), runtimeCache: cache }, broken.deps);
+    const again = counting();
+    await evaluate([e], { ...config(), runtimeCache: cache }, again.deps);
+    expect(again.calls).toEqual({ typecheck: 0, checker: 1, fast: 1 });
+    const plain = counting();
+    await evaluate([e], config(), plain.deps);
+    await evaluate([e], config(), plain.deps);
+    expect(plain.calls).toEqual({ typecheck: 4, checker: 2, fast: 2 });
   });
 });

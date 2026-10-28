@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CLEAN_ID, chromeChecker, chromeDiagnostics, chromeRuntime, chromeStatus, isCloseTimeout, runChrome } from "./chrome.mjs";
+import { EntryCache } from "./cache.mjs";
+import { CLEAN_ID, cacheableChrome, chromeChecker, chromeDiagnostics, chromeRuntime, chromeStatus, isCloseTimeout, runChrome } from "./chrome.mjs";
+import { HALT_TEXT, haltable } from "./hits.mjs";
 import { classify } from "./classify.mjs";
 
 // A row as scripts/runtime-oracle.mjs writes it (the fields the fuzzer reads).
@@ -214,5 +216,89 @@ writeFileSync(arg("--out"), JSON.stringify({ results }));
     const none = setup({ "fuzz-1": [closeTimeout] });
     await runChrome([{ id: "fuzz-1", dir: none.caseDir, sites: [] }], { out: none.dir, install: none.install, bin: "b", typefacts: "t", closeRetries: 0, oracle: none.oracle, env: none.env });
     expect(readFileSync(none.log, "utf8").trim().split("\n")).toHaveLength(1);
+  });
+});
+
+describe("runChrome: the Chrome cache", () => {
+  const fakeOracle = (dir) => {
+    const path = join(dir, "oracle.mjs");
+    writeFileSync(path, `import { appendFileSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+const arg = (name) => process.argv[process.argv.indexOf(name) + 1];
+const ids = readdirSync(arg("--cases")).sort();
+appendFileSync(process.env.FAKE_LOG, JSON.stringify(ids) + "\\n");
+const plan = JSON.parse(readFileSync(process.env.FAKE_PLAN, "utf8"));
+writeFileSync(arg("--out"), JSON.stringify({ results: ids.map((id) => ({ id, verdict: "static-only", findings: [], diagnostics: [], pageErrors: [], ...(plan[id] ?? {}) })) }));
+`);
+    return path;
+  };
+  const setup = (plan = {}) => {
+    const dir = mkdtempSync(join(tmpdir(), "fuzz-chrome-cache-"));
+    const caseDir = join(dir, "case");
+    mkdirSync(caseDir);
+    writeFileSync(join(caseDir, "App.tsx"), "clean");
+    writeFileSync(join(dir, "plan.json"), JSON.stringify(plan));
+    const log = join(dir, "log.jsonl");
+    writeFileSync(log, "");
+    const cache = new EntryCache(join(dir, "cache"), "chrome", "e".repeat(64));
+    const options = { out: dir, install: join(dir, "install"), bin: "b", typefacts: "t", control: true, oracle: fakeOracle(dir), env: { ...process.env, FAKE_PLAN: join(dir, "plan.json"), FAKE_LOG: log }, cache };
+    const calls = () => readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    return { dir, caseDir, options, calls, cache };
+  };
+
+  it("answers a case Chrome already ran from the cache, says so, and runs a changed case", async () => {
+    const t = setup({ "fuzz-1": { diagnostics: [{ code: "NO_OWNER_CLEANUP", file: "App.tsx", line: 2 }] } });
+    const first = await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }], t.options);
+    expect(first.get("fuzz-1").cached).toBe(false);
+    const second = await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }], t.options);
+    expect(t.calls()).toEqual([["fuzz-1"]]);
+    expect(second.get("fuzz-1")).toMatchObject({ cached: true, runtime: first.get("fuzz-1").runtime });
+    writeFileSync(join(t.caseDir, "App.tsx"), "clean, edited");
+    const third = await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }], t.options);
+    expect(third.get("fuzz-1").cached).toBe(false);
+    expect(t.calls()).toEqual([["fuzz-1"], ["fuzz-1"]]);
+    // Another mode of the same files is another key.
+    await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }], { ...t.options, control: false });
+    expect(t.calls()).toHaveLength(3);
+  });
+
+  it("does not store a harness error or a page that never loaded; without a cache every call runs", async () => {
+    const t = setup({ "fuzz-1": { verdict: "harness-error", error: "boom" }, "fuzz-2": { failure: { step: 0, message: "page.goto: Timeout 12000ms exceeded" } } });
+    const cases = [{ id: "fuzz-1", dir: t.caseDir, sites: [] }, { id: "fuzz-2", dir: t.caseDir, sites: [] }];
+    await runChrome(cases, t.options);
+    await runChrome(cases, t.options);
+    expect(t.calls()).toEqual([["fuzz-1", "fuzz-2"], ["fuzz-1", "fuzz-2"]]);
+    expect(t.cache.stats().stored).toBe(0);
+    const plain = setup();
+    const { cache, ...options } = plain.options;
+    const records = await runChrome([{ id: "fuzz-1", dir: plain.caseDir, sites: [] }], options);
+    await runChrome([{ id: "fuzz-1", dir: plain.caseDir, sites: [] }], options);
+    expect(plain.calls()).toHaveLength(2);
+    expect(records.get("fuzz-1").cached).toBeUndefined();
+    expect(cache).toBeTruthy();
+  });
+  it("a cacheable record is a row that is no harness error and a page that loaded", () => {
+    expect(cacheableChrome({ row: { verdict: "static-only" }, runtime: { failure: null } })).toBe(true);
+    expect(cacheableChrome({ row: { verdict: "static-only" }, runtime: { failure: { message: "locator.click: Timeout 12000ms exceeded" } } })).toBe(true);
+    expect(cacheableChrome({ row: null, runtime: {} })).toBe(false);
+    expect(cacheableChrome({ row: { verdict: "harness-error" }, runtime: {} })).toBe(false);
+    expect(cacheableChrome({ row: { verdict: "static-only" }, runtime: { failure: { message: "Browser feedback bootstrap did not bind the loaded document within 12000 ms" } } })).toBe(false);
+  });
+});
+
+describe("chromeRuntime: the halt marker", () => {
+  const sites = [{ id: "s1", witness: { selector: "#w1", text: "w1:7" } }, { id: "s2", witness: { selector: "#w2", text: "w2:3" } }];
+  it("reads a step that resolved to the marker as absent and the run as cut short; a run with no marker is unchanged", () => {
+    const row = { id: "fuzz-1", verdict: "static-only", diagnostics: [], pageErrors: [] };
+    const halted = chromeRuntime(row, [{ selector: haltable("#w1"), text: "w1:7" }, { selector: haltable("#w2"), text: HALT_TEXT }], sites);
+    expect(halted.failure).toMatchObject({ phase: "halted" });
+    expect(halted.witnesses).toEqual([
+      { siteId: "s1", witness: sites[0].witness, present: true, actual: "w1:7", reached: true },
+      { siteId: "s2", witness: sites[1].witness, present: false, actual: null, reached: null },
+    ]);
+    const plain = chromeRuntime(row, [{ selector: haltable("#w1"), text: "w1:7" }, { selector: "#w2", text: "w2:3" }], sites);
+    expect(plain.failure).toBeNull();
+    expect(plain.witnesses.map((w) => w.reached)).toEqual([true, true]);
+    // A failure the oracle recorded stays the failure.
+    expect(chromeRuntime({ ...row, failure: { message: "locator.click: Timeout" } }, [{ selector: haltable("#w2"), text: HALT_TEXT }], sites).failure.phase).toBe("execution");
   });
 });

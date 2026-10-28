@@ -10,6 +10,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { mapPoolSettled } from "../lib/pool.mjs";
+import { cacheableRecord, cacheableTypecheck, caseKey } from "./cache.mjs";
 import { materializeForChecker, runChecker, siteVerdicts } from "./checker.mjs";
 import { classify, runtimeEvents } from "./classify.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
@@ -33,7 +34,9 @@ const inconclusive = (reason, why) => ({ verdict: "inconclusive", reasons: [reas
  *   casesDir (where case dirs are written), concurrency, workers, keepWork,
  *   instrument (default true; false runs the clean text and classifies as before the hit ledger: the baseline of the neutrality regression),
  *   control (also run the clean twin and the checker on the twin's text, and compare),
- *   (`deadSite` is the strict confirmation of unexecuted candidates, read by run.mjs; it changes no verdict here) }
+ *   (`deadSite` is the strict confirmation of unexecuted candidates, read by run.mjs; it changes no verdict here),
+ *   runtimeCache (an `EntryCache` of cache.mjs under `runtimeEnvironmentKey`: the type checks and the fast-path records are taken from it
+ *   when the case's files match, and stored in it otherwise; only the checker runs again. Absent, every step runs, as before it existed) }
  * @returns {Promise<Map<string, object>>} id -> { program, built, typecheck, checker, runtime, classification, verdicts, control }
  */
 export async function evaluate(entries, config, deps = {}) {
@@ -44,20 +47,31 @@ export async function evaluate(entries, config, deps = {}) {
   const { install, casesDir } = config;
   const instrument = config.instrument !== false;
   const control = instrument && Boolean(config.control);
+  const cache = config.runtimeCache ?? null;
+  // A type check (or a fast record) from the cache when the case's files match, else the real one, stored when it says something about the program.
+  const remembered = async (built, part, compute, keep) => {
+    if (!cache) return compute();
+    const key = caseKey(built.files, part);
+    const stored = cache.get(key);
+    if (stored !== undefined) return stored;
+    const value = await compute();
+    if (keep(value)) cache.set(key, value);
+    return value;
+  };
   mkdirSync(casesDir, { recursive: true });
 
   // 1. Write the case, type-check it as the oracle compiles it, and ask the checker (on the clean text).
   const prepared = await mapPoolSettled(entries, async ({ program, built }) => {
     const caseDir = writeCase(join(casesDir, built.id), built);
     const dir = materializeForChecker(built, install, built.id);
-    const typed = await types(dir, { tsc: config.tsc });
+    const typed = await remembered(built, "typecheck", () => types(dir, { tsc: config.tsc }), cacheableTypecheck);
     if (!typed.ok) return { program, built, caseDir, dir, typecheck: typed };
     const ordinary = hasPackages(built);
     const checker = await check(dir, { bin: config.bin, typefacts: config.typefacts, ordinary });
     const value = { program, built, caseDir, dir, typecheck: typed, checker };
     if (instrument) {
       const twinDir = materializeForChecker(built, install, `${built.id}-run`, { twin: true });
-      value.twinTypecheck = await types(twinDir, { tsc: config.tsc });
+      value.twinTypecheck = await remembered(built, "typecheck-twin", () => types(twinDir, { tsc: config.tsc }), cacheableTypecheck);
       if (control && checker.ok && value.twinTypecheck.ok) value.twinChecker = await check(twinDir, { bin: config.bin, typefacts: config.typefacts, ordinary });
       if (!config.keepWork) rmSync(twinDir, { recursive: true, force: true });
     }
@@ -76,11 +90,10 @@ export async function evaluate(entries, config, deps = {}) {
 
   // 2. Run everything the checker answered in one Vitest batch (the twin), and, as a control, the clean twin in a second.
   const variant = instrument ? "run" : "clean";
-  const records = live.length
-    ? await fast(live.map(({ built, caseDir }) => ({ id: built.id, dir: caseDir, variant })), { install: config.fastInstall, workers: config.workers, virtualClock: config.virtualClock })
-    : new Map();
+  const fastOptions = { install: config.fastInstall, workers: config.workers, virtualClock: config.virtualClock };
+  const records = live.length ? await fastCached(live.map(({ built, caseDir }) => ({ id: built.id, dir: caseDir, variant, built })), fast, fastOptions, cache) : new Map();
   const controls = control && live.length
-    ? await fast(live.map(({ built, caseDir }) => ({ id: `${built.id}-clean`, dir: caseDir, variant: "clean" })), { install: config.fastInstall, workers: config.workers, virtualClock: config.virtualClock })
+    ? await fastCached(live.map(({ built, caseDir }) => ({ id: `${built.id}-clean`, dir: caseDir, variant: "clean", built })), fast, fastOptions, cache)
     : new Map();
 
   // 3. Classify.
@@ -109,6 +122,28 @@ export async function evaluate(entries, config, deps = {}) {
     });
   }
   return results;
+}
+
+/** The fast path for `cases` (`{ id, dir, variant, built }`): the cached records, and one batch for the rest (stored when the runner wrote them). */
+async function fastCached(cases, fast, options, cache) {
+  const strip = (list) => list.map(({ id, dir, variant }) => ({ id, dir, variant }));
+  if (!cache) return fast(strip(cases), options);
+  const records = new Map();
+  const missing = [];
+  for (const entry of cases) {
+    const key = caseKey(entry.built.files, `fast-${entry.variant}|${entry.id}`);
+    const stored = cache.get(key);
+    if (stored !== undefined) records.set(entry.id, stored); else missing.push({ ...entry, key });
+  }
+  if (missing.length) {
+    const ran = await fast(strip(missing), options);
+    for (const entry of missing) {
+      const record = ran.get(entry.id);
+      records.set(entry.id, record);
+      if (cacheableRecord(record)) cache.set(entry.key, record);
+    }
+  }
+  return records;
 }
 
 /**

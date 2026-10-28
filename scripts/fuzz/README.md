@@ -142,6 +142,8 @@ node scripts/fuzz/matrix.mjs ... --baseline <saved matrix.json>         # gate: 
 node scripts/fuzz/matrix.mjs --gate <baseline.json> <current.json>      # compare two recorded matrices
 ```
 
+**Runtime cache.** Solid's answer on a program does not depend on the checker. `matrix.mjs` keeps each program's type checks (clean and twin) and fast-path record under `--cache-dir` (default `$TMPDIR/solid-checker-fuzz-cache`, beside the neutrality baseline), keyed by the case's files and by an environment key: the generator version, the hash of this directory's judging sources, `scripts/runtime-oracle.mjs` (the type check compiles its entry), the clock, the `tsrs` binary and both installs' lockfiles. The checker is not in the key, so a run after a checker fix reruns only the checker. A record the machine produced (a runner that wrote nothing, a type check killed by its timeout) is never stored. `matrix.json` does not change; the hits and misses go to `cache.json` beside it. `--no-cache` turns it off, and so does `--real-clock`, whose records depend on the machine.
+
 `--confirm-with-chrome` runs, per cell, up to `--chrome-sample` (3) agree programs, up to `--chrome-false-clean` (4) false-clean programs and every wrong-rule program in Chrome and records `same`, `differs`, `not-fired-in-chrome` or `chrome-inconclusive` beside the fast verdict. `--shrink` reduces the smallest Chrome-confirmed false-clean program of each cell (the control is the legal twin) and reconfirms the minimum in Chrome. Output: `matrix.json` (per cell counts, per binding and layer counts, per-seed verdicts, Chrome summary, minimum), `matrix.md`, `programs.jsonl`, `repros/`.
 
 **Gate.** A cell's program seeds depend on the run seed, the code, the context and the index only (`cellSeed`), so a baseline and a later run with the same `--seed` and `--per-cell` judge the same programs. The gate fails (exit 1) when a judged program leaves `agree` for another judged outcome or enters `false-clean`, or a baseline cell is missing; it names the seeds that moved. `typed-away` and `harness` are not verdicts, they are what a loaded machine produces: a program that moves out of one of them is reported as "baseline unjudged" and never fails the gate, and a program that moves into one is an "infrastructure warning" (the run is suspect), also not a failure. A current run in which more than half the programs are typed-away or harness is refused (exit 2). Different seeds, per-cell counts or generator versions are refused (exit 2). A cell where the checker improved is reported, not failed.
@@ -224,6 +226,22 @@ Each divergence is a typed `equivalence-divergence` with both programs (`diverge
 
 Equivalence mode does not make a rewrite a license to compare unlike code: a rewrite that is only equivalent under a condition (a name used before its declaration, a `return` in an IIFE) checks the condition and declines. Calibration: on a checker from before PR #128 (a violation at a site no execution reaches was reported), containers programs show `low` divergences between `if (false) { createRoot(f1) }` and the same statement outlined into a called closure; on main they agree.
 
+## Replay
+
+`node scripts/fuzz/replay.mjs --out <fresh dir> <dir|list> [...] [--confirm-with-chrome]` re-judges recorded programs with the current checker without regenerating their seeds: the recheck after a checker fix. An argument is a directory or a text file that lists directories (one per line, an optional label after the path, `#` comments). A directory is an item when it holds:
+
+| item | files | what is judged |
+| --- | --- | --- |
+| pair | `original.program.json`, `variant.program.json` (an equivalence `divergences/<variant id>/`) | both trees rebuilt as cases, compared at the recorded sites by the site map; Chrome judges them as equivalence mode does |
+| text pair | `original.App.tsx`, `variant.App.tsx`, `divergence.json` (a shrunk equivalence repro) | both texts, compared at the recorded lines; Chrome runs each text with the oracle's own driver |
+| plain | `App.tsx` (a repro) | the checker's findings against the defect diagnostics Chrome reports in the file |
+
+Any other directory is searched for items. Per item (`replay.jsonl`, `replay.json`, a line on stderr): the bucket now (`agree` when both sides agree at every recorded site), the bucket and Chrome status recorded with it (a pair reads them from its run's `divergence.json` and `equivalence.json`), Chrome's status now, `chromeCache`, and `fixed`. An item is `fixed` only when both sides agree on a violation and Chrome still reports a code its rule claims there; two clean sides agree but are not fixed. A plain repro is fixed when every defect diagnostic Chrome reports is covered by a claiming violation. Exit 3 when Chrome contradicts a violation (stop and report).
+
+**Chrome cache.** `replay.mjs` and `equivalence.mjs --confirm-with-chrome` keep each Chrome record under `--cache-dir`, keyed by the staged case's files, the call's mode, the judging sources, `scripts/runtime-oracle.mjs` with the product scripts it drives Chrome with (`packages/cli/scripts`), the browser build and the oracle install's lockfile, so a recheck runs Chrome only on new programs. It is for confirmation only. The checker is not in the key, so a cached record's checker half is the run's that stored it: callers that judge the checker by Chrome's findings (`run.mjs`, `matrix.mjs`) do not use it. A cached answer is named on its row (`chromeCache: "hit"`, `[chrome cache hit]`), so it never turns a fresh disagreement into agreement unseen. Harness errors and pages that never loaded are not stored. `--no-chrome-cache` turns it off.
+
+**Halted runs.** A generated case asks the oracle for its halt marker (`"haltMarker": true` in `oracle.json`): a second page module, outside the case's tsconfig so the checker never reads it, that appends `<output id="sc-halted">` when Solid reports `REACTIVITY_HALTED`. Every click and witness step names it as its alternative (`X, body:not(:has(X)) > #sc-halted`, `haltable` in `hits.mjs`), so a wait for an element a halt keeps from appearing ends at once instead of after the scenario's 12 s timeout; with no halt the selector is `X`. `chromeRuntime` reads such a checkpoint as absent and the run as cut short (`failure.phase: "halted"`), so the partial-run rule stands: a diagnostic reached may confirm, a missing one never contradicts. The fast path needs nothing: on the virtual clock a wait costs no wall time.
+
 ## Known limits
 
 * The fast path is Happy DOM, not a browser, and Chrome judges only its candidates: a false positive the fast path does not produce is not looked for in Chrome. A candidate the fast path invents is refuted by Chrome and noted, not reported as a checker bug.
@@ -247,7 +265,7 @@ Equivalence mode does not make a rewrite a license to compare unlike code: a rew
 | `hits.mjs` | the hit ledger: the counter's source, the strip, the readout parser, the per-site record, and the pure comparisons of the neutrality gate |
 | `neutrality.mjs` | the regression: a seed range with and without instrumentation, verdict by verdict (`--profiles`, `--chunk`, `--order failing-first`, `--stop-on-mismatch`) |
 | `fast-daemon.mjs`, `fast/serve.mjs` | the long-lived fast host: one Vitest process (Vite server, Solid plugin, transform cache) serving every batch; `--no-daemon` gives one process per batch |
-| `cache.mjs` | the baseline cache of the regression and its mismatch history |
+| `cache.mjs` | the baseline cache of the regression and its mismatch history; the runtime and Chrome caches |
 | `unexecuted.mjs`, `deadsite.mjs` | the unexecuted candidate (the ledger's proof), Chrome's judgement of it, and the confirmation conditions as code |
 | `typecheck.mjs` | `tsrs -p ... --noEmit` against the published typings; a program that does not type-check is dropped |
 | `checker.mjs` | materializes a case as the oracle does and runs the native checker; per-site verdicts |
@@ -260,6 +278,7 @@ Equivalence mode does not make a rewrite a license to compare unlike code: a rew
 | `matrix.mjs` | the recall matrix (code x context), its Chrome sample, the false-clean shrink and the baseline gate |
 | `package.mjs`, `packages.mjs`, `packages-seeds.mjs`, `packages-check.mjs` | the `packages` profile: generated dependency packages (below) |
 | `rewrite.mjs`, `equivalence.mjs` | equivalence mode: runtime-identical rewrites of a program, the per-site comparison across them, the buckets and the Chrome judgement |
+| `replay.mjs` | re-judges recorded pairs and repros with the current checker, optionally in Chrome (Replay) |
 | `compare-runs.mjs` | equality of two runs (rows, findings, summary, minima), the evidence that a speed change moved nothing |
 | `run.mjs` | the command line |
 

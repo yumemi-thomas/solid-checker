@@ -15,7 +15,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { GENERATOR_VERSION } from "./generate.mjs";
-import { HITS_SELECTOR, stripInstrumentation } from "./hits.mjs";
+import { HITS_SELECTOR, haltable, stripInstrumentation } from "./hits.mjs";
 import { drivingPlan, printProgram, programPackages } from "./print.mjs";
 
 const clickSelector = (id) => `[data-act="${id}"]`;
@@ -23,15 +23,18 @@ const clickSelector = (id) => `[data-act="${id}"]`;
 /**
  * The scenario steps for a plan: clicks in order, then one read per distinct witness selector.
  * `hits` appends two reads of the hit readout last (their checkpoints are the counters; equal texts show the page was still).
+ * Every click and witness read is `haltable`: after REACTIVITY_HALTED a missing element resolves to the oracle's halt marker
+ * (`haltMarker` in oracle.json) instead of holding the run for the scenario timeout. chrome.mjs reads such a checkpoint as absent
+ * and the run as cut short (a partial run).
  */
 export function scenarioSteps(plan, sites, { hits = false } = {}) {
-  const steps = plan.clicks.map((id) => ({ action: "click", selector: clickSelector(id) }));
+  const steps = plan.clicks.map((id) => ({ action: "click", selector: haltable(clickSelector(id)) }));
   const seen = new Set();
   for (const site of sites) {
     const selector = site.witness?.selector;
     if (!selector || seen.has(selector)) continue;
     seen.add(selector);
-    steps.push({ action: "wait-for-selector", selector });
+    steps.push({ action: "wait-for-selector", selector: haltable(selector) });
   }
   const kept = steps.slice(0, hits ? 58 : 60);
   if (hits) for (let read = 0; read < 2; read += 1) kept.push({ action: "wait-for-selector", selector: HITS_SELECTOR });
@@ -57,8 +60,8 @@ export function buildCase(program, { id = `fuzz-${program.seed}`, note } = {}) {
       ...packageFiles,
       "App.tsx": text,
       "App.run.txt": runText,
-      "oracle.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), steps }, null, 2)}\n`,
-      "oracle.run.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), steps: runSteps }, null, 2)}\n`,
+      "oracle.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), haltMarker: true, steps }, null, 2)}\n`,
+      "oracle.run.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), haltMarker: true, steps: runSteps }, null, 2)}\n`,
       "program.json": `${JSON.stringify(program)}\n`,
       "sites.json": `${JSON.stringify({ id, generator: GENERATOR_VERSION, seed: program.seed, plan, sites, glue, ledger }, null, 2)}\n`,
     },

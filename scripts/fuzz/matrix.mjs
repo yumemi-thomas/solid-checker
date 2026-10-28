@@ -22,6 +22,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { EntryCache, cacheDirectory, runtimeEnvironmentKey } from "./cache.mjs";
 import { codeRules, ignoredRules, withholdingRules } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
@@ -339,6 +340,7 @@ function reportGate(result) {
 const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] [--per-cell N] [--codes A,B] [--contexts a,b]
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--checker-label <commit>] [--tsc <tsrs>] [--all-cores]
   [--confirm-with-chrome [--chrome-sample 3] [--chrome-false-clean 4] [--browser <chromium>]] [--shrink [--budget N]]
+  [--cache-dir <dir>] [--no-cache]      the runtime cache (type checks and fast-path records; default $TMPDIR/solid-checker-fuzz-cache)
   [--baseline <matrix.json>]            fail when a judged program leaves agree or enters false-clean (same seeds); moves out of or into typed-away/harness are reported, not failed
   node scripts/fuzz/matrix.mjs --gate <baseline.json> <current.json>`;
 
@@ -349,12 +351,22 @@ export async function runMatrix(options) {
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
   requireTypeChecker(resolveTsc(options.tsc));
   mkdirSync(out, { recursive: true });
-  const config = attachDaemon(configFrom({ ...options, profile: "misuse" }, out), options);
+  const config = withRuntimeCache(attachDaemon(configFrom({ ...options, profile: "misuse" }, out), options), options);
   try {
     return await sweep(options, config, out);
   } finally {
     await config.fast?.close();
   }
+}
+
+/**
+ * The runtime cache of a matrix run (cache.mjs): Solid's answer on a program (its type checks and fast-path records) does not depend on
+ * the checker, so a run after a checker fix takes them from the cache and reruns only the checker. Off with `--no-cache` and on the real
+ * clock (whose records depend on the machine).
+ */
+export function withRuntimeCache(config, options) {
+  if (options.noCache || !config.virtualClock) return config;
+  return { ...config, runtimeCache: new EntryCache(cacheDirectory(options), "runtime", runtimeEnvironmentKey(config)) };
 }
 
 async function sweep(options, config, out) {
@@ -453,6 +465,11 @@ async function sweep(options, config, out) {
   writeFileSync(join(out, "programs.jsonl"), rows.map((row) => JSON.stringify({ ...row, site: undefined, region: regionOf(row.site) })).join("\n") + "\n");
   writeFileSync(join(out, "matrix.json"), `${JSON.stringify({ ...matrix, statuses }, null, 2)}\n`);
   writeFileSync(join(out, "matrix.md"), markdown(matrix, statuses));
+  if (config.runtimeCache) {
+    // Beside the matrix, not in it: a cached run's matrix.json is the uncached run's, byte for byte.
+    writeFileSync(join(out, "cache.json"), `${JSON.stringify(config.runtimeCache.stats(), null, 2)}\n`);
+    console.error(`matrix: runtime cache ${JSON.stringify(config.runtimeCache.stats())}`);
+  }
   console.error(`matrix: wrote ${join(out, "matrix.md")}`);
   if (options.baseline) return reportGate(gate(JSON.parse(readFileSync(resolve(options.baseline), "utf8")), JSON.parse(JSON.stringify(matrix))));
   return 0;
@@ -465,7 +482,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "baseline", "checker-label"] });
+      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "baseline", "checker-label", "cache-dir"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

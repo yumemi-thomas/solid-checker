@@ -14,6 +14,14 @@
 
 export const PRELUDE_MARK = "// __sc_hits__\n";
 export const HITS_SELECTOR = "#sc-hits";
+/** The oracle's halt marker (scripts/runtime-oracle.mjs `haltMarker`): appended outside #root once Solid reports REACTIVITY_HALTED. */
+export const HALT_SELECTOR = "#sc-halted";
+export const HALT_TEXT = "sc-halted";
+/**
+ * A step selector that matches `selector`, or, when nothing matches it, the halt marker: a wait for an element that can no longer
+ * appear (nothing renders after a halt) ends at once. Native CSS (the scenario's selector rule); with no halt it is `selector`.
+ */
+export const haltable = (selector) => `${selector}, body:not(:has(${selector})) > ${HALT_SELECTOR}`;
 /** Longest order log kept (ids, in the order they ran). */
 export const ORDER_LIMIT = 400;
 
