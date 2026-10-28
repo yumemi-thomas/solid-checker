@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
-      "start": 489,
-      "end": 501,
+      "start": 499,
+      "end": 511,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
-      "start": 754,
-      "end": 763,
+      "start": 764,
+      "end": 773,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
-      "start": 1018,
-      "end": 1030,
+      "start": 1028,
+      "end": 1040,
       "fixes": 0
     },
     {
@@ -37,8 +37,18 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
-      "start": 1568,
-      "end": 1580,
+      "start": 1578,
+      "end": 1590,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
+      "start": 2297,
+      "end": 2309,
       "fixes": 0
     }
   ]

@@ -804,18 +804,20 @@ pub(crate) fn parameter_called_first(
             callee.body.contains(candidate.span)
                 && references.contains(&ast.peel_ts_sugar_span(candidate.callee))
         })
-        .map(|candidate| candidate.span.start)
-        .min()
+        .map(|candidate| candidate.span)
+        .min_by_key(|span| span.start)
     else {
         return false;
     };
-    !ast.calls
-        .iter()
-        .any(|other| callee.body.contains(other.span) && other.span.end <= first)
-        && !ast
-            .tagged_template_tags
-            .iter()
-            .any(|tag| callee.body.contains(*tag) && tag.end <= first)
+    // Anything written in the function before that call, its parameter list
+    // and nested functions included, and the call's own arguments (evaluated
+    // before the callee runs); JSX counts as a call (ADR 0495 review).
+    let before = |at: Span| {
+        callee.span.contains(at) && at != first && !at.contains(first) && at.start < first.end
+    };
+    !ast.calls.iter().any(|other| before(other.span))
+        && !ast.tagged_template_tags.iter().any(|tag| before(*tag))
+        && !ast.jsx_elements.iter().any(|element| before(element.span))
 }
 
 /// ADR 0474 amendment: the owner each run of a helper's function argument has,

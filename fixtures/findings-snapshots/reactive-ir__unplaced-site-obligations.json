@@ -242,6 +242,16 @@
       "fixes": 0
     },
     {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 2009,
+      "end": 2016,
+      "fixes": 0
+    },
+    {
       "rule": "sync-computation-received-async",
       "code": "SC7002",
       "kind": "violation",

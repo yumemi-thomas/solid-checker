@@ -1,4 +1,4 @@
-import { createEffect, onCleanup } from "solid-js";
+import { createEffect, getOwner, onCleanup } from "solid-js";
 
 // ADR 0493: an operation in function layers that run in place after an await
 // runs on the await's continuation, where no owner is current.
@@ -81,6 +81,33 @@ export function DeferredAfterAwait() {
   const load = async () => {
     await Promise.resolve();
     later(() => {
+      createEffect(() => 1, () => {});
+    });
+  };
+  void load();
+  return <div />;
+}
+
+// Not a violation (ADR 0493 review): a getOwner() guard around the layer
+// skips it with no owner after the await.
+export function GuardedAfterAwait() {
+  const load = async () => {
+    await Promise.resolve();
+    if (getOwner()) {
+      run(() => {
+        createEffect(() => 1, () => {});
+      });
+    }
+  };
+  void load();
+  return <div />;
+}
+
+// Not a violation: a library callback may run zero times.
+export function ForEachAfterAwait(props: { items: number[] }) {
+  const load = async () => {
+    await Promise.resolve();
+    props.items.forEach(() => {
       createEffect(() => 1, () => {});
     });
   };

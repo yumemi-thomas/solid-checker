@@ -149,9 +149,31 @@ pub(super) fn emit_file(
         // IIFE, a helper's callback, a function bound to a name called once;
         // ADR 0469's climb) runs on the stack of the outermost layer's call,
         // so where that call follows an await on every path, so does it.
+        // Not through a library callback, which may never run, and not where
+        // the function the climb ends in probes `getOwner()` at all: a guard
+        // around a layer (`if (getOwner()) run(() => …)`) skips it with no
+        // owner, and the push-time guard test follows only IIFEs.
         let climbed_after_await = || {
             crate::execution_role::climb_in_place_layers(file, candidate.operation_span, lookup)
-                .is_some_and(|climb| !climb.in_list && climb.suspended == Some(true))
+                .is_some_and(|climb| {
+                    !climb.in_list
+                        && climb.suspended == Some(true)
+                        && !crate::execution_role::climb_crosses_library_callback(
+                            file,
+                            candidate.operation_span,
+                            climb.at,
+                            lookup,
+                        )
+                        && !crate::owners::owning_function(&file.ast, climb.at).is_some_and(
+                            |outer| {
+                                file.ast.calls.iter().any(|call| {
+                                    outer.span.contains(call.span)
+                                        && lookup.primitive_at_call(file, call.span)
+                                            == Some(solid_dialect::Primitive::GetOwner)
+                                })
+                            },
+                        )
+                })
         };
         let after_await = settled_after_await
             || (continuation_placed

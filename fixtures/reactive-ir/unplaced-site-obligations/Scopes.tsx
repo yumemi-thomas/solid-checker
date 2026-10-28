@@ -63,3 +63,15 @@ export function waitReadyExported() {
 export function readNowExported() {
   return resolve(() => ready());
 }
+
+// Not a violation (ADR 0493 review): `[1].reduce` with no initial value never
+// calls its callback, so a library callback is not crossed.
+export function ReduceCallback() {
+  const m = createMemo(() =>
+    [1].reduce((total) => {
+      void resolve(() => ready());
+      return total;
+    }),
+  );
+  return <div>{m()}</div>;
+}

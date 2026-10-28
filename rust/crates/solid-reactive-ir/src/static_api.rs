@@ -633,7 +633,20 @@ fn resolve_tracked_scope(
     // the outermost layer's call, with the callback's observer active; not in
     // a parameter list, not after an await.
     let at = match crate::execution_role::climb_in_place_layers(file, call.span, context.lookup) {
-        Some(climb) if !climb.in_list && climb.suspended.is_none() => climb.at,
+        // A library callback may run zero times (ADR 0493 review), so it is
+        // not crossed.
+        Some(climb)
+            if !climb.in_list
+                && climb.suspended.is_none()
+                && !crate::execution_role::climb_crosses_library_callback(
+                    file,
+                    call.span,
+                    climb.at,
+                    context.lookup,
+                ) =>
+        {
+            climb.at
+        }
         _ => call.span,
     };
     if let Some((container, index)) =

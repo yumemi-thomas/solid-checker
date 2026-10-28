@@ -128,6 +128,7 @@ fn walk_to_effect_phase(
         visiting: HashSet::default(),
         budget: BUDGET,
         earlier: false,
+        from: None,
     };
     // The instance the flush call's own import loads, followed through
     // re-exports to the file that imports the package; unresolved is no proof.
@@ -155,6 +156,8 @@ struct Walk<'l, 'a> {
     budget: usize,
     /// A call that may run before the path ([`EffectPhaseOrigin::earlier_call`]).
     earlier: bool,
+    /// The layer the walk just left, whose own calls are the path's.
+    from: Option<Span>,
 }
 
 impl<'l, 'a> Walk<'l, 'a> {
@@ -183,20 +186,33 @@ impl<'l, 'a> Walk<'l, 'a> {
         if literal.r#async && !runs_before_first_suspension(file, literal, span) {
             return None;
         }
-        // A call inside a function nested in this layer runs only when that
-        // function is called, and that call is this layer's own.
-        let own = |at: Span| {
-            literal.body.contains(at)
-                && containing_ast_function(&file.ast, at)
-                    .is_some_and(|function| function.span == literal.span)
+        // ADR 0495 (review): what may run in this layer before the path does.
+        // Anything written before the path in the layer, its parameter list
+        // included and functions nested in it too (a getter or a JSX component
+        // runs with no call written), except the inner layer the walk came
+        // from; and, inside the path's own call, what its arguments evaluate
+        // outside the functions they create. JSX counts as a call.
+        let from = self.from.take();
+        let nested_in_path = |at: Span| {
+            file.ast
+                .functions
+                .iter()
+                .any(|function| span.contains(function.span) && function.span.contains(at))
         };
-        self.earlier |= file.ast.calls.iter().any(|other| {
-            own(other.span) && other.span.end <= span.start && !other.span.contains(span)
-        }) || file
-            .ast
-            .tagged_template_tags
-            .iter()
-            .any(|tag| own(*tag) && tag.end <= span.start);
+        let before = |at: Span| {
+            literal.span.contains(at)
+                && !at.contains(span)
+                && from.is_none_or(|inner| !inner.contains(at))
+                && (at.end <= span.start || (span.contains(at) && !nested_in_path(at)))
+        };
+        self.earlier |= file.ast.calls.iter().any(|other| before(other.span))
+            || file.ast.tagged_template_tags.iter().any(|tag| before(*tag))
+            || file
+                .ast
+                .jsx_elements
+                .iter()
+                .any(|element| before(element.span));
+        self.from = Some(literal.span);
         if let Some((call, index)) = argument_position(file, literal) {
             if let Some(origin) = self.argument_layer(file, call, index, helper_calls) {
                 return Some(origin);

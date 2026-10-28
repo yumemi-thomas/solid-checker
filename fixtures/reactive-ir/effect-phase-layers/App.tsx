@@ -102,3 +102,74 @@ export function MemoAfterEarlierCall() {
   );
   return null;
 }
+
+declare function tick(): number;
+
+function runWith(_n: number, cb: () => unknown) {
+  cb();
+}
+function runPassing(cb: (n: number) => unknown) {
+  cb(tick());
+}
+function runDefault(cb: () => unknown, _x: number = tick()) {
+  cb();
+}
+
+// SC6002 uncertifiable (ADR 0495 review): the helper call's own argument
+// runs first.
+export function MemoAfterHelperArgument() {
+  const [count] = createSignal(0);
+  createEffect(
+    () => count(),
+    () => {
+      runWith(tick(), () => createMemo(() => 1));
+    },
+  );
+  return null;
+}
+
+// SC6002 uncertifiable: the helper's call of its parameter evaluates an
+// argument first.
+export function MemoAfterParameterArgument() {
+  const [count] = createSignal(0);
+  createEffect(
+    () => count(),
+    () => {
+      runPassing(() => createMemo(() => 1));
+    },
+  );
+  return null;
+}
+
+// SC6002 uncertifiable: a parameter default of the helper, and of the
+// callback, runs first.
+export function MemoAfterDefaults() {
+  const [count] = createSignal(0);
+  createEffect(
+    () => count(),
+    () => {
+      runDefault(() => createMemo(() => 1));
+      runNow((_x: number = tick()) => createMemo(() => 2));
+    },
+  );
+  return null;
+}
+
+// SC6002 uncertifiable: a getter read before the helper call runs a call
+// with no call written at the read.
+export function MemoAfterGetter() {
+  const [count] = createSignal(0);
+  createEffect(
+    () => count(),
+    () => {
+      const probe = {
+        get v() {
+          return tick();
+        },
+      };
+      void probe.v;
+      runNow(() => createMemo(() => 1));
+    },
+  );
+  return null;
+}

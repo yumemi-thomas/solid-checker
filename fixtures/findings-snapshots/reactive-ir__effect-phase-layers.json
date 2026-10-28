@@ -110,6 +110,96 @@
       "start": 2177,
       "end": 2187,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 2683,
+      "end": 2695,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 2756,
+      "end": 2766,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 2984,
+      "end": 2996,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 3052,
+      "end": 3062,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 3275,
+      "end": 3287,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 3343,
+      "end": 3353,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 3403,
+      "end": 3413,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 3639,
+      "end": 3651,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 3808,
+      "end": 3818,
+      "fixes": 0
     }
   ]
 }

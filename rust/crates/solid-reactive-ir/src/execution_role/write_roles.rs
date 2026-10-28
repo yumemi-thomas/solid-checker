@@ -2084,6 +2084,52 @@ pub(crate) struct InPlaceClimb {
     pub(crate) suspended: Option<bool>,
 }
 
+/// ADR 0493 review: whether the climb from `span` to `to` crosses a layer that
+/// is an inline callback of a standard-library or dependency call
+/// (`[x].forEach(fn)`, `[1].reduce(fn)`): such a callback runs during the
+/// call but may run zero times, so a claim that it runs is no proof. An IIFE,
+/// a project helper's callback and a function bound to a name and called once
+/// run on every completion. `true` where a step cannot be retraced.
+pub(crate) fn climb_crosses_library_callback(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    to: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let mut at = span;
+    for _ in 0..16 {
+        if at == to {
+            return false;
+        }
+        let Some(function) = crate::owners::owning_function(&file.ast, at) else {
+            return true;
+        };
+        let library = file
+            .ast
+            .arguments_containing(function.span)
+            .filter(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+            })
+            .any(|(call, _)| {
+                lookup
+                    .resolved_callee_call(file, call.callee)
+                    .and_then(|resolved| resolved.declaration.as_ref())
+                    .is_none_or(|declaration| {
+                        declaration.standard_library
+                            || declaration.source_file.contains("/node_modules/")
+                    })
+            });
+        if library {
+            return true;
+        }
+        at = match layer_run(file, function, lookup) {
+            LayerRun::InPlace(call) | LayerRun::InPlaceAmongOthers(call) => call,
+            LayerRun::FreshStack | LayerRun::Elsewhere => return true,
+        };
+    }
+    true
+}
+
 /// Climbs from `span` through the function layers that run in place: an IIFE,
 /// an inline standard-library callback, a helper's callback it calls in its own
 /// body ([`layer_run`], the walk the write roles take). Stops at the first
