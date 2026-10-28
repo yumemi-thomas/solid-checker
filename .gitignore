@@ -107,6 +107,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/write-owner-in-cleanup-rc13/node_modules/**
 !fixtures/reactive-ir/write-callback-by-name/node_modules/
 !fixtures/reactive-ir/write-callback-by-name/node_modules/**
+!fixtures/reactive-ir/strict-read-async-apply/node_modules/
+!fixtures/reactive-ir/strict-read-async-apply/node_modules/**
 !fixtures/reactive-ir/write-detached-owner-helper/node_modules/
 !fixtures/reactive-ir/write-detached-owner-helper/node_modules/**
 !fixtures/reactive-ir/write-cleanup-handle-call/node_modules/

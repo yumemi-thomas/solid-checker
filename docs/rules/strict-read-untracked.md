@@ -213,6 +213,11 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   that may run before the alias's declarator throws there and is
   uncertifiable. A `let`, conditional, parameter, imported or exported alias is
   not followed.
+- **An effect apply reading an async source stays here (ADR 0467).** A run
+  that meets the source pending throws `PENDING_ASYNC_UNTRACKED_READ` instead
+  of the warning; when the apply first runs against the source's settling is
+  not proven, so the untracked read is the claim and the message names the
+  pending case (`fixtures/reactive-ir/strict-read-async-apply`).
 
 ## Why is this bad?
 

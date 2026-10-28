@@ -84,8 +84,23 @@ impl CatalogWording for Catalog {
 
     fn wording(&self, seed: FindingSeed<'_>) -> FindingWording {
         match seed {
-            FindingSeed::StrictRead { read, compute_reads_source } => {
+            FindingSeed::StrictRead {
+                read,
+                compute_reads_source,
+                apply_reads_async_source,
+            } => {
                 let mut message = strict_read_message_with_compute(read, compute_reads_source);
+                // ADR 0467: rc.17's `read()` throws PENDING_ASYNC_UNTRACKED_READ
+                // for a pending source before it would warn, so a run of the
+                // apply meets one code or the other. When the first run comes
+                // (a mount held by async, a compute that waits on async, a
+                // later run) decides which, and no fact here orders it against
+                // the source's settling: the untracked read is the claim.
+                if apply_reads_async_source && !compute_reads_source {
+                    message.push_str(
+                        "; its source is async, so a run of this apply while the source is still pending throws PENDING_ASYNC_UNTRACKED_READ instead of this warning, and whether the apply first runs before or after the source settles is not proven here",
+                    );
+                }
                 if read.uncertain {
                     // Signal-backing is a caller-decided fact in 2.0 (probed:
                     // devComponent's strict-read window only warns for props

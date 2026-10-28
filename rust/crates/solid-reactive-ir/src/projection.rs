@@ -509,6 +509,11 @@ pub enum FindingSeed<'a> {
     StrictRead {
         read: &'a ReactiveRead,
         compute_reads_source: bool,
+        /// ADR 0467: the read is an effect apply's read of a source proven
+        /// async. A run while the source is pending throws
+        /// `PENDING_ASYNC_UNTRACKED_READ` instead of the strict-read warning;
+        /// which one a run meets is the apply's timing, not proven here.
+        apply_reads_async_source: bool,
     },
     OwnedWrite(&'a ReactiveWrite),
     Action(&'a ActionInvocation),
@@ -567,6 +572,12 @@ pub fn project_findings(
     let construction_started = Instant::now();
     let capabilities = catalog.capabilities();
     let mut findings = Vec::new();
+    let async_apply_reads = program
+        .async_reads
+        .iter()
+        .filter(|read| read.async_provenance && read.execution == crate::ExecutionRole::EffectApply)
+        .map(|read| &read.location)
+        .collect::<std::collections::HashSet<_>>();
 
     findings.extend(
         program
@@ -578,6 +589,7 @@ pub fn project_findings(
                     FindingSeed::StrictRead {
                         read,
                         compute_reads_source: program.apply_compute_reads.contains(&read.location),
+                        apply_reads_async_source: async_apply_reads.contains(&read.location),
                     },
                     catalog,
                 )
