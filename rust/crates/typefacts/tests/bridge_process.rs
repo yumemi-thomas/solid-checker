@@ -343,6 +343,7 @@ fn demands(fixture: &Fixture) -> AnalysisDemand {
             // The binding kind is produced only beside both type answers.
             runtime_identity: true,
             declared_keys: false,
+            writable_optional_property: false,
             callability: true,
             constructability: true,
             ..EntityDemand::default()

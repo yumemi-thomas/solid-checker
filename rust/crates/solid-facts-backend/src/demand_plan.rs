@@ -42,9 +42,10 @@ struct DemandSpans {
     library_type_spans: HashSet<Span>,
     declared_key_spans: HashSet<Span>,
     /// The links a store write's member chain reads past its root (ADR
-    /// 0465), asked for their primitive value domain without a symbol
-    /// observation.
+    /// 0465; a `delete` operand's too, ADR 0461), asked for their primitive
+    /// value domain without a symbol observation.
     chain_link_spans: HashSet<Span>,
+    writable_optional_property_spans: HashSet<Span>,
     async_symbol_spans: HashSet<Span>,
     async_value_spans: Vec<Span>,
 }
@@ -94,6 +95,7 @@ fn plan_file(
     collect_argument_spans(dialect, file, &mut spans);
     collect_member_spans(file, &mut spans);
     collect_chain_link_spans(dialect, file, &mut spans);
+    collect_delete_spans(dialect, file, &mut spans);
     emit_span_demands(
         file,
         spans,
@@ -103,6 +105,35 @@ fn plan_file(
     )?;
     plan_call_demands(dialect, file, demands, (&path, &returned_callees));
     Ok(())
+}
+
+/// ADR 0461: whether a `delete` operand that is a static member names a
+/// property TypeScript lets it delete (optional, not readonly), and whether
+/// each object the member chain reads on the way may be `null` or `undefined`
+/// (TS18047/TS18048 under strictNullChecks), which
+/// `no-store-mutation-outside-setter` asks before reporting a store delete.
+/// TypeScript sees through parentheses only: `delete store.v!` and `delete
+/// (store.v as T)` are TS2703, so a type assertion on the operand asks nothing.
+fn collect_delete_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut DemandSpans) {
+    if !dialect.semantic_demands.delete_operand_optionality {
+        return;
+    }
+    for &target in &file.ast.deleted_targets {
+        let Some(member) = file.peel_parentheses(target) else {
+            continue;
+        };
+        if file.ast.member_at(member).is_none()
+            || file.ast.computed_members.binary_search(&member).is_ok()
+        {
+            continue;
+        }
+        spans.writable_optional_property_spans.insert(member);
+        // The links the chain reads past its root, shared with the
+        // assignment and mutator forms (ADR 0465).
+        spans
+            .chain_link_spans
+            .extend(file.ast.member_chain_links(member));
+    }
 }
 
 fn collect_symbol_spans(
@@ -777,7 +808,7 @@ const ARRAY_MUTATOR_NAMES: [&str; 9] = [
 /// method's callee, reads past its chain's root. Whether each may be `null` or
 /// `undefined` (TS18047/TS18048 under strictNullChecks) is what
 /// `no-store-mutation-outside-setter` asks before reporting a store write
-/// through a chain longer than one link (as ADR 0460 for `delete`).
+/// through a chain longer than one link (as ADR 0461 for `delete`).
 fn collect_chain_link_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut DemandSpans) {
     if !dialect.semantic_demands.store_write_chain_links {
         return;
@@ -868,6 +899,7 @@ fn emit_span_demands(
         library_type_spans,
         declared_key_spans,
         chain_link_spans,
+        writable_optional_property_spans,
         async_symbol_spans,
         async_value_spans,
     } = spans;
@@ -921,6 +953,11 @@ fn emit_span_demands(
     for span in declared_key_spans {
         let mut planned = demand(file_location(path, span));
         planned.declared_keys = true;
+        demands.push(planned);
+    }
+    for span in writable_optional_property_spans {
+        let mut planned = demand(file_location(path, span));
+        planned.writable_optional_property = true;
         demands.push(planned);
     }
 
@@ -1329,6 +1366,7 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         reference_space: false,
         runtime_identity: false,
         declared_keys: false,
+        writable_optional_property: false,
     }
 }
 
@@ -1396,6 +1434,7 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.reference_space |= demand.reference_space;
             current.runtime_identity |= demand.runtime_identity;
             current.declared_keys |= demand.declared_keys;
+            current.writable_optional_property |= demand.writable_optional_property;
         } else {
             merged.push(demand);
         }

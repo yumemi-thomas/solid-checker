@@ -22,6 +22,10 @@ symbol:
 
 - an assignment, compound assignment or update (`store.a.b = x`,
   `store.n++`);
+- a `delete` of a bare or parenthesized static member path (`delete
+  store.a.b`) whose property Type Facts proves optional and not readonly
+  (ADR 0461), its links past the root judged as an assignment's (ADR 0465,
+  below); a missing fact makes it uncertifiable;
 - a call of one of the nine in-place `Array.prototype` methods (`push`, `pop`,
   `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`) on a
   path of the store. The callee must resolve through Type Facts to the
@@ -76,11 +80,19 @@ after `flush()`):
 
 Not reported, deliberately:
 
-- `delete store.path`. It is dropped, but for a required property tsc reports
-  TS2790 (strictNullChecks), and a property whose type includes `undefined` or
-  is optional type-checks with no Type Fact at a delete operand to say which.
-  Pinned in the tsc oracle and ownership case `…/delete-required-property/001`;
-  open item in `docs/open-work.md`.
+- `delete` of a required or readonly property: tsc reports TS2790 (under
+  strictNullChecks) or TS2704. A non-optional property typed `T | undefined`
+  stays silent too (TS2790 under `exactOptionalPropertyTypes`). Only a property
+  the checker marks optional and not readonly (`v?: T`, `Partial<T>`) is
+  reported, through the Type Fact `writableOptionalProperty`. A type
+  assertion on the operand (`delete store.v!`, `delete (store.v as T)`) is
+  TS2703, and a link that may be `undefined` or `null` (`store.o.b` with `o?:`)
+  is TS18048/TS18047: both silent. Any other chain past the root
+  (`store.a.b`) is uncertifiable: without `strictNullChecks` a link's type
+  proves nothing at run time. An element access, an optional chain, a
+  cast root and a `const` alias of the store are refused. Pinned in the tsc oracle and ownership cases
+  `…/delete-required-property/001`, `…/delete-optional-property/001`; fixture
+  `store-delete`.
 - Reassigning an accessor binding (`count = 2`, this rule's former
   accessor-binding arm). On rc.17 a `const` binding is TS2588 and a `let`
   assigned a number or a function is TS2322 (`count++` TS2356, `count += 1`
@@ -154,6 +166,10 @@ Examples of **incorrect** code for this rule:
 const [items] = createStore({ list: [3, 1, 2] });
 // An in-place array method on a store path: dropped.
 items.list.sort();
+
+const [doc] = createStore<{ note?: string }>({ note: "a" });
+// The `deleteProperty` trap drops it too.
+delete doc.note;
 
 const selected = createProjection((draft) => { draft[id()] = true; }, {});
 // Derived, read-only outside its compute function: dropped.

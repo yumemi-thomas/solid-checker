@@ -57,6 +57,7 @@ pub(super) fn check_file(
     uncalled_accessor(file, context, defects);
     no_direct_mutation(file, context, defects);
     no_store_mutator_call(file, context, defects);
+    no_store_delete(file, context, defects);
     expected_function_got_expression(file, context, defects);
     reactive_source_uncaptured(file, context, defects);
 }
@@ -1362,7 +1363,7 @@ fn store_write_is_exempt(
 
 /// What the links a store write's member chain reads past its root
 /// ([`solid_facts::ast::AstFacts::member_chain_links`] of the written member
-/// `member`) leave of its proof (ADR 0465; ADR 0460 for `delete`). `None`: the
+/// `member`) leave of its proof (ADR 0465, shared with `delete`, ADR 0461). `None`: the
 /// rule is silent. `Some(true)`: uncertifiable. `Some(false)`: the write's
 /// proof stands.
 ///
@@ -1556,6 +1557,107 @@ fn no_store_mutator_call(
             analysis_context: String::new(),
             fixes: vec![],
             uncertain: past_root,
+        });
+    }
+}
+
+/// `delete` of a static member path of a proven store (ADR 0461): the proxy's
+/// `deleteProperty` trap drops it outside a setter like the `set` trap drops an
+/// assignment (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5761-5767`), with
+/// the same exemptions ([`store_write_is_exempt`]).
+///
+/// The rule never reports what TypeScript reports on the same delete:
+/// - the operand must be a bare or parenthesized member: `delete store.v!` and
+///   `delete (store.v as T)` are TS2703, so a type assertion is silent;
+/// - its property must carry Type Facts' `writable_optional_property`
+///   (optional, not readonly): a required one is TS2790 under
+///   strictNullChecks, a readonly one TS2704;
+/// - the links the chain reads past the root (`store.a` in `delete
+///   store.a.b`) get the verdict the assignment and mutator forms get
+///   ([`chain_links_verdict`], ADR 0465): silent on a link TypeScript reports
+///   as possibly nullish, a violation under strictNullChecks when every link
+///   excludes `null` and `undefined`, uncertifiable otherwise.
+///
+/// A proven store delete with no entity at the operand is uncertifiable: the
+/// write is proven, the TypeScript question is open. A computed key, an optional
+/// chain, a root that is not a bare identifier and a props object stay silent.
+fn no_store_delete(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    defects: &mut Vec<StaticDefect>,
+) {
+    for &target in &file.ast.deleted_targets {
+        let Some(member) = file.peel_parentheses(target) else {
+            continue;
+        };
+        if file.ast.member_at(member).is_none()
+            || file.ast.computed_members.binary_search(&member).is_ok()
+        {
+            continue;
+        }
+        let Some(root) = member_root(file, member) else {
+            continue;
+        };
+        // Every link from the operand down to the root is a plain member read:
+        // no `?.` (which may skip the delete) and no wrapper between links.
+        let mut link = member;
+        let mut plain = true;
+        while let Some(current) = file.ast.member_at(link) {
+            if file.ast.optional_members.binary_search(&link).is_ok() {
+                plain = false;
+                break;
+            }
+            link = current.object;
+        }
+        if !plain
+            || link != root
+            || !file
+                .ast
+                .identifiers
+                .iter()
+                .any(|identifier| identifier.span == root)
+        {
+            continue;
+        }
+        let Some(symbol) = source_symbol_at(context, file, root) else {
+            continue;
+        };
+        if context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store) {
+            continue;
+        }
+        let Some((name, _)) = context.accessors.get(symbol) else {
+            continue;
+        };
+        if store_write_is_exempt(
+            file,
+            context,
+            StoreWriteSite {
+                span: member,
+                member,
+                root,
+            },
+            symbol,
+        ) {
+            continue;
+        }
+        let path = file.path.as_str();
+        let uncertain = match context.lookup.entity_at(path, member) {
+            None => true,
+            Some(entity) if !entity.writable_optional_property => continue,
+            Some(_) => match chain_links_verdict(file, context, member) {
+                None => continue,
+                Some(past_root) => past_root,
+            },
+        };
+        defects.push(StaticDefect {
+            kind: StaticDefectKind::DirectMutation {
+                name: name.as_str().to_owned(),
+                target: store_target(context, symbol),
+            },
+            location: location(file.path.shared(), member),
+            analysis_context: String::new(),
+            fixes: vec![],
+            uncertain,
         });
     }
 }

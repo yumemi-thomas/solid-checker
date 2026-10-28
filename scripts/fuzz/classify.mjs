@@ -14,6 +14,9 @@
 //                             Assigned after classification (falseclean.mjs), never here.
 //   recall-gap                Solid reports a defect and the checker declines (an uncertifiable finding at the
 //                             diagnostic): counted and ranked as a roadmap metric, never a failure.
+//   candidate-unexecuted      shown as `candidate-false-positive: unexecuted`. The checker proves a defect at a payload site the hit ledger
+//                             shows never ran (unexecuted.mjs). A hypothesis: Chrome confirms it (`confirmed-unexecuted`, exit 3) or not.
+//                             Ranked under recall-gap and above inconclusive, so only a row that was `inconclusive: never-ran` moves to it.
 //   inconclusive              the evidence cannot decide: the site never ran, nothing shows it ran,
 //                             the rule has no runtime counterpart, the program threw, the
 //                             checker or the runtime failed. "Unresolved" is not evidence (invariant 2).
@@ -23,16 +26,17 @@
 // is above zero); `landed` is the page text of the site's witness. A payload site with a witness needs `landed`
 // (a site that ran but did not land is not evidence of silence). A site with no witness (a glue call, a void
 // payload) is judged by `ran`. A finding on a line with no payload site is judged by the glue calls (auto-sites)
-// on its lines. A site that never ran is `inconclusive: never-ran`, unless `flags.deadSite` (off by default)
-// and every condition of deadsite.mjs hold, which makes it a `dead-site` candidate false positive.
+// on its lines. A site that never ran is a `candidate-unexecuted` when the ledger proves it (unexecuted.mjs: payload sites only, each placed,
+// the page quiescent, the host entered), else `inconclusive: never-ran`. Chrome and the conditions of deadsite.mjs decide whether a
+// candidate is confirmed (unexecuted.mjs `judgeUnexecuted`); this comparator only says what the ledger shows.
 //
 // An uncertifiable finding is never a claim; at a runtime diagnostic it counts as covering it
 // (the checker said it could not prove), the way the runtime oracle's `covered-uncertifiable` does.
 import { codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, withholdingRules } from "./codes.mjs";
-import { deadSiteConditions } from "./deadsite.mjs";
 import { hitCount } from "./hits.mjs";
+import { STATUS as UNEXECUTED_STATUS, unexecutedCandidate } from "./unexecuted.mjs";
 
-export const VERDICTS = ["candidate-false-positive", "candidate-false-clean", "candidate-wrong-rule", "known-open", "recall-gap", "inconclusive", "agree"];
+export const VERDICTS = ["candidate-false-positive", "candidate-false-clean", "candidate-wrong-rule", "known-open", "recall-gap", "candidate-unexecuted", "inconclusive", "agree"];
 const rank = (verdict) => VERDICTS.indexOf(verdict);
 
 const inSpan = (finding, line) => finding.line <= line && line <= finding.endLine;
@@ -87,11 +91,10 @@ export function disturbances(runtime, plan) {
  * @param {{failure?:object,diagnostics:object[],errors:object[],witnesses:{siteId:string,reached:boolean|null}[]}} input.runtime
  * @param {{clicks:string[]}} [input.plan]
  * @param {{id:string,hit:number,line:number}[]} [input.glue] auto-sites: one per emitted call (print.mjs)
- * @param {{deadSite?: boolean}} [input.flags] `deadSite` enables the dead-site subkind (off by default)
- * @param {{ledger?: object[], closed?: object, neutral?: boolean}} [input.evidence] what the dead-site conditions read
+ * @param {{ledger?: object[], lexicallyDead?: Set<number>}} [input.evidence] what the unexecuted candidate reads
  *   Also read from `runtime`: `hits` (`{ id: count }`, null when the run was not instrumented) and `quiescent`.
  */
-export function classify({ sites, glue = [], checker, runtime, plan, flags = {}, evidence = {} }) {
+export function classify({ sites, glue = [], checker, runtime, plan, evidence = {} }) {
   const items = [];
   const add = (kind, reason, extra = {}) => items.push({ kind, reason, ...extra });
 
@@ -143,15 +146,13 @@ export function classify({ sites, glue = [], checker, runtime, plan, flags = {},
     } else if (states.some((state) => ran(state))) {
       add("inconclusive", "the site ran but its witness did not land: nothing proves the claimed code executed", { finding: label, why: "ran-not-landed" });
     } else if (hits !== null && states.every((state) => state.count === 0)) {
-      const dead = flags.deadSite
-        ? deadSiteConditions({ sites: covered, ledger: evidence.ledger, hits, closed: evidence.closed, quiescent: runtime.quiescent ?? null, neutral: evidence.neutral === true, disturbed })
-        : null;
-      if (dead?.ok) {
-        add("candidate-false-positive", `${finding.rule} (${finding.id ?? "?"}) is a violation at line ${finding.line}; no execution of the driven closed program entered the site (a closure built and never invoked)`,
-          { finding: label, siteIds: covered.map((site) => site.id), subkind: "dead-site" });
+      // Payload sites only: a finding on a plumbing line (glue calls) is never a candidate.
+      const unexecuted = payload.length ? unexecutedCandidate({ sites: covered, ledger: evidence.ledger, hits, quiescent: runtime.quiescent ?? null, lexicallyDead: evidence.lexicallyDead }) : null;
+      if (unexecuted?.ok) {
+        add("candidate-unexecuted", `${finding.rule} (${finding.id ?? "?"}) is a violation at line ${finding.line}; the hit ledger shows no execution entered the site (${[...new Set(unexecuted.bases)].join(", ")})`,
+          { finding: label, status: UNEXECUTED_STATUS, siteIds: covered.map((site) => site.id), bases: unexecuted.bases });
       } else {
-        add("inconclusive", `the site never ran${dead ? `; dead-site not provable (${dead.unmet.map((u) => u.condition).join(", ")})` : ""}`,
-          { finding: label, why: "never-ran", ...(dead ? { unmet: dead.unmet.map((u) => u.condition) } : {}) });
+        add("inconclusive", "the site never ran", { finding: label, why: "never-ran" });
       }
     } else if (states.every((state) => state.landed === null)) {
       add("inconclusive", "the runtime is silent, but nothing shows the site ran (no witness)", { finding: label, why: "no-witness" });

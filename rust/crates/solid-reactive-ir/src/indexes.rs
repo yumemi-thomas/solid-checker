@@ -1951,6 +1951,7 @@ impl<'a> SemanticLookup<'a> {
                             self.symbol_names,
                             self.dialect,
                         )
+                        .filter(|_| !self.namespace_slot_mention_withheld(file, call.callee))
                     })
                     .collect(),
                 jsx: file
@@ -1965,6 +1966,7 @@ impl<'a> SemanticLookup<'a> {
                             self.symbol_names,
                             self.dialect,
                         )
+                        .filter(|_| !self.namespace_slot_mention_withheld(file, element.name.span))
                     })
                     .collect(),
             }

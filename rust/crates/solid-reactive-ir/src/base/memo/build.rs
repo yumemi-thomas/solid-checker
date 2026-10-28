@@ -564,7 +564,8 @@ fn symbol_rows_digest(view: &FileView<'_>) -> [u8; 32] {
 }
 
 /// The declaration each resolved call of `entities` names (a callee's
-/// symbol) and the declared key set each carries (ADR 0436), digested.
+/// symbol), the declared key set each carries (ADR 0436) and its
+/// writable-optional-property flag (ADR 0461), digested.
 fn declarations_digest(entities: &[typefacts::EntityFact]) -> [u8; 32] {
     let mut digest = Sha256::new();
     for entity in entities {
@@ -603,6 +604,7 @@ fn declarations_digest(entities: &[typefacts::EntityFact]) -> [u8; 32] {
                 }
             }
         }
+        digest.update([u8::from(entity.writable_optional_property)]);
     }
     digest.finalize().into()
 }
@@ -1746,9 +1748,9 @@ impl<'w> FileRead<'_, '_, 'w> {
     }
 
     /// The TypeFacts entity at exactly `span` of this file: reads the entity
-    /// rows. Its `declared_keys` are part of the Entities fingerprint
-    /// ([`declarations_digest`]); no other field of the row is, so a memo reads
-    /// from it only what that digest covers.
+    /// rows. Its `declared_keys` and `writable_optional_property` are part of
+    /// the Entities fingerprint ([`declarations_digest`]); no other field of the
+    /// row is, so a memo reads from it only what that digest covers.
     pub(crate) fn entity_at(&self, span: Span) -> Option<&'w typefacts::EntityFact> {
         self.ctx
             .record_input(Input::File(self.id, Section::Entities));

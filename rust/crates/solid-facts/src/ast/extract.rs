@@ -86,6 +86,14 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) module_consumers: Vec<(Span, ModuleLoadConsumer)>,
     pub(super) sequences: Vec<SequenceFact>,
     pub(super) import_equals: Vec<ImportEqualsFact>,
+    /// `(local, initializer identifier's declaration, key)` of every static
+    /// slot of a non-ambient `const` object pattern whose initializer is an
+    /// identifier; kept in `finish` only where the declaration is a runtime
+    /// namespace import binding.
+    pub(super) namespace_member_candidates: Vec<(Span, Span, CompactString)>,
+    /// The declarations of the bindings this module exports by name or as
+    /// its default or `export =` value.
+    pub(super) exported_declarations: Vec<Span>,
     pub(super) type_imports: Vec<TypeImportFact>,
     pub(super) type_queries: Vec<Span>,
     pub(super) type_names: Vec<Span>,
@@ -327,6 +335,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             module_consumers: Vec::new(),
             sequences: Vec::new(),
             import_equals: Vec::new(),
+            namespace_member_candidates: Vec::new(),
+            exported_declarations: Vec::new(),
             type_imports: Vec::new(),
             type_queries: Vec::new(),
             type_names: Vec::new(),
@@ -483,6 +493,35 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.await_operands.sort_unstable();
         self.jsx_child_expressions.sort_unstable();
         self.disposal_initializers.sort_unstable();
+        let namespace_bindings = self
+            .imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .flat_map(|import| &import.bindings)
+            .filter(|binding| binding.kind == ImportKind::Namespace && !binding.type_only)
+            .map(|binding| binding.local.span)
+            .collect::<std::collections::HashSet<_>>();
+        // A binding the module exports directly (`export const`, `export { x }`,
+        // `export default x`, `export = x`) is referenced from other modules;
+        // such a slot is not recorded. A value that escapes otherwise
+        // (`export default { x }`) is not a reference to the binding.
+        let exported = self
+            .exported_declarations
+            .iter()
+            .copied()
+            .collect::<std::collections::HashSet<_>>();
+        let mut namespace_member_bindings = std::mem::take(&mut self.namespace_member_candidates)
+            .into_iter()
+            .filter(|(local, namespace, _)| {
+                namespace_bindings.contains(namespace) && !exported.contains(local)
+            })
+            .map(|(local, namespace, key)| NamespaceMemberBindingFact {
+                local,
+                namespace,
+                key,
+            })
+            .collect::<Vec<_>>();
+        namespace_member_bindings.sort_by_key(|fact| fact.local);
         AstFacts {
             schema: AST_FACTS_SCHEMA,
             source,
@@ -504,6 +543,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             module_loads: self.module_loads,
             sequences: self.sequences,
             import_equals: self.import_equals,
+            namespace_member_bindings,
             type_imports: self.type_imports,
             type_queries: self.type_queries,
             type_names: self.type_names,

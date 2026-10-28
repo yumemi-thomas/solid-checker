@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   awaitStmt, button, call, child, component, decl, expr, fn, getOwner, helper, iife, iter, member, nodeCount, obj, param, probe, program, prim,
-  read, ref, ret, set, signal, validate, walk, write, num,
+  read, ref, ret, set, signal, validate, walk, write, num, closedGrammar, contain, show,
 } from "./model.mjs";
 import { printProgram } from "./print.mjs";
 
@@ -86,5 +86,30 @@ describe("walk", () => {
     const nodes = [...walk(p)];
     expect(nodes.length).toBe(nodeCount(p));
     for (const { node, path } of nodes) expect(path.reduce((value, key) => value[key], p)).toBe(node);
+  });
+});
+
+describe("closedGrammar with containers (the confirmation of an unexecuted violation)", () => {
+  const contained = (kind, extra = {}) => program({ seed: 1, components: [component("C1", [], [contain(kind, 1, [], extra)], [])] });
+  it("refuses every container strictly and admits those the text fixes with { containers: true }", () => {
+    for (const kind of ["comp-never", "comp-rendered", "comp-slot", "comp-returned", "class-field", "class-static", "class-sblock", "class-method", "class-ctor", "dead-if", "dead-after-return", "dead-fn", "and-true", "and-false"]) {
+      expect(closedGrammar(contained(kind)).closed).toBe(false);
+      expect(closedGrammar(contained(kind), { containers: true })).toEqual({ closed: true, reasons: [] });
+    }
+  });
+
+  it("never admits comp-prop: the caller of the component may supply the prop", () => {
+    expect(closedGrammar(contained("comp-prop"), { containers: true })).toMatchObject({ closed: false, reasons: ["container comp-prop"] });
+  });
+
+  it("admits the rewritten call forms only with containers, and still refuses the rest of the grammar", () => {
+    const optional = (name) => expr({ ...call(ref(name)), via: "optional" });
+    const via = program({ seed: 1, components: [component("C1", [], [optional("f")], [])] });
+    const declared = program({ seed: 1, components: [component("C1", [], [decl("f", fn([])), optional("f")], [])] });
+    expect(closedGrammar(declared).reasons).toContain("call through optional");
+    expect(closedGrammar(declared, { containers: true }).closed).toBe(true);
+    expect(closedGrammar(via, { containers: true }).reasons).toContain("call of undeclared f");
+    const shown = program({ seed: 1, components: [component("C1", [], [], [show(read("s1"), [])])] });
+    expect(closedGrammar(shown, { containers: true }).closed).toBe(false);
   });
 });

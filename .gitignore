@@ -109,6 +109,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/write-detached-owner-helper/node_modules/**
 !fixtures/reactive-ir/write-cleanup-handle-call/node_modules/
 !fixtures/reactive-ir/write-cleanup-handle-call/node_modules/**
+!fixtures/reactive-ir/write-render-apply-row-layers/node_modules/
+!fixtures/reactive-ir/write-render-apply-row-layers/node_modules/**
 !fixtures/reactive-ir/dead-code-sites/node_modules/
 !fixtures/reactive-ir/dead-code-sites/node_modules/**
 !fixtures/reactive-ir/rc17-callback-exports-mixed/node_modules/
@@ -637,6 +639,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/leaf-scope-project-callees/node_modules/**
 !fixtures/reactive-ir/store-mutators/node_modules/
 !fixtures/reactive-ir/store-mutators/node_modules/**
+!fixtures/reactive-ir/store-delete/node_modules/
+!fixtures/reactive-ir/store-delete/node_modules/**
 !fixtures/reactive-ir/projection-writes/node_modules/
 !fixtures/reactive-ir/projection-writes/node_modules/**
 !fixtures/reactive-ir/accessor-rebinding/node_modules/

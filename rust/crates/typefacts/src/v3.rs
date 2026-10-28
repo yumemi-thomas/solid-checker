@@ -56,8 +56,11 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V22: u64 = 22;
 /// v23 adds the declared-keys entity field (ADR 0436): row flag bit 16 followed,
 /// when set, by a count and that many strings, after the runtime binding kind.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V23: u64 = 23;
+/// v24 adds the writable-optional-property entity flag (ADR 0461): row flag
+/// bit 17, with no payload.
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V24: u64 = 24;
 /// Every Wire table schema a transition may carry (v10 is retired).
-pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 20] = [
+pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 21] = [
     TYPE_FACTS_TABLE_SCHEMA_V3,
     TYPE_FACTS_TABLE_SCHEMA_V4,
     TYPE_FACTS_TABLE_SCHEMA_V5,
@@ -78,10 +81,11 @@ pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 20] = [
     TYPE_FACTS_TABLE_SCHEMA_V21,
     TYPE_FACTS_TABLE_SCHEMA_V22,
     TYPE_FACTS_TABLE_SCHEMA_V23,
+    TYPE_FACTS_TABLE_SCHEMA_V24,
 ];
 
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:b273de404211dd3325012eb1c6aa7b47d3964ec5d61210227e36bc183e49d26e";
+    "sha256:3a373545fd152a6b98bb36d7f04980075f55a606e67583f0e762c41837ff673d";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -499,9 +503,11 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // the first, and a protocol-84 client would reject the second.
 // Protocol 86 (ADR 0436) adds the `declaredKeys` demand and entity field, carried
 // by Wire table schema v23; a protocol-85 consumer would refuse the new bit.
-// Protocol 87 (ADR 0465) adds the analyze answer's `strictNullChecks`, the
+// Protocol 87 (ADR 0461) adds the `writableOptionalProperty` demand and entity
+// flag, carried by Wire table schema v24.
+// Protocol 88 (ADR 0465) adds the analyze answer's `strictNullChecks`, the
 // program's effective option, which the retained table keeps.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 87;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 88;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -588,6 +594,8 @@ pub struct EntityDemand {
     pub runtime_identity: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub declared_keys: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub writable_optional_property: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -829,6 +837,7 @@ pub const DEMAND_FLAG_CONSTRUCTABILITY: u64 = 1 << 16;
 pub const DEMAND_FLAG_PRIMITIVE_LITERAL_CANDIDATES: u64 = 1 << 17;
 pub const DEMAND_FLAG_PARAMETER_OBJECT_SHAPE: u64 = 1 << 18;
 pub const DEMAND_FLAG_DECLARED_KEYS: u64 = 1 << 19;
+pub const DEMAND_FLAG_WRITABLE_OPTIONAL_PROPERTY: u64 = 1 << 20;
 
 pub(crate) fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
     while value >= 0x80 {
@@ -879,6 +888,7 @@ pub(crate) mod rows {
     pub(crate) const ENTITY_PRIMITIVE_LITERAL_CANDIDATES: u64 = 1 << 14;
     pub(crate) const ENTITY_RUNTIME_BINDING_KIND: u64 = 1 << 15;
     pub(crate) const ENTITY_DECLARED_KEYS: u64 = 1 << 16;
+    pub(crate) const ENTITY_WRITABLE_OPTIONAL_PROPERTY: u64 = 1 << 17;
 
     pub(crate) const PARAMETER_DECLARATION: u64 = 1 << 0;
     pub(crate) const PARAMETER_REST: u64 = 1 << 1;
@@ -1389,6 +1399,7 @@ fn decode_entity_run(
             | TYPE_FACTS_TABLE_SCHEMA_V21
             | TYPE_FACTS_TABLE_SCHEMA_V22 => 65535,
             TYPE_FACTS_TABLE_SCHEMA_V23 => 131071,
+            TYPE_FACTS_TABLE_SCHEMA_V24 => 262143,
             TYPE_FACTS_TABLE_SCHEMA_V15 | TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
             TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
@@ -1622,6 +1633,7 @@ fn decode_entity_run(
             tuple_shape,
             library_types,
             declared_keys,
+            writable_optional_property: flags & rows::ENTITY_WRITABLE_OPTIONAL_PROPERTY != 0,
             primitive_value_domain,
             primitive_literal_candidates,
             reference_space,
@@ -2189,6 +2201,9 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
         }
         if demand.declared_keys {
             flags |= DEMAND_FLAG_DECLARED_KEYS;
+        }
+        if demand.writable_optional_property {
+            flags |= DEMAND_FLAG_WRITABLE_OPTIONAL_PROPERTY;
         }
         let group = groups.last_mut().expect("group pushed above");
         let has_query = u64::from(demand.query_location.is_some());

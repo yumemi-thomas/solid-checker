@@ -12,7 +12,7 @@ use crate::v3::{
     TYPE_FACTS_TABLE_SCHEMA_V13, TYPE_FACTS_TABLE_SCHEMA_V14, TYPE_FACTS_TABLE_SCHEMA_V15,
     TYPE_FACTS_TABLE_SCHEMA_V16, TYPE_FACTS_TABLE_SCHEMA_V17, TYPE_FACTS_TABLE_SCHEMA_V18,
     TYPE_FACTS_TABLE_SCHEMA_V19, TYPE_FACTS_TABLE_SCHEMA_V20, TYPE_FACTS_TABLE_SCHEMA_V21,
-    TYPE_FACTS_TABLE_SCHEMA_V23, TransitionMode, rows,
+    TYPE_FACTS_TABLE_SCHEMA_V23, TYPE_FACTS_TABLE_SCHEMA_V24, TransitionMode, rows,
 };
 use crate::{
     ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, ArrayShape, CallKind,
@@ -213,6 +213,10 @@ fn write_entity_run(
         set(
             schema >= TYPE_FACTS_TABLE_SCHEMA_V23 && declared_keys.is_some(),
             rows::ENTITY_DECLARED_KEYS,
+        );
+        set(
+            schema >= TYPE_FACTS_TABLE_SCHEMA_V24 && entity.writable_optional_property,
+            rows::ENTITY_WRITABLE_OPTIONAL_PROPERTY,
         );
         set(
             schema >= TYPE_FACTS_TABLE_SCHEMA_V5 && entity.symbol_claim == SymbolClaim::Unresolved,

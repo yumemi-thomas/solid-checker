@@ -222,6 +222,8 @@ fn detached_in_place(
     // or keeps it ([`LayerRun::InPlaceAmongOthers`]): the callback has runs this
     // climb does not follow, so only a run that proves a violation is read.
     let mut among_others = false;
+    // Whether a layer on the way holds the site past an await.
+    let mut suspended = false;
     // Bounded: each step moves to the call that holds the previous function.
     for _ in 0..16 {
         let Some(function) = crate::owners::owning_function(&file.ast, at) else {
@@ -231,6 +233,11 @@ fn detached_in_place(
             break;
         }
         in_list |= !function.body.contains(at);
+        // An await before the site in a layer: the rest of that layer runs
+        // later, on a stack the apply's first run is not on (ADR 0460).
+        suspended |= follows_dominating_await(file, at)
+            || follows_try_head_await(file, at, lookup)
+            || may_follow_suspension(file, at);
         let primitive_call = file
             .ast
             .arguments_containing(function.span)
@@ -271,6 +278,23 @@ fn detached_in_place(
                     }
                     _ => {}
                 }
+            }
+            // ADR 0460: the layers run on the stack of a callback that shares
+            // its call's owner on its first run (`createRenderEffect`'s apply),
+            // so the write is placed as one written directly in it. A site in a
+            // list, or a callback a helper also hands on, has runs this climb
+            // does not follow, and so no placement.
+            if layered
+                && callback_owner_at_call(file, call, primitive, index, lookup)
+                    == Some(solid_dialect::CallbackOwner::InheritsFirstRun)
+            {
+                if suspended {
+                    return None;
+                }
+                if in_list || among_others {
+                    return Some(WriteRegionAdjustment::OwnerUnknown);
+                }
+                return Some(WriteRegionAdjustment::FirstRunAtCallSite(call.span));
             }
             if execution.is_some()
                 && lookup
@@ -814,17 +838,104 @@ fn named_closure_in_owner_keeping_callback<'a>(
                         lookup
                             .primitive_at_call(file, call.span)
                             .is_some_and(|primitive| {
-                                lookup
-                                    .dialect
-                                    .callback_preserves_owner_write_context(primitive)
-                                    && callback_execution_at_call(
-                                        file, call, primitive, index, lookup,
-                                    )
-                                    .is_some()
+                                callback_takes_call_owner(file, call, primitive, index, lookup)
                             })
                     })
         })
         .min_by_key(|function| function.body.end - function.body.start)
+}
+
+/// How the functions between a site and the control-flow children callback
+/// around it run (ADR 0460).
+enum ControlFlowLayers {
+    /// Every one runs in place, on the stack of the call at this span, written
+    /// in the callback itself; `true` when a helper also hands one on.
+    InPlace(Span, bool),
+    /// One is bound to a name, stored or handed to a call this does not know:
+    /// its entries place it, not the callback.
+    Unrun,
+}
+
+/// The layers between `span` and the control-flow children callback that
+/// gives it its deferred role ([`control_flow_execution_role`] answers
+/// deferred only for a function nested in that callback). `None` when that
+/// role does not come from such a callback, or when a layer has a role of its
+/// own the write keeps: a primitive's callback, a JSX attribute's value (an
+/// event handler), or a callback a scheduler runs on a fresh stack.
+fn control_flow_nested_layers(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ControlFlowLayers> {
+    let deferred = |at: Span| {
+        control_flow_execution_role(file, at, entities, symbol_names, lookup.dialect)
+            == Some(ExecutionRole::DeferredCallback)
+    };
+    if !deferred(span) {
+        return None;
+    }
+    let mut at = span;
+    let mut among_others = false;
+    // Bounded: each step moves to the call that runs the previous function.
+    for _ in 0..16 {
+        if !deferred(at) {
+            return Some(ControlFlowLayers::InPlace(at, among_others));
+        }
+        let function = crate::owners::owning_function(&file.ast, at)?;
+        if function.generator || !function.body.contains(at) {
+            return Some(ControlFlowLayers::Unrun);
+        }
+        // Past an await the rest of the layer runs as a continuation with no
+        // owner, where a write is legal; past a possible suspension, unplaced.
+        if follows_dominating_await(file, at) || follows_try_head_await(file, at, lookup) {
+            return None;
+        }
+        if may_follow_suspension(file, at) {
+            return Some(ControlFlowLayers::Unrun);
+        }
+        let primitive_argument =
+            file.ast
+                .arguments_containing(function.span)
+                .any(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                        && lookup.primitive_at_call(file, call.span).is_some()
+                });
+        if primitive_argument || jsx_attribute_value_function(file, function.span) {
+            return None;
+        }
+        match layer_run(file, function, lookup) {
+            LayerRun::InPlace(call) => at = call,
+            LayerRun::InPlaceAmongOthers(call) => {
+                among_others = true;
+                at = call;
+            }
+            LayerRun::FreshStack => return None,
+            LayerRun::Elsewhere => return Some(ControlFlowLayers::Unrun),
+        }
+    }
+    Some(ControlFlowLayers::Unrun)
+}
+
+/// Whether the callback at `call`'s `index` places the writes written in it by
+/// its call's owner: one that keeps that owner and runs during the call
+/// (`untrack`, ADR 0455), or one that shares it on its first run
+/// (`createRenderEffect`'s apply, ADR 0460). Its lexical role (deferred) is
+/// then no proof for a function it builds.
+fn callback_takes_call_owner(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: solid_dialect::Primitive,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    (lookup
+        .dialect
+        .callback_preserves_owner_write_context(primitive)
+        && callback_execution_at_call(file, call, primitive, index, lookup).is_some())
+        || callback_owner_at_call(file, call, primitive, index, lookup)
+            == Some(solid_dialect::CallbackOwner::InheritsFirstRun)
 }
 
 /// ADR 0455: whether `span` is written in a function that a callback keeping
@@ -855,11 +966,7 @@ fn unrun_layer_in_owner_keeping_callback(
                     .map(|primitive| (call, index, primitive))
             });
         if let Some((call, index, primitive)) = primitive_call {
-            return unrun
-                && lookup
-                    .dialect
-                    .callback_preserves_owner_write_context(primitive)
-                && callback_execution_at_call(file, call, primitive, index, lookup).is_some();
+            return unrun && callback_takes_call_owner(file, call, primitive, index, lookup);
         }
         match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) => at = call,
@@ -1145,6 +1252,35 @@ fn write_role_walk(
         ExecutionRole::Unreported
     } else {
         ExecutionRole::Unknown
+    };
+    // ADR 0460: the deferred role a control-flow component's children callback
+    // gives every function nested in it is no proof for a write. A function
+    // the callback's code runs in place (an IIFE, a helper calling it) runs
+    // where that code does; any other is placed by its own entries.
+    let direct = if direct == ExecutionRole::DeferredCallback {
+        match control_flow_nested_layers(file, span, entities, symbol_names, lookup) {
+            Some(ControlFlowLayers::InPlace(at, among_others)) => {
+                let role = semantic_write_execution_role_within(
+                    file,
+                    at,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    root_body,
+                    visiting,
+                );
+                return if among_others && !role.reports_disallowed_write() {
+                    unknown
+                } else {
+                    role
+                };
+            }
+            Some(ControlFlowLayers::Unrun) => ExecutionRole::Unknown,
+            None => direct,
+        }
+    } else {
+        direct
     };
     // Directly in a component body the dev owner is the component's root, so
     // a guard that exempts roots exempts the body too. Only the body itself:

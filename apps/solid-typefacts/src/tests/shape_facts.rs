@@ -685,6 +685,83 @@ bare;\n";
     assert!(undemanded[0].declared_keys.is_none(), "undemanded");
 }
 
+/// ADR 0461: a property access names a writable optional property only when
+/// its resolved property symbol is optional and not readonly, the condition
+/// under which `delete` of it raises neither TS2790 nor TS2704.
+#[test]
+fn demanded_writable_optional_property_answers_only_optional_writable_properties() {
+    let source = "type State = { opt?: number; req: number; undef: number | undefined; readonly ro?: number; method?(): void; nested: { inner?: string } };\n\
+declare const s: State;\n\
+declare const partial: Partial<{ a: number }>;\n\
+declare const required: Required<{ a?: number }>;\n\
+declare const frozen: Readonly<{ a?: number }>;\n\
+declare const either: { a?: number } | { a: string };\n\
+declare const record: Record<string, number>;\n\
+declare const loose: any;\n\
+delete s.opt;\n\
+delete s.req;\n\
+delete s.undef;\n\
+delete s.ro;\n\
+delete s.method;\n\
+delete s.nested.inner;\n\
+delete s[\"opt\"];\n\
+delete partial.a;\n\
+delete required.a;\n\
+delete frozen.a;\n\
+delete either.a;\n\
+delete record.k;\n\
+delete loose.k;\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SHAPES_CONFIG), ("deletes.ts", source)]);
+    let path = scratch.path("deletes.ts");
+    let mut project = scratch.open();
+    let cases: [(&str, bool); 13] = [
+        ("s.opt", true),
+        ("s.req", false),
+        // Its type includes `undefined`, but it is not optional: TS2790 under
+        // `exactOptionalPropertyTypes`.
+        ("s.undef", false),
+        ("s.ro", false),
+        ("s.method", false),
+        ("s.nested.inner", true),
+        // An element access is not answered.
+        ("s[\"opt\"]", false),
+        ("partial.a", true),
+        ("required.a", false),
+        ("frozen.a", false),
+        // A union property is optional when any constituent's is.
+        ("either.a", true),
+        ("record.k", false),
+        ("loose.k", false),
+    ];
+    let demands: Vec<EntityDemand> = cases
+        .iter()
+        .map(|(expression, _)| EntityDemand {
+            location: find_last(&path, source, expression),
+            writable_optional_property: true,
+            ..EntityDemand::default()
+        })
+        .collect();
+    let facts = entities(&mut project, &path, &demands);
+    assert_eq!(facts.len(), cases.len());
+    for ((expression, want), fact) in cases.iter().zip(&facts) {
+        assert_eq!(
+            fact.writable_optional_property, *want,
+            "{expression} writable optional property"
+        );
+    }
+
+    let undemanded = entities(
+        &mut project,
+        &path,
+        &[EntityDemand {
+            location: demands[0].location.clone(),
+            type_descriptor: true,
+            ..EntityDemand::default()
+        }],
+    );
+    assert!(!undemanded[0].writable_optional_property, "undemanded");
+}
+
 /// Go writes an internal library symbol name (`\xFEtype`) as a raw byte that
 /// clients read back as U+FFFD; the Rust producer spells what clients read.
 #[test]
