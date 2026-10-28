@@ -176,7 +176,20 @@ impl<'l, 'a> Walk<'l, 'a> {
             return None;
         }
         if let Some((call, index)) = argument_position(file, literal) {
-            return self.argument_layer(file, call, index, helper_calls);
+            if let Some(origin) = self.argument_layer(file, call, index, helper_calls) {
+                return Some(origin);
+            }
+            // ADR 0484: a project helper that calls this argument in its own
+            // body on every completion, and never hands it on or keeps it
+            // (`layer_run`'s `InPlace`), runs it on the helper call's stack, so
+            // every run of the literal is a run of that call. A primitive's or
+            // an unknown callee's argument is not such a layer.
+            return match crate::execution_role::layer_run(file, literal, self.lookup) {
+                crate::execution_role::LayerRun::InPlace(at) if at == call.span => {
+                    self.layer(file, at, helper_calls + 1)
+                }
+                _ => None,
+            };
         }
         if let Some(call) = iife_call(file, literal) {
             return self.layer(file, call.span, helper_calls);
@@ -569,20 +582,11 @@ impl<'l, 'a> Walk<'l, 'a> {
 
 /// Whether the function is part of its module's surface, which callers
 /// outside the analyzed project may use.
+/// ADR 0484: the module exports the function itself. An export statement's
+/// span holds every function nested in the exported one, which is not
+/// exported by it (`crate::execution_role::module_exports`).
 fn exported(lookup: &SemanticLookup<'_>, file: &FileFacts, function: &FunctionFact) -> bool {
-    file.ast
-        .exports
-        .iter()
-        .any(|export| export.span.contains(function.span))
-        || lookup
-            .typescript_file(file.path.as_str())
-            .is_some_and(|facts| {
-                facts.functions.iter().any(|candidate| {
-                    candidate.exported
-                        && candidate.body.start_byte == u64::from(function.body.start)
-                        && candidate.body.end_byte == u64::from(function.body.end)
-                })
-            })
+    crate::execution_role::module_exports(file, function, lookup)
 }
 
 /// The call and argument position at which `literal` is written as the

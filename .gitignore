@@ -117,6 +117,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/local-alias-member-reads/node_modules/**
 !fixtures/reactive-ir/primitive-in-effect-callback/node_modules/
 !fixtures/reactive-ir/primitive-in-effect-callback/node_modules/**
+!fixtures/reactive-ir/effect-phase-layers/node_modules/
+!fixtures/reactive-ir/effect-phase-layers/node_modules/**
 !fixtures/reactive-ir/write-in-refused-creation/node_modules/
 !fixtures/reactive-ir/write-in-refused-creation/node_modules/**
 !fixtures/reactive-ir/owner-returned-callable/node_modules/

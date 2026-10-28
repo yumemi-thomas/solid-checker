@@ -1,0 +1,3 @@
+# effect-phase-layers
+
+**Claim (ADR 0484).** The effect-phase walk shared by SC2008 and SC6002 crosses a closure written in an exported component and called only in place (an export statement's span no longer makes the functions nested in it exported), and a project helper that calls its callback in its own body (`layer_run`'s `InPlace`). Violations: `flush` in such a closure and through such a helper (SC2008). Uncertifiable: a memo created through a helper (SC6002 proves its throw only with no call before it). Silent: a helper that keeps its callback. Stubs as in `primitive-in-effect-callback`, plus rc.17's `flush`.
