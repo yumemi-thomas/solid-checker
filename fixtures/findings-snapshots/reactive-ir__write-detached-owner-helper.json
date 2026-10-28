@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 2867,
-      "end": 2874,
+      "start": 2962,
+      "end": 2969,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 3066,
-      "end": 3073,
+      "start": 3161,
+      "end": 3168,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 3283,
-      "end": 3290,
+      "start": 3378,
+      "end": 3385,
       "fixes": 0
     },
     {
@@ -37,108 +37,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 3629,
-      "end": 3636,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 3798,
-      "end": 3805,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 3982,
-      "end": 3989,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 4787,
-      "end": 4794,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 4952,
-      "end": 4959,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 5128,
-      "end": 5135,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 5295,
-      "end": 5302,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 5445,
-      "end": 5452,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 5658,
-      "end": 5665,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 5854,
-      "end": 5861,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 6022,
-      "end": 6029,
+      "start": 3724,
+      "end": 3731,
       "fixes": 0
     },
     {
@@ -147,8 +47,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 6388,
-      "end": 6395,
+      "start": 3893,
+      "end": 3900,
       "fixes": 0
     },
     {
@@ -157,8 +57,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 6563,
-      "end": 6570,
+      "start": 4077,
+      "end": 4084,
       "fixes": 0
     },
     {
@@ -167,8 +67,108 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
-      "start": 6743,
-      "end": 6750,
+      "start": 4882,
+      "end": 4889,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
+      "start": 5047,
+      "end": 5054,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
+      "start": 5223,
+      "end": 5230,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
+      "start": 5390,
+      "end": 5397,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
+      "start": 5540,
+      "end": 5547,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
+      "start": 5753,
+      "end": 5760,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
+      "start": 5949,
+      "end": 5956,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
+      "start": 6117,
+      "end": 6124,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
+      "start": 6483,
+      "end": 6490,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
+      "start": 6658,
+      "end": 6665,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-helper/App.tsx",
+      "start": 6838,
+      "end": 6845,
       "fixes": 0
     },
     {

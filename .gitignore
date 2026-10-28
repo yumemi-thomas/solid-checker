@@ -109,6 +109,10 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/write-callback-by-name/node_modules/**
 !fixtures/reactive-ir/write-named-closure-in-root/node_modules/
 !fixtures/reactive-ir/write-named-closure-in-root/node_modules/**
+!fixtures/reactive-ir/write-named-function-one-call/node_modules/
+!fixtures/reactive-ir/write-named-function-one-call/node_modules/**
+!fixtures/reactive-ir/local-alias-literal-slots/node_modules/
+!fixtures/reactive-ir/local-alias-literal-slots/node_modules/**
 !fixtures/reactive-ir/write-in-refused-creation/node_modules/
 !fixtures/reactive-ir/write-in-refused-creation/node_modules/**
 !fixtures/reactive-ir/owner-returned-callable/node_modules/

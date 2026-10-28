@@ -1377,7 +1377,7 @@ fn store_write_standing(
     if !context.dialect.store_setter_callback_enables_proxy_writes() {
         return WriteStanding::Dropped;
     }
-    let stores = store_and_aliases(context, file.path.as_str(), site.root, symbol);
+    let stores = store_and_aliases(context, file, site.root, symbol);
     let windows = write_windows(file, context, &stores, symbol);
     if windows.is_empty() {
         return WriteStanding::Dropped;
@@ -1463,10 +1463,11 @@ impl Windows {
 /// write's own (ADR 0476).
 fn store_and_aliases(
     context: &UpstreamCompatContext<'_>,
-    path: &str,
+    file: &solid_facts::FileFacts,
     root: Span,
     symbol: &crate::SymbolId,
 ) -> Vec<crate::SymbolId> {
+    let path = file.path.as_str();
     let mut stores = vec![symbol.clone()];
     let mut at = (path.to_owned(), root);
     for _ in 0..4 {
@@ -1493,6 +1494,39 @@ fn store_and_aliases(
         .filter(|(_, _, bound)| !stores.contains(bound))
     {
         stores.push(bound);
+    }
+    // ADR 0480: the exact aliases of `local_alias_bindings` (an object or array
+    // literal's slot, an object-literal arrow's slot) hold the same store, in
+    // either direction, to a fixpoint within the site's file.
+    {
+        let pairs = file
+            .ast
+            .local_alias_bindings
+            .iter()
+            .filter_map(|alias| {
+                Some((
+                    context.entities.at(path, alias.local)?.clone(),
+                    context.entities.at(path, alias.source)?.clone(),
+                ))
+            })
+            .collect::<Vec<_>>();
+        loop {
+            let mut grew = false;
+            for (local, source) in &pairs {
+                let (has_local, has_source) = (stores.contains(local), stores.contains(source));
+                if has_local != has_source {
+                    stores.push(if has_local {
+                        source.clone()
+                    } else {
+                        local.clone()
+                    });
+                    grew = true;
+                }
+            }
+            if !grew {
+                break;
+            }
+        }
     }
     stores
 }
@@ -1525,20 +1559,68 @@ fn is_own_setter(
             slot_symbol(1) == Some(&callee_symbol)
                 && slot_symbol(0).is_some_and(|store| stores.contains(store))
         }
-        solid_facts::ast::BindingShape::Identifier if depth > 0 && binding.immutable => binding
-            .initializer_identifier
-            .as_ref()
-            .is_some_and(|source| {
-                is_own_setter(
-                    context,
-                    binding_file.path.as_str(),
-                    source.span,
-                    stores,
-                    depth - 1,
-                )
-            }),
+        solid_facts::ast::BindingShape::Identifier if depth > 0 && binding.immutable => {
+            binding
+                .initializer_identifier
+                .as_ref()
+                .is_some_and(|source| {
+                    is_own_setter(
+                        context,
+                        binding_file.path.as_str(),
+                        source.span,
+                        stores,
+                        depth - 1,
+                    )
+                })
+                || literal_alias_is_own_setter(context, binding_file, &callee_symbol, stores, depth)
+        }
+        _ if depth > 0 => {
+            literal_alias_is_own_setter(context, binding_file, &callee_symbol, stores, depth)
+        }
         _ => false,
     }
+}
+
+/// ADR 0480: whether the binding `symbol` is an exact local alias
+/// (`local_alias_bindings`: a literal slot) of the setter destructured beside
+/// one of `stores`, directly or through further such aliases.
+fn literal_alias_is_own_setter(
+    context: &UpstreamCompatContext<'_>,
+    file: &solid_facts::FileFacts,
+    symbol: &crate::SymbolId,
+    stores: &[crate::SymbolId],
+    depth: usize,
+) -> bool {
+    let path = file.path.as_str();
+    let Some(alias) = file
+        .ast
+        .local_alias_bindings
+        .iter()
+        .find(|alias| context.entities.at(path, alias.local) == Some(symbol))
+    else {
+        return false;
+    };
+    // The source is a declaration: the setter slot of a store's array
+    // pattern, or another alias.
+    if let Some(binding) = file.ast.bindings.iter().find(|binding| {
+        binding.shape == solid_facts::ast::BindingShape::Array
+            && binding
+                .array_slots
+                .get(1)
+                .and_then(Option::as_ref)
+                .is_some_and(|name| name.span == alias.source)
+    }) {
+        return binding
+            .array_slots
+            .first()
+            .and_then(Option::as_ref)
+            .and_then(|name| context.entities.at(path, name.span))
+            .is_some_and(|store| stores.contains(store));
+    }
+    let Some(source) = context.entities.at(path, alias.source) else {
+        return false;
+    };
+    depth > 0 && literal_alias_is_own_setter(context, file, source, stores, depth - 1)
 }
 
 /// Where the site at `span` (a store write, or the call of a function that

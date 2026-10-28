@@ -70,7 +70,7 @@ export const inParameterList = action(function* (x: number = (() => { flush(); r
   yield x;
 });
 
-// Negative (not claimed): a named closure called in place is not a layer the climb crosses.
+// Positive (ADR 0479): a named closure whose only reference is one call runs on that call's stack.
 export const namedClosure = action(function* () {
   const f = () => flush();
   f();

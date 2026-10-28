@@ -1,0 +1,5 @@
+# local-alias-literal-slots
+
+**Claim (ADR 0480).** A slot of a destructured `const` array literal (`const [a] = [r1]`), or of a `const` holder of one every reference of which is such a destructuring (`const pair = [0, r1] as const; const [, a] = pair`), and a slot of a destructured call of a `const` arrow whose expression body is an object literal of static data properties (`const { a } = useThing()`), is the `const` it names, for every rule, as ADR 0463's aliases are.
+
+Violations: `strict-read-untracked` in a body (holder, literal, arrow), `no-write-in-pure-computation` (setter slot in a memo), `no-store-mutation-outside-setter` (store slot). Not aliases: a holder written or handed out, a block-bodied arrow, a parameter value, a slot after a spread. Silent: the read in a memo, and a write through each alias inside its own store's setter, also when the setter is reached through a literal slot (the fuzzer's legal matrix found these false positives in the first cut). Stubs as in `local-alias-bindings`.

@@ -2,6 +2,9 @@
 
 use super::*;
 
+/// ADR 0480: an object-literal arrow's slots, `(key, the const variable its value is)`.
+pub(super) type ArrowSlots = Vec<(CompactString, Option<Span>)>;
+
 /// Whether `path`'s extension marks it as a JSON module rather than
 /// JavaScript or TypeScript.
 ///
@@ -96,6 +99,21 @@ pub(super) struct Collector<'s, 'semantic> {
     /// `(local, source)` of every local alias (`LocalAliasBindingFact`) but
     /// the export test, which `finish` applies.
     pub(super) local_alias_candidates: Vec<(Span, Span)>,
+    /// ADR 0480: each `const` holding an array literal, by its symbol: the
+    /// `const` variable each element is (`None` past a spread, for a hole or
+    /// any other element), and how many `const` array patterns destructure it.
+    pub(super) const_array_slots: Vec<(oxc_semantic::SymbolId, Vec<Option<Span>>)>,
+    pub(super) array_destructures: Vec<oxc_semantic::SymbolId>,
+    /// `(local, holder, index)`: a slot of a `const` array pattern over a
+    /// `const` identifier, resolved in `finish` against `const_array_slots`.
+    pub(super) pending_array_aliases: Vec<(Span, oxc_semantic::SymbolId, usize)>,
+    /// ADR 0480: each `const` arrow whose expression body is an object
+    /// literal of static data properties, by its symbol: `(key, the const
+    /// variable its value is)`.
+    pub(super) const_object_arrows: Vec<(oxc_semantic::SymbolId, ArrowSlots)>,
+    /// `(local, arrow, key)`: a slot of a `const` object pattern over a call of
+    /// a `const` identifier, resolved in `finish` against `const_object_arrows`.
+    pub(super) pending_call_aliases: Vec<(Span, oxc_semantic::SymbolId, CompactString)>,
     /// The declarations of the bindings this module exports by name or as
     /// its default or `export =` value.
     pub(super) exported_declarations: Vec<Span>,
@@ -342,6 +360,11 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             import_equals: Vec::new(),
             namespace_member_candidates: Vec::new(),
             local_alias_candidates: Vec::new(),
+            const_array_slots: Vec::new(),
+            array_destructures: Vec::new(),
+            pending_array_aliases: Vec::new(),
+            const_object_arrows: Vec::new(),
+            pending_call_aliases: Vec::new(),
             exported_declarations: Vec::new(),
             type_imports: Vec::new(),
             type_queries: Vec::new(),
@@ -528,6 +551,39 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             })
             .collect::<Vec<_>>();
         namespace_member_bindings.sort_by_key(|fact| fact.local);
+        // ADR 0480: an array slot holds its element's `const` when every
+        // reference to the holder is a `const` array pattern's initializer,
+        // so nothing writes, passes or exports the array; an object slot over
+        // a call holds the arrow's returned property, a fresh literal each call.
+        let array_slots = std::mem::take(&mut self.const_array_slots)
+            .into_iter()
+            .collect::<std::collections::HashMap<_, _>>();
+        let object_arrows = std::mem::take(&mut self.const_object_arrows)
+            .into_iter()
+            .collect::<std::collections::HashMap<_, _>>();
+        let mut destructures = std::collections::HashMap::<oxc_semantic::SymbolId, usize>::new();
+        for holder in std::mem::take(&mut self.array_destructures) {
+            *destructures.entry(holder).or_default() += 1;
+        }
+        for (local, holder, index) in std::mem::take(&mut self.pending_array_aliases) {
+            let only_destructured = destructures.get(&holder).copied().unwrap_or(0)
+                == self.scoping.get_resolved_reference_ids(holder).len()
+                && !exported.contains(&span(self.scoping.symbol_span(holder)));
+            if let Some(Some(source)) = array_slots.get(&holder).and_then(|slots| slots.get(index))
+                && only_destructured
+            {
+                self.local_alias_candidates.push((local, *source));
+            }
+        }
+        for (local, arrow, key) in std::mem::take(&mut self.pending_call_aliases) {
+            let Some(values) = object_arrows.get(&arrow) else {
+                continue;
+            };
+            let mut matching = values.iter().filter(|(name, _)| *name == key);
+            if let (Some((_, Some(source))), None) = (matching.next(), matching.next()) {
+                self.local_alias_candidates.push((local, *source));
+            }
+        }
         let mut local_alias_bindings = std::mem::take(&mut self.local_alias_candidates)
             .into_iter()
             .filter(|(local, _)| !exported.contains(local))

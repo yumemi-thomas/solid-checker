@@ -145,8 +145,8 @@ export function CleanupRootClosureReturned() {
   return <div>{w1()}<button onClick={() => { dispose(); }}>go</button></div>;
 }
 
-// Uncertifiable where rc.17 throws: a root call in a nested function may run
-// before a const is initialized (ADR 0466), so it is no proof.
+// Violation (rc.17 throws): `run` has one call, after both declarators, so the
+// root call in it runs there and `f1` is initialized (ADR 0479).
 
 // The root call in a closure declared before the root body.
 export function CleanupRootByNameInNestedFunction() {

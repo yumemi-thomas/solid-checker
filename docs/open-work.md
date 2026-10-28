@@ -6,6 +6,7 @@ Case ids name directories under `fixtures/runtime-oracle/`; each `oracle.json` `
 
 ## 1. Known open detections
 
+- A value read as a member of a hook's result (`const thing = useThing(); thing.set(1)`), a block-bodied or imported hook, and a literal holder read any other way are not followed to the primitive (ADR 0480 covers destructured slots only): the misuse matrix's `hook-member` binding is 574 of its 768 certified false cleans.
 Defects the runtime reports and the checker does not. Each is a missing violation, not a false positive; the named rule should claim it. Codes are the runtime's.
 
 Strict read in a setup body (`strict-read-untracked`, SC1001):
