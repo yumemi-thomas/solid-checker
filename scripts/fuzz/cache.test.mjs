@@ -198,6 +198,14 @@ describe("what is really installed", () => {
     symlinkSync(join(dir, "node_modules"), join(linked, "node_modules"));
     expect(treeStat(linked)).toBe(treeStat(dir));                                      // a shared install through a symlink
     expect(treeStat(join(dir, "none"))).toBe("missing");
+    // A run's own tool caches do not move it (every Vite and Vitest run rewrites them), npm's record of the install does.
+    const stable = treeStat(dir);
+    mkdirSync(join(dir, "node_modules/.vite-temp"), { recursive: true });
+    writeFileSync(join(dir, "node_modules/.vite-temp/x.mjs"), "run 1");
+    mkdirSync(join(dir, "node_modules/.vitest-cache"), { recursive: true });
+    expect(treeStat(dir)).toBe(stable);
+    writeFileSync(join(dir, "node_modules/.package-lock.json"), "{}");
+    expect(treeStat(dir)).not.toBe(stable);
   });
 
   it("installedKey moves with Node's version, the runner's environment and either install's files", () => {

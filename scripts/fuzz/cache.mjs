@@ -138,6 +138,8 @@ export function treeHash(directory, keep = () => true) {
  * What is really installed below `directory` (an install's node_modules, a browser build): every file's path, size and modification
  * time, symlinks followed. A lockfile says what should be there; this says what is, so a reinstall, a half-finished `npm ci` or an
  * edited dist file all move the key. A stat walk, not a byte hash: about a tenth of the time, and any npm write moves an mtime.
+ * Dot-directories are left out: they are the tools' own caches (`.vite`, `.vite-temp`, `.vitest-cache`), rewritten by every run, and
+ * no package's code lives there. Dot-files stay (npm's `.package-lock.json`, the record of what it installed).
  */
 export function treeStat(directory) {
   if (!directory || !existsSync(directory)) return "missing";
@@ -151,7 +153,7 @@ export function treeStat(directory) {
       const path = join(dir, name);
       let info;
       try { info = statSync(path); } catch { hash.update(`${prefix}${name}\0dangling\n`); continue; }
-      if (info.isDirectory()) visit(path, `${prefix}${name}/`);
+      if (info.isDirectory()) { if (!name.startsWith(".")) visit(path, `${prefix}${name}/`); }
       else hash.update(`${prefix}${name}\0${info.size}\0${info.mtimeMs}\n`);
     }
   };
