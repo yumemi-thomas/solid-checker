@@ -512,6 +512,26 @@ impl DiagnosticSession {
                 });
             }
         }
+        // ADR 0464: a violation at a site that names a binding which may not
+        // be initialized yet there (a `const`/`let` declared later, a
+        // destructured one included) claims what may instead be a
+        // `ReferenceError`. Style rules claim nothing about execution.
+        for finding in &mut findings {
+            if finding.kind == "violation"
+                && !finding.id.starts_with("SC80")
+                && solid_reactive_ir::site_may_precede_initialization(
+                    &program,
+                    finding.primary_location.path.as_ref(),
+                    finding.primary_location.start_byte,
+                    finding.primary_location.end_byte,
+                )
+            {
+                finding.kind = "uncertifiable".into();
+                finding.message.push_str(
+                    "; this code names a binding before its declaration is proven to have run, so it may throw a ReferenceError instead, and this is not proven",
+                );
+            }
+        }
         // ADR 0360: a file the compiler refused carries no compiler facts, so
         // nothing about it is proven, and neither is anything a finding
         // elsewhere reaches through it. Its sites are unplaced in the IR; a

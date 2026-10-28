@@ -55,6 +55,7 @@ pub(crate) use memo_probes::{BindingResolutionRows, probing};
 pub(crate) use returned_invocations::{INVOCATION_TABLES_FROM, InvocationTables};
 pub(crate) use returned_uses::{RETURNED_TABLES_FROM, ReturnedTables, UseKind};
 mod initialization;
+pub(crate) use initialization::early_mention_report_sites;
 mod intrinsics;
 mod member_values;
 mod primitive_proof;
