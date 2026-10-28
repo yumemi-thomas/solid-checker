@@ -86,7 +86,7 @@ export async function runProfile({ options, profile, config, cache, history, out
     }
     let started = Date.now();
     if (missing.length) {
-      const fresh = resultRows(await evaluateFn(missing, { ...config, casesDir: join(out, "cases", `${name}-base`), instrument: false, control: false, deadSite: false }));
+      const fresh = resultRows(await evaluateFn(missing, { ...config, casesDir: join(out, "cases", `${name}-base`), instrument: false, control: false }));
       for (const row of fresh) {
         cached.set(row.id, row);
         const entry = missing.find((candidate) => candidate.built.id === row.id);

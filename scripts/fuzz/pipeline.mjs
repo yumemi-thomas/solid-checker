@@ -6,12 +6,12 @@
 // this" (invariant 1); the instrumented twin (hits.mjs) is type-checked too, because it is what runs,
 // and it runs in Happy DOM. The neutrality gate (hits.mjs, README): strip(runText) == text is checked
 // when the case is built; `config.control` runs the clean twin in the same engine and compares the
-// outcomes (and the checker on the twin's text); both are required before a dead-site verdict.
+// outcomes (and the checker on the twin's text); both are required before an unexecuted candidate is confirmed (unexecuted.mjs).
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { mapPoolSettled } from "../lib/pool.mjs";
 import { materializeForChecker, runChecker, siteVerdicts } from "./checker.mjs";
-import { classify } from "./classify.mjs";
+import { classify, runtimeEvents } from "./classify.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { runFast } from "./fast.mjs";
 import { findingsDiff, outcomeDiff } from "./hits.mjs";
@@ -19,6 +19,7 @@ import { closedGrammar } from "./model.mjs";
 import { signature as findingSignature } from "./dedupe.mjs";
 import { callAtLine } from "./falseclean.mjs";
 import { typecheck } from "./typecheck.mjs";
+import { judgeUnexecuted, lexicallyDeadHits } from "./unexecuted.mjs";
 
 /** A case that ships a generated package is checked as a user's run is (checker.mjs ORDINARY_ARGS): the package is read from source. */
 export const hasPackages = (built) => Object.keys(built.packages ?? {}).length > 0;
@@ -31,7 +32,7 @@ const inconclusive = (reason, why) => ({ verdict: "inconclusive", reasons: [reas
  *   casesDir (where case dirs are written), concurrency, workers, keepWork,
  *   instrument (default true; false runs the clean text and classifies as before the hit ledger: the baseline of the neutrality regression),
  *   control (also run the clean twin and the checker on the twin's text, and compare),
- *   deadSite (enable the dead-site subkind; implies control) }
+ *   (`deadSite` is the strict confirmation of unexecuted candidates, read by run.mjs; it changes no verdict here) }
  * @returns {Promise<Map<string, object>>} id -> { program, built, typecheck, checker, runtime, classification, verdicts, control }
  */
 export async function evaluate(entries, config, deps = {}) {
@@ -41,7 +42,7 @@ export async function evaluate(entries, config, deps = {}) {
   const results = new Map();
   const { install, casesDir } = config;
   const instrument = config.instrument !== false;
-  const control = instrument && Boolean(config.control || config.deadSite);
+  const control = instrument && Boolean(config.control);
   mkdirSync(casesDir, { recursive: true });
 
   // 1. Write the case, type-check it as the oracle compiles it, and ask the checker (on the clean text).
@@ -103,8 +104,7 @@ export async function evaluate(entries, config, deps = {}) {
     }
     value.classification = classify({
       sites: value.built.sites, glue: instrument ? value.built.glue : [], checker: value.checker, runtime: value.runtime, plan: value.built.plan,
-      flags: { deadSite: Boolean(config.deadSite) },
-      evidence: { ledger: value.built.ledger, closed: closedGrammar(value.program), neutral },
+      evidence: { ledger: value.built.ledger, closed: closedGrammar(value.program), neutral, lexicallyDead: lexicallyDeadHits(value.program, value.built.ledger) },
     });
   }
   return results;
@@ -114,10 +114,10 @@ export async function evaluate(entries, config, deps = {}) {
  * Whether a shrink asks for the neutrality control (`config.control`) of an accepted candidate only, not of every candidate it tries.
  * The control can only turn a verdict into `inconclusive` (`perturbed-run`); it adds nothing to a verdict it lets stand. So a candidate
  * holds under the control exactly when it holds without it and then passes it: `judgeEntries` runs the plain pass for the batch and the
- * controlled pass for the candidates that hold, in order, until one passes, which is the one the search takes. The dead-site subkind
- * reads the control inside its verdict, so it keeps the control in every round. `config.shrinkControl === "each"` restores the old rule.
+ * controlled pass for the candidates that hold, in order, until one passes, which is the one the search takes.
+ * `config.shrinkControl === "each"` restores the old rule.
  */
-export const lazyControl = (config) => Boolean(config.control) && !config.deadSite && config.shrinkControl !== "each";
+export const lazyControl = (config) => Boolean(config.control) && config.shrinkControl !== "each";
 
 /**
  * Judges built entries as `evaluate` does and answers `holds(entry, result)` for each. With `lazyControl(config)` the batch runs
@@ -145,14 +145,24 @@ export async function judgeEntries(entries, config, holds, deps = {}) {
 /**
  * Chrome's judgement of a fast-path result: the same comparator, on Chrome's runtime and checker records
  * (the oracle's findings on the twin, compared with the fast pipeline's clean ones: a difference is
- * `instrumentation-perturbed-checker`). A dead-site candidate is confirmed only if Chrome itself meets every condition.
+ * `instrumentation-perturbed-checker`).
  */
 export function classifyChrome(value, record, config = {}) {
   return classify({
     sites: value.built.sites, glue: value.built.glue ?? [], checker: record.checker, runtime: record.runtime, plan: value.built.plan,
-    flags: { deadSite: Boolean(config.deadSite) },
-    evidence: { ledger: value.built.ledger, closed: closedGrammar(value.program), neutral: Boolean(value.built.neutral) && !record.checker.perturbed?.length && value.control?.matched === true },
+    evidence: { ledger: value.built.ledger, closed: closedGrammar(value.program), neutral: Boolean(value.built.neutral) && !record.checker.perturbed?.length && value.control?.matched === true,
+      lexicallyDead: lexicallyDeadHits(value.program, value.built.ledger) },
   });
+}
+
+/**
+ * Chrome's judgement of one fast-path `candidate-unexecuted` item (unexecuted.mjs): `confirmed-unexecuted` only when Chrome shows the same
+ * and every condition of deadsite.mjs holds on Chrome's records. `controlMatched` is the clean-twin control of the program (a fast-path
+ * run of the clean text, compared with the twin's), which Chrome's records cannot supply.
+ */
+export function judgeUnexecutedInChrome(value, item, record, { controlMatched, strict = false } = {}) {
+  const judged = classifyChrome({ ...value, control: { matched: controlMatched === true } }, record, {});
+  return judgeUnexecuted({ item, program: value.program, built: value.built, record, judged, events: runtimeEvents(record.runtime), controlMatched, strict });
 }
 
 /** Signatures of a classified result's candidate items: { signature, item } per candidate. */
@@ -163,6 +173,9 @@ export function signaturesOf(program, built, classification) {
     if (item.kind === "candidate-false-positive") {
       const site = known.find((s) => s.id === item.siteIds?.[0]);
       if (site) out.push({ item, site, signature: findingSignature({ rule: item.finding.rule, kind: item.kind, program, path: site.path, outcome: item.subkind ?? "silent" }) });
+    } else if (item.kind === "candidate-unexecuted") {
+      const site = known.find((s) => s.id === item.siteIds?.[0]);
+      if (site) out.push({ item, site, signature: findingSignature({ rule: item.finding.rule, kind: item.kind, program, path: site.path, outcome: [...new Set(item.bases ?? [])].sort().join("+") || "unexecuted" }) });
     } else if (item.kind === "candidate-wrong-rule") {
       const site = known.find((candidate) => candidate.line === item.finding.line) ?? known.find((candidate) => Math.abs(candidate.line - item.finding.line) <= 1);
       if (site) out.push({ item, site, signature: findingSignature({ rule: item.finding.rule, kind: item.kind, program, path: site.path, outcome: item.diagnostic.code }) });
