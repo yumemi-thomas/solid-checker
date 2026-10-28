@@ -127,6 +127,31 @@ describe("classify: the checker is quiet, uncertifiable or failed", () => {
     });
   });
 
+  // ASYNC_OUTSIDE_LOADING_BOUNDARY is reported by the scheduler: whatever frames the fast path attaches (here line 3, the mount), the
+  // read the checker answers on (line 8) is not among them. It is judged by file, as the misuse matrix judges it.
+  describe("a placeless code is judged by file, not by line", () => {
+    const placeless = (findings, lines = [3]) => classify({ sites, checker: checker(findings), runtime: runtime({ diagnostics: [diag("ASYNC_OUTSIDE_LOADING_BOUNDARY", ...lines)] }), plan });
+    it("is agreed with by a claiming violation anywhere in the file, and is never a false positive for it", () => {
+      const result = placeless([violation("async-outside-loading-boundary", 8, 8, "SC5003")]);
+      expect(result.items.map((item) => item.kind)).toEqual(["agree"]);
+      expect(result.verdict).toBe("agree");
+    });
+    it("is a recall gap when the claiming findings in the file all decline", () => {
+      const result = placeless([uncertifiable("async-outside-loading-boundary", 8)]);
+      expect(result.verdict).toBe("recall-gap");
+      expect(result.items[0]).toMatchObject({ kind: "recall-gap", diagnostic: { code: "ASYNC_OUTSIDE_LOADING_BOUNDARY", line: null, unplaced: true, rule: "async-outside-loading-boundary" } });
+    });
+    it("is a false clean only when the file has no claiming finding at all", () => {
+      expect(placeless([]).verdict).toBe("candidate-false-clean");
+      expect(placeless([]).items[0].diagnostic).toMatchObject({ line: null, unplaced: true });
+      expect(placeless([violation("no-write-in-pure-computation", 8)]).items.map((item) => item.kind)).toContain("candidate-false-clean");
+    });
+    it("leaves a code reported at its call to the line", () => {
+      const result = classify({ sites, checker: checker([uncertifiable("reactive-dispatch-unresolved", 8)]), runtime: runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 3)] }), plan });
+      expect(result.verdict).toBe("candidate-false-clean");
+    });
+  });
+
   it("a withholding finding at the diagnostic is a recall gap: the checker declined", () => {
     const result = classify({ sites, checker: checker([uncertifiable("reactive-dispatch-unresolved", 8)]), runtime: runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 8)] }), plan });
     expect(result.verdict).toBe("recall-gap");

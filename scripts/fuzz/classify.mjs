@@ -32,7 +32,7 @@
 //
 // An uncertifiable finding is never a claim; at a runtime diagnostic it counts as covering it
 // (the checker said it could not prove), the way the runtime oracle's `covered-uncertifiable` does.
-import { codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, withholdingRules } from "./codes.mjs";
+import { codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, withholdingRules } from "./codes.mjs";
 import { hitCount } from "./hits.mjs";
 import { STATUS as UNEXECUTED_STATUS, unexecutedCandidate } from "./unexecuted.mjs";
 
@@ -120,7 +120,8 @@ export function classify({ sites, glue = [], checker, runtime, plan, evidence = 
     if (!covered.length) { add("inconclusive", "the finding spans no site of interest", { finding: label, why: "no-site" }); continue; }
     const codes = codesForRule(finding.rule);
     // A consequence code (the engine halting after a throw) is not a diagnostic of this site.
-    const here = events.filter((event) => !consequenceCodes.includes(event.code) && lines(event.positions).some((line) => inSpan(finding, line)));
+    // A placeless code (scheduler-time: no authored stack line) counts for a finding of a rule that claims it, wherever the file reports it.
+    const here = events.filter((event) => !consequenceCodes.includes(event.code) && (lines(event.positions).some((line) => inSpan(finding, line)) || (isPlacelessCode(event.code) && codes.includes(event.code))));
     if (here.some((event) => codes.includes(event.code))) { add("agree", `runtime ${here.find((e) => codes.includes(e.code)).code} at the finding`, { finding: label, siteIds: covered.map((s) => s.id) }); continue; }
     const elsewhere = here.filter((event) => (codeRules[event.code] ?? []).some((rule) => sameDefectFamily(rule, finding.rule)));
     if (elsewhere.length) {
@@ -192,12 +193,20 @@ export function diagnosticItems(events, findings, registrationLines = () => []) 
     if (!isDefectCode(event.code)) continue;
     const rules = codeRules[event.code] ?? [];
     const severity = policyOf(event.code).severity;
-    const attributed = event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined);
+    const placeless = isPlacelessCode(event.code);
+    // A placeless code has no line of its own whatever frames the fast path attaches: it is judged by file.
+    const attributed = placeless ? [] : event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined);
     const claims = (finding) => rules.includes(finding.rule) || withholdingRules.includes(finding.rule);
     if (!attributed.length) {
-      if (event.positions.length || findings.some(claims)) continue;
-      items.push({ kind: "candidate-false-clean", reason: `${event.code} (no line could be given) has no finding of a rule that claims it`,
-        diagnostic: { code: event.code, line: null, message: event.message, severity, source: event.source, unplaced: true, frames: [] } });
+      if (!placeless && event.positions.length) continue;
+      const claiming = findings.filter(claims);
+      const unplaced = { code: event.code, line: null, message: event.message, severity, source: event.source, unplaced: true, frames: [] };
+      if (!claiming.length) {
+        items.push({ kind: "candidate-false-clean", reason: `${event.code} (no line could be given) has no finding of a rule that claims it`, diagnostic: unplaced });
+      } else if (placeless && !claiming.some((finding) => finding.kind === "violation")) {
+        // Every claiming finding in the file declines: the checker was asked and withheld, the same recall gap as at a line.
+        items.push({ kind: "recall-gap", reason: `${event.code} (no line could be given): the checker declines (uncertifiable ${claiming[0].rule})`, diagnostic: { ...unplaced, rule: claiming[0].rule } });
+      }
       continue;
     }
     const registered = attributed.flatMap((position) => registrationLines(position.line));
