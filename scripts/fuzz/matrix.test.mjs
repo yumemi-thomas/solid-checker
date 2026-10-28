@@ -109,6 +109,31 @@ describe("gate", () => {
     expect(result.ok).toBe(true);
     expect(result.improvements.map((i) => i.why)).toEqual(["agree 2 -> 3", "false-clean 1 -> 0"]);
   });
+  it("never counts a move out of a typed-away or harness baseline as a regression, and reports it apart", () => {
+    const loaded = matrixOf([row("A", "body", 1, "agree"), row("A", "body", 2, "typed-away"), row("A", "body", 3, "harness"), row("A", "body", 4, "agree")]);
+    const later = matrixOf([row("A", "body", 1, "agree"), row("A", "body", 2, "false-clean"), row("A", "body", 3, "false-clean"), row("A", "body", 4, "agree")]);
+    const result = gate(loaded, later);
+    expect(result.ok).toBe(true);
+    expect(result.regressions).toEqual([]);
+    expect(result.baselineUnjudged).toEqual([{ cell: "A|body", programs: ["2: typed-away -> false-clean", "3: harness -> false-clean"] }]);
+  });
+  it("still fails a judged program that becomes false-clean in the same cell", () => {
+    const loaded = matrixOf([row("A", "body", 1, "agree"), row("A", "body", 2, "typed-away")]);
+    const result = gate(loaded, matrixOf([row("A", "body", 1, "false-clean"), row("A", "body", 2, "false-clean")]));
+    expect(result.ok).toBe(false);
+    expect(result.regressions.map((r) => r.programs)).toEqual([["1: agree -> false-clean"], ["1: agree -> false-clean"]]);
+  });
+  it("reports a move into harness or typed-away as an infrastructure warning, not a regression", () => {
+    const wide = matrixOf([1, 2, 3, 4, 5, 6].map((seed) => row("A", "body", seed, seed === 3 ? "false-clean" : "agree")));
+    const result = gate(wide, matrixOf([1, 2, 3, 4, 5, 6].map((seed) => row("A", "body", seed, seed === 2 ? "harness" : seed === 3 ? "typed-away" : "agree"))));
+    expect(result.ok).toBe(true);
+    expect(result.infrastructure).toEqual([{ cell: "A|body", programs: ["2: agree -> harness", "3: false-clean -> typed-away"] }]);
+  });
+  it("refuses a current run that is mostly typed-away or harness", () => {
+    const result = gate(base, matrixOf([row("A", "body", 1, "harness"), row("A", "body", 2, "typed-away"), row("A", "body", 3, "typed-away")]));
+    expect(result.ok).toBe(false);
+    expect(result.refused).toMatch(/judged nothing/);
+  });
   it("fails a baseline cell that vanished and refuses different seeds", () => {
     expect(gate(base, matrixOf([row("B", "body", 1, "agree")])).regressions[0].why).toMatch(/missing/);
     expect(gate(base, { ...base, seed: 2 }).refused).toMatch(/differ in seed/);
