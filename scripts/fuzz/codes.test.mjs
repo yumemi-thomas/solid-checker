@@ -96,11 +96,16 @@ describe("the policy table", () => {
     for (const [code, policy] of Object.entries(codePolicy)) {
       expect(DISPOSITIONS, code).toContain(policy.disposition);
       expect(["error", "warn", "info"], code).toContain(policy.severity);
-      expect(policy.rules.length > 0, code).toBe(policy.disposition === "defect-claimed");
+      // A claimed defect has rules; an advisory code may keep the rule that reports it as an optional warning; nothing else has rules.
+      if (policy.disposition === "defect-claimed") expect(policy.rules.length, code).toBeGreaterThan(0);
+      else if (policy.rules.length) expect(policy.disposition, code).toBe("advisory");
     }
   });
   it("classifies the ones the proposal lists", () => {
-    expect(Object.values(codePolicy).filter((policy) => policy.disposition === "defect-claimed")).toHaveLength(23);
+    expect(Object.values(codePolicy).filter((policy) => policy.disposition === "defect-claimed")).toHaveLength(22);
+    // Solid documents a boundary-less async mount as legal (SPEC-ASYNC-SEMANTICS A6): advisory, still claimed by SC5003 as a warning.
+    expect(policyOf("ASYNC_OUTSIDE_LOADING_BOUNDARY")).toMatchObject({ disposition: "advisory", rules: ["async-outside-loading-boundary"] });
+    expect(isDefectCode("ASYNC_OUTSIDE_LOADING_BOUNDARY")).toBe(false);
     for (const code of ["PRIMITIVE_IN_EFFECT_CALLBACK", "RUN_WITH_DISPOSED_OWNER", "PENDING_ASYNC_FORBIDDEN_SCOPE", "ASYNC_STORE_SETTER", "UNCOMMITTED_INPUT_OVERWRITTEN", "LOADING_ON_OUTSIDE_HOLD"]) {
       expect(policyOf(code).disposition, code).toBe("defect-unclaimed");
       expect(isDefectCode(code), code).toBe(true);

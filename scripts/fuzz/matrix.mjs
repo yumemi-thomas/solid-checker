@@ -23,7 +23,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { withRuntimeCache } from "./cache.mjs";
-import { codeRules, ignoredRules, withholdingRules } from "./codes.mjs";
+import { codeRules, ignoredRules, policyOf, withholdingRules } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
@@ -310,7 +310,8 @@ const UNJUDGED = new Set(["typed-away", "harness"]);
  * A baseline `typed-away` or `harness` is a machine-load artifact, not a verdict: a program that moves out of it is reported as
  * `baselineUnjudged` and never as a regression. A program that moves into one of them is reported as `infrastructure` (a warning:
  * the run, not the checker, changed). Neither fails the gate.
- * @returns {{ ok: boolean, refused?: string, regressions: object[], improvements: object[], baselineUnjudged: object[], infrastructure: object[] }}
+ * A baseline cell of a code that is no longer a claimed defect (advisory now) is `retired`: reported, not failed.
+ * @returns {{ ok: boolean, refused?: string, regressions: object[], improvements: object[], baselineUnjudged: object[], infrastructure: object[], retired: object[] }}
  */
 export function gate(baseline, current) {
   const empty = { regressions: [], improvements: [], baselineUnjudged: [], infrastructure: [] };
@@ -322,9 +323,11 @@ export function gate(baseline, current) {
   const all = Object.values(now).reduce((sum, n) => sum + n, 0);
   const unjudged = (now["typed-away"] ?? 0) + (now.harness ?? 0);
   if (all && unjudged / all > TYPE_ERROR_REFUSAL_SHARE) return { ok: false, refused: `${unjudged} of ${all} programs of the current run are typed-away or harness: it judged nothing (the limit is ${TYPE_ERROR_REFUSAL_SHARE * 100}%)`, ...empty };
-  const regressions = []; const improvements = []; const baselineUnjudged = []; const infrastructure = [];
+  const regressions = []; const improvements = []; const baselineUnjudged = []; const infrastructure = []; const retired = [];
   for (const [key, base] of Object.entries(baseline.cells)) {
     const cell = current.cells[key];
+    // A code the policy table no longer counts as a defect (it became advisory) is not measured any more: reported, never a regression.
+    if (!cell && policyOf(base.code) && policyOf(base.code).disposition !== "defect-claimed") { retired.push({ cell: key, why: `${base.code} is ${policyOf(base.code)?.disposition ?? "unknown"} now, not measured` }); continue; }
     if (!cell) { regressions.push({ cell: key, why: "cell missing from the current matrix" }); continue; }
     const seeds = [...new Set([...Object.keys(base.verdicts), ...Object.keys(cell.verdicts)])];
     const list = (keep) => seeds.filter((seed) => keep(base.verdicts[seed], cell.verdicts[seed])).map((seed) => `${seed}: ${base.verdicts[seed] ?? "missing"} -> ${cell.verdicts[seed] ?? "missing"}`);
@@ -339,12 +342,13 @@ export function gate(baseline, current) {
     if (cell.agree > base.agree) improvements.push({ cell: key, why: `agree ${base.agree} -> ${cell.agree}` });
     if (cell["false-clean"] < base["false-clean"]) improvements.push({ cell: key, why: `false-clean ${base["false-clean"]} -> ${cell["false-clean"]}` });
   }
-  return { ok: regressions.length === 0, regressions, improvements, baselineUnjudged, infrastructure };
+  return { ok: regressions.length === 0, regressions, improvements, baselineUnjudged, infrastructure, retired };
 }
 
 function reportGate(result) {
   if (result.refused) { console.error(`gate refused: ${result.refused}`); return 2; }
   for (const item of result.improvements) console.error(`gate: improved ${item.cell}: ${item.why}`);
+  for (const item of result.retired ?? []) console.error(`gate: retired ${item.cell}: ${item.why}`);
   for (const item of result.baselineUnjudged ?? []) console.error(`gate: baseline unjudged ${item.cell} (not a regression, the baseline was typed-away or harness):\n    ${item.programs.slice(0, 5).join("\n    ")}`);
   for (const item of result.infrastructure ?? []) console.error(`gate: INFRASTRUCTURE WARNING ${item.cell}: ${item.programs.length} program(s) are now typed-away or harness (the run is suspect, not the checker):\n    ${item.programs.slice(0, 5).join("\n    ")}`);
   for (const item of result.regressions) console.error(`gate: REGRESSION ${item.cell}: ${item.why}${item.programs?.length ? `\n    ${item.programs.slice(0, 5).join("\n    ")}` : ""}`);

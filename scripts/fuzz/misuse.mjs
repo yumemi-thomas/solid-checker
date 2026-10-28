@@ -15,7 +15,7 @@ import {
   signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt,
   button, child, show, forEach, use,
 } from "./model.mjs";
-import { codeRules } from "./codes.mjs";
+import { codeRules, policyOf } from "./codes.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
 export const BINDINGS = ["direct", "namespace", "alias", "destructured", "wrapper"];
@@ -120,7 +120,8 @@ export const SPEC = {
 };
 
 /** The claimed codes of the policy table, in the table's order: the rows of the matrix. */
-export const MISUSE_CODES = Object.keys(codeRules).filter((code) => SPEC[code]);
+/** The codes the matrix measures: the defects a rule claims. An advisory code (Solid documents it as legal) is not a miss when the checker is silent. */
+export const MISUSE_CODES = Object.keys(codeRules).filter((code) => SPEC[code] && policyOf(code)?.disposition === "defect-claimed");
 /** The codes that have a template (not typed away). */
 export const TEMPLATE_CODES = MISUSE_CODES.filter((code) => !SPEC[code].typedAway);
 export const contextsOf = (code) => SPEC[code].contexts;
