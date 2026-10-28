@@ -283,6 +283,10 @@ a release whose `onCleanup` was not read (ADR 0456,
 A write no execution reaches (`false && setV(1)`, after a `return`, in a
 closure only an unreferenced child calls) is uncertifiable (ADR 0458,
 `fixtures/reactive-ir/dead-code-sites`).
+So is a write in a `createRoot` body, or in a component rendered only there,
+when the root call or the render is written in an effect apply or a leaf
+callback: rc.17 refuses the creation before the body runs (ADR 0475,
+`fixtures/reactive-ir/write-in-refused-creation`).
 
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.

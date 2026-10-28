@@ -106,7 +106,7 @@ Other:
 - RC1b (missing-owner, silent): a call-valued callee `hf1(cb)()` in a timer, where `hf1` returns a function that calls `cb`: no owner edge combines the factory's returned closure with the callback captured for that specific call. Needs a per-call returned-closure identity (all returns the same function, no other escape); `factory()()` is not fixed by callee peeling (ADR 0468).
 - `leaf-owner-forbidden-call` (SC3001), recall: JSX itself inside an owned leaf callback (`onSettled(() => { <Child2 />; })`) throws `PRIMITIVE_IN_FORBIDDEN_SCOPE` in rc.17 (rendering a component creates a transparent root, `dev-shared.js:1455-1495` rejects it under a leaf owner), but SC3001's census enumerates calls only (`cleanup.rs:240-342`), not JSX element creation. A claimed code, so a recall gap, not a policy one.
 - `PRIMITIVE_IN_EFFECT_CALLBACK` (no rule claims it): JSX written in an effect apply (`createEffect(c, () => <div>{r()}</div>)`) throws in rc.17; SC1001 is silent there since ADR 0470 (the read is tracked), so the defect is unreported.
-- A write or action in a `createRoot` body written directly in an effect apply is reported (SC2001/SC2002, inline and, since ADR 0471, through a named closure), though rc.17 throws `PRIMITIVE_IN_EFFECT_CALLBACK` at the root call before the body runs; the root call's own placement is not asked.
+- Every rule (ADR 0475): a site in a root, primitive or component created in an effect apply or a leaf callback is uncertifiable, also where rc.17 runs it (an `onSettled` called out of band; an older prerelease without `PRIMITIVE_IN_EFFECT_CALLBACK`, as in `setter-in-root-rc3`/`-rc9`). A creation behind a helper, an IIFE or an effect cleanup is not followed.
 
 Leaf body (`leaf-owner-forbidden-call`, SC3001):
 

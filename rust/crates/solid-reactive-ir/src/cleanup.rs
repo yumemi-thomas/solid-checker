@@ -513,7 +513,21 @@ fn forbidden_operation_kind(
     primitive: &PrimitiveName,
 ) -> Option<crate::LeafOwnerOperationKind> {
     let kind = primitive.primitive()?;
-    let forbidden = match dialect.cleanup_rule(kind) {
+    leaf_forbids(dialect, file, call, kind).then(|| match kind {
+        Primitive::OnCleanup => crate::LeafOwnerOperationKind::Cleanup,
+        Primitive::Flush => crate::LeafOwnerOperationKind::Flush,
+        _ => crate::LeafOwnerOperationKind::Primitive(primitive.to_string()),
+    })
+}
+
+/// Whether the dialect forbids this primitive call under a leaf owner.
+fn leaf_forbids(
+    dialect: &dyn solid_dialect::Dialect,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    kind: Primitive,
+) -> bool {
+    match dialect.cleanup_rule(kind) {
         CleanupRule::Always => true,
         // `createSignal(fn)` registers work; `createSignal(0)` does not.
         // Flattening this arm into the unconditional one would turn every
@@ -523,12 +537,21 @@ fn forbidden_operation_kind(
             .first()
             .is_some_and(|argument| file.ast.functions_within(argument.span).next().is_some()),
         CleanupRule::Never => false,
-    };
-    forbidden.then(|| match kind {
-        Primitive::OnCleanup => crate::LeafOwnerOperationKind::Cleanup,
-        Primitive::Flush => crate::LeafOwnerOperationKind::Flush,
-        _ => crate::LeafOwnerOperationKind::Primitive(primitive.to_string()),
-    })
+    }
+}
+
+/// ADR 0475: whether this primitive call creates an owner or computation the
+/// leaf-owner rules forbid (SC3001's `Primitive` kind: not `onCleanup` or
+/// `flush`, which create nothing). The runtime refuses the same creations in
+/// an effect apply, where no owner is current.
+pub(crate) fn creates_forbidden_primitive(
+    dialect: &dyn solid_dialect::Dialect,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    kind: Primitive,
+) -> bool {
+    !matches!(kind, Primitive::OnCleanup | Primitive::Flush)
+        && leaf_forbids(dialect, file, call, kind)
 }
 
 /// Collects the forbidden-operation kinds an exactly-resolved helper performs

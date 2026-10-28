@@ -28,6 +28,13 @@
 //! else unnamed (a callback, an object member, a JSX attribute value) may run
 //! once created. The answer is a least fixed point: a function entered only
 //! from itself never runs.
+//!
+//! ADR 0475: an entry the runtime refuses enters nothing. A creation (a
+//! primitive the leaf-owner rules forbid, or a component render, which creates
+//! a root first) written in the own extent of an effect apply or a leaf
+//! callback throws before its callback or the component body runs, so that
+//! callback is never entered from there, and a render or reference there
+//! enters no function.
 
 use std::cell::{Cell, RefCell};
 
@@ -62,6 +69,8 @@ pub(crate) struct SiteReach<'l, 'a> {
     visiting: RefCell<HashSet<(String, Span)>>,
     /// Set when a derivation met a function in progress.
     assumed: Cell<bool>,
+    /// Whether a refused creation enters nothing (ADR 0475).
+    refusals: bool,
 }
 
 /// How deep a chain of functions the query follows before it answers
@@ -75,7 +84,21 @@ impl<'l, 'a> SiteReach<'l, 'a> {
             functions: RefCell::default(),
             visiting: RefCell::default(),
             assumed: Cell::new(false),
+            refusals: true,
         }
+    }
+
+    /// The query without ADR 0475's refusals: what tells a report why a site
+    /// is unreached.
+    fn without_refusals(lookup: &'l SemanticLookup<'a>) -> Self {
+        Self {
+            refusals: false,
+            ..Self::new(lookup)
+        }
+    }
+
+    fn refused(&self, file: &solid_facts::FileFacts, entry: Span) -> bool {
+        self.refusals && refused_entry(file, entry, self.lookup)
     }
 
     /// Whether any execution reaches `site` of `file`.
@@ -139,16 +162,35 @@ impl<'l, 'a> SiteReach<'l, 'a> {
             return false;
         }
         let Some(outer) = crate::owners::owning_function(&file.ast, function.span) else {
-            // Module scope: entered by modules and hosts this does not follow.
-            return true;
+            // Module scope: entered by modules and hosts this does not follow,
+            // unless it is entered only through refused creations (ADR 0475).
+            return !self.entered_only_through_refusals(file, function);
         };
-        if !self.function_runs(file, outer) {
+        if !self.function_runs(file, outer) || self.refused(file, function.span) {
             return false;
         }
         match function_declaration_span(file, function) {
             Some(declaration) => !self.binding_unreached(file, function, declaration),
             None => !returned_by_discarded_iife(file, function.span),
         }
+    }
+
+    /// ADR 0475: whether a function bound to a name has a call or render the
+    /// runtime refuses and nothing else that runs reaches it. A module-scope
+    /// function nothing names keeps ADR 0458's answer (it may run).
+    fn entered_only_through_refusals(
+        &self,
+        file: &solid_facts::FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        self.refusals
+            && self
+                .lookup
+                .function_call_sites(file.path.as_str(), function.span)
+                .into_iter()
+                .any(|(caller, callee)| self.refused(caller, callee))
+            && function_declaration_span(file, function)
+                .is_some_and(|declaration| self.binding_unreached(file, function, declaration))
     }
 
     /// Whether nothing that runs reaches the function bound at `declaration`.
@@ -166,7 +208,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
             .lookup
             .function_call_sites(file.path.as_str(), function.span)
             .into_iter()
-            .any(|(caller, callee)| self.reached(caller, callee))
+            .any(|(caller, callee)| self.reached(caller, callee) && !self.refused(caller, callee))
         {
             return false;
         }
@@ -191,6 +233,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
                     .any(|query| query.contains(reference.span))
                     || returned_by_discarded_iife(file, reference.span)
                     || !self.reached(file, reference.span)
+                    || self.refused(file, reference.span)
             })
     }
 
@@ -238,6 +281,76 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         };
         !flow_binding_exported(file, declaration) && self.references_unreached(file, declaration)
     }
+}
+
+/// ADR 0475: whether `entry` enters nothing because the runtime refuses the
+/// creation it is part of: it is the tag of a component element, or a callback
+/// argument (a literal or a reference) of a primitive the leaf-owner rules
+/// forbid, and that element or call is written in the own extent of an effect
+/// apply or a leaf callback ([`creation_refused_at`]).
+fn refused_entry(file: &solid_facts::FileFacts, entry: Span, lookup: &SemanticLookup<'_>) -> bool {
+    let rendered = file
+        .ast
+        .jsx_elements
+        .iter()
+        .find(|element| element.name.span == entry || element.closing_name == Some(entry));
+    if let Some(element) = rendered {
+        return creation_refused_at(file, element.span, lookup);
+    }
+    file.ast
+        .arguments_containing(entry)
+        .filter(|(call, index)| file.ast.peel_ts_sugar_span(call.arguments[*index].span) == entry)
+        .any(|(call, index)| {
+            let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+                return false;
+            };
+            let semantics =
+                lookup
+                    .dialect
+                    .callback_semantics_at(primitive, index, call.arguments.len());
+            let callback = lookup
+                .dialect
+                .callback_runs_in_created_root(primitive, index)
+                || (semantics.execution.is_some() && !semantics.requires_return_invocation);
+            callback
+                && crate::cleanup::creates_forbidden_primitive(
+                    lookup.dialect,
+                    file,
+                    call,
+                    primitive,
+                )
+                && creation_refused_at(file, call.span, lookup)
+        })
+}
+
+/// Whether a creation at `site` is written in the own extent of a callback
+/// whose runs refuse it: an effect apply (rc.17 `PRIMITIVE_IN_EFFECT_CALLBACK`:
+/// no owner is current there) or a leaf callback (`PRIMITIVE_IN_FORBIDDEN_SCOPE`,
+/// SC3001's owners). Lexical: an `onSettled` called out of band is no leaf at
+/// runtime, which costs a violation there, never adds one.
+fn creation_refused_at(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(function) = crate::owners::owning_function(&file.ast, site) else {
+        return false;
+    };
+    file.ast
+        .arguments_containing(function.span)
+        .filter(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+        })
+        .any(|(call, index)| {
+            lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    effect_apply_argument(lookup.dialect, primitive, call.arguments.len())
+                        == Some(index)
+                        || callback_owner_at_call(file, call, primitive, index, lookup)
+                            == Some(solid_dialect::CallbackOwner::Leaf)
+                })
+        })
 }
 
 /// The class whose constructor, method or accessor `function` is.
@@ -319,6 +432,7 @@ pub(crate) fn unreached_report_sites(
     lookup: &SemanticLookup<'_>,
 ) -> Vec<crate::UnreachedSite> {
     let query = SiteReach::new(lookup);
+    let plain = SiteReach::without_refusals(lookup);
     let mut sites = crate::projection::reported_locations(program)
         .into_iter()
         .filter_map(|location| {
@@ -329,10 +443,12 @@ pub(crate) fn unreached_report_sites(
             ) else {
                 return None;
             };
-            match query.site(file, Span::new(start, end)) {
+            let site = Span::new(start, end);
+            match query.site(file, site) {
                 Reach::Unreached(reason) => Some(crate::UnreachedSite {
                     location: location.clone(),
                     dead_code: reason == UnreachedReason::DeadCode,
+                    refused_creation: plain.site(file, site) == Reach::MayRun,
                 }),
                 Reach::MayRun => None,
             }

@@ -1328,6 +1328,11 @@ pub struct UnreachedSite {
     /// literal test rules out); else the function running it never runs.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub dead_code: bool,
+    /// Unreached only because the runtime refuses a creation on the way: a
+    /// root, primitive or component created in an effect apply or a leaf
+    /// callback (ADR 0475).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub refused_creation: bool,
 }
 
 /// The [`UnreachedSite`] at exactly the byte range `start..end` of `path`,
