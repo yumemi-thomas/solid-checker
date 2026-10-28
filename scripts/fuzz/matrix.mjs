@@ -35,7 +35,7 @@ import { shrink } from "./shrink.mjs";
 import { legalTwin } from "./falseclean.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
 import { materializeForChecker } from "./checker.mjs";
-import { typecheck } from "./typecheck.mjs";
+import { requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
 export const OUTCOMES = ["typed-away", "harness", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean"];
 const CONFIRMED = ["agree", "wrong-rule", "recall-gap", "false-clean"];
@@ -329,6 +329,7 @@ const CHUNK = 150;
 export async function runMatrix(options) {
   const out = resolve(options.out);
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
+  requireTypeChecker(resolveTsc(options.tsc));
   mkdirSync(out, { recursive: true });
   const config = attachDaemon(configFrom({ ...options, profile: "misuse" }, out), options);
   try {
@@ -358,6 +359,9 @@ async function sweep(options, config, out) {
     }
     console.error(`matrix: ${Math.min(at + CHUNK, entries.length)}/${entries.length} programs, ${Math.round((Date.now() - started) / 1000)}s, ${JSON.stringify(tally(rows))}`);
   }
+
+  const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length, { first: rows.find((row) => row.outcome === "typed-away")?.detail?.error });
+  if (refusal) throw new Error(refusal);
 
   // Chrome: a sample of agree programs per cell, every wrong-rule and false-clean one.
   if (options.confirmWithChrome) {

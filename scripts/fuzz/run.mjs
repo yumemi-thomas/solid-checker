@@ -26,7 +26,7 @@ import { applyLedgerToResults, falseCleanStream } from "./falseclean-run.mjs";
 import { LEDGER_PATH, loadLedger } from "./falseclean.mjs";
 import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
-import { DEFAULT_TSC } from "./typecheck.mjs";
+import { requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 import { isSite, walk } from "./model.mjs";
 import { availableParallelism } from "node:os";
 import { createFastDaemon } from "./fast-daemon.mjs";
@@ -79,7 +79,7 @@ export function configFrom(options, out) {
     fastInstall: resolve(options.fastInstall ?? DEFAULT_FAST_INSTALL),
     bin: options.checkerBin ? resolve(options.checkerBin) : process.env.SOLID_CHECKER_NATIVE_BIN,
     typefacts: options.typefacts ? resolve(options.typefacts) : process.env.SOLID_TYPEFACTS_BIN,
-    tsc: options.tsc ?? process.env.FUZZ_TSC ?? DEFAULT_TSC,
+    tsc: resolveTsc(options.tsc),
     casesDir: join(out, "cases"),
     concurrency: options.concurrency ?? defaultParallelism(undefined, { allCores: options.allCores }),
     workers: options.workers ?? defaultWorkers(undefined, { virtualClock: !options.realClock }),
@@ -150,6 +150,7 @@ async function main(options) {
   if (!options.out) throw new Error(`--out <fresh directory> is required\n${usage}`);
   const out = resolve(options.out);
   if (existsSync(out)) throw new Error(`use a fresh --out path (${out} exists)`);
+  requireTypeChecker(resolveTsc(options.tsc));
   mkdirSync(out, { recursive: true });
 
   const config = attachDaemon(configFrom(options, out), options);
@@ -180,6 +181,8 @@ async function sweep(options, config, out) {
   const tally = (key) => rows.reduce((counts, row) => ({ ...counts, [row[key]]: (counts[row[key]] ?? 0) + 1 }), {});
   const itemTally = rows.flatMap((row) => row.items).reduce((counts, item) => ({ ...counts, [item.kind]: (counts[item.kind] ?? 0) + 1 }), {});
   console.error(`programs ${rows.length}: ${JSON.stringify(tally("verdict"))}; items ${JSON.stringify(itemTally)}`);
+  const refusal = typeErrorRefusal(rows.filter((row) => row.verdict === "type-error" || row.typeErrors).length, rows.length, { first: rows.find((row) => row.typeErrors)?.typeErrors[0] ?? rows.find((row) => row.verdict === "type-error")?.reasons?.[0] });
+  if (refusal) throw new Error(refusal);
 
   const candidates = [...results.values()].filter((value) => value.classification.verdict === "candidate-false-positive");
   const findings = [];
