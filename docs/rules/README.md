@@ -130,6 +130,16 @@ into a discarded result, and a method of a class nothing names). A function at
 module scope, and any value handed on, may run. Style rules (SC80xx) and
 `flush-in-effect-callback` (SC2008) are unaffected.
 
+## A binding named before its declarator
+
+A violation at a site that names a `const` or `let` binding (a destructured
+one included: `const [count, setCount] = createSignal(0)`) where the
+declarator is not proven to have run is uncertifiable, whatever the rule
+([ADR 0464](../decisions.md#adr-0464)): if the code runs first it throws a
+`ReferenceError` instead. `[1].forEach(() => count())` written above the
+declarator is one; the same callback below it is still reported. Style rules
+(SC80xx) are unaffected.
+
 ## Obligations
 
 An obligation is an internal uncertifiable result ([ADR 0328](../decisions.md#adr-0328)):

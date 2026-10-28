@@ -13,9 +13,9 @@ use typefacts::v3::{
 #[test]
 fn handshake_declares_the_operation_sets_protocol() {
     assert_eq!(
-        TYPE_FACTS_HANDSHAKE_PROTOCOL, 87,
-        "protocol 87 adds the writableOptionalProperty demand and Wire table schema v24 \
-         (ADR 0461); 86 added the declaredKeys demand and Wire table schema v23 (ADR 0436)"
+        TYPE_FACTS_HANDSHAKE_PROTOCOL, 88,
+        "protocol 88 adds the analyze answer's strictNullChecks (ADR 0465); 87 added the \
+         writableOptionalProperty demand and Wire table schema v24 (ADR 0461)"
     );
 }
 

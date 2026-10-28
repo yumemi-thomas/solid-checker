@@ -441,6 +441,11 @@ pub struct SemanticDemandCapabilities {
     /// element, which `missing-owner` asks to prove the spread holds no
     /// listener key.
     pub spread_declared_keys: bool,
+    /// ADR 0465: the primitive value domain of each link a store write's
+    /// member chain reads past its root (`store.a` in `store.a.b = 1` and
+    /// `store.a.push(1)`), which `no-store-mutation-outside-setter` asks so as
+    /// to stay silent where TypeScript reports a possibly nullish link.
+    pub store_write_chain_links: bool,
     /// ADR 0461: whether a `delete` operand's property is optional and not
     /// readonly, which `no-store-mutation-outside-setter` asks to report a
     /// store delete TypeScript accepts.
@@ -453,6 +458,7 @@ impl SemanticDemandCapabilities {
         async_array_map_callbacks: false,
         server_argument_library_types: false,
         spread_declared_keys: false,
+        store_write_chain_links: false,
         delete_operand_optionality: false,
     };
     /// Only the 2.0 catalog carries `server-function-rich-argument`, so only it
@@ -462,6 +468,7 @@ impl SemanticDemandCapabilities {
         async_array_map_callbacks: true,
         server_argument_library_types: true,
         spread_declared_keys: true,
+        store_write_chain_links: true,
         delete_operand_optionality: true,
     };
 }

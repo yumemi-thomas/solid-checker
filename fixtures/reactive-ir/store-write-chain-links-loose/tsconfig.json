@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "jsx": "preserve",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": false,
+    "target": "ES2022"
+  },
+  "include": [
+    "*.ts",
+    "*.tsx"
+  ]
+}

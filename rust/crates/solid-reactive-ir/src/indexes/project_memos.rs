@@ -239,12 +239,13 @@ whole_program! {
 }
 
 whole_program! {
-    /// ADR 0339: the mentions of a function-valued binding not proven to
-    /// follow its declarator, by path, both sorted. A cycle cannot occur (the
-    /// proof's own recursion lives inside the one answer), so the empty answer
-    /// is never served: it would be reported and the store emptied.
+    /// ADR 0339, 0464: by path, the mentions of a function-valued or
+    /// pattern-declared binding the call graph withholds, and those of them
+    /// not proven to follow the declarator, all sorted. A cycle cannot occur
+    /// (the proof's own recursion lives inside the one answer), so the empty
+    /// answer is never served: it would be reported and the store emptied.
     UninitializedReferences, 36, uninitialized_references, "initialization_rejected",
-    Vec<(String, Vec<Span>)>,
+    Vec<(String, Vec<Span>, Vec<Span>)>,
     cycle: Vec::new(),
     direct: |lookup| lookup.compute_uninitialized_references(),
     |ctx| Ok(ctx.project(|lookup| lookup.compute_uninitialized_references()))

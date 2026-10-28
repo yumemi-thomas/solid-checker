@@ -221,6 +221,16 @@ impl TypeScriptTable {
             .map_or_else(|| self.synthetic().generation, FactTable::generation)
     }
 
+    /// Whether the program the table was analyzed under applies
+    /// `strictNullChecks`, as the producer's compiler resolves it (ADR 0465).
+    /// `None` is no answer (a synthetic table, a producer that did not say).
+    #[must_use]
+    pub fn strict_null_checks(&self) -> Option<bool> {
+        self.retained
+            .as_ref()
+            .and_then(FactTable::strict_null_checks)
+    }
+
     #[must_use]
     pub fn project_id(&self) -> &str {
         self.retained.as_ref().map_or_else(

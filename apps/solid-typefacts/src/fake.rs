@@ -41,6 +41,8 @@ pub struct FakeBackend {
     pub apply_updates: bool,
     /// What `update` reports of the module graph (`UpdateOutcome::graph_kept`).
     pub graph_kept: bool,
+    /// What analyze answers of the program's `strictNullChecks` (ADR 0465).
+    pub strict_null_checks: Option<bool>,
     /// Calls `semantic_demand_runs` and `references_batch` have seen.
     pub semantic_calls: Arc<Mutex<u32>>,
     pub reference_calls: Arc<Mutex<u32>>,
@@ -132,6 +134,7 @@ impl FakeBackend {
             fail_update: false,
             apply_updates: false,
             graph_kept: false,
+            strict_null_checks: None,
             semantic_calls: Arc::default(),
             reference_calls: Arc::default(),
             reference_requests: Arc::default(),
@@ -158,6 +161,10 @@ impl FakeBackend {
 }
 
 impl ClosureBackend for FakeBackend {
+    fn strict_null_checks(&mut self, _: &Context) -> Result<Option<bool>, BackendError> {
+        Ok(self.strict_null_checks)
+    }
+
     fn source_files(&mut self, _: &Context) -> Result<Vec<SourceFile>, BackendError> {
         if self.digests.is_some() {
             return Err(BackendError(

@@ -1699,6 +1699,27 @@ impl AstFacts {
         Self::at_span(&self.members, span, |fact| fact.span)
     }
 
+    /// The links of the member chain at `member` past its root: every object
+    /// below `member` that is itself a member, outermost first, each as
+    /// written (`store.a.b` and `store.a` in `store.a.b.c`; `store.n!` in
+    /// `store.n!.b`, which TypeScript types by its wrapper). The walk goes
+    /// through transparent wrappers and stops at the first object that is no
+    /// member, the root. A store write reads every link before it writes
+    /// (ADR 0461, 0465).
+    #[must_use]
+    pub fn member_chain_links(&self, member: Span) -> Vec<Span> {
+        let mut links = Vec::new();
+        let mut current = self.member_at(member);
+        while let Some(access) = current {
+            let next = self.member_at(self.peel_ts_sugar_span(access.object));
+            if next.is_some() {
+                links.push(access.object);
+            }
+            current = next;
+        }
+        links
+    }
+
     /// The conditional expression at exactly `span`.
     #[must_use]
     pub fn conditional_at(&self, span: Span) -> Option<&ConditionalExpressionFact> {

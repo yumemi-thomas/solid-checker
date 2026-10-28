@@ -195,6 +195,7 @@ mod tests {
             state_token: "1".into(),
             affected: Vec::new(),
             graph_kept: false,
+            strict_null_checks: None,
             sources: Vec::new(),
             source_arena: arena.path.to_string_lossy().into_owned(),
             source_lengths: vec![request_id, offset, length],

@@ -143,6 +143,7 @@ impl ProgramDraft {
             undecided_component_regions: self.undecided_component_regions,
             event_dispatch_sites: self.event_dispatch_sites,
             unreached_sites: Vec::new(),
+            early_mention_sites: Vec::new(),
             obligation_counts: ObligationCounts {
                 strict_reads: self.strict_read_obligations,
                 writes_and_actions: self.write_action_obligations.len(),
@@ -670,6 +671,8 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     // reported, while the lookup's memos are still open.
     program.unreached_sites =
         crate::execution_role::unreached_report_sites(&program, semantic_lookup);
+    program.early_mention_sites =
+        crate::indexes::early_mention_report_sites(&program, semantic_lookup);
     if defer_memo_end {
         semantic_lookup.defer_end_memos();
     } else if let Some(report) = semantic_lookup.end_memos() {
