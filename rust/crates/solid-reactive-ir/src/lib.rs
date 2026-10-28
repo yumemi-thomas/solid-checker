@@ -2181,6 +2181,18 @@ fn referenced_primitive(
     };
     let known = |name: Option<PrimitiveName>| name.filter(|name| name.primitive().is_some());
     if let Some(declaration) = ast.reference_declaration(span) {
+        // `const { onCleanup: cleanup } = Solid` (ADR 0459): the slot's
+        // symbol carries the member's name (`add_solid_import_names`).
+        if ast.namespace_member_binding(declaration).is_some() {
+            return known(primitive_name(
+                file.path.as_str(),
+                declaration,
+                None,
+                entities,
+                symbol_names,
+                dialect,
+            ));
+        }
         let binding = import_binding(declaration)?;
         if binding.kind == ImportKind::Namespace {
             return None;
@@ -2251,6 +2263,7 @@ fn jsx_primitive_name_cached(
         return lookup.primitives(file).jsx[index].clone();
     }
     jsx_primitive_name(file, element, entities, symbol_names, dialect)
+        .filter(|_| !lookup.namespace_slot_mention_withheld(file, element.name.span))
 }
 
 /// [`call_primitive_name`], answered from `lookup`'s per-file memo (which
@@ -2286,6 +2299,7 @@ fn call_primitive_name_cached(
         return lookup.primitives(file).calls[index].clone();
     }
     call_primitive_name(file, call, entities, symbol_names, dialect)
+        .filter(|_| !lookup.namespace_slot_mention_withheld(file, call.callee))
 }
 
 fn call_primitive_name(
