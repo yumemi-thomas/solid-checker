@@ -714,5 +714,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-write-chain-links/node_modules/**
 !fixtures/reactive-ir/store-write-chain-links-loose/node_modules/
 !fixtures/reactive-ir/store-write-chain-links-loose/node_modules/**
+!fixtures/reactive-ir/store-write-literal-links/node_modules/
+!fixtures/reactive-ir/store-write-literal-links/node_modules/**
 !fixtures/reactive-ir/callee-spelling/node_modules/
 !fixtures/reactive-ir/callee-spelling/node_modules/**

@@ -1888,6 +1888,40 @@
    "note": "ADR 0476: the own-setter window (ADR 0425) is the setter's dynamic extent, not the callback's text. A write the callback hands to `queueMicrotask` runs after `storeSetter` returned and removed the store from `writeScopes` (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5847-5866`), so `inDraft(target)` is false and the `set` trap drops it with STORE_WRITE_OUTSIDE_SETTER (Chrome, witnessed: the value stays 0). The scheduler is a reviewed fresh-stack one (`runtime_semantics::FRESH_STACK_SCHEDULERS`), resolved through its signature."
   },
   {
+   "id": "no-store-mutation-outside-setter/literal-link/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nexport function Panel() {\n  const [store] = createStore({ a: { v: 0 } });\n  store.a.v = 1;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "store.a.v"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "ADR 0491: a link past the root that holds the literal the store's own initializer wrote, in a function-local store whose setter is never referenced and whose proxy never leaves as a value, is served wrapped (`isWrappable`, `@solidjs/signals@2.0.0-rc.17` `dist/dev.js:2272-2283`), so the write below it is dropped with STORE_WRITE_OUTSIDE_SETTER (Chrome, misuse matrix)."
+  },
+  {
    "id": "no-store-mutation-outside-setter/own-setter-outside-closure/001",
    "dialect": "solid-v2",
    "source": {

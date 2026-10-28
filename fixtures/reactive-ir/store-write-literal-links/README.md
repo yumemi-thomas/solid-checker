@@ -1,0 +1,5 @@
+# store-write-literal-links
+
+**Claim (ADR 0491).** A store write past the root is a violation when every link it reads holds the object or array literal the store's own initializer wrote there and nothing can replace or reach that raw value: the store is a function-local `const [store, setter?] = createStore(<closed object literal>)`, the setter is absent or never referenced, and every reference to the store (or an exact `const` alias) is the root of a static member path that is written, deleted, called as a callback-free array mutator, or read where the literal holds a primitive. The proxy then serves each link wrapped (rc.17 `isWrappable`), so the write is dropped with `STORE_WRITE_OUTSIDE_SETTER`.
+
+Violations: `Literal` (`store.a.v`, `store.items.push(1)`, `store.deep.b.c`), `Alias`. Uncertifiable (ADR 0476 unchanged): `SetterUsed`, `FrozenLink`, `Escapes`, `RootEscapes`, `NamedInitial`, `Spread`, `Getter`, `SortCallback`, `ModuleScope`; their root writes are unaffected. Stub: `store-write-chain-links`'s.

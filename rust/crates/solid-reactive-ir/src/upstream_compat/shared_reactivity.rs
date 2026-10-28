@@ -1264,7 +1264,8 @@ fn no_direct_mutation(
         // ADR 0465: a store write past the root (`store.a.b = 1`) is
         // TypeScript's where a link may be nullish, and unproven otherwise.
         let past_root = if store {
-            let Some(past_root) = chain_links_verdict(file, context, assignment.target) else {
+            let Some(past_root) = chain_links_verdict(file, context, assignment.target, root)
+            else {
                 continue;
             };
             past_root
@@ -1966,16 +1967,19 @@ fn named_function_standing(
 ///   write is TypeScript's and the rule is silent.
 /// - Any other link leaves the write uncertifiable (ADR 0476). The proxy serves
 ///   a child through `isWrappable` (`dist/dev.js:2272-2283`, `:5569`, `:5605`),
-///   which refuses a frozen object, a non-plain prototype (a `Map`, a class
-///   instance) and a DOM node, and serves it raw: a write below lands. Whether
+///   which refuses a frozen object, a value whose tag is not `Object` (a `Map`,
+///   a `Date`; a class instance tagged `Object` is wrapped) and a DOM node, and
+///   serves it raw: a write below lands. Whether
 ///   a link's value is frozen or plain is a property of the value, not of its
 ///   type (`Object.freeze` can reach any reference, `Readonly<T>` is assignable
 ///   to `T`), so no fact proves the link is wrapped. An undefined link throws
 ///   `TypeError` before any write, and a frozen array's mutator throws too.
+///   Except (ADR 0491) where [`links_proven_wrappable`] holds.
 fn chain_links_verdict(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
     member: Span,
+    root: Span,
 ) -> Option<bool> {
     let ast = &file.ast;
     let member = ast.peel_ts_sugar_span(member);
@@ -2014,7 +2018,296 @@ fn chain_links_verdict(
     if nullish && !optional {
         return None;
     }
-    Some(true)
+    Some(
+        !(optional_free(ast, member, &links)
+            && links_proven_wrappable(file, context, member, root)),
+    )
+}
+
+/// No link of the chain, nor the written member, is an optional access.
+fn optional_free(ast: &solid_facts::ast::AstFacts, member: Span, links: &[Span]) -> bool {
+    std::iter::once(member)
+        .chain(links.iter().map(|&link| ast.peel_ts_sugar_span(link)))
+        .all(|access| ast.optional_members.binary_search(&access).is_err())
+}
+
+/// The in-place array methods [`links_proven_wrappable`] lets a store path
+/// call: [`ARRAY_MUTATORS`] less `sort`, whose comparator receives elements.
+const CALLBACK_FREE_ARRAY_MUTATORS: [&str; 8] = [
+    "push",
+    "pop",
+    "shift",
+    "unshift",
+    "splice",
+    "reverse",
+    "fill",
+    "copyWithin",
+];
+
+/// ADR 0491: every link the write at `member` reads past the store root holds
+/// the object or array literal the store's own initializer wrote there, so the
+/// proxy serves it wrapped (`isWrappable`, rc.17 `dist/dev.js:2272-2283`: a
+/// fresh literal is neither frozen nor of a foreign prototype) and a write
+/// below it is dropped like a write to the root. Proven only where nothing can
+/// replace or reach that raw value:
+/// - the root resolves, through exact `const` aliases, to slot 0 of a `const`
+///   array pattern in a function body whose initializer is `createStore` with
+///   one argument, a closed object literal (no spread, computed, duplicate,
+///   accessor or `__proto__` key), so the store is deep and its value inline;
+/// - the setter slot is absent or never referenced, so no write lands and no
+///   value replaces a link (a write outside the setter is dropped);
+/// - every reference to the store or an alias is an alias's initializer or the
+///   root of a static, non-optional member path that is written, deleted,
+///   called as a callback-free array mutator on an array literal, or read
+///   where the literal holds a primitive: no proxy of the store or below it
+///   leaves as a value, so nothing reaches the raw value (`$TARGET`), freezes
+///   or marks it.
+///
+/// Each link's key is a data property of the literal the previous key named;
+/// an array literal ends the walk (its elements have no static key).
+fn links_proven_wrappable(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    member: Span,
+    root: Span,
+) -> bool {
+    let ast = &file.ast;
+    let Some(root_declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(root)) else {
+        return false;
+    };
+    // The store pattern and its exact `const` aliases, by declared name span.
+    let mut names = vec![root_declaration];
+    let mut store = None;
+    for _ in 0..4 {
+        let declaration = *names.last().expect("one name");
+        let Some(binding) = ast
+            .bindings
+            .iter()
+            .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+        else {
+            return false;
+        };
+        if !binding.immutable {
+            return false;
+        }
+        match binding.shape {
+            solid_facts::ast::BindingShape::Identifier => {
+                let Some(source) = binding
+                    .initializer_identifier
+                    .as_ref()
+                    .and_then(|source| ast.reference_declaration(source.span))
+                else {
+                    return false;
+                };
+                names.push(source);
+            }
+            solid_facts::ast::BindingShape::Array => {
+                store = Some(binding);
+                break;
+            }
+            _ => return false,
+        }
+    }
+    let Some(store) = store else {
+        return false;
+    };
+    let slot = |index: usize| store.array_slots.get(index).and_then(Option::as_ref);
+    if slot(0).map(|name| name.span) != names.last().copied()
+        || store.array_slots.len() > 2
+        || file
+            .source_text(store.pattern)
+            .is_none_or(|pattern| pattern.contains("..."))
+        || !ast.any_function_body_containing(store.declaration)
+    {
+        return false;
+    }
+    let primitive = context
+        .entities
+        .at(file.path.as_str(), slot(0).expect("slot 0").span)
+        .and_then(|symbol| context.source_primitives.get(symbol));
+    let Some(call) = store.call_initializer.and_then(|call| ast.call_at(call)) else {
+        return false;
+    };
+    let [argument] = call.arguments.as_slice() else {
+        return false;
+    };
+    let initial = ast.peel_ts_sugar_span(argument.span);
+    if primitive.is_none_or(|primitive| primitive.as_str() != "createStore")
+        || ast.peel_ts_sugar_span(store.initializer.unwrap_or(call.span)) != call.span
+        || closed_literal(ast, initial).is_none()
+    {
+        return false;
+    }
+    let referenced = |declaration: Span| {
+        ast.identifiers.iter().any(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && ast.reference_declaration(identifier.span) == Some(declaration)
+        })
+    };
+    if slot(1).is_some_and(|setter| referenced(setter.span)) {
+        return false;
+    }
+    // Alias initializers are the references the alias walk already took.
+    let alias_sources: Vec<Span> = ast
+        .bindings
+        .iter()
+        .filter(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.iter().any(|name| names.contains(&name.span))
+        })
+        .filter_map(|binding| {
+            binding
+                .initializer_identifier
+                .as_ref()
+                .map(|source| source.span)
+        })
+        .collect();
+    for identifier in &ast.identifiers {
+        if identifier.role != solid_facts::ast::IdentifierRole::Reference
+            || !ast
+                .reference_declaration(identifier.span)
+                .is_some_and(|declaration| names.contains(&declaration))
+            || alias_sources.contains(&identifier.span)
+        {
+            continue;
+        }
+        if !contained_store_use(file, identifier.span, initial) {
+            return false;
+        }
+    }
+    // The written path's links resolve to literals (the use check above
+    // already walked it; this pins the links themselves).
+    let Some(path) = static_path(
+        file,
+        ast.peel_ts_sugar_span(member),
+        ast.peel_ts_sugar_span(root),
+    ) else {
+        return false;
+    };
+    path.len() >= 2 && resolve_literal_path(file, initial, &path[..path.len() - 1]).is_some()
+}
+
+/// What a literal value resolved from a store's initializer is.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum LiteralValue {
+    Object(Span),
+    Array,
+    Primitive,
+}
+
+/// The closed object literal at exactly `span`.
+fn closed_literal(ast: &solid_facts::ast::AstFacts, span: Span) -> Option<Span> {
+    ast.object_get_shapes
+        .iter()
+        .find(|shape| shape.span == span)
+        .filter(|shape| {
+            shape.closed
+                && shape
+                    .properties
+                    .iter()
+                    .all(|property| property.getter.is_none())
+        })
+        .map(|shape| shape.span)
+}
+
+/// The value the closed literal `literal` holds at `path`, one static key per
+/// step; an array literal or a primitive ends it.
+fn resolve_literal_path(file: &FileFacts, literal: Span, path: &[Span]) -> Option<LiteralValue> {
+    let ast = &file.ast;
+    let mut value = LiteralValue::Object(literal);
+    for &key in path {
+        let LiteralValue::Object(object) = value else {
+            return None;
+        };
+        let name = file.source_text(key)?;
+        let property = ast.object_properties.iter().find(|property| {
+            object.contains(property.span)
+                && !property.computed
+                && property.data
+                && file.source_text(property.key) == Some(name)
+                && !ast.object_get_shapes.iter().any(|shape| {
+                    shape.span != object
+                        && object.contains(shape.span)
+                        && shape.span.contains(property.span)
+                })
+        })?;
+        let inner = ast.peel_ts_sugar_span(property.value);
+        value = match property.value_kind {
+            solid_facts::ast::RuntimeValueKind::Object => {
+                LiteralValue::Object(closed_literal(ast, inner)?)
+            }
+            solid_facts::ast::RuntimeValueKind::Array
+                if ast.array_literals.binary_search(&inner).is_ok() =>
+            {
+                LiteralValue::Array
+            }
+            solid_facts::ast::RuntimeValueKind::Primitive => LiteralValue::Primitive,
+            _ => return None,
+        };
+    }
+    Some(value)
+}
+
+/// The static, non-optional member path rooted at `root` that ends at
+/// `member`: each step's property span, outermost last.
+fn static_path(file: &FileFacts, member: Span, root: Span) -> Option<Vec<Span>> {
+    let ast = &file.ast;
+    let mut path = Vec::new();
+    let mut current = member;
+    while current != root {
+        let access = ast.member_at(current)?;
+        if ast.computed_members.binary_search(&current).is_ok()
+            || ast.optional_members.binary_search(&current).is_ok()
+        {
+            return None;
+        }
+        path.push(access.property);
+        current = ast.peel_ts_sugar_span(access.object);
+    }
+    path.reverse();
+    Some(path)
+}
+
+/// The reference `reference` to a store whose initializer is the closed
+/// literal `initial` is the root of a static member path that is written,
+/// deleted, called as a callback-free array mutator on an array literal, or
+/// read where the literal holds a primitive.
+fn contained_store_use(file: &FileFacts, reference: Span, initial: Span) -> bool {
+    let ast = &file.ast;
+    let mut top = reference;
+    while let Some(parent) = ast.members.iter().find(|parent| {
+        ast.peel_ts_sugar_span(parent.object) == top
+            && ast.computed_members.binary_search(&parent.span).is_err()
+            && ast.optional_members.binary_search(&parent.span).is_err()
+    }) {
+        top = parent.span;
+    }
+    if top == reference {
+        return false;
+    }
+    let Some(path) = static_path(file, top, reference) else {
+        return false;
+    };
+    let (last, prefix) = path.split_last().expect("one step");
+    let written = ast.write_targets.binary_search(&top).is_ok()
+        || ast
+            .deleted_targets
+            .iter()
+            .any(|&target| file.peel_parentheses(target) == Some(top));
+    if written {
+        return resolve_literal_path(file, initial, prefix).is_some();
+    }
+    let called = ast
+        .calls
+        .iter()
+        .any(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == top);
+    if called {
+        return file
+            .source_text(*last)
+            .is_some_and(|name| CALLBACK_FREE_ARRAY_MUTATORS.contains(&name))
+            && resolve_literal_path(file, initial, prefix) == Some(LiteralValue::Array);
+    }
+    resolve_literal_path(file, initial, &path) == Some(LiteralValue::Primitive)
 }
 
 /// Whether `tsc` reports a type error written in `file` at all: not a
@@ -2117,7 +2410,7 @@ fn no_store_mutator_call(
         }
         // ADR 0465: the receiver of `store.items.push(1)` is a link past the
         // root; only a store that is itself the array (`list.push(1)`) has none.
-        let Some(past_root) = chain_links_verdict(file, context, callee) else {
+        let Some(past_root) = chain_links_verdict(file, context, callee, root) else {
             continue;
         };
         defects.push(StaticDefect {
@@ -2214,7 +2507,7 @@ fn no_store_delete(
         let uncertain = match context.lookup.entity_at(path, member) {
             None => true,
             Some(entity) if !entity.writable_optional_property => continue,
-            Some(_) => match chain_links_verdict(file, context, member) {
+            Some(_) => match chain_links_verdict(file, context, member, root) {
                 None => continue,
                 Some(past_root) => past_root,
             },
