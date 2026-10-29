@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BaselineCache, EntryCache, browserKey, installedKey, recordDigest, treeStat, typecheckDigest, MismatchHistory, ORACLE_SOURCES, cacheableRecord, cacheableTypecheck, caseFiles, caseKey, chromeEnvironmentKey, codeHash, environmentKey, fileHash, programKey, runtimeEnvironmentKey, treeHash } from "./cache.mjs";
+import { BaselineCache, EntryCache, RECORD_SOURCES, executionFiles, browserKey, installedKey, recordDigest, treeStat, typecheckDigest, MismatchHistory, ORACLE_SOURCES, cacheableRecord, cacheableTypecheck, caseFiles, caseKey, chromeEnvironmentKey, codeHash, environmentKey, fileHash, programKey, runtimeEnvironmentKey, treeHash } from "./cache.mjs";
 
 const scratch = () => mkdtempSync(join(tmpdir(), "fuzz-cache-"));
 const config = (dir, text = "checker") => {
@@ -86,6 +86,29 @@ describe("the runtime and Chrome keys", () => {
     writeFileSync(join(dir, "fast/package-lock.json"), "{}"); writeFileSync(join(dir, "oracle/package-lock.json"), "{}");
     return { dir, config: { tsc, fastInstall: join(dir, "fast"), install: join(dir, "oracle"), virtualClock: true, bin: join(dir, "checker") } };
   };
+
+  it("a record's case key ignores what no runner reads: program.json, the oracle note, sites.json beyond its plan and sites", () => {
+    const files = (over = {}) => ({
+      "App.tsx": "a", "App.run.txt": "b", "program.json": '{"seed":1}',
+      "oracle.json": JSON.stringify({ note: "generator 2, seed 1", steps: [] }),
+      "sites.json": JSON.stringify({ id: "x", generator: 2, seed: 1, plan: { clicks: [] }, sites: [{ id: 1 }], glue: [], ledger: [] }),
+      ...over,
+    });
+    const base = caseKey(files(), "fast-run|x");
+    expect(caseKey(files({ "program.json": '{"seed":2}' }), "fast-run|x")).toBe(base);
+    expect(caseKey(files({ "oracle.json": JSON.stringify({ note: "generator 3, seed 9", steps: [] }) }), "fast-run|x")).toBe(base);
+    expect(caseKey(files({ "sites.json": JSON.stringify({ id: "x", generator: 3, seed: 9, plan: { clicks: [] }, sites: [{ id: 1 }], glue: [1], ledger: [2] }) }), "fast-run|x")).toBe(base);
+    expect(caseKey(files({ "App.tsx": "changed" }), "fast-run|x")).not.toBe(base);
+    expect(caseKey(files({ "oracle.json": JSON.stringify({ note: "generator 2, seed 1", steps: [{ click: 1 }] }) }), "fast-run|x")).not.toBe(base);
+    expect(caseKey(files({ "sites.json": JSON.stringify({ id: "x", plan: { clicks: [1] }, sites: [{ id: 1 }] }) }), "fast-run|x")).not.toBe(base);
+    expect(executionFiles({ "oracle.json": "not json" })).toEqual({ "oracle.json": "not json" });
+  });
+
+  it("the record sources are the fast path, the type check, Chrome and the pipeline, not the generator", () => {
+    const before = RECORD_SOURCES();
+    expect(before).toBe(RECORD_SOURCES());
+    expect(before).not.toBe(codeHash());
+  });
 
   it("the runtime key moves with the judging sources, the oracle, the clock, the type checker and either lockfile, and not with the checker", () => {
     const { dir, config } = setup();
