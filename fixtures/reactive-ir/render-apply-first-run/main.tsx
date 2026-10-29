@@ -1,5 +1,6 @@
 import { hydrate, render } from "@solidjs/web";
 import {
+  ReadThenWrite,
   ComputeReads,
   ConditionalEffect,
   FirstRunWrite,
@@ -37,3 +38,4 @@ class Mounts {
 void Mounts;
 declare const ready: boolean;
 if (ready) render(() => <UnderCondition />, document.body);
+render(() => <ReadThenWrite />, document.body);

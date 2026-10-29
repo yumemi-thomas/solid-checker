@@ -1401,9 +1401,14 @@ fn write_role_walk(
                 match first_run {
                     ExecutionRole::DiscardedRendering => return first_run,
                     ExecutionRole::Unknown | ExecutionRole::Unreported => return first_run,
-                    // ADR 0503: a first run proven synchronous throws there.
+                    // ADR 0503: a first run proven synchronous throws there,
+                    // when nothing in the apply runs before the write (an
+                    // earlier call, a pending read among them, may throw
+                    // first; ADR 0508 review).
                     role if role.reports_disallowed_write() => {
-                        return if first_run_proven_at_call(file, call, lookup) {
+                        return if first_run_proven_at_call(file, call, lookup)
+                            && apply_runs_nothing_before(file, call, span)
+                        {
                             role
                         } else {
                             ExecutionRole::Unknown
@@ -2184,6 +2189,43 @@ fn first_run_proven_at_call(
     lookup.function_may_be_component(file, component)
         && crate::interproc::site_on_every_completion(lookup, file, component.span, call)
         && crate::owners::mounted_by_module_render(lookup, file, component)
+}
+
+/// No call is written in the apply of the effect created at `call` before the
+/// position of `span` in it (the outermost function or site around `span` the
+/// apply's own body holds); a call around that position is the one that runs
+/// it, not one before it.
+fn apply_runs_nothing_before(file: &solid_facts::FileFacts, call: Span, span: Span) -> bool {
+    let ast = &file.ast;
+    let Some(apply) = ast
+        .call_at(call)
+        .and_then(|fact| fact.arguments.get(1))
+        .and_then(|argument| ast.function_at(ast.peel_ts_sugar_span(argument.span)))
+    else {
+        return false;
+    };
+    let own_calls = || {
+        ast.calls.iter().filter(move |other| {
+            apply.body.contains(other.span)
+                && crate::owners::containing_ast_function(ast, other.span)
+                    .is_some_and(|function| function.span == apply.span)
+        })
+    };
+    // A write outside the apply (a closure of the body the apply calls) runs
+    // through one of the apply's calls, which one this does not know: only an
+    // apply with one call of its own runs nothing before it.
+    if !apply.body.contains(span) {
+        return own_calls().count() <= 1;
+    }
+    let mut position = span;
+    for _ in 0..32 {
+        match crate::owners::containing_ast_function(ast, position) {
+            Some(function) if function.span == apply.span => break,
+            Some(function) => position = function.span,
+            None => return false,
+        }
+    }
+    !own_calls().any(|other| other.span.end <= position.start)
 }
 
 /// ADR 0504: the read at `site` happens in the first run of a render-effect

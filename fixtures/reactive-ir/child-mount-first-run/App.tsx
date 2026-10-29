@@ -1,4 +1,4 @@
-import { Show, createMemo, createRenderEffect, createSignal } from "solid-js";
+import { For, Show, createMemo, createRenderEffect, createSignal } from "solid-js";
 
 // ADR 0507: a component a parent renders as a plain child, the parent itself
 // mounted by a module-scope render (main.tsx) and running nothing else, runs
@@ -87,7 +87,8 @@ function WriteChildC() {
   return <p>{count()}</p>;
 }
 
-// Uncertifiable: `<Show>` runs its children inside a computation.
+// Violation (SC2001, ADR 0508): `<Show when={true}>` renders its child in its
+// value memo, which computes when `Show` is created.
 export function ShowParent() {
   return (
     <div>
@@ -140,5 +141,90 @@ export function ConditionalParent() {
     <div>
       <WriteChildE />
     </div>
+  );
+}
+
+function WriteChildF() {
+  const [count, setCount] = createSignal(0);
+  createRenderEffect(
+    () => 1,
+    () => {
+      setCount(6);
+    },
+  );
+  return <p>{count()}</p>;
+}
+
+// Violation (SC2001, ADR 0508): a one-row `<For>` renders its row on the
+// parent's insert's first pass.
+export function ForParent() {
+  return (
+    <ul>
+      <For each={[1]}>{() => <WriteChildF />}</For>
+    </ul>
+  );
+}
+
+function WriteChildG() {
+  const [count, setCount] = createSignal(0);
+  createRenderEffect(
+    () => 1,
+    () => {
+      setCount(7);
+    },
+  );
+  return <p>{count()}</p>;
+}
+
+const shown = true as boolean;
+
+// Uncertifiable: `when` is not the literal `true`.
+export function ShowBindingParent() {
+  return (
+    <div>
+      <Show when={shown}>
+        <WriteChildG />
+      </Show>
+    </div>
+  );
+}
+
+function WriteChildH() {
+  const [count, setCount] = createSignal(0);
+  createRenderEffect(
+    () => 1,
+    () => {
+      setCount(8);
+    },
+  );
+  return <p>{count()}</p>;
+}
+
+// Uncertifiable: an empty list renders no row.
+export function ForEmptyParent() {
+  return (
+    <ul>
+      <For each={[] as number[]}>{() => <WriteChildH />}</For>
+    </ul>
+  );
+}
+
+function WriteChildI() {
+  const [count, setCount] = createSignal(0);
+  createRenderEffect(
+    () => 1,
+    () => {
+      setCount(9);
+    },
+  );
+  return <p>{count()}</p>;
+}
+
+// Uncertifiable: the row takes the item.
+export function ForItemParent() {
+  return (
+    <ul>
+      <For each={[1]}>{(item) => <WriteChildI />}</For>
+    </ul>
   );
 }
