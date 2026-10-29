@@ -1046,6 +1046,12 @@ fn the_any_file_vetoes_follow_what_the_project_writes() {
     );
     let (string_code, tuple, ..) = veto("eval(\"1\");");
     assert!(string_code && tuple, "eval is string code, and mutates all");
+    // ADR 0511: a slot taken from a held array literal is read as one
+    // written in place.
+    let inline = veto("const [, run] = [0, eval];\nrun(\"1\");");
+    assert!(inline.0, "an inline literal's slot may be eval");
+    let held = veto("const pair = [0, eval];\nconst [, run] = pair;\nrun(\"1\");");
+    assert!(held.0, "a held literal's slot may be eval");
     assert!(veto("Object.assign(target, extra);").2);
     assert!(veto("Function.prototype.bind = null;").3);
     let promise = veto("Promise.prototype.then = null;");

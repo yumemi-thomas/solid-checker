@@ -479,11 +479,32 @@ pub(super) fn string_code_reference(
                 )
             });
     }
+    // ADR 0511: an array pattern over a `const` holding an array literal
+    // (`const pair = [0, eval]; const [, f] = pair;`) takes its slot from that
+    // literal as from one written in place. Before this, the holder's
+    // initializer counted as a fresh allocation and no element was read.
+    let literal = {
+        let initializer = file.ast.peel_ts_sugar_span(initializer);
+        if file.ast.array_literals.contains(&initializer) {
+            Some(initializer)
+        } else if binding.shape == ast::BindingShape::Array {
+            file.ast
+                .reference_declaration(initializer)
+                .and_then(|holder| {
+                    file.ast.bindings.iter().find(|candidate| {
+                        candidate.shape == ast::BindingShape::Identifier
+                            && candidate.names.iter().any(|name| name.span == holder)
+                    })
+                })
+                .and_then(|holder| holder.initializer)
+                .map(|value| file.ast.peel_ts_sugar_span(value))
+                .filter(|value| file.ast.array_literals.contains(value))
+        } else {
+            None
+        }
+    };
     if binding.shape == ast::BindingShape::Array
-        && file
-            .ast
-            .array_literals
-            .contains(&file.ast.peel_ts_sugar_span(initializer))
+        && let Some(initializer) = literal
     {
         // No element identity is guessed. Any possible gateway in a literal
         // withholds every selected callable slot until exact value flow exists.
