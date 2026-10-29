@@ -1553,8 +1553,9 @@ fn solid2_precision_corrections_are_end_to_end() {
     // the handler of `Promise.resolve(..).then(..)` returned, not awaited, by
     // the async memo is queued before the memo adopts the promise, and the
     // rc.13 runtime attributes no read to a handler that has no frame of the
-    // computation below it; nothing for the shadowed, unresolved, or
-    // wrapper-built callbacks.
+    // computation below it; the shadowed project `filter` method, whose exact
+    // body calls its callback synchronously (ADR 0485), and nothing for the
+    // unresolved or wrapper-built callbacks.
     // The cleanup-return *value* rules are gone (every illegal return is a
     // TypeScript error against the real `EffectFunction` signature), so the
     // contextual, explicit, parenthesized, `as`-cast, member, and returned-call
@@ -1573,13 +1574,15 @@ fn solid2_precision_corrections_are_end_to_end() {
     // cleanup); a produced function, `(() => void) | undefined`, and `void`
     // are legal and silent.
     for (rule, expected) in [
-        ("reactive-read-after-await", 3),
+        ("reactive-read-after-await", 4),
         ("invalid-cleanup-return", 0),
         ("cleanup-return-unresolved", 0),
         // Five placed reads, and three reads in the Promise, wrapper-built and
         // unresolved callbacks after the await, which no role places and which
-        // are uncertifiable (ADR 0332).
-        ("strict-read-untracked", 8),
+        // are uncertifiable (ADR 0332). And the link Get of the nested store
+        // write in the body (`profile.user` of `profile.user.name = …`, ADR
+        // 0498).
+        ("strict-read-untracked", 9),
         // The nested, cast and props writes, plus the three root-record
         // writes: on the audited rc.17 `Store<T> = T`, so a root write
         // type-checks and is this checker's (asserted by span below).

@@ -8,7 +8,7 @@
 // nothing it can prove", which is never evidence either way.
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ignoredRules } from "./codes.mjs";
@@ -72,8 +72,10 @@ export function materializeForChecker(built, install, id = built.id, { twin = fa
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "App.tsx"), twin ? built.files["App.run.txt"] : built.files["App.tsx"]);
+  const modules = projectModules(built.files);
+  for (const name of modules) writeFileSync(join(dir, name), built.files[name]);
   writeFileSync(join(dir, "main.tsx"), MAIN_SOURCE);
-  writeFileSync(join(dir, "tsconfig.json"), tsconfigFor(["main.tsx", "App.tsx"]));
+  writeFileSync(join(dir, "tsconfig.json"), tsconfigFor(["main.tsx", "App.tsx", ...modules]));
   installPackages(dir, built.packages);
   return dir;
 }
@@ -84,11 +86,18 @@ export function materializeFromDirectory(caseDir, install, id) {
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   cpSync(join(caseDir, "App.tsx"), join(dir, "App.tsx"));
+  const modules = readdirSync(caseDir).filter((name) => isProjectModule(name));
+  for (const name of modules) cpSync(join(caseDir, name), join(dir, name));
   if (existsSync(join(caseDir, "node_modules"))) cpSync(join(caseDir, "node_modules"), join(dir, "node_modules"), { recursive: true });
   writeFileSync(join(dir, "main.tsx"), MAIN_SOURCE);
-  writeFileSync(join(dir, "tsconfig.json"), tsconfigFor(["main.tsx", "App.tsx"]));
+  writeFileSync(join(dir, "tsconfig.json"), tsconfigFor(["main.tsx", "App.tsx", ...modules]));
   return dir;
 }
+
+/** A project module besides App.tsx and the entry: a top-level `.ts`/`.tsx` source (not a declaration file). */
+const isProjectModule = (name) => /^[^/]+\.tsx?$/.test(name) && !name.endsWith(".d.ts") && name !== "App.tsx" && name !== "main.tsx";
+/** The case's project modules (`helpers.ts`), sorted. */
+export const projectModules = (files = {}) => Object.keys(files).filter(isProjectModule).sort();
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 /** The runtime resolver the launcher (packages/cli/bin/launcher.mjs) points the native checker at. */
@@ -132,13 +141,24 @@ export function runChecker(dir, { bin, typefacts, timeoutMs = 180000, env = proc
       if (status !== 0 && status !== 1) { done({ ok: false, findings: [], wallMs, exitStatus: status, error: stderr.slice(-800) || `exit ${status}` }); return; }
       try {
         const analysis = JSON.parse(stdout);
-        done({ ok: true, findings: parseFindings(analysis, dir), wallMs, exitStatus: status });
+        const veto = entryVeto(analysis, dir);
+        done({ ok: true, findings: parseFindings(analysis, dir), wallMs, exitStatus: status, ...(veto ? { entryVeto: veto } : {}) });
       } catch (error) {
         if (error instanceof UnmappedFindingsError) unmapped.push(error.message);
         done({ ok: false, findings: [], wallMs, exitStatus: status, error: error instanceof UnmappedFindingsError ? error.message : `malformed checker output: ${error.message}` });
       }
     });
   });
+}
+
+/**
+ * The premise by which the harness's own entry (main.tsx, the oracle's event passes) withholds the checker's event-handler proofs
+ * (ADR 0435's dispatch veto), or null. While it does, every write and read in a handler is uncertifiable by construction, whatever the
+ * program: before ADR 0477 credited the await continuation, every fuzzed handler was. Recorded per run, so a run can say so.
+ */
+export function entryVeto(analysis, dir) {
+  const entry = `${canonical(dir)}/main.tsx:`;
+  return (analysis?.premises ?? []).find((premise) => typeof premise === "string" && premise.includes("withholds") && (premise.includes(entry) || premise.includes(`${resolve(dir)}/main.tsx:`))) ?? null;
 }
 
 /** The checker answered with findings and none of them is a file of the program it was asked about (see `parseFindings`). */

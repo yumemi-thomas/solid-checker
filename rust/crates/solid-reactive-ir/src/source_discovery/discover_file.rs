@@ -230,6 +230,14 @@ pub(crate) fn discover_file_sources(
                 if go_returned_source {
                     result.returned_source_symbols.push(symbol.clone());
                     result.summary_source_symbols.push(symbol.clone());
+                } else if source_kind == ReactiveSourceKind::Accessor
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                {
+                    // ADR 0486: an accessor a primitive returns directly
+                    // (`const m = createMemo(...)`) is read through a function
+                    // like a tuple's accessor is: the summaries carry it, so a
+                    // read in a helper is the read of whatever calls it.
+                    result.summary_source_symbols.push(symbol.clone());
                 }
                 result.source_kinds.push((symbol.clone(), source_kind));
                 if let Some(primitive) = primitive.as_deref() {

@@ -34,6 +34,7 @@ pub enum Rule {
     PendingAsyncUnsuspendableRead,
     AsyncOutsideLoadingBoundary,
     PrimitiveInDirectiveApplication,
+    PrimitiveInEffectCallback,
     MissingEffectFunction,
     SyncNodeReceivedAsync,
     HttpResponseAfterFlush,
@@ -80,7 +81,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 35] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -102,6 +103,7 @@ impl Rule {
         Self::PendingAsyncUnsuspendableRead,
         Self::AsyncOutsideLoadingBoundary,
         Self::PrimitiveInDirectiveApplication,
+        Self::PrimitiveInEffectCallback,
         Self::MissingEffectFunction,
         Self::SyncNodeReceivedAsync,
         Self::HttpResponseAfterFlush,
@@ -222,6 +224,13 @@ impl Rule {
                 "warning",
                 false,
             ),
+            // ADR 0483: a computation or root created with no owner in a
+            // createEffect apply throws PRIMITIVE_IN_EFFECT_CALLBACK in the
+            // rc.17 dev build (`assertNotInEffectCallback`): an error, like the
+            // family's other mirrored dev throws.
+            Self::PrimitiveInEffectCallback => {
+                ("SC6002", "primitive-in-effect-callback", "error", false)
+            }
             Self::MissingEffectFunction => ("SC7001", "missing-effect-function", "error", false),
             Self::SyncNodeReceivedAsync => {
                 ("SC7002", "sync-computation-received-async", "error", false)
@@ -406,6 +415,7 @@ mod tests {
             ("SC2005", "no-await-primitive-in-tracked-scope"),
             ("SC2006", "flush-in-action"),
             ("SC2008", "flush-in-effect-callback"),
+            ("SC6002", "primitive-in-effect-callback"),
             ("SC2007", "static-dynamic-async-source"),
             ("SC7002", "sync-computation-received-async"),
             ("SC7005", "http-response-after-flush"),

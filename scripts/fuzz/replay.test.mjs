@@ -117,11 +117,25 @@ describe("probe witnesses", () => {
   it("a violation Chrome is silent on, where the write landed, is a witnessed false positive", () => {
     const row = judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [store] } }, new Map([["rp-z", record("1")]]));
     expect(row.chrome).toMatchObject({ status: "violation-without-diagnostic", witness: "landed", witnessed: "false-positive-witnessed" });
-    expect(judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [store] } }, new Map([["rp-z", record("0")]])).chrome.witnessed).toBeUndefined();
+    expect(judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [store] } }, new Map([["rp-z", record("0")]])).chrome.witnessed).toBe("violation-witnessed");
+  });
+  it("a violation the runtime is silent on whose witness did not land is backed by the behaviour; with none it is a defect", () => {
+    const read = { ...store, rule: "strict-read-untracked", id: "SC1001" };
+    expect(judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [read] } }, new Map([["rp-z", record("0")]])).chrome).toMatchObject({ status: "violation-without-diagnostic", witnessed: "violation-witnessed" });
+    expect(judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [] } }, new Map([["rp-z", record("0")]])).chrome).toMatchObject({ status: "no-defect", witnessed: "defect-witnessed" });
+    expect(judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [] } }, new Map([["rp-z", record("1")]])).chrome.witnessed).toBeUndefined();
   });
   it("a false clean whose write did not land is a witnessed defect", () => {
     const fired = record("0", [{ code: "STORE_WRITE_OUTSIDE_SETTER", positions: [{ file: "App.tsx", line: 11 }] }]);
     expect(judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [] } }, new Map([["rp-z", fired]])).chrome).toMatchObject({ status: "false-clean", witness: "not-landed", witnessed: "defect-witnessed" });
+  });
+  it("judges a diagnostic Chrome could not place in the file, and a code no rule claims is unclaimed", () => {
+    const unplaced = { row: {}, runtime: { ...record("1").runtime, unattributed: ["UNCOMMITTED_INPUT_OVERWRITTEN", "STORE_WRITE_OUTSIDE_SETTER"] } };
+    expect(judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [] } }, new Map([["rp-z", unplaced]])).chrome.diagnostics).toEqual([
+      { code: "UNCOMMITTED_INPUT_OVERWRITTEN", line: null, status: "unclaimed", unattributed: true },
+      { code: "STORE_WRITE_OUTSIDE_SETTER", line: null, status: "false-clean", unattributed: true }]);
+    const onlyUnclaimed = { row: {}, runtime: { ...record("1").runtime, unattributed: ["UNCOMMITTED_INPUT_OVERWRITTEN"] } };
+    expect(judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [] } }, new Map([["rp-z", onlyUnclaimed]])).chrome.status).toBe("unclaimed");
   });
 });
 

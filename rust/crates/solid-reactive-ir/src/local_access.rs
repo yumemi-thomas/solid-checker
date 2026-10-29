@@ -1461,7 +1461,7 @@ impl LocalAccessContext<'_, '_> {
         if self.async_sources.contains(symbol)
             && !alias_withheld
             && self.accessors.contains_key(symbol)
-            && inside_non_component_function(file, call.callee, self.lookup)
+            && read_in_named_local_function(file, call.callee, self.lookup)
             && named_callback_execution_role(file, call.callee, self.lookup).is_none()
             && !pending_accessor_probe(file, call.callee, self.lookup)
         {
@@ -1747,21 +1747,31 @@ impl LocalAccessContext<'_, '_> {
                     self.symbol_names,
                     self.lookup,
                 );
-                if execution != ExecutionRole::TrackedJsx {
-                    // The call may itself sit in a named local function a
-                    // rendered call runs.
-                    sites.push((call.span, depth + 1));
-                    continue;
-                }
-                if containing_leaf_owner(
+                let leaf_owner = containing_leaf_owner(
                     file,
                     call.callee,
                     self.entities,
                     self.symbol_names,
                     self.lookup,
-                )
-                .is_some()
-                {
+                );
+                // ADR 0490: a call that runs where a direct read is
+                // unsuspendable (a component body's strict-read window,
+                // module evaluation, a leaf owner) reads there, as the
+                // direct read does.
+                let unsuspendable = leaf_owner.is_some()
+                    || execution == ExecutionRole::ModuleInitialization
+                    || (execution == ExecutionRole::UntrackedRendering
+                        && nested_literal_runs_during_body(
+                            file,
+                            call.callee,
+                            self.entities,
+                            self.symbol_names,
+                            self.lookup,
+                        ));
+                if execution != ExecutionRole::TrackedJsx && !unsuspendable {
+                    // The call may itself sit in a named local function a
+                    // rendered call runs.
+                    sites.push((call.span, depth + 1));
                     continue;
                 }
                 let call_location = location(file.path.shared(), call.span);
@@ -1778,7 +1788,7 @@ impl LocalAccessContext<'_, '_> {
                     location: call_location,
                     declaration: declaration.clone(),
                     execution,
-                    leaf_owner: None,
+                    leaf_owner: leaf_owner.map(Into::into),
                     under_loading: cover == LoadingCover::Covered,
                     mount_unresolved: cover == LoadingCover::Unresolved,
                     call_attributed: true,
@@ -1787,8 +1797,18 @@ impl LocalAccessContext<'_, '_> {
                     options_opaque: options.opaque,
                     ssr_client_hole: options.ssr_client_bare,
                     server_rendering_unresolved: options.server_rendering_unresolved,
-                    host_callback_timing: false,
-                    callee_callback_timing: false,
+                    host_callback_timing: host_callback_timing(
+                        file,
+                        call.callee,
+                        execution,
+                        self.lookup,
+                    ),
+                    callee_callback_timing: callee_callback_timing(
+                        file,
+                        call.callee,
+                        execution,
+                        self.lookup,
+                    ),
                     invocation_context_unproven: false,
                 }));
             }
@@ -1929,13 +1949,24 @@ impl LocalAccessContext<'_, '_> {
                     self.prop_sources.contains_key(symbol)
                         && self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
                 });
-        if !prop_head
-            && file
-                .ast
-                .members
-                .iter()
-                .any(|candidate| file.ast.peel_ts_sugar_span(candidate.object) == member.span)
-        {
+        // ADR 0498: a member that is the object of a written, deleted or
+        // iterated member (`store.a` in `store.a.v = 1`) is read on its own:
+        // the longer path is no read, so the Get of this one is the chain's.
+        let read_as_part = |candidate: &solid_facts::ast::MemberFact| {
+            file.ast.peel_ts_sugar_span(candidate.object) == member.span
+                && !(file.ast.is_plain_assignment_target(candidate.span)
+                    || file
+                        .ast
+                        .deleted_targets
+                        .iter()
+                        .any(|target| file.ast.peel_ts_sugar_span(*target) == candidate.span)
+                    || file
+                        .ast
+                        .iteration_targets
+                        .iter()
+                        .any(|target| file.ast.peel_ts_sugar_span(*target) == candidate.span))
+        };
+        if !prop_head && file.ast.members.iter().any(read_as_part) {
             return;
         }
         // A plain assignment writes this exact member without reading its
@@ -1985,8 +2016,34 @@ impl LocalAccessContext<'_, '_> {
             } else {
                 None
             };
-        let Some(symbol) = inline_root
+        // ADR 0498: a receiver that is a member read holding exactly a
+        // `const` (ADR 0481, `thing.useIt`) is that `const`.
+        // The receiver may be the alias itself or a static path below it
+        // (`thing.useIt.items` in `thing.useIt.items.push(1)`).
+        let member_alias_symbol = {
+            let mut at = file.ast.peel_ts_sugar_span(member.object);
+            let mut found = None;
+            for _ in 0..8 {
+                if let Some(alias) = file.ast.local_alias_member(at) {
+                    found = self.entities.at(file.path.as_str(), alias.source).cloned();
+                    break;
+                }
+                let Some(inner) = file
+                    .ast
+                    .member_at(at)
+                    .filter(|_| file.ast.computed_members.binary_search(&at).is_err())
+                else {
+                    break;
+                };
+                at = file.ast.peel_ts_sugar_span(inner.object);
+            }
+            found
+        };
+        // The alias fact is exact, so it comes before the entity at the
+        // member (the property's own symbol, no source).
+        let Some(symbol) = member_alias_symbol
             .as_ref()
+            .or(inline_root.as_ref())
             .or(self.entities.get(&object))
             .or(binder_symbol.as_ref())
         else {
@@ -2812,3 +2869,32 @@ pub(crate) fn function_literal_runs_nothing(
 }
 
 // Insert at the end of the existing local_access.rs module.
+
+/// ADR 0496: the read sits directly in a function that is no component, no
+/// compiler callback role and no primitive's callback argument, so the call-attributed
+/// walk ([`LocalAccessAnalyzer::push_call_attributed_async_reads`]) may follow
+/// its calls; that walk judges every call by its own role. A read in a named
+/// closure inside a `createRoot` callback is such a read, which
+/// `inside_non_component_function` (any primitive callback around it) refused.
+fn read_in_named_local_function(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(function) = containing_ast_function(&file.ast, span) else {
+        return false;
+    };
+    !file
+        .compiler
+        .callback_roles
+        .iter()
+        .any(|callback| callback.span == function.span)
+        && !file
+            .ast
+            .arguments_containing(function.span)
+            .any(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                    && lookup.primitive_at_call(file, call.span).is_some()
+            })
+        && !lookup.function_may_be_component(file, function)
+}

@@ -580,6 +580,13 @@ impl<'f, 'a> Reach<'f, 'a> {
             // a reactive receiver does not prove its method invokes that
             // receiver or reads an accessor.
             let symbol = ast_call.and_then(|(file, candidate)| {
+                // ADR 0481: a member read that is exactly a `const` names it.
+                if let Some(alias) = file
+                    .ast
+                    .local_alias_member(file.ast.peel_ts_sugar_span(candidate.callee))
+                {
+                    return ctx.entities.at(file.path.as_str(), alias.source);
+                }
                 if let Some(member) = file
                     .ast
                     .members
@@ -847,6 +854,43 @@ impl<'f, 'a> Reach<'f, 'a> {
             ) {
                 mark_uncertain(draft, mark);
             }
+            return;
+        }
+        // ADR 0485: a literal a project helper calls in its own synchronous
+        // body on every completion (`layer_run`'s in-place answers at this
+        // call) runs on this call's stack, on the continuation: its reads are
+        // the continuation's. One such run makes the read; other runs the
+        // helper may make do not unmake it.
+        let mut in_place = false;
+        for argument in &call.arguments {
+            if argument.spread {
+                continue;
+            }
+            let Some(callback) = callback_argument_literal(file, argument.span) else {
+                continue;
+            };
+            if callback.generator {
+                continue;
+            }
+            if let crate::execution_role::LayerRun::InPlace(at)
+            | crate::execution_role::LayerRun::InPlaceAmongOthers(at) =
+                crate::execution_role::layer_run(file, callback, ctx.semantic_lookup)
+                && at == call.span
+                && ctx
+                    .semantic_lookup
+                    .resolved_callee_call(file, call.callee)
+                    .is_none_or(|resolved| {
+                        !resolved
+                            .declaration
+                            .as_ref()
+                            .is_some_and(|declaration| declaration.standard_library)
+                    })
+            {
+                self.report_prefix(draft, walk, file, callback, depth);
+                in_place = true;
+            }
+        }
+        if in_place {
             return;
         }
         let Some(resolved) = ctx.semantic_lookup.resolved_callee_call(file, call.callee) else {

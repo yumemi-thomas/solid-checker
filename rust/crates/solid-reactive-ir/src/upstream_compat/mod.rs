@@ -169,6 +169,14 @@ pub(super) fn source_symbol_at<'a>(
     file: &FileFacts,
     span: Span,
 ) -> Option<&'a crate::SymbolId> {
+    // ADR 0482: a member read that is exactly a `const` (ADR 0481) is that
+    // `const`'s reference.
+    if let Some(alias) = file
+        .ast
+        .local_alias_member(file.ast.peel_ts_sugar_span(span))
+    {
+        return context.entities.at(file.path.as_str(), alias.source);
+    }
     context.entities.at(file.path.as_str(), span).or_else(|| {
         context
             .source_reference_index
@@ -177,10 +185,16 @@ pub(super) fn source_symbol_at<'a>(
     })
 }
 
-/// The object a member chain is rooted at: `store.a.b` -> `store`.
+/// The object a member chain is rooted at: `store.a.b` -> `store`. A member
+/// read that is exactly a `const` (ADR 0481, `thing.store.a` -> `thing.store`)
+/// is the root it names (ADR 0482), as that `const`'s identifier would be.
 pub(super) fn member_root(file: &FileFacts, span: Span) -> Option<Span> {
     let mut current = file.ast.member_at(span)?;
     loop {
+        let object = file.ast.peel_ts_sugar_span(current.object);
+        if file.ast.local_alias_member(object).is_some() {
+            return Some(object);
+        }
         match file.ast.member_at(current.object) {
             Some(outer) => current = outer,
             None => return Some(current.object),

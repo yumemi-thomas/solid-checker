@@ -55,6 +55,15 @@ export function typeErrorRefusal(typeErrors, total, { first } = {}) {
   return `invalid run: ${typeErrors} of ${total} programs failed to type-check (the limit is ${TYPE_ERROR_REFUSAL_SHARE * 100}%, and a run where all fail proves nothing)${first ? `; first: ${first}` : ""}`;
 }
 
+/**
+ * A run whose programs the harness could not judge, more than half of them (a checker that would not start, a missing producer),
+ * proves nothing either; the run refuses rather than reporting an empty matrix as clean.
+ */
+export function harnessRefusal(harness, total, { first } = {}) {
+  if (!total || harness / total <= 0.5) return null;
+  return `invalid run: the harness could not judge ${harness} of ${total} programs${first ? `; first: ${first}` : ""}`;
+}
+
 /** The oracle's compiler options (scripts/runtime-oracle.mjs), so a program checks as the oracle will compile it. */
 export const COMPILER_OPTIONS = {
   target: "ES2022", module: "ESNext", moduleResolution: "Bundler", jsx: "preserve",

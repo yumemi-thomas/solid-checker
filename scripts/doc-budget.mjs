@@ -67,7 +67,13 @@ export const FILE_BUDGETS = {
   // And the batch review notes on the batch: 52,848 bytes: 53_000.
   // And the RC8/RC10 note (component execution boundary, left open): 53,828 bytes: 54_000.
   // And the second batch review (ADR 0475 climb, ADR 0472 fail-open shapes): 54,303 bytes: 54_500.
-  "docs/open-work.md": 54_500,
+  // And the UNCOMMITTED_INPUT_OVERWRITTEN not-to-build line: 55,065 bytes: 55_200.
+  // And the ADR 0480 hook-member line: 55_600.
+  // And the ADR 0482 review notes (annotated readonly erasure, imported store alias): 55,675 bytes: 55_900.
+  // And the ADR 0483 shared apply-owner premise line: 56,087 bytes: 56_300.
+  // And ADR 0491 (its open-work clause, the writeOverride premise): 56,528 bytes: 56_700.
+  // And ADR 0500's known miss (a hook holder that is no member alias): 57_000.
+  "docs/open-work.md": 57_000,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for the
   // catalog review's ADRs 0381 and 0424-0434, 4 bytes under 115_600; and for ADR 0435,
@@ -150,7 +156,32 @@ export const FILE_BUDGETS = {
   // And the ADR 0474 guard amendment: 297,529 bytes: 298_000.
   // And the second batch review amendments (ADRs 0474, 0475): 298,019 bytes: 298_500.
   // And ADR 0476 (the setter window, past-root writes): 300,074 bytes: 300_500.
-  "docs/decisions.md": 300_500,
+  // And ADR 0477 (the await-continuation dispatch): 301,796 bytes: 302_000.
+  // And ADR 0478 (flush-in-action through in-place layers): 302,714 bytes: 302_900.
+  // And ADR 0479 (a named function with one call runs in place): 303,868 bytes: 304_000.
+  // And ADR 0480 (literal slots as exact aliases) and the ADR 0479 review amendment: 306041 bytes: 306_800.
+  // And ADR 0481 (member reads of an exclusive arrow result): 307,159 bytes: 307_400.
+  // And ADR 0482 (a member alias is a root for the ported rules): 308,347 bytes: 308_600.
+  // And ADR 0483 (SC6002 primitive-in-effect-callback): 309,927 bytes: 310_200.
+  // And the ADR 0483 premise amendment: 310_600.
+  // And ADR 0484 (the effect-phase walk crosses nested closures and helpers): 311,241 bytes: 311_500.
+  // And ADR 0485 (a helper's in-place callback after an await): 312,340 bytes: 312_600.
+  // And ADR 0486 (directly returned accessors are summary-eligible): 313,445 bytes: 313_700.
+  // And ADR 0487 (the read-after-await rule reads member aliases): 314_600.
+  // And ADR 0488 (a settled cleanup after an await is unowned): 315_500.
+  // And ADR 0489 (the stored-literal walk follows a named function's one call): 316_500.
+  // And ADR 0490 (an async read in a named local function is unsuspendable where its call is): 318_000.
+  // And ADR 0491 (a store link its own initializer wrote is wrapped): 320_000.
+  // And ADR 0492 (a leaf owner's callback runs helper callbacks in place): 321_800.
+  // And ADRs 0493-0495 (layers after an await, resolve/until layers, SC6002 per layer): 325_200.
+  // And the ADR 0493-0495 review amendments: 326_500.
+  // And ADR 0496 (the call-attributed async walk starts from any named local function): 327_800.
+  // And ADR 0497 (the store-link proof follows literal slots): 329_400.
+  // And the ADR 0497 review note and ADR 0498 (the object of a written member is read): 331_800.
+  // And ADR 0499 (a store link read in a closure member write): 333_400.
+  // And ADR 0500 (the store-link proof follows a member-read hook holder): 334_800.
+  // And the ADR 0500 review note: 335_700.
+  "docs/decisions.md": 335_700,
 };
 
 export const GROUP_BUDGETS = [
@@ -185,7 +216,7 @@ export const GROUP_BUDGETS = [
   // With main's ADR 0451 (PR #119) merged in: 753,780 bytes: 754_500.
   // And for ADR 0454 (its entry, the open-work lines, a rule-page paragraph): 758,425 bytes against 754,500: 759_000; its owner-graph follow-up: 760,511 bytes: 761_000; its reachability follow-up: 761,579 bytes: 762_500.
   // And for ADR 0455 (its entry, one open-work line, a rule-page paragraph): 765,586 bytes against 762,500: 766_000.
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 840_000 }, // ADR 0476 store-alias amendment (an ADR clause, a rule-page clause): 839,881 bytes. // ADR 0476 review (its sentence, the residual false-positive line): 839,649 bytes. // ADR 0476 (its entry, two rule-page paragraphs, two open-work lines): 839,107 bytes. // Second batch review: 836,062 bytes. // ADR 0474 guard amendment (its sentence, a rule-page sentence): 835,097 bytes. // RC8/RC10 open-work note: 834,391 bytes. // ADR 0475 (its entry, a rule-page sentence, one open-work line): 833,477 bytes. // Batch review notes on the batch: 831,469 bytes. // ADR 0474 on the batch: 829,668 bytes. // ADR 0472 (its entry, a rule-page paragraph, open-work): 827,781 bytes. // ADR 0471 (its entry, a rule-page sentence, one open-work line): 825,165 bytes. // ADR 0470 (its entry, a rule-page bullet, one open-work line): 822,681 bytes. // ADR 0469 (its entry, a rule-page bullet): 820,739 bytes. // ADR 0468 (its entry, one open-work line): 818,373 bytes. // Merge of main (PR #135) into the batch: 815,691 bytes. // ADR 0467 (its entry, two rule-page paragraphs, one open-work line): 807,212 bytes. // ADR 0466 (its entry, one open-work line, a rule-page paragraph): 804,218 bytes. // ADR 0463 (its entry, open-work lines, rule-page sentences): 800,445 bytes. // ADR 0462 (its entry, two rule-page paragraphs, one open-work line): 796,067 bytes. // Merge of PR #129 with ADR 0461 (PR #130): 792,496 bytes. // ADR 0461 review amendment (ADR sentences, open-work lines, rule-page sentences): 782,004 bytes. // ADR 0461 (its entry, the open-work line, a rule-page paragraph): 780,658 bytes. // Merge of ADR 0456 (PR #123) with ADR 0457: 778,757 bytes. // ADR 0456 (its entry, open-work lines, a rule-page paragraph): 775,714 bytes. // ADR 0457 review amendment (its sentences, one open-work line): 774,199 bytes against 773,500. // ADR 0457 (its entry, a rule-page sentence): 773,270 bytes against 771,500. // ADR 0455 fourth-review amendment: 771,408 bytes. // ADR 0455 third-review amendment: 770,819 bytes. // ADR 0455 cleanup amendment: 769,241 bytes. // ADR 0455 named-closure follow-up: 767,101 bytes. // ADR 0455 follow-up: 766,106 bytes against 766,000.
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 886_600 }, // ADR 0500 review. // ADR 0500. // ADR 0499. // ADR 0497 review, ADR 0498. // ADR 0497 (its entry). // ADR 0496 (its entry). // ADR 0493-0495 review amendments. // ADRs 0493-0495 (entries, three rule-page clauses). // ADR 0492 (its entry, a rule-page clause). // ADR 0491 (its entry and review, a rule-page clause, the open-work line). // ADR 0490 (its entry, a rule-page paragraph). // ADR 0489 (its entry). // ADR 0488 (its entry). // ADR 0487 (its entry). // ADR 0486 (its entry, a rule-page clause). // ADR 0485 (its entry, a rule-page sentence): 857,477 bytes. // ADR 0484 (its entry, a rule-page clause): 856,113 bytes. // ADR 0483 premise lines (open-work, rule pages, ADR). // ADR 0483 (its entry, the SC6002 rule page, a README row): 853,675 bytes. // ADR 0482 review notes in open-work: 849,875 bytes. // ADR 0482 (its entry, a rule-page paragraph, the open-work line): 849,509 bytes. // ADR 0481 (its entry, the open-work line): 848,204 bytes. // ADRs 0479 amendment and 0480 (entries, one open-work line). // ADR 0479 (its entry): 844,490 bytes. // ADR 0478 (its entry, a rule-page paragraph): 843,336 bytes. // The UNCOMMITTED_INPUT_OVERWRITTEN not-to-build line: 842,068 bytes. // ADR 0477 (its entry, a rule-page sentence): 841,485 bytes. // ADR 0476 store-alias amendment (an ADR clause, a rule-page clause): 839,881 bytes. // ADR 0476 review (its sentence, the residual false-positive line): 839,649 bytes. // ADR 0476 (its entry, two rule-page paragraphs, two open-work lines): 839,107 bytes. // Second batch review: 836,062 bytes. // ADR 0474 guard amendment (its sentence, a rule-page sentence): 835,097 bytes. // RC8/RC10 open-work note: 834,391 bytes. // ADR 0475 (its entry, a rule-page sentence, one open-work line): 833,477 bytes. // Batch review notes on the batch: 831,469 bytes. // ADR 0474 on the batch: 829,668 bytes. // ADR 0472 (its entry, a rule-page paragraph, open-work): 827,781 bytes. // ADR 0471 (its entry, a rule-page sentence, one open-work line): 825,165 bytes. // ADR 0470 (its entry, a rule-page bullet, one open-work line): 822,681 bytes. // ADR 0469 (its entry, a rule-page bullet): 820,739 bytes. // ADR 0468 (its entry, one open-work line): 818,373 bytes. // Merge of main (PR #135) into the batch: 815,691 bytes. // ADR 0467 (its entry, two rule-page paragraphs, one open-work line): 807,212 bytes. // ADR 0466 (its entry, one open-work line, a rule-page paragraph): 804,218 bytes. // ADR 0463 (its entry, open-work lines, rule-page sentences): 800,445 bytes. // ADR 0462 (its entry, two rule-page paragraphs, one open-work line): 796,067 bytes. // Merge of PR #129 with ADR 0461 (PR #130): 792,496 bytes. // ADR 0461 review amendment (ADR sentences, open-work lines, rule-page sentences): 782,004 bytes. // ADR 0461 (its entry, the open-work line, a rule-page paragraph): 780,658 bytes. // Merge of ADR 0456 (PR #123) with ADR 0457: 778,757 bytes. // ADR 0456 (its entry, open-work lines, a rule-page paragraph): 775,714 bytes. // ADR 0457 review amendment (its sentences, one open-work line): 774,199 bytes against 773,500. // ADR 0457 (its entry, a rule-page sentence): 773,270 bytes against 771,500. // ADR 0455 fourth-review amendment: 771,408 bytes. // ADR 0455 third-review amendment: 770,819 bytes. // ADR 0455 cleanup amendment: 769,241 bytes. // ADR 0455 named-closure follow-up: 767,101 bytes. // ADR 0455 follow-up: 766,106 bytes against 766,000.
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
@@ -247,7 +278,23 @@ export const GROUP_BUDGETS = [
     // And ADR 0475's fixture (write-in-refused-creation): 346,275 bytes: 346_500.
     // And the ADR 0474 guard amendment (owner-helper-callback): 346,892 bytes: 347_000.
     // And ADR 0476's store-setter-extent fixture, with its review cases: 347,798 bytes: 347_900.
-    bytes: 347_900,
+    // And ADR 0477's four event-dispatch-await fixtures: 349,709 bytes: 349_900.
+    // And ADR 0478's rc9-flush-in-action-layers fixture: 350,331 bytes: 350_500.
+    // And ADRs 0479 and 0480's fixtures (write-named-function-one-call, local-alias-literal-slots): 352_300.
+    // And ADR 0481's local-alias-member-reads fixture: 352,734 bytes: 352_900.
+    // And ADR 0482's cases in local-alias-member-reads: 353,012 bytes: 353_200.
+    // And ADR 0483's primitive-in-effect-callback fixture: 353,690 bytes: 353_900.
+    // And ADR 0484's effect-phase-layers fixture: 354,315 bytes: 354_500.
+    // And ADR 0485's after-await-helper-callback fixture: 354,904 bytes: 355_100.
+    // And ADR 0488's settled-cleanup-after-await fixture: 355_600.
+    // And ADR 0490's async-unsuspendable-call-attributed fixture: 356,247 bytes: 356_500.
+    // And ADR 0491's store-write-literal-links fixture: 357_500.
+    // And ADR 0492's leaf-scope-helper-callback fixture: 358_800.
+    // And ADR 0493's owner-after-await-layers fixture, 0494/0495 README edits: 360_500.
+    // And ADRs 0496/0497 README rows: 361_200.
+    // And ADR 0499's local-alias-member-reads paragraph: 361_800.
+    // And ADR 0500's store-write-literal-links row and review: 362_500.
+    bytes: 362_500,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

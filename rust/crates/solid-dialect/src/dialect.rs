@@ -1060,6 +1060,21 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether creating `primitive`'s computation or root with no owner inside
+    /// a `createEffect` apply callback throws in the dev build (ADR 0483:
+    /// `PRIMITIVE_IN_EFFECT_CALLBACK`). Only the creating call, given its
+    /// arguments, decides: the function form of a state constructor creates a
+    /// computation, its value form does not. `false` wherever the bytes were
+    /// not read.
+    fn throws_creating_in_effect_callback(
+        &self,
+        primitive: Primitive,
+        first_argument_is_function: bool,
+    ) -> bool {
+        let _ = (primitive, first_argument_is_function);
+        false
+    }
+
     /// Whether a call of `primitive` returns a **tuple** whose first slot
     /// carries the reactive value.
     ///

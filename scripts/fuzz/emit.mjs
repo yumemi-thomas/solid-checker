@@ -16,19 +16,21 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { GENERATOR_VERSION } from "./generate.mjs";
 import { HITS_SELECTOR, haltable, stripInstrumentation } from "./hits.mjs";
-import { drivingPlan, printProgram, programPackages } from "./print.mjs";
+import { drivingPlan, moduleFiles, printProgram, programPackages } from "./print.mjs";
 
 const clickSelector = (id) => `[data-act="${id}"]`;
 
 /**
- * The scenario steps for a plan: clicks in order, then one read per distinct witness selector.
+ * The scenario steps for a plan: its edits (`{ selector, text }`: the user types into an input, before any click), clicks in order,
+ * then one read per distinct witness selector. An edit is not `haltable` (a halt marker cannot be typed into: a halted run fails there).
  * `hits` appends two reads of the hit readout last (their checkpoints are the counters; equal texts show the page was still).
  * Every click and witness read is `haltable`: after REACTIVITY_HALTED a missing element resolves to the oracle's halt marker
  * (`haltMarker` in oracle.json) instead of holding the run for the scenario timeout. chrome.mjs reads such a checkpoint as absent
  * and the run as cut short (a partial run).
  */
 export function scenarioSteps(plan, sites, { hits = false } = {}) {
-  const steps = plan.clicks.map((id) => ({ action: "click", selector: haltable(clickSelector(id)) }));
+  const steps = [...(plan.edits ?? []).map((edit) => ({ action: "fill", selector: edit.selector, text: edit.text })),
+    ...plan.clicks.map((id) => ({ action: "click", selector: haltable(clickSelector(id)) }))];
   const seen = new Set();
   for (const site of sites) {
     const selector = site.witness?.selector;
@@ -58,6 +60,8 @@ export function buildCase(program, { id = `fuzz-${program.seed}`, note } = {}) {
     id, text, runText, sites, glue, ledger, lineTable, plan, neutral, packages,
     files: {
       ...packageFiles,
+      // The project's other modules (`helpers.ts`): the same text in the clean case and the twin (they hold no site).
+      ...moduleFiles(program),
       "App.tsx": text,
       "App.run.txt": runText,
       "oracle.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), haltMarker: true, steps }, null, 2)}\n`,

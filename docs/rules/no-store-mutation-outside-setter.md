@@ -35,6 +35,11 @@ symbol:
 - the same writes through a `createProjection` result, reported as a
   projection write (it has no setter to name).
 
+**Through a hook result (ADR 0482).** A member read that is exactly the store
+(`const holder = useState(); holder.state`, ADR 0481) is the write's root, so
+`holder.state.v = 1` is reported like `state.v = 1`, and a write inside the
+store's own setter called as `holder.setState(…)` is exempt.
+
 **Past the root (ADR 0465, 0476).** A write that reads no link past the root
 (`store.v = 1`, `list.push(1)` on a store that is the array, a cast root) is a
 violation: `createStore` wraps its initial value whatever it is
@@ -44,11 +49,18 @@ under the program's `strictNullChecks` (Type Facts reports it as the compiler
 resolves it) a link whose type may hold `null` or `undefined` is TS18048/TS18047,
 so the rule is silent. The proxy serves a child only through `isWrappable`
 (`dist/dev.js:2272-2283`), which refuses a frozen object, a non-plain prototype
-(a `Map`, a class instance) and a DOM node and serves it raw: a write below such
+(a `Map`, a `Date`: a class instance whose tag is `Object` is wrapped, Chrome) and a DOM node and serves it raw: a write below such
 a link lands (Chrome, witnessed with `Object.freeze`). Whether a link's value is
 plain is a property of the value, not of its type, so no fact proves the link is
-wrapped (ADR 0476). Fixtures `store-write-chain-links`,
-`store-write-chain-links-loose`, `store-setter-extent`.
+wrapped (ADR 0476), except from the store's own initializer (ADR 0491): a
+function-local `const [store] = createStore({ a: { v: 0 } })` whose setter is
+never referenced and whose every reference is a static member path that is
+written, deleted, called as a callback-free array mutator, or read where the
+literal holds a primitive serves each literal link wrapped, so `store.a.v = 1`
+is a violation; any reference that hands a proxy out, a non-literal or open
+literal, a getter, a used setter or a module-scope store leaves it
+uncertifiable. Fixtures `store-write-chain-links`,
+`store-write-chain-links-loose`, `store-setter-extent`, `store-write-literal-links`.
 
 The runtime drops all of them outside a setter: the proxy's `set` trap
 returns `true` without storing (`@solidjs/signals@2.0.0-rc.17`

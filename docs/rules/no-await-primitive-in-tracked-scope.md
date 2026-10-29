@@ -141,10 +141,12 @@ the value still will not update).
   [no-write-in-pure-computation](no-write-in-pure-computation.md)).
 - **Component bodies, event handlers, effect apply callbacks, `createRoot`
   bodies, module scope** — probed: no observer is active in any of them.
-- **Helpers.** The proof is lexical: a call inside a named helper that a memo
-  happens to call is not claimed as a violation (the helper may equally be
-  called from an event handler). Where nothing places the call at all, the
-  finding is **uncertifiable**.
+- **Helpers.** A call in function layers that run in place inside a tracked
+  callback (an IIFE, a project helper's callback, a function bound to a name
+  whose only run is its one call there; not in a parameter list, not after an
+  `await`) runs with the observer active, so it is a violation (ADR 0494). A
+  helper that may also be called from an event handler is not such a layer.
+  Where nothing places the call at all, the finding is **uncertifiable**.
 - **`onSettled` / leaf owners.** `resolve()` passes the observer guard there,
   so this rule is silent — but note that in an *owner-backed* `onSettled` the
   promise still rejects in dev with `PRIMITIVE_IN_FORBIDDEN_SCOPE` (probed):

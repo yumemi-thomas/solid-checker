@@ -1924,16 +1924,22 @@ fn layers_run_inline(
         if layer.generator || !outer.span.contains(layer.span) {
             return false;
         }
-        match layer_run(file, layer, lookup) {
+        let call = match layer_run(file, layer, lookup) {
             LayerRun::FreshStack => return fresh_stack_ok,
-            LayerRun::InPlace(_) => {}
+            LayerRun::InPlace(call) => call,
             LayerRun::Elsewhere | LayerRun::InPlaceAmongOthers(_) => return false,
+        };
+        // The layer runs on its call's stack, so the next layer is the
+        // function that owns the call: the enclosing function, or the function
+        // whose parameter list the call is written in (ADR 0454: a layer in a
+        // default value runs only when that function is called without the
+        // argument). For an IIFE, an inline callback and a helper's argument
+        // the call is around the layer; a named function's one call (ADR 0479)
+        // may be in another function, which must be inside `outer` too.
+        if !outer.span.contains(call) {
+            return false;
         }
-        // The layer's own span is outside its body, so the function that owns
-        // it is the enclosing function, or the function whose parameter list
-        // the layer is written in (ADR 0454: a layer in a default value runs
-        // only when that function is called without the argument).
-        let Some(next) = crate::owners::owning_function(&file.ast, layer.span) else {
+        let Some(next) = crate::owners::owning_function(&file.ast, call) else {
             return false;
         };
         layer = next;
@@ -1999,25 +2005,129 @@ pub(crate) fn layer_run(
         _ => match helper_runs_layer_inline(file, layer, lookup) {
             Some((call, ParameterUses::OnlyCalled)) => LayerRun::InPlace(call),
             Some((call, ParameterUses::AlsoElsewhere)) => LayerRun::InPlaceAmongOthers(call),
-            None => LayerRun::Elsewhere,
+            None => sole_call_of_named_function(file, layer, lookup)
+                .map_or(LayerRun::Elsewhere, LayerRun::InPlace),
         },
     }
 }
 
+/// ADR 0479: the one call that runs a function bound to a name, when it is the
+/// function's only run (`const f = () => …; f();`): the binding holds this
+/// function at every call (ADR 0221, `function_value_is_current`), the
+/// function has exactly one call site (ADR 0448 credits only calls that follow
+/// the declarator), it is in this file, and every other reference to the
+/// binding is the declaration, so nothing aliases, passes, stores or exports
+/// it. Its module neither exports it nor hands it out through a namespace
+/// (`module_exports`, `hands_out_by_name`): a consumer outside the analysed
+/// files would leave no reference here. A method, a generator, a named
+/// function expression (also entered by its own name) and a function with no
+/// binding answer `None`, as does a symbol whose references are not known.
+fn sole_call_of_named_function(
+    file: &solid_facts::FileFacts,
+    layer: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    use solid_facts::ast::FunctionKind;
+    if layer.method_name.is_some()
+        || layer.generator
+        || (layer.kind == FunctionKind::Expression && layer.name.is_some())
+    {
+        return None;
+    }
+    let binding = function_binding_name(file, layer)?;
+    let path = file.path.as_str();
+    let symbol = lookup.entities().at(path, binding.span)?;
+    if !lookup.function_value_is_current(file, layer)
+        || lookup.hands_out_by_name(path, layer.span)
+        || module_exports(file, layer, lookup)
+    {
+        return None;
+    }
+    let sites = lookup.function_call_sites(path, layer.span);
+    let [(caller, callee)] = sites.as_slice() else {
+        return None;
+    };
+    if caller.path.as_str() != path {
+        return None;
+    }
+    let call = file
+        .ast
+        .calls
+        .iter()
+        .find(|call| file.ast.peel_ts_sugar_span(call.callee) == *callee)?;
+    let references = lookup.symbol_references_if_present(symbol.as_str())?;
+    let accounted = |start: u32, end: u32| {
+        (start == binding.span.start && end == binding.span.end)
+            || (start == callee.start && end == callee.end)
+    };
+    let escapes = references.iter().any(|reference| {
+        let start = u32::try_from(reference.start_byte).unwrap_or(u32::MAX);
+        let end = u32::try_from(reference.end_byte).unwrap_or(u32::MAX);
+        reference.path.as_ref() != path || !accounted(start, end)
+    });
+    (!escapes).then_some(call.span)
+}
+
 /// Where a site runs once the function layers around it that run in place
 /// ([`layer_run`]) are crossed (ADR 0469).
-pub(super) struct InPlaceClimb {
+pub(crate) struct InPlaceClimb {
     /// The call of the outermost layer crossed: the site runs on its stack.
-    pub(super) at: Span,
+    pub(crate) at: Span,
     /// A layer holds the climbed site in its parameter list (ADR 0454): it
     /// runs only when its call omits the argument.
-    pub(super) in_list: bool,
+    pub(crate) in_list: bool,
     /// A helper on the way also hands its callback on or keeps it
     /// ([`LayerRun::InPlaceAmongOthers`]): one run is in place.
-    pub(super) among_others: bool,
+    pub(crate) among_others: bool,
     /// A site on the way follows an await in its layer: on every path
     /// (`Some(true)`), or possibly (`Some(false)`).
-    pub(super) suspended: Option<bool>,
+    pub(crate) suspended: Option<bool>,
+}
+
+/// ADR 0493 review: whether the climb from `span` to `to` crosses a layer that
+/// is an inline callback of a standard-library or dependency call
+/// (`[x].forEach(fn)`, `[1].reduce(fn)`): such a callback runs during the
+/// call but may run zero times, so a claim that it runs is no proof. An IIFE,
+/// a project helper's callback and a function bound to a name and called once
+/// run on every completion. `true` where a step cannot be retraced.
+pub(crate) fn climb_crosses_library_callback(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    to: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let mut at = span;
+    for _ in 0..16 {
+        if at == to {
+            return false;
+        }
+        let Some(function) = crate::owners::owning_function(&file.ast, at) else {
+            return true;
+        };
+        let library = file
+            .ast
+            .arguments_containing(function.span)
+            .filter(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+            })
+            .any(|(call, _)| {
+                lookup
+                    .resolved_callee_call(file, call.callee)
+                    .and_then(|resolved| resolved.declaration.as_ref())
+                    .is_none_or(|declaration| {
+                        declaration.standard_library
+                            || declaration.source_file.contains("/node_modules/")
+                    })
+            });
+        if library {
+            return true;
+        }
+        at = match layer_run(file, function, lookup) {
+            LayerRun::InPlace(call) | LayerRun::InPlaceAmongOthers(call) => call,
+            LayerRun::FreshStack | LayerRun::Elsewhere => return true,
+        };
+    }
+    true
 }
 
 /// Climbs from `span` through the function layers that run in place: an IIFE,
@@ -2025,7 +2135,7 @@ pub(super) struct InPlaceClimb {
 /// body ([`layer_run`], the walk the write roles take). Stops at the first
 /// function that is not such a layer (a primitive's callback, a stored or
 /// handed-on function, a generator); `None` when `span` is in none.
-pub(super) fn climb_in_place_layers(
+pub(crate) fn climb_in_place_layers(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,

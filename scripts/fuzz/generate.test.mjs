@@ -143,6 +143,11 @@ describe("buildCase", () => {
     expect(haltable('[data-act="b1"]')).toBe('[data-act="b1"], body:not(:has([data-act="b1"])) > #sc-halted');
   });
 
+  it("types a plan's edits before its clicks, into the plain selector", () => {
+    const steps = scenarioSteps({ clicks: ["b1"], edits: [{ selector: "#i", text: "typed" }] }, []);
+    expect(steps).toEqual([{ action: "fill", selector: "#i", text: "typed" }, { action: "click", selector: haltable('[data-act="b1"]') }]);
+  });
+
   it("asks the oracle for the halt marker in both scenarios", () => {
     const built = buildCase(generateProgram(2802362291), { id: "fuzz-x" });
     expect(JSON.parse(built.files["oracle.json"]).haltMarker).toBe(true);

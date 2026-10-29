@@ -108,6 +108,7 @@ pub(super) fn direct_reference_contributions(
         ..
     } = context;
     let mut contributions = Vec::new();
+    let mut sites = Vec::new();
     for reference in references_by_source
         .get(source.symbol.as_str())
         .into_iter()
@@ -116,13 +117,27 @@ pub(super) fn direct_reference_contributions(
         let Some(&file) = project_indexes.files_by_path.get(reference.path.as_ref()) else {
             continue;
         };
-        let Ok(start) = u32::try_from(reference.start_byte) else {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
             continue;
         };
-        let Ok(end) = u32::try_from(reference.end_byte) else {
-            continue;
-        };
-        let reference_span = Span::new(start, end);
+        sites.push((file, Span::new(start, end)));
+    }
+    // ADR 0499: a member read that is exactly this source (ADR 0481,
+    // `thing.useIt`) is a reference to it, in the file that declares both.
+    if let Some(&file) = project_indexes
+        .files_by_path
+        .get(source.declaration.path.as_ref())
+    {
+        for alias in &file.ast.local_alias_members {
+            if entities.at(file.path.as_str(), alias.source) == Some(&source.symbol) {
+                sites.push((file, alias.member));
+            }
+        }
+    }
+    for (file, reference_span) in sites {
         let Some(owner) = containing_summary_function_indexed(
             nodes,
             nodes_by_path,

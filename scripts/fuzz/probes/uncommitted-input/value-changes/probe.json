@@ -1,0 +1,1 @@
+{ "witness": { "selector": "#w", "text": "1" }, "steps": [{ "action": "fill", "selector": "#i", "text": "typed" }, { "action": "click", "selector": "#b" }] }

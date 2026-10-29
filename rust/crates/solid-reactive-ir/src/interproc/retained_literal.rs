@@ -109,6 +109,17 @@ pub(super) fn runs_in_unproven_stored_literal(
             span = call.span;
             continue;
         }
+        // ADR 0489: a function bound to a name whose only run is its one call
+        // (ADR 0479, `layer_run`'s `InPlace`) runs where that call is, as an
+        // IIFE does: the walk continues from the call.
+        if let crate::execution_role::LayerRun::InPlace(call) =
+            crate::execution_role::layer_run(file, literal, lookup)
+            && call != span
+            && !literal.span.contains(call)
+        {
+            span = call;
+            continue;
+        }
         return control_flow_execution_role(file, span, entities, symbol_names, lookup.dialect)
             .is_none();
     }

@@ -34,6 +34,13 @@ describe("judge", () => {
   it("wrong-rule: only another rule's violation covers the site", () => {
     expect(verdict({ checker: { ok: true, findings: [finding("missing-owner", "violation")] } }).outcome).toBe("wrong-rule");
   });
+  it("another rule's violation the runtime substantiates on the site is a second defect, not a wrong rule", () => {
+    const both = run([event("STORE_WRITE_OUTSIDE_SETTER", 10), event("STRICT_READ_UNTRACKED", 10)]);
+    const findings = [finding("strict-read-untracked", "violation"), finding("no-store-mutation-outside-setter", "uncertifiable")];
+    expect(judge({ code: "STORE_WRITE_OUTSIDE_SETTER", site, typecheck: { ok: true }, checker: { ok: true, findings }, runtime: both }))
+      .toMatchObject({ outcome: "recall-gap", detail: { corroborated: ["strict-read-untracked"] } });
+    expect(judge({ code: "STORE_WRITE_OUTSIDE_SETTER", site, typecheck: { ok: true }, checker: { ok: true, findings }, runtime: run([event("STORE_WRITE_OUTSIDE_SETTER", 10)]) }).outcome).toBe("wrong-rule");
+  });
   it("another rule's uncertifiable finding on the site is not a recall gap for this code: listed, and the program falls through", () => {
     const result = verdict({ checker: { ok: true, findings: [finding("no-write-in-pure-computation", "uncertifiable")] } });
     expect(result).toMatchObject({ outcome: "false-clean", detail: { unrelated: ["no-write-in-pure-computation/uncertifiable@10"] } });

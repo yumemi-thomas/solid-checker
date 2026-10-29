@@ -760,6 +760,66 @@ pub(crate) fn helper_argument_run(
     })
 }
 
+/// ADR 0495: the first call the exact project function `call` runs makes, in
+/// its own body, is a call of its parameter `index`: no call is written in
+/// the body before the earliest call of the parameter (by its binding), so
+/// nothing the helper itself calls runs before the argument does. Not for an
+/// async or generator function, a destructured parameter, or a function that
+/// reads `arguments`.
+pub(crate) fn parameter_called_first(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some((callee_file, callee, true)) = project_callee_at_parameter(file, call, index, lookup)
+    else {
+        return false;
+    };
+    if callee.r#async || callee.generator {
+        return false;
+    }
+    let Some(parameter) = callee.parameters.get(index) else {
+        return false;
+    };
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier {
+        return false;
+    }
+    let Some(name) = parameter.names.first() else {
+        return false;
+    };
+    let ast = &callee_file.ast;
+    if callee_file
+        .source
+        .get(callee.span.start as usize..callee.span.end as usize)
+        .is_none_or(|source| identifier_occurrences(source, "arguments") > 0)
+    {
+        return false;
+    }
+    let references = ast.references_to(name.span);
+    let Some(first) = ast
+        .calls
+        .iter()
+        .filter(|candidate| {
+            callee.body.contains(candidate.span)
+                && references.contains(&ast.peel_ts_sugar_span(candidate.callee))
+        })
+        .map(|candidate| candidate.span)
+        .min_by_key(|span| span.start)
+    else {
+        return false;
+    };
+    // Anything written in the function before that call, its parameter list
+    // and nested functions included, and the call's own arguments (evaluated
+    // before the callee runs); JSX counts as a call (ADR 0495 review).
+    let before = |at: Span| {
+        callee.span.contains(at) && at != first && !at.contains(first) && at.start < first.end
+    };
+    !ast.calls.iter().any(|other| before(other.span))
+        && !ast.tagged_template_tags.iter().any(|tag| before(*tag))
+        && !ast.jsx_elements.iter().any(|element| before(element.span))
+}
+
 /// ADR 0474 amendment: the owner each run of a helper's function argument has,
 /// for the owner graph ([`helper_argument_owner_runs`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

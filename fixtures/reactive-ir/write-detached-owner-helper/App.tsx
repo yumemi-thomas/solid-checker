@@ -15,9 +15,10 @@ declare const attached: boolean;
 // ComponentOwnerHelper.
 // Uncertifiable: an owner that may be null (MaybeNullOwnerHelper, a violation
 // before); a helper whose timing is not proven inline ends the climb unplaced,
-// never at the outer role: it keeps the callback (NullHelperKeeps), calls it in
-// a root it creates (NullHelperOwnRoot, a cost: rc.17 throws) or hands it on
-// (CreatedOwnerHelperDetaches, legal).
+// never at the outer role: it keeps the callback (NullHelperKeeps) or hands it
+// on (CreatedOwnerHelperDetaches, legal). Violation (rc.17 throws): a helper that
+// calls it in a root it creates (NullHelperOwnRoot): the helper has one call, so
+// the root body's call climbs to it (ADR 0479).
 //
 // A helper that calls the callback in its own body and also runs it elsewhere
 // (hands it to a root or an owner, a microtask, a store) has runs the climb does

@@ -74,6 +74,13 @@ pub(crate) struct EffectPhaseOrigin {
     pub(crate) path: String,
     /// Project functions the walk entered through a call, outermost last.
     pub(crate) helper_calls: usize,
+    /// The apply callback argument the walk ended at.
+    pub(crate) apply: Span,
+    /// ADR 0495: a call written before the walk's path in a layer it crossed
+    /// (the apply, an IIFE, a named function, a helper's callback) or in a
+    /// helper's own body before it calls its parameter, so one that may run
+    /// before the span does.
+    pub(crate) earlier_call: bool,
 }
 
 /// The effect call whose apply callback provably runs the code at `span`
@@ -85,7 +92,34 @@ pub(crate) fn effect_phase_origin(
     instances: &crate::PackageInstanceEvidence,
     lookup: &SemanticLookup<'_>,
 ) -> Option<EffectPhaseOrigin> {
+    walk_to_effect_phase(file, span, package_root, instances, lookup, false)
+}
+
+/// [`effect_phase_origin`] through layers that keep the apply callback's
+/// owner (ADR 0483): no primitive callback but `untrack`'s is crossed, since
+/// `runWithOwner`, `createRoot` and the rest set an owner (or may) before
+/// their callback runs. The apply runs with none (`createEffect`'s is queued
+/// to the flush), so code reached this way runs with no owner.
+pub(crate) fn ownerless_effect_phase_origin(
+    file: &FileFacts,
+    span: Span,
+    package_root: &str,
+    instances: &crate::PackageInstanceEvidence,
+    lookup: &SemanticLookup<'_>,
+) -> Option<EffectPhaseOrigin> {
+    walk_to_effect_phase(file, span, package_root, instances, lookup, true)
+}
+
+fn walk_to_effect_phase(
+    file: &FileFacts,
+    span: Span,
+    package_root: &str,
+    instances: &crate::PackageInstanceEvidence,
+    lookup: &SemanticLookup<'_>,
+    owner_preserving: bool,
+) -> Option<EffectPhaseOrigin> {
     let mut walk = Walk {
+        owner_preserving,
         lookup,
         package_root,
         flush_instance: "",
@@ -93,6 +127,8 @@ pub(crate) fn effect_phase_origin(
         files: std::cell::OnceCell::new(),
         visiting: HashSet::default(),
         budget: BUDGET,
+        earlier: false,
+        from: None,
     };
     // The instance the flush call's own import loads, followed through
     // re-exports to the file that imports the package; unresolved is no proof.
@@ -103,6 +139,8 @@ pub(crate) fn effect_phase_origin(
 }
 
 struct Walk<'l, 'a> {
+    /// Cross only layers that keep the owner ([`ownerless_effect_phase_origin`]).
+    owner_preserving: bool,
     lookup: &'l SemanticLookup<'a>,
     /// The package instance the starting call's declaration is in: the effect
     /// call must resolve to the same one, or its queue is not the one running.
@@ -116,6 +154,10 @@ struct Walk<'l, 'a> {
     /// Functions the walk is inside through a call, so a call cycle ends.
     visiting: HashSet<(String, Span)>,
     budget: usize,
+    /// A call that may run before the path ([`EffectPhaseOrigin::earlier_call`]).
+    earlier: bool,
+    /// The layer the walk just left, whose own calls are the path's.
+    from: Option<Span>,
 }
 
 impl<'l, 'a> Walk<'l, 'a> {
@@ -144,8 +186,54 @@ impl<'l, 'a> Walk<'l, 'a> {
         if literal.r#async && !runs_before_first_suspension(file, literal, span) {
             return None;
         }
+        // ADR 0495 (review): what may run in this layer before the path does.
+        // Anything written before the path in the layer, its parameter list
+        // included and functions nested in it too (a getter or a JSX component
+        // runs with no call written), except the inner layer the walk came
+        // from; and, inside the path's own call, what its arguments evaluate
+        // outside the functions they create. JSX counts as a call.
+        let from = self.from.take();
+        let nested_in_path = |at: Span| {
+            file.ast
+                .functions
+                .iter()
+                .any(|function| span.contains(function.span) && function.span.contains(at))
+        };
+        let before = |at: Span| {
+            literal.span.contains(at)
+                && !at.contains(span)
+                && from.is_none_or(|inner| !inner.contains(at))
+                && (at.end <= span.start || (span.contains(at) && !nested_in_path(at)))
+        };
+        self.earlier |= file.ast.calls.iter().any(|other| before(other.span))
+            || file.ast.tagged_template_tags.iter().any(|tag| before(*tag))
+            || file
+                .ast
+                .jsx_elements
+                .iter()
+                .any(|element| before(element.span));
+        self.from = Some(literal.span);
         if let Some((call, index)) = argument_position(file, literal) {
-            return self.argument_layer(file, call, index, helper_calls);
+            if let Some(origin) = self.argument_layer(file, call, index, helper_calls) {
+                return Some(origin);
+            }
+            // ADR 0484: a project helper that calls this argument in its own
+            // body on every completion, and never hands it on or keeps it
+            // (`layer_run`'s `InPlace`), runs it on the helper call's stack, so
+            // every run of the literal is a run of that call. A primitive's or
+            // an unknown callee's argument is not such a layer.
+            return match crate::execution_role::layer_run(file, literal, self.lookup) {
+                crate::execution_role::LayerRun::InPlace(at) if at == call.span => {
+                    self.earlier |= !crate::execution_role::parameter_called_first(
+                        file,
+                        call,
+                        index,
+                        self.lookup,
+                    );
+                    self.layer(file, at, helper_calls + 1)
+                }
+                _ => None,
+            };
         }
         if let Some(call) = iife_call(file, literal) {
             return self.layer(file, call.span, helper_calls);
@@ -179,7 +267,12 @@ impl<'l, 'a> Walk<'l, 'a> {
                     .then(|| EffectPhaseOrigin {
                         path: file.path.to_string(),
                         helper_calls,
+                        apply: call.arguments[index].span,
+                        earlier_call: self.earlier,
                     });
+            }
+            if self.owner_preserving && primitive != solid_dialect::Primitive::Untrack {
+                return None;
             }
             return if dialect.synchronous_callback_slot(primitive, index, call.arguments.len()) {
                 self.layer(file, call.span, helper_calls)
@@ -221,12 +314,19 @@ impl<'l, 'a> Walk<'l, 'a> {
         call: &solid_facts::ast::CallFact,
     ) -> bool {
         self.instance_of(file, call.callee) == Some(self.flush_instance)
-            && self
-                .lookup
-                .resolved_callee_call(file, call.callee)
-                .and_then(|resolved| resolved.declaration.as_ref())
-                .and_then(|declaration| package_root(declaration.location.path.as_ref()))
-                .is_some_and(|root| root == self.package_root)
+            // ADR 0483: in the owner-preserving walk the creating call and the
+            // effect may be declared in different files of one installation
+            // (rc.17's `createMemo` is `solid-js`'s own overload object, its
+            // `createEffect` is `typeof` signals'); both imports loading the
+            // same installed `solid-js` copy is what makes them share the
+            // signals copy, and with it the marker and the owner.
+            && (self.owner_preserving
+                || self
+                    .lookup
+                    .resolved_callee_call(file, call.callee)
+                    .and_then(|resolved| resolved.declaration.as_ref())
+                    .and_then(|declaration| package_root(declaration.location.path.as_ref()))
+                    .is_some_and(|root| root == self.package_root))
     }
 
     /// The installed `solid-js` the file that imports the function `callee`
@@ -527,20 +627,11 @@ impl<'l, 'a> Walk<'l, 'a> {
 
 /// Whether the function is part of its module's surface, which callers
 /// outside the analyzed project may use.
+/// ADR 0484: the module exports the function itself. An export statement's
+/// span holds every function nested in the exported one, which is not
+/// exported by it (`crate::execution_role::module_exports`).
 fn exported(lookup: &SemanticLookup<'_>, file: &FileFacts, function: &FunctionFact) -> bool {
-    file.ast
-        .exports
-        .iter()
-        .any(|export| export.span.contains(function.span))
-        || lookup
-            .typescript_file(file.path.as_str())
-            .is_some_and(|facts| {
-                facts.functions.iter().any(|candidate| {
-                    candidate.exported
-                        && candidate.body.start_byte == u64::from(function.body.start)
-                        && candidate.body.end_byte == u64::from(function.body.end)
-                })
-            })
+    crate::execution_role::module_exports(file, function, lookup)
 }
 
 /// The call and argument position at which `literal` is written as the

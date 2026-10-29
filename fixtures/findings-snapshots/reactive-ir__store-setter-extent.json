@@ -107,8 +107,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
-      "start": 4221,
-      "end": 4228,
+      "start": 4730,
+      "end": 4737,
       "fixes": 0
     },
     {
@@ -117,18 +117,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
-      "start": 4667,
-      "end": 4674,
-      "fixes": 0
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
-      "start": 4910,
-      "end": 4921,
+      "start": 4973,
+      "end": 4984,
       "fixes": 0
     },
     {
@@ -137,8 +127,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
-      "start": 4987,
-      "end": 4998,
+      "start": 5050,
+      "end": 5061,
       "fixes": 0
     },
     {
@@ -147,8 +137,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
-      "start": 5275,
-      "end": 5282,
+      "start": 5338,
+      "end": 5345,
       "fixes": 0
     }
   ]

@@ -1116,6 +1116,40 @@ fn the_write_guards_stand_down_in_disposal_only_on_rc17_signals() {
     );
 }
 
+/// ADR 0483: the effect-callback creation throw is claimed exactly where the
+/// signals release read is rc.17 (it rests on the same answer as the disposal
+/// write guard), for the computations and roots whose creation reaches
+/// `assertNotInEffectCallback`, and the function forms of state only.
+#[test]
+fn only_rc17_signals_throw_on_a_creation_in_an_effect_callback() {
+    use crate::Dialect;
+    let (audited, _) = analyzed(&same("2.0.0-rc.17"));
+    for primitive in [
+        Primitive::CreateMemo,
+        Primitive::CreateEffect,
+        Primitive::CreateRenderEffect,
+        Primitive::CreateRoot,
+        Primitive::CreateProjection,
+    ] {
+        assert!(
+            audited.throws_creating_in_effect_callback(primitive, false),
+            "{primitive:?}"
+        );
+    }
+    assert!(audited.throws_creating_in_effect_callback(Primitive::CreateSignal, true));
+    assert!(!audited.throws_creating_in_effect_callback(Primitive::CreateSignal, false));
+    assert!(!audited.throws_creating_in_effect_callback(Primitive::CreateStore, false));
+    assert!(!audited.throws_creating_in_effect_callback(Primitive::OnCleanup, false));
+    for release in ["2.0.0-rc.0", "2.0.0-rc.9", "2.0.0-rc.13"] {
+        let (vocabulary, _) = analyzed(&same(release));
+        assert!(
+            !vocabulary.throws_creating_in_effect_callback(Primitive::CreateMemo, false),
+            "{release}"
+        );
+    }
+    assert!(!Solid2::CONSERVATIVE.throws_creating_in_effect_callback(Primitive::CreateMemo, false));
+}
+
 /// rc.17's `onCleanup` returns its callback; only rc.17's bytes were read for
 /// that, so every other signals release, read for other questions or not, and
 /// the conservative vocabulary answer `Unknown`. No other slot is a returned

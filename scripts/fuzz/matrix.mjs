@@ -23,7 +23,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { withRuntimeCache } from "./cache.mjs";
-import { codeRules, ignoredRules, policyOf, withholdingRules } from "./codes.mjs";
+import { codeRules, codesForRule, ignoredRules, policyOf, withholdingRules } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
@@ -36,7 +36,7 @@ import { shrink } from "./shrink.mjs";
 import { legalTwin } from "./falseclean.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
 import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
-import { TYPE_ERROR_REFUSAL_SHARE, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
+import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
 export const OUTCOMES = ["typed-away", "harness", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean"];
 const CONFIRMED = ["agree", "wrong-rule", "recall-gap", "false-clean"];
@@ -87,9 +87,24 @@ export function judge({ code, site, typecheck: typed, checker, runtime }) {
   const remote = Boolean(claimingViolation) && !inLines(claimingViolation, region);
   const violations = covering.filter((finding) => finding.kind === "violation");
   const stray = relevant.filter((finding) => finding.kind === "violation" && !rules.includes(finding.rule) && !inLines(finding, region));
-  const detail = { placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}) };
+  // Another claimed code Chrome reports on the site's lines (a store link written in a body is a strict read too): the checker
+  // missed it when no finding of its rules is in the file (`false-clean`), or declined it (`recall-gap`). The target's outcome
+  // does not see it, so it is counted on its own.
+  const secondary = Object.fromEntries([...new Set(known
+    .filter((event) => event.code !== code && (codeRules[event.code] ?? []).length && attributed(event).some((position) => region.includes(position.line)))
+    .map((event) => event.code))]
+    .map((other) => [other, relevant.some((finding) => finding.kind === "violation" && codeRules[other].includes(finding.rule))
+      ? "agree"
+      : relevant.some((finding) => codeRules[other].includes(finding.rule)) ? "recall-gap" : "false-clean"])
+    .filter(([, verdict]) => verdict !== "agree"));
+  const detail = { placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(Object.keys(secondary).length ? { secondary } : {}) };
   if (claimingViolation) return { outcome: "agree", detail };
-  if (violations.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(violations.map((finding) => finding.rule))] } };
+  // A violation of another rule that the runtime substantiates on these lines (one of that rule's codes reported here: a store read
+  // in a body is a strict read too) is a second defect at the site, not a wrong rule; the code is judged as if it were absent.
+  const corroborated = (finding) => codesForRule(finding.rule).some((other) => known.some((event) => event.code === other && attributed(event).some((position) => region.includes(position.line))));
+  const wrong = violations.filter((finding) => !corroborated(finding));
+  if (violations.length > wrong.length) detail.corroborated = [...new Set(violations.filter(corroborated).map((finding) => finding.rule))];
+  if (wrong.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(wrong.map((finding) => finding.rule))] } };
   // A recall gap is the checker declining this code: an uncertifiable finding of a rule that claims it (or a withholding) at the site.
   // Another rule's uncertifiable finding on the same lines says nothing about this code; it is listed, and the program falls through.
   if (covering.some(claims)) return { outcome: "recall-gap", detail };
@@ -246,13 +261,31 @@ export function buildMatrix(rows, { options, header, typedAway }) {
   // Violations away from the site, per rule: they need a look (a template's second defect, or a false positive).
   const strays = {};
   for (const row of rows) for (const label of row.detail?.stray ?? []) { const rule = label.split("@")[0]; strays[rule] = [...(strays[rule] ?? []), row.id]; }
+  // Second codes Chrome reported at a site that the checker missed or declined, per code and verdict.
+  const secondary = {};
+  for (const row of rows) for (const [other, verdict] of Object.entries(row.detail?.secondary ?? {})) {
+    const entry = (secondary[other] ??= { "false-clean": [], "recall-gap": [] });
+    entry[verdict].push(row.id);
+  }
   return {
     strays: Object.fromEntries(Object.entries(strays).map(([rule, ids]) => [rule, { programs: ids.length, examples: ids.slice(0, 3) }])),
+    secondary: Object.fromEntries(Object.entries(secondary).map(([other, entry]) => [other, Object.fromEntries(Object.entries(entry).map(([verdict, ids]) => [verdict, { programs: ids.length, examples: ids.slice(0, 3) }]))])),
     generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), checker: header, total,
     confirmed: CONFIRMED.reduce((sum, name) => sum + total[name], 0),
     falseCleanCertified: rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
     byFeature: featureTable(rows), typedAway, cells: out,
   };
+}
+
+/**
+ * How many checker runs had their event-handler proofs withheld by the harness's own entry (checker.mjs `entryVeto`): with any, a
+ * handler context's outcomes say nothing about the checker's handler proofs. Empty when none was.
+ */
+export function entryVetoSummary(values) {
+  const vetoed = [...values.values()].map((value) => value?.checker?.entryVeto).filter(Boolean);
+  if (!vetoed.length) return {};
+  console.error(`WARNING: the harness entry withheld event-handler proofs in ${vetoed.length} checker run(s): ${vetoed[0]}`);
+  return { entryVeto: { runs: vetoed.length, premise: vetoed[0] } };
 }
 
 function chromeSummary(rows) {
@@ -401,8 +434,8 @@ function reportGate(result) {
 
 const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] [--per-cell N] [--codes A,B] [--contexts a,b]
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--checker-label <commit>] [--tsc <tsrs>] [--all-cores]
-  [--confirm-with-chrome [--chrome-sample 3] [--chrome-false-clean 4] [--browser <chromium>]] [--shrink [--budget N]]
-  [--grid]                              one program per shape (variant x binding x layer) of every cell, instead of --per-cell random draws
+  [--confirm-with-chrome [--chrome-sample 3] [--chrome-false-clean 4] [--chrome-other 2] [--browser <chromium>]] [--shrink [--budget N]]
+  [--grid [--layers a,b]]               one program per shape (variant x binding x layer) of every cell, instead of --per-cell random draws
   [--cache-dir <dir>] [--no-cache]      the runtime cache (type checks and fast-path records; default $TMPDIR/solid-checker-fuzz-cache)
   [--baseline <matrix.json>]            fail when a judged program leaves agree or enters false-clean (same seeds); moves out of or into typed-away/harness are reported, not failed
   node scripts/fuzz/matrix.mjs --gate <baseline.json> <current.json>`;
@@ -425,7 +458,9 @@ export async function runMatrix(options) {
 async function sweep(options, config, out) {
   const cells = cellList({ codes: options.codes?.split(","), contexts: options.contexts?.split(",") });
   const entries = [];
-  if (options.grid) for (const cell of cells) gridShapes(cell.code, cell.context).forEach((shape, index) => entries.push({ cell, ...generateShape(options, cell, shape, index) }));
+  // `--layers a,b` keeps those layers' shapes (their index, and so their programs, as in the whole grid).
+  const layerKept = (shape) => !options.layers || options.layers.split(",").includes(shape.layer);
+  if (options.grid) for (const cell of cells) gridShapes(cell.code, cell.context).forEach((shape, index) => { if (layerKept(shape)) entries.push({ cell, ...generateShape(options, cell, shape, index) }); });
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
@@ -459,14 +494,19 @@ async function sweep(options, config, out) {
   assertFindingsMapped();
   const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length, { first: rows.find((row) => row.outcome === "typed-away")?.detail?.errors?.[0] });
   if (refusal) throw new Error(refusal);
+  const broken = harnessRefusal(rows.filter((row) => row.outcome === "harness").length, rows.length, { first: rows.find((row) => row.outcome === "harness")?.detail?.why });
+  if (broken) throw new Error(broken);
 
   // Chrome: a sample of agree programs per cell, every wrong-rule and false-clean one.
   if (options.confirmWithChrome) {
     const pick = [];
     const bySample = new Map();
     // Per cell: up to --chrome-sample agree programs, up to --chrome-false-clean false-clean programs (the smallest first: they are the
-    // ones the shrinker takes), every wrong-rule program. Every cell with a false clean or a wrong rule is thereby confirmed in Chrome.
-    const limits = { agree: options.chromeSample ?? 3, "false-clean": options.chromeFalseClean ?? 4, "wrong-rule": Infinity };
+    // ones the shrinker takes), every wrong-rule program, and up to --chrome-other recall-gap and not-fired programs (a not-fired program
+    // Chrome fires is a Happy DOM gap; a recall gap Chrome does not reproduce is a fast-path artefact). Every cell with a false clean or
+    // a wrong rule is thereby confirmed in Chrome.
+    const other = options.chromeOther ?? 2;
+    const limits = { agree: options.chromeSample ?? 3, "false-clean": options.chromeFalseClean ?? 4, "wrong-rule": Infinity, "recall-gap": other, "not-fired": other };
     for (const row of [...rows].sort((a, b) => (a.binding === "destructured") - (b.binding === "destructured") || a.lines - b.lines || a.index - b.index)) {
       if (!(row.outcome in limits)) continue;
       const key = `${row.code}|${row.context}|${row.outcome}`;
@@ -526,7 +566,7 @@ async function sweep(options, config, out) {
   }
 
   const header = { label: options.checkerLabel ?? null, bin: options.checkerBin ? "release build" : null };
-  const matrix = buildMatrix(rows, { options, header, typedAway });
+  const matrix = { ...buildMatrix(rows, { options, header, typedAway }), ...entryVetoSummary(values) };
   const statuses = codeStatuses(matrix);
   writeFileSync(join(out, "programs.jsonl"), rows.map((row) => JSON.stringify({ ...row, site: undefined, region: regionOf(row.site) })).join("\n") + "\n");
   writeFileSync(join(out, "matrix.json"), `${JSON.stringify({ ...matrix, statuses }, null, 2)}\n`);
@@ -548,8 +588,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "baseline", "checker-label", "cache-dir"], extraFlags: ["grid"] });
-      for (const key of ["perCell", "chromeSample", "chromeFalseClean"]) if (options[key] !== undefined) options[key] = Number(options[key]);
+      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir"], extraFlags: ["grid"] });
+      for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }
       else process.exitCode = await runMatrix(options);

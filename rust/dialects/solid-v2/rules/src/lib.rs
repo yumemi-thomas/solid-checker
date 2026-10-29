@@ -614,6 +614,9 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::FlushInAction => {
             "the flush() call runs directly in an action body, inside a step, where the installed @solidjs/signals throws FLUSH_IN_ACTION in dev"
         }
+        Rule::PrimitiveInEffectCallback => {
+            "the creating call runs on the stack of a createEffect apply callback with no owner set in between, where the installed @solidjs/signals dev build throws PRIMITIVE_IN_EFFECT_CALLBACK; a production build creates the computation with no owner, so nothing disposes it"
+        }
         Rule::FlushInEffectCallback => {
             "the flush() call runs on the stack of a createEffect apply callback, inside the flush that is draining effects, so the queue is already running and the call drains nothing (the installed @solidjs/signals usually also warns FLUSH_IN_EFFECT_CALLBACK in dev)"
         }

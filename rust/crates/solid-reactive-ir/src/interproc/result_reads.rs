@@ -1934,8 +1934,16 @@ pub(crate) fn body_site_runs_during_call(
         // Binding-pattern defaults/keys run after the initializer, even
         // though written before it. Assignment patterns have the same
         // reversal. Withhold these sites rather than infer evaluation order.
+        // ADR 0499: a member target (`store.a.v = x`) is no pattern: its
+        // object and key are evaluated before the right-hand side, so a site
+        // in them runs during the call as any other does.
         || file.ast.bindings.iter().any(|binding| binding.pattern.contains(site))
-        || file.ast.assignments.iter().any(|assignment| assignment.target.contains(site))
+        || file.ast.assignments.iter().any(|assignment| {
+            assignment.target.contains(site)
+                && !file.ast.members.iter().any(|member| {
+                    member.span == file.ast.peel_ts_sugar_span(assignment.target)
+                })
+        })
         || (file.ast.members.iter().any(|member| member.span == site)
             && !member_is_get(&file.ast, site))
     {

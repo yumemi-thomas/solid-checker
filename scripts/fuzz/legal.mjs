@@ -20,6 +20,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { withRuntimeCache } from "./cache.mjs";
 import { runChrome } from "./chrome.mjs";
+import { entryVetoSummary } from "./matrix.mjs";
 import { assertFindingsMapped } from "./checker.mjs";
 import { disturbances, runtimeEvents } from "./classify.mjs";
 import { codesForRule, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.mjs";
@@ -31,7 +32,7 @@ import { LAYERS, LEGAL_CODES, SPEC, gridBindingsOf, legalVariantsOf } from "./mi
 import { evaluate } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
-import { requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
+import { harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 
 export const LEGAL_OUTCOMES = ["typed-away", "harness", "not-legal", "disturbed", "false-positive", "unexecuted", "uncertifiable", "clean"];
 
@@ -46,6 +47,8 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
   if (!checker?.ok) return { outcome: "harness", detail: { why: `checker: ${String(checker?.error ?? "not run").slice(0, 120)}` } };
   if (!runtime) return { outcome: "harness", detail: { why: "no runtime record" } };
   const events = runtimeEvents(runtime);
+  // A program whose runtime failed before reporting anything (a module that would not load) says nothing about legality.
+  if (runtime.failure && !events.length && !(hitCount(runtime.hits ?? null, site.hit) > 0)) return { outcome: "harness", detail: { why: `runtime: ${String(runtime.failure.message).slice(0, 120)}` } };
   const region = regionOf(site);
   const relevant = checker.findings.filter((finding) => !ignoredRules.includes(finding.rule));
   const violations = relevant.filter((finding) => finding.kind === "violation");
@@ -96,7 +99,7 @@ export async function runLegal(options) {
     const cells = legalCells({ codes: options.codes?.split(",") });
     const entries = [];
     for (const cell of cells) {
-      if (options.grid) legalShapes(cell.code).forEach((shape, index) => entries.push({ cell, index, ...generateLegal(options, cell, { shape }) }));
+      if (options.grid) legalShapes(cell.code).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => entries.push({ cell, index, ...generateLegal(options, cell, { shape }) }));
       else for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateLegal(options, cell, { index }) });
     }
     console.error(`legal: ${cells.length} cells, ${entries.length} programs`);
@@ -118,20 +121,40 @@ export async function runLegal(options) {
     assertFindingsMapped();
     const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length);
     if (refusal) throw new Error(refusal);
-    // Chrome: every false-positive candidate, its twin run with the hit ledger beside its clean control.
+    const broken = harnessRefusal(rows.filter((row) => row.outcome === "harness").length, rows.length, { first: rows.find((row) => row.outcome === "harness")?.detail?.why });
+    if (broken) throw new Error(broken);
+    // Chrome: every false-positive candidate, and up to --chrome-sample programs per cell of each other judged outcome (a clean program
+    // Chrome reports the code for is an illegal "legal" context, the generator's bug; an unexecuted one Chrome runs is a Happy DOM gap).
+    // Each twin runs with the hit ledger beside its clean control.
     let confirmed = 0;
     const candidates = rows.filter((row) => row.outcome === "false-positive");
-    if (options.confirmWithChrome && candidates.length) {
-      const cases = candidates.map((row) => ({ id: row.id, dir: values.get(row.id).caseDir, sites: values.get(row.id).built.sites }));
-      const records = await runChrome(cases, { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency, withClean: true });
-      for (const row of candidates) {
+    if (options.confirmWithChrome) {
+      const sampled = new Map();
+      const limit = options.chromeSample ?? 2;
+      const pick = rows.filter((row) => {
+        if (row.outcome === "false-positive") return true;
+        if (!["clean", "uncertifiable", "unexecuted", "not-legal"].includes(row.outcome)) return false;
+        const key = `${row.code}|${row.context}|${row.outcome}`;
+        const n = sampled.get(key) ?? 0;
+        if (n >= limit) return false;
+        sampled.set(key, n + 1);
+        return true;
+      });
+      const cases = pick.map((row) => ({ id: row.id, dir: values.get(row.id).caseDir, sites: values.get(row.id).built.sites }));
+      const records = pick.length ? await runChrome(cases, { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency, withClean: true }) : new Map();
+      for (const row of pick) {
         const value = values.get(row.id);
         const record = records.get(row.id);
         const judged = record?.checker?.ok && !record.checker.perturbed?.length ? judgeLegal({ code: row.code, site: siteOf(value.built), typecheck: { ok: true }, checker: record.checker, runtime: record.runtime, plan: value.built.plan }) : null;
-        row.chrome = judged ? { status: judged.outcome === "false-positive" ? "confirmed" : "not-confirmed", outcome: judged.outcome } : { status: "chrome-inconclusive", why: record?.checker?.perturbed?.[0] ?? record?.runtime?.failure?.message ?? "no record" };
+        if (!judged) row.chrome = { status: "chrome-inconclusive", why: record?.checker?.perturbed?.[0] ?? record?.runtime?.failure?.message ?? "no record" };
+        else if (row.outcome === "false-positive") row.chrome = { status: judged.outcome === "false-positive" ? "confirmed" : "not-confirmed", outcome: judged.outcome };
+        else row.chrome = { status: judged.outcome === row.outcome ? "same" : "differs", outcome: judged.outcome };
         if (row.chrome.status === "confirmed") confirmed += 1;
       }
     }
+    const checked = rows.filter((row) => row.chrome);
+    const chrome = checked.length ? Object.fromEntries(["confirmed", "not-confirmed", "same", "differs", "chrome-inconclusive"].map((status) => [status, checked.filter((row) => row.chrome.status === status).length])) : null;
+    const differs = checked.filter((row) => row.chrome.status === "differs").map(({ id, outcome, chrome: c }) => ({ id, fast: outcome, chrome: c.outcome }));
     const cellsOut = {};
     for (const row of rows) {
       const cell = (cellsOut[`${row.code}|${row.context}`] ??= { code: row.code, context: row.context, programs: 0, ...tally([]), verdicts: {} });
@@ -139,12 +162,13 @@ export async function runLegal(options) {
       cell[row.outcome] += 1;
       cell.verdicts[String(row.seed)] = row.outcome;
     }
-    const report = { mode: "legal", seed: options.seed, perCell: options.grid ? null : options.perCell, sampling: options.grid ? "grid" : "random", total: tally(rows), confirmed, cells: cellsOut,
+    const report = { mode: "legal", seed: options.seed, perCell: options.grid ? null : options.perCell, sampling: options.grid ? "grid" : "random", ...entryVetoSummary(values), total: tally(rows), confirmed, chrome, chromeDiffers: differs, cells: cellsOut,
       falsePositives: candidates.map(({ id, code, context, variant, binding, layer, detail, chrome }) => ({ id, code, context, variant, binding, layer, rules: detail.rules, chrome })),
       notLegal: rows.filter((row) => row.outcome === "not-legal").map(({ id, detail }) => ({ id, reported: detail.reported })) };
     writeFileSync(join(out, "legal.json"), `${JSON.stringify(report, null, 2)}\n`);
     writeFileSync(join(out, "programs.jsonl"), `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
-    console.error(`legal: ${JSON.stringify(report.total)}${options.confirmWithChrome ? `; Chrome confirmed ${confirmed} of ${candidates.length}` : ""}`);
+    console.error(`legal: ${JSON.stringify(report.total)}${chrome ? `; Chrome ${JSON.stringify(chrome)}` : ""}`);
+    for (const d of differs) console.error(`legal: Chrome differs ${d.id}: fast ${d.fast}, Chrome ${d.chrome}`);
     for (const fp of report.falsePositives) console.error(`legal: candidate false positive ${fp.id} [${fp.rules.join(", ")}]${fp.chrome ? ` chrome ${fp.chrome.status}` : ""}`);
     for (const row of report.notLegal.slice(0, 10)) console.error(`legal: not legal ${row.id} (Solid reports ${row.reported.join(", ")})`);
     if (confirmed) { console.error("\nSTOP: Chrome confirms a violation where the call is legal (a false positive). Report the program(s) above."); return 3; }
@@ -154,13 +178,13 @@ export async function runLegal(options) {
   }
 }
 
-const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid] [--codes A,B] [--confirm-with-chrome]
+const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2]]
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--tsc <tsrs>] [--cache-dir <dir>] [--no-cache]`;
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["per-cell", "codes", "cache-dir"], extraFlags: ["grid"] });
-    if (options.perCell !== undefined) options.perCell = Number(options.perCell);
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["per-cell", "codes", "cache-dir", "chrome-sample", "layers"], extraFlags: ["grid"] });
+    for (const key of ["perCell", "chromeSample"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }
     else process.exitCode = await runLegal(options);

@@ -37,7 +37,9 @@ scope, and detached callbacks. Exported functions with unseen callers, nullable
 allocation paths are uncertifiable rather than proven violations.
 
 The apply callback of `createEffect(compute, apply)` is always a detached
-callback: the runtime queues it, and it runs from the flush with no owner. The
+callback: the runtime queues it, and it runs from the flush with no owner. (Premise: a
+`flush()` called synchronously under an owner would drain the queue under it;
+see docs/open-work.md.) The
 apply callback of `createRenderEffect(compute, apply)` is not. Its first run
 happens before `createRenderEffect` returns, under the caller's owner, and only
 its later runs come from the flush with no owner. An operation in that callback
@@ -128,8 +130,11 @@ not one also called from a component body, and outside a class element and JSX
 the compiler wraps; an exported function counts in a closed program on the
 terms above, and a literal handed to a helper only handlers call does too, ADR
 0442) leaves it too (ADR 0437): the delivery it makes runs on the stack of a
-delivery. A dispatch in any other function, or one in a
-function nothing places, keeps it. The remaining sites are listed in the
+delivery. A dispatch an `await` of its own async function dominates (ADR 0477:
+ADR 0320's continuation, so not one before the await, after a conditional one, or
+in a closure written after it) leaves it as class `await continuation`: it resumes
+from the microtask queue with no owner and no window. A dispatch in any other
+function, or one in a function nothing places, keeps it. The remaining sites are listed in the
 report's `premises`.
 
 Exact event members (including tuple slot zero) and intrinsic spreads join the
@@ -192,7 +197,10 @@ Withheld, and so uncertain or silent: a generator (calling it runs no body), and
 a call placed under another owner, which is an instance field initializer (it
 runs at construction) or JSX in the owner's own body (a child or an attribute).
 The code after an async IIFE's first `await` is a continuation with no owner
-(ADR 0333), as for any async function. An operation in a literal that a
+(ADR 0333), as for any async function, and so is an operation in function layers
+that run in place there (an IIFE, a project helper's callback, a function bound
+to a name and called once) when the outermost layer's call follows an `await` on
+every path (ADR 0493). An operation in a literal that a
 synchronous guard invokes is guarded: `if (getOwner()) (() => { … })()` runs
 only under an owner, so it is not reported; the guard must be Solid's
 `getOwner`, and no `await` may separate it from the operation (ADR 0347).

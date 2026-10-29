@@ -22,6 +22,11 @@ describe("judgeLegal", () => {
     expect(judge({ checker: violation, runtime: runtime({ hits: { 4: 0 } }) }).outcome).toBe("unexecuted");
     expect(judge({ checker: violation, runtime: runtime({ errors: [{ kind: "window-error", message: "boom", positions: [] }] }) }).outcome).toBe("disturbed");
   });
+  it("is a harness failure when the runtime failed before the site ran: a module that would not load says nothing", () => {
+    const failed = runtime({ failure: { phase: "import", message: "Failed to resolve import \"./helpers\"" }, hits: null });
+    expect(judge({ runtime: failed })).toMatchObject({ outcome: "harness" });
+    expect(judge({ runtime: runtime({ failure: { phase: "plan", message: "late" } }) }).outcome).toBe("clean");
+  });
   it("is not legal when the runtime reports the code: the template is wrong there", () => {
     const fired = runtime({ diagnostics: [{ code: "STORE_WRITE_OUTSIDE_SETTER", positions: [{ file: "App.tsx", line: 10 }] }] });
     expect(judge({ runtime: fired }).outcome).toBe("not-legal");

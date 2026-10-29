@@ -102,7 +102,7 @@ const setAlias = setStore;
 export function SetterAlias() {
   return <button onClick={() => { setStore(() => { viaAlias(); }); setAlias(() => { viaAlias(); }); }}>{store.n}</button>;
 }
-// Uncertifiable: a chain of callers deeper than is followed.
+// Clean (ADR 0479): each helper has one call, so the chain climbs to the setter's window, where the read-proxy write lands.
 function deep0() { store.n = 7; }
 function deep1() { deep0(); }
 function deep2() { deep1(); }

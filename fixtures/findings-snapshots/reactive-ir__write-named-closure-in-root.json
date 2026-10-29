@@ -114,11 +114,11 @@
     {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
-      "kind": "uncertifiable",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
-      "start": 7882,
-      "end": 7886,
+      "start": 7886,
+      "end": 7890,
       "fixes": 0
     }
   ]

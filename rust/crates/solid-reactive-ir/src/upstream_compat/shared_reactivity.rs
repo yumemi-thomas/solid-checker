@@ -1264,7 +1264,8 @@ fn no_direct_mutation(
         // ADR 0465: a store write past the root (`store.a.b = 1`) is
         // TypeScript's where a link may be nullish, and unproven otherwise.
         let past_root = if store {
-            let Some(past_root) = chain_links_verdict(file, context, assignment.target) else {
+            let Some(past_root) = chain_links_verdict(file, context, assignment.target, root)
+            else {
                 continue;
             };
             past_root
@@ -1294,6 +1295,18 @@ fn no_direct_mutation(
 /// target or a mutator call), the member expression whose object it writes
 /// through (the assignment target itself, or the mutator's callee), and the
 /// root identifier that member chain starts at.
+/// Whether `span` is a bare identifier, or a member read that is exactly a
+/// `const` (ADR 0481), which [`super::member_root`] returns as a root and
+/// [`super::source_symbol_at`] resolves to that `const` (ADR 0482).
+fn bare_root(file: &FileFacts, span: Span) -> bool {
+    file.ast.local_alias_member(span).is_some()
+        || file
+            .ast
+            .identifiers
+            .iter()
+            .any(|identifier| identifier.span == span)
+}
+
 #[derive(Clone, Copy)]
 struct StoreWriteSite {
     span: Span,
@@ -1366,18 +1379,14 @@ fn store_write_standing(
             .ast
             .member_at(site.member)
             .is_some_and(|member| member.object == site.root)
-        && file
-            .ast
-            .identifiers
-            .iter()
-            .any(|identifier| identifier.span == site.root)
+        && bare_root(file, site.root)
     {
         return WriteStanding::Exempt;
     }
     if !context.dialect.store_setter_callback_enables_proxy_writes() {
         return WriteStanding::Dropped;
     }
-    let stores = store_and_aliases(context, file.path.as_str(), site.root, symbol);
+    let stores = store_and_aliases(context, file, site.root, symbol);
     let windows = write_windows(file, context, &stores, symbol);
     if windows.is_empty() {
         return WriteStanding::Dropped;
@@ -1412,7 +1421,7 @@ fn write_windows(
 ) -> Windows {
     let mut windows = Windows::default();
     for call in &file.ast.calls {
-        if !is_own_setter(context, file.path.as_str(), call.callee, stores, 4) {
+        if !is_own_setter(context, file, call.callee, stores, 4) {
             continue;
         }
         for argument in &call.arguments {
@@ -1463,12 +1472,33 @@ impl Windows {
 /// write's own (ADR 0476).
 fn store_and_aliases(
     context: &UpstreamCompatContext<'_>,
-    path: &str,
+    file: &solid_facts::FileFacts,
     root: Span,
     symbol: &crate::SymbolId,
 ) -> Vec<crate::SymbolId> {
+    let path = file.path.as_str();
     let mut stores = vec![symbol.clone()];
     let mut at = (path.to_owned(), root);
+    // ADR 0482: a member alias root is no reference the index knows; the walk
+    // starts from the binding its `const` declares, which is in this file.
+    if let Some(alias) = file
+        .ast
+        .local_alias_member(file.ast.peel_ts_sugar_span(root))
+    {
+        let Some(source) = file
+            .ast
+            .bindings
+            .iter()
+            .find(|binding| binding.names.iter().any(|name| name.span == alias.source))
+            .filter(|binding| {
+                binding.shape == solid_facts::ast::BindingShape::Identifier && binding.immutable
+            })
+            .and_then(|binding| binding.initializer_identifier.as_ref())
+        else {
+            return close_over_local_aliases(context, file, stores);
+        };
+        at = (path.to_owned(), source.span);
+    }
     for _ in 0..4 {
         let Some((binding_file, binding, bound)) = context.lookup.binding_at_reference(&at.0, at.1)
         else {
@@ -1494,6 +1524,48 @@ fn store_and_aliases(
     {
         stores.push(bound);
     }
+    close_over_local_aliases(context, file, stores)
+}
+
+/// ADR 0480: the exact aliases of `local_alias_bindings` (an object or array
+/// literal's slot, an object-literal arrow's slot) hold the same store, in
+/// either direction, to a fixpoint within the site's file.
+fn close_over_local_aliases(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    mut stores: Vec<crate::SymbolId>,
+) -> Vec<crate::SymbolId> {
+    let path = file.path.as_str();
+    {
+        let pairs = file
+            .ast
+            .local_alias_bindings
+            .iter()
+            .filter_map(|alias| {
+                Some((
+                    context.entities.at(path, alias.local)?.clone(),
+                    context.entities.at(path, alias.source)?.clone(),
+                ))
+            })
+            .collect::<Vec<_>>();
+        loop {
+            let mut grew = false;
+            for (local, source) in &pairs {
+                let (has_local, has_source) = (stores.contains(local), stores.contains(source));
+                if has_local != has_source {
+                    stores.push(if has_local {
+                        source.clone()
+                    } else {
+                        local.clone()
+                    });
+                    grew = true;
+                }
+            }
+            if !grew {
+                break;
+            }
+        }
+    }
     stores
 }
 
@@ -1503,13 +1575,22 @@ fn store_and_aliases(
 /// most `depth` of them). Another store's setter or a same-spelled local is not.
 fn is_own_setter(
     context: &UpstreamCompatContext<'_>,
-    path: &str,
+    file: &solid_facts::FileFacts,
     callee: Span,
     stores: &[crate::SymbolId],
     depth: usize,
 ) -> bool {
-    let Some((binding_file, binding, callee_symbol)) =
-        context.lookup.binding_at_reference(path, callee)
+    // ADR 0482: a member read that is exactly a `const` (ADR 0481) calls that
+    // `const`: the setter slot of one of `stores`' patterns, or an alias of it.
+    if let Some(alias) = file
+        .ast
+        .local_alias_member(file.ast.peel_ts_sugar_span(callee))
+    {
+        return setter_declaration_is_own(context, file, alias.source, stores, depth);
+    }
+    let Some((binding_file, binding, callee_symbol)) = context
+        .lookup
+        .binding_at_reference(file.path.as_str(), callee)
     else {
         return false;
     };
@@ -1525,20 +1606,73 @@ fn is_own_setter(
             slot_symbol(1) == Some(&callee_symbol)
                 && slot_symbol(0).is_some_and(|store| stores.contains(store))
         }
-        solid_facts::ast::BindingShape::Identifier if depth > 0 && binding.immutable => binding
-            .initializer_identifier
-            .as_ref()
-            .is_some_and(|source| {
-                is_own_setter(
-                    context,
-                    binding_file.path.as_str(),
-                    source.span,
-                    stores,
-                    depth - 1,
-                )
-            }),
+        solid_facts::ast::BindingShape::Identifier if depth > 0 && binding.immutable => {
+            binding
+                .initializer_identifier
+                .as_ref()
+                .is_some_and(|source| {
+                    is_own_setter(context, binding_file, source.span, stores, depth - 1)
+                })
+                || literal_alias_is_own_setter(context, binding_file, &callee_symbol, stores, depth)
+        }
+        _ if depth > 0 => {
+            literal_alias_is_own_setter(context, binding_file, &callee_symbol, stores, depth)
+        }
         _ => false,
     }
+}
+
+/// ADR 0480: whether the binding `symbol` is an exact local alias
+/// (`local_alias_bindings`: a literal slot) of the setter destructured beside
+/// one of `stores`, directly or through further such aliases.
+fn literal_alias_is_own_setter(
+    context: &UpstreamCompatContext<'_>,
+    file: &solid_facts::FileFacts,
+    symbol: &crate::SymbolId,
+    stores: &[crate::SymbolId],
+    depth: usize,
+) -> bool {
+    let path = file.path.as_str();
+    let Some(alias) = file
+        .ast
+        .local_alias_bindings
+        .iter()
+        .find(|alias| context.entities.at(path, alias.local) == Some(symbol))
+    else {
+        return false;
+    };
+    setter_declaration_is_own(context, file, alias.source, stores, depth)
+}
+
+/// Whether the binding declared at `declaration` is the setter slot of one of
+/// `stores`' `createStore` patterns, or an exact local alias of one.
+fn setter_declaration_is_own(
+    context: &UpstreamCompatContext<'_>,
+    file: &solid_facts::FileFacts,
+    declaration: Span,
+    stores: &[crate::SymbolId],
+    depth: usize,
+) -> bool {
+    let path = file.path.as_str();
+    if let Some(binding) = file.ast.bindings.iter().find(|binding| {
+        binding.shape == solid_facts::ast::BindingShape::Array
+            && binding
+                .array_slots
+                .get(1)
+                .and_then(Option::as_ref)
+                .is_some_and(|name| name.span == declaration)
+    }) {
+        return binding
+            .array_slots
+            .first()
+            .and_then(Option::as_ref)
+            .and_then(|name| context.entities.at(path, name.span))
+            .is_some_and(|store| stores.contains(store));
+    }
+    let Some(source) = context.entities.at(path, declaration) else {
+        return false;
+    };
+    depth > 0 && literal_alias_is_own_setter(context, file, source, stores, depth - 1)
 }
 
 /// Where the site at `span` (a store write, or the call of a function that
@@ -1833,20 +1967,32 @@ fn named_function_standing(
 ///   write is TypeScript's and the rule is silent.
 /// - Any other link leaves the write uncertifiable (ADR 0476). The proxy serves
 ///   a child through `isWrappable` (`dist/dev.js:2272-2283`, `:5569`, `:5605`),
-///   which refuses a frozen object, a non-plain prototype (a `Map`, a class
-///   instance) and a DOM node, and serves it raw: a write below lands. Whether
+///   which refuses a frozen object, a value whose tag is not `Object` (a `Map`,
+///   a `Date`; a class instance tagged `Object` is wrapped) and a DOM node, and
+///   serves it raw: a write below lands. Whether
 ///   a link's value is frozen or plain is a property of the value, not of its
 ///   type (`Object.freeze` can reach any reference, `Readonly<T>` is assignable
 ///   to `T`), so no fact proves the link is wrapped. An undefined link throws
 ///   `TypeError` before any write, and a frozen array's mutator throws too.
+///   Except (ADR 0491) where [`links_proven_wrappable`] holds.
 fn chain_links_verdict(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
     member: Span,
+    root: Span,
 ) -> Option<bool> {
     let ast = &file.ast;
     let member = ast.peel_ts_sugar_span(member);
-    let links = ast.member_chain_links(member);
+    let mut links = ast.member_chain_links(member);
+    // ADR 0482: a member read that is exactly a `const` (ADR 0481) is the root
+    // (`super::member_root`), so it and the links inside it are not past it.
+    if let Some(root) = links
+        .iter()
+        .map(|&link| ast.peel_ts_sugar_span(link))
+        .find(|&link| ast.local_alias_member(link).is_some())
+    {
+        links.retain(|&link| !root.contains(ast.peel_ts_sugar_span(link)));
+    }
     if links.is_empty() {
         return Some(false);
     }
@@ -1872,7 +2018,615 @@ fn chain_links_verdict(
     if nullish && !optional {
         return None;
     }
-    Some(true)
+    Some(
+        !(optional_free(ast, member, &links)
+            && links_proven_wrappable(file, context, member, root)),
+    )
+}
+
+/// No link of the chain, nor the written member, is an optional access.
+fn optional_free(ast: &solid_facts::ast::AstFacts, member: Span, links: &[Span]) -> bool {
+    std::iter::once(member)
+        .chain(links.iter().map(|&link| ast.peel_ts_sugar_span(link)))
+        .all(|access| ast.optional_members.binary_search(&access).is_err())
+}
+
+/// The in-place array methods [`links_proven_wrappable`] lets a store path
+/// call: those of [`ARRAY_MUTATORS`] that take no callback and always write
+/// `length` (`Array.prototype` §23.1.3), so the call meets the `set` trap
+/// whatever the array holds; `reverse`, `fill` and `copyWithin` may write
+/// nothing, and `sort`'s comparator receives elements.
+const LENGTH_WRITING_ARRAY_MUTATORS: [&str; 5] = ["push", "pop", "shift", "unshift", "splice"];
+
+/// ADR 0491: every link the write at `member` reads past the store root holds
+/// the object or array literal the store's own initializer wrote there, so the
+/// proxy serves it wrapped (`isWrappable`, rc.17 `dist/dev.js:2272-2283`: a
+/// fresh literal is neither frozen nor of a foreign prototype) and a write
+/// below it is dropped like a write to the root. Proven only where nothing can
+/// replace or reach that raw value:
+/// - the root resolves, through exact `const` aliases, to slot 0 of a `const`
+///   array pattern in a function body whose initializer is `createStore` with
+///   one argument, a closed object literal (no spread, computed, duplicate,
+///   accessor or `__proto__` key), so the store is deep and its value inline;
+/// - the setter slot is absent or never referenced, so no write lands and no
+///   value replaces a link (a write outside the setter is dropped);
+/// - every reference to the store or an alias is an alias's initializer or the
+///   root of a static, non-optional member path that is written, deleted,
+///   called as a callback-free array mutator on an array literal, or read
+///   where the literal holds a primitive: no proxy of the store or below it
+///   leaves as a value, so nothing reaches the raw value (`$TARGET`), freezes
+///   or marks it.
+///
+/// Each link's key is a data property of the literal the previous key named;
+/// an array literal ends the walk (its elements have no static key).
+fn links_proven_wrappable(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    member: Span,
+    root: Span,
+) -> bool {
+    let ast = &file.ast;
+    // A direct `eval` can reach the setter or the store with no reference
+    // the binder sees.
+    if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
+        return false;
+    }
+    // ADR 0500: a member root that is exactly a `const` (ADR 0481,
+    // `thing.useIt`) starts the walk at that `const`.
+    let root_declaration = ast
+        .local_alias_member(ast.peel_ts_sugar_span(root))
+        .map(|alias| alias.source)
+        .or_else(|| ast.reference_declaration(ast.peel_ts_sugar_span(root)));
+    let Some(root_declaration) = root_declaration else {
+        return false;
+    };
+    // The store pattern and its exact `const` aliases, by declared name span.
+    let mut names = vec![root_declaration];
+    let mut store = None;
+    for _ in 0..4 {
+        let declaration = *names.last().expect("one name");
+        // ADR 0497: an exact local alias (ADR 0463, 0480: a `const` alias, a
+        // literal slot, a tuple holder's slot, an object-literal arrow's slot)
+        // holds the store itself.
+        if let Some(alias) = ast.local_alias_binding(declaration) {
+            names.push(alias.source);
+            continue;
+        }
+        let Some(binding) = ast
+            .bindings
+            .iter()
+            .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+        else {
+            return false;
+        };
+        if !binding.immutable {
+            return false;
+        }
+        match binding.shape {
+            solid_facts::ast::BindingShape::Identifier => {
+                let Some(source) = binding
+                    .initializer_identifier
+                    .as_ref()
+                    .and_then(|source| ast.reference_declaration(source.span))
+                else {
+                    return false;
+                };
+                names.push(source);
+            }
+            solid_facts::ast::BindingShape::Array => {
+                store = Some(binding);
+                break;
+            }
+            _ => return false,
+        }
+    }
+    let Some(store) = store else {
+        return false;
+    };
+    let slot = |index: usize| store.array_slots.get(index).and_then(Option::as_ref);
+    if slot(0).map(|name| name.span) != names.last().copied()
+        || store.array_slots.len() > 2
+        || file
+            .source_text(store.pattern)
+            .is_none_or(|pattern| pattern.contains("..."))
+        || !ast.any_function_body_containing(store.declaration)
+    {
+        return false;
+    }
+    let primitive = context
+        .entities
+        .at(file.path.as_str(), slot(0).expect("slot 0").span)
+        .and_then(|symbol| context.source_primitives.get(symbol));
+    let Some(call) = store.call_initializer.and_then(|call| ast.call_at(call)) else {
+        return false;
+    };
+    let [argument] = call.arguments.as_slice() else {
+        return false;
+    };
+    let initial = ast.peel_ts_sugar_span(argument.span);
+    if primitive.is_none_or(|primitive| primitive.as_str() != "createStore")
+        || ast.peel_ts_sugar_span(store.initializer.unwrap_or(call.span)) != call.span
+        || closed_literal(ast, initial).is_none()
+    {
+        return false;
+    }
+    let referenced = |declaration: Span| {
+        ast.identifiers.iter().any(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && ast.reference_declaration(identifier.span) == Some(declaration)
+        })
+    };
+    if slot(1).is_some_and(|setter| referenced(setter.span)) {
+        return false;
+    }
+    // ADR 0497: every exact alias of the store, not only those on the root's
+    // chain, is the store; its references are checked like the store's own.
+    for _ in 0..4 {
+        let more: Vec<Span> = ast
+            .local_alias_bindings
+            .iter()
+            .filter(|alias| names.contains(&alias.source) && !names.contains(&alias.local))
+            .map(|alias| alias.local)
+            .collect();
+        if more.is_empty() {
+            break;
+        }
+        names.extend(more);
+    }
+    // Alias initializers are the references the alias walk already took.
+    let alias_sources: Vec<Span> = ast
+        .bindings
+        .iter()
+        .filter(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.iter().any(|name| names.contains(&name.span))
+        })
+        .filter_map(|binding| {
+            binding
+                .initializer_identifier
+                .as_ref()
+                .map(|source| source.span)
+        })
+        .collect();
+    for identifier in &ast.identifiers {
+        if identifier.role != solid_facts::ast::IdentifierRole::Reference
+            || !ast
+                .reference_declaration(identifier.span)
+                .is_some_and(|declaration| names.contains(&declaration))
+            || alias_sources.contains(&identifier.span)
+        {
+            continue;
+        }
+        if !contained_store_use(file, identifier.span, initial)
+            && !consumed_by_alias_slots(file, identifier.span, &names, initial)
+        {
+            return false;
+        }
+    }
+    // The written path's links resolve to literals (the use check above
+    // already walked it; this pins the links themselves).
+    let member = ast.peel_ts_sugar_span(member);
+    let Some(path) = static_path(file, member, ast.peel_ts_sugar_span(root)) else {
+        return false;
+    };
+    let (last, prefix) = match path.split_last() {
+        Some((last, prefix)) if !prefix.is_empty() => (last, prefix),
+        _ => return false,
+    };
+    let called = ast
+        .calls
+        .iter()
+        .any(|call| ast.peel_ts_sugar_span(call.callee) == member);
+    if called
+        && !file
+            .source_text(*last)
+            .is_some_and(|name| LENGTH_WRITING_ARRAY_MUTATORS.contains(&name))
+    {
+        return false;
+    }
+    holds_object(resolve_literal_path(file, initial, prefix))
+}
+
+/// The value is an object or array literal: a primitive (or a regular
+/// expression, which the facts class with them) is served raw.
+fn holds_object(value: Option<LiteralValue>) -> bool {
+    matches!(value, Some(LiteralValue::Object(_) | LiteralValue::Array))
+}
+
+/// ADR 0497: the store reference `reference` is a direct element of an array
+/// literal, or the value of a static data property of an object literal, that
+/// only `const` destructuring consumes, each slot receiving the store being an
+/// exact alias in `names` (ADR 0480): a tuple holder `const pair = [0, store]`
+/// every reference of which initializes a `const [, a] = pair`, or the
+/// expression body of a `const` arrow `() => ({ a: store })` every reference
+/// of which is the callee of a call initializing a `const { a } = …`. No
+/// pattern has a rest element, a default or a nested pattern, so nothing but
+/// those aliases receives the proxy.
+fn consumed_by_alias_slots(
+    file: &FileFacts,
+    reference: Span,
+    names: &[Span],
+    initial: Span,
+) -> bool {
+    let ast = &file.ast;
+    let plain_pattern = |binding: &solid_facts::ast::BindingFact, open: char| {
+        binding.immutable
+            && file.source_text(binding.pattern).is_some_and(|pattern| {
+                !pattern.contains("...")
+                    && !pattern.contains('=')
+                    && pattern.matches(['{', '[']).count() == 1
+                    && pattern.trim_start().starts_with(open)
+            })
+    };
+    let references_to = |declaration: Span| -> Vec<Span> {
+        ast.identifiers
+            .iter()
+            .filter(|identifier| {
+                identifier.role == solid_facts::ast::IdentifierRole::Reference
+                    && ast.reference_declaration(identifier.span) == Some(declaration)
+            })
+            .map(|identifier| identifier.span)
+            .collect()
+    };
+    // An object literal property whose value is the reference.
+    if let Some(property) = ast.object_properties.iter().find(|property| {
+        ast.peel_ts_sugar_span(property.value) == reference && property.data && !property.computed
+    }) {
+        // ADR 0497 review: a key compared as written, so it must be a plain
+        // identifier (no quotes, no escape) for the comparison with each
+        // pattern slot's key to be exact.
+        let Some(key) = file
+            .source_text(property.key)
+            .filter(|key| plain_identifier(key))
+        else {
+            return false;
+        };
+        let Some(literal) = ast
+            .object_get_shapes
+            .iter()
+            .filter(|shape| shape.span.contains(property.span))
+            .min_by_key(|shape| shape.span.end - shape.span.start)
+            .filter(|shape| shape.closed && shape.properties.iter().all(|p| p.getter.is_none()))
+        else {
+            return false;
+        };
+        // The literal is an arrow's whole expression body.
+        let Some(arrow) =
+            crate::owners::containing_ast_function(ast, literal.span).filter(|function| {
+                ast.peel_ts_sugar_span(function.body) == literal.span
+                    && !function.r#async
+                    && !function.generator
+            })
+        else {
+            return false;
+        };
+        let Some(binding) = ast.bindings.iter().find(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding
+                    .initializer
+                    .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == arrow.span)
+        }) else {
+            return false;
+        };
+        let Some(name) = binding.names.first() else {
+            return false;
+        };
+        let uses = references_to(name.span);
+        return !uses.is_empty()
+            && uses.iter().all(|&callee| {
+                let Some(call) = ast
+                    .calls
+                    .iter()
+                    .find(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == callee)
+                else {
+                    return false;
+                };
+                held_by_member_holder(file, call.span, key, literal.span, initial)
+                    || ast.bindings.iter().any(|pattern| {
+                        pattern.shape == solid_facts::ast::BindingShape::Object
+                            && pattern.initializer.is_some_and(|initializer| {
+                                ast.peel_ts_sugar_span(initializer) == call.span
+                            })
+                            && plain_pattern(pattern, '{')
+                            && pattern.object_slots.iter().all(|slot| {
+                                // Every slot's key is a plain identifier too,
+                                // so one that receives the store is found, and
+                                // each that does is an alias in the set.
+                                slot.plain_identifier_key
+                                    && plain_identifier(slot.property.as_str())
+                                    && (slot.property.as_str() != key
+                                        || names.contains(&slot.local.span))
+                            })
+                    })
+            });
+    }
+    // A direct element of an array literal held by a tuple holder.
+    let Some(literal) = ast
+        .array_literals
+        .iter()
+        .copied()
+        .filter(|literal| literal.contains(reference))
+        .min_by_key(|literal| literal.end - literal.start)
+    else {
+        return false;
+    };
+    let Some(text) = file.source_text(literal) else {
+        return false;
+    };
+    // A spread shifts every later element's index, and a generic or JSX
+    // comma the depth count does not see; both are refused (ADR 0497
+    // review).
+    if text.contains(['`', '\'', '"', '/', '<']) || text.contains("...") {
+        return false;
+    }
+    // The element index at depth one, and that the reference is the whole
+    // element.
+    let offset = (reference.start - literal.start) as usize;
+    let (mut depth, mut index, mut element_start) = (0_i32, 0_usize, 1_usize);
+    for (at, character) in text.char_indices() {
+        if at == offset {
+            break;
+        }
+        match character {
+            '[' | '(' | '{' => depth += 1,
+            ']' | ')' | '}' => depth -= 1,
+            ',' if depth == 1 => {
+                index += 1;
+                element_start = at + 1;
+            }
+            _ => {}
+        }
+    }
+    let end = (reference.end - literal.start) as usize;
+    let whole = text
+        .get(element_start..offset)
+        .is_some_and(|lead| lead.trim().is_empty())
+        && text
+            .get(end..)
+            .is_some_and(|rest| rest.trim_start().starts_with([',', ']']));
+    if !whole {
+        return false;
+    }
+    let Some(holder) = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == literal)
+    }) else {
+        return false;
+    };
+    let Some(name) = holder.names.first() else {
+        return false;
+    };
+    let uses = references_to(name.span);
+    !uses.is_empty()
+        && uses.iter().all(|&use_span| {
+            ast.bindings.iter().any(|pattern| {
+                pattern.shape == solid_facts::ast::BindingShape::Array
+                    && pattern
+                        .initializer
+                        .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == use_span)
+                    && plain_pattern(pattern, '[')
+                    && pattern.array_slots.get(index).is_none_or(|slot| {
+                        slot.as_ref().is_none_or(|slot| names.contains(&slot.span))
+                    })
+            })
+        })
+}
+
+/// ADR 0500: the arrow's call at `call` initializes a function-local `const`
+/// holder (`const thing = useThing()`) every reference of which is the object
+/// of a static, non-optional member read that is not written, deleted or
+/// iterated: so the object never leaves, and the store reaches code only
+/// through `thing.<key>`. Each such read at the store's `key` is an exact
+/// member alias (ADR 0481) and a contained store use, as a reference to the
+/// store itself must be ([`contained_store_use`]).
+fn held_by_member_holder(
+    file: &FileFacts,
+    call: Span,
+    key: &str,
+    literal: Span,
+    initial: Span,
+) -> bool {
+    let ast = &file.ast;
+    let Some(holder) = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call)
+    }) else {
+        return false;
+    };
+    let Some(name) = holder.names.first() else {
+        return false;
+    };
+    if !ast.any_function_body_containing(holder.declaration) {
+        return false;
+    }
+    let uses: Vec<Span> = ast
+        .identifiers
+        .iter()
+        .filter(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && ast.reference_declaration(identifier.span) == Some(name.span)
+        })
+        .map(|identifier| identifier.span)
+        .collect();
+    !uses.is_empty()
+        && uses.iter().all(|&use_span| {
+            let Some(member) = ast
+                .members
+                .iter()
+                .find(|member| ast.peel_ts_sugar_span(member.object) == use_span)
+            else {
+                return false;
+            };
+            if ast.computed_members.binary_search(&member.span).is_ok()
+                || ast.optional_members.binary_search(&member.span).is_ok()
+                || ast.write_targets.contains(&member.span)
+                || ast
+                    .deleted_targets
+                    .iter()
+                    .any(|target| file.peel_parentheses(*target) == Some(member.span))
+            {
+                return false;
+            }
+            let Some(property) = file
+                .source_text(member.property)
+                .filter(|key| plain_identifier(key))
+            else {
+                return false;
+            };
+            if property == key {
+                return ast.local_alias_member(member.span).is_some()
+                    && contained_store_use(file, member.span, initial);
+            }
+            // Another key's value must not run with the holder as `this`, nor
+            // be a function the analysis cannot see into: a primitive,
+            // object or array literal, or an arrow function (no own `this`).
+            ast.object_properties.iter().any(|candidate| {
+                literal.contains(candidate.span)
+                    && candidate.data
+                    && !candidate.computed
+                    && file.source_text(candidate.key) == Some(property)
+                    && (matches!(
+                        candidate.value_kind,
+                        solid_facts::ast::RuntimeValueKind::Primitive
+                            | solid_facts::ast::RuntimeValueKind::Object
+                            | solid_facts::ast::RuntimeValueKind::Array
+                    ) || ast
+                        .function_at(ast.peel_ts_sugar_span(candidate.value))
+                        .is_some_and(|function| {
+                            function.kind == solid_facts::ast::FunctionKind::Arrow
+                        }))
+            })
+        })
+}
+
+/// What a literal value resolved from a store's initializer is.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum LiteralValue {
+    Object(Span),
+    Array,
+    Primitive,
+}
+
+/// The closed object literal at exactly `span`.
+fn closed_literal(ast: &solid_facts::ast::AstFacts, span: Span) -> Option<Span> {
+    ast.object_get_shapes
+        .iter()
+        .find(|shape| shape.span == span)
+        .filter(|shape| {
+            shape.closed
+                && shape
+                    .properties
+                    .iter()
+                    .all(|property| property.getter.is_none())
+        })
+        .map(|shape| shape.span)
+}
+
+/// The value the closed literal `literal` holds at `path`, one static key per
+/// step; an array literal or a primitive ends it.
+fn resolve_literal_path(file: &FileFacts, literal: Span, path: &[Span]) -> Option<LiteralValue> {
+    let ast = &file.ast;
+    let mut value = LiteralValue::Object(literal);
+    for &key in path {
+        let LiteralValue::Object(object) = value else {
+            return None;
+        };
+        let name = file.source_text(key)?;
+        let property = ast.object_properties.iter().find(|property| {
+            object.contains(property.span)
+                && !property.computed
+                && property.data
+                && file.source_text(property.key) == Some(name)
+                && !ast.object_get_shapes.iter().any(|shape| {
+                    shape.span != object
+                        && object.contains(shape.span)
+                        && shape.span.contains(property.span)
+                })
+        })?;
+        let inner = ast.peel_ts_sugar_span(property.value);
+        value = match property.value_kind {
+            solid_facts::ast::RuntimeValueKind::Object => {
+                LiteralValue::Object(closed_literal(ast, inner)?)
+            }
+            solid_facts::ast::RuntimeValueKind::Array
+                if ast.array_literals.binary_search(&inner).is_ok() =>
+            {
+                LiteralValue::Array
+            }
+            solid_facts::ast::RuntimeValueKind::Primitive => LiteralValue::Primitive,
+            _ => return None,
+        };
+    }
+    Some(value)
+}
+
+/// The static, non-optional member path rooted at `root` that ends at
+/// `member`: each step's property span, outermost last.
+fn static_path(file: &FileFacts, member: Span, root: Span) -> Option<Vec<Span>> {
+    let ast = &file.ast;
+    let mut path = Vec::new();
+    let mut current = member;
+    while current != root {
+        let access = ast.member_at(current)?;
+        if ast.computed_members.binary_search(&current).is_ok()
+            || ast.optional_members.binary_search(&current).is_ok()
+        {
+            return None;
+        }
+        path.push(access.property);
+        current = ast.peel_ts_sugar_span(access.object);
+    }
+    path.reverse();
+    Some(path)
+}
+
+/// The reference `reference` to a store whose initializer is the closed
+/// literal `initial` is the root of a static member path that is written,
+/// deleted, called as a callback-free array mutator on an array literal, or
+/// read where the literal holds a primitive.
+fn contained_store_use(file: &FileFacts, reference: Span, initial: Span) -> bool {
+    let ast = &file.ast;
+    let mut top = reference;
+    while let Some(parent) = ast.members.iter().find(|parent| {
+        ast.peel_ts_sugar_span(parent.object) == top
+            && ast.computed_members.binary_search(&parent.span).is_err()
+            && ast.optional_members.binary_search(&parent.span).is_err()
+    }) {
+        top = parent.span;
+    }
+    if top == reference {
+        return false;
+    }
+    let Some(path) = static_path(file, top, reference) else {
+        return false;
+    };
+    let (last, prefix) = path.split_last().expect("one step");
+    let written = ast.write_targets.binary_search(&top).is_ok()
+        || ast
+            .deleted_targets
+            .iter()
+            .any(|&target| file.peel_parentheses(target) == Some(top));
+    if written {
+        return holds_object(resolve_literal_path(file, initial, prefix));
+    }
+    let called = ast
+        .calls
+        .iter()
+        .any(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == top);
+    if called {
+        return file
+            .source_text(*last)
+            .is_some_and(|name| LENGTH_WRITING_ARRAY_MUTATORS.contains(&name))
+            && resolve_literal_path(file, initial, prefix) == Some(LiteralValue::Array);
+    }
+    resolve_literal_path(file, initial, &path) == Some(LiteralValue::Primitive)
 }
 
 /// Whether `tsc` reports a type error written in `file` at all: not a
@@ -1956,11 +2710,7 @@ fn no_store_mutator_call(
             .ast
             .call_at(file.ast.peel_ts_sugar_span(root))
             .is_some()
-            || !file
-                .ast
-                .identifiers
-                .iter()
-                .any(|identifier| identifier.span == root)
+            || !bare_root(file, root)
         {
             continue;
         }
@@ -1979,7 +2729,7 @@ fn no_store_mutator_call(
         }
         // ADR 0465: the receiver of `store.items.push(1)` is a link past the
         // root; only a store that is itself the array (`list.push(1)`) has none.
-        let Some(past_root) = chain_links_verdict(file, context, callee) else {
+        let Some(past_root) = chain_links_verdict(file, context, callee, root) else {
             continue;
         };
         defects.push(StaticDefect {
@@ -2034,23 +2784,20 @@ fn no_store_delete(
         };
         // Every link from the operand down to the root is a plain member read:
         // no `?.` (which may skip the delete) and no wrapper between links.
+        // The walk ends at the root `member_root` found: a member alias root
+        // (ADR 0482) is itself a member, and its own links are not the chain's.
         let mut link = member;
         let mut plain = true;
-        while let Some(current) = file.ast.member_at(link) {
+        while link != root
+            && let Some(current) = file.ast.member_at(link)
+        {
             if file.ast.optional_members.binary_search(&link).is_ok() {
                 plain = false;
                 break;
             }
             link = current.object;
         }
-        if !plain
-            || link != root
-            || !file
-                .ast
-                .identifiers
-                .iter()
-                .any(|identifier| identifier.span == root)
-        {
+        if !plain || link != root || !bare_root(file, root) {
             continue;
         }
         let Some(symbol) = source_symbol_at(context, file, root) else {
@@ -2079,7 +2826,7 @@ fn no_store_delete(
         let uncertain = match context.lookup.entity_at(path, member) {
             None => true,
             Some(entity) if !entity.writable_optional_property => continue,
-            Some(_) => match chain_links_verdict(file, context, member) {
+            Some(_) => match chain_links_verdict(file, context, member, root) {
                 None => continue,
                 Some(past_root) => past_root,
             },
@@ -2234,4 +2981,14 @@ fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
     // TS2538 ("Type 'Accessor<string>' cannot be used as an index type") in
     // both dialects, so it never reaches this function's callers any more.
     None
+}
+
+/// A key written as a plain identifier: ASCII letters, digits, `_` or `$`, not
+/// starting with a digit, so its source text is its value.
+fn plain_identifier(text: &str) -> bool {
+    let mut characters = text.chars();
+    characters
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_' || first == '$')
+        && characters.all(|rest| rest.is_ascii_alphanumeric() || rest == '_' || rest == '$')
 }

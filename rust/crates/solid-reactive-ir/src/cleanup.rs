@@ -254,7 +254,82 @@ pub(super) fn leaf_owner_operations_for_file(
                 .is_some_and(|owner| {
                     owner.span == leaf_callback.span && !owner.body.contains(call.span)
                 });
-            if !own_list && !direct_callback_runs(callback_file, leaf_callback.span, call.span) {
+            // ADR 0492: a call in callbacks that project helpers call in their
+            // own body (ADR 0469's climb), written in the callback, runs on
+            // the stack of the outermost helper call, as ADR 0478 reads it:
+            // not in a parameter list, not after an await. An IIFE, an inline
+            // standard-library callback and a named function are the helper
+            // and host paths' (`helper_forbidden_operations`, the host-callback
+            // census), which judge them at their own call.
+            let in_place = || {
+                let Some(climb) =
+                    crate::execution_role::climb_in_place_layers(callback_file, call.span, lookup)
+                else {
+                    return false;
+                };
+                if climb.in_list
+                    || climb.suspended.is_some()
+                    || !direct_callback_runs(callback_file, leaf_callback.span, climb.at)
+                {
+                    return false;
+                }
+                let ast = &callback_file.ast;
+                let mut at = call.span;
+                for _ in 0..16 {
+                    if at == climb.at {
+                        return true;
+                    }
+                    let Some(function) = crate::owners::owning_function(ast, at) else {
+                        return false;
+                    };
+                    let Some((helper, _)) =
+                        ast.arguments_containing(function.span)
+                            .find(|(container, index)| {
+                                ast.peel_ts_sugar_span(container.arguments[*index].span)
+                                    == function.span
+                            })
+                    else {
+                        return false;
+                    };
+                    // A project function: no standard-library or
+                    // dependency declaration (a primitive's callback is the
+                    // owner model's, not a helper's).
+                    let project = lookup
+                        .resolved_callee_call(callback_file, helper.callee)
+                        .and_then(|resolved| resolved.declaration.as_ref())
+                        .is_some_and(|declaration| {
+                            !declaration.standard_library
+                                && !declaration.source_file.contains("/node_modules/")
+                        });
+                    if !project {
+                        return false;
+                    }
+                    at = helper.span;
+                }
+                false
+            };
+            // Only a call whose function is itself an argument can be in a
+            // helper's callback, a syntactic test that spares the climb for
+            // every other call (this pass runs on every build).
+            let handed = || {
+                crate::owners::owning_function(&callback_file.ast, call.span).is_some_and(
+                    |function| {
+                        function.span != leaf_callback.span
+                            && callback_file.ast.arguments_containing(function.span).any(
+                                |(container, index)| {
+                                    callback_file
+                                        .ast
+                                        .peel_ts_sugar_span(container.arguments[index].span)
+                                        == function.span
+                                },
+                            )
+                    },
+                )
+            };
+            if !own_list
+                && !direct_callback_runs(callback_file, leaf_callback.span, call.span)
+                && !(handed() && in_place())
+            {
                 continue;
             }
             let primitive = crate::call_primitive_name_cached(

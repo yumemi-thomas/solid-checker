@@ -125,9 +125,11 @@ effect.
 - **Anything that may run elsewhere.** Each layer between the call and the
   apply must be proven to run only during it: a call the dialect or the audited
   standard-library rows state runs its callback before returning, an immediately
-  invoked function, or a project function bound to a name nothing reassigns,
-  not exported, with at least one call, whose every reference is an exact call
-  that is itself such a layer. A helper that is also called from an event
+  invoked function, a project helper that calls the callback in its own body and
+  never hands it on or keeps it (ADR 0484), or a project function bound to a
+  name nothing reassigns, not exported itself (one nested in an exported
+  function is not), with at least one call, whose every reference is an exact
+  call that is itself such a layer. A helper that is also called from an event
   handler, a timer, the module body or another non-effect function, aliased,
   passed as an argument or exported is not claimed: the flush may run outside
   the effect. Unresolved callees, generators (calling one runs none of its

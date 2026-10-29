@@ -691,6 +691,10 @@ fn call_accessor_symbol<'s>(
     call: &solid_facts::ast::CallFact,
 ) -> Option<&'s SymbolId> {
     let callee = file.ast.peel_ts_sugar_span(call.callee);
+    // ADR 0481: a member read that is exactly a `const` names that `const`.
+    if let Some(alias) = file.ast.local_alias_member(callee) {
+        return ctx.entities.at(file.path.as_str(), alias.source);
+    }
     if let Some(member) = file.ast.member_at(callee) {
         return (!file.ast.computed_members.contains(&member.span))
             .then(|| ctx.entities.at(file.path.as_str(), member.property))

@@ -3,6 +3,33 @@
 use super::*;
 
 /// The expression under any parentheses and TypeScript wrappers.
+/// The static data properties of an object literal by their runtime keys, or
+/// `None` when any property is a spread, a computed or numeric key, a getter,
+/// a setter, a method or `__proto__` (which sets the prototype).
+fn static_data_properties<'e, 'a>(
+    literal: &'e oxc_ast::ast::ObjectExpression<'a>,
+) -> Option<Vec<(&'e str, &'e Expression<'a>)>> {
+    let mut values = Vec::new();
+    for property in &literal.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return None;
+        };
+        if property.computed || property.method || property.kind != PropertyKind::Init {
+            return None;
+        }
+        let key = match &property.key {
+            PropertyKey::StaticIdentifier(identifier) => identifier.name.as_str(),
+            PropertyKey::StringLiteral(literal) => literal.value.as_str(),
+            _ => return None,
+        };
+        if key == "__proto__" {
+            return None;
+        }
+        values.push((key, &property.value));
+    }
+    Some(values)
+}
+
 fn unwrapped<'e, 'a>(mut expression: &'e Expression<'a>) -> &'e Expression<'a> {
     loop {
         expression = match expression {
@@ -172,6 +199,22 @@ impl Collector<'_, '_> {
         }
     }
 
+    /// The `const` variable symbol the binder resolves `expression` (under
+    /// parentheses and TypeScript wrappers) to.
+    fn const_symbol_of(&self, expression: &Expression<'_>) -> Option<oxc_semantic::SymbolId> {
+        let Expression::Identifier(identifier) = unwrapped(expression) else {
+            return None;
+        };
+        let symbol = identifier
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())?;
+        self.scoping
+            .symbol_flags(symbol)
+            .contains(oxc_semantic::SymbolFlags::ConstVariable)
+            .then_some(symbol)
+    }
+
     /// The binding identifier of the `const` variable the binder resolves
     /// `expression` (under parentheses and TypeScript wrappers) to.
     fn const_variable_of(&self, expression: &Expression<'_>) -> Option<Span> {
@@ -194,6 +237,25 @@ impl Collector<'_, '_> {
     /// properties are all static data properties, the slot's key present once
     /// with an identifier value. A `let`, a `var` and an ambient declarator
     /// record nothing.
+    /// The `const` variable each element of an array literal is, by index:
+    /// `None` for a hole, any other expression, and every index from the first
+    /// spread on (a spread moves the rest).
+    fn array_literal_slots(&self, array: &oxc_ast::ast::ArrayExpression<'_>) -> Vec<Option<Span>> {
+        let mut slots = Vec::new();
+        for element in &array.elements {
+            match element {
+                ArrayExpressionElement::SpreadElement(_) => break,
+                ArrayExpressionElement::Elision(_) => slots.push(None),
+                element => slots.push(
+                    element
+                        .as_expression()
+                        .and_then(|value| self.const_variable_of(value)),
+                ),
+            }
+        }
+        slots
+    }
+
     fn record_local_alias_candidates(&mut self, declaration: &VariableDeclarator<'_>) {
         if declaration.kind != oxc_ast::ast::VariableDeclarationKind::Const
             || self.ambient_variable
@@ -209,31 +271,120 @@ impl Collector<'_, '_> {
                 if let Some(source) = self.const_variable_of(init) {
                     self.local_alias_candidates.push((span(local.span), source));
                 }
+                // ADR 0480: a holder a later pattern may read through.
+                let Some(symbol) = local.symbol_id.get() else {
+                    return;
+                };
+                // ADR 0481: a holder of an arrow call's fresh object.
+                if let Expression::CallExpression(call) = unwrapped(init)
+                    && !call.optional
+                    && let Some(arrow) = self.const_symbol_of(&call.callee)
+                {
+                    self.member_holders.push((symbol, arrow));
+                }
+                match unwrapped(init) {
+                    Expression::ArrayExpression(array) => {
+                        let slots = self.array_literal_slots(array);
+                        self.const_array_slots.push((symbol, slots));
+                    }
+                    Expression::ArrowFunctionExpression(arrow)
+                        if arrow.expression && !arrow.r#async =>
+                    {
+                        let Some(oxc_ast::ast::Statement::ExpressionStatement(body)) =
+                            arrow.body.statements.first()
+                        else {
+                            return;
+                        };
+                        let Expression::ObjectExpression(literal) = unwrapped(&body.expression)
+                        else {
+                            return;
+                        };
+                        let Some(values) = static_data_properties(literal) else {
+                            return;
+                        };
+                        // ADR 0500 review: a `function` or class value is
+                        // called with the holder as `this` (`thing.reset()`),
+                        // which can replace a slot or hand the holder out.
+                        if values.iter().any(|(_, value)| {
+                            matches!(
+                                unwrapped(value),
+                                Expression::FunctionExpression(_) | Expression::ClassExpression(_)
+                            )
+                        }) {
+                            return;
+                        }
+                        let values = values
+                            .into_iter()
+                            .map(|(key, value)| {
+                                (CompactString::from(key), self.const_variable_of(value))
+                            })
+                            .collect();
+                        self.const_object_arrows.push((symbol, values));
+                    }
+                    _ => {}
+                }
+            }
+            // ADR 0480: `const [a, b] = [x, y]`, and `const [, b] = pair` over a
+            // `const` holding an array literal (resolved in `finish`).
+            BindingPattern::ArrayPattern(pattern) => {
+                let direct = match unwrapped(init) {
+                    Expression::ArrayExpression(array) => Some(self.array_literal_slots(array)),
+                    _ => None,
+                };
+                let holder = if direct.is_none() {
+                    self.const_symbol_of(init)
+                } else {
+                    None
+                };
+                if let Some(holder) = holder {
+                    self.array_destructures.push(holder);
+                }
+                for (index, element) in pattern.elements.iter().enumerate() {
+                    let Some(BindingPattern::BindingIdentifier(local)) = element else {
+                        continue;
+                    };
+                    if let Some(slots) = &direct {
+                        if let Some(Some(source)) = slots.get(index) {
+                            self.local_alias_candidates
+                                .push((span(local.span), *source));
+                        }
+                    } else if let Some(holder) = holder {
+                        self.pending_array_aliases
+                            .push((span(local.span), holder, index));
+                    }
+                }
             }
             BindingPattern::ObjectPattern(pattern) => {
+                // ADR 0480: `const { a } = make()` over a `const` arrow whose body
+                // is an object literal (resolved in `finish`): each call returns a
+                // fresh literal, read here before anything can write it.
+                if let Expression::CallExpression(call) = unwrapped(init)
+                    && !call.optional
+                    && let Some(arrow) = self.const_symbol_of(&call.callee)
+                {
+                    for slot in &pattern.properties {
+                        if slot.computed {
+                            continue;
+                        }
+                        let BindingPattern::BindingIdentifier(local) = &slot.value else {
+                            continue;
+                        };
+                        let key = match &slot.key {
+                            PropertyKey::StaticIdentifier(identifier) => identifier.name.as_str(),
+                            PropertyKey::StringLiteral(literal) => literal.value.as_str(),
+                            _ => continue,
+                        };
+                        self.pending_call_aliases
+                            .push((span(local.span), arrow, key.into()));
+                    }
+                    return;
+                }
                 let Expression::ObjectExpression(literal) = unwrapped(init) else {
                     return;
                 };
-                // Every property a static data property, by its runtime key.
-                let mut values = Vec::<(&str, &Expression<'_>)>::new();
-                for property in &literal.properties {
-                    let ObjectPropertyKind::ObjectProperty(property) = property else {
-                        return;
-                    };
-                    if property.computed || property.method || property.kind != PropertyKind::Init {
-                        return;
-                    }
-                    let key = match &property.key {
-                        PropertyKey::StaticIdentifier(identifier) => identifier.name.as_str(),
-                        PropertyKey::StringLiteral(literal) => literal.value.as_str(),
-                        _ => return,
-                    };
-                    // `__proto__: v` sets the prototype rather than a property.
-                    if key == "__proto__" {
-                        return;
-                    }
-                    values.push((key, &property.value));
-                }
+                let Some(values) = static_data_properties(literal) else {
+                    return;
+                };
                 for slot in &pattern.properties {
                     if slot.computed {
                         continue;
@@ -2184,6 +2335,21 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         });
         if member.optional {
             self.optional_members.push(span(member.span));
+        }
+        // ADR 0481: a static member read of a bare identifier (not under a
+        // wrapper: `(thing as T).set` still names `thing`, but is left out).
+        if let Expression::Identifier(object) = &member.object
+            && let Some(symbol) = object
+                .reference_id
+                .get()
+                .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+        {
+            self.identifier_member_reads.push((
+                symbol,
+                span(member.span),
+                CompactString::from(member.property.name.as_str()),
+                member.optional,
+            ));
         }
         self.record_completion_site(member.span);
         walk::walk_static_member_expression(self, member);

@@ -443,6 +443,16 @@ impl<'a> SemanticLookup<'a> {
     /// inherit the identity of `i` or `wrapper` when the complete callee has no
     /// semantic fact.
     pub(crate) fn callee_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
+        // ADR 0481: a member read that is exactly a `const` names that `const`.
+        if let Some(alias) = file
+            .ast
+            .local_alias_member(file.ast.peel_ts_sugar_span(callee))
+        {
+            return self
+                .entities
+                .at(file.path.as_str(), alias.source)
+                .map(SymbolId::as_str);
+        }
         self.redirected_callee_symbol(file, callee).or_else(|| {
             let path = file.path.as_str();
             plain_callee_symbol(
@@ -498,6 +508,14 @@ impl<'a> SemanticLookup<'a> {
     /// compare the returned candidates' summaries before using more than one.
     pub(crate) fn callee_symbols(&self, file: &FileFacts, callee: Span) -> Vec<SymbolId> {
         let callee = file.ast.peel_ts_sugar_span(callee);
+        if let Some(alias) = file.ast.local_alias_member(callee) {
+            return self
+                .entities
+                .at(file.path.as_str(), alias.source)
+                .cloned()
+                .into_iter()
+                .collect();
+        }
         let member_property = self
             .ast_indexes
             .get(file.path.as_str())

@@ -1,7 +1,8 @@
 import { action, createEffect, createMemo, createSignal, onSettled, resolve, until } from "solid-js";
 
 const [ready] = createSignal(false);
-// Nothing places these helpers' calls: SC2005 and SC2004 uncertifiable.
+// Each helper is called once, from a memo compute (ADR 0494): SC2005 and
+// SC2004 are violations there, as in the compute itself.
 function waitReady() {
   return until(() => ready());
 }
@@ -52,4 +53,25 @@ declare function invoke(callback: () => unknown): void;
 export function OpaqueCallback() {
   invoke(() => resolve(() => ready()));
   return <div />;
+}
+
+// Nothing places an exported helper with no caller here: SC2005 and SC2004
+// uncertifiable.
+export function waitReadyExported() {
+  return until(() => ready());
+}
+export function readNowExported() {
+  return resolve(() => ready());
+}
+
+// Not a violation (ADR 0493 review): `[1].reduce` with no initial value never
+// calls its callback, so a library callback is not crossed.
+export function ReduceCallback() {
+  const m = createMemo(() =>
+    [1].reduce((total) => {
+      void resolve(() => ready());
+      return total;
+    }),
+  );
+  return <div>{m()}</div>;
 }

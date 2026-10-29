@@ -362,6 +362,86 @@ impl StaticApiContext<'_> {
                     uncertain: false,
                 });
             }
+            // SC6002 (ADR 0483): a computation or root created with no owner
+            // on a createEffect apply's stack. rc.17's dev build throws
+            // PRIMITIVE_IN_EFFECT_CALLBACK there (`assertNotInEffectCallback`,
+            // `inEffectCallback && context === null`); which creating calls
+            // reach it is the dialect's. The walk crosses no layer that sets an
+            // owner. The marker is one global that a nested synchronous effect
+            // run lowers, so the throw is proven only where no call runs in the
+            // apply before this one; otherwise the claim is uncertifiable.
+            if let Some(created) = kind
+                && self.client_build
+                && dialect.throws_creating_in_effect_callback(
+                    created,
+                    call.arguments.first().is_some_and(|argument| {
+                        !argument.spread
+                            && matches!(
+                                argument.value,
+                                solid_facts::ast::ArgumentValueKind::Function
+                                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                            )
+                    }),
+                )
+                && let Some(root) = self
+                    .lookup
+                    .resolved_callee_call(file, call.callee)
+                    .and_then(|resolved| resolved.declaration.as_ref())
+                    .and_then(|declaration| {
+                        crate::effect_phase::package_root(declaration.location.path.as_ref())
+                    })
+                && let Some(origin) = crate::effect_phase::ownerless_effect_phase_origin(
+                    file,
+                    call.span,
+                    &root,
+                    self.package_instances,
+                    self.lookup,
+                )
+            {
+                // ADR 0495: each layer the walk crossed, and each helper's own
+                // body before it calls its parameter (a tagged template runs
+                // its tag function too). Within the apply's own text the
+                // positional test stands as before.
+                let earlier_call =
+                    origin.earlier_call
+                        || (origin.helper_calls == 0
+                            && (file.ast.calls.iter().any(|other| {
+                                origin.apply.contains(other.span)
+                                    && other.span.end <= call.span.start
+                                    && !other.span.contains(call.span)
+                            }) || file.ast.tagged_template_tags.iter().any(|tag| {
+                                origin.apply.contains(*tag) && tag.end <= call.span.start
+                            })));
+                let reached = match origin.helper_calls {
+                    0 => "directly in the apply callback of a createEffect".to_owned(),
+                    1 => format!(
+                        "in a function that the apply callback of a createEffect in {} calls",
+                        origin.path
+                    ),
+                    calls => format!(
+                        "in a function reached through {calls} calls from the apply callback of a createEffect in {}",
+                        origin.path
+                    ),
+                };
+                result.violations.push(StaticViolation {
+                    id: "SC6002".into(),
+                    rule: "primitive-in-effect-callback".into(),
+                    message: if earlier_call {
+                        format!(
+                            "{primitive}() is called {reached}, with no owner set in between; the dev build throws PRIMITIVE_IN_EFFECT_CALLBACK here unless a call that runs earlier in the callback ran an effect synchronously (which lowers the marker the guard reads), and whether one does is not proven"
+                        )
+                    } else {
+                        format!(
+                            "{primitive}() is called {reached}, with no owner set in between; the effect phase runs with no owner, so the dev build throws PRIMITIVE_IN_EFFECT_CALLBACK here, and a production build creates a computation nothing owns, never disposed"
+                        )
+                    },
+                    hint: "Create the computation in the effect's compute function or the component body, where an owner holds it, or parent it explicitly: capture `const owner = getOwner()` outside and wrap the creation in `runWithOwner(owner, () => …)`.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: earlier_call,
+                });
+            }
             let Some(kind @ (Primitive::Refresh | Primitive::Affects)) = kind else {
                 continue;
             };
@@ -548,14 +628,35 @@ fn resolve_tracked_scope(
     allowed: &[Span],
     context: &StaticApiContext<'_>,
 ) -> Option<String> {
+    // ADR 0494: a call in function layers that run in place inside the
+    // callback (ADR 0469's climb, as ADR 0478 reads it) runs on the stack of
+    // the outermost layer's call, with the callback's observer active; not in
+    // a parameter list, not after an await.
+    let at = match crate::execution_role::climb_in_place_layers(file, call.span, context.lookup) {
+        // A library callback may run zero times (ADR 0493 review), so it is
+        // not crossed.
+        Some(climb)
+            if !climb.in_list
+                && climb.suspended.is_none()
+                && !crate::execution_role::climb_crosses_library_callback(
+                    file,
+                    call.span,
+                    climb.at,
+                    context.lookup,
+                ) =>
+        {
+            climb.at
+        }
+        _ => call.span,
+    };
     if let Some((container, index)) =
         file.ast
-            .arguments_containing(call.span)
+            .arguments_containing(at)
             .find(|(container, index)| {
                 crate::execution_role::direct_callback_runs(
                     file,
                     container.arguments[*index].span,
-                    call.span,
+                    at,
                 )
             })
     {
@@ -781,16 +882,25 @@ fn action_step_body(
     call: &solid_facts::ast::CallFact,
     context: &StaticApiContext<'_>,
 ) -> Option<&'static str> {
-    let (container, index) =
-        file.ast
-            .arguments_containing(call.span)
-            .find(|(container, index)| {
-                crate::execution_role::direct_callback_runs(
-                    file,
-                    container.arguments[*index].span,
-                    call.span,
-                )
-            })?;
+    // ADR 0478: a call in function layers that run in place inside the body
+    // (an IIFE, an inline standard-library callback, a helper's callback it
+    // calls in its own body; ADR 0469's climb) runs on the stack of the
+    // outermost layer's call, so that call is the position the step proof
+    // reads. A layer in a parameter list runs only when its argument is
+    // omitted, and a site after an await in its layer runs on a later task:
+    // neither is claimed. One in-place run proves the throw, so a helper that
+    // also hands its callback on still counts.
+    let at = match crate::execution_role::climb_in_place_layers(file, call.span, context.lookup) {
+        Some(climb) if !climb.in_list && climb.suspended.is_none() => climb.at,
+        Some(_) => return None,
+        None => call.span,
+    };
+    let (container, index) = file
+        .ast
+        .arguments_containing(at)
+        .find(|(container, index)| {
+            crate::execution_role::direct_callback_runs(file, container.arguments[*index].span, at)
+        })?;
     let argument = &container.arguments[index];
     if argument.spread {
         return None;
@@ -809,13 +919,12 @@ fn action_step_body(
     let written = argument.value_span.unwrap_or(argument.span);
     // ADR 0454: a call in the generator's parameter list runs when the
     // generator is created, before its first step.
-    let body = crate::owners::containing_body_function(&file.ast, call.span)
+    let body = crate::owners::containing_body_function(&file.ast, at)
         .filter(|function| function.span == written && function.generator)?;
     if !body.r#async {
         return Some("sync generator");
     }
-    crate::effect_phase::runs_before_first_suspension(file, body, call.span)
-        .then_some("async generator")
+    crate::effect_phase::runs_before_first_suspension(file, body, at).then_some("async generator")
 }
 
 /// The root expression span of a member/call chain: `state.user` and

@@ -1,0 +1,75 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/async-unsuspendable-call-attributed/App.tsx",
+      "start": 491,
+      "end": 495,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/async-unsuspendable-call-attributed/App.tsx",
+      "start": 730,
+      "end": 734,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-unsuspendable-call-attributed/App.tsx",
+      "start": 961,
+      "end": 970,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-unsuspendable-call-attributed/App.tsx",
+      "start": 1198,
+      "end": 1207,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-unsuspendable-call-attributed/App.tsx",
+      "start": 2016,
+      "end": 2020,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/async-unsuspendable-call-attributed/App.tsx",
+      "start": 2290,
+      "end": 2296,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/async-unsuspendable-call-attributed/App.tsx",
+      "start": 2309,
+      "end": 2313,
+      "fixes": 0
+    }
+  ]
+}

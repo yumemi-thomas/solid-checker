@@ -1,0 +1,3 @@
+# primitive-in-effect-callback
+
+**Claim (ADR 0483).** On rc.17 dev, `assertNotInEffectCallback` throws `PRIMITIVE_IN_EFFECT_CALLBACK` when a computation or root is created with no owner inside the effect phase. A `createMemo`, `createRoot` or function-form `createSignal` reached from a `createEffect` apply directly, through an IIFE or through `untrack` is SC6002 (an effect created there is SC4001 as well). After an earlier call in the callback it is uncertifiable (a synchronous effect run lowers the marker). Clean: under `runWithOwner(owner, …)`, value-form state, the compute, and a render effect's apply (its first run is owned). Stubs as in `write-owner-in-cleanup`.

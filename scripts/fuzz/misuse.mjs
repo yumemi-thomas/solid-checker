@@ -5,7 +5,8 @@
 //   context   where the call sits: a component body, a memo or effect compute, an effect or render-effect apply, createTrackedEffect,
 //             onSettled, untrack, createRoot, runWithOwner(null), a handler, a timer, a promise callback, a microtask, after an await,
 //             a JSX child (plain, under Show, in a For row), an action body, an async memo or effect compute
-//   layer     none, a closure (named, called), a same-file helper taking the callback, an IIFE, or two of them
+//   layer     none, a closure (named, called), a same-file helper taking the callback, an IIFE, two of them, or the helper in
+//             another module (`helpers.ts`, imported by name: the checker must follow the call across files)
 //   binding   the call reaches its API through a direct import, a namespace import, an alias, a destructuring, or a wrapper function
 //
 // A cell of the recall matrix (matrix.mjs) is (code, context). `SPEC[code].contexts` lists the contexts the template is meant to fire
@@ -19,7 +20,7 @@ import { codePolicy, policyOf } from "./codes.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
 export const BINDINGS = ["direct", "namespace", "alias", "destructured", "wrapper"];
-export const LAYERS = ["none", "closure", "helper", "iife", "closure+helper"];
+export const LAYERS = ["none", "closure", "helper", "iife", "closure+helper", "module-helper"];
 
 /** Contexts where nothing owns the code that runs: a handler, a timer, a promise or microtask callback, after an await, runWithOwner(null). */
 const UNOWNED = ["handler", "timer", "then", "micro", "async", "owner-null"];
@@ -248,6 +249,7 @@ function applyLayer(layer, stmts, kit) {
   switch (layer) {
     case "closure": { const f = kit.name("f"); return [decl(f, fn(stmts)), expr(call(ref(f)))]; }
     case "helper": return [expr(call(ref(kit.ensureHelper("call")), [fn(stmts)]))];
+    case "module-helper": return [expr(call(ref(kit.ensureHelper("call", { module: true })), [fn(stmts)]))];
     case "iife": return [expr(iife(fn(stmts)))];
     default: return stmts;
   }

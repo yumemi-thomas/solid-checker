@@ -147,7 +147,8 @@ function render(program, instrument) {
   }
   const used = new Set(["createSignal"]);
   const signals = signalTable(program);
-  const helpers = new Map((program.helpers ?? []).filter((helper) => !helper.pkg).map((helper) => [helper.name, helper]));
+  const helpers = new Map((program.helpers ?? []).filter((helper) => !helper.pkg && !helper.module).map((helper) => [helper.name, helper]));
+  const moduleHelpers = (program.helpers ?? []).filter((helper) => helper.module);
   const packageHelpers = new Map(usedPackageHelpers(program).map((helper) => [helper.name, helper]));
   // The misuse profile: what each `use` node prints and needs (imports, wrapper functions, aliases).
   const uses = new Map();
@@ -470,6 +471,7 @@ function render(program, instrument) {
   const webNames = [...new Set(useList.flatMap(([, described]) => described.web))].sort();
   const namespaces = [...new Set(useList.flatMap(([, described]) => described.namespaces))].sort();
   const packageImports = [...new Set([...packageHelpers.values()].map((helper) => accessOf(helper).importLine))];
+  if (moduleHelpers.length) packageImports.push(`import { ${moduleHelpers.map((helper) => helper.name).join(", ")} } from "./helpers";`);
   const header = `import { ${importNames.join(", ")} } from "solid-js";\n${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}${packageImports.map((line) => `${line}\n`).join("")}\n`;
   // Printing the body filled `used`; the header goes first, so line numbers shift by its height.
   const body = out.join("\n");
@@ -504,16 +506,24 @@ function render(program, instrument) {
   for (const row of ledger) row.line = hitLines.get(row.hit);
   return { text, sites, siteHits, ledger, lineTable };
 
-  function helperText(helper) {
-    switch (helper.form) {
-      case "call": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}cb();`, `${INDENT}return 1;`, "}"];
-      case "defaultCall": return [`function ${helper.name}(cb: () => unknown, x: unknown = cb()) {`, `${INDENT}return x;`, "}"];
-      case "returnClosure": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}const g = (x: unknown = cb()) => x;`, `${INDENT}return g;`, "}"];
-      case "returnCb": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}return cb;`, "}"];
-      case "storeCb": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}return { cb };`, "}"];
-      case "timerCb": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}setTimeout(cb, 0);`, `${INDENT}return 1;`, "}"];
-      default: throw new Error(`unknown helper form ${helper.form}`);
-    }
+}
+
+/** The project modules besides App.tsx: `helpers.ts` with the module helpers (`helper.module`), exported; empty when there are none. */
+export function moduleFiles(program) {
+  const moduleHelpers = (program.helpers ?? []).filter((helper) => helper.module);
+  if (!moduleHelpers.length) return {};
+  return { "helpers.ts": `${moduleHelpers.map((helper) => ["export " + helperText(helper)[0], ...helperText(helper).slice(1)].join("\n")).join("\n\n")}\n` };
+}
+
+function helperText(helper) {
+  switch (helper.form) {
+    case "call": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}cb();`, `${INDENT}return 1;`, "}"];
+    case "defaultCall": return [`function ${helper.name}(cb: () => unknown, x: unknown = cb()) {`, `${INDENT}return x;`, "}"];
+    case "returnClosure": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}const g = (x: unknown = cb()) => x;`, `${INDENT}return g;`, "}"];
+    case "returnCb": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}return cb;`, "}"];
+    case "storeCb": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}return { cb };`, "}"];
+    case "timerCb": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}setTimeout(cb, 0);`, `${INDENT}return 1;`, "}"];
+    default: throw new Error(`unknown helper form ${helper.form}`);
   }
 }
 

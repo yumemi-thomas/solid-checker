@@ -219,6 +219,8 @@ const codeRules = {
   STORE_WRITE_OUTSIDE_SETTER: ["no-store-mutation-outside-setter"],
   CLEANUP_IN_FORBIDDEN_SCOPE: ["leaf-owner-forbidden-call"],
   PRIMITIVE_IN_FORBIDDEN_SCOPE: ["leaf-owner-forbidden-call"],
+  // ADR 0483: a computation or root created with no owner in a createEffect apply (thrown).
+  PRIMITIVE_IN_EFFECT_CALLBACK: ["primitive-in-effect-callback"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["async-outside-loading-boundary"],
   PENDING_ASYNC_UNTRACKED_READ: ["pending-async-unsuspendable-read"],
   // A pending read in createTrackedEffect or onSettled: SC5001's leaf-owner variant.

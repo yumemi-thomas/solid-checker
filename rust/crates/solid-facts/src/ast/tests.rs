@@ -3147,6 +3147,97 @@ p();\n";
 /// variable, directly or through one data property of an object literal it
 /// destructures; every other form names nothing.
 #[test]
+fn local_alias_members_record_reads_of_an_exclusive_arrow_result() {
+    let source = concat!(
+        "const r = () => 1;\n",
+        "const make = () => ({ set: r, other: 1 });\n",
+        "const thing = make();\n",
+        "thing.set();\n",
+        "thing.set;\n",
+        "thing.other;\n",
+        // ADR 0500 review: a key the literal lacks reads `Object.prototype`.
+        "const probed = make();\n",
+        "probed.set;\n",
+        "probed.missing;\n",
+        "const written = make();\n",
+        "written.set;\n",
+        "(written as any).set = () => 2;\n",
+        "const passed = make();\n",
+        "passed.set;\n",
+        "console.log(passed);\n",
+        "const deleted = make();\n",
+        "deleted.set;\n",
+        "delete (deleted as any).other;\n",
+        "const optional = make();\n",
+        "optional?.set;\n",
+        "export const shared = make();\n",
+        "shared.set;\n",
+        "let held = make();\n",
+        "held.set;\n",
+        "const later = async () => ({ set: r });\n",
+        "const promised = later();\n",
+        "promised.set;\n",
+        "const { set: fromPromise } = later();\n",
+        // ADR 0500 review: a `function` value runs with the holder as `this`.
+        "const withThis = () => ({ set: r, reset: function () {} });\n",
+        "const viaThis = withThis();\n",
+        "viaThis.set;\n",
+    );
+    let facts = extract("members.ts", source).unwrap();
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let recorded = facts
+        .local_alias_members
+        .iter()
+        .map(|fact| (text(fact.member), fact.source.start))
+        .collect::<Vec<_>>();
+    assert_eq!(recorded, [("thing.set", 6), ("thing.set", 6)]);
+}
+
+#[test]
+fn local_alias_bindings_follow_const_array_holders_and_object_literal_arrows() {
+    let source = concat!(
+        "const r = () => 1;\n",
+        "let v = () => 2;\n",
+        "const pair = [0, r] as const;\n",
+        "const [, a] = pair;\n",
+        "const [b, c] = [r, r];\n",
+        "const make = () => ({ s: r });\n",
+        "const { s: d } = make();\n",
+        "const written = [r];\n",
+        "const [e] = written;\n",
+        "(written as unknown[])[0] = v;\n",
+        "const passed = [r];\n",
+        "const [f] = passed;\n",
+        "console.log(passed);\n",
+        "const spread = [...[v], r];\n",
+        "const [, g] = spread;\n",
+        "const [h, i] = [...[v], r];\n",
+        "const block = () => { return { s: r }; };\n",
+        "const { s: j } = block();\n",
+        "const param = (p: () => number) => ({ s: p });\n",
+        "const { s: k } = param(r);\n",
+        "const twice = () => ({ s: r, s: r });\n",
+        "const { s: l } = twice();\n",
+        "const { s: m } = make?.();\n",
+        "let held = [r];\n",
+        "const [n] = held;\n",
+        "export const shared = [r];\n",
+        "const [o] = shared;\n",
+        "const fromLet = [v];\n",
+        "const [q] = fromLet;\n",
+    );
+    let facts = extract("alias.ts", source).unwrap();
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let recorded = facts
+        .local_alias_bindings
+        .iter()
+        .map(|fact| (text(fact.local), fact.source.start))
+        .collect::<Vec<_>>();
+    let r = 6;
+    assert_eq!(recorded, [("a", r), ("b", r), ("c", r), ("d", r)]);
+}
+
+#[test]
 fn local_alias_bindings_record_only_exact_const_copies_of_a_const_variable() {
     let source = concat!(
         "const r = () => 1;\n",
