@@ -84,7 +84,9 @@ parent creates and hands over as an exact prop or through one context provider
 (ADR 0510); the prop may be read through the apply's IIFEs, closures called once and helpers that call their callback first, and the memo may be one an inert project hook creates when the body calls it before the effect; the handed value may be read through a `const` alias or an inline object literal's slot declared before the effect (ADR 0511). The static tree may hold string attributes, literal children and
 reads of the body's own literal signals and synchronous memos. No function
 between the read and the apply calls anything before it: a throw there ends
-the run first (`fixtures/reactive-ir/pending-source-first-run`).
+the run first (`fixtures/reactive-ir/pending-source-first-run`); nor does any
+operator, template or loop there or in the body before the effect, which may
+throw through a coercion (ADR 0511 closes ADR 0507's residual).
 
 ## Examples
 
