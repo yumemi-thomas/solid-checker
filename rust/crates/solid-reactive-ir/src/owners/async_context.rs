@@ -116,6 +116,8 @@ pub(super) fn loading_cover_at(
 /// outside every flush, lane, transition and boundary (`@solidjs/web@2.0.0-rc.17`
 /// `dist/web.dev.js:542-568`). One such mount is enough for a claim about a
 /// run that happens in it.
+///
+/// ADR 0507: or a parent so mounted renders it ([`MountSite::parents`]).
 pub(crate) fn mounted_by_module_render(
     lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
@@ -124,9 +126,254 @@ pub(crate) fn mounted_by_module_render(
     !module_render_sites(lookup, file, component).is_empty()
 }
 
-/// The mounts [`mounted_by_module_render`] accepts, as the file each is
-/// written in and the `render` call.
+/// A mount [`mounted_by_module_render`] accepts: the module-scope `render`
+/// call and the file it is written in, and the parents between it and the
+/// component, outermost first: each parent's file, function and the tag in it
+/// that renders the next one (or the component).
+pub(crate) struct MountSite<'a> {
+    pub(crate) entry: &'a solid_facts::FileFacts,
+    pub(crate) render: Span,
+    pub(crate) parents: Vec<(
+        &'a solid_facts::FileFacts,
+        &'a solid_facts::ast::FunctionFact,
+        Span,
+    )>,
+}
+
+/// How many parents a mount may pass through.
+const MOUNT_DEPTH: usize = 4;
+
+/// The mounts of `component`: its own module-scope renders (ADR 0503), and
+/// those of each parent that renders it as a static child (ADR 0507,
+/// [`static_child_tag`]).
 pub(crate) fn module_render_sites<'a>(
+    lookup: &SemanticLookup<'a>,
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+) -> Vec<MountSite<'a>> {
+    mount_sites_within(lookup, file, component, MOUNT_DEPTH)
+}
+
+fn mount_sites_within<'a>(
+    lookup: &SemanticLookup<'a>,
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    depth: usize,
+) -> Vec<MountSite<'a>> {
+    let mut sites = direct_render_sites(lookup, file, component)
+        .into_iter()
+        .map(|(entry, render)| MountSite {
+            entry,
+            render,
+            parents: Vec::new(),
+        })
+        .collect::<Vec<_>>();
+    if depth == 0 || !lookup.function_value_is_current(file, component) {
+        return sites;
+    }
+    for (caller, tag) in lookup.function_call_sites(file.path.as_str(), component.span) {
+        let Some(parent) = static_child_tag(lookup, caller, tag) else {
+            continue;
+        };
+        for mut site in mount_sites_within(lookup, caller, parent, depth - 1) {
+            site.parents.push((caller, parent, tag));
+            sites.push(site);
+        }
+    }
+    sites
+}
+
+/// ADR 0507: the parent whose body renders the component at `tag` while it
+/// runs, synchronously: the tag is a self-closing JSX element with no
+/// attribute, spread or child, written in the parent's own body (not in a
+/// function nested there), inside the argument of the parent's one return,
+/// which is unconditional and in its straight-line flow (or its expression
+/// body), reached from that argument through intrinsic elements only, each the
+/// child of the next (no expression container, fragment or component between).
+/// The compiler evaluates such a tag (`createComponent`) while it builds the
+/// returned tree, so the child's body runs inside the parent's, outside any
+/// computation. `<Show>`, `<For>` and other components run their children
+/// later or inside a computation, and are not this.
+pub(crate) fn static_child_tag<'a>(
+    lookup: &SemanticLookup<'a>,
+    file: &'a solid_facts::FileFacts,
+    tag: Span,
+) -> Option<&'a solid_facts::ast::FunctionFact> {
+    let ast = &file.ast;
+    let element = ast
+        .jsx_elements
+        .iter()
+        .find(|element| element.name.span == tag)?;
+    if !element.self_closing
+        || !element.attributes.is_empty()
+        || !element.spreads.is_empty()
+        || !element.children.is_empty()
+    {
+        return None;
+    }
+    let parent = crate::owners::containing_ast_function(ast, element.span)?;
+    if parent.r#async
+        || parent.generator
+        || !lookup.function_may_be_component(file, parent)
+        || !lookup.function_value_is_current(file, parent)
+    {
+        return None;
+    }
+    let own = |span: Span| {
+        crate::owners::containing_ast_function(ast, span)
+            .is_some_and(|function| function.span == parent.span)
+    };
+    if !inert_parent(file, parent, element) {
+        return None;
+    }
+    let returns = ast
+        .returns
+        .iter()
+        .filter(|fact| own(fact.span))
+        .collect::<Vec<_>>();
+    let root = if parent.expression_body {
+        if !returns.is_empty() {
+            return None;
+        }
+        ast.peel_ts_sugar_span(parent.body)
+    } else {
+        let [only] = returns.as_slice() else {
+            return None;
+        };
+        if only.conditional || !only.straight_line {
+            return None;
+        }
+        ast.peel_ts_sugar_span(only.argument?)
+    };
+    if !root.contains(element.span)
+        || ast
+            .jsx_fragments
+            .iter()
+            .any(|fragment| root.contains(*fragment) && fragment.contains(element.span))
+    {
+        return None;
+    }
+    // Climb from the tag to the returned element, each step the child of an
+    // intrinsic element.
+    let mut at = element.span;
+    for _ in 0..64 {
+        if at == root {
+            return Some(parent);
+        }
+        let holder = ast
+            .jsx_elements
+            .iter()
+            .filter(|candidate| candidate.span != at && candidate.span.contains(at))
+            .min_by_key(|candidate| candidate.span.end - candidate.span.start)?;
+        let intrinsic = holder.member_object.is_none()
+            && file.source_text(holder.name.span).is_some_and(|name| {
+                name.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+                    && name.chars().all(|c| c.is_ascii_alphanumeric())
+            });
+        if !intrinsic || !holder.children.contains(&at) || !own(holder.span) {
+            return None;
+        }
+        at = holder.span;
+    }
+    None
+}
+
+/// ADR 0507: the parent runs nothing but the render of `child`: its body is
+/// one `return <tree>` (or the tree as its expression body), with no other
+/// statement (an implicit coercion, getter, iteration or loop runs code no
+/// syntax names; ADR 0507 review), no parameter but plain ones, and in its
+/// span no call, member read, tagged template, class, `throw`, nested function
+/// or fragment, and no JSX element but `child` and intrinsic elements with no
+/// attribute, spread or expression child. An earlier pass of the same mount
+/// that went pending would stage the child's passes
+/// (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:1690-1708`), and code
+/// that throws ends the mount.
+fn inert_parent(
+    file: &solid_facts::FileFacts,
+    parent: &solid_facts::ast::FunctionFact,
+    child: &solid_facts::ast::JsxElementFact,
+) -> bool {
+    let ast = &file.ast;
+    let inside = |span: Span| parent.span.contains(span);
+    let plain_parameters = parent.parameters.iter().all(|parameter| {
+        parameter.shape == solid_facts::ast::BindingShape::Identifier
+            && parameter.initializer.is_none()
+    });
+    let elements_static = ast
+        .jsx_elements
+        .iter()
+        .filter(|element| inside(element.span) && element.span != child.span)
+        .all(|element| {
+            let intrinsic = element.member_object.is_none()
+                && file.source_text(element.name.span).is_some_and(|name| {
+                    name.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+                        && name.chars().all(|c| c.is_ascii_alphanumeric())
+                });
+            let children = element.children.iter().all(|span| {
+                let text = file.source_text(*span).unwrap_or("{");
+                if text.starts_with('<') {
+                    ast.jsx_elements.iter().any(|inner| inner.span == *span)
+                } else if text.starts_with('{') {
+                    element.empty_children.contains(span)
+                } else {
+                    true
+                }
+            });
+            intrinsic && element.attributes.is_empty() && element.spreads.is_empty() && children
+        });
+    // The body is the return and nothing else: between the braces, `return`
+    // and the returned expression (`ReturnFact::span`), in parentheses or not.
+    let own_returns = ast
+        .returns
+        .iter()
+        .filter(|fact| {
+            crate::owners::containing_ast_function(ast, fact.span)
+                .is_some_and(|function| function.span == parent.span)
+        })
+        .collect::<Vec<_>>();
+    let only_return = parent.expression_body
+        || match own_returns.as_slice() {
+            [only] => {
+                let returned = file
+                    .source_text(parent.body)
+                    .and_then(|body| body.trim().strip_prefix('{')?.strip_suffix('}'))
+                    .and_then(|inner| inner.trim().strip_prefix("return"))
+                    .map(|rest| {
+                        let mut rest = rest.trim().trim_end_matches(';').trim_end();
+                        while let Some(inside) =
+                            rest.strip_prefix('(').and_then(|r| r.strip_suffix(')'))
+                        {
+                            rest = inside.trim();
+                        }
+                        rest
+                    });
+                returned.is_some_and(|returned| {
+                    file.source_text(only.span).map(str::trim) == Some(returned)
+                })
+            }
+            _ => false,
+        };
+    only_return
+        && plain_parameters
+        && elements_static
+        && !ast.calls.iter().any(|call| inside(call.span))
+        && !ast.members.iter().any(|member| inside(member.span))
+        && !ast.computed_members.iter().any(|member| inside(*member))
+        && !ast.tagged_template_tags.iter().any(|tag| inside(*tag))
+        && !ast.classes.iter().any(|class| inside(class.span))
+        && !ast
+            .throw_statements
+            .iter()
+            .any(|statement| inside(*statement))
+        && !ast.jsx_fragments.iter().any(|fragment| inside(*fragment))
+        && !ast
+            .functions
+            .iter()
+            .any(|function| function.span != parent.span && inside(function.span))
+}
+
+/// The module-scope renders that mount `component` itself (ADR 0503).
+fn direct_render_sites<'a>(
     lookup: &SemanticLookup<'a>,
     file: &solid_facts::FileFacts,
     component: &solid_facts::ast::FunctionFact,

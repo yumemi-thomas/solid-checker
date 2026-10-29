@@ -2302,7 +2302,8 @@ pub(crate) fn pending_apply_first_read(
 /// - the body runs nothing else ([`body_runs_nothing_else`]), and the
 ///   source's async compute is one primitive literal;
 /// - a module-scope `render` mounting it is the first code to run that can
-///   create a reactive node ([`render_runs_first`]).
+///   create a reactive node ([`render_runs_first`]); a parent between them
+///   (ADR 0507) runs nothing but that render (`static_child_tag`).
 fn user_apply_runs_in_mount_flush(
     file: &solid_facts::FileFacts,
     component: &solid_facts::ast::FunctionFact,
@@ -2329,7 +2330,7 @@ fn user_apply_runs_in_mount_flush(
         && body_runs_nothing_else(file, component, effect, memo, lookup)
         && crate::owners::module_render_sites(lookup, file, component)
             .into_iter()
-            .any(|(entry, render)| render_runs_first(lookup, entry, render))
+            .any(|site| render_runs_first(lookup, site.entry, site.render))
 }
 
 /// Every JSX element in `component` is a lowercase intrinsic tag (no custom
