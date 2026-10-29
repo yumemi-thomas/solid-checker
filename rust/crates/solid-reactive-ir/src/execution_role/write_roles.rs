@@ -2252,11 +2252,23 @@ pub(crate) fn runs_nothing_before_in_layers(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     let ast = &file.ast;
-    // The site's own arguments are evaluated before it.
+    // The site's own arguments are evaluated before it (and a member among
+    // them may throw; the callee's own member is the read).
+    let callee = ast
+        .call_at(site)
+        .map(|call| ast.peel_ts_sugar_span(call.callee));
     if ast
         .calls
         .iter()
         .any(|other| other.span != site && site.contains(other.span))
+        || ast.members.iter().any(|member| {
+            Some(member.span) != callee && site.contains(member.span) && member.span != site
+        })
+        || ast
+            .computed_members
+            .iter()
+            .any(|member| site.contains(*member))
+        || ast.spreads.iter().any(|spread| site.contains(spread.span))
     {
         return false;
     }
@@ -2271,7 +2283,15 @@ pub(crate) fn runs_nothing_before_in_layers(
                 && crate::owners::containing_ast_function(ast, other.span)
                     .is_some_and(|owner| owner.span == function.span)
         });
-        if earlier {
+        // A pattern parameter takes its argument apart first, which may throw.
+        let plain_parameters = function
+            .parameters
+            .iter()
+            .all(|parameter| parameter.shape == solid_facts::ast::BindingShape::Identifier);
+        if earlier
+            || !plain_parameters
+            || !throws_nothing_before(file, function, function.span.start, at.start, None, lookup)
+        {
             return false;
         }
         if function.span == apply {
@@ -2401,6 +2421,7 @@ pub(crate) fn pending_apply_first_read(
                 component,
                 memo.span.end,
                 call.span.start,
+                None,
                 None,
                 lookup,
             )
@@ -2955,6 +2976,7 @@ pub(super) fn body_runs_nothing_between(
     from: u32,
     until: u32,
     provided: Option<Span>,
+    source: Option<Span>,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     use solid_dialect::Primitive;
@@ -2978,8 +3000,88 @@ pub(super) fn body_runs_nothing_between(
                             .calls
                             .iter()
                             .any(|inner| callee.span.contains(inner.span))
+                        && throws_nothing_before(
+                            file,
+                            callee,
+                            callee.span.start,
+                            callee.span.end,
+                            source,
+                            lookup,
+                        )
                 })
         })
+        && throws_nothing_before(file, component, from, until, source, lookup)
+}
+
+/// ADR 0510 review: no expression of `function`'s own code (not of a function
+/// nested in it) written between `from` and `until` may throw without a call:
+/// a member read (`props.cfg.x` of an `any` that is `undefined`, a getter), a
+/// computed member, a spread or iteration, an operator (`'k' in 1`,
+/// `instanceof`, arithmetic that coerces), a `delete`, a destructuring of
+/// anything but a signal's or memo's tuple or a local literal (`const { a } =
+/// null`), a tagged template, a
+/// class, a `throw` or a loop. Calls are the callers' to check. Before this,
+/// `const v = props.cfg.x;` before the effect, or `(v as any).a.b;` before the
+/// read in the apply, left the claim standing though the run throws first.
+pub(super) fn throws_nothing_before(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    from: u32,
+    until: u32,
+    source: Option<Span>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_dialect::Primitive;
+    let ast = &file.ast;
+    let own = |span: Span| {
+        span.start >= from
+            && span.end <= until
+            && function.span.contains(span)
+            && crate::owners::containing_ast_function(ast, span)
+                .is_some_and(|owner| owner.span == function.span)
+    };
+    // A signal's or memo's tuple, or a local literal taken apart (ADR 0505's
+    // [`local_literal_destructuring`]): nothing there can throw.
+    let safe_pattern = |binding: &solid_facts::ast::BindingFact| {
+        local_literal_destructuring(file, function, binding, source, lookup)
+            || (binding.shape == solid_facts::ast::BindingShape::Array
+                && binding
+                    .call_initializer
+                    .and_then(|span| ast.call_at(span))
+                    .is_some_and(|call| {
+                        matches!(
+                            lookup.primitive_at_call(file, call.span),
+                            Some(Primitive::CreateSignal | Primitive::CreateMemo)
+                        )
+                    }))
+    };
+    !ast.members.iter().any(|member| own(member.span))
+        && !ast.computed_members.iter().any(|member| own(*member))
+        && !ast.spreads.iter().any(|spread| own(spread.span))
+        && !ast.iterated_operands.iter().any(|operand| {
+            own(*operand)
+                && !ast.bindings.iter().any(|binding| {
+                    safe_pattern(binding)
+                        && binding
+                            .initializer
+                            .is_some_and(|initializer| initializer.contains(*operand))
+                })
+        })
+        && !ast.primitive_results.iter().any(|operator| own(*operator))
+        && !ast.coercing_operands.iter().any(|operand| own(*operand))
+        && !ast.deleted_targets.iter().any(|target| own(*target))
+        && !ast.tagged_template_tags.iter().any(|tag| own(*tag))
+        && !ast.classes.iter().any(|class| own(class.span))
+        && !ast.throw_statements.iter().any(|statement| own(*statement))
+        && !ast.loop_statements.iter().any(|statement| own(*statement))
+        && ast
+            .bindings
+            .iter()
+            .filter(|binding| {
+                own(binding.declaration)
+                    && binding.shape != solid_facts::ast::BindingShape::Identifier
+            })
+            .all(safe_pattern)
 }
 
 /// The function literal a call's callee names: an identifier bound by a

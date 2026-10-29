@@ -187,19 +187,44 @@ pub(crate) fn module_scope_only_creates(
 /// finished evaluating before its body runs and a module-scope `const` there
 /// is initialized before the `render` (ECMAScript `InnerModuleEvaluation`; a
 /// module that imports the entry could leave a dependency of the component
-/// unevaluated, its `const` in its temporal dead zone).
+/// unevaluated, its `const` in its temporal dead zone). And no other root
+/// (a project file none imports) reaches the source's module (ADR 0510
+/// review): a page that loads such a module script before the entry would
+/// evaluate the source first, and the microtask checkpoint between the two
+/// scripts settles it. Premise: the page loads no script beyond the
+/// project's files that imports the source.
 fn module_source_mount(
     lookup: &SemanticLookup<'_>,
     site: &crate::owners::MountSite<'_>,
     source_file: &solid_facts::FileFacts,
 ) -> bool {
+    let (_, _, edges, _) = lookup.module_scope_census();
+    let entry = site.entry.path.as_str();
+    let imported = |path: &str| edges.iter().any(|(_, target)| target == path);
+    let reaches_source = |root: &str| {
+        let mut seen = vec![root];
+        let mut next = 0;
+        while let Some(&at) = seen.get(next) {
+            next += 1;
+            if at == source_file.path.as_str() {
+                return true;
+            }
+            for (_, target) in edges.iter().filter(|(from, _)| from == at) {
+                if !seen.contains(&target.as_str()) {
+                    seen.push(target.as_str());
+                }
+            }
+        }
+        false
+    };
+    let other_root_reaches = edges
+        .iter()
+        .map(|(from, _)| from.as_str())
+        .any(|root| root != entry && !imported(root) && reaches_source(root));
     site.entry.path != source_file.path
         && render_runs_first(lookup, site.entry, site.render)
-        && !lookup
-            .module_scope_census()
-            .2
-            .iter()
-            .any(|path| path == site.entry.path.as_str())
+        && !imported(entry)
+        && !other_root_reaches
 }
 
 /// ADR 0510: the source of the effect `effect`'s apply read is a module-scope
@@ -226,6 +251,7 @@ pub(super) fn module_source_pending(
     let path = source_file.path.as_str();
     let render_effect =
         lookup.primitive_at_call(file, effect.span) == Some(Primitive::CreateRenderEffect);
+    let source = source_name_in(file, source_file, binding, lookup);
     crate::indexes::at_module_scope(&source_file.ast, binding.declaration)
         && !path.contains("/node_modules/")
         && ![".d.ts", ".d.mts", ".d.cts"]
@@ -243,6 +269,7 @@ pub(super) fn module_source_pending(
             component.body.start,
             effect.span.start,
             None,
+            source,
             lookup,
         )
         && (render_effect
@@ -253,7 +280,7 @@ pub(super) fn module_source_pending(
                 None,
                 BodyAdmits {
                     context: None,
-                    source: source_name_in(file, source_file, binding, lookup),
+                    source,
                 },
                 lookup,
             ))
@@ -410,6 +437,7 @@ pub(super) fn parent_source_pending(
         component.body.start,
         effect.span.start,
         provided,
+        None,
         lookup,
     ) && (render_effect
         || user_apply_flush_premises(
@@ -443,7 +471,11 @@ pub(super) fn parent_source_pending(
 }
 
 /// The declaration `file` names a module-scope source by: its own name in its
-/// own module, or the local name of the runtime import of it.
+/// own module, or the local name of a runtime import of it, where the source
+/// module's one value export under the imported name (a duplicate is a
+/// TypeScript error) binds exactly the memo's declaration: `export const m`,
+/// or `export { m as x }` whose local resolves to it (ADR 0510 review: never
+/// an import matched by the declaration's text, `export { m as x, f as m }`).
 fn source_name_in(
     file: &solid_facts::FileFacts,
     source_file: &solid_facts::FileFacts,
@@ -454,8 +486,24 @@ fn source_name_in(
     if source_file.path == file.path {
         return Some(declared);
     }
-    let name = source_file.source_text(declared)?;
-    file.ast
+    let source_ast = &source_file.ast;
+    let exported_as = |name: &str| {
+        let mut entries = source_ast
+            .exports
+            .iter()
+            .filter(|export| export.module.is_none() && !export.type_only)
+            .flat_map(|export| export.specifiers.iter().chain(&export.declarations))
+            .filter(|entry| !entry.type_only && entry.exported.as_str() == name);
+        let entry = entries.next()?;
+        if entries.next().is_some() {
+            return None;
+        }
+        (entry.local.span == declared
+            || source_ast.reference_declaration(entry.local.span) == Some(declared))
+        .then_some(())
+    };
+    let mut locals = file
+        .ast
         .imports
         .iter()
         .filter(|import| {
@@ -464,8 +512,16 @@ fn source_name_in(
                     == Some(source_file.path.as_str())
         })
         .flat_map(|import| &import.bindings)
-        .find(|imported| !imported.type_only && imported.imported.as_deref() == Some(name))
-        .map(|imported| imported.local.span)
+        .filter(|imported| {
+            !imported.type_only
+                && imported
+                    .imported
+                    .as_deref()
+                    .is_some_and(|name| exported_as(name).is_some())
+        })
+        .map(|imported| imported.local.span);
+    let local = locals.next()?;
+    locals.next().is_none().then_some(local)
 }
 
 /// Every reference to the handed object (`props`, `ctx`) is the object of a
