@@ -18,7 +18,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { withRuntimeCache } from "./cache.mjs";
+import { browserExecutionCache, withRuntimeCache } from "./cache.mjs";
 import { runChrome } from "./chrome.mjs";
 import { entryVetoSummary } from "./matrix.mjs";
 import { assertFindingsMapped } from "./checker.mjs";
@@ -148,7 +148,7 @@ export async function runLegal(options) {
         return true;
       });
       const cases = pick.map((row) => ({ id: row.id, dir: values.get(row.id).caseDir, sites: values.get(row.id).built.sites }));
-      const records = pick.length ? await runChrome(cases, { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency, withClean: true }) : new Map();
+      const records = pick.length ? await runChrome(cases, { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency, withClean: true, executionCache: browserExecutionCache(options) }) : new Map();
       for (const row of pick) {
         const value = values.get(row.id);
         const record = records.get(row.id);
@@ -190,7 +190,7 @@ const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["per-cell", "codes", "cache-dir", "chrome-sample", "layers"], extraFlags: ["grid"] });
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["per-cell", "codes", "cache-dir", "chrome-sample", "layers"], extraFlags: ["grid", "no-chrome-cache"] });
     for (const key of ["perCell", "chromeSample"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

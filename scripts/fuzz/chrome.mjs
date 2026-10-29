@@ -105,9 +105,9 @@ export const isCloseTimeout = (row) => row?.verdict === "harness-error" && /clos
 export const CLEAN_ID = (id) => `${id}~clean`;
 
 /** One oracle call over a staged cases directory; returns its rows by id. */
-async function oracleRows(root, { out, install, browser, concurrency, env, bin, typefacts, oracle }, only) {
+async function oracleRows(root, { out, install, browser, concurrency, env, bin, typefacts, oracle, executionCache }, only) {
   const result = join(resolve(out), `chrome-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.json`);
-  const args = ["--cases", root, "--out", result, "--install", resolve(install), "--cache", "off",
+  const args = ["--cases", root, "--out", result, "--install", resolve(install), "--cache", executionCache ? resolve(executionCache) : "off",
     ...(only ? ["--only", only.join(",")] : []),
     ...(browser ? ["--browser", browser] : []), ...(concurrency ? ["--concurrency", String(concurrency)] : [])];
   const run = await spawnOracle(args, { ...env, SOLID_CHECKER_NATIVE_BIN: bin, SOLID_TYPEFACTS_BIN: typefacts }, oracle);
@@ -178,7 +178,7 @@ export async function runChrome(cases, options) {
 export const cacheableChrome = (record) => Boolean(record?.row) && record.row.verdict !== "harness-error"
   && !/page\.goto|bootstrap did not bind|close timed out|Target (page, context or browser )?closed|browserType\.launch/i.test(String(record.runtime?.failure?.message ?? ""));
 
-async function runChromeCases(cases, { out, install = DEFAULT_ORACLE_INSTALL, bin, typefacts, browser, concurrency, control = false, withClean = false, closeRetries = 1, oracle, env = process.env }) {
+async function runChromeCases(cases, { out, install = DEFAULT_ORACLE_INSTALL, bin, typefacts, browser, concurrency, control = false, withClean = false, closeRetries = 1, oracle, env = process.env, executionCache }) {
   if (!bin || !typefacts) throw new Error("Chrome confirmation needs the checker binary and typefacts (--checker-bin, --typefacts)");
   const root = join(resolve(out), "chrome-cases");
   rmSync(root, { recursive: true, force: true });
@@ -194,7 +194,7 @@ async function runChromeCases(cases, { out, install = DEFAULT_ORACLE_INSTALL, bi
       cpSync(join(root, id, "oracle.run.json"), join(root, id, "oracle.json"));
     }
   }
-  const settings = { out, install, browser, concurrency, env, bin, typefacts, oracle };
+  const settings = { out, install, browser, concurrency, env, bin, typefacts, oracle, executionCache };
   const rows = await oracleRows(root, settings);
   const retries = new Map();
   for (let attempt = 1; attempt <= closeRetries; attempt += 1) {

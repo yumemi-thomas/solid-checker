@@ -50,7 +50,7 @@ export function environmentKey(config, { code = codeHash(), oracle = fileHash(jo
  * The program half of a key. With `files` (a built case's), the hash of its text too: the seed alone does not say which program it
  * is (`--containers`, the misuse pins and the other generator flags draw a different program from the same seed).
  */
-export const programKey = ({ seed, profile, components, files }) => `${profile ?? "-"}|${components ?? 1}|${seed}${files ? `|${caseKey(files, "program").slice(0, 32)}` : ""}`;
+export const programKey = ({ seed, profile, components, files }) => `${profile ?? "-"}|${components ?? 1}|${seed}${files ? `|${rawCaseKey(files, "program").slice(0, 32)}` : ""}`;
 
 /** Rows by program key, in one file per environment key. */
 export class BaselineCache {
@@ -187,18 +187,52 @@ export const ORACLE_SOURCES = () => sha256(JSON.stringify([
 ]));
 
 /**
- * The environment of the fast path's record and the type check: the generator, the judging sources (`codeHash`), the oracle's entry
- * (the type check compiles its main.tsx), the clock, the type checker binary and both lockfiles. Not the checker.
+ * The sources that produce a runtime, type-check or Chrome record from a case's files: the fast path (fast.mjs, its daemon and
+ * the runner tree), the type check and the project it compiles (typecheck.mjs, checker.mjs's main.tsx and tsconfig), the Chrome
+ * driver and its hit parsing, the pipeline that stages them, and this module (the record format). Not the generator or the
+ * judges: a record is raw evidence, classified fresh on every run, and what the generator wrote is the case's files
+ * (`executionFiles`), so a generator that grows keeps the records of the programs it still writes.
  */
-export function runtimeEnvironmentKey(config, { code = codeHash(), oracle = fileHash(join(repo, "scripts/runtime-oracle.mjs")), installed = installedKey(config) } = {}) {
+export const RECORD_SOURCES = () => sha256(JSON.stringify([
+  ...["fast.mjs", "fast-daemon.mjs", "typecheck.mjs", "checker.mjs", "chrome.mjs", "hits.mjs", "pipeline.mjs", "cache.mjs"].map((name) => fileHash(join(here, name))),
+  treeHash(join(here, "fast"), (name) => /\.(mjs|tsx?|json)$/.test(name) && !/\.test\./.test(name)),
+]));
+
+/**
+ * What of a case's files a record depends on: every file, but not `program.json` (the generator's model), `sites.json` only as the
+ * plan and sites the runner reads (fast/runner.tsx), and the oracle files without their `note` (which names the generator and
+ * seed; no runner reads it). Text that does not parse is kept whole.
+ */
+export function executionFiles(files) {
+  const out = {};
+  for (const [name, text] of Object.entries(files)) {
+    if (name === "program.json") continue;
+    if (name === "sites.json" || name === "oracle.json" || name === "oracle.run.json") {
+      try {
+        const value = JSON.parse(text);
+        if (name === "sites.json") out[name] = JSON.stringify({ plan: value.plan, sites: value.sites });
+        else { const { note, ...rest } = value; out[name] = JSON.stringify(rest); }
+        continue;
+      } catch { /* kept whole */ }
+    }
+    out[name] = text;
+  }
+  return out;
+}
+
+/**
+ * The environment of the fast path's record and the type check: the sources that produce them (`RECORD_SOURCES`), the oracle's
+ * entry (the type check compiles its main.tsx), the clock, the type checker binary and both lockfiles. Not the checker.
+ */
+export function runtimeEnvironmentKey(config, { code = RECORD_SOURCES(), oracle = fileHash(join(repo, "scripts/runtime-oracle.mjs")), installed = installedKey(config) } = {}) {
   return sha256(JSON.stringify({
-    kind: "runtime", generator: GENERATOR_VERSION, code, oracle, installed, virtualClock: Boolean(config.virtualClock), tsc: fileHash(config.tsc),
+    kind: "runtime", code, oracle, installed, virtualClock: Boolean(config.virtualClock), tsc: fileHash(config.tsc),
     fastLock: fileHash(join(config.fastInstall, "package-lock.json")), oracleLock: fileHash(join(config.install, "package-lock.json")),
   }));
 }
 
-/** The environment of a Chrome record: the judging sources, the oracle and the product scripts it runs, the browser, the oracle install's lockfile. Not the checker. */
-export function chromeEnvironmentKey(config, { code = codeHash(), oracle = ORACLE_SOURCES(), browser = browserKey(config.browser), installed = installedKey({ install: config.install }) } = {}) {
+/** The environment of a Chrome record: the sources that produce it, the oracle and the product scripts it runs, the browser, the oracle install's lockfile. Not the checker. */
+export function chromeEnvironmentKey(config, { code = RECORD_SOURCES(), oracle = ORACLE_SOURCES(), browser = browserKey(config.browser), installed = installedKey({ install: config.install }) } = {}) {
   return sha256(JSON.stringify({ kind: "chrome", code, oracle, browser, installed, oracleLock: fileHash(join(config.install, "package-lock.json")) }));
 }
 
@@ -217,8 +251,10 @@ export function defaultBrowserName(home = process.env.HOME) {
   return builds[0] ?? "none";
 }
 
-/** The program half of a runtime or Chrome key: what is asked (`part`) of which files (a case's, by name and text). */
-export const caseKey = (files, part) => sha256(JSON.stringify([part, Object.entries(files).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))]));
+/** The program half of a runtime or Chrome key: what is asked (`part`) of which files (a case's `executionFiles`, by name and text). */
+/** Every file whole: a baseline row is classified, so it depends on all the generator wrote (`programKey`). */
+const rawCaseKey = (files, part) => sha256(JSON.stringify([part, Object.entries(files).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))]));
+export const caseKey = (files, part) => sha256(JSON.stringify([part, Object.entries(executionFiles(files)).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))]));
 
 /** The files of a case directory as `{ relative path: text }` (what `caseKey` hashes for a staged case). */
 export function caseFiles(directory) {
@@ -316,6 +352,14 @@ export const cacheableRecord = (record) => Boolean(record) && record.failure?.ph
 
 /** Where the caches live: `--cache-dir`, else `$TMPDIR/solid-checker-fuzz-cache` (the neutrality baseline's default too). */
 export const cacheDirectory = (options) => resolve(options.cacheDir ?? join(tmpdir(), "solid-checker-fuzz-cache"));
+
+/**
+ * Where `feedback run` keeps the browser half of a run (`--execution-cache`, packages/cli/scripts/feedback-execution-cache.mjs), or
+ * undefined with `--no-cache` or `--no-chrome-cache`. That cache reruns the checker every time and keys the browser half on what it
+ * reads of it (the development models, the type error count), the sources, the scenario, the browser, the tooling and the harness,
+ * so a grid's Chrome confirmation keeps judging this checker: only Vite and Chromium are skipped.
+ */
+export const browserExecutionCache = (options) => (options.noCache || options.noChromeCache ? undefined : join(cacheDirectory(options), "browser-execution"));
 
 /** The Chrome cache of a run, or null with `--no-chrome-cache`. */
 export const chromeCacheFor = (config, options) => (options.noChromeCache ? null : new EntryCache(cacheDirectory(options), "chrome", chromeEnvironmentKey({ ...config, browser: options.browser ? resolve(options.browser) : undefined })));
