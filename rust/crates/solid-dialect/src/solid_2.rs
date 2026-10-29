@@ -2219,6 +2219,13 @@ impl Dialect for Solid2 {
         matches!(primitive, Primitive::Render | Primitive::Hydrate)
     }
 
+    // `render` runs `code()` inside `createRoot` before it returns, then
+    // flushes (`@solidjs/web@2.0.0-rc.17` `dist/web.dev.js:542-568`);
+    // `hydrate`'s code may start later (`:1626-1633`).
+    fn mount_runs_component_synchronously(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::Render
+    }
+
     /// Source: `solid-reactive-ir/src/directives.rs` `is_created_primitive`.
     /// 2.0 renamed `mergeProps` to `merge`. `omit` and `pick`, the
     /// `splitProps` replacements, are deliberately absent for the same reason

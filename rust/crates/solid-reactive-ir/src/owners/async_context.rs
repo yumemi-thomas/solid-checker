@@ -108,6 +108,61 @@ pub(super) fn loading_cover_at(
     LoadingCover::Unresolved
 }
 
+/// ADR 0503: `component` is rendered by a call of a synchronous mount
+/// (`render`, `mount_runs_component_synchronously`) written at a module's top
+/// level, whose first argument is a function literal whose whole body is one
+/// self-closing JSX element (no attribute, no child) whose tag resolves exactly
+/// to `component`. Such a call runs the component's body on its own stack,
+/// outside every flush, lane, transition and boundary (`@solidjs/web@2.0.0-rc.17`
+/// `dist/web.dev.js:542-568`). One such mount is enough for a claim about a
+/// run that happens in it.
+pub(crate) fn mounted_by_module_render(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+) -> bool {
+    lookup
+        .function_call_sites(file.path.as_str(), component.span)
+        .into_iter()
+        .any(|(caller, tag)| {
+            let ast = &caller.ast;
+            let Some(element) = ast
+                .jsx_elements
+                .iter()
+                .find(|element| element.name.span == tag)
+            else {
+                return false;
+            };
+            if !element.self_closing
+                || !element.attributes.is_empty()
+                || !element.spreads.is_empty()
+                || !element.children.is_empty()
+            {
+                return false;
+            }
+            let Some(arrow) = crate::owners::containing_ast_function(ast, element.span) else {
+                return false;
+            };
+            if arrow.r#async
+                || arrow.generator
+                || ast.peel_ts_sugar_span(arrow.body) != element.span
+            {
+                return false;
+            }
+            let Some((call, _)) = ast.arguments_containing(arrow.span).find(|(call, index)| {
+                *index == 0 && ast.peel_ts_sugar_span(call.arguments[*index].span) == arrow.span
+            }) else {
+                return false;
+            };
+            ast.functions_owning(call.span).next().is_none()
+                && lookup
+                    .primitive_at_call(caller, call.span)
+                    .is_some_and(|primitive| {
+                        lookup.dialect.mount_runs_component_synchronously(primitive)
+                    })
+        })
+}
+
 /// Whether `function` is what a `render`/`hydrate` call mounts: the function
 /// literal passed as its first argument, or a function it names.
 pub(super) fn function_is_mount_root(

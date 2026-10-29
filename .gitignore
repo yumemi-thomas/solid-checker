@@ -117,6 +117,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/local-alias-member-reads/node_modules/**
 !fixtures/reactive-ir/primitive-in-effect-callback/node_modules/
 !fixtures/reactive-ir/primitive-in-effect-callback/node_modules/**
+!fixtures/reactive-ir/render-apply-first-run/node_modules/
+!fixtures/reactive-ir/render-apply-first-run/node_modules/**
 !fixtures/reactive-ir/effect-phase-layers/node_modules/
 !fixtures/reactive-ir/effect-phase-layers/node_modules/**
 !fixtures/reactive-ir/after-await-helper-callback/node_modules/

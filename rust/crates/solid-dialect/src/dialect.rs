@@ -1130,6 +1130,14 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 0503: a mount primitive that runs its component code on its own
+    /// synchronous stack, outside every flush, lane and transition, when it is
+    /// called outside them (`render`, not `hydrate`, whose code may start
+    /// later).
+    fn mount_runs_component_synchronously(&self, _primitive: Primitive) -> bool {
+        false
+    }
+
     /// Which parameters of a control-flow component's children callback are
     /// reactive accessors rather than plain values.
     ///

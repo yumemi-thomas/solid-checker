@@ -180,10 +180,21 @@ pub(super) fn write_region_adjustment(
             {
                 return Some(WriteRegionAdjustment::CallSite(call.span));
             }
-            if callback_owner_at_call(file, call, primitive, index, lookup)
-                == Some(solid_dialect::CallbackOwner::InheritsFirstRun)
-            {
-                return Some(WriteRegionAdjustment::FirstRunAtCallSite(call.span));
+            match callback_owner_at_call(file, call, primitive, index, lookup) {
+                Some(solid_dialect::CallbackOwner::InheritsFirstRun) => {
+                    return Some(WriteRegionAdjustment::FirstRunAtCallSite(call.span));
+                }
+                // ADR 0502: a render-effect apply whose first run a `schedule`
+                // (or unreadable options) may keep on the call: no placement.
+                Some(solid_dialect::CallbackOwner::Conditional)
+                    if lookup
+                        .dialect
+                        .effect_apply_schedule_options(primitive, index)
+                        .is_some() =>
+                {
+                    return Some(WriteRegionAdjustment::OwnerUnknown);
+                }
+                _ => {}
             }
             None
         })
@@ -1390,7 +1401,14 @@ fn write_role_walk(
                 match first_run {
                     ExecutionRole::DiscardedRendering => return first_run,
                     ExecutionRole::Unknown | ExecutionRole::Unreported => return first_run,
-                    role if role.reports_disallowed_write() => return ExecutionRole::Unknown,
+                    // ADR 0503: a first run proven synchronous throws there.
+                    role if role.reports_disallowed_write() => {
+                        return if first_run_proven_at_call(file, call, lookup) {
+                            role
+                        } else {
+                            ExecutionRole::Unknown
+                        };
+                    }
                     _ => break,
                 }
             }
@@ -2128,6 +2146,70 @@ pub(crate) fn climb_crosses_library_callback(
         };
     }
     true
+}
+
+/// ADR 0503: the first run of the effect created at `call` happens before the
+/// call returns, under the caller's owner. rc.17's `effect()` runs it on the
+/// call unless `defer` or `schedule` is set (ADR 0502), the first pass is born
+/// staged or seated in a lane, the compute errors or goes pending, or a
+/// boundary above shows its fallback (`@solidjs/signals@2.0.0-rc.17`
+/// `dist/dev.js:1851-1869`, `dist/dev-shared.js:4227-4240`, `:4388-4396`,
+/// `:4438-4462`, `dist/dev.js:1957`). Proven where:
+/// - the call has no options argument;
+/// - its compute is a function literal, not async or a generator, that calls,
+///   reads, references, awaits, renders and throws nothing, so it settles on
+///   its first pass with a value no thenable can be;
+/// - the call is on every completion of its component's body
+///   (`site_on_every_completion`), and that component is rendered by a
+///   module-scope `render` ([`crate::owners::mounted_by_module_render`]): no
+///   flush, lane, transition or boundary is above that body.
+fn first_run_proven_at_call(
+    file: &solid_facts::FileFacts,
+    call: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let Some(fact) = ast.calls.iter().find(|candidate| candidate.span == call) else {
+        return false;
+    };
+    let [compute, _apply] = fact.arguments.as_slice() else {
+        return false;
+    };
+    if compute.spread || !compute_settles_synchronously(file, compute.span) {
+        return false;
+    }
+    let Some(component) = crate::owners::containing_ast_function(ast, call) else {
+        return false;
+    };
+    lookup.function_may_be_component(file, component)
+        && crate::interproc::site_on_every_completion(lookup, file, component.span, call)
+        && crate::owners::mounted_by_module_render(lookup, file, component)
+}
+
+/// A compute function literal that settles on its first pass with a plain
+/// value: not async or a generator, and nothing in it can run code, read a
+/// source or throw (no call, member, reference, await, JSX, tagged template or
+/// `throw`).
+fn compute_settles_synchronously(file: &solid_facts::FileFacts, argument: Span) -> bool {
+    let ast = &file.ast;
+    let Some(function) = ast.function_at(ast.peel_ts_sugar_span(argument)) else {
+        return false;
+    };
+    let within = |span: Span| function.span.contains(span);
+    !function.r#async
+        && !function.generator
+        && !ast.calls.iter().any(|call| within(call.span))
+        && !ast.members.iter().any(|member| within(member.span))
+        && !ast.identifiers.iter().any(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && within(identifier.span)
+        })
+        && !ast.awaits.iter().any(|awaited| within(*awaited))
+        && !ast.jsx_elements.iter().any(|element| within(element.span))
+        && !ast.tagged_template_tags.iter().any(|tag| within(*tag))
+        && file
+            .source_text(function.span)
+            .is_some_and(|text| !text.contains("throw"))
 }
 
 /// Climbs from `span` through the function layers that run in place: an IIFE,
