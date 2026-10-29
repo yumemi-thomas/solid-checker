@@ -11,9 +11,12 @@
 use super::*;
 
 /// The census: the analyzed project files (outside `node_modules`) whose
-/// module scope may run code, sorted, and whether a project file loads a
-/// module whose evaluation no analyzed file shows.
-pub(crate) type ModuleScopeCensus = (Vec<String>, bool);
+/// module scope may run code, sorted; those of them whose scope only creates
+/// nodes (ADR 0510, [`crate::execution_role::module_scope_only_creates`]);
+/// the project files some project file imports or re-exports at runtime
+/// (ADR 0510: an entry none imports is a root of evaluation); and whether a
+/// project file loads a module whose evaluation no analyzed file shows.
+pub(crate) type ModuleScopeCensus = (Vec<String>, Vec<String>, Vec<String>, bool);
 
 impl SemanticLookup<'_> {
     /// [`census`] as the whole-program memo's answer.
@@ -31,6 +34,8 @@ pub(crate) fn at_module_scope(ast: &solid_facts::ast::AstFacts, span: Span) -> b
 
 pub(super) fn census(lookup: &SemanticLookup<'_>) -> ModuleScopeCensus {
     let mut loud = Vec::new();
+    let mut creating = Vec::new();
+    let mut imported = Vec::new();
     let mut unseen = false;
     for file in lookup.files() {
         let path = file.path.as_str();
@@ -40,11 +45,33 @@ pub(super) fn census(lookup: &SemanticLookup<'_>) -> ModuleScopeCensus {
         unseen |= loads_unseen_module(lookup, file);
         if module_scope_may_run(file) {
             loud.push(path.to_string());
+            if crate::execution_role::module_scope_only_creates(file, lookup) {
+                creating.push(path.to_string());
+            }
+        }
+        let ast = &file.ast;
+        let modules = ast
+            .imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .map(|import| import.module.as_str())
+            .chain(
+                ast.exports
+                    .iter()
+                    .filter(|export| !export.type_only)
+                    .filter_map(|export| export.module.as_deref()),
+            );
+        for module in modules {
+            if let Some(target) = lookup.relative_module_path(path, module) {
+                imported.push(target.to_string());
+            }
         }
     }
-    loud.sort();
-    loud.dedup();
-    (loud, unseen)
+    for list in [&mut loud, &mut creating, &mut imported] {
+        list.sort();
+        list.dedup();
+    }
+    (loud, creating, imported, unseen)
 }
 
 fn is_declaration_file(path: &str) -> bool {

@@ -90,6 +90,9 @@
   "rust/crates/solid-reactive-ir/src/execution_role/site_reach.rs": {
     "file_by_path": 1
   },
+  "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs": {
+    "file_by_path": 1
+  },
   "rust/crates/solid-reactive-ir/src/identity.rs": {
     "typescript-table": 1
   },

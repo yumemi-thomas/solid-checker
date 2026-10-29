@@ -324,10 +324,11 @@ whole_program! {
 }
 
 whole_program! {
-    /// ADR 0505: the project files whose module scope may run code, and
-    /// whether a file loads a module no analyzed file shows.
-    ModuleScopeRuns, 48, module_scope, "module_scope_runs", (Vec<String>, bool),
-    cycle: (Vec::new(), true),
+    /// ADR 0505: the project files whose module scope may run code, those
+    /// that only create nodes and the files a project file imports (ADR
+    /// 0510), and whether a file loads a module no analyzed file shows.
+    ModuleScopeRuns, 48, module_scope, "module_scope_runs", (Vec<String>, Vec<String>, Vec<String>, bool),
+    cycle: (Vec::new(), Vec::new(), Vec::new(), true),
     direct: |lookup| super::module_scope::census(lookup),
     |ctx| Ok(ctx.project(super::module_scope::census))
 }

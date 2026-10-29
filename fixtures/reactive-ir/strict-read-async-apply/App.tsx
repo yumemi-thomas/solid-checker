@@ -113,7 +113,7 @@ export function UnmountedApplyReadsAsync() {
   return <p>x</p>;
 }
 
-// ADR 0504 review negatives (mounted; the strict read stays): a closure two
+// ADR 0504 review negatives (mounted; none is SC5001-proven): a closure two
 // effects call, a call in the apply before the read (it may throw first), and
 // a read in the body before the effect is created (the body read throws).
 export function SharedClosure() {

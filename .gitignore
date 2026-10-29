@@ -127,6 +127,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/call-result-binding/node_modules/**
 !fixtures/reactive-ir/child-mount-first-run/node_modules/
 !fixtures/reactive-ir/child-mount-first-run/node_modules/**
+!fixtures/reactive-ir/pending-source-first-run/node_modules/
+!fixtures/reactive-ir/pending-source-first-run/node_modules/**
 !fixtures/reactive-ir/effect-phase-layers/node_modules/
 !fixtures/reactive-ir/effect-phase-layers/node_modules/**
 !fixtures/reactive-ir/after-await-helper-callback/node_modules/

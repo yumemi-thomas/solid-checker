@@ -380,8 +380,11 @@ pub(crate) fn collect_project<'facts>(
                 && !async_rows.contains(&read.location)
                 // Local access decided the rows of a component's own source;
                 // these are the sources it could not see: transported, in
-                // another file, or at module scope.
+                // another file, or at module scope, and a read a local
+                // function makes at its call (`wrapUse()`, ADR 0510) whose
+                // call it placed no row at.
                 && (read.transported
+                    || read.origin.is_some()
                     || read.declaration.path != read.location.path
                     || ctx
                         .semantic_lookup
