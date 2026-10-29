@@ -122,3 +122,74 @@ export function RenderedLater() {
   );
   return <p>{count()}</p>;
 }
+
+// ADR 0503 review negatives (uncertifiable): computes that are no single
+// primitive literal.
+export function ComputeImports() {
+  const [count, setCount] = createSignal(0);
+  createRenderEffect(
+    () => import("./App"),
+    () => {
+      setCount(1);
+    },
+  );
+  return <p>{count()}</p>;
+}
+
+export function ComputeThenable() {
+  const [count, setCount] = createSignal(0);
+  createRenderEffect(
+    () => ({ then() {} }),
+    () => {
+      setCount(1);
+    },
+  );
+  return <p>{count()}</p>;
+}
+
+export function ComputeDestructures() {
+  const [count, setCount] = createSignal(0);
+  createRenderEffect(
+    ({ a }: any) => 1,
+    () => {
+      setCount(1);
+    },
+  );
+  return <p>{count()}</p>;
+}
+
+// A binding reassigned before the render mounts another function.
+export let Replaced = () => {
+  const [count, setCount] = createSignal(0);
+  createRenderEffect(
+    () => 1,
+    () => {
+      setCount(1);
+    },
+  );
+  return <p>{count()}</p>;
+};
+Replaced = () => <p />;
+
+// Rendered from a class field and under a condition: not on every module run.
+export function InClassField() {
+  const [count, setCount] = createSignal(0);
+  createRenderEffect(
+    () => 1,
+    () => {
+      setCount(1);
+    },
+  );
+  return <p>{count()}</p>;
+}
+
+export function UnderCondition() {
+  const [count, setCount] = createSignal(0);
+  createRenderEffect(
+    () => 1,
+    () => {
+      setCount(1);
+    },
+  );
+  return <p>{count()}</p>;
+}

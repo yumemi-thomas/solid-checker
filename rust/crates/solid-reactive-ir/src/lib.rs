@@ -1267,6 +1267,22 @@ pub struct AsyncRead {
     /// are uncertifiable, never proven.
     #[serde(default, skip_serializing_if = "is_false")]
     pub call_attributed: bool,
+    /// ADR 0504: the read is in the first run of an effect apply that is
+    /// proven to run while its async source is still pending
+    /// ([`crate::execution_role::pending_apply_first_read`]), so rc.17 throws
+    /// `PENDING_ASYNC_UNTRACKED_READ` there (SC5001), and never warns the
+    /// strict read (SC1001 is withdrawn at the site).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub apply_first_run_pending: bool,
+    /// For a call-attributed [`Self::apply_first_run_pending`] row, the read it
+    /// stands for: a strict read reported through a summary with this origin
+    /// is withdrawn too.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_origin: Option<Location>,
+    /// The apply a [`Self::apply_first_run_pending`] row's first run is: a
+    /// strict read withdrawn through [`Self::pending_origin`] lies in it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_apply: Option<Location>,
 }
 
 fn default_async_provenance() -> bool {

@@ -66,6 +66,16 @@ run, none of which a local fact orders. The read is reported as a
 [strict-read-untracked](strict-read-untracked.md) violation whose message names
 the pending case (`fixtures/reactive-ir/strict-read-async-apply`).
 
+It is claimed where a render effect's first run is proven to meet the source
+pending (ADR 0504): the first run is on the call (ADR 0503: a component
+rendered by a module-scope `render`, no options, a compute that is one
+primitive literal), the source is a `const` of that body declared before the
+call as `createMemo(async () => …)` with no options, nothing between them runs
+code, and no call in the apply precedes the read. The read is then this rule's
+violation and the strict read is not reported. A `createEffect` apply stays a
+strict read: its first run is in `render`'s flush, which a pending render
+effect anywhere in the mount can hold.
+
 ## Examples
 
 Incorrect:

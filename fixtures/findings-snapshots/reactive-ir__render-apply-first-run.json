@@ -90,6 +90,66 @@
       "start": 2783,
       "end": 2794,
       "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
+      "start": 3081,
+      "end": 3092,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
+      "start": 3284,
+      "end": 3295,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
+      "start": 3487,
+      "end": 3498,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
+      "start": 3737,
+      "end": 3748,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
+      "start": 4027,
+      "end": 4038,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
+      "start": 4215,
+      "end": 4226,
+      "fixes": 0
     }
   ]
 }

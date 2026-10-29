@@ -579,11 +579,40 @@ pub fn project_findings(
         .map(|read| &read.location)
         .collect::<std::collections::HashSet<_>>();
 
+    // ADR 0504: where an apply's first run is proven to meet its source
+    // pending, rc.17 throws before it would warn: the strict read is not
+    // reported there, the pending read is.
+    let pending_rows = program
+        .async_reads
+        .iter()
+        .filter(|read| read.apply_first_run_pending)
+        .collect::<Vec<_>>();
+    let pending_first_runs = pending_rows
+        .iter()
+        .map(|read| &read.location)
+        .collect::<std::collections::HashSet<_>>();
+    // A strict read with the row's origin is withdrawn only inside the same
+    // apply: another apply that reaches the same read runs at another time.
+    let withdrawn_through_origin = |read: &crate::ReactiveRead| {
+        read.origin.as_ref().is_some_and(|origin| {
+            pending_rows.iter().any(|row| {
+                row.pending_origin.as_ref() == Some(origin)
+                    && row.pending_apply.as_ref().is_some_and(|apply| {
+                        apply.path == read.location.path
+                            && apply.start_byte <= read.location.start_byte
+                            && read.location.end_byte <= apply.end_byte
+                    })
+            })
+        })
+    };
     findings.extend(
         program
             .reads
             .iter()
             .filter(|read| read_reported(read, capabilities))
+            .filter(|read| {
+                !pending_first_runs.contains(&read.location) && !withdrawn_through_origin(read)
+            })
             .map(|read| {
                 project_finding(
                     FindingSeed::StrictRead {
@@ -637,12 +666,26 @@ pub fn project_findings(
                 project_finding(FindingSeed::OwnerRequirement(requirement), catalog)
             }),
     );
+    // ADR 0504: a call-attributed pending row stands for its origin read; where
+    // that read has its own row, it is reported there only.
+    let direct_pending = program
+        .async_reads
+        .iter()
+        .filter(|read| read.apply_first_run_pending && read.pending_origin.is_none())
+        .map(|read| &read.location)
+        .collect::<std::collections::HashSet<_>>();
     if capabilities.async_reads {
         findings.extend(
             program
                 .async_reads
                 .iter()
                 .filter(|read| async_read_reported(read))
+                .filter(|read| {
+                    !read
+                        .pending_origin
+                        .as_ref()
+                        .is_some_and(|origin| direct_pending.contains(origin))
+                })
                 .map(|read| project_finding(FindingSeed::AsyncRead(read), catalog)),
         );
     }
@@ -701,6 +744,10 @@ fn async_read_reported(read: &crate::AsyncRead) -> bool {
     // ordering, not the reachability, is what was wrong.
     if read.execution == crate::ExecutionRole::DiscardedRendering {
         return false;
+    }
+    // ADR 0504: a read in an apply's first run that meets its source pending.
+    if read.apply_first_run_pending {
+        return true;
     }
     // Pending-read rules (SC5001/SC5002) need proven async
     // provenance; they stay reported for loadingValue-declared

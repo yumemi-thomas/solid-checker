@@ -98,3 +98,63 @@ export function BodyReadsAsync() {
   data();
   return <p>x</p>;
 }
+
+// ADR 0504: the same apply as `ApplyReadsAsync`, but no module-scope render
+// mounts it (main.tsx), so the first run's timing is unproven: the strict read.
+export function UnmountedApplyReadsAsync() {
+  const data = createMemo(async () => 1);
+  createEffect(
+    () => 1,
+    () => {
+      data();
+    }
+  );
+  return <p>x</p>;
+}
+
+// ADR 0504 review negatives (mounted; the strict read stays): a closure two
+// effects call, a call in the apply before the read (it may throw first), and
+// a read in the body before the effect is created (the body read throws).
+export function SharedClosure() {
+  const data = createMemo(async () => 1);
+  const show = () => {
+    data();
+  };
+  createRenderEffect(
+    () => 1,
+    () => {
+      show();
+    }
+  );
+  createEffect(
+    () => 1,
+    () => {
+      show();
+    }
+  );
+  return <p>x</p>;
+}
+
+export function ReadAfterCall() {
+  const data = createMemo(async () => 1);
+  createRenderEffect(
+    () => 1,
+    () => {
+      console.log("first");
+      data();
+    }
+  );
+  return <p>x</p>;
+}
+
+export function BodyReadsFirst() {
+  const data = createMemo(async () => 1);
+  data();
+  createRenderEffect(
+    () => 1,
+    () => {
+      data();
+    }
+  );
+  return <p>x</p>;
+}

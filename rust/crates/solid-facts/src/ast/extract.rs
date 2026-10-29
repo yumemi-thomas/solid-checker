@@ -443,8 +443,10 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             method_names: Vec::new(),
             conditional_flow_depth: 0,
             function_flow_depths: Vec::new(),
-            function_exits: Vec::new(),
-            function_try_blocks: Vec::new(),
+            // ADR 0503: the module is the outermost frame, so its own `try`
+            // blocks and exits weigh as a function's do.
+            function_exits: vec![false],
+            function_try_blocks: vec![0],
             skippable_chain_sites: Vec::new(),
             skippable_chain_ranges: Vec::new(),
             logical_assignment_depth: 0,

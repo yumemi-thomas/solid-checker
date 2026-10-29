@@ -2186,30 +2186,216 @@ fn first_run_proven_at_call(
         && crate::owners::mounted_by_module_render(lookup, file, component)
 }
 
+/// ADR 0504: the read at `site` happens in the first run of a render-effect
+/// apply that runs while its async source is still pending, so rc.17's
+/// `read()` throws `PENDING_ASYNC_UNTRACKED_READ` before it would warn the
+/// strict read (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:5320-5325`,
+/// `:5441-5446`). Answers the apply's span. Proven where:
+/// - the site is in the apply of a `createRenderEffect`, a function literal,
+///   directly or through in-place layers that cross no library callback,
+///   parameter list, await or helper that also hands its callback on, and no
+///   call in that apply is written before it (an earlier throw ends the run);
+/// - the call's first run is on the call ([`first_run_proven_at_call`]: no
+///   options, a compute that is one primitive literal, on every completion of
+///   a component rendered by a module-scope `render`): it runs at creation
+///   (`dist/dev.js:1869`), which a halt does not stop (`schedule` alone checks
+///   it, `dist/dev-shared.js:2038-2042`);
+/// - the source (`declaration`) is a `const` of that body, declared on every
+///   completion before the call, initialized by `createMemo` with one
+///   argument, an async function literal: pending from its creation until a
+///   microtask (`:4626`, `:3642-3660`), with no `loadingValue` to mask it;
+/// - nothing in the body between the source and the call runs code: each call
+///   there creates a signal or memo, or calls a local function that calls
+///   nothing.
+///
+/// A user effect's first run (`createEffect`) is in `render`'s tail flush,
+/// which a pending render effect anywhere in the mount (a fragment, a helper's
+/// JSX, a module-level effect) holds until the source settles: not proven.
+pub(crate) fn pending_apply_first_read(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    declaration: &typefacts::Location,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    use solid_dialect::Primitive;
+    let ast = &file.ast;
+    let at = match climb_in_place_layers(file, site, lookup) {
+        Some(climb)
+            if !climb.in_list
+                && !climb.among_others
+                && climb.suspended.is_none()
+                && !climb_crosses_library_callback(file, site, climb.at, lookup) =>
+        {
+            climb.at
+        }
+        Some(_) => return None,
+        None => site,
+    };
+    let (call, _) = ast.arguments_containing(at).find(|(container, index)| {
+        *index == 1 && super::direct_callback_runs(file, container.arguments[*index].span, at)
+    })?;
+    let apply = ast.function_at(ast.peel_ts_sugar_span(call.arguments.get(1)?.span))?;
+    if !apply.body.contains(at)
+        || lookup.primitive_at_call(file, call.span) != Some(Primitive::CreateRenderEffect)
+        || !first_run_proven_at_call(file, call.span, lookup)
+        || ast.calls.iter().any(|other| {
+            // A call in a function nested in the apply runs only when that
+            // function is called, and that call is the apply's own.
+            apply.body.contains(other.span)
+                && other.span.end <= at.start
+                && crate::owners::containing_ast_function(ast, other.span)
+                    .is_some_and(|function| function.span == apply.span)
+        })
+    {
+        return None;
+    }
+    let component = crate::owners::containing_ast_function(ast, call.span)?;
+    if declaration.path.as_ref() != file.path.as_str() {
+        return None;
+    }
+    let declared = Span::new(
+        u32::try_from(declaration.start_byte).ok()?,
+        u32::try_from(declaration.end_byte).ok()?,
+    );
+    let binding = ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == declared))?;
+    let memo = binding
+        .call_initializer
+        .and_then(|span| ast.call_at(span))?;
+    let async_compute = match memo.arguments.as_slice() {
+        [compute] if !compute.spread => ast
+            .function_at(ast.peel_ts_sugar_span(compute.span))
+            .is_some_and(|function| function.r#async && !function.generator),
+        _ => false,
+    };
+    let ok = binding.immutable
+        && binding.shape == solid_facts::ast::BindingShape::Identifier
+        && binding.declaration.end <= call.span.start
+        && async_compute
+        && lookup.primitive_at_call(file, memo.span) == Some(Primitive::CreateMemo)
+        && crate::owners::containing_ast_function(ast, binding.declaration)
+            .is_some_and(|function| function.span == component.span)
+        && crate::interproc::site_on_every_completion(lookup, file, component.span, memo.span)
+        && body_runs_nothing_between(file, component, memo.span.end, call.span.start, lookup);
+    ok.then_some(apply.span)
+}
+
+/// Every call written in `component`'s own body between `from` and `until`
+/// (not inside a function nested there) creates a signal or memo, or calls a
+/// local function whose body calls nothing: nothing there can read the source
+/// or throw before the effect is created.
+fn body_runs_nothing_between(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    from: u32,
+    until: u32,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_dialect::Primitive;
+    let ast = &file.ast;
+    ast.calls
+        .iter()
+        .filter(|call| {
+            call.span.start >= from
+                && call.span.end <= until
+                && crate::owners::containing_ast_function(ast, call.span)
+                    .is_some_and(|function| function.span == component.span)
+        })
+        .all(|call| {
+            matches!(
+                lookup.primitive_at_call(file, call.span),
+                Some(Primitive::CreateSignal | Primitive::CreateMemo)
+            ) || local_function_of_callee(file, call.callee).is_some_and(|callee| {
+                component.span.contains(callee.span)
+                    && !ast
+                        .calls
+                        .iter()
+                        .any(|inner| callee.span.contains(inner.span))
+            })
+        })
+}
+
+/// The function literal a call's callee names: an identifier bound by a
+/// `const` whose initializer is exactly that literal (not a primitive's
+/// result, such as a memo accessor).
+fn local_function_of_callee(
+    file: &solid_facts::FileFacts,
+    callee: Span,
+) -> Option<&solid_facts::ast::FunctionFact> {
+    let ast = &file.ast;
+    let declaration = ast.reference_declaration(ast.peel_ts_sugar_span(callee))?;
+    let binding = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.iter().any(|name| name.span == declaration)
+    })?;
+    ast.function_at(ast.peel_ts_sugar_span(binding.initializer?))
+}
+
 /// A compute function literal that settles on its first pass with a plain
-/// value: not async or a generator, and nothing in it can run code, read a
-/// source or throw (no call, member, reference, await, JSX, tagged template or
-/// `throw`).
+/// value: not async or a generator, with no parameter or one plain parameter
+/// with no default, whose whole body is one primitive literal or returns one
+/// (`() => 1`, `() => { return 1; }`). Anything else may run code, throw, or
+/// return a thenable the runtime parks (a dynamic `import()`, an object with
+/// `then`; ADR 0503 review).
 fn compute_settles_synchronously(file: &solid_facts::FileFacts, argument: Span) -> bool {
     let ast = &file.ast;
     let Some(function) = ast.function_at(ast.peel_ts_sugar_span(argument)) else {
         return false;
     };
-    let within = |span: Span| function.span.contains(span);
+    let plain_parameters = match function.parameters.as_slice() {
+        [] => true,
+        [parameter] => {
+            parameter.shape == solid_facts::ast::BindingShape::Identifier
+                && parameter.initializer.is_none()
+        }
+        _ => false,
+    };
     !function.r#async
         && !function.generator
-        && !ast.calls.iter().any(|call| within(call.span))
-        && !ast.members.iter().any(|member| within(member.span))
-        && !ast.identifiers.iter().any(|identifier| {
-            identifier.role == solid_facts::ast::IdentifierRole::Reference
-                && within(identifier.span)
-        })
-        && !ast.awaits.iter().any(|awaited| within(*awaited))
-        && !ast.jsx_elements.iter().any(|element| within(element.span))
-        && !ast.tagged_template_tags.iter().any(|tag| within(*tag))
+        && plain_parameters
         && file
-            .source_text(function.span)
-            .is_some_and(|text| !text.contains("throw"))
+            .source_text(function.body)
+            .is_some_and(primitive_literal_body)
+}
+
+/// The text of a function body that is one primitive literal, or a block that
+/// only returns one.
+fn primitive_literal_body(text: &str) -> bool {
+    let text = text.trim();
+    let literal = match text
+        .strip_prefix('{')
+        .and_then(|inner| inner.strip_suffix('}'))
+    {
+        Some(inner) => {
+            let Some(rest) = inner.trim().strip_prefix("return") else {
+                return false;
+            };
+            if !rest.starts_with(char::is_whitespace) {
+                return false;
+            }
+            let rest = rest.trim();
+            rest.strip_suffix(';').unwrap_or(rest).trim()
+        }
+        None => text,
+    };
+    let quoted = |quote: char| {
+        literal.len() >= 2
+            && literal.starts_with(quote)
+            && literal.ends_with(quote)
+            && !literal[1..literal.len() - 1].contains([quote, '\\', '\n'])
+    };
+    matches!(literal, "true" | "false" | "null")
+        || quoted('"')
+        || quoted('\'')
+        || (!literal.is_empty()
+            && literal.trim_start_matches('-').split('.').count() <= 2
+            && literal
+                .trim_start_matches('-')
+                .split('.')
+                .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit())))
 }
 
 /// Climbs from `span` through the function layers that run in place: an IIFE,

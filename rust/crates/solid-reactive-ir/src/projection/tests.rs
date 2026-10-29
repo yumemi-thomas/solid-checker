@@ -227,6 +227,9 @@ fn catalog_capabilities_gate_whole_program_tables() {
             invocation_context_unproven: false,
             mount_unresolved: false,
             call_attributed: false,
+            apply_first_run_pending: false,
+            pending_origin: None,
+            pending_apply: None,
         }],
         ..Program::default()
     };
@@ -271,6 +274,9 @@ fn a_discarded_async_read_is_excluded_ahead_of_the_leaf_owner_short_circuit() {
             invocation_context_unproven: false,
             mount_unresolved: false,
             call_attributed: false,
+            apply_first_run_pending: false,
+            pending_origin: None,
+            pending_apply: None,
         }],
         ..Program::default()
     };
@@ -323,6 +329,9 @@ fn selection_filters_safe_rows_before_the_catalog_seam() {
             invocation_context_unproven: false,
             mount_unresolved: false,
             call_attributed: false,
+            apply_first_run_pending: false,
+            pending_origin: None,
+            pending_apply: None,
         }],
         ..Program::default()
     };

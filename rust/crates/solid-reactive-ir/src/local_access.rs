@@ -1768,6 +1768,47 @@ impl LocalAccessContext<'_, '_> {
                             self.symbol_names,
                             self.lookup,
                         ));
+                // ADR 0504: a call in an effect apply whose first run is
+                // proven to meet the source pending reads it there.
+                if !options.declared_loading
+                    && !options.opaque
+                    && let Some(apply) = crate::execution_role::pending_apply_first_read(
+                        file,
+                        call.span,
+                        declaration,
+                        self.lookup,
+                    )
+                {
+                    let call_location = location(file.path.shared(), call.span);
+                    if !result
+                        .async_reads
+                        .iter()
+                        .any(|existing| existing.location == call_location)
+                    {
+                        result.async_reads.push(Arc::new(AsyncRead {
+                            accessor: format!("{name}()").into(),
+                            location: call_location,
+                            declaration: declaration.clone(),
+                            execution,
+                            leaf_owner: None,
+                            under_loading: false,
+                            mount_unresolved: false,
+                            call_attributed: true,
+                            apply_first_run_pending: true,
+                            pending_origin: Some(location(file.path.shared(), read.span)),
+                            pending_apply: Some(location(file.path.shared(), apply)),
+                            async_provenance: true,
+                            declared_loading: false,
+                            options_opaque: false,
+                            ssr_client_hole: options.ssr_client_bare,
+                            server_rendering_unresolved: options.server_rendering_unresolved,
+                            host_callback_timing: false,
+                            callee_callback_timing: false,
+                            invocation_context_unproven: false,
+                        }));
+                    }
+                    continue;
+                }
                 if execution != ExecutionRole::TrackedJsx && !unsuspendable {
                     // The call may itself sit in a named local function a
                     // rendered call runs.
@@ -1792,6 +1833,9 @@ impl LocalAccessContext<'_, '_> {
                     under_loading: cover == LoadingCover::Covered,
                     mount_unresolved: cover == LoadingCover::Unresolved,
                     call_attributed: true,
+                    apply_first_run_pending: false,
+                    pending_origin: None,
+                    pending_apply: None,
                     async_provenance: true,
                     declared_loading: options.declared_loading,
                     options_opaque: options.opaque,
@@ -1875,6 +1919,22 @@ impl LocalAccessContext<'_, '_> {
                     )
                 };
             let cover = read_loading_cover(self.lookup, file, call.callee, self.symbol_names);
+            // ADR 0504: the proof climbs from the read to the apply itself, so a
+            // read in a closure the apply calls (its own role the body's) is
+            // placed there too.
+            let pending_apply = (async_provenance
+                && async_execution != ExecutionRole::DiscardedRendering
+                && !async_options.declared_loading
+                && !async_options.opaque)
+                .then(|| {
+                    crate::execution_role::pending_apply_first_read(
+                        file,
+                        call.span,
+                        declaration,
+                        self.lookup,
+                    )
+                })
+                .flatten();
             result.async_reads.push(Arc::new(AsyncRead {
                 accessor: format!("{name}()").into(),
                 location: location(file.path.shared(), call.span),
@@ -1891,6 +1951,12 @@ impl LocalAccessContext<'_, '_> {
                 under_loading: cover == LoadingCover::Covered,
                 mount_unresolved: cover == LoadingCover::Unresolved,
                 call_attributed: false,
+                // The proof climbs from the read to the apply itself, so a
+                // read in a closure the apply calls (its own role the body's)
+                // is placed there too.
+                apply_first_run_pending: pending_apply.is_some(),
+                pending_origin: None,
+                pending_apply: pending_apply.map(|apply| location(file.path.shared(), apply)),
                 async_provenance,
                 declared_loading: async_options.declared_loading,
                 options_opaque: async_options.opaque,
@@ -2353,6 +2419,9 @@ impl LocalAccessContext<'_, '_> {
                 under_loading: cover == LoadingCover::Covered,
                 mount_unresolved: cover == LoadingCover::Unresolved,
                 call_attributed: false,
+                apply_first_run_pending: false,
+                pending_origin: None,
+                pending_apply: None,
                 async_provenance: member_async,
                 declared_loading: member_options.declared_loading,
                 options_opaque: member_options.opaque,
@@ -2532,6 +2601,9 @@ impl LocalAccessContext<'_, '_> {
                 under_loading: cover == LoadingCover::Covered,
                 mount_unresolved: cover == LoadingCover::Unresolved,
                 call_attributed: false,
+                apply_first_run_pending: false,
+                pending_origin: None,
+                pending_apply: None,
                 async_provenance: true,
                 declared_loading: false,
                 options_opaque: false,

@@ -412,6 +412,28 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
 }
 
 fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
+    // ADR 0504: the first run of an effect apply proven to meet the source
+    // pending.
+    if read.apply_first_run_pending {
+        return FindingWording::new(
+            Rule::PendingAsyncUnsuspendableRead.metadata(),
+            format!(
+                "pending async accessor {:?} is read in the first run of an effect apply, which runs before its source settles (the component is mounted by render, the source is created earlier in its body, and the effect's compute settles at once); an apply's read cannot suspend, so Solid throws PENDING_ASYNC_UNTRACKED_READ in dev",
+                read.accessor
+            ),
+            "Read the async value in the effect's compute function, which tracks and suspends, and pass it to the apply as its argument; or guard the read with isPending/latest.".to_owned(),
+        )
+        .with_evidence(vec![
+            EvidenceStep {
+                message: "the source's computation is async: pending from its creation until a microtask".to_owned(),
+                location: Some(read.declaration.clone()),
+            },
+            EvidenceStep {
+                message: "the apply's first run reads it before the microtask".to_owned(),
+                location: Some(read.location.clone()),
+            },
+        ]);
+    }
     if read.invocation_context_unproven {
         return FindingWording::new(
             Rule::PendingAsyncUnsuspendableRead.metadata(),
