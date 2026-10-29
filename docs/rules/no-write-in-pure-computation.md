@@ -37,7 +37,12 @@ mounted by a lane's pass); it then runs later from the flush, where the write is
 legal, as every later run is. The checker cannot prove the first run is
 synchronous, so such a write is uncertifiable rather than either answer, also
 through layers the apply runs in place (an IIFE, a helper calling its callback,
-a named closure the apply calls; ADR 0460). A `createRenderEffect` created where
+a named closure the apply calls; ADR 0460). It is a violation where the first
+run is proven to be on the call (ADR 0503): the component is rendered by a
+module-scope `render(() => <C />, …)`, the call has no options, its compute
+settles on its first pass (no call, read or reference), and the call is on
+every completion of the body. `schedule` withholds the first run as `defer`
+does (ADR 0502). A `createRenderEffect` created where
 writes are legal (an event handler, module scope) leaves every run of its apply
 legal.
 

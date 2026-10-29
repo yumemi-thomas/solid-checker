@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { MAIN_SOURCE, UnmappedFindingsError, WORK_NAMESPACE, assertFindingsMapped, entryVeto, materializeForChecker, oracleMainSource, parseFindings, runChecker, siteVerdicts } from "./checker.mjs";
+import { MAIN_SOURCE, UnmappedFindingsError, mainSourceFor, WORK_NAMESPACE, assertFindingsMapped, entryVeto, materializeForChecker, oracleMainSource, parseFindings, runChecker, siteVerdicts } from "./checker.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { DEFAULT_ORACLE_INSTALL } from "./chrome.mjs";
@@ -20,6 +20,23 @@ describe("entryVeto", () => {
     expect(entryVeto({ premises: [`synchronous dispatch (ADR 0435) at ${dir}/main.tsx:39 excluded: caller await continuation`] }, dir)).toBeNull();
     expect(entryVeto({ premises: [`synchronous dispatch (ADR 0435) at ${dir}/App.tsx:9 withholds event handler owner and read proofs: receiver unknown`] }, dir)).toBeNull();
     expect(entryVeto({}, dir)).toBeNull();
+  });
+});
+
+describe("mainSourceFor (ADR 0501)", () => {
+  it("is MAIN_SOURCE without a mount list", () => {
+    expect(mainSourceFor(undefined)).toBe(MAIN_SOURCE);
+    expect(mainSourceFor(JSON.stringify({ steps: [] }))).toBe(MAIN_SOURCE);
+  });
+  it("renders each mounted export by its own top-level render call, and the loop skips them", () => {
+    const main = mainSourceFor(JSON.stringify({ mount: ["C1", "B2"] }));
+    expect(main).toContain('import { B2, C1 } from "./App";');
+    expect(main).toContain('render(() => <B2 />, host("B2"));');
+    expect(main).toContain('render(() => <C1 />, host("C1"));');
+    expect(main.indexOf("<B2 />")).toBeLessThan(main.indexOf("<C1 />"));
+    expect(main).toContain('const mounted = new Set<string>(["B2","C1"]);');
+    expect(main).toContain("mounted.has(name)");
+    expect(main).toContain("async function exercise()");
   });
 });
 
@@ -44,7 +61,9 @@ describe("materializeForChecker", () => {
     const dir = materializeForChecker(built, install);
     expect(dir).toBe(join(install, ".solid-checker-fuzz", WORK_NAMESPACE, "fuzz-11"));
     expect(readFileSync(join(dir, "App.tsx"), "utf8")).toBe(built.text);
-    expect(readFileSync(join(dir, "main.tsx"), "utf8")).toBe(MAIN_SOURCE);
+    // The oracle's entry for this case: its exported components are mounted by name (ADR 0501).
+    expect(JSON.parse(built.files["oracle.json"]).mount).toEqual(["C1"]);
+    expect(readFileSync(join(dir, "main.tsx"), "utf8")).toBe(mainSourceFor(built.files["oracle.json"]));
     const tsconfig = JSON.parse(readFileSync(join(dir, "tsconfig.json"), "utf8"));
     expect(tsconfig.files).toEqual(["main.tsx", "App.tsx"]);
     expect(tsconfig.compilerOptions).toMatchObject({ jsx: "preserve", jsxImportSource: "@solidjs/web", strict: true, types: [] });

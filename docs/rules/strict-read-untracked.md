@@ -232,7 +232,10 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   that meets the source pending throws `PENDING_ASYNC_UNTRACKED_READ` instead
   of the warning; when the apply first runs against the source's settling is
   not proven, so the untracked read is the claim and the message names the
-  pending case (`fixtures/reactive-ir/strict-read-async-apply`).
+  pending case (`fixtures/reactive-ir/strict-read-async-apply`). Where the
+  first run is proven to meet the source pending (ADRs 0504, 0505), the read is
+  [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md)'s
+  instead and is not reported here.
 
 ## Why is this bad?
 

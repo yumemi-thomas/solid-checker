@@ -151,6 +151,9 @@
     "facts.files": 2,
     "symbols_by_id": 1
   },
+  "rust/crates/solid-reactive-ir/src/indexes/module_scope.rs": {
+    "files()": 1
+  },
   "rust/crates/solid-reactive-ir/src/indexes/project_memos.rs": {
     "files()": 1
   },

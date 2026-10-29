@@ -56,6 +56,8 @@ export function buildCase(program, { id = `fuzz-${program.seed}`, note } = {}) {
   const packageNames = Object.keys(packages);
   const packageFiles = Object.fromEntries(packageNames.flatMap((name) => Object.entries(packages[name]).map(([file, text]) => [`node_modules/${name}/${file}`, text])));
   const description = note ?? `differential fuzzer, generator ${GENERATOR_VERSION}, seed ${program.seed}`;
+  // ADR 0501: the exported components, which the entry renders by name (the oracle's `mount`).
+  const mount = [...text.matchAll(/^export function ([A-Z][A-Za-z0-9_]*)\b/gm)].map((match) => match[1]);
   return {
     id, text, runText, sites, glue, ledger, lineTable, plan, neutral, packages,
     files: {
@@ -64,8 +66,8 @@ export function buildCase(program, { id = `fuzz-${program.seed}`, note } = {}) {
       ...moduleFiles(program),
       "App.tsx": text,
       "App.run.txt": runText,
-      "oracle.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), haltMarker: true, steps }, null, 2)}\n`,
-      "oracle.run.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), haltMarker: true, steps: runSteps }, null, 2)}\n`,
+      "oracle.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), ...(mount.length ? { mount } : {}), haltMarker: true, steps }, null, 2)}\n`,
+      "oracle.run.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), ...(mount.length ? { mount } : {}), haltMarker: true, steps: runSteps }, null, 2)}\n`,
       "program.json": `${JSON.stringify(program)}\n`,
       "sites.json": `${JSON.stringify({ id, generator: GENERATOR_VERSION, seed: program.seed, plan, sites, glue, ledger }, null, 2)}\n`,
     },

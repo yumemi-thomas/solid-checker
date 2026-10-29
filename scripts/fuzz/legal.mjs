@@ -38,6 +38,9 @@ export const LEGAL_OUTCOMES = ["typed-away", "harness", "not-legal", "disturbed"
 
 const inLines = (finding, lines) => lines.some((line) => finding.line <= line && line <= finding.endLine);
 
+/** Rules whose violation claims the site ran: an unexecuted site contradicts it. */
+const RUN_CLAIMING_RULES = ["pending-async-unsuspendable-read"];
+
 /**
  * Judges one legal program at its site.
  * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object, plan?: object }} input
@@ -56,6 +59,9 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
   const stray = violations.filter((finding) => !inLines(finding, region)).map((finding) => `${finding.rule}@${finding.line}`);
   const detail = { findings: relevant.filter((finding) => inLines(finding, region)).map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(stray.length ? { stray } : {}) };
   if (events.some((event) => event.code === code)) return { outcome: "not-legal", detail: { ...detail, reported: [...new Set(events.map((event) => event.code))] } };
+  // A run-claiming violation anywhere (a call attributed the read in a closure) whose codes the runtime never reports (ADR 0504 review).
+  const claimedRuns = violations.filter((finding) => RUN_CLAIMING_RULES.includes(finding.rule) && !events.some((event) => codesForRule(finding.rule).includes(event.code)));
+  if (claimedRuns.length && !disturbances(runtime, plan ?? { clicks: [] }).length) return { outcome: "false-positive", detail: { ...detail, rules: [...new Set(claimedRuns.map((finding) => finding.rule))], at: claimedRuns.map((finding) => finding.line) } };
   if (!atSite.length) {
     return relevant.some((finding) => finding.kind === "uncertifiable" && inLines(finding, region)) ? { outcome: "uncertifiable", detail } : { outcome: "clean", detail };
   }
@@ -66,7 +72,8 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
   if (!contradicted.length) return { outcome: "uncertifiable", detail: { ...detail, why: "a violation whose rule no runtime code contradicts, or whose code the runtime reports" } };
   const ran = hitCount(runtime.hits ?? null, site.hit);
   if (ran === null) return { outcome: "disturbed", detail: { ...detail, why: "no hit ledger" } };
-  if (ran === 0) return { outcome: "unexecuted", detail };
+  // A rule whose violation says the site ran (SC5001: "is read in the first run") is wrong where it never ran (ADR 0504 review).
+  if (ran === 0 && !contradicted.some((finding) => RUN_CLAIMING_RULES.includes(finding.rule))) return { outcome: "unexecuted", detail };
   return { outcome: "false-positive", detail: { ...detail, rules: [...new Set(contradicted.map((finding) => finding.rule))] } };
 }
 

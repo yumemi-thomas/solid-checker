@@ -2,93 +2,13 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
       "kind": "violation",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 707,
-      "end": 713,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 885,
-      "end": 891,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 1071,
-      "end": 1077,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 1103,
-      "end": 1109,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 1252,
-      "end": 1258,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 1284,
-      "end": 1290,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 1437,
-      "end": 1443,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 1743,
-      "end": 1749,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 2098,
-      "end": 2105,
+      "start": 799,
+      "end": 805,
       "fixes": 0
     },
     {
@@ -97,8 +17,178 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 2219,
-      "end": 2225,
+      "start": 977,
+      "end": 983,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 1163,
+      "end": 1169,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 1195,
+      "end": 1201,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 1344,
+      "end": 1350,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 1376,
+      "end": 1382,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 1529,
+      "end": 1535,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 1835,
+      "end": 1841,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 2190,
+      "end": 2197,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 2311,
+      "end": 2317,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 2633,
+      "end": 2639,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 3074,
+      "end": 3080,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 3140,
+      "end": 3146,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 3338,
+      "end": 3344,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 3458,
+      "end": 3464,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 3519,
+      "end": 3525,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 3905,
+      "end": 3911,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 4211,
+      "end": 4217,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 4234,
+      "end": 4240,
       "fixes": 0
     }
   ]

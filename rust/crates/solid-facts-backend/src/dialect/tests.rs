@@ -123,6 +123,9 @@ fn catalog_prose_program() -> Program {
             invocation_context_unproven: false,
             mount_unresolved: false,
             call_attributed: false,
+            apply_first_run_pending: false,
+            pending_origin: None,
+            pending_apply: None,
         }],
         static_defects: defect_kinds
             .into_iter()

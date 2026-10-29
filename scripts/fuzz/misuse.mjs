@@ -14,7 +14,7 @@
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
   signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, storeNestedSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt,
-  button, child, show, forEach, use,
+  button, child, show, forEach, use, contain,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 
@@ -107,7 +107,9 @@ export const SPEC = {
     contexts: LEAF, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
   },
-  PENDING_ASYNC_UNTRACKED_READ: { legal: ["memo"],
+  // The `-guarded` applies (ADR 0504 review): the read sits behind a guard that returns on the first run, which is the only run;
+  // `-closure`: the guard is in a closure the apply calls.
+  PENDING_ASYNC_UNTRACKED_READ: { legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure"],
     contexts: ["body", "root", "effect-apply", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
   },
@@ -269,6 +271,13 @@ function inContext(context, stmts, kit) {
     case "effect-apply": return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) }))], view: [] };
     case "render-compute": return { body: [expr(prim("render", fn([...stmts, ret(num(1))]), { apply: fn([]) }))], view: [] };
     case "render-apply": return { body: [expr(prim("render", fn([ret(num(1))]), { apply: fn(stmts) }))], view: [] };
+    case "effect-apply-guarded": return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn([contain("guard-return", 0, stmts)]) }))], view: [] };
+    case "effect-apply-guarded-closure": case "render-apply-guarded-closure": {
+      const step = kit.name("g");
+      const apply = fn([decl(step, fn([contain("guard-return", 0, stmts)])), expr(call(ref(step)))]);
+      return { body: [expr(prim(context.startsWith("effect") ? "effect" : "render", fn([ret(num(1))]), { apply }))], view: [] };
+    }
+    case "render-apply-guarded": return { body: [expr(prim("render", fn([ret(num(1))]), { apply: fn([contain("guard-return", 0, stmts)]) }))], view: [] };
     case "tracked": return { body: [expr(prim("tracked", fn(stmts)))], view: [] };
     case "settled": return { body: [expr(prim("settled", fn(stmts)))], view: [] };
     case "untrack": return { body: [expr(prim("untrack", fn(stmts)))], view: [] };

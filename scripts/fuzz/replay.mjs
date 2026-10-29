@@ -186,10 +186,15 @@ export const caseIdOf = (item) => `rp-${basename(item.dir).replace(/[^A-Za-z0-9_
 
 /** A case from a bare App.tsx: no sites, no plan, no twin; the oracle drives it with its own event passes. */
 function textCase(id, text, probe = null) {
-  if (!probe) return { id, text, sites: [], glue: [], packages: {}, plan: { clicks: [] }, files: { "App.tsx": text } };
+  if (!probe) {
+    const mount = mountOf(text);
+    return { id, text, sites: [], glue: [], packages: {}, plan: { clicks: [] },
+      files: { "App.tsx": text, ...(mount.mount ? { "oracle.json": `${JSON.stringify({ note: "replay probe", ...mount }, null, 2)}\n` } : {}) } };
+  }
   const steps = [...(probe.steps ?? []), { action: "wait-for-selector", selector: probe.witness.selector }];
   return { id, text, sites: [{ id: "w", line: 0, witness: probe.witness }], glue: [], packages: {}, plan: { clicks: [] },
-    files: { "App.tsx": text, "oracle.json": `${JSON.stringify({ note: "replay probe", steps }, null, 2)}\n` } };
+    // ADR 0501: the probe's exported components are mounted by name, as the generator's are.
+    files: { "App.tsx": text, "oracle.json": `${JSON.stringify({ note: "replay probe", ...mountOf(text), steps }, null, 2)}\n` } };
 }
 
 const ORDER = ["high", "certainty-divergence", "low", "lost", "agree"];
@@ -378,4 +383,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.error(`replay: ${error.message}`);
     process.exitCode = 2;
   }
+}
+
+/** The oracle's `mount` for an App.tsx: its exported components (ADR 0501), as scripts/fuzz/emit.mjs lists them. */
+function mountOf(text) {
+  const mount = [...text.matchAll(/^export function ([A-Z][A-Za-z0-9_]*)\b/gm)].map((match) => match[1]);
+  return mount.length ? { mount } : {};
 }

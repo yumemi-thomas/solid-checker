@@ -287,15 +287,23 @@ pub(crate) fn read_escapes_synchronous_extent(
                 if semantics.owner == Some(solid_dialect::CallbackOwner::InheritsFirstRun) {
                     // The first apply is absent, or unproven, if options can
                     // defer it. Later runs do not read for the creating caller.
-                    return dialect
-                        .effect_apply_defer_options(primitive, index)
-                        .is_some_and(|options| {
+                    // ADR 0502: so does `schedule`, which queues the first run.
+                    let withheld = |options: Option<usize>, key: &str| {
+                        options.is_some_and(|options| {
                             matches!(
-                                crate::call_option_literal(file, call, options, "defer"),
+                                crate::call_option_literal(file, call, options, key),
                                 solid_dialect::OptionLiteral::True
                                     | solid_dialect::OptionLiteral::Unknown
                             )
-                        });
+                        })
+                    };
+                    return withheld(
+                        dialect.effect_apply_defer_options(primitive, index),
+                        "defer",
+                    ) || withheld(
+                        dialect.effect_apply_schedule_options(primitive, index),
+                        "schedule",
+                    );
                 }
                 matches!(
                     semantics.execution,

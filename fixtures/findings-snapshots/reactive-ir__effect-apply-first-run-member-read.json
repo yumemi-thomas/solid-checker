@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-apply-first-run/variants/member-read/App.tsx",
+      "start": 288,
+      "end": 295,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-apply-first-run/variants/member-read/App.tsx",
+      "start": 324,
+      "end": 334,
+      "fixes": 0
+    }
+  ]
+}
