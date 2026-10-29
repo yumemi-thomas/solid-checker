@@ -473,7 +473,9 @@ function render(program, instrument) {
     const keys = source ? sourceKeys(component, signals) : [];
     const attrs = keys.map(([key]) => ` ${key}={${key}${sourcedRead(source) === "value" ? "()" : ""}}`).join("") + (source === "prop-omit" ? " extra={1}" : "");
     const passed = source === "prop-spread" ? `<M${index + 1}${attrs} />` : source?.includes("context") ? `<${component.name} />` : `<${component.name}${attrs} />`;
-    const wrapped = source?.includes("context") ? [`<ValCtx value={{ ${keys.map(([key]) => key).join(", ")} }}>`, `${INDENT}${passed}`, "</ValCtx>"] : [passed];
+    const tag = source?.includes("context") ? `<ValCtx value={{ ${keys.map(([key]) => key).join(", ")} }}>`
+      : source === "async-loading" ? (used.add("Loading"), "<Loading fallback={0}>") : null;
+    const wrapped = tag ? [tag, `${INDENT}${passed}`, tag.startsWith("<ValCtx") ? "</ValCtx>" : "</Loading>"] : [passed];
     const mounted = component.mount === "show" ? (used.add("Show"), [`<Show when={true}>`, ...wrapped.map((line) => `${INDENT}${line}`), `</Show>`])
       : component.mount === "for" ? (used.add("For"), [`<For each={[1]}>`, `${INDENT}{() => ${wrapped.join("")}}`, `</For>`])
       : wrapped;
@@ -607,7 +609,7 @@ function sourcePrelude(component, signals, used) {
   switch (component.source) {
     case "prop-merge": used.add("merge"); return ["const merged = merge({ extra: 1 }, props);"];
     case "prop-omit": used.add("omit"); return ['const rest = omit(props, "extra");'];
-    case "context": used.add("useContext"); return ["const ctx = useContext(ValCtx);"];
+    case "context": case "async-context": used.add("useContext"); return ["const ctx = useContext(ValCtx);"];
     case "context-destructured": used.add("useContext"); return [`const { ${keys()} } = useContext(ValCtx);`];
     case "module-hook": return [`const { ${keys()} } = useVals();`];
     case "module-hook-member": return ["const vals = useVals();"];

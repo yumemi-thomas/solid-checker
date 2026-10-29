@@ -202,7 +202,7 @@ export async function runLegal(options) {
   }
 }
 
-const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for] [--sources local,props,context,module]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2]]
+const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for] [--sources local,props,context,module,async]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2]]
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--tsc <tsrs>] [--cache-dir <dir>] [--no-cache]`;
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

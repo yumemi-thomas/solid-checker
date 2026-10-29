@@ -322,9 +322,17 @@ describe("the source axes", () => {
     expect(sourcesOf("STRICT_READ_UNTRACKED", "signal", "direct")).toContain("prop-value");
     expect(sourcesOf("STRICT_READ_UNTRACKED", "signal", "alias")).not.toContain("prop-value");
     expect(sourcesOf("REACTIVE_WRITE_IN_OWNED_SCOPE", "signal", "direct")).not.toContain("prop-value");
-    expect(sourcesOf("PENDING_ASYNC_UNTRACKED_READ", null, "direct")).toContain("module");
+    expect(sourcesOf("PENDING_ASYNC_UNTRACKED_READ", null, "direct")).toEqual(expect.arrayContaining(["async-prop", "async-value", "async-context", "async-loading", "module"]));
     expect(sourcesOf("PENDING_ASYNC_UNTRACKED_READ", null, "direct")).not.toContain("prop");
     expect(sourcesOf("FLUSH_IN_ACTION", null, "direct")).toEqual(["local"]);
+    const { cellList, generateShape } = await import("./matrix.mjs");
+    const cell = cellList().find((c) => c.code === "PENDING_ASYNC_UNTRACKED_READ" && c.context === "body");
+    const [shape] = (await firstOf(cell.code, cell.context, "async-value")).filter((s) => s.binding === "direct");
+    const { built } = generateShape({ seed: 1 }, cell, shape, 0);
+    expect(built.text).toContain("<C1 a1={a1()} />");
+    expect(built.text.split("\n")[built.sites[0].line - 1].trim()).toBe("props.a1;");
+    const [loading] = (await firstOf(cell.code, cell.context, "async-loading")).filter((s) => s.binding === "direct");
+    expect(generateShape({ seed: 1 }, cell, loading, 0).built.text).toMatch(/<Loading fallback=\{0\}>\n\s+<C1 a1=\{a1\} \/>\n\s+<\/Loading>/);
   });
 });
 

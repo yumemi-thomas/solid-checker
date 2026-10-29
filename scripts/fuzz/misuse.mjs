@@ -41,22 +41,25 @@ export const MOUNTS = ["root", "child", "show", "for"];
  *            (`ctx.setW1`) or destructured.
  *   module   `helpers.ts` creates them at module scope (`export const [w1, setW1] = createSignal(0)`), or a hook there does
  *            (`useVals()`), destructured or as an object (`vals.setW1`).
- * `props` and `context` take the templates whose values are not async; `module` takes all.
+ *   async    the async memo of an async template, created in the parent and read in the child: passed as an accessor, as its
+ *            value (`a1={a1()}`), by context, or as an accessor under the parent's `<Loading>`.
+ * `props` and `context` take the templates whose values are not async (async values are the `async` axis's); `module` takes all.
  */
 export const SOURCE_AXES = {
   props: ["prop", "prop-destructured", "prop-merge", "prop-omit", "prop-spread", "prop-value"],
   context: ["context", "context-destructured"],
   module: ["module", "module-hook", "module-hook-member"],
+  async: ["async-prop", "async-value", "async-context", "async-loading"],
 };
 export const SOURCES = ["local", ...Object.values(SOURCE_AXES).flat()];
 /** A source whose values a parent component creates (the component is then rendered by `P1`, not exported). */
 export const parentSource = (source) => source !== "local" && !source.startsWith("module");
 /** A source that hands the component a read's value, not the accessor: only a read written as the misuse itself can use it. */
-const valueSource = (source) => source === "prop-value";
+const valueSource = (source) => source === "prop-value" || source === "async-value";
 
 /**
- * The sources a (code, variant, binding) can take: the template must have values (`setup`); `props`/`context` need values that
- * are not async; a value source needs a bare read (`w1()`) at the site and a binding that keeps the read there (an alias
+ * The sources a (code, variant, binding) can take: the template must have values (`setup`); `async` sources need an async value and
+ * `props`/`context` need none; a value source needs a bare read (`w1()`) at the site and a binding that keeps the read there (an alias
  * of `props.w1` would read it on the alias's line); a template may refuse a source in a context (`sourcesNotIn`).
  */
 export function sourcesOf(code, variant, binding, context) {
@@ -70,13 +73,13 @@ export function sourcesOf(code, variant, binding, context) {
   return SOURCES.filter((source) => {
     if (source === "local") return true;
     if (excluded.includes(source)) return false;
-    if (!source.startsWith("module") && isAsync) return false;
+    if (source.startsWith("async-") ? !isAsync : (!source.startsWith("module") && isAsync)) return false;
     if (valueSource(source)) return bareRead && ["direct", "wrapper"].includes(binding);
     return true;
   });
 }
 
-/** `--sources a,b`: source names or axis names (`props`, `context`, `module`); default `local` only. */
+/** `--sources a,b`: source names or axis names (`props`, `context`, `module`, `async`); default `local` only. */
 export function sourcesOption(value) {
   const sources = (value ?? "local").split(",").flatMap((name) => SOURCE_AXES[name] ?? [name]);
   for (const source of sources) if (!SOURCES.includes(source)) throw new Error(`--sources: unknown source ${source} (${[...Object.keys(SOURCE_AXES), ...SOURCES].join(", ")})`);
@@ -90,10 +93,10 @@ export function sourcesOption(value) {
  */
 export function sourcedName(source, name) {
   switch (source) {
-    case "prop": case "prop-spread": case "prop-value": return `props.${name}`;
+    case "prop": case "prop-spread": case "prop-value": case "async-prop": case "async-value": case "async-loading": return `props.${name}`;
     case "prop-merge": return `merged.${name}`;
     case "prop-omit": return `rest.${name}`;
-    case "context": return `ctx.${name}`;
+    case "context": case "async-context": return `ctx.${name}`;
     case "module-hook-member": return `vals.${name}`;
     default: return name;
   }
