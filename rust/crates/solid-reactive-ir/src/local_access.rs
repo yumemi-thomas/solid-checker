@@ -3205,8 +3205,18 @@ impl LocalAccessContext<'_, '_> {
                 PropUse::Unknown => uncertain = true,
             }
             // ADR 0509: the getter a caller passed reads an async source, so
-            // this read may read it pending; nothing here places an async
-            // read for a prop, so outside tracked JSX it is an obligation.
+            // this read may read it pending: the strict read is not proven
+            // (rc.17 may throw the pending read first), and outside tracked
+            // JSX the pending read is an obligation.
+            if exact_root
+                && backing == PropUse::Reactive
+                && property.is_some_and(|property| {
+                    self.props_reactivity
+                        .async_getter(prop_declaration, property)
+                })
+            {
+                uncertain = true;
+            }
             if exact_root
                 && backing == PropUse::Reactive
                 && (execution != ExecutionRole::TrackedJsx

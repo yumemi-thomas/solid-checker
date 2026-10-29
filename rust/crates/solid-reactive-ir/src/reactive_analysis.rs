@@ -363,6 +363,82 @@ pub(crate) fn collect_project<'facts>(
     for obligation in handed {
         draft.push_defect(obligation);
     }
+    // ADR 0509: a reported read of a proven async source with no async row
+    // (a transported read, a module source read in another file) may meet the
+    // source pending; give it the row the projection opens it with
+    // (`options_opaque`: nothing it projects is a proven violation).
+    let async_rows = draft
+        .async_reads
+        .iter()
+        .map(|read| read.location.clone())
+        .collect::<HashSet<_>>();
+    let synthesized = draft
+        .reads
+        .iter()
+        .filter(|read| {
+            (read.execution.reports_untracked_read() || read.execution.reports_unplaced())
+                && !async_rows.contains(&read.location)
+                // Local access decided the rows of a component's own source;
+                // these are the sources it could not see: transported, in
+                // another file, or at module scope.
+                && (read.transported
+                    || read.declaration.path != read.location.path
+                    || ctx
+                        .semantic_lookup
+                        .file_by_path(read.declaration.path.as_ref())
+                        .and_then(|file| {
+                            let start = u32::try_from(read.declaration.start_byte).ok()?;
+                            let end = u32::try_from(read.declaration.end_byte).ok()?;
+                            Some(crate::indexes::at_module_scope(
+                                &file.ast,
+                                solid_facts::core::Span::new(start, end),
+                            ))
+                        })
+                        .unwrap_or(false))
+                && ctx
+                    .entities
+                    .get(&read.declaration)
+                    .is_some_and(|symbol| source.async_sources.contains(symbol))
+                // A read inside a pending probe (`isPending(() => read())`)
+                // is the legal way to meet the source pending.
+                && !ctx
+                    .semantic_lookup
+                    .file_by_path(read.location.path.as_ref())
+                    .and_then(|file| {
+                        let start = u32::try_from(read.location.start_byte).ok()?;
+                        let end = u32::try_from(read.location.end_byte).ok()?;
+                        let call = file.ast.call_at(solid_facts::core::Span::new(start, end))?;
+                        Some(crate::execution_role::pending_accessor_probe(
+                            file,
+                            call.callee,
+                            ctx.semantic_lookup,
+                        ))
+                    })
+                    .unwrap_or(false)
+        })
+        .map(|read| crate::AsyncRead {
+            accessor: read.accessor.clone(),
+            location: read.location.clone(),
+            declaration: read.declaration.clone(),
+            execution: read.execution,
+            leaf_owner: None,
+            under_loading: false,
+            async_provenance: true,
+            declared_loading: false,
+            options_opaque: true,
+            ssr_client_hole: false,
+            server_rendering_unresolved: false,
+            host_callback_timing: read.host_callback_timing,
+            callee_callback_timing: read.callee_callback_timing,
+            invocation_context_unproven: false,
+            mount_unresolved: false,
+            call_attributed: false,
+            apply_first_run_pending: false,
+            pending_origin: None,
+            pending_apply: None,
+        })
+        .collect::<Vec<_>>();
+    draft.async_reads.extend(synthesized);
     static_rules::component_returns_conditionally(ctx, draft);
     // After every read, write and action table is merged: the rule's
     // negative proof is that none of them lies inside the predicate.
