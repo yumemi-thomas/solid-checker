@@ -2024,7 +2024,8 @@ impl LocalAccessContext<'_, '_> {
         // As `discover_call`: a read in a non-component function is placed
         // by the summaries of its callers, which a prop's value has none of:
         // there the read is an obligation.
-        let placed = self.props_call_placed(file, call);
+        let placed = self.props_call_placed(file, call)
+            || self.props_call_pending_in_layers(file, call, &sources);
         let mut unplaced_read = false;
         for source in &sources {
             if let Some(accessor) = self.accessors.get(source.as_str())
@@ -2103,6 +2104,42 @@ impl LocalAccessContext<'_, '_> {
                     && self.lookup.primitive_at_call(file, outer.span).is_some()
                     && containing_ast_function(&file.ast, outer.span)
                         .is_some_and(|owner| self.lookup.function_is_component(file, owner))
+            })
+    }
+
+    /// ADR 0511: a call of a prop's value deeper than
+    /// [`Self::props_call_placed`] admits (an IIFE, a closure or a helper's
+    /// callback inside an effect's apply) is placed by the first-run proof
+    /// itself: every source a visible call site passes is an async accessor,
+    /// and ADR 0504/0510's proof climbs from the call through those in-place
+    /// layers to an apply whose first run meets each pending
+    /// ([`crate::execution_role::pending_apply_first_read`], which walks the
+    /// layers with `runs_nothing_before_in_layers`). The read then throws
+    /// `PENDING_ASYNC_UNTRACKED_READ` there; anything else stays the
+    /// obligation.
+    fn props_call_pending_in_layers(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        sources: &[SymbolId],
+    ) -> bool {
+        !sources.is_empty()
+            && sources.iter().all(|source| {
+                self.accessors
+                    .get(source.as_str())
+                    .is_some_and(|(_, declaration)| {
+                        let options = self.effective_async_options(source.as_str());
+                        self.async_sources.contains(source.as_str())
+                            && !options.declared_loading
+                            && !options.opaque
+                            && crate::execution_role::pending_apply_first_read(
+                                file,
+                                call.span,
+                                declaration,
+                                self.lookup,
+                            )
+                            .is_some()
+                    })
             })
     }
 

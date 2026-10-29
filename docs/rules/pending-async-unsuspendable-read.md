@@ -81,7 +81,7 @@ component renders a static intrinsic tree, its body runs nothing else, and that
 module-scope async memo of a literal in a module whose scope only creates nodes,
 under the first `render` of an entry no module imports, or a memo the mounting
 parent creates and hands over as an exact prop or through one context provider
-(ADR 0510). The static tree may hold string attributes, literal children and
+(ADR 0510); the prop may be read through the apply's IIFEs, closures called once and helpers that call their callback first (ADR 0511). The static tree may hold string attributes, literal children and
 reads of the body's own literal signals and synchronous memos. No function
 between the read and the apply calls anything before it: a throw there ends
 the run first (`fixtures/reactive-ir/pending-source-first-run`).
