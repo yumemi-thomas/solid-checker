@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import { mapPoolSettled } from "../lib/pool.mjs";
 import { chromeCacheFor } from "./cache.mjs";
 import { runChrome } from "./chrome.mjs";
-import { siteVerdicts } from "./checker.mjs";
+import { projectModules, siteVerdicts } from "./checker.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { codeRules, codesForRule, ignoredRules, isDefectCode, ruleHasRuntimeCounterpart, withholdingRules } from "./codes.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
@@ -173,7 +173,7 @@ export function probeOf(dir) {
 
 async function replayPlain(item, config) {
   const probe = probeOf(item.dir);
-  const built = textCase(caseIdOf(item), readFileSync(join(item.dir, "App.tsx"), "utf8"), probe);
+  const built = textCase(caseIdOf(item), readFileSync(join(item.dir, "App.tsx"), "utf8"), probe, modulesOf(item.dir));
   const result = await judge(built, config, {}, built.id);
   const base = { kind: item.kind, dir: item.dir, label: item.label };
   if (result.status !== "ok") return { ...base, now: "not-judged", why: result.status };
@@ -184,17 +184,20 @@ async function replayPlain(item, config) {
 /** A bare text's case id: its directory's name and a hash of its path (stable across lists, so the Chrome cache finds it; unique across directories). */
 export const caseIdOf = (item) => `rp-${basename(item.dir).replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 40)}-${createHash("sha1").update(item.dir).digest("hex").slice(0, 6)}`;
 
-/** A case from a bare App.tsx: no sites, no plan, no twin; the oracle drives it with its own event passes. */
-function textCase(id, text, probe = null) {
+/** A probe's project modules besides App.tsx (`helpers.ts`, which App.tsx imports by a relative path): name -> text. */
+const modulesOf = (dir) => Object.fromEntries(projectModules(Object.fromEntries(readdirSync(dir).map((name) => [name, true]))).map((name) => [name, readFileSync(join(dir, name), "utf8")]));
+
+/** A case from a bare App.tsx (and its project modules): no sites, no plan, no twin; the oracle drives it with its own event passes. */
+function textCase(id, text, probe = null, modules = {}) {
   if (!probe) {
     const mount = mountOf(text);
     return { id, text, sites: [], glue: [], packages: {}, plan: { clicks: [] },
-      files: { "App.tsx": text, ...(mount.mount ? { "oracle.json": `${JSON.stringify({ note: "replay probe", ...mount }, null, 2)}\n` } : {}) } };
+      files: { ...modules, "App.tsx": text, ...(mount.mount ? { "oracle.json": `${JSON.stringify({ note: "replay probe", ...mount }, null, 2)}\n` } : {}) } };
   }
   const steps = [...(probe.steps ?? []), { action: "wait-for-selector", selector: probe.witness.selector }];
   return { id, text, sites: [{ id: "w", line: 0, witness: probe.witness }], glue: [], packages: {}, plan: { clicks: [] },
     // ADR 0501: the probe's exported components are mounted by name, as the generator's are.
-    files: { "App.tsx": text, "oracle.json": `${JSON.stringify({ note: "replay probe", ...mountOf(text), steps }, null, 2)}\n` } };
+    files: { ...modules, "App.tsx": text, "oracle.json": `${JSON.stringify({ note: "replay probe", ...mountOf(text), steps }, null, 2)}\n` } };
 }
 
 const ORDER = ["high", "certainty-divergence", "low", "lost", "agree"];

@@ -85,7 +85,7 @@ export function legalCells({ codes } = {}) {
 }
 
 /** The legal shapes of a code (`--grid`): its legal variants x its grid bindings x the layers. */
-export const legalShapes = (code, mounts = ["root"], sources = ["local"]) => legalVariantsOf(code).flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => shapeAxes(code, variant, binding, mounts, sources).map((axes) => ({ variant, binding, layer, ...axes })))));
+export const legalShapes = (code, mounts = ["root"], sources = ["local"], context) => legalVariantsOf(code).flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => shapeAxes(code, variant, binding, mounts, sources, context).map((axes) => ({ variant, binding, layer, ...axes })))));
 
 /** One legal program: its seed depends on the run seed and the cell and the index (random) or the shape (grid) only. */
 export function generateLegal(options, { code, context }, { index, shape }) {
@@ -108,7 +108,7 @@ export async function runLegal(options) {
     const cells = legalCells({ codes: options.codes?.split(",") });
     const entries = [];
     for (const cell of cells) {
-      if (options.grid) legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources)).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => entries.push({ cell, index, ...generateLegal(options, cell, { shape }) }));
+      if (options.grid) legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources), cell.context).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => entries.push({ cell, index, ...generateLegal(options, cell, { shape }) }));
       else for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateLegal(options, cell, { index }) });
     }
     console.error(`legal: ${cells.length} cells, ${entries.length} programs`);
@@ -202,7 +202,7 @@ export async function runLegal(options) {
   }
 }
 
-const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for] [--sources local,props,context]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2]]
+const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for] [--sources local,props,context,module]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2]]
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--tsc <tsrs>] [--cache-dir <dir>] [--no-cache]`;
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

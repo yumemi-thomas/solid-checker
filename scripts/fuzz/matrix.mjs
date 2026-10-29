@@ -143,14 +143,14 @@ export function cellList({ codes, contexts } = {}) {
  */
 export const gridShapes = (code, context, mounts = ["root"], sources = ["local"]) => gridVariantsOf(code)
   .filter((variant) => context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context))
-  .flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => shapeAxes(code, variant, binding, mounts, sources).map((axes) => ({ variant, binding, layer, ...axes })))));
+  .flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => shapeAxes(code, variant, binding, mounts, sources, context).map((axes) => ({ variant, binding, layer, ...axes })))));
 
 /**
  * The mount and source of a shape's programs: each mount with the local source, then each other source the (code, variant,
  * binding) takes, mounted as the source says (misuse.mjs SOURCES; a source is not crossed with the mounts). `{}` is the root.
  */
-export function shapeAxes(code, variant, binding, mounts, sources) {
-  const takes = sourcesOf(code, variant, binding);
+export function shapeAxes(code, variant, binding, mounts, sources, context) {
+  const takes = sourcesOf(code, variant, binding, context);
   return [
     ...(sources.includes("local") ? mounts.map((mount) => (mount === "root" ? {} : { mount })) : []),
     ...sources.filter((source) => source !== "local" && takes.includes(source)).map((source) => ({ source })),
@@ -461,7 +461,7 @@ const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] 
   [--confirm-with-chrome [--chrome-sample 3] [--chrome-false-clean 4] [--chrome-other 2] [--browser <chromium>]] [--shrink [--budget N]]
   [--grid [--layers a,b]]               one program per shape (variant x binding x layer) of every cell, instead of --per-cell random draws
   [--mounts root,child,show,for]        with --grid, also mount each program as a parent's child (misuse.mjs MOUNTS; default root)
-  [--sources local,props,context]       with --grid, also take the values from a parent's props or a context
+  [--sources local,props,context,module]  with --grid, also take the values from a parent's props, a context or helpers.ts
                                         (misuse.mjs SOURCES; axis or source names; default local)
   [--cache-dir <dir>] [--no-cache]      the runtime cache (type checks and fast-path records; default $TMPDIR/solid-checker-fuzz-cache)
   [--no-chrome-cache]                   run Chrome's browser half fresh (by default feedback run --execution-cache reuses it; the checker always reruns)

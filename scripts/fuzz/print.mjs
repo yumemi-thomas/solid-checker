@@ -14,7 +14,7 @@
 // the last line, so no line moves. The type check, the fast path and Chrome run `runText`.
 import { INSTRUMENT_PRELUDE } from "./hits.mjs";
 import { isSite, paramTsType, signalTable, walk } from "./model.mjs";
-import { AUX, MODULE, describeUse, sourcedName, sourcedRead } from "./misuse.mjs";
+import { AUX, MODULE, describeUse, parentSource, sourcedName, sourcedRead } from "./misuse.mjs";
 import { accessOf, packageFiles } from "./package.mjs";
 
 const MARK_OPEN = "\u0001";
@@ -468,7 +468,8 @@ function render(program, instrument) {
   // The parents of the mount axis: each renders its child component in its own JSX.
   // A parent source (misuse.mjs SOURCES) creates the component's values in the parent and hands them on as props or by context.
   for (const [index, component] of program.components.filter((c) => c.mount).entries()) {
-    const { source } = component;
+    // A module source keeps its values in helpers.ts: a parent of the mount axis then renders the component bare.
+    const source = component.source && parentSource(component.source) ? component.source : undefined;
     const keys = source ? sourceKeys(component, signals) : [];
     const attrs = keys.map(([key]) => ` ${key}={${key}${sourcedRead(source) === "value" ? "()" : ""}}`).join("") + (source === "prop-omit" ? " extra={1}" : "");
     const passed = source === "prop-spread" ? `<M${index + 1}${attrs} />` : source?.includes("context") ? `<${component.name} />` : `<${component.name}${attrs} />`;
@@ -483,11 +484,13 @@ function render(program, instrument) {
   // The source's types and its context, above the components that name them.
   const declared = program.components.flatMap((component) => sourceDeclarations(component, signals, used));
   if (declared.length) out.unshift(...declared, "");
+  const sourcedImports = program.components.flatMap((component) => sourceImports(component, signals));
   const importNames = [...new Set([...used, ...useList.flatMap(([, described]) => described.solid)])].sort();
   const webNames = [...new Set(useList.flatMap(([, described]) => described.web))].sort();
   const namespaces = [...new Set(useList.flatMap(([, described]) => described.namespaces))].sort();
   const packageImports = [...new Set([...packageHelpers.values()].map((helper) => accessOf(helper).importLine))];
-  if (moduleHelpers.length) packageImports.push(`import { ${moduleHelpers.map((helper) => helper.name).join(", ")} } from "./helpers";`);
+  const fromHelpers = [...moduleHelpers.map((helper) => helper.name), ...sourcedImports];
+  if (fromHelpers.length) packageImports.push(`import { ${fromHelpers.join(", ")} } from "./helpers";`);
   const typeNames = [...new Set(program.components.flatMap((component) => sourceTypeNames(component, signals)))].sort();
   const header = `import { ${importNames.join(", ")} } from "solid-js";\n${typeNames.length ? `import type { ${typeNames.join(", ")} } from "solid-js";\n` : ""}${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}${packageImports.map((line) => `${line}\n`).join("")}\n`;
   // Printing the body filled `used`; the header goes first, so line numbers shift by its height.
@@ -525,11 +528,25 @@ function render(program, instrument) {
 
 }
 
-/** The project modules besides App.tsx: `helpers.ts` with the module helpers (`helper.module`), exported; empty when there are none. */
+/**
+ * The project modules besides App.tsx: `helpers.ts` with the module helpers (`helper.module`), exported, and the values of a
+ * `module` source (misuse.mjs SOURCES: created at its scope, or by its hook `useVals`); empty when there are none.
+ */
 export function moduleFiles(program) {
   const moduleHelpers = (program.helpers ?? []).filter((helper) => helper.module);
-  if (!moduleHelpers.length) return {};
-  return { "helpers.ts": `${moduleHelpers.map((helper) => ["export " + helperText(helper)[0], ...helperText(helper).slice(1)].join("\n")).join("\n\n")}\n` };
+  const signals = signalTable(program);
+  const used = new Set();
+  const sourced = [];
+  for (const component of program.components) {
+    if (!component.source?.startsWith("module")) continue;
+    const created = component.signals.filter((sig) => component.sourced.includes(sig.name)).map((sig) => signalText(sig, signals, used));
+    if (component.source === "module") sourced.push(created.map((line) => `export ${line}`).join("\n"));
+    else sourced.push([`export function useVals() {`, ...created.map((line) => `${INDENT}${line}`), `${INDENT}return { ${sourceKeys(component, signals).map(([key]) => key).join(", ")} };`, "}"].join("\n"));
+  }
+  if (!moduleHelpers.length && !sourced.length) return {};
+  const head = used.size ? `import { ${[...used].sort().join(", ")} } from "solid-js";\n\n` : "";
+  const parts = [...sourced, ...moduleHelpers.map((helper) => ["export " + helperText(helper)[0], ...helperText(helper).slice(1)].join("\n"))];
+  return { "helpers.ts": `${head}${parts.join("\n\n")}\n` };
 }
 
 /** The declaration of a signal (model.mjs signal kinds); `used` collects the imports it needs. */
@@ -580,7 +597,7 @@ function sourcedSignals(component, signals) {
 
 function sourceParameter(component, signals) {
   const { source } = component;
-  if (!source || source.includes("context")) return "";
+  if (!source || source.includes("context") || source.startsWith("module")) return "";
   if (source === "prop-destructured") return `{ ${sourceKeys(component, signals).map(([key]) => key).join(", ")} }: ${component.name}Props`;
   return `props: ${component.name}Props`;
 }
@@ -592,6 +609,8 @@ function sourcePrelude(component, signals, used) {
     case "prop-omit": used.add("omit"); return ['const rest = omit(props, "extra");'];
     case "context": used.add("useContext"); return ["const ctx = useContext(ValCtx);"];
     case "context-destructured": used.add("useContext"); return [`const { ${keys()} } = useContext(ValCtx);`];
+    case "module-hook": return [`const { ${keys()} } = useVals();`];
+    case "module-hook-member": return ["const vals = useVals();"];
     default: return [];
   }
 }
@@ -599,7 +618,7 @@ function sourcePrelude(component, signals, used) {
 /** The module-scope lines a source needs in App.tsx: the props type, or the context's value type and the context. */
 function sourceDeclarations(component, signals, used) {
   const { source } = component;
-  if (!source) return [];
+  if (!source || source.startsWith("module")) return [];
   const fields = sourceKeys(component, signals).map(([key, type]) => `${key}: ${type}`);
   if (source === "prop-omit") fields.push("extra: number");
   if (!source.includes("context")) return [`type ${component.name}Props = { ${fields.join("; ")} };`];
@@ -607,9 +626,15 @@ function sourceDeclarations(component, signals, used) {
   return [`type ${component.name}Vals = { ${fields.join("; ")} };`, `const ValCtx = createContext<${component.name}Vals>();`];
 }
 
+/** What App.tsx imports from `helpers.ts` for a module source. */
+function sourceImports(component, signals) {
+  if (!component.source?.startsWith("module")) return [];
+  return component.source === "module" ? sourceKeys(component, signals).map(([key]) => key) : ["useVals"];
+}
+
 function sourceTypeNames(component, signals) {
   const { source } = component;
-  if (!source) return [];
+  if (!source || source.startsWith("module")) return [];
   return [...new Set(sourceKeys(component, signals).flatMap(([, type]) => type.match(/\b(Accessor|Setter|StoreSetter|SourceAccessor)\b/g) ?? []))];
 }
 

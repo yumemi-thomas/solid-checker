@@ -39,25 +39,29 @@ export const MOUNTS = ["root", "child", "show", "for"];
  *            makes) and the misuse reads `props.w1`.
  *   context  the parent provides them (`<ValCtx value={{ w1, setW1 }}>`) and the component reads `useContext(ValCtx)`, as an object
  *            (`ctx.setW1`) or destructured.
- * `props` and `context` take the templates whose values are not async.
+ *   module   `helpers.ts` creates them at module scope (`export const [w1, setW1] = createSignal(0)`), or a hook there does
+ *            (`useVals()`), destructured or as an object (`vals.setW1`).
+ * `props` and `context` take the templates whose values are not async; `module` takes all.
  */
 export const SOURCE_AXES = {
   props: ["prop", "prop-destructured", "prop-merge", "prop-omit", "prop-spread", "prop-value"],
   context: ["context", "context-destructured"],
+  module: ["module", "module-hook", "module-hook-member"],
 };
 export const SOURCES = ["local", ...Object.values(SOURCE_AXES).flat()];
 /** A source whose values a parent component creates (the component is then rendered by `P1`, not exported). */
-export const parentSource = (source) => source !== "local";
+export const parentSource = (source) => source !== "local" && !source.startsWith("module");
 /** A source that hands the component a read's value, not the accessor: only a read written as the misuse itself can use it. */
 const valueSource = (source) => source === "prop-value";
 
 /**
  * The sources a (code, variant, binding) can take: the template must have values (`setup`); `props`/`context` need values that
  * are not async; a value source needs a bare read (`w1()`) at the site and a binding that keeps the read there (an alias
- * of `props.w1` would read it on the alias's line).
+ * of `props.w1` would read it on the alias's line); a template may refuse a source in a context (`sourcesNotIn`).
  */
-export function sourcesOf(code, variant, binding) {
+export function sourcesOf(code, variant, binding, context) {
   const spec = SPEC[code];
+  const excluded = spec.sourcesNotIn?.[context] ?? [];
   const sigs = spec.setup(variant, (prefix) => `${prefix}1`);
   if (!sigs.length) return ["local"];
   const isAsync = sigs.some((sig) => sig.kind === "async");
@@ -65,13 +69,14 @@ export function sourcesOf(code, variant, binding) {
   const bareRead = target.kind === "local" && !target.args && sigs.some((sig) => sig.name === target.name && [undefined, "memo", "async"].includes(sig.kind));
   return SOURCES.filter((source) => {
     if (source === "local") return true;
-    if (isAsync) return false;
+    if (excluded.includes(source)) return false;
+    if (!source.startsWith("module") && isAsync) return false;
     if (valueSource(source)) return bareRead && ["direct", "wrapper"].includes(binding);
     return true;
   });
 }
 
-/** `--sources a,b`: source names or axis names (`props`, `context`); default `local` only. */
+/** `--sources a,b`: source names or axis names (`props`, `context`, `module`); default `local` only. */
 export function sourcesOption(value) {
   const sources = (value ?? "local").split(",").flatMap((name) => SOURCE_AXES[name] ?? [name]);
   for (const source of sources) if (!SOURCES.includes(source)) throw new Error(`--sources: unknown source ${source} (${[...Object.keys(SOURCE_AXES), ...SOURCES].join(", ")})`);
@@ -89,6 +94,7 @@ export function sourcedName(source, name) {
     case "prop-merge": return `merged.${name}`;
     case "prop-omit": return `rest.${name}`;
     case "context": return `ctx.${name}`;
+    case "module-hook-member": return `vals.${name}`;
     default: return name;
   }
 }
@@ -182,7 +188,9 @@ export const SPEC = {
   // The `-guarded` applies (ADR 0504 review): the read sits behind a guard that returns on the first run, which is the only run;
   // `-closure`: the guard is in a closure the apply calls. `-rerun`: the compute reads a signal a button sets to 2, so the apply runs again
   // and the guarded read executes (the source settled by then): Chrome then judges the strict read the checker reports there.
-  PENDING_ASYNC_UNTRACKED_READ: { legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
+  // A module-scope async memo is created with no owner and is still pending when a `-guarded-rerun` apply runs again (Chrome reports
+  // the read there): those two legal contexts do not take the `module` source.
+  PENDING_ASYNC_UNTRACKED_READ: { sourcesNotIn: { "effect-apply-guarded-rerun": ["module"], "render-apply-guarded-rerun": ["module"] }, legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
     contexts: ["body", "root", "effect-apply", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
   },
@@ -414,7 +422,7 @@ export function buildMisuse(kit, plan = {}) {
   for (const l of layer === "none" ? [] : layer.split("+")) stmts = applyLayer(l, stmts, kit);
   const placed = inContext(context, stmts, kit);
   const source = plan.source ?? "local";
-  if (!sourcesOf(code, variant, binding).includes(source)) throw new Error(`${code}/${variant}/${binding} cannot take source ${source}`);
+  if (!sourcesOf(code, variant, binding, context).includes(source)) throw new Error(`${code}/${variant}/${binding} cannot take source ${source}`);
   // A parent source renders the component from its parent, plainly; the mount axis is not crossed with it.
   const mount = parentSource(source) ? "child" : plan.mount ?? "root";
   if (!MOUNTS.includes(mount)) throw new Error(`unknown mount ${mount}`);
