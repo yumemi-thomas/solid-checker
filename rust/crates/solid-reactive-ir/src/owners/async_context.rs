@@ -121,57 +121,64 @@ pub(crate) fn mounted_by_module_render(
     file: &solid_facts::FileFacts,
     component: &solid_facts::ast::FunctionFact,
 ) -> bool {
+    !module_render_sites(lookup, file, component).is_empty()
+}
+
+/// The mounts [`mounted_by_module_render`] accepts, as the file each is
+/// written in and the `render` call.
+pub(crate) fn module_render_sites<'a>(
+    lookup: &SemanticLookup<'a>,
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+) -> Vec<(&'a solid_facts::FileFacts, Span)> {
     // The binding holds this function where it is rendered (a `let`
     // reassigned before the render mounts another; ADR 0503 review).
-    lookup.function_value_is_current(file, component)
-        && lookup
-            .function_call_sites(file.path.as_str(), component.span)
-            .into_iter()
-            .any(|(caller, tag)| {
-                let ast = &caller.ast;
-                let Some(element) = ast
-                    .jsx_elements
+    if !lookup.function_value_is_current(file, component) {
+        return Vec::new();
+    }
+    lookup
+        .function_call_sites(file.path.as_str(), component.span)
+        .into_iter()
+        .filter_map(|(caller, tag)| {
+            let ast = &caller.ast;
+            let element = ast
+                .jsx_elements
+                .iter()
+                .find(|element| element.name.span == tag)?;
+            if !element.self_closing
+                || !element.attributes.is_empty()
+                || !element.spreads.is_empty()
+                || !element.children.is_empty()
+            {
+                return None;
+            }
+            let arrow = crate::owners::containing_ast_function(ast, element.span)?;
+            if arrow.r#async
+                || arrow.generator
+                || ast.peel_ts_sugar_span(arrow.body) != element.span
+            {
+                return None;
+            }
+            let (call, _) = ast.arguments_containing(arrow.span).find(|(call, index)| {
+                *index == 0 && ast.peel_ts_sugar_span(call.arguments[*index].span) == arrow.span
+            })?;
+            // A call that runs whenever the module is evaluated: outside every
+            // function and class, in the module's straight-line flow (no
+            // condition, loop, or exit before it; ADR 0503 review).
+            let runs = ast.functions_owning(call.span).next().is_none()
+                && !ast
+                    .classes
                     .iter()
-                    .find(|element| element.name.span == tag)
-                else {
-                    return false;
-                };
-                if !element.self_closing
-                    || !element.attributes.is_empty()
-                    || !element.spreads.is_empty()
-                    || !element.children.is_empty()
-                {
-                    return false;
-                }
-                let Some(arrow) = crate::owners::containing_ast_function(ast, element.span) else {
-                    return false;
-                };
-                if arrow.r#async
-                    || arrow.generator
-                    || ast.peel_ts_sugar_span(arrow.body) != element.span
-                {
-                    return false;
-                }
-                let Some((call, _)) = ast.arguments_containing(arrow.span).find(|(call, index)| {
-                    *index == 0 && ast.peel_ts_sugar_span(call.arguments[*index].span) == arrow.span
-                }) else {
-                    return false;
-                };
-                // A call that runs whenever the module is evaluated: outside every
-                // function and class, in the module's straight-line flow (no
-                // condition, loop, or exit before it; ADR 0503 review).
-                ast.functions_owning(call.span).next().is_none()
-                    && !ast
-                        .classes
-                        .iter()
-                        .any(|class| class.span.contains(call.span))
-                    && ast.completion_sites.binary_search(&call.span).is_ok()
-                    && lookup
-                        .primitive_at_call(caller, call.span)
-                        .is_some_and(|primitive| {
-                            lookup.dialect.mount_runs_component_synchronously(primitive)
-                        })
-            })
+                    .any(|class| class.span.contains(call.span))
+                && ast.completion_sites.binary_search(&call.span).is_ok()
+                && lookup
+                    .primitive_at_call(caller, call.span)
+                    .is_some_and(|primitive| {
+                        lookup.dialect.mount_runs_component_synchronously(primitive)
+                    });
+            runs.then_some((caller, call.span))
+        })
+        .collect()
 }
 
 /// Whether `function` is what a `render`/`hydrate` call mounts: the function

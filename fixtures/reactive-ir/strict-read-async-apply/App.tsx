@@ -5,8 +5,9 @@ import { createEffect, createMemo, createRenderEffect, createSignal } from "soli
 // (`ApplyReadsAsync`, `RenderApplyReadsAsync`, `RenderApplyReadsAsyncRendered`)
 // and warns STRICT_READ_UNTRACKED when it meets it settled (`ApplyReadsAsyncRendered`,
 // whose mount waits on the rendered read; `ApplyComputeReadsAsync`, whose compute
-// waits; `ApplyComputeWaitsOnOtherAsync`). The strict read is reported in each;
-// the async rule claims none.
+// waits; `ApplyComputeWaitsOnOtherAsync`). Where the first run is proven to
+// meet the source pending (ADRs 0504, 0505; README) the async rule claims the
+// read; elsewhere the strict read is reported.
 
 export function ApplyReadsAsync() {
   const data = createMemo(async () => 1);
@@ -154,6 +155,37 @@ export function BodyReadsFirst() {
     () => 1,
     () => {
       data();
+    }
+  );
+  return <p>x</p>;
+}
+
+// ADR 0504 review: the render effect's first run returns before the read
+// (its value is the compute's 1), so it never meets the source pending: the
+// strict read stays the claim.
+export function RenderApplyGuarded() {
+  const data = createMemo(async () => 1);
+  createRenderEffect(
+    () => 1,
+    (v) => {
+      if (v === 1) return;
+      data();
+    }
+  );
+  return <p>x</p>;
+}
+
+// ADR 0504 review: the same guard in a closure the apply calls.
+export function RenderApplyGuardedClosure() {
+  const data = createMemo(async () => 1);
+  createRenderEffect(
+    () => 1,
+    (v) => {
+      const step = () => {
+        if (v === 1) return;
+        data();
+      };
+      step();
     }
   );
   return <p>x</p>;

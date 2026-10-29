@@ -342,6 +342,7 @@ function render(program, instrument) {
       case "dead-if": return `if (false) ${block(c.body, depth, open())}`;
       case "dead-after-return": return `(${asyncKw}() => ${block(c.body, depth, open(), ["return;"])})();`;
       case "dead-fn": return funcDecl(depth);
+      case "guard-return": return `if (v === 1) return;${line(block(c.body, depth, open()))}`;
       case "and-true": case "and-false": {
         const cond = c.kind === "and-true" ? "true" : "false";
         return direct ? `${cond} && ${expr(c.body[0].e, depth)};` : `${cond} && (() => ${block(c.body, depth, open())})();`;

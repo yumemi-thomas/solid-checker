@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-apply-first-run/variants/expression-child/App.tsx",
+      "start": 330,
+      "end": 337,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-apply-first-run/variants/expression-child/App.tsx",
+      "start": 366,
+      "end": 373,
+      "fixes": 0
+    }
+  ]
+}

@@ -300,7 +300,8 @@ export const GROUP_BUDGETS = [
     // And ADR 0500's store-write-literal-links row and review: 362_500.
     // And ADR 0503's render-apply-first-run fixture: 363_700.
     // And ADR 0503's review rows and ADR 0504's strict-read-async-apply paragraph: 365_200.
-    bytes: 365_200,
+    // And ADR 0505's effect-apply-first-run fixture and strict-read-async-apply sentence: 366_000.
+    bytes: 366_000,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

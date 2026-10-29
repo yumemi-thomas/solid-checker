@@ -180,6 +180,7 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) deleted_targets: Vec<Span>,
     pub(super) if_regions: Vec<IfRegionFact>,
     pub(super) jump_statements: Vec<Span>,
+    pub(super) throw_statements: Vec<Span>,
     pub(super) iteration_targets: Vec<Span>,
     pub(super) loop_statements: Vec<Span>,
     pub(super) loop_repeats: Vec<(Span, Span)>,
@@ -423,6 +424,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             deleted_targets: Vec::new(),
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
+            throw_statements: Vec::new(),
             iteration_targets: Vec::new(),
             loop_statements: Vec::new(),
             loop_repeats: Vec::new(),
@@ -516,6 +518,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.write_targets.dedup();
         self.if_regions.sort_by_key(|fact| fact.consequent);
         self.jump_statements.sort_unstable();
+        self.throw_statements.sort_unstable();
         self.iteration_targets.sort_unstable();
         self.loop_statements.sort_unstable();
         self.loop_repeats.sort_unstable();
@@ -719,6 +722,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             deleted_targets: self.deleted_targets,
             if_regions: self.if_regions,
             jump_statements: self.jump_statements,
+            throw_statements: self.throw_statements,
             iteration_targets: self.iteration_targets,
             loop_statements: self.loop_statements,
             loop_repeats: self.loop_repeats,

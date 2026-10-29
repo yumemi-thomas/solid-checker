@@ -22,6 +22,22 @@ describe("judgeLegal", () => {
     expect(judge({ checker: violation, runtime: runtime({ hits: { 4: 0 } }) }).outcome).toBe("unexecuted");
     expect(judge({ checker: violation, runtime: runtime({ errors: [{ kind: "window-error", message: "boom", positions: [] }] }) }).outcome).toBe("disturbed");
   });
+  it("is a false positive at a site that never ran when the rule claims it ran (SC5001, ADR 0504 review)", () => {
+    const findings = [finding("pending-async-unsuspendable-read", "violation")];
+    const verdict = judgeLegal({ code: "PENDING_ASYNC_UNTRACKED_READ", site, typecheck: { ok: true }, checker: { ok: true, findings }, runtime: runtime({ hits: { 4: 0 } }) });
+    expect(verdict.outcome).toBe("false-positive");
+    const elsewhere = [finding("pending-async-unsuspendable-read", "violation", 30)];
+    expect(judgeLegal({ code: "PENDING_ASYNC_UNTRACKED_READ", site, typecheck: { ok: true }, checker: { ok: true, findings: elsewhere }, runtime: runtime() }).outcome).toBe("false-positive");
+  });
+
+  it("puts a -guarded apply's site behind a return its first run takes", () => {
+    for (const context of ["effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure"]) {
+      expect(SPEC.PENDING_ASYNC_UNTRACKED_READ.legal).toContain(context);
+      const { built } = generateLegal({ seed: 1 }, { code: "PENDING_ASYNC_UNTRACKED_READ", context }, { shape: legalShapes("PENDING_ASYNC_UNTRACKED_READ")[0] });
+      expect(built.files["App.tsx"]).toMatch(/\n\s+if \(v === 1\) return;\n\s+\{/);
+    }
+  });
+
   it("is a harness failure when the runtime failed before the site ran: a module that would not load says nothing", () => {
     const failed = runtime({ failure: { phase: "import", message: "Failed to resolve import \"./helpers\"" }, hits: null });
     expect(judge({ runtime: failed })).toMatchObject({ outcome: "harness" });

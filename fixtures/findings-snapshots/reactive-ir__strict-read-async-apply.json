@@ -2,13 +2,13 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
       "kind": "violation",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 707,
-      "end": 713,
+      "start": 799,
+      "end": 805,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 885,
-      "end": 891,
+      "start": 977,
+      "end": 983,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 1071,
-      "end": 1077,
+      "start": 1163,
+      "end": 1169,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 1103,
-      "end": 1109,
+      "start": 1195,
+      "end": 1201,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 1252,
-      "end": 1258,
+      "start": 1344,
+      "end": 1350,
       "fixes": 0
     },
     {
@@ -57,8 +57,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 1284,
-      "end": 1290,
+      "start": 1376,
+      "end": 1382,
       "fixes": 0
     },
     {
@@ -67,8 +67,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 1437,
-      "end": 1443,
+      "start": 1529,
+      "end": 1535,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 1743,
-      "end": 1749,
+      "start": 1835,
+      "end": 1841,
       "fixes": 0
     },
     {
@@ -87,8 +87,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 2098,
-      "end": 2105,
+      "start": 2190,
+      "end": 2197,
       "fixes": 0
     },
     {
@@ -97,8 +97,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 2219,
-      "end": 2225,
+      "start": 2311,
+      "end": 2317,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 2541,
-      "end": 2547,
+      "start": 2633,
+      "end": 2639,
       "fixes": 0
     },
     {
@@ -117,8 +117,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 2982,
-      "end": 2988,
+      "start": 3074,
+      "end": 3080,
       "fixes": 0
     },
     {
@@ -127,8 +127,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 3048,
-      "end": 3054,
+      "start": 3140,
+      "end": 3146,
       "fixes": 0
     },
     {
@@ -137,8 +137,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 3246,
-      "end": 3252,
+      "start": 3338,
+      "end": 3344,
       "fixes": 0
     },
     {
@@ -147,8 +147,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 3366,
-      "end": 3372,
+      "start": 3458,
+      "end": 3464,
       "fixes": 0
     },
     {
@@ -157,8 +157,38 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
-      "start": 3427,
-      "end": 3433,
+      "start": 3519,
+      "end": 3525,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 3905,
+      "end": 3911,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 4211,
+      "end": 4217,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
+      "start": 4234,
+      "end": 4240,
       "fixes": 0
     }
   ]

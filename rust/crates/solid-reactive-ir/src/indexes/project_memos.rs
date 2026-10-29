@@ -83,6 +83,7 @@ project_tables! {
     45 source_texts: SourceTexts,
     46 dispatch_veto: DispatchVetoAnswer,
     47 write_flow_answers: WriteFlowAnswer,
+    48 module_scope: ModuleScopeRuns,
 }
 
 /// A whole-program memo: key `()`, computed from the lookup in one
@@ -320,6 +321,15 @@ whole_program! {
         let found = super::intrinsics::tripwires(lookup);
         (found.promise, found.array_iteration)
     }))
+}
+
+whole_program! {
+    /// ADR 0505: the project files whose module scope may run code, and
+    /// whether a file loads a module no analyzed file shows.
+    ModuleScopeRuns, 48, module_scope, "module_scope_runs", (Vec<String>, bool),
+    cycle: (Vec::new(), true),
+    direct: |lookup| super::module_scope::census(lookup),
+    |ctx| Ok(ctx.project(super::module_scope::census))
 }
 
 whole_program! {

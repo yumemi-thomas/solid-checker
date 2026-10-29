@@ -339,6 +339,10 @@ pub struct AstFacts {
     /// a jump in a span says nothing about what any other fact domain withheld.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub jump_statements: Vec<Span>,
+    /// Every `throw` statement, sorted by span (facts schema 86, ADR 0505):
+    /// where a function body or a module scope may end by throwing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub throw_statements: Vec<Span>,
     /// The left side of every `for (target in …)` / `for (target of …)` whose
     /// target is an *assignment* to an existing binding rather than a
     /// declaration, by span, sorted. Each iteration writes the target, so it
@@ -2153,6 +2157,7 @@ impl AstFacts {
             deleted_targets: Vec::new(),
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
+            throw_statements: Vec::new(),
             iteration_targets: Vec::new(),
             loop_statements: Vec::new(),
             loop_repeats: Vec::new(),

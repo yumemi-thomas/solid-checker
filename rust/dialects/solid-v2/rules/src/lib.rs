@@ -412,8 +412,8 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
 }
 
 fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
-    // ADR 0504: the first run of an effect apply proven to meet the source
-    // pending.
+    // ADRs 0504, 0505: the first run of an effect apply proven to meet the
+    // source pending.
     if read.apply_first_run_pending {
         return FindingWording::new(
             Rule::PendingAsyncUnsuspendableRead.metadata(),

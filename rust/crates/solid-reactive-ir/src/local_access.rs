@@ -1689,9 +1689,12 @@ impl LocalAccessContext<'_, '_> {
             return;
         };
         let options = self.effective_async_options(symbol);
-        let mut sites = vec![(read.span, 0_usize)];
+        // The flag: the read runs on every completion of each function from
+        // its own to the current call's (ADR 0504 review: a guard in a
+        // called closure skips it on the apply's first run).
+        let mut sites = vec![(read.span, 0_usize, true)];
         let mut visited = HashSet::<solid_facts::core::Span>::default();
-        while let Some((site, depth)) = sites.pop() {
+        while let Some((site, depth, every)) = sites.pop() {
             let Some(function) = containing_ast_function(&file.ast, site) else {
                 continue;
             };
@@ -1703,6 +1706,13 @@ impl LocalAccessContext<'_, '_> {
             {
                 continue;
             }
+            let every = every
+                && crate::interproc::site_on_every_completion(
+                    self.lookup,
+                    file,
+                    function.span,
+                    site,
+                );
             let Some(binding) = function_binding_name(file, function) else {
                 continue;
             };
@@ -1770,7 +1780,8 @@ impl LocalAccessContext<'_, '_> {
                         ));
                 // ADR 0504: a call in an effect apply whose first run is
                 // proven to meet the source pending reads it there.
-                if !options.declared_loading
+                if every
+                    && !options.declared_loading
                     && !options.opaque
                     && let Some(apply) = crate::execution_role::pending_apply_first_read(
                         file,
@@ -1812,7 +1823,7 @@ impl LocalAccessContext<'_, '_> {
                 if execution != ExecutionRole::TrackedJsx && !unsuspendable {
                     // The call may itself sit in a named local function a
                     // rendered call runs.
-                    sites.push((call.span, depth + 1));
+                    sites.push((call.span, depth + 1, every));
                     continue;
                 }
                 let call_location = location(file.path.shared(), call.span);

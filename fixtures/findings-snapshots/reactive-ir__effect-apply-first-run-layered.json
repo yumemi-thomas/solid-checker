@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-apply-first-run/variants/layered/App.tsx",
+      "start": 547,
+      "end": 554,
+      "fixes": 0
+    }
+  ]
+}

@@ -86,6 +86,9 @@ export const CONTAINER_KINDS = [
   "class-field", "class-static", "class-sblock", "class-method", "class-ctor",
   "dead-if", "dead-after-return", "dead-fn", "and-true", "and-false",
 ];
+/** Containers only an effect apply holds (the misuse profile's `-guarded` contexts): `guard-return` puts its statements behind
+ * `if (v === 1) return;`, skipped on the first run, whose `v` is the compute's 1 (ADR 0504 review). */
+export const APPLY_CONTAINER_KINDS = ["guard-return"];
 /** Kinds whose body is the body of a function of its own (an `await` needs `async`). The rest run inside the parent function. */
 export const FUNCTION_KINDS = new Set([
   "comp-never", "comp-rendered", "comp-slot", "comp-prop", "comp-returned", "class-method", "class-ctor", "class-static", "class-sblock",
@@ -325,7 +328,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
     }
 
     function checkContain(stmt, scope) {
-      if (!CONTAINER_KINDS.includes(stmt.kind)) fail(`${where}: unknown container ${stmt.kind}`);
+      if (!CONTAINER_KINDS.includes(stmt.kind) && !APPLY_CONTAINER_KINDS.includes(stmt.kind)) fail(`${where}: unknown container ${stmt.kind}`);
       const own = FUNCTION_KINDS.has(stmt.kind);
       if (stmt.async && !ASYNC_KINDS.has(stmt.kind)) fail(`${where}: a ${stmt.kind} cannot be async`);
       if (stmt.kind === "comp-rendered" && stmt.body.at(-1)?.k !== "return") fail(`${where}: a rendered component returns`);

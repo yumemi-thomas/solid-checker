@@ -58,6 +58,8 @@ mod initialization;
 pub(crate) use initialization::early_mention_report_sites;
 mod intrinsics;
 mod member_values;
+mod module_scope;
+pub(crate) use module_scope::{at_module_scope, declared_function, runtime_reference};
 mod primitive_proof;
 mod project_memos;
 mod test_runner;

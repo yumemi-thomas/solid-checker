@@ -71,10 +71,13 @@ pending (ADR 0504): the first run is on the call (ADR 0503: a component
 rendered by a module-scope `render`, no options, a compute that is one
 primitive literal), the source is a `const` of that body declared before the
 call as `createMemo(async () => …)` with no options, nothing between them runs
-code, and no call in the apply precedes the read. The read is then this rule's
-violation and the strict read is not reported. A `createEffect` apply stays a
-strict read: its first run is in `render`'s flush, which a pending render
-effect anywhere in the mount can hold.
+code, no call in the apply precedes the read, and the read is on every completion of the apply (a guard that returns on the first run skips it). The read is then this rule's
+violation and the strict read is not reported. A `createEffect` apply's first
+run is in `render`'s flush, which a pending render effect anywhere in the mount
+can hold. It is claimed only where nothing can create one (ADR 0505): the
+component renders a static intrinsic tree, its body runs nothing else, and that
+`render` is the first code in the program that can create a reactive node
+(`fixtures/reactive-ir/effect-apply-first-run`).
 
 ## Examples
 

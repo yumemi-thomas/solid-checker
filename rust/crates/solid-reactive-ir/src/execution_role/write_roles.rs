@@ -2208,9 +2208,10 @@ fn first_run_proven_at_call(
 ///   there creates a signal or memo, or calls a local function that calls
 ///   nothing.
 ///
-/// A user effect's first run (`createEffect`) is in `render`'s tail flush,
+/// A user effect's first apply (`createEffect`) is in `render`'s tail flush,
 /// which a pending render effect anywhere in the mount (a fragment, a helper's
-/// JSX, a module-level effect) holds until the source settles: not proven.
+/// JSX, a module-level effect) holds until the source settles: proven only
+/// under [`user_apply_runs_in_mount_flush`] (ADR 0505).
 pub(crate) fn pending_apply_first_read(
     file: &solid_facts::FileFacts,
     site: Span,
@@ -2236,7 +2237,11 @@ pub(crate) fn pending_apply_first_read(
     })?;
     let apply = ast.function_at(ast.peel_ts_sugar_span(call.arguments.get(1)?.span))?;
     if !apply.body.contains(at)
-        || lookup.primitive_at_call(file, call.span) != Some(Primitive::CreateRenderEffect)
+        || !read_on_every_completion_of_apply(file, site, apply.span, lookup)
+        || !matches!(
+            lookup.primitive_at_call(file, call.span),
+            Some(Primitive::CreateRenderEffect | Primitive::CreateEffect)
+        )
         || !first_run_proven_at_call(file, call.span, lookup)
         || ast.calls.iter().any(|other| {
             // A call in a function nested in the apply runs only when that
@@ -2278,8 +2283,442 @@ pub(crate) fn pending_apply_first_read(
         && crate::owners::containing_ast_function(ast, binding.declaration)
             .is_some_and(|function| function.span == component.span)
         && crate::interproc::site_on_every_completion(lookup, file, component.span, memo.span)
-        && body_runs_nothing_between(file, component, memo.span.end, call.span.start, lookup);
+        && body_runs_nothing_between(file, component, memo.span.end, call.span.start, lookup)
+        && (lookup.primitive_at_call(file, call.span) == Some(Primitive::CreateRenderEffect)
+            || user_apply_runs_in_mount_flush(file, component, call, memo, lookup));
     ok.then_some(apply.span)
+}
+
+/// ADR 0505: a user effect's first apply (`createEffect`) runs in the tail
+/// flush of the `render` that mounted `component`, while the source is still
+/// pending. The apply is queued at the call and run by that flush
+/// (`@solidjs/web@2.0.0-rc.17` `dist/web.dev.js:542-568`); a pending render
+/// effect anywhere in the flush, or a transaction an earlier pass left, would
+/// hold it until the source settles (`@solidjs/signals@2.0.0-rc.17`
+/// `dist/dev-shared.js:1690-1733`, `:2180`). Proven where:
+/// - the component renders a static tree ([`static_intrinsic_tree`]): no
+///   component, fragment, expression, attribute or custom element, so the
+///   mount creates no render effect that can go pending;
+/// - the body runs nothing else ([`body_runs_nothing_else`]), and the
+///   source's async compute is one primitive literal;
+/// - a module-scope `render` mounting it is the first code to run that can
+///   create a reactive node ([`render_runs_first`]).
+fn user_apply_runs_in_mount_flush(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    effect: &solid_facts::ast::CallFact,
+    memo: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let source_settles_at_await = memo
+        .arguments
+        .first()
+        .and_then(|argument| ast.function_at(ast.peel_ts_sugar_span(argument.span)))
+        .and_then(|compute| file.source_text(compute.body))
+        .is_some_and(primitive_literal_body);
+    let plain_parameters = component.parameters.iter().all(|parameter| {
+        parameter.shape == solid_facts::ast::BindingShape::Identifier
+            && parameter.initializer.is_none()
+    });
+    !component.r#async
+        && !component.generator
+        && plain_parameters
+        && source_settles_at_await
+        && static_intrinsic_tree(file, component)
+        && body_runs_nothing_else(file, component, effect, memo, lookup)
+        && crate::owners::module_render_sites(lookup, file, component)
+            .into_iter()
+            .any(|(entry, render)| render_runs_first(lookup, entry, render))
+}
+
+/// Every JSX element in `component` is a lowercase intrinsic tag (no custom
+/// element, member or namespaced name) written in its own body, with no
+/// attribute, spread or expression child, no fragment is written there, and
+/// every return of the body (or an expression body) is one of those elements.
+fn static_intrinsic_tree(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+) -> bool {
+    let ast = &file.ast;
+    let own = |span: Span| {
+        crate::owners::containing_ast_function(ast, span)
+            .is_some_and(|function| function.span == component.span)
+    };
+    let elements = ast
+        .jsx_elements
+        .iter()
+        .filter(|element| component.span.contains(element.span))
+        .collect::<Vec<_>>();
+    let static_element = |element: &solid_facts::ast::JsxElementFact| {
+        let intrinsic = file.source_text(element.name.span).is_some_and(|name| {
+            !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        });
+        let children = element.children.iter().all(|child| {
+            let text = file.source_text(*child).unwrap_or("{");
+            if text.starts_with('<') {
+                elements.iter().any(|inner| inner.span == *child)
+            } else if text.starts_with('{') {
+                element.empty_children.contains(child)
+            } else {
+                true
+            }
+        });
+        own(element.span)
+            && intrinsic
+            && element.member_object.is_none()
+            && element.attributes.is_empty()
+            && element.spreads.is_empty()
+            && element.properties.is_empty()
+            && element.boolean_properties.is_empty()
+            && children
+    };
+    let is_element = |span: Span| {
+        let span = ast.peel_ts_sugar_span(span);
+        elements.iter().any(|element| element.span == span)
+    };
+    let returns = ast
+        .returns
+        .iter()
+        .filter(|fact| own(fact.span))
+        .collect::<Vec<_>>();
+    let returns_tree = if component.expression_body {
+        is_element(component.body)
+    } else {
+        !returns.is_empty()
+            && returns
+                .iter()
+                .all(|fact| fact.argument.is_some_and(is_element))
+    };
+    !ast.jsx_fragments
+        .iter()
+        .any(|fragment| component.span.contains(*fragment))
+        && elements.iter().all(|element| static_element(element))
+        && returns_tree
+}
+
+/// Nothing written in `component`'s body outside the effect's and the
+/// source's arguments runs code while the body runs, or throws: each call
+/// there is one of those two, a signal or memo created from primitive
+/// literals, or a call of an inert local function ([`inert_local_function`])
+/// with primitive-literal arguments; no member is read, no template is
+/// tagged, no class is written, no `throw` is written; a destructuring
+/// declaration takes a local object or array literal apart with no default;
+/// each name the body references outside those calls' callees is its own.
+fn body_runs_nothing_else(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    effect: &solid_facts::ast::CallFact,
+    memo: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_dialect::Primitive;
+    let ast = &file.ast;
+    let excluded = effect
+        .arguments
+        .iter()
+        .chain(&memo.arguments)
+        .map(|argument| argument.span)
+        .collect::<Vec<_>>();
+    let in_code = |span: Span| {
+        component.span.contains(span) && !excluded.iter().any(|region| region.contains(span))
+    };
+    // Code of the body itself, not of a function nested in it.
+    let own = |span: Span| {
+        in_code(span)
+            && crate::owners::containing_ast_function(ast, span)
+                .is_some_and(|function| function.span == component.span)
+    };
+    let literal_arguments = |call: &solid_facts::ast::CallFact| {
+        call.arguments.iter().all(|argument| {
+            !argument.spread
+                && file
+                    .source_text(ast.peel_ts_sugar_span(argument.span))
+                    .is_some_and(primitive_literal_body)
+        })
+    };
+    let primitive_callee = |call: &solid_facts::ast::CallFact| {
+        call.span == effect.span
+            || call.span == memo.span
+            || matches!(
+                lookup.primitive_at_call(file, call.span),
+                Some(Primitive::CreateSignal | Primitive::CreateMemo)
+            ) && literal_arguments(call)
+    };
+    let calls = ast.calls.iter().filter(|call| own(call.span)).all(|call| {
+        primitive_callee(call)
+            || (literal_arguments(call)
+                && local_function_of_callee(file, call.callee).is_some_and(|callee| {
+                    own(callee.span) && inert_local_function(file, component, callee)
+                }))
+    });
+    // A nested function runs only when called: by a call above (inert), or
+    // from the excluded regions.
+    let nested = ast
+        .functions
+        .iter()
+        .filter(|function| function.span != component.span && in_code(function.span))
+        .all(|function| !own(function.span) || crate::indexes::declared_function(ast, function));
+    let quiet = !ast.members.iter().any(|member| own(member.span))
+        && !ast.computed_members.iter().any(|member| own(*member))
+        && !ast.tagged_template_tags.iter().any(|tag| in_code(*tag))
+        && !ast.classes.iter().any(|class| in_code(class.span))
+        && !ast.spreads.iter().any(|spread| own(spread.span))
+        && !ast
+            .object_properties
+            .iter()
+            .any(|property| own(property.span) && property.computed)
+        && !ast
+            .throw_statements
+            .iter()
+            .any(|statement| in_code(*statement));
+    let callees = ast
+        .calls
+        .iter()
+        .filter(|call| own(call.span) && primitive_callee(call))
+        .map(|call| ast.peel_ts_sugar_span(call.callee))
+        .collect::<Vec<_>>();
+    let references = ast.identifiers.iter().all(|identifier| {
+        !crate::indexes::runtime_reference(ast, identifier)
+            || !own(identifier.span)
+            || callees.contains(&identifier.span)
+            || ast
+                .reference_declaration(identifier.span)
+                .is_some_and(|declaration| component.span.contains(declaration))
+    });
+    let destructuring = ast
+        .bindings
+        .iter()
+        .filter(|binding| {
+            own(binding.declaration) && binding.shape != solid_facts::ast::BindingShape::Identifier
+        })
+        .all(|binding| local_literal_destructuring(file, component, binding, lookup));
+    calls && nested && quiet && references && destructuring
+}
+
+/// A local `const` function literal whose body runs nothing: it calls, reads
+/// a member of, tags, renders, spreads, awaits and throws nothing, nests no
+/// function, and each name it references is declared in `component`.
+fn inert_local_function(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    let ast = &file.ast;
+    let inside = |span: Span| function.span.contains(span);
+    !function.r#async
+        && !function.generator
+        && function.parameters.is_empty()
+        && !ast.calls.iter().any(|call| inside(call.span))
+        && !ast.members.iter().any(|member| inside(member.span))
+        && !ast.computed_members.iter().any(|member| inside(*member))
+        && !ast.tagged_template_tags.iter().any(|tag| inside(*tag))
+        && !ast.jsx_elements.iter().any(|element| inside(element.span))
+        && !ast.jsx_fragments.iter().any(|fragment| inside(*fragment))
+        && !ast.spreads.iter().any(|spread| inside(spread.span))
+        && !ast.awaits.iter().any(|awaited| inside(*awaited))
+        && !ast
+            .object_properties
+            .iter()
+            .any(|property| inside(property.span) && property.computed)
+        && !ast
+            .functions
+            .iter()
+            .any(|nested| nested.span != function.span && inside(nested.span))
+        && !ast
+            .throw_statements
+            .iter()
+            .any(|statement| inside(*statement))
+        && ast.identifiers.iter().all(|identifier| {
+            !crate::indexes::runtime_reference(ast, identifier)
+                || !inside(identifier.span)
+                || ast
+                    .reference_declaration(identifier.span)
+                    .is_some_and(|declaration| component.span.contains(declaration))
+        })
+}
+
+/// A destructuring declaration with no default that takes apart an object
+/// literal (written there, bound to a local `const`, or returned by an inert
+/// local function's expression body) or an array literal (written there or
+/// bound to a local `const`, with the array iterator intact, ADR 0349): it
+/// reads plain properties and cannot throw.
+fn local_literal_destructuring(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    binding: &solid_facts::ast::BindingFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_facts::ast::BindingShape;
+    let ast = &file.ast;
+    let Some(initializer) = binding.initializer.map(|span| ast.peel_ts_sugar_span(span)) else {
+        return false;
+    };
+    let opens = |span: Span, bracket: char| {
+        file.source_text(ast.peel_ts_sugar_span(span))
+            .is_some_and(|text| text.starts_with(bracket))
+    };
+    let literal = |span: Span, bracket: char| {
+        if opens(span, bracket) {
+            return true;
+        }
+        // A local `const` holding the literal.
+        ast.reference_declaration(span)
+            .and_then(|declaration| {
+                ast.bindings.iter().find(|candidate| {
+                    candidate.immutable
+                        && candidate.shape == BindingShape::Identifier
+                        && candidate.names.iter().any(|name| name.span == declaration)
+                })
+            })
+            .is_some_and(|candidate| {
+                component.span.contains(candidate.declaration)
+                    && candidate
+                        .initializer
+                        .is_some_and(|value| opens(value, bracket))
+            })
+    };
+    let returned_object = || {
+        ast.call_at(initializer).is_some_and(|call| {
+            call.arguments.is_empty()
+                && local_function_of_callee(file, call.callee).is_some_and(|callee| {
+                    callee.expression_body
+                        && component.span.contains(callee.span)
+                        && inert_local_function(file, component, callee)
+                        && opens(callee.body, '{')
+                })
+        })
+    };
+    let no_default = file
+        .source_text(binding.pattern)
+        .is_some_and(|pattern| !pattern.contains('='));
+    no_default
+        && match binding.shape {
+            BindingShape::Object => literal(initializer, '{') || returned_object(),
+            BindingShape::Array => lookup.array_iteration_intact() && literal(initializer, '['),
+            BindingShape::Identifier => true,
+        }
+}
+
+/// ADR 0505: no code that can create a reactive node runs before the module-
+/// scope `render` call at `render` in `entry`, so its tail flush is the first
+/// and holds nothing an earlier pass left: no project module's scope runs
+/// code except `entry`'s, every module loaded is the dialect's own or an
+/// analyzed project file ([`crate::indexes::module_scope_census`]), and before
+/// the call `entry` itself runs only standard-library calls and local `const`
+/// functions that run only those, references no import but the call's own
+/// callee, and writes no class, tagged template, JSX outside the call, or
+/// top-level `await`.
+fn render_runs_first(
+    lookup: &SemanticLookup<'_>,
+    entry: &solid_facts::FileFacts,
+    render: Span,
+) -> bool {
+    let (loud, unseen) = lookup.module_scope_census();
+    if unseen || loud.iter().any(|path| path != entry.path.as_str()) {
+        return false;
+    }
+    let ast = &entry.ast;
+    let Some(call) = ast.call_at(render) else {
+        return false;
+    };
+    let Some(mounted) = call.arguments.first().map(|argument| argument.span) else {
+        return false;
+    };
+    // What runs before the mount: the code ahead of the call, and the call's
+    // other arguments.
+    let before = |span: Span| span.end <= render.end && !mounted.contains(span) && span != render;
+    let standard = |call: &solid_facts::ast::CallFact| {
+        let kind = if call.construct {
+            typefacts::CallKind::Construct
+        } else {
+            typefacts::CallKind::Call
+        };
+        lookup
+            .standard_library_declaration(entry, call, kind)
+            .is_some()
+    };
+    let local_runs_standard = |call: &solid_facts::ast::CallFact| {
+        local_function_of_callee(entry, call.callee).is_some_and(|function| {
+            function.span.end <= render.start
+                && crate::indexes::at_module_scope(ast, function.span)
+                && ast
+                    .calls
+                    .iter()
+                    .filter(|inner| function.span.contains(inner.span))
+                    .all(&standard)
+        })
+    };
+    let imports = ast
+        .imports
+        .iter()
+        .flat_map(|import| import.bindings.iter().map(|binding| binding.local.span))
+        .collect::<Vec<_>>();
+    let callee = ast.peel_ts_sugar_span(call.callee);
+    ast.module_hazards.is_empty()
+        && ast
+            .calls
+            .iter()
+            .filter(|candidate| before(candidate.span))
+            .all(|candidate| standard(candidate) || local_runs_standard(candidate))
+        && ast
+            .functions
+            .iter()
+            .filter(|function| before(function.span))
+            .all(|function| {
+                crate::indexes::at_module_scope(ast, function.span)
+                    && crate::indexes::declared_function(ast, function)
+            })
+        && ast.identifiers.iter().all(|identifier| {
+            !crate::indexes::runtime_reference(ast, identifier)
+                || !before(identifier.span)
+                || identifier.span == callee
+                || ast
+                    .reference_declaration(identifier.span)
+                    .is_none_or(|declaration| !imports.contains(&declaration))
+        })
+        && !ast.classes.iter().any(|class| before(class.span))
+        && !ast.tagged_template_tags.iter().any(|tag| before(*tag))
+        && !ast.jsx_elements.iter().any(|element| before(element.span))
+        && !ast.jsx_fragments.iter().any(|fragment| before(*fragment))
+        && !ast
+            .awaits
+            .iter()
+            .any(|awaited| before(*awaited) && crate::indexes::at_module_scope(ast, *awaited))
+        && !ast.module_loads.iter().any(|load| before(load.span))
+}
+
+/// ADR 0504 review: the read at `site` runs on every normal completion of the
+/// apply's first run: on every completion of its own function, and each
+/// in-place layer's call on every completion of the function holding it, up to
+/// the apply. A guard false on the first run (`if (v === 1) return;`, an empty
+/// loop) skips it.
+fn read_on_every_completion_of_apply(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    apply: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let mut at = site;
+    for _ in 0..16 {
+        let Some(function) = crate::owners::containing_body_function(&file.ast, at) else {
+            return false;
+        };
+        if !crate::interproc::site_on_every_completion(lookup, file, function.span, at) {
+            return false;
+        }
+        if function.span == apply {
+            return true;
+        }
+        at = match layer_run(file, function, lookup) {
+            LayerRun::InPlace(call) | LayerRun::InPlaceAmongOthers(call) => call,
+            LayerRun::FreshStack | LayerRun::Elsewhere => return false,
+        };
+    }
+    false
 }
 
 /// Every call written in `component`'s own body between `from` and `until`
