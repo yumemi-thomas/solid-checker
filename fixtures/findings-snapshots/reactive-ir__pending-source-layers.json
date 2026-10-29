@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 526,
-      "end": 538,
+      "start": 579,
+      "end": 591,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 946,
-      "end": 958,
+      "start": 999,
+      "end": 1011,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 1451,
-      "end": 1463,
+      "start": 1504,
+      "end": 1516,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 1987,
-      "end": 1997,
+      "start": 2040,
+      "end": 2050,
       "fixes": 0
     },
     {
@@ -47,8 +47,38 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 2457,
-      "end": 2467,
+      "start": 2510,
+      "end": 2520,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
+      "start": 3047,
+      "end": 3053,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
+      "start": 3297,
+      "end": 3303,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
+      "start": 3568,
+      "end": 3574,
       "fixes": 0
     }
   ]

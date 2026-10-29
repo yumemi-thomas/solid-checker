@@ -2290,7 +2290,14 @@ pub(crate) fn runs_nothing_before_in_layers(
             .all(|parameter| parameter.shape == solid_facts::ast::BindingShape::Identifier);
         if earlier
             || !plain_parameters
-            || !throws_nothing_before(file, function, function.span.start, at.start, None, lookup)
+            || !throws_nothing_before(
+                file,
+                function,
+                function.span.start,
+                at.start,
+                BodyAdmits::default(),
+                lookup,
+            )
         {
             return false;
         }
@@ -2421,8 +2428,7 @@ pub(crate) fn pending_apply_first_read(
                 component,
                 memo.span.end,
                 call.span.start,
-                None,
-                None,
+                BodyAdmits::default(),
                 lookup,
             )
             && (lookup.primitive_at_call(file, call.span) == Some(Primitive::CreateRenderEffect)
@@ -2431,7 +2437,8 @@ pub(crate) fn pending_apply_first_read(
         // ADR 0510: a module-scope memo of a module that only creates.
         module_source_pending(file, component, call, source_file, binding, memo, lookup)
     } else {
-        // ADR 0510: a memo the mounting parent hands over.
+        // ADR 0510: a memo the mounting parent hands over; ADR 0511: one an
+        // inert project hook the body calls creates.
         parent_source_pending(
             file,
             site,
@@ -2441,7 +2448,7 @@ pub(crate) fn pending_apply_first_read(
             binding,
             memo,
             lookup,
-        )
+        ) || hook_source_pending(file, component, call, source_file, binding, memo, lookup)
     };
     ok.then_some(apply.span)
 }
@@ -2491,6 +2498,11 @@ fn user_apply_runs_in_mount_flush(
 pub(super) struct BodyAdmits {
     pub(super) context: Option<Span>,
     pub(super) source: Option<Span>,
+    /// ADR 0511: the call of an inert project hook in the body
+    /// ([`super::pending_sources::inert_hook`]): it creates nodes, runs
+    /// nothing else and returns an object literal of data properties, so the
+    /// call and a destructuring of its result cannot throw.
+    pub(super) hook: Option<Span>,
 }
 
 /// ADR 0505's premises on the component itself, its mount aside: plain
@@ -2646,6 +2658,7 @@ fn body_runs_nothing_else(
         call.span == effect.span
             || memo.is_some_and(|memo| call.span == memo.span)
             || provided_context_call(file, call, provided, lookup)
+            || admits.hook == Some(call.span)
             || (inert_creation(file, call, lookup)
                 && lookup.primitive_at_call(file, call.span) != Some(Primitive::CreateContext))
             || matches!(
@@ -2665,7 +2678,7 @@ fn body_runs_nothing_else(
         primitive_callee(call)
             || (literal_arguments(call)
                 && local_function_of_callee(file, call.callee).is_some_and(|callee| {
-                    own(callee.span) && inert_local_function(file, component, callee, admits.source)
+                    own(callee.span) && inert_local_function(file, component, callee, admits)
                 }))
     });
     // A nested function runs only when called: by a call above (inert), or
@@ -2724,7 +2737,8 @@ fn body_runs_nothing_else(
             own(binding.declaration) && binding.shape != solid_facts::ast::BindingShape::Identifier
         })
         .all(|binding| {
-            local_literal_destructuring(file, component, binding, admits.source, lookup)
+            local_literal_destructuring(file, component, binding, admits, lookup)
+                || hook_result_destructuring(file, binding, admits)
                 // A signal's tuple (ADR 0510, `inert_creation`).
                 || binding
                     .call_initializer
@@ -2741,7 +2755,7 @@ fn inert_local_function(
     file: &solid_facts::FileFacts,
     component: &solid_facts::ast::FunctionFact,
     function: &solid_facts::ast::FunctionFact,
-    source: Option<Span>,
+    admits: BodyAdmits,
 ) -> bool {
     let ast = &file.ast;
     let inside = |span: Span| function.span.contains(span);
@@ -2774,9 +2788,25 @@ fn inert_local_function(
                 || ast
                     .reference_declaration(identifier.span)
                     .is_some_and(|declaration| {
-                        component.span.contains(declaration) || source == Some(declaration)
+                        component.span.contains(declaration) || admits.source == Some(declaration)
                     })
         })
+}
+
+/// ADR 0511: an object pattern with no default taking apart the result of
+/// the body's inert hook call ([`BodyAdmits::hook`]), which is an object
+/// literal of data properties: it reads plain properties and cannot throw.
+fn hook_result_destructuring(
+    file: &solid_facts::FileFacts,
+    binding: &solid_facts::ast::BindingFact,
+    admits: BodyAdmits,
+) -> bool {
+    binding.shape == solid_facts::ast::BindingShape::Object
+        && admits.hook.is_some()
+        && binding.call_initializer == admits.hook
+        && file
+            .source_text(binding.pattern)
+            .is_some_and(|pattern| !pattern.contains('=') && !pattern.contains("..."))
 }
 
 /// A destructuring declaration with no default that takes apart an object
@@ -2788,7 +2818,7 @@ fn local_literal_destructuring(
     file: &solid_facts::FileFacts,
     component: &solid_facts::ast::FunctionFact,
     binding: &solid_facts::ast::BindingFact,
-    source: Option<Span>,
+    admits: BodyAdmits,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     use solid_facts::ast::BindingShape;
@@ -2826,7 +2856,7 @@ fn local_literal_destructuring(
                 && local_function_of_callee(file, call.callee).is_some_and(|callee| {
                     callee.expression_body
                         && component.span.contains(callee.span)
-                        && inert_local_function(file, component, callee, source)
+                        && inert_local_function(file, component, callee, admits)
                         && opens(callee.body, '{')
                 })
         })
@@ -2975,8 +3005,7 @@ pub(super) fn body_runs_nothing_between(
     component: &solid_facts::ast::FunctionFact,
     from: u32,
     until: u32,
-    provided: Option<Span>,
-    source: Option<Span>,
+    admits: BodyAdmits,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     use solid_dialect::Primitive;
@@ -2993,7 +3022,8 @@ pub(super) fn body_runs_nothing_between(
             matches!(
                 lookup.primitive_at_call(file, call.span),
                 Some(Primitive::CreateSignal | Primitive::CreateMemo)
-            ) || provided_context_call(file, call, provided, lookup)
+            ) || provided_context_call(file, call, admits.context, lookup)
+                || admits.hook == Some(call.span)
                 || local_function_of_callee(file, call.callee).is_some_and(|callee| {
                     component.span.contains(callee.span)
                         && !ast
@@ -3005,12 +3035,12 @@ pub(super) fn body_runs_nothing_between(
                             callee,
                             callee.span.start,
                             callee.span.end,
-                            source,
+                            admits,
                             lookup,
                         )
                 })
         })
-        && throws_nothing_before(file, component, from, until, source, lookup)
+        && throws_nothing_before(file, component, from, until, admits, lookup)
 }
 
 /// ADR 0510 review: no expression of `function`'s own code (not of a function
@@ -3028,7 +3058,7 @@ pub(super) fn throws_nothing_before(
     function: &solid_facts::ast::FunctionFact,
     from: u32,
     until: u32,
-    source: Option<Span>,
+    admits: BodyAdmits,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     use solid_dialect::Primitive;
@@ -3043,7 +3073,8 @@ pub(super) fn throws_nothing_before(
     // A signal's or memo's tuple, or a local literal taken apart (ADR 0505's
     // [`local_literal_destructuring`]): nothing there can throw.
     let safe_pattern = |binding: &solid_facts::ast::BindingFact| {
-        local_literal_destructuring(file, function, binding, source, lookup)
+        local_literal_destructuring(file, function, binding, admits, lookup)
+            || hook_result_destructuring(file, binding, admits)
             || (binding.shape == solid_facts::ast::BindingShape::Array
                 && binding
                     .call_initializer

@@ -1,5 +1,6 @@
 import { createMemo, createRenderEffect } from "solid-js";
 import type { Accessor } from "solid-js";
+import { useData, useDataThenParse } from "./hooks";
 
 // ADR 0511: a read of a memo the mounting parent hands over as an exact prop
 // is placed through the in-place layers of the apply (an IIFE, a named
@@ -128,4 +129,42 @@ export function PropThrowFirst() {
       <ThrowChild data={data} />
     </div>
   );
+}
+
+// Violation (SC5001): the memo an inert hook of another module creates in
+// this body is pending at the render effect's first run.
+export function HookDestructured() {
+  const { data } = useData();
+  createRenderEffect(
+    () => 1,
+    () => {
+      data();
+    },
+  );
+  return <p>static</p>;
+}
+
+// Uncertifiable: the hook is called after the effect, whose first run meets
+// `data` in its temporal dead zone.
+export function HookAfterEffect() {
+  createRenderEffect(
+    () => 1,
+    () => {
+      data();
+    },
+  );
+  const { data } = useData();
+  return <p>static</p>;
+}
+
+// Uncertifiable: the hook runs code after the creation (it throws).
+export function HookRunsCode() {
+  const { data } = useDataThenParse();
+  createRenderEffect(
+    () => 1,
+    () => {
+      data();
+    },
+  );
+  return <p>static</p>;
 }

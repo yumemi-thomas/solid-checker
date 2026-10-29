@@ -268,8 +268,11 @@ pub(super) fn module_source_pending(
             component,
             component.body.start,
             effect.span.start,
-            None,
-            source,
+            BodyAdmits {
+                context: None,
+                source,
+                hook: None,
+            },
             lookup,
         )
         && (render_effect
@@ -281,6 +284,7 @@ pub(super) fn module_source_pending(
                 BodyAdmits {
                     context: None,
                     source,
+                    hook: None,
                 },
                 lookup,
             ))
@@ -436,8 +440,11 @@ pub(super) fn parent_source_pending(
         component,
         component.body.start,
         effect.span.start,
-        provided,
-        None,
+        BodyAdmits {
+            context: provided,
+            source: None,
+            hook: None,
+        },
         lookup,
     ) && (render_effect
         || user_apply_flush_premises(
@@ -448,6 +455,7 @@ pub(super) fn parent_source_pending(
             BodyAdmits {
                 context: provided,
                 source: None,
+                hook: None,
             },
             lookup,
         ))
@@ -548,4 +556,219 @@ fn only_called_members(file: &solid_facts::FileFacts, declaration: Span) -> bool
                         .any(|assignment| assignment.target.contains(member.span))
             })
         })
+}
+
+/// ADR 0511: `hook` (in `hook_file`) is an inert project hook: a function of
+/// an analyzed project file (not a dependency or a declaration file), not
+/// async or a generator, with a block body and no parameter, whose own code
+/// runs nothing but [`inert_creation`]s (each call one, every nested
+/// function such a creation's compute), throws nothing before its end
+/// ([`throws_nothing_before`]), references only its own names and the
+/// creations' callees, and has one `return`, in its straight-line flow, of
+/// an object literal whose properties are plain data properties naming its
+/// own bindings (`return { a1 };`). Its call creates those nodes under the
+/// caller's owner and returns a fresh object: nothing there reads, throws or
+/// lets a microtask run.
+pub(crate) fn inert_hook(
+    hook_file: &solid_facts::FileFacts,
+    hook: &FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &hook_file.ast;
+    let path = hook_file.path.as_str();
+    let own = |span: Span| {
+        hook.body.contains(span)
+            && crate::owners::containing_ast_function(ast, span)
+                .is_some_and(|function| function.span == hook.span)
+    };
+    let creations = ast
+        .calls
+        .iter()
+        .filter(|call| own(call.span))
+        .collect::<Vec<_>>();
+    if path.contains("/node_modules/")
+        || [".d.ts", ".d.mts", ".d.cts"]
+            .iter()
+            .any(|suffix| path.ends_with(suffix))
+        || hook.r#async
+        || hook.generator
+        || hook.expression_body
+        || !hook.parameters.is_empty()
+        || hook.rest_parameter
+        || !creations
+            .iter()
+            .all(|call| inert_creation(hook_file, call, lookup))
+    {
+        return false;
+    }
+    let computes = creations
+        .iter()
+        .filter_map(|call| call.arguments.first())
+        .map(|argument| ast.peel_ts_sugar_span(argument.span))
+        .collect::<Vec<_>>();
+    let callees = creations
+        .iter()
+        .map(|call| ast.peel_ts_sugar_span(call.callee))
+        .collect::<Vec<_>>();
+    let returns = ast
+        .returns
+        .iter()
+        .filter(|returned| own(returned.span))
+        .collect::<Vec<_>>();
+    let [returned] = returns.as_slice() else {
+        return false;
+    };
+    let Some(object) = returned.argument.map(|span| ast.peel_ts_sugar_span(span)) else {
+        return false;
+    };
+    let object_literal = returned.straight_line
+        && hook_file
+            .source_text(object)
+            .is_some_and(|text| text.starts_with('{'))
+        && ast
+            .object_properties
+            .iter()
+            .filter(|property| object.contains(property.span))
+            .all(|property| {
+                property.data
+                    && !property.computed
+                    && ast
+                        .reference_declaration(ast.peel_ts_sugar_span(property.value))
+                        .is_some_and(|declaration| hook.body.contains(declaration))
+            });
+    object_literal
+        && ast.functions.iter().all(|function| {
+            function.span == hook.span
+                || !hook.span.contains(function.span)
+                || computes.contains(&function.span)
+        })
+        && !ast.jsx_elements.iter().any(|element| own(element.span))
+        && !ast.jsx_fragments.iter().any(|fragment| own(*fragment))
+        && !ast.awaits.iter().any(|awaited| own(*awaited))
+        && throws_nothing_before(
+            hook_file,
+            hook,
+            hook.body.start,
+            hook.body.end,
+            BodyAdmits::default(),
+            lookup,
+        )
+        && ast.identifiers.iter().all(|identifier| {
+            !crate::indexes::runtime_reference(ast, identifier)
+                || !own(identifier.span)
+                || callees.contains(&identifier.span)
+                || ast
+                    .reference_declaration(identifier.span)
+                    .is_some_and(|declaration| hook.body.contains(declaration))
+        })
+}
+
+/// ADR 0511: the call in `component`'s own body, before the effect at
+/// `effect`, of the inert hook `hook` (in `hook_file`): a call with no
+/// argument whose callee resolves exactly to the hook (an identifier bound
+/// to it that nothing writes), on every completion of the body, as a
+/// `const`'s whole initializer bound to a name or taken apart by an object
+/// pattern.
+fn hook_call_in_body<'f>(
+    file: &'f solid_facts::FileFacts,
+    component: &FunctionFact,
+    effect: &CallFact,
+    hook_file: &solid_facts::FileFacts,
+    hook: &FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f CallFact> {
+    let ast = &file.ast;
+    let mut calls = ast.calls.iter().filter(|call| {
+        call.span.end <= effect.span.start
+            && crate::owners::containing_ast_function(ast, call.span)
+                .is_some_and(|function| function.span == component.span)
+            && project_callee_at_parameter(file, call, 0, lookup).is_some_and(
+                |(callee_file, callee, _)| {
+                    callee_file.path == hook_file.path && callee.span == hook.span
+                },
+            )
+    });
+    let call = calls.next()?;
+    let callee = ast.peel_ts_sugar_span(call.callee);
+    let named = hook.name.as_ref().map(|name| name.span);
+    (calls.next().is_none()
+        && !call.construct
+        && call.arguments.is_empty()
+        && !ast.members.iter().any(|member| member.span == callee)
+        && ast
+            .identifiers
+            .iter()
+            .any(|identifier| identifier.span == callee)
+        && named.is_none_or(|name| !crate::indexes::binding_written(hook_file, name))
+        && ast
+            .reference_declaration(callee)
+            .is_some_and(|declaration| !crate::indexes::binding_written(file, declaration))
+        && crate::interproc::site_on_every_completion(lookup, file, component.span, call.span)
+        && ast.bindings.iter().any(|binding| {
+            binding.immutable
+                && matches!(
+                    binding.shape,
+                    BindingShape::Identifier | BindingShape::Object
+                )
+                && binding
+                    .initializer
+                    .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call.span)
+        }))
+    .then_some(call)
+}
+
+/// ADR 0511: the source of the effect `effect`'s apply read is a `const`
+/// async memo (`binding`, `memo`) an inert project hook creates
+/// ([`inert_hook`]; `const a1 = createMemo(async () => 1); return { a1 };`),
+/// on every completion, with a compute of one primitive literal, and the
+/// component calls that hook once in its body before the effect
+/// ([`hook_call_in_body`]): the memo is created there, under the component's
+/// owner, pending until a microtask (`@solidjs/signals@2.0.0-rc.17`
+/// `dist/dev-shared.js:3640-3690`), and the exact transport carried the read
+/// to its declaration. The component takes plain parameters and runs nothing
+/// else in its body before the effect; a `createEffect` also meets ADR
+/// 0505's premises on a mount whose `render` runs first.
+pub(super) fn hook_source_pending(
+    file: &solid_facts::FileFacts,
+    component: &FunctionFact,
+    effect: &CallFact,
+    hook_file: &solid_facts::FileFacts,
+    binding: &BindingFact,
+    memo: &CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(hook) = crate::owners::containing_ast_function(&hook_file.ast, binding.declaration)
+    else {
+        return false;
+    };
+    if (hook_file.path == file.path && hook.span == component.span)
+        || !memo_compute_is_literal(hook_file, memo)
+        || !crate::interproc::site_on_every_completion(lookup, hook_file, hook.span, memo.span)
+        || !plain_component(component)
+        || !inert_hook(hook_file, hook, lookup)
+    {
+        return false;
+    }
+    let Some(call) = hook_call_in_body(file, component, effect, hook_file, hook, lookup) else {
+        return false;
+    };
+    let admits = BodyAdmits {
+        context: None,
+        source: None,
+        hook: Some(call.span),
+    };
+    let render_effect =
+        lookup.primitive_at_call(file, effect.span) == Some(Primitive::CreateRenderEffect);
+    body_runs_nothing_between(
+        file,
+        component,
+        component.body.start,
+        effect.span.start,
+        admits,
+        lookup,
+    ) && (render_effect
+        || (user_apply_flush_premises(file, component, effect, None, admits, lookup)
+            && crate::owners::module_render_sites(lookup, file, component)
+                .iter()
+                .any(|site| render_runs_first(lookup, site.entry, site.render))))
 }
