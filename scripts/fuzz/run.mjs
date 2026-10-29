@@ -36,7 +36,7 @@ import { mapPoolSettled } from "../lib/pool.mjs";
 import { cleanupEvidence } from "./disposal.mjs";
 import { containerEvidence } from "./container.mjs";
 
-const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "containers", "real-clock", "help"]);
+const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "containers", "real-clock", "no-typecheck-batch", "help"]);
 const VALUES = new Set(["cache-dir", "seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch", "shrink-control", "ledger", "code", "context", "binding", "layer", "variant"]);
 
 export function parseArgs(argv, { extraValues = [], extraFlags = [] } = {}) {
@@ -93,6 +93,8 @@ export function configFrom(options, out) {
     shrinkControl: options.shrinkControl ?? "accepted",
     virtualClock: !options.realClock,
     instrument: !options.noInstrument,
+    // Type checks gathered into one `tsrs -b` per batch (typecheck.mjs createTypecheckBatcher); `--no-typecheck-batch`: one process each.
+    typecheckBatch: !options.noTypecheckBatch,
   };
 }
 
@@ -144,6 +146,7 @@ const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--
   [--shrink-control accepted|each]   with --control, ask for the control of each accepted reduction (default) or of every candidate tried
   [--real-clock]      the fast path waits on the wall clock (the default is the virtual clock, fast/virtual-clock.mjs); Chrome always uses its own
   [--no-daemon]       one Vitest process per batch instead of the long-lived fast host
+  [--no-typecheck-batch]  one tsrs process per type check instead of one tsrs -b per batch
   [--cache-dir <dir>] [--no-cache]   the runtime cache: type checks and fast-path records by case files (cache.mjs; default $TMPDIR/solid-checker-fuzz-cache)
   [--no-instrument]   run the clean text with no hit ledger (the baseline of the neutrality regression)
   [--generate-only]   write and type-check the programs, run nothing else
