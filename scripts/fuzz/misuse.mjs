@@ -13,7 +13,7 @@
 // in; a context where the call is legal (a write in a handler) is not in the list. `typedAway` codes have no template: the published
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
-  signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, storeNestedSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt,
+  signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, storeNestedSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
   button, child, show, forEach, use, contain,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
@@ -114,8 +114,9 @@ export const SPEC = {
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
   },
   // The `-guarded` applies (ADR 0504 review): the read sits behind a guard that returns on the first run, which is the only run;
-  // `-closure`: the guard is in a closure the apply calls.
-  PENDING_ASYNC_UNTRACKED_READ: { legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure"],
+  // `-closure`: the guard is in a closure the apply calls. `-rerun`: the compute reads a signal a button sets to 2, so the apply runs again
+  // and the guarded read executes (the source settled by then): Chrome then judges the strict read the checker reports there.
+  PENDING_ASYNC_UNTRACKED_READ: { legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
     contexts: ["body", "root", "effect-apply", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
   },
@@ -283,6 +284,16 @@ function inContext(context, stmts, kit) {
       const apply = fn([decl(step, fn([contain("guard-return", 0, stmts)])), expr(call(ref(step)))]);
       return { body: [expr(prim(context.startsWith("effect") ? "effect" : "render", fn([ret(num(1))]), { apply }))], view: [] };
     }
+    case "effect-apply-guarded-rerun": case "render-apply-guarded-rerun": {
+      const trigger = signal(kit.name("t"), 1, "src");
+      const apply = fn([contain("guard-return", 0, stmts)]);
+      const compute = fn([ret(read(trigger.name))]);
+      return {
+        body: [expr(prim(context.startsWith("effect") ? "effect" : "render", compute, { apply }))],
+        view: [button(kit.name("b"), [expr(write(trigger.name, 2))])],
+        sigs: [trigger],
+      };
+    }
     case "render-apply-guarded": return { body: [expr(prim("render", fn([ret(num(1))]), { apply: fn([contain("guard-return", 0, stmts)]) }))], view: [] };
     case "tracked": return { body: [expr(prim("tracked", fn(stmts)))], view: [] };
     case "settled": return { body: [expr(prim("settled", fn(stmts)))], view: [] };
@@ -336,5 +347,5 @@ export function buildMisuse(kit, plan = {}) {
   const placed = inContext(context, stmts, kit);
   const mount = plan.mount ?? "root";
   if (!MOUNTS.includes(mount)) throw new Error(`unknown mount ${mount}`);
-  return { sigs, body: placed.body, view: placed.view, shape: `${code}/${context}/${binding}/${layer}${mount === "root" ? "" : `/${mount}`}`, misuse: { code, context, variant, binding, layer, mount } };
+  return { sigs: [...sigs, ...(placed.sigs ?? [])], body: placed.body, view: placed.view, shape: `${code}/${context}/${binding}/${layer}${mount === "root" ? "" : `/${mount}`}`, misuse: { code, context, variant, binding, layer, mount } };
 }
