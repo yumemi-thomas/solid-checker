@@ -44,6 +44,25 @@ export async function evaluate(entries, config, deps = {}) {
 }
 
 /**
+ * Where a run's time goes, summed over the work items of each phase (busy time: items overlap in a pool, so a sum can exceed the
+ * wall time): materializing projects, type checks run (not cache hits), checker runs, fast-path batches. `phaseTimings()` reads and
+ * `resetPhaseTimings()` clears them; the grids print them at the end.
+ */
+const timings = { materialize: { ms: 0, n: 0 }, typecheck: { ms: 0, n: 0 }, checker: { ms: 0, n: 0 }, fast: { ms: 0, n: 0 } };
+export const phaseTimings = () => JSON.parse(JSON.stringify(timings));
+/** The timings as one log line: each phase's busy seconds and item count. */
+export const formatPhaseTimings = (phases = phaseTimings()) => Object.entries(phases).map(([phase, { ms, n }]) => `${phase} ${(ms / 1000).toFixed(1)}s/${n}`).join(", ");
+export function resetPhaseTimings() { for (const phase of Object.values(timings)) { phase.ms = 0; phase.n = 0; } }
+const timed = (phase, work) => {
+  const start = performance.now();
+  const done = () => { timings[phase].ms += performance.now() - start; timings[phase].n += 1; };
+  const value = work();
+  if (value && typeof value.then === "function") return value.finally(done);
+  done();
+  return value;
+};
+
+/**
  * The first half of `evaluate`: writes the cases, type-checks them and runs the checker (step 1). `finishEntries` runs the fast path and
  * classifies (steps 2 and 3). Apart, a caller can overlap one batch's checker work with the previous batch's fast path (matrix.mjs); the
  * halves are `evaluate`'s, so the records and classifications are the same.
@@ -79,18 +98,21 @@ export async function prepareEntries(entries, config, deps = {}) {
 
   // 1. Write the case, type-check it as the oracle compiles it, and ask the checker (on the clean text).
   const prepared = await mapPoolSettled(entries, async ({ program, built }) => {
-    const caseDir = writeCase(join(casesDir, built.id), built);
-    const dir = materializeForChecker(built, install, built.id);
-    const typed = await remembered(built, "typecheck", () => types(dir, { tsc: config.tsc }), cacheableTypecheck);
+    const caseDir = timed("materialize", () => writeCase(join(casesDir, built.id), built));
+    const dir = timed("materialize", () => materializeForChecker(built, install, built.id));
+    const typed = await remembered(built, "typecheck", () => timed("typecheck", () => types(dir, { tsc: config.tsc })), cacheableTypecheck);
     if (!typed.ok) return { program, built, caseDir, dir, typecheck: typed };
     const ordinary = hasPackages(built);
-    const checker = await check(dir, { bin: config.bin, typefacts: config.typefacts, ordinary });
+    const checker = await timed("checker", () => check(dir, { bin: config.bin, typefacts: config.typefacts, ordinary }));
     const value = { program, built, caseDir, dir, typecheck: typed, checker };
     if (instrument) {
-      const twinDir = materializeForChecker(built, install, `${built.id}-run`, { twin: true });
-      value.twinTypecheck = await remembered(built, "typecheck-twin", () => types(twinDir, { tsc: config.tsc }), cacheableTypecheck);
-      if (control && checker.ok && value.twinTypecheck.ok) value.twinChecker = await check(twinDir, { bin: config.bin, typefacts: config.typefacts, ordinary });
-      if (!config.keepWork) rmSync(twinDir, { recursive: true, force: true });
+      // The twin's project is written only when something reads it: a type check that is not a cache hit (or is spot-checked),
+      // or the twin's checker control.
+      let twinDir = null;
+      const twin = () => (twinDir ??= timed("materialize", () => materializeForChecker(built, install, `${built.id}-run`, { twin: true })));
+      value.twinTypecheck = await remembered(built, "typecheck-twin", () => timed("typecheck", () => types(twin(), { tsc: config.tsc })), cacheableTypecheck);
+      if (control && checker.ok && value.twinTypecheck.ok) value.twinChecker = await timed("checker", () => check(twin(), { bin: config.bin, typefacts: config.typefacts, ordinary }));
+      if (twinDir && !config.keepWork) rmSync(twinDir, { recursive: true, force: true });
     }
     return value;
   }, { concurrency: config.concurrency });
@@ -113,7 +135,8 @@ export async function prepareEntries(entries, config, deps = {}) {
 /** The second half of `evaluate` (steps 2 and 3) on what `prepareEntries` returned. */
 export async function finishEntries({ results, live }, config, deps = {}) {
   // The long-lived host (`config.fast`) serves the batches when there is one; tests inject `deps.runFast`.
-  const fast = deps.runFast ?? (config.fast ? (cases) => config.fast.run(cases) : runFast);
+  const runBatch = deps.runFast ?? (config.fast ? (cases) => config.fast.run(cases) : runFast);
+  const fast = (cases, options) => timed("fast", () => runBatch(cases, options));
   const instrument = config.instrument !== false;
   const control = instrument && Boolean(config.control);
   const cache = config.runtimeCache ?? null;

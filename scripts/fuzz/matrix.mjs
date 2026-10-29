@@ -30,7 +30,7 @@ import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import { LAYERS, MISUSE_CODES, SPEC, TEMPLATE_CODES, gridBindingsOf, gridVariantsOf } from "./misuse.mjs";
 import { isSite, walk } from "./model.mjs";
-import { evaluate, finishEntries, prepareEntries, runtimeCached } from "./pipeline.mjs";
+import { evaluate, finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { legalTwin } from "./falseclean.mjs";
@@ -492,6 +492,7 @@ async function sweep(options, config, out) {
     console.error(`matrix: ${Math.min(at + CHUNK, entries.length)}/${entries.length} programs, ${Math.round((Date.now() - started) / 1000)}s, ${JSON.stringify(tally(rows))}`);
   }
 
+  console.error(`matrix: evaluated in ${Math.round((Date.now() - started) / 1000)}s; busy time ${formatPhaseTimings()}`);
   assertFindingsMapped();
   const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length, { first: rows.find((row) => row.outcome === "typed-away")?.detail?.errors?.[0] });
   if (refusal) throw new Error(refusal);
@@ -515,8 +516,12 @@ async function sweep(options, config, out) {
       if (n < limits[row.outcome]) { bySample.set(key, n + 1); pick.push(row); }
     }
     console.error(`matrix: Chrome confirmation of ${pick.length} programs`);
-    for (let at = 0; at < pick.length; at += 40) {
-      const chunk = pick.slice(at, at + 40);
+    const chromeStarted = Date.now();
+    // Chunks only pace the progress line and the retries: the oracle's pool runs a chunk's cases independently, so a larger chunk
+    // changes no record, and spends less time waiting on one chunk's slowest case before the next starts.
+    const CHROME_CHUNK = 160;
+    for (let at = 0; at < pick.length; at += CHROME_CHUNK) {
+      const chunk = pick.slice(at, at + CHROME_CHUNK);
       const records = await chromeRecords(chunk.map((row) => values.get(row.id)), config, options, out);
       for (const row of chunk) row.chrome = judgeChrome(row, records.get(row.id));
       // A browser that would not close in time or a clean run that did not report is the machine's, not the program's: once more.
@@ -525,7 +530,7 @@ async function sweep(options, config, out) {
         const again = await chromeRecords(retry.map((row) => values.get(row.id)), config, options, out);
         for (const row of retry) { const next = judgeChrome(row, again.get(row.id)); if (next.status !== "chrome-inconclusive") row.chrome = { ...next, retried: true }; }
       }
-      console.error(`matrix: Chrome ${Math.min(at + 40, pick.length)}/${pick.length}`);
+      console.error(`matrix: Chrome ${Math.min(at + CHROME_CHUNK, pick.length)}/${pick.length}, ${Math.round((Date.now() - chromeStarted) / 1000)}s`);
     }
   }
 

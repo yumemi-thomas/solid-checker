@@ -29,7 +29,7 @@ import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
 import { fnv, regionOf, siteOf } from "./matrix.mjs";
 import { LAYERS, LEGAL_CODES, SPEC, gridBindingsOf, legalVariantsOf } from "./misuse.mjs";
-import { evaluate } from "./pipeline.mjs";
+import { finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
 import { harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
@@ -112,9 +112,21 @@ export async function runLegal(options) {
     console.error(`legal: ${cells.length} cells, ${entries.length} programs`);
     const rows = [];
     const values = new Map();
-    for (let at = 0; at < entries.length; at += 150) {
-      const chunk = entries.slice(at, at + 150);
-      const results = await evaluate(chunk.map(({ program, built }) => ({ program, built })), config);
+    const started = Date.now();
+    // As matrix.mjs: with every runtime cached no Vitest batch runs, so the workers' share goes to the checker; and chunk k's fast
+    // path runs while chunk k+1 is type-checked and checked. Each chunk's records and verdicts are what `evaluate` gives it.
+    const plain = (list) => list.map(({ program, built }) => ({ program, built }));
+    const run = runtimeCached(plain(entries), config) ? { ...config, concurrency: config.concurrency + config.workers } : config;
+    if (run !== config) console.error(`legal: every program's runtime is cached; checker concurrency ${run.concurrency}`);
+    const chunks = [];
+    for (let at = 0; at < entries.length; at += 150) chunks.push(entries.slice(at, at + 150));
+    const prepare = (chunk) => { const stage = prepareEntries(plain(chunk), run); stage.catch(() => {}); return stage; };
+    let next = chunks.length ? prepare(chunks[0]) : null;
+    for (const [number, chunk] of chunks.entries()) {
+      const at = number * 150;
+      const stage = await next;
+      next = number + 1 < chunks.length ? prepare(chunks[number + 1]) : null;
+      const results = await finishEntries(stage, run);
       for (const { cell, program, built } of chunk) {
         const value = results.get(built.id);
         const site = siteOf(built);
@@ -123,8 +135,9 @@ export async function runLegal(options) {
         rows.push({ id: built.id, seed: program.seed, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, outcome: verdict.outcome, detail: verdict.detail, site: { line: site.line, hit: site.hit, aux: site.aux } });
         values.set(built.id, value);
       }
-      console.error(`legal: ${Math.min(at + 150, entries.length)}/${entries.length}, ${JSON.stringify(tally(rows))}`);
+      console.error(`legal: ${Math.min(at + 150, entries.length)}/${entries.length}, ${Math.round((Date.now() - started) / 1000)}s, ${JSON.stringify(tally(rows))}`);
     }
+    console.error(`legal: evaluated in ${Math.round((Date.now() - started) / 1000)}s; busy time ${formatPhaseTimings()}`);
     assertFindingsMapped();
     const refusal = typeErrorRefusal(rows.filter((row) => row.outcome === "typed-away").length, rows.length);
     if (refusal) throw new Error(refusal);
@@ -148,7 +161,9 @@ export async function runLegal(options) {
         return true;
       });
       const cases = pick.map((row) => ({ id: row.id, dir: values.get(row.id).caseDir, sites: values.get(row.id).built.sites }));
+      const chromeStarted = Date.now();
       const records = pick.length ? await runChrome(cases, { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency, withClean: true, executionCache: browserExecutionCache(options) }) : new Map();
+      console.error(`legal: Chrome confirmed ${pick.length} programs in ${Math.round((Date.now() - chromeStarted) / 1000)}s`);
       for (const row of pick) {
         const value = values.get(row.id);
         const record = records.get(row.id);
