@@ -2034,10 +2034,20 @@ impl LocalAccessContext<'_, '_> {
         let placed = self.props_call_placed(file, call)
             || self.props_call_pending_in_layers(file, call, &sources);
         let mut unplaced_read = false;
+        // ADR 0511: as an own source's (`discover_call`), a read in a named
+        // local function outside the component's own code is read where the
+        // calls of that function run (`push_call_attributed_async_reads`
+        // below), not at its own site.
+        let read_by_callers = inside_non_component_function(file, call.callee, self.lookup)
+            && named_callback_execution_role(file, call.callee, self.lookup).is_none()
+            && read_in_named_local_function(file, call.callee, self.lookup);
         for source in &sources {
             if let Some(accessor) = self.accessors.get(source.as_str())
                 && read_multiplicity.is_some()
             {
+                if placed && read_by_callers && self.async_sources.contains(source.as_str()) {
+                    continue;
+                }
                 if placed {
                     self.push_accessor_read(
                         file,
@@ -2049,6 +2059,29 @@ impl LocalAccessContext<'_, '_> {
                     );
                 } else {
                     unplaced_read = true;
+                }
+            }
+        }
+        // ADR 0511: a read in a named local function the body defines
+        // (`const wrapUse = () => { props.k(); }`) is read where a call of it
+        // runs, as an own source's is.
+        if placed
+            && !alias_withheld
+            && read_in_named_local_function(file, call.callee, self.lookup)
+            && named_callback_execution_role(file, call.callee, self.lookup).is_none()
+            && !pending_accessor_probe(file, call.callee, self.lookup)
+        {
+            for source in &sources {
+                if self.async_sources.contains(source.as_str())
+                    && self.accessors.contains_key(source.as_str())
+                {
+                    self.push_call_attributed_async_reads(
+                        file,
+                        call,
+                        source.as_str(),
+                        allowed,
+                        result,
+                    );
                 }
             }
         }
@@ -2765,9 +2798,10 @@ impl LocalAccessContext<'_, '_> {
                     && first
                     && !options.declared_loading
                     && !options.opaque
-                    && let Some(apply) = crate::execution_role::pending_apply_first_read(
+                    && let Some(apply) = crate::execution_role::pending_apply_first_read_from(
                         file,
                         call.span,
+                        read.span,
                         declaration,
                         self.lookup,
                     )

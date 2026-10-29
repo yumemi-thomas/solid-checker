@@ -170,6 +170,26 @@
       "start": 5874,
       "end": 5886,
       "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
+      "start": 6408,
+      "end": 6417,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
+      "start": 6836,
+      "end": 6846,
+      "fixes": 0
     }
   ]
 }

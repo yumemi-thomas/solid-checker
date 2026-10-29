@@ -13,6 +13,8 @@ import {
   PropIife,
   PropKept,
   PropThrowFirst,
+  PropWrapper,
+  PropWrapperTwice,
 } from "./App";
 
 const host = document.body;
@@ -29,3 +31,5 @@ render(() => <PropAliasLate />, host);
 render(() => <ContextDestructured />, host);
 render(() => <LoadingHolder />, host);
 render(() => <LoadingOn />, host);
+render(() => <PropWrapper />, host);
+render(() => <PropWrapperTwice />, host);

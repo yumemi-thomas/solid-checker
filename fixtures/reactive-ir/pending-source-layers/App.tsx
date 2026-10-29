@@ -286,3 +286,52 @@ export function LoadingOn() {
     </div>
   );
 }
+
+function WrapperChild(props: { data: Accessor<number> }) {
+  const wrapUse = () => {
+    props.data();
+  };
+  createRenderEffect(
+    () => 1,
+    () => {
+      wrapUse();
+    },
+  );
+  return <p>static</p>;
+}
+
+// Violation (SC5001, at `wrapUse()` in `WrapperChild`): the body's wrapper
+// reads the prop where its one call runs, the apply's first run.
+export function PropWrapper() {
+  const data = createMemo(async () => 1);
+  return (
+    <div>
+      <WrapperChild data={data} />
+    </div>
+  );
+}
+
+function TwiceChild(props: { data: Accessor<number> }) {
+  const wrapUse = () => {
+    props.data();
+  };
+  createRenderEffect(
+    () => 1,
+    () => {
+      wrapUse();
+    },
+  );
+  wrapUse();
+  return <p>static</p>;
+}
+
+// Uncertifiable (in `TwiceChild`): the wrapper has a second call, in the
+// body, so the apply's is not its one call.
+export function PropWrapperTwice() {
+  const data = createMemo(async () => 1);
+  return (
+    <div>
+      <TwiceChild data={data} />
+    </div>
+  );
+}

@@ -2373,6 +2373,20 @@ pub(crate) fn pending_apply_first_read(
     declaration: &typefacts::Location,
     lookup: &SemanticLookup<'_>,
 ) -> Option<Span> {
+    pending_apply_first_read_from(file, site, site, declaration, lookup)
+}
+
+/// [`pending_apply_first_read`] at `site`, a call that runs the read at
+/// `origin` (the read itself, or ADR 0511: a read in a named local function
+/// the call runs, `const wrapUse = () => { props.k(); }`): a source the mount
+/// hands over is named by the origin's own callee.
+pub(crate) fn pending_apply_first_read_from(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    origin: Span,
+    declaration: &typefacts::Location,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
     use solid_dialect::Primitive;
     let ast = &file.ast;
     let at = match climb_in_place_layers(file, site, lookup) {
@@ -2441,7 +2455,7 @@ pub(crate) fn pending_apply_first_read(
         // inert project hook the body calls creates.
         parent_source_pending(
             file,
-            site,
+            origin,
             component,
             call,
             source_file,
