@@ -14,14 +14,15 @@
 //   defect-unclaimed  a defect no rule claims (a recall gap by "never quieter than Solid"): a diagnostic with no finding
 //                     is a false clean; the ledger (known-open.json) holds the accepted ones, with a reference
 //   consequence       the engine's reaction to an earlier failure: never a finding of its own, report to Solid
-//   advisory          performance and attribution notes, not defects
+//   advisory          notes Solid documents as legal (performance, attribution, an FYI), not defects; a rule may still claim one
+//                     (`rules`), as an optional warning, but a diagnostic with no finding is not a false clean
 //   out-of-scope      SSR and server-only, browser-host or typed-away (invariant 1) codes
 export const DISPOSITIONS = ["defect-claimed", "defect-unclaimed", "consequence", "advisory", "out-of-scope"];
 
 const claimed = (rules, severity) => ({ rules, disposition: "defect-claimed", severity });
 const unclaimed = (severity, note) => ({ rules: [], disposition: "defect-unclaimed", severity, note });
 const consequence = (severity) => ({ rules: [], disposition: "consequence", severity });
-const advisory = (severity) => ({ rules: [], disposition: "advisory", severity });
+const advisory = (severity, rules = [], note) => ({ rules, disposition: "advisory", severity, ...(note ? { note } : {}) });
 const outOfScope = (severity, note) => ({ rules: [], disposition: "out-of-scope", severity, note });
 
 export const codePolicy = {
@@ -38,8 +39,13 @@ export const codePolicy = {
   STORE_WRITE_OUTSIDE_SETTER: claimed(["no-store-mutation-outside-setter"], "warn"),
   CLEANUP_IN_FORBIDDEN_SCOPE: claimed(["leaf-owner-forbidden-call"], "error"),
   PRIMITIVE_IN_FORBIDDEN_SCOPE: claimed(["leaf-owner-forbidden-call"], "error"),
-  ASYNC_OUTSIDE_LOADING_BOUNDARY: claimed(["async-outside-loading-boundary"], "warn"),
+  // Legal by Solid's own rules: an async read with no <Loading> above it makes the root wait and attach at once (rc.17
+  // `effect.ts`; SPEC-ASYNC-SEMANTICS A6 "warn-only", 08-dev-diagnostics "FYI, not an error"). SC5003 reports it as a warning.
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: advisory("warn", ["async-outside-loading-boundary"], "legal: SPEC-ASYNC-SEMANTICS A6; the rule is an optional warning"),
   PENDING_ASYNC_UNTRACKED_READ: claimed(["pending-async-unsuspendable-read"], "error"),
+  // A pending read in a leaf owner (createTrackedEffect, onSettled): SC5001's leaf-owner variant, warning severity like Solid's
+  // (docs/rules/pending-async-unsuspendable-read.md; @solidjs/signals rc.17 dev-shared.js).
+  PENDING_ASYNC_FORBIDDEN_SCOPE: claimed(["pending-async-unsuspendable-read"], "warn"),
   SYNC_NODE_RECEIVED_ASYNC: claimed(["sync-computation-received-async"], "error"),
   UNTRACKED_READ_AFTER_AWAIT: claimed(["reactive-read-after-await"], "warn"),
   MISSING_EFFECT_FN: claimed(["missing-effect-function"], "error"),
@@ -54,7 +60,6 @@ export const codePolicy = {
   // Defects no rule claims.
   PRIMITIVE_IN_EFFECT_CALLBACK: unclaimed("error"),
   RUN_WITH_DISPOSED_OWNER: unclaimed("warn", "decided not to build: docs/open-work.md, `runWithOwner` with a disposed owner"),
-  PENDING_ASYNC_FORBIDDEN_SCOPE: unclaimed("warn"),
   ASYNC_STORE_SETTER: unclaimed("error"),
   UNCOMMITTED_INPUT_OVERWRITTEN: unclaimed("warn"),
   LOADING_ON_OUTSIDE_HOLD: unclaimed("warn"),

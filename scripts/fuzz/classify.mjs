@@ -164,7 +164,12 @@ export function classify({ sites, glue = [], checker, runtime, plan, evidence = 
 
   items.push(...diagnosticItems(events, findings, evidence.registrationLines));
 
-  if (!items.length) add("agree", disturbed.length ? `no claims to compare (${disturbed[0]})` : "the checker and the runtime are both silent");
+  // A disturbed run (a throw, a halt, a runner failure) with nothing to compare proves nothing: the part that never ran could hold a
+  // diagnostic. It is inconclusive, never agreement (README, "What a finding means").
+  if (!items.length) {
+    if (disturbed.length) add("inconclusive", `the run was disturbed and nothing could be compared: ${disturbed[0]}`, { why: "disturbed" });
+    else add("agree", "the checker and the runtime are both silent");
+  }
   return result(items);
 
   function result(rows) {
@@ -189,6 +194,9 @@ export function classify({ sites, glue = [], checker, runtime, plan, evidence = 
  */
 export function diagnosticItems(events, findings, registrationLines = () => []) {
   const items = [];
+  // Certified: the checker has no uncertifiable finding in the file, so it claims it proved the whole file; a false clean there is a
+  // fail-closed break (invariant 2), not a recall gap.
+  const certified = !findings.some((finding) => finding.kind === "uncertifiable");
   for (const event of events) {
     if (!isDefectCode(event.code)) continue;
     const rules = codeRules[event.code] ?? [];
@@ -202,7 +210,7 @@ export function diagnosticItems(events, findings, registrationLines = () => []) 
       const claiming = findings.filter(claims);
       const unplaced = { code: event.code, line: null, message: event.message, severity, source: event.source, unplaced: true, frames: [] };
       if (!claiming.length) {
-        items.push({ kind: "candidate-false-clean", reason: `${event.code} (no line could be given) has no finding of a rule that claims it`, diagnostic: unplaced });
+        items.push({ kind: "candidate-false-clean", reason: `${event.code} (no line could be given) has no finding of a rule that claims it`, diagnostic: unplaced, certified });
       } else if (placeless && !claiming.some((finding) => finding.kind === "violation")) {
         // Every claiming finding in the file declines: the checker was asked and withheld, the same recall gap as at a line.
         items.push({ kind: "recall-gap", reason: `${event.code} (no line could be given): the checker declines (uncertifiable ${claiming[0].rule})`, diagnostic: { ...unplaced, rule: claiming[0].rule } });
@@ -228,7 +236,7 @@ export function diagnosticItems(events, findings, registrationLines = () => []) 
       items.push({ kind: "recall-gap", reason: `${event.code}: the checker declines (uncertifiable ${covering[0].rule}) at line ${diagnostic.line}`, diagnostic: { ...diagnostic, rule: covering[0].rule } });
       continue;
     }
-    items.push({ kind: "candidate-false-clean", reason: `${event.code} at line ${diagnostic.line} has no finding of a rule that claims it`, diagnostic });
+    items.push({ kind: "candidate-false-clean", reason: `${event.code} at line ${diagnostic.line} has no finding of a rule that claims it`, diagnostic, certified });
   }
   return items;
 }

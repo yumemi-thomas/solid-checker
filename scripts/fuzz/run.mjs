@@ -285,7 +285,8 @@ async function sweep(options, config, out) {
     writeFileSync(join(out, "cache.json"), `${JSON.stringify(config.runtimeCache.stats(), null, 2)}\n`);
     console.error(`runtime cache ${JSON.stringify(config.runtimeCache.stats())}`);
   }
-  writeFileSync(join(out, "summary.json"), `${JSON.stringify({ programs: rows.length, verdicts: tally("verdict"), items: itemTally, candidates: candidates.length, confirmed, groups: groups.length,
+  const certifiedFalseCleans = rows.flatMap((row) => row.items).filter((item) => item.kind === "candidate-false-clean" && item.certified).length;
+  writeFileSync(join(out, "summary.json"), `${JSON.stringify({ programs: rows.length, verdicts: tally("verdict"), items: itemTally, certifiedFalseCleans, candidates: candidates.length, confirmed, groups: groups.length,
     unexecuted: unexecutedReport && { candidates: unexecutedReport.candidates, programs: unexecutedReport.programs, confirmed: unexecutedReport.confirmed, byStatus: unexecutedReport.byStatus, byBasis: unexecutedReport.byBasis },
     falseClean: falseClean && { groups: falseClean.groups.length, confirmed: falseClean.confirmed, knownOpen: falseClean.knownOpen, staleOpen: falseClean.staleOpen.length, recallGaps: falseClean.recallGaps.reduce((sum, row) => sum + row.count, 0) } }, null, 2)}\n`);
   for (const group of groups) console.error(`${group.count}x [${group.representative.status}] ${group.signature}\n    repro: ${group.representative.repro}`);

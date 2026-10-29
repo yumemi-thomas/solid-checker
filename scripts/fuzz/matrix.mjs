@@ -23,12 +23,12 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { withRuntimeCache } from "./cache.mjs";
-import { codeRules, ignoredRules, withholdingRules } from "./codes.mjs";
+import { codeRules, ignoredRules, policyOf, withholdingRules } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
-import { LAYERS, MISUSE_CODES, SPEC, TEMPLATE_CODES, bindingsOf, variantsOf } from "./misuse.mjs";
+import { LAYERS, MISUSE_CODES, SPEC, TEMPLATE_CODES, gridBindingsOf, variantsOf } from "./misuse.mjs";
 import { isSite, walk } from "./model.mjs";
 import { evaluate, finishEntries, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
@@ -90,10 +90,16 @@ export function judge({ code, site, typecheck: typed, checker, runtime }) {
   const detail = { placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}) };
   if (claimingViolation) return { outcome: "agree", detail };
   if (violations.length) return { outcome: "wrong-rule", detail: { ...detail, rules: [...new Set(violations.map((finding) => finding.rule))] } };
-  if (covering.length) return { outcome: "recall-gap", detail };
+  // A recall gap is the checker declining this code: an uncertifiable finding of a rule that claims it (or a withholding) at the site.
+  // Another rule's uncertifiable finding on the same lines says nothing about this code; it is listed, and the program falls through.
+  if (covering.some(claims)) return { outcome: "recall-gap", detail };
+  const unrelated = covering.length ? { unrelated: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`) } : {};
   const claimingElsewhere = relevant.find((finding) => claims(finding));
-  if (claimingElsewhere) return { outcome: "recall-gap", detail: { ...detail, remote: `${claimingElsewhere.rule}/${claimingElsewhere.kind}@${claimingElsewhere.line}` } };
-  return { outcome: "false-clean", detail };
+  if (claimingElsewhere) return { outcome: "recall-gap", detail: { ...detail, ...unrelated, remote: `${claimingElsewhere.rule}/${claimingElsewhere.kind}@${claimingElsewhere.line}` } };
+  // Certified: the file has no uncertifiable finding at all, so the checker claims it proved the whole file. A false clean there is a
+  // fail-closed break (invariant 2); in a file with an uncertifiable finding elsewhere it is a recall gap that only lost its place.
+  const certified = !relevant.some((finding) => finding.kind === "uncertifiable");
+  return { outcome: "false-clean", detail: { ...detail, ...unrelated, certified } };
 }
 
 /** The misuse site of a built case: its only `use` site. */
@@ -120,7 +126,7 @@ export function cellList({ codes, contexts } = {}) {
  * program of one shape had the same outcome, and no smaller key did, so one program per shape judges what the random draw judges and
  * reaches the shapes twenty random draws miss. In a fixed order: variants, then bindings, then layers.
  */
-export const gridShapes = (code) => variantsOf(code).flatMap((variant) => bindingsOf(code, variant).flatMap((binding) => LAYERS.map((layer) => ({ variant, binding, layer }))));
+export const gridShapes = (code) => variantsOf(code).flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.map((layer) => ({ variant, binding, layer }))));
 
 /** A shape's program seed depends on the run seed and the shape only, so a shape's program does not move when the grid grows. */
 export const shapeSeed = (base, code, context, { variant, binding, layer }) => programSeed((Number(base) ^ fnv(`${code}/${context}/${variant ?? "-"}/${binding}/${layer}`)) >>> 0, 0);
@@ -194,6 +200,23 @@ async function shrinkRepresentative(row, value, config, options, out) {
 // ---------------------------------------------------------------------------------------------------------------------
 // Report
 
+/**
+ * Outcomes by binding x layer across every code: one root cause in the checker (a value alias lost, a helper not followed) shows once
+ * here, where the cells count it once per code.
+ */
+export function featureTable(rows) {
+  const out = {};
+  for (const row of rows) {
+    const key = `${row.binding}|${row.layer}`;
+    const slot = (out[key] ??= { programs: 0, ...emptyTally(), falseCleanCertified: 0, codes: [] });
+    slot.programs += 1;
+    slot[row.outcome] += 1;
+    if (row.outcome === "false-clean" && row.detail?.certified) slot.falseCleanCertified += 1;
+    if (row.outcome === "false-clean" && !slot.codes.includes(row.code)) slot.codes.push(row.code);
+  }
+  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : 1)).map(([key, slot]) => [key, { ...slot, codes: slot.codes.sort() }]));
+}
+
 /** Builds the recorded matrix (JSON) from the per-program rows. */
 export function buildMatrix(rows, { options, header, typedAway }) {
   const cells = {};
@@ -210,6 +233,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
     out[key] = {
       code: cell.code, context: cell.context, programs: cell.rows.length, ...counts, confirmed,
       agreeRemote: cell.rows.filter((row) => row.outcome === "agree" && row.detail?.remote).length,
+      falseCleanCertified: cell.rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
       byBinding: by("binding"), byLayer: by("layer"),
       chrome: chromeSummary(cell.rows),
       verdicts: Object.fromEntries(cell.rows.map((row) => [String(row.seed), row.outcome])),
@@ -223,7 +247,9 @@ export function buildMatrix(rows, { options, header, typedAway }) {
   return {
     strays: Object.fromEntries(Object.entries(strays).map(([rule, ids]) => [rule, { programs: ids.length, examples: ids.slice(0, 3) }])),
     generator: GENERATOR_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), checker: header, total,
-    confirmed: CONFIRMED.reduce((sum, name) => sum + total[name], 0), typedAway, cells: out,
+    confirmed: CONFIRMED.reduce((sum, name) => sum + total[name], 0),
+    falseCleanCertified: rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
+    byFeature: featureTable(rows), typedAway, cells: out,
   };
 }
 
@@ -258,7 +284,15 @@ export function markdown(matrix, statuses) {
     lines.push(`| ${code} | ${cells.join(" | ")} |`);
   }
   const t = matrix.total;
-  lines.push("", `Totals: ${Object.entries(t).map(([k, v]) => `${k} ${v}`).join(", ")}; runtime-confirmed ${matrix.confirmed}.`, "");
+  lines.push("", `Totals: ${Object.entries(t).map(([k, v]) => `${k} ${v}`).join(", ")}; runtime-confirmed ${matrix.confirmed}. False cleans in a certified file (no uncertifiable finding anywhere: a fail-closed break): ${matrix.falseCleanCertified ?? "-"}.`, "");
+  if (matrix.byFeature) {
+    lines.push("## By binding and layer, across codes", "", "| binding | layer | programs | agree | recall-gap | false-clean | certified false-clean | codes with a false clean |", "| --- | --- | --- | --- | --- | --- | --- | --- |");
+    for (const [key, slot] of Object.entries(matrix.byFeature)) {
+      const [binding, layer] = key.split("|");
+      lines.push(`| ${binding} | ${layer} | ${slot.programs} | ${slot.agree} | ${slot["recall-gap"]} | ${slot["false-clean"]} | ${slot.falseCleanCertified} | ${slot.codes.length} |`);
+    }
+    lines.push("");
+  }
   if (statuses) {
     lines.push(`## Per code`, "", `| code | status | agree | wrong-rule | recall-gap | false-clean | not-fired | why |`, `| --- | --- | --- | --- | --- | --- | --- | --- |`);
     for (const s of statuses) lines.push(`| ${s.code} | ${s.status} | ${s.agree ?? "-"} | ${s.wrongRule ?? "-"} | ${s.recallGap ?? "-"} | ${s.falseClean ?? "-"} | ${s.notFired ?? "-"} | ${s.why ?? ""} |`);
@@ -310,7 +344,8 @@ const UNJUDGED = new Set(["typed-away", "harness"]);
  * A baseline `typed-away` or `harness` is a machine-load artifact, not a verdict: a program that moves out of it is reported as
  * `baselineUnjudged` and never as a regression. A program that moves into one of them is reported as `infrastructure` (a warning:
  * the run, not the checker, changed). Neither fails the gate.
- * @returns {{ ok: boolean, refused?: string, regressions: object[], improvements: object[], baselineUnjudged: object[], infrastructure: object[] }}
+ * A baseline cell of a code that is no longer a claimed defect (advisory now) is `retired`: reported, not failed.
+ * @returns {{ ok: boolean, refused?: string, regressions: object[], improvements: object[], baselineUnjudged: object[], infrastructure: object[], retired: object[] }}
  */
 export function gate(baseline, current) {
   const empty = { regressions: [], improvements: [], baselineUnjudged: [], infrastructure: [] };
@@ -322,11 +357,16 @@ export function gate(baseline, current) {
   const all = Object.values(now).reduce((sum, n) => sum + n, 0);
   const unjudged = (now["typed-away"] ?? 0) + (now.harness ?? 0);
   if (all && unjudged / all > TYPE_ERROR_REFUSAL_SHARE) return { ok: false, refused: `${unjudged} of ${all} programs of the current run are typed-away or harness: it judged nothing (the limit is ${TYPE_ERROR_REFUSAL_SHARE * 100}%)`, ...empty };
-  const regressions = []; const improvements = []; const baselineUnjudged = []; const infrastructure = [];
+  const regressions = []; const improvements = []; const baselineUnjudged = []; const infrastructure = []; const retired = []; const newPrograms = [];
   for (const [key, base] of Object.entries(baseline.cells)) {
     const cell = current.cells[key];
+    // A code the policy table no longer counts as a defect (it became advisory) is not measured any more: reported, never a regression.
+    if (!cell && policyOf(base.code) && policyOf(base.code).disposition !== "defect-claimed") { retired.push({ cell: key, why: `${base.code} is ${policyOf(base.code)?.disposition ?? "unknown"} now, not measured` }); continue; }
     if (!cell) { regressions.push({ cell: key, why: "cell missing from the current matrix" }); continue; }
-    const seeds = [...new Set([...Object.keys(base.verdicts), ...Object.keys(cell.verdicts)])];
+    // The baseline's programs. A program only the current run has (a grid shape added since) is new, reported, never a regression.
+    const seeds = Object.keys(base.verdicts);
+    const added = Object.keys(cell.verdicts).filter((seed) => !(seed in base.verdicts));
+    if (added.length) newPrograms.push({ cell: key, programs: added.length });
     const list = (keep) => seeds.filter((seed) => keep(base.verdicts[seed], cell.verdicts[seed])).map((seed) => `${seed}: ${base.verdicts[seed] ?? "missing"} -> ${cell.verdicts[seed] ?? "missing"}`);
     const lost = list((was, is) => was === "agree" && is !== "agree" && !UNJUDGED.has(is));
     const gained = list((was, is) => is === "false-clean" && was !== "false-clean" && !UNJUDGED.has(was));
@@ -339,12 +379,14 @@ export function gate(baseline, current) {
     if (cell.agree > base.agree) improvements.push({ cell: key, why: `agree ${base.agree} -> ${cell.agree}` });
     if (cell["false-clean"] < base["false-clean"]) improvements.push({ cell: key, why: `false-clean ${base["false-clean"]} -> ${cell["false-clean"]}` });
   }
-  return { ok: regressions.length === 0, regressions, improvements, baselineUnjudged, infrastructure };
+  return { ok: regressions.length === 0, regressions, improvements, baselineUnjudged, infrastructure, retired, newPrograms };
 }
 
 function reportGate(result) {
   if (result.refused) { console.error(`gate refused: ${result.refused}`); return 2; }
   for (const item of result.improvements) console.error(`gate: improved ${item.cell}: ${item.why}`);
+  for (const item of result.retired ?? []) console.error(`gate: retired ${item.cell}: ${item.why}`);
+  if (result.newPrograms?.length) console.error(`gate: ${result.newPrograms.reduce((n, item) => n + item.programs, 0)} program(s) in ${result.newPrograms.length} cell(s) are new since the baseline (not compared)`);
   for (const item of result.baselineUnjudged ?? []) console.error(`gate: baseline unjudged ${item.cell} (not a regression, the baseline was typed-away or harness):\n    ${item.programs.slice(0, 5).join("\n    ")}`);
   for (const item of result.infrastructure ?? []) console.error(`gate: INFRASTRUCTURE WARNING ${item.cell}: ${item.programs.length} program(s) are now typed-away or harness (the run is suspect, not the checker):\n    ${item.programs.slice(0, 5).join("\n    ")}`);
   for (const item of result.regressions) console.error(`gate: REGRESSION ${item.cell}: ${item.why}${item.programs?.length ? `\n    ${item.programs.slice(0, 5).join("\n    ")}` : ""}`);

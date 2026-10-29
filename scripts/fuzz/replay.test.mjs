@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { caseIdOf, chromeCodesAt, collectItems, fixedStatus, itemKind, judgeWithChrome, originalId, verdictAtLine } from "./replay.mjs";
+import { caseIdOf, chromeCodesAt, collectItems, probeOf, fixedStatus, itemKind, judgeWithChrome, originalId, verdictAtLine } from "./replay.mjs";
 
 const scratch = () => mkdtempSync(join(tmpdir(), "fuzz-replay-"));
 const write = (dir, files) => { mkdirSync(dir, { recursive: true }); for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text); return dir; };
@@ -68,6 +68,21 @@ describe("judging", () => {
     expect(uncached.chromeCache).toBeUndefined();
   });
 
+  it("names a violation Chrome shows no diagnostic of its codes for (a candidate false positive for a person to read)", () => {
+    const built = { id: "rp-y" };
+    const quiet = { row: {}, runtime: { diagnostics: [], errors: [], failure: null } };
+    const store = { file: "App.tsx", rule: "no-store-mutation-outside-setter", id: "SC2003", kind: "violation", line: 8, endLine: 8 };
+    const row = judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [store] } }, new Map([["rp-y", quiet]]));
+    expect(row.chrome).toMatchObject({ status: "violation-without-diagnostic", unmatched: ["no-store-mutation-outside-setter@8"] });
+    expect(row.fixed).toBe(false);
+    // A partial run never says so: the part that did not run could hold the diagnostic.
+    const partial = judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [store] } }, new Map([["rp-y", { row: {}, runtime: { ...quiet.runtime, failure: { phase: "halted" } } }]]));
+    expect(partial.chrome.status).not.toBe("violation-without-diagnostic");
+    // A rule with no runtime counterpart is never contradicted by silence.
+    const noCounterpart = judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [{ ...store, rule: "a-static-only-rule" }] } }, new Map([["rp-y", quiet]]));
+    expect(noCounterpart.chrome.status).toBe("no-defect");
+  });
+
   it("never reads Chrome's silence on a bare text pair as evidence: it has no driver plan", () => {
     const site = { site: "s1", line: 4, variantLine: 4, now: "high", original: { verdict: "violation", rules: ["action-called-in-owned-scope"] } };
     const row = { kind: "text-pair", chromeInput: { originalBuilt: { id: "o" }, variantBuilt: { id: "v" }, sites: [site] } };
@@ -83,5 +98,29 @@ describe("case ids", () => {
     expect(caseIdOf({ dir: "/a/min/rc4" })).toBe(caseIdOf({ dir: "/a/min/rc4" }));
     expect(caseIdOf({ dir: "/a/min/rc4" })).not.toBe(caseIdOf({ dir: "/b/min/rc4" }));
     expect(caseIdOf({ dir: "/a/min/rc4.x y" })).toMatch(/^rp-rc4_x_y-[0-9a-f]{6}$/);
+  });
+});
+
+describe("probe witnesses", () => {
+  const store = { file: "App.tsx", rule: "no-store-mutation-outside-setter", id: "SC2003", kind: "violation", line: 8, endLine: 8 };
+  const witness = { selector: "#w", text: "1" };
+  const built = { id: "rp-z", sites: [{ id: "w", line: 0, witness }] };
+  const record = (actual, diagnostics = []) => ({ row: {}, runtime: { diagnostics, errors: [], failure: null, witnesses: [{ siteId: "w", witness, present: true, actual, reached: actual === "1" }] } });
+  it("reads a probe and refuses one without a witness", () => {
+    const dir = mkdtempSync(join(tmpdir(), "fuzz-probe-"));
+    expect(probeOf(dir)).toBeNull();
+    writeFileSync(join(dir, "probe.json"), JSON.stringify({ witness }));
+    expect(probeOf(dir)).toEqual({ witness });
+    writeFileSync(join(dir, "probe.json"), JSON.stringify({ witness: { selector: "#w" } }));
+    expect(() => probeOf(dir)).toThrow(/witness/);
+  });
+  it("a violation Chrome is silent on, where the write landed, is a witnessed false positive", () => {
+    const row = judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [store] } }, new Map([["rp-z", record("1")]]));
+    expect(row.chrome).toMatchObject({ status: "violation-without-diagnostic", witness: "landed", witnessed: "false-positive-witnessed" });
+    expect(judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [store] } }, new Map([["rp-z", record("0")]])).chrome.witnessed).toBeUndefined();
+  });
+  it("a false clean whose write did not land is a witnessed defect", () => {
+    const fired = record("0", [{ code: "STORE_WRITE_OUTSIDE_SETTER", positions: [{ file: "App.tsx", line: 11 }] }]);
+    expect(judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [] } }, new Map([["rp-z", fired]])).chrome).toMatchObject({ status: "false-clean", witness: "not-landed", witnessed: "defect-witnessed" });
   });
 });

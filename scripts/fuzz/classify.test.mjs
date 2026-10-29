@@ -44,6 +44,13 @@ describe("classify: the checker claims a violation", () => {
     expect(result.reasons[0]).toMatch(/disturbed.*threw/);
   });
 
+  it("is inconclusive, never agreement, when a disturbed run leaves nothing to compare", () => {
+    const result = classify({ sites, checker: checker([]), runtime: runtime({ errors: [{ kind: "window-error", message: "boom", positions: [{ file: "App.tsx", line: 30 }] }] }), plan });
+    expect(result.verdict).toBe("inconclusive");
+    expect(result.items).toEqual([expect.objectContaining({ kind: "inconclusive", why: "disturbed" })]);
+    expect(classify({ sites, checker: checker([]), runtime: runtime({}), plan }).verdict).toBe("agree");      // a quiet run: both silent
+  });
+
   it("is inconclusive when reactivity halted", () => {
     const result = classify({ sites, checker: checker([violation("no-write-in-pure-computation", 8)]), runtime: runtime({ diagnostics: [diag("REACTIVITY_HALTED")] }), plan });
     expect(result.verdict).toBe("inconclusive");
@@ -136,15 +143,12 @@ describe("classify: the checker is quiet, uncertifiable or failed", () => {
       expect(result.items.map((item) => item.kind)).toEqual(["agree"]);
       expect(result.verdict).toBe("agree");
     });
-    it("is a recall gap when the claiming findings in the file all decline", () => {
-      const result = placeless([uncertifiable("async-outside-loading-boundary", 8)]);
-      expect(result.verdict).toBe("recall-gap");
-      expect(result.items[0]).toMatchObject({ kind: "recall-gap", diagnostic: { code: "ASYNC_OUTSIDE_LOADING_BOUNDARY", line: null, unplaced: true, rule: "async-outside-loading-boundary" } });
-    });
-    it("is a false clean only when the file has no claiming finding at all", () => {
-      expect(placeless([]).verdict).toBe("candidate-false-clean");
-      expect(placeless([]).items[0].diagnostic).toMatchObject({ line: null, unplaced: true });
-      expect(placeless([violation("no-write-in-pure-computation", 8)]).items.map((item) => item.kind)).toContain("candidate-false-clean");
+    // The one placeless code is advisory (Solid documents the boundary-less mount as legal), so silence on it is no miss.
+    it("is neither a recall gap nor a false clean: the code is advisory", () => {
+      expect(placeless([uncertifiable("async-outside-loading-boundary", 8)]).verdict).toBe("agree");
+      expect(placeless([]).verdict).toBe("agree");
+      expect(placeless([]).items.map((item) => item.kind)).not.toContain("candidate-false-clean");
+      expect(placeless([violation("no-write-in-pure-computation", 8)]).items.map((item) => item.kind)).not.toContain("candidate-false-clean");
     });
     it("leaves a code reported at its call to the line", () => {
       const result = classify({ sites, checker: checker([uncertifiable("reactive-dispatch-unresolved", 8)]), runtime: runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 3)] }), plan });
@@ -172,13 +176,20 @@ describe("classify: the checker is quiet, uncertifiable or failed", () => {
     }
   });
 
+  it("marks a false clean certified when the checker has no uncertifiable finding in the file", () => {
+    const fired = runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 8)] });
+    expect(classify({ sites, checker: checker([]), runtime: fired, plan }).items.find((item) => item.kind === "candidate-false-clean").certified).toBe(true);
+    expect(classify({ sites, checker: checker([uncertifiable("missing-owner", 30)]), runtime: fired, plan }).items.find((item) => item.kind === "candidate-false-clean").certified).toBe(false);
+  });
+
   it("a diagnostic with no line is a false clean only when no claiming finding exists anywhere", () => {
     const unplaced = runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED")] });
     const none = classify({ sites, checker: checker([]), runtime: unplaced, plan });
     expect(none.items.find((item) => item.kind === "candidate-false-clean")?.diagnostic).toMatchObject({ code: "STRICT_READ_UNTRACKED", line: null, unplaced: true });
     const elsewhere = classify({ sites, checker: checker([violation("strict-read-untracked", 20, 20, "SC1001")]), runtime: unplaced, plan });
     expect(elsewhere.items.map((item) => item.kind)).not.toContain("candidate-false-clean");
-    expect(classify({ sites, checker: checker([]), runtime: runtime({ diagnostics: [diag("REACTIVITY_HALTED", 8)] }), plan }).verdict).toBe("agree");
+    // A halt is a consequence, never a false clean; with nothing else to compare the run is inconclusive, not agreement.
+    expect(classify({ sites, checker: checker([]), runtime: runtime({ diagnostics: [diag("REACTIVITY_HALTED", 8)] }), plan }).verdict).toBe("inconclusive");
   });
 
   it("ranks the tiers: false clean, wrong rule, known open, recall gap, unexecuted, inconclusive, agree", () => {

@@ -15,7 +15,7 @@ import {
   signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt,
   button, child, show, forEach, use,
 } from "./model.mjs";
-import { codeRules } from "./codes.mjs";
+import { codePolicy, policyOf } from "./codes.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
 export const BINDINGS = ["direct", "namespace", "alias", "destructured", "wrapper"];
@@ -86,6 +86,11 @@ export const SPEC = {
     contexts: ["jsx", "show", "for"], bindings: ["direct", "alias", "destructured", "wrapper"], placeless: true,
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
   },
+  // rc.17 dev-shared.js: a pending read inside createTrackedEffect or onSettled serves the committed value (and throws while uninitialized).
+  PENDING_ASYNC_FORBIDDEN_SCOPE: {
+    contexts: LEAF, bindings: ["direct", "alias", "destructured", "wrapper"],
+    setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
+  },
   PENDING_ASYNC_UNTRACKED_READ: {
     contexts: ["body", "root", "effect-apply", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
@@ -97,6 +102,18 @@ export const SPEC = {
   UNTRACKED_READ_AFTER_AWAIT: {
     contexts: ["memo-async", "effect-async"], bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [signal(name("r"), 3, "src")], call: (node, [sig]) => local(sig.name),
+  },
+  // Defect codes no rule claims (codes.mjs `defect-unclaimed`): measured for "never quieter than Solid"; a silent checker is a false clean.
+  // rc.17 dev-shared.js `assertNotInEffectCallback`: a memo, effect or root created with no owner in an effect callback belongs to nobody.
+  PRIMITIVE_IN_EFFECT_CALLBACK: {
+    // Effect apply only: in a render effect's apply rc.17 does not report it (the fast path fires it in every effect-apply cell).
+    variants: ["memo", "root", "effect"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [],
+    call: (node) => (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
+  },
+  ASYNC_STORE_SETTER: {
+    typedAway: true, contexts: [], bindings: [], setup: () => [], call: () => api("createStore"),
+    probe: 'import { createStore } from "solid-js";\nexport function C1() {\n  const [s1, setS1] = createStore({ v: 0 });\n  return <button onClick={() => { setS1(async (s) => { await Promise.resolve(); s.v = 7; }); }}>{s1.v}</button>;\n}\n',
+    why: "the typings reject it: the setter callback is `(state) => void | T`, so an async callback is TS2345 and tsc already reports it",
   },
   MISSING_EFFECT_FN: {
     typedAway: true, contexts: [], bindings: [], setup: () => [], call: () => api("createEffect", "() => 1"),
@@ -119,13 +136,29 @@ export const SPEC = {
   },
 };
 
-/** The claimed codes of the policy table, in the table's order: the rows of the matrix. */
-export const MISUSE_CODES = Object.keys(codeRules).filter((code) => SPEC[code]);
+/**
+ * The codes the matrix measures, in the policy table's order: the defects, claimed by a rule or not ("never quieter than Solid": an
+ * unclaimed defect the checker is silent on is a false clean too). An advisory code (Solid documents it as legal) is not measured.
+ */
+export const MISUSE_CODES = Object.keys(codePolicy).filter((code) => SPEC[code] && ["defect-claimed", "defect-unclaimed"].includes(policyOf(code)?.disposition));
 /** The codes that have a template (not typed away). */
 export const TEMPLATE_CODES = MISUSE_CODES.filter((code) => !SPEC[code].typedAway);
 export const contextsOf = (code) => SPEC[code].contexts;
 export const bindingsOf = (code, variant) => SPEC[code].bindingsFor?.(variant) ?? SPEC[code].bindings;
 export const variantsOf = (code) => SPEC[code].variants ?? [null];
+
+/**
+ * Bindings of a component-scope value (a setter, an accessor, an action, a store) in the shapes real code hands one on: a hook that
+ * returns it in an object (`const { useIt } = useThing()`), the hook's result used through a member (`thing.useIt()`), a tuple slot
+ * (`const [, useIt] = pair`). Grid-only (`gridBindingsOf`): never drawn at random, so the random matrix's programs and baseline stay.
+ * The `destructured` binding of a value is an object literal (`const { useIt } = { useIt: r1 }`), which real code rarely writes.
+ */
+export const VALUE_BINDINGS = ["hook", "hook-member", "tuple"];
+const SAMPLE_SIGS = [{ name: "x", setter: "setX" }, { name: "a", setter: "setA" }];
+export function gridBindingsOf(code, variant) {
+  const kind = SPEC[code].call({ code, variant }, SAMPLE_SIGS).kind;
+  return kind === "api" ? bindingsOf(code, variant) : [...bindingsOf(code, variant), ...VALUE_BINDINGS];
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Printing a `use` node. print.mjs calls `describeUse`; the aux marker lets the printer find the wrapper's inner call line.
@@ -167,6 +200,9 @@ export function describeUse(node, signals) {
       case "alias": out.preludeLines.push(`const useIt = ${name};`); out.text = `useIt(${args})`; break;
       case "destructured": out.preludeLines.push(`const { useIt } = { useIt: ${name} };`); out.text = `useIt(${args})`; break;
       case "wrapper": out.preludeLines.push(`const wrapUse = () => { ${AUX}${name}(${args}); };`); out.text = "wrapUse()"; break;
+      case "hook": out.preludeLines.push(`const useThing = () => ({ useIt: ${name} });`, "const { useIt } = useThing();"); out.text = `useIt(${args})`; break;
+      case "hook-member": out.preludeLines.push(`const useThing = () => ({ useIt: ${name} });`, "const thing = useThing();"); out.text = `thing.useIt(${args})`; break;
+      case "tuple": out.preludeLines.push(`const pair = [0, ${name}] as const;`, "const [, useIt] = pair;"); out.text = `useIt(${args})`; break;
       default: out.text = `${name}(${args})`;
     }
     return out;
@@ -175,6 +211,9 @@ export function describeUse(node, signals) {
   switch (node.bind) {
     case "alias": out.preludeLines.push(`const useIt = ${target.object};`); out.text = target.text("useIt"); break;
     case "wrapper": out.preludeLines.push(`const wrapUse = () => { ${AUX}${target.text(target.object)}; };`); out.text = "wrapUse()"; break;
+    case "hook": out.preludeLines.push(`const useThing = () => ({ useIt: ${target.object} });`, "const { useIt } = useThing();"); out.text = target.text("useIt"); break;
+    case "hook-member": out.preludeLines.push(`const useThing = () => ({ useIt: ${target.object} });`, "const thing = useThing();"); out.text = target.text("thing.useIt"); break;
+    case "tuple": out.preludeLines.push(`const pair = [0, ${target.object}] as const;`, "const [, useIt] = pair;"); out.text = target.text("useIt"); break;
     default: out.text = target.text(target.object);
   }
   return out;

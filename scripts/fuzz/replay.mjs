@@ -27,7 +27,7 @@ import { chromeCacheFor } from "./cache.mjs";
 import { runChrome } from "./chrome.mjs";
 import { siteVerdicts } from "./checker.mjs";
 import { runtimeEvents } from "./classify.mjs";
-import { codeRules, codesForRule, ignoredRules, isDefectCode, withholdingRules } from "./codes.mjs";
+import { codeRules, codesForRule, ignoredRules, isDefectCode, ruleHasRuntimeCounterpart, withholdingRules } from "./codes.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { classifyDivergence, compareVariant, judge, judgeDivergence, siteMap, siteSummary } from "./equivalence.mjs";
 import { configFrom, parseArgs } from "./run.mjs";
@@ -158,8 +158,22 @@ async function replayTextPair(item, config) {
   return { ...base, now: worst(sites.map((site) => site.now)), sites: sites.map(({ findings, ...site }) => site), chromeInput: { originalBuilt, variantBuilt, sites } };
 }
 
+/**
+ * A plain repro's witness (`probe.json`: `{ witness: { selector, text }, steps? }`): the text the selector shows when the claimed
+ * effect happened (a write that landed, say). Chrome runs `steps`, then reads the selector; the witness says whether a violation or
+ * a diagnostic is about code that ran, which a bare text cannot show.
+ */
+export function probeOf(dir) {
+  const path = join(dir, "probe.json");
+  if (!isFile(path)) return null;
+  const probe = readJson(path);
+  if (!probe.witness?.selector || typeof probe.witness.text !== "string") throw new Error(`${path}: a probe needs witness.selector and witness.text`);
+  return probe;
+}
+
 async function replayPlain(item, config) {
-  const built = textCase(caseIdOf(item), readFileSync(join(item.dir, "App.tsx"), "utf8"));
+  const probe = probeOf(item.dir);
+  const built = textCase(caseIdOf(item), readFileSync(join(item.dir, "App.tsx"), "utf8"), probe);
   const result = await judge(built, config, {}, built.id);
   const base = { kind: item.kind, dir: item.dir, label: item.label };
   if (result.status !== "ok") return { ...base, now: "not-judged", why: result.status };
@@ -171,8 +185,11 @@ async function replayPlain(item, config) {
 export const caseIdOf = (item) => `rp-${basename(item.dir).replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 40)}-${createHash("sha1").update(item.dir).digest("hex").slice(0, 6)}`;
 
 /** A case from a bare App.tsx: no sites, no plan, no twin; the oracle drives it with its own event passes. */
-function textCase(id, text) {
-  return { id, text, sites: [], glue: [], packages: {}, plan: { clicks: [] }, files: { "App.tsx": text } };
+function textCase(id, text, probe = null) {
+  if (!probe) return { id, text, sites: [], glue: [], packages: {}, plan: { clicks: [] }, files: { "App.tsx": text } };
+  const steps = [...(probe.steps ?? []), { action: "wait-for-selector", selector: probe.witness.selector }];
+  return { id, text, sites: [{ id: "w", line: 0, witness: probe.witness }], glue: [], packages: {}, plan: { clicks: [] },
+    files: { "App.tsx": text, "oracle.json": `${JSON.stringify({ note: "replay probe", steps }, null, 2)}\n` } };
 }
 
 const ORDER = ["high", "certainty-divergence", "low", "lost", "agree"];
@@ -202,8 +219,19 @@ export function judgeWithChrome(row, records) {
           : !lines.length && input.findings.some((finding) => finding.kind === "violation" && rules.includes(finding.rule)) ? "agree" : "false-clean";
       return { code: event.code, line: lines[0] ?? null, status };
     });
-    const status = !judged.length ? (record.runtime.failure ? "chrome-inconclusive" : "no-defect") : judged.every((entry) => entry.status === "agree") ? "agree" : judged.some((entry) => entry.status === "false-clean") ? "false-clean" : "recall-gap";
-    return { ...row, chrome: { status, diagnostics: judged, ...(record.runtime.failure ? { partial: true } : {}) }, chromeCache: cachedOf(input.built.id), fixed: status === "agree" };
+    // A violation of a rule a runtime diagnostic can contradict, where Chrome reports no defect of its codes on its lines: a candidate
+    // false positive. A bare text has no witness, so nothing shows the site ran: it is for a person to read, never confirmed here.
+    const unmatched = input.findings.filter((finding) => finding.kind === "violation" && ruleHasRuntimeCounterpart(finding.rule)
+      && !events.some((event) => codesForRule(finding.rule).includes(event.code)));
+    const base = !judged.length ? (record.runtime.failure ? "chrome-inconclusive" : "no-defect") : judged.every((entry) => entry.status === "agree") ? "agree" : judged.some((entry) => entry.status === "false-clean") ? "false-clean" : "recall-gap";
+    const status = unmatched.length && !record.runtime.failure && ["no-defect", "agree"].includes(base) ? "violation-without-diagnostic" : base;
+    // With a probe's witness: did the claimed effect happen? A violation Chrome is silent on, at code whose witness landed, is a
+    // witnessed false positive (stop and report); a false clean whose witness did not land is a witnessed defect.
+    const witness = input.built.sites?.[0]?.witness ? (record.runtime.witnesses?.[0]?.reached === true ? "landed" : record.runtime.witnesses?.[0]?.present ? "not-landed" : "absent") : undefined;
+    const witnessed = witness === "landed" && status === "violation-without-diagnostic" ? "false-positive-witnessed" : witness === "not-landed" && status === "false-clean" ? "defect-witnessed" : undefined;
+    return { ...row, chrome: { status, diagnostics: judged, ...(unmatched.length ? { unmatched: unmatched.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(record.runtime.failure ? { partial: true } : {}),
+      ...(witness ? { witness, actual: record.runtime.witnesses?.[0]?.actual ?? null } : {}), ...(witnessed ? { witnessed } : {}) },
+      chromeCache: cachedOf(input.built.id), fixed: status === "agree" };
   }
   const originalRecord = records.get(input.originalBuilt.id);
   const variantRecord = records.get(input.variantBuilt.id);

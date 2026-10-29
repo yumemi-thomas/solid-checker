@@ -35,18 +35,20 @@ symbol:
 - the same writes through a `createProjection` result, reported as a
   projection write (it has no setter to name).
 
-**Past the root (ADR 0465).** A write that reads no link past the root
+**Past the root (ADR 0465, 0476).** A write that reads no link past the root
 (`store.v = 1`, `list.push(1)` on a store that is the array, a cast root) is a
-violation. A write through a link (`store.a.b = 1`, `store.items.push(1)`)
-depends on the program's `strictNullChecks`, which Type Facts reports as the
-compiler resolves it (the option, else `strict`, on unless `false`). Under it,
-a link whose type may hold `null` or `undefined` is TS18048/TS18047, so the
-rule is silent; a link whose type excludes both keeps the violation; an
-element-access link (`store.rows[0].done`) and a chain under a type assertion
-(`store.n!.b`, `(store.o as T).b`) are uncertifiable. Without it every write
-through a link is uncertifiable: the type then proves nothing about the link's
-runtime value, and an undefined link throws `TypeError` before the proxy sees
-a write. Fixtures `store-write-chain-links`, `store-write-chain-links-loose`.
+violation: `createStore` wraps its initial value whatever it is
+(`dist/dev.js:5904-5915`), so the root is always the read proxy. A write through
+a link (`store.a.b = 1`, `store.items.push(1)`) is uncertifiable, except that
+under the program's `strictNullChecks` (Type Facts reports it as the compiler
+resolves it) a link whose type may hold `null` or `undefined` is TS18048/TS18047,
+so the rule is silent. The proxy serves a child only through `isWrappable`
+(`dist/dev.js:2272-2283`), which refuses a frozen object, a non-plain prototype
+(a `Map`, a class instance) and a DOM node and serves it raw: a write below such
+a link lands (Chrome, witnessed with `Object.freeze`). Whether a link's value is
+plain is a property of the value, not of its type, so no fact proves the link is
+wrapped (ADR 0476). Fixtures `store-write-chain-links`,
+`store-write-chain-links-loose`, `store-setter-extent`.
 
 The runtime drops all of them outside a setter: the proxy's `set` trap
 returns `true` without storing (`@solidjs/signals@2.0.0-rc.17`
@@ -59,22 +61,36 @@ write to a projection result outside its compute function are dropped
 tsc oracle checks against the published typings.
 
 Two writes are exempt because rc.17 commits them (probed, with the value read
-after `flush()`):
+after `flush()`). Each holds while a window is open, a dynamic extent rather
+than a region of text (ADR 0476):
 
-- A write through the original store proxy **lexically inside one of that
-  store's own setter callbacks**: `storeSetter` adds the store to
-  `writeScopes` for the callback (`dist/dev.js:5847-5866`), so the trap's
-  `inDraft(target)` holds (`:4955-4957`). `setStore(draft => { store.value = 7
-  })` commits like a draft write. The exemption is proven, not guessed: the
-  callee must resolve to the setter destructured beside that exact store.
-  Writing through *another* store's proxy inside a setter is dropped (a
-  different `scopeKey`) and stays a finding, as does any write outside a
-  setter. Upstream reports the own-setter write; that divergence is pinned as
-  ownership case `no-store-mutation-outside-setter/own-setter-write/001`.
+- A write through the original store proxy **while one of that store's own
+  setter callbacks runs**: `storeSetter` adds the store to `writeScopes` for the
+  callback (`dist/dev.js:5847-5866`), so the trap's `inDraft(target)` holds
+  (`:4955-4957`). `setStore(draft => { store.value = 7 })` commits like a draft
+  write. The pairing is proven, not guessed: the callee must resolve to the
+  setter destructured beside that exact store. Writing through *another*
+  store's proxy inside a setter is dropped (a different `scopeKey`) and stays a
+  finding, as does any write outside a setter. Upstream reports the own-setter
+  write; that divergence is pinned as ownership case
+  `no-store-mutation-outside-setter/own-setter-write/001`.
 - A write through a projection's result symbol (or a function-form
-  `createStore(fn, seed)`'s store) **lexically inside its compute function**:
+  `createStore(fn, seed)`'s store) **while its compute function runs**:
   `runProjectionComputed` runs the function inside `storeSetter(draft, …)`
   (`dist/dev.js:6675-6678`). Ownership case `…/projection-compute-write/001`.
+
+The window is open on the callback's own stack: the callback itself, an IIFE, an
+inline standard-library callback (`forEach`) and a project helper that calls its
+callback, crossed as the write rules cross them (`layer_run`). A write the
+callback schedules runs after the window closed, and is dropped: a reviewed
+fresh-stack scheduler (`queueMicrotask`, `setTimeout`, `.then`, resolved through
+its signature) or an `await` before it in an async layer (ownership case
+`…/own-setter-deferred-write/001`). A function written elsewhere is in the window
+when every reference to it is a call inside one (ownership case
+`…/own-setter-outside-closure/001`); one call outside every window drops the
+write on that run, and a reference that hands it on, or a callback given to a
+function this does not know, leaves it uncertifiable. Fixture
+`store-setter-extent`.
 
 1.x setters never unlocked the proxy; 1.x is not analyzed here (ADR 0110).
 

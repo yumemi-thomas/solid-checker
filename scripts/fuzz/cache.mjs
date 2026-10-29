@@ -23,7 +23,8 @@ export function codeHash(directory = here) {
   const files = [];
   const visit = (dir, prefix = "") => {
     for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
-      if (entry.name === "node_modules" || entry.name.startsWith(".") || entry.name === "install") continue;
+      // `probes/` holds programs to judge (replay inputs), not sources that judge.
+      if (entry.name === "node_modules" || entry.name.startsWith(".") || entry.name === "install" || (prefix === "" && entry.name === "probes")) continue;
       if (entry.isDirectory()) visit(join(dir, entry.name), `${prefix}${entry.name}/`);
       else if (/\.(mjs|tsx?|json)$/.test(entry.name) && !/\.test\.mjs$/.test(entry.name) && entry.name !== "neutrality.mjs") files.push([`${prefix}${entry.name}`, join(dir, entry.name)]);
     }

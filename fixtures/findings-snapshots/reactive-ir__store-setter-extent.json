@@ -1,0 +1,155 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 526,
+      "end": 533,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 673,
+      "end": 680,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 832,
+      "end": 839,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 1105,
+      "end": 1112,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 2145,
+      "end": 2152,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 2493,
+      "end": 2500,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 2643,
+      "end": 2650,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 2998,
+      "end": 3015,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 3306,
+      "end": 3313,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 3667,
+      "end": 3674,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 4221,
+      "end": 4228,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 4667,
+      "end": 4674,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 4910,
+      "end": 4921,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 4987,
+      "end": 4998,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-extent/App.tsx",
+      "start": 5275,
+      "end": 5282,
+      "fixes": 0
+    }
+  ]
+}

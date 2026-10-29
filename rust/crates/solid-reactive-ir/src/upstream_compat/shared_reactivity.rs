@@ -1244,8 +1244,8 @@ fn no_direct_mutation(
             target,
             DirectMutationTarget::Store | DirectMutationTarget::Projection
         );
-        if store
-            && store_write_is_exempt(
+        let standing = if store {
+            store_write_standing(
                 file,
                 context,
                 StoreWriteSite {
@@ -1255,7 +1255,10 @@ fn no_direct_mutation(
                 },
                 symbol,
             )
-        {
+        } else {
+            WriteStanding::Dropped
+        };
+        if standing == WriteStanding::Exempt {
             continue;
         }
         // ADR 0465: a store write past the root (`store.a.b = 1`) is
@@ -1282,7 +1285,7 @@ fn no_direct_mutation(
             // `-writeomit`, `review-r1-alias-mutation`). Only a getter-backed
             // prop rejects it (a TypeError), and which props are getters is
             // not proven here, so the claim stays an obligation.
-            uncertain: props || past_root,
+            uncertain: props || past_root || standing == WriteStanding::Unproven,
         });
     }
 }
@@ -1324,8 +1327,19 @@ fn store_target(
     }
 }
 
-/// Whether a write through the proven store `symbol` is correct code or
-/// TypeScript's to report, so this rule stays silent.
+/// Where a store write stands against the windows that write-enable the
+/// store's proxy (ADR 0476).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WriteStanding {
+    /// Correct code, or TypeScript's: the rule is silent.
+    Exempt,
+    /// The write runs with no window open, at least on one run: dropped.
+    Dropped,
+    /// Whether a window is open when it runs is not proven: uncertifiable.
+    Unproven,
+}
+
+/// Where a write through the proven store `symbol` stands.
 ///
 /// - A write to the root record's *own* property is TS2540 where the
 ///   dialect's store type is `Readonly` at that level (`@solidjs/signals`
@@ -1334,15 +1348,19 @@ fn store_target(
 ///   be a bare identifier: `(state as { count: number }).count = 1` casts the
 ///   readonly away, so TypeScript falls silent there while the write is still
 ///   dropped at runtime, and `member_root` resolves through the cast.
-/// - 2.0 write-enables the original proxy for the duration of the store's own
-///   setter callback and of the compute function that derives it
-///   ([`inside_own_setter_callback`], [`inside_own_compute_function`]).
-fn store_write_is_exempt(
+/// - 2.0 write-enables the original proxy while the store's own setter runs
+///   its callback and while the compute function that derives the store runs
+///   (`inDraft`, rc.17 `dist/dev.js:4955-4957`, `:5847-5866`, `:6675-6678`).
+///   That is a dynamic extent, not a lexical one (ADR 0476): a write is exempt
+///   only when it runs on the callback's own stack, and a write the callback
+///   schedules (`queueMicrotask`, `setTimeout`, `.then`) runs after the
+///   window closes and is dropped ([`write_window_standing`]).
+fn store_write_standing(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
     site: StoreWriteSite,
     symbol: &crate::SymbolId,
-) -> bool {
+) -> WriteStanding {
     if context.dialect.store_root_properties_are_readonly()
         && file
             .ast
@@ -1354,11 +1372,406 @@ fn store_write_is_exempt(
             .iter()
             .any(|identifier| identifier.span == site.root)
     {
-        return true;
+        return WriteStanding::Exempt;
     }
-    context.dialect.store_setter_callback_enables_proxy_writes()
-        && (inside_own_setter_callback(file, context, site.span, symbol)
-            || inside_own_compute_function(file, context, site.span, symbol))
+    if !context.dialect.store_setter_callback_enables_proxy_writes() {
+        return WriteStanding::Dropped;
+    }
+    let windows = write_windows(file, context, symbol);
+    if windows.is_empty() {
+        return WriteStanding::Dropped;
+    }
+    write_window_standing(file, context, &windows, site.span, WINDOW_DEPTH)
+}
+
+/// How many named functions [`write_window_standing`] follows from a write to
+/// the calls that run it.
+const WINDOW_DEPTH: usize = 3;
+
+/// A function that runs while the store's proxy is write-enabled, or that is
+/// written inside such a function's argument: the store's own setter callback
+/// (`direct`: the argument itself) or a function within that argument, and
+/// the store's own compute function.
+#[derive(Clone, Copy)]
+struct WriteWindow {
+    function: Span,
+    /// The function is the argument the setter (or the deriving primitive)
+    /// itself invokes, not one written inside it.
+    direct: bool,
+}
+
+/// The windows of the store `store_symbol` in this file. The pairing is
+/// proven, not guessed ([`is_own_setter`]). The compute function is
+/// [`own_compute_functions`]'s.
+fn write_windows(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    store_symbol: &crate::SymbolId,
+) -> Windows {
+    let mut windows = Windows::default();
+    for call in &file.ast.calls {
+        if !is_own_setter(context, file.path.as_str(), call.callee, store_symbol, 4) {
+            continue;
+        }
+        for argument in &call.arguments {
+            let direct = file.ast.peel_ts_sugar_span(argument.span);
+            // A function named by the argument (`setStore(bump)`) is invoked
+            // by the setter like an inline one ([`named_function_standing`]).
+            windows.arguments.push(direct);
+            // A function written in the argument, not the argument itself
+            // (`setStore(flag ? a : b)`, a function inside an object), is a
+            // region of the window whose run this does not prove.
+            for function in file.ast.functions_within(argument.span) {
+                windows.regions.push(WriteWindow {
+                    function: function.span,
+                    direct: function.span == direct,
+                });
+            }
+        }
+    }
+    windows.regions.extend(
+        own_compute_functions(file, context, store_symbol)
+            .into_iter()
+            .map(|function| WriteWindow {
+                function,
+                direct: true,
+            }),
+    );
+    windows
+}
+
+/// The windows of one store in one file: the functions they run
+/// ([`WriteWindow`], `regions`) and the argument positions of its own setter's calls.
+#[derive(Default)]
+struct Windows {
+    regions: Vec<WriteWindow>,
+    arguments: Vec<Span>,
+}
+
+impl Windows {
+    fn is_empty(&self) -> bool {
+        self.regions.is_empty() && self.arguments.is_empty()
+    }
+}
+
+/// Whether the callee at `callee` (in `path`) is the setter destructured beside
+/// the store `store_symbol` (`const [store, setStore] = createStore(...)`),
+/// directly or through exact `const` aliases of it (`const set = setStore`, at
+/// most `depth` of them). Another store's setter or a same-spelled local is not.
+fn is_own_setter(
+    context: &UpstreamCompatContext<'_>,
+    path: &str,
+    callee: Span,
+    store_symbol: &crate::SymbolId,
+    depth: usize,
+) -> bool {
+    let Some((binding_file, binding, callee_symbol)) =
+        context.lookup.binding_at_reference(path, callee)
+    else {
+        return false;
+    };
+    match binding.shape {
+        solid_facts::ast::BindingShape::Array => {
+            let slot_symbol = |slot: usize| {
+                binding
+                    .array_slots
+                    .get(slot)
+                    .and_then(Option::as_ref)
+                    .and_then(|name| context.entities.at(binding_file.path.as_str(), name.span))
+            };
+            slot_symbol(1) == Some(&callee_symbol) && slot_symbol(0) == Some(store_symbol)
+        }
+        solid_facts::ast::BindingShape::Identifier if depth > 0 && binding.immutable => binding
+            .initializer_identifier
+            .as_ref()
+            .is_some_and(|source| {
+                is_own_setter(
+                    context,
+                    binding_file.path.as_str(),
+                    source.span,
+                    store_symbol,
+                    depth - 1,
+                )
+            }),
+        _ => false,
+    }
+}
+
+/// Where the site at `span` (a store write, or the call of a function that
+/// writes) stands against `windows` (ADR 0476).
+///
+/// The site is climbed out through the layers that run in place
+/// ([`crate::execution_role::layer_run`]: an IIFE, an inline standard-library
+/// callback, a helper's callback it calls in its own body). Where the climb
+/// stops:
+///
+/// - in a direct window, with no await before the site on the way and not in
+///   a parameter list: the site runs on the window's own stack, so the write
+///   is exempt; after an await on every path it runs once the window has
+///   closed (dropped), after a possible one it is unproven;
+/// - in a function written inside a window that a reviewed scheduler runs on
+///   a fresh stack (`setTimeout(fn)`, `queueMicrotask(fn)`, `.then(fn)`,
+///   [`crate::execution_role::LayerRun::FreshStack`]): the window has closed,
+///   so the write is dropped;
+/// - in a named function: the windows of the calls that run it
+///   ([`named_function_standing`]);
+/// - anywhere else in a window: unproven; outside every window: dropped.
+fn write_window_standing(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    windows: &Windows,
+    span: Span,
+    depth: usize,
+) -> WriteStanding {
+    // Climb out through the layers that run in place ([`crate::execution_role::layer_run`]),
+    // up to a window. Unlike `climb_in_place_layers`, a layer called inside a
+    // JSX expression is crossed: inside a window function it runs on that
+    // function's stack, whatever JSX the function itself is written in.
+    let mut at = span;
+    let mut suspended: Option<bool> = None;
+    let mut in_list = false;
+    let mut owner = None;
+    for _ in 0..16 {
+        let Some(function) = crate::owners::owning_function(&file.ast, at) else {
+            break;
+        };
+        owner = Some(function);
+        if function.generator
+            || windows
+                .regions
+                .iter()
+                .any(|window| window.direct && window.function == function.span)
+        {
+            break;
+        }
+        let inside = windows
+            .regions
+            .iter()
+            .any(|window| window.function.contains(function.span));
+        match crate::execution_role::layer_run(file, function, context.lookup) {
+            // A layer called in JSX written inside the window runs where the
+            // compiler places that expression (a render effect, after the
+            // setter returned); only JSX around the whole window is crossed.
+            crate::execution_role::LayerRun::InPlace(call)
+                if inside
+                    && file.ast.jsx_containing(call).any(|element| {
+                        !windows.regions.iter().any(|window| {
+                            window.direct
+                                && window.function.contains(function.span)
+                                && element.span.contains(window.function)
+                        })
+                    }) =>
+            {
+                return WriteStanding::Unproven;
+            }
+            crate::execution_role::LayerRun::InPlace(call) => {
+                in_list |= !function.body.contains(at);
+                if function.r#async {
+                    if crate::execution_role::follows_unconditional_await(file, at) {
+                        suspended = Some(true);
+                    } else if crate::execution_role::may_follow_own_await(file, at) {
+                        suspended.get_or_insert(false);
+                    }
+                }
+                at = call;
+            }
+            crate::execution_role::LayerRun::InPlaceAmongOthers(_) if inside => {
+                return WriteStanding::Unproven;
+            }
+            crate::execution_role::LayerRun::FreshStack if inside => return WriteStanding::Dropped,
+            _ => break,
+        }
+    }
+    let Some(owner) = owner else {
+        return WriteStanding::Dropped;
+    };
+    if windows
+        .regions
+        .iter()
+        .any(|window| window.direct && window.function == owner.span)
+    {
+        // An async window (a compute function `async () => { await …; }`)
+        // closes at its first await.
+        if owner.r#async {
+            if crate::execution_role::follows_unconditional_await(file, at) {
+                suspended = Some(true);
+            } else if crate::execution_role::may_follow_own_await(file, at) {
+                suspended.get_or_insert(false);
+            }
+        }
+        return if in_list || !owner.body.contains(at) {
+            WriteStanding::Unproven
+        } else {
+            match suspended {
+                None => WriteStanding::Exempt,
+                Some(true) => WriteStanding::Dropped,
+                Some(false) => WriteStanding::Unproven,
+            }
+        };
+    }
+    let in_window = windows
+        .regions
+        .iter()
+        .any(|window| window.function.contains(owner.span));
+    if in_window
+        && matches!(
+            crate::execution_role::layer_run(file, owner, context.lookup),
+            crate::execution_role::LayerRun::FreshStack
+        )
+    {
+        return WriteStanding::Dropped;
+    }
+    match named_function_standing(file, context, windows, owner, depth) {
+        Some(standing) => standing,
+        None if in_window || called_in_window(file, context, windows, owner) => {
+            WriteStanding::Unproven
+        }
+        None => WriteStanding::Dropped,
+    }
+}
+
+/// Whether a call written in a window may run the project function `function`,
+/// so that one of its runs is in the window and a write in it is not proven
+/// dropped, whatever its references show:
+///
+/// - the call resolves, exactly, to it
+///   ([`crate::execution_role::project_callee_at_parameter`], the resolution
+///   the write rules take);
+/// - `function` is a method, which has no binding whose references list its
+///   calls, and the call is through a member that resolves to no project
+///   function (`api.run()` where the receiver's resolution is withheld, ADR
+///   0299): it may be this method.
+fn called_in_window(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    windows: &Windows,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    let method = function.method_name.is_some();
+    file.ast.calls.iter().any(|call| {
+        if !windows
+            .regions
+            .iter()
+            .any(|window| window.function.contains(call.span))
+        {
+            return false;
+        }
+        match crate::execution_role::project_callee_at_parameter(file, call, 0, context.lookup) {
+            Some((callee_file, callee, _)) => {
+                callee_file.path == file.path && callee.span == function.span
+            }
+            None => {
+                method
+                    && file
+                        .ast
+                        .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                        .is_some()
+            }
+        }
+    })
+}
+
+/// The standing of a write in the named function `function`, from the calls
+/// that run it: `None` when every call of it is outside every window, or it
+/// has none (nothing to say; the caller keeps its own answer). Callers deeper
+/// than [`WINDOW_DEPTH`] are unknown.
+///
+/// Every reference to its binding must be its declaration, a type query or
+/// the callee of a call (by name, or as a method), or the store setter's own
+/// argument; a reference that passes the function on, an export, or one in
+/// another file may run it anywhere, so with a call in a window the write is
+/// unproven. Each call is placed by [`write_window_standing`]: one
+/// call with no window open drops the write on that run, every call in a
+/// window exempts it, anything else leaves it unproven. An async function's
+/// body may run past an await, so it proves no exemption; nor does a
+/// generator, whose body runs when it is iterated.
+fn named_function_standing(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    windows: &Windows,
+    function: &solid_facts::ast::FunctionFact,
+    depth: usize,
+) -> Option<WriteStanding> {
+    if function.generator {
+        return None;
+    }
+    // The chain of callers is longer than this follows: unknown, not dropped.
+    if depth == 0 {
+        return Some(WriteStanding::Unproven);
+    }
+    let name = crate::owners::function_binding_name(file, function)?;
+    let path = file.path.as_str();
+    let symbol = context.lookup.entities().at(path, name.span)?;
+    // A binding that may hold another function by the time a call runs (an
+    // object's method, a reassignable `let`) proves no exemption.
+    let current = context.lookup.function_value_is_current(file, function);
+    let references = context
+        .lookup
+        .symbol_references_if_present(symbol.as_str())?;
+    let mut handed = context.lookup.hands_out_by_name(path, function.span)
+        || crate::execution_role::module_exports(file, function, context.lookup);
+    let mut standings = Vec::new();
+    for reference in &references {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            handed = true;
+            continue;
+        };
+        let at = Span::new(start, end);
+        if reference.path.as_ref() != path {
+            handed = true;
+            continue;
+        }
+        if at == name.span || file.ast.type_queries.iter().any(|query| query.contains(at)) {
+            continue;
+        }
+        // The function named as the setter's own argument (`setStore(bump)`):
+        // the setter invokes it while its window is open.
+        if windows.arguments.contains(&at) {
+            standings.push(WriteStanding::Exempt);
+            continue;
+        }
+        // A call of it: by its name, or as a method (`api.run()`, whose
+        // reference is the member's property).
+        match file.ast.calls.iter().find(|call| {
+            let callee = file.ast.peel_ts_sugar_span(call.callee);
+            callee == at
+                || file
+                    .ast
+                    .member_at(callee)
+                    .is_some_and(|member| member.property == at)
+        }) {
+            Some(call) => standings.push(write_window_standing(
+                file,
+                context,
+                windows,
+                call.span,
+                depth - 1,
+            )),
+            None => handed = true,
+        }
+    }
+    // No run of it is in a window, or unknown: nothing to say here.
+    if standings
+        .iter()
+        .all(|standing| *standing == WriteStanding::Dropped)
+    {
+        return None;
+    }
+    Some(if handed || function.r#async || !current {
+        WriteStanding::Unproven
+    } else if standings.contains(&WriteStanding::Dropped) {
+        WriteStanding::Dropped
+    } else if standings
+        .iter()
+        .all(|standing| *standing == WriteStanding::Exempt)
+    {
+        WriteStanding::Exempt
+    } else {
+        WriteStanding::Unproven
+    })
 }
 
 /// What the links a store write's member chain reads past its root
@@ -1367,21 +1780,21 @@ fn store_write_is_exempt(
 /// rule is silent. `Some(true)`: uncertifiable. `Some(false)`: the write's
 /// proof stands.
 ///
-/// - No link past the root: the proof stands.
-/// - The program applies `strictNullChecks` (Type Facts' table answer): a link
-///   whose primitive value domain may hold `null` or `undefined` is
-///   TS18047/TS18048 in a chain with no optional access, in a file `tsc`
-///   checks, so the write is TypeScript's and the rule is silent; in an
-///   optional chain (`store.list?.push(1)`, `store.deep?.list.push(1)`), or
-///   in a file `tsc` may not report in, it is uncertifiable. A link whose domain excludes both is
-///   held to its type, so the proof stands; one whose domain was not served
-///   or is unknown is uncertifiable, and so is one whose type is not its
-///   declared one: an element access (no `undefined` without
-///   `noUncheckedIndexedAccess`) or a chain under a type assertion
-///   (`store.n!.b`, `(store.o as T).b`, `(store as T).a.b`).
-/// - It does not, or the table does not say: a type says nothing about a
-///   link's runtime value, and an undefined link throws `TypeError` before
-///   any write, so the write is uncertifiable.
+/// - No link past the root: the proof stands. `createStore` wraps its initial
+///   value whatever it is (rc.17 `dist/dev.js:5904-5915`, `wrap` never asks
+///   `isWrappable`), so the root is always the read proxy.
+/// - The program applies `strictNullChecks` (Type Facts' table answer), and a
+///   link's primitive value domain may hold `null` or `undefined`, in a chain
+///   with no optional access, in a file `tsc` checks: TS18047/TS18048, so the
+///   write is TypeScript's and the rule is silent.
+/// - Any other link leaves the write uncertifiable (ADR 0476). The proxy serves
+///   a child through `isWrappable` (`dist/dev.js:2272-2283`, `:5569`, `:5605`),
+///   which refuses a frozen object, a non-plain prototype (a `Map`, a class
+///   instance) and a DOM node, and serves it raw: a write below lands. Whether
+///   a link's value is frozen or plain is a property of the value, not of its
+///   type (`Object.freeze` can reach any reference, `Readonly<T>` is assignable
+///   to `T`), so no fact proves the link is wrapped. An undefined link throws
+///   `TypeError` before any write, and a frozen array's mutator throws too.
 fn chain_links_verdict(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
@@ -1393,51 +1806,29 @@ fn chain_links_verdict(
     if links.is_empty() {
         return Some(false);
     }
-    if context.strict_null_checks != Some(true) {
+    if context.strict_null_checks != Some(true) || !tsc_reports_in(file) {
         return Some(true);
     }
     let path = file.path.as_str();
-    // Every object the chain reads, the root included, must be its own
-    // declared value: no assertion around it and no computed key.
-    let root = links
-        .last()
-        .and_then(|&link| ast.member_at(ast.peel_ts_sugar_span(link)))
-        .map(|access| access.object);
-    let asserted = links
-        .iter()
-        .chain(root.iter())
-        .any(|&object| crate::indexes::SemanticLookup::peel_parentheses(file, object).is_none());
-    let computed = links.iter().any(|&link| {
-        ast.computed_members
-            .binary_search(&ast.peel_ts_sugar_span(link))
-            .is_ok()
-    });
-    let checked = tsc_reports_in(file);
     // An optional access anywhere in the chain (`store.list?.push(1)`,
     // `store.deep?.list.push(1)`) short-circuits it, so tsc reports no
     // nullish link of it.
     let optional = std::iter::once(member)
         .chain(links.iter().map(|&link| ast.peel_ts_sugar_span(link)))
         .any(|access| ast.optional_members.binary_search(&access).is_ok());
-    let mut open = asserted || computed;
-    for &link in &links {
-        match context
+    let nullish = links.iter().any(|&link| {
+        context
             .lookup
             .entity_at(path, link)
             .and_then(|entity| entity.primitive_value_domain.present())
-        {
-            Some(domain) if !domain.unknown() => {
-                if domain.may_be_null() || domain.may_be_undefined() {
-                    if checked && !optional {
-                        return None;
-                    }
-                    open = true;
-                }
-            }
-            _ => open = true,
-        }
+            .is_some_and(|domain| {
+                !domain.unknown() && (domain.may_be_null() || domain.may_be_undefined())
+            })
+    });
+    if nullish && !optional {
+        return None;
     }
-    Some(open)
+    Some(true)
 }
 
 /// Whether `tsc` reports a type error written in `file` at all: not a
@@ -1529,7 +1920,7 @@ fn no_store_mutator_call(
         {
             continue;
         }
-        if store_write_is_exempt(
+        let standing = store_write_standing(
             file,
             context,
             StoreWriteSite {
@@ -1538,7 +1929,8 @@ fn no_store_mutator_call(
                 root,
             },
             symbol,
-        ) {
+        );
+        if standing == WriteStanding::Exempt {
             continue;
         }
         // ADR 0465: the receiver of `store.items.push(1)` is a link past the
@@ -1554,7 +1946,7 @@ fn no_store_mutator_call(
             location: location(file.path.shared(), call.span),
             analysis_context: String::new(),
             fixes: vec![],
-            uncertain: past_root,
+            uncertain: past_root || standing == WriteStanding::Unproven,
         });
     }
 }
@@ -1562,7 +1954,7 @@ fn no_store_mutator_call(
 /// `delete` of a static member path of a proven store (ADR 0461): the proxy's
 /// `deleteProperty` trap drops it outside a setter like the `set` trap drops an
 /// assignment (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5761-5767`), with
-/// the same exemptions ([`store_write_is_exempt`]).
+/// the same exemptions ([`store_write_standing`]).
 ///
 /// The rule never reports what TypeScript reports on the same delete:
 /// - the operand must be a bare or parenthesized member: `delete store.v!` and
@@ -1626,7 +2018,7 @@ fn no_store_delete(
         let Some((name, _)) = context.accessors.get(symbol) else {
             continue;
         };
-        if store_write_is_exempt(
+        let standing = store_write_standing(
             file,
             context,
             StoreWriteSite {
@@ -1635,7 +2027,8 @@ fn no_store_delete(
                 root,
             },
             symbol,
-        ) {
+        );
+        if standing == WriteStanding::Exempt {
             continue;
         }
         let path = file.path.as_str();
@@ -1655,33 +2048,32 @@ fn no_store_delete(
             location: location(file.path.shared(), member),
             analysis_context: String::new(),
             fixes: vec![],
-            uncertain,
+            uncertain: uncertain || standing == WriteStanding::Unproven,
         });
     }
 }
 
-/// Whether `target` sits lexically inside the compute function that derives
-/// the store `store_symbol`: the first argument of the `createProjection(fn)`
-/// or function-form `createStore(fn, seed)` call its binding initializes.
+/// The compute function that derives the store `store_symbol`: the first
+/// argument of the `createProjection(fn)` or function-form `createStore(fn,
+/// seed)` call its binding initializes.
 ///
 /// The runtime runs that function inside `storeSetter(draft, …)`, which
 /// write-enables the store's family for the run (`@solidjs/signals@2.0.0-rc.17`
 /// `dist/dev.js:6675-6678`, `:5847-5866`); a write through the result symbol
-/// from the re-run commits like the draft's (probed). Any function nested in
-/// it counts too, so a callback whose run outlives the compute function is a
-/// miss on the checker's side only, never a finding. The binding must be in
-/// this file: a write from another module is never inside the call.
-fn inside_own_compute_function(
+/// from the re-run commits like the draft's (probed). A write it schedules
+/// runs after the run and is dropped ([`write_window_standing`], ADR 0476).
+/// The binding must be in this file: a write from another module is never
+/// inside the call.
+fn own_compute_functions(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
-    target: Span,
     store_symbol: &crate::SymbolId,
-) -> bool {
+) -> Vec<Span> {
     let Some((_, declaration)) = context.accessors.get(store_symbol) else {
-        return false;
+        return Vec::new();
     };
     if declaration.path.as_ref() != file.path.as_str() {
-        return false;
+        return Vec::new();
     }
     let declared = Span::new(
         u32::try_from(declaration.start_byte).unwrap_or(u32::MAX),
@@ -1690,70 +2082,19 @@ fn inside_own_compute_function(
     file.ast
         .bindings
         .iter()
-        .filter(|binding| {
-            binding.names.iter().any(|name| name.span == declared)
-                || binding
-                    .array_slots
-                    .first()
-                    .and_then(Option::as_ref)
-                    .is_some_and(|name| name.span == declared)
-        })
+        .filter(|binding| binding.names.iter().any(|name| name.span == declared))
         .filter_map(|binding| binding.call_initializer)
         .filter_map(|call| file.ast.call_at(call))
         .filter_map(|call| call.arguments.first())
-        .any(|argument| {
+        .filter_map(|argument| {
             let argument = file.ast.peel_ts_sugar_span(argument.span);
             file.ast
                 .functions
                 .iter()
-                .any(|function| function.span == argument && function.body.contains(target))
+                .find(|function| function.span == argument)
+                .map(|function| function.span)
         })
-}
-
-/// Whether `target` (an assignment through a store proxy rooted at
-/// `store_symbol`) sits lexically inside a callback passed to that store's
-/// *own* setter.
-///
-/// The pairing is proven, not guessed: the callee must resolve to the second
-/// slot of the exact array destructuring whose first slot is `store_symbol` —
-/// `const [store, setStore] = createStore(...)`. Another store's setter, a
-/// same-spelled local, or an eagerly evaluated argument (no function between
-/// the assignment and the argument) all fail the proof and keep the finding.
-fn inside_own_setter_callback(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    target: Span,
-    store_symbol: &crate::SymbolId,
-) -> bool {
-    file.ast.arguments_containing(target).any(|(call, index)| {
-        let argument = &call.arguments[index];
-        // The write must run when the setter invokes the callback, not while
-        // building the argument list.
-        if !file
-            .ast
-            .functions_within(argument.span)
-            .any(|function| function.body.contains(target))
-        {
-            return false;
-        }
-        let Some((binding_file, binding, callee_symbol)) = context
-            .lookup
-            .binding_at_reference(file.path.as_str(), call.callee)
-        else {
-            return false;
-        };
-        if binding.shape != solid_facts::ast::BindingShape::Array {
-            return false;
-        }
-        let slot_symbol = |slot: usize| {
-            binding
-                .array_slots
-                .get(slot)
-                .and_then(Option::as_ref)
-                .and_then(|name| context.entities.at(binding_file.path.as_str(), name.span))
-        };
-        slot_symbol(1) == Some(&callee_symbol) && slot_symbol(0) == Some(store_symbol)
-    })
+        .collect()
 }
 
 /// Whether this identifier is the callee of a call — the correct use.
