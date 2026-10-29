@@ -30,6 +30,16 @@ describe("judgeLegal", () => {
     expect(judgeLegal({ code: "PENDING_ASYNC_UNTRACKED_READ", site, typecheck: { ok: true }, checker: { ok: true, findings: elsewhere }, runtime: runtime() }).outcome).toBe("false-positive");
   });
 
+  it("gives a -guarded-rerun apply a later run: its compute reads a signal a button sets to 2", () => {
+    for (const context of ["effect-apply-guarded-rerun", "render-apply-guarded-rerun"]) {
+      expect(SPEC.PENDING_ASYNC_UNTRACKED_READ.legal).toContain(context);
+      const { built } = generateLegal({ seed: 1 }, { code: "PENDING_ASYNC_UNTRACKED_READ", context }, { shape: legalShapes("PENDING_ASYNC_UNTRACKED_READ")[0] });
+      expect(built.text).toMatch(/return t1\(\);\n\s+\}, \(v\) => \{\n\s+if \(v === 1\) return;/);
+      expect(built.text).toMatch(/onClick=\{\(\) => \{\n\s+setT1\(2\);/);
+      expect(built.plan.clicks).toEqual(["b1"]);
+    }
+  });
+
   it("puts a -guarded apply's site behind a return its first run takes", () => {
     for (const context of ["effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure"]) {
       expect(SPEC.PENDING_ASYNC_UNTRACKED_READ.legal).toContain(context);
