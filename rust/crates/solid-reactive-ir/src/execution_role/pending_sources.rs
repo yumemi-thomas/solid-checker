@@ -850,42 +850,58 @@ pub(crate) fn handed_member_alias(file: &solid_facts::FileFacts, callee: Span) -
                 .object_slots
                 .iter()
                 .find(|slot| slot.local.span == declaration && slot.plain_identifier_key)?;
-            let shape = ast
-                .object_get_shapes
-                .iter()
-                .find(|shape| shape.span == initializer)?;
-            if !shape.closed {
-                return None;
-            }
-            let own = ast
-                .object_properties
-                .iter()
-                .filter(|property| {
-                    initializer.contains(property.span)
-                        && !ast.object_properties.iter().any(|outer| {
-                            outer.span != property.span
-                                && initializer.contains(outer.span)
-                                && outer.span.contains(property.span)
-                        })
-                })
-                .collect::<Vec<_>>();
-            if !own
-                .iter()
-                .all(|property| property.data && !property.computed)
-            {
-                return None;
-            }
-            let mut matching = own.iter().filter(|property| {
-                file.source_text(property.key)
-                    .map(|key| key.trim_matches(['\'', '"']))
-                    == Some(slot.property.as_str())
-            });
-            let property = matching.next()?;
-            if matching.next().is_some() {
-                return None;
-            }
-            plain_member(property.value)
+            plain_member(closed_literal_slot_value(
+                file,
+                initializer,
+                slot.property.as_str(),
+            )?)
         }
         BindingShape::Array => None,
     }
+}
+
+/// ADR 0511: the value of property `key` of the object literal written at
+/// `literal`, where the literal is closed (no spread), every property of it
+/// is a plain data property with a non-computed key, and `key` appears once.
+pub(crate) fn closed_literal_slot_value(
+    file: &solid_facts::FileFacts,
+    literal: Span,
+    key: &str,
+) -> Option<Span> {
+    let ast = &file.ast;
+    let shape = ast
+        .object_get_shapes
+        .iter()
+        .find(|shape| shape.span == literal)?;
+    if !shape.closed {
+        return None;
+    }
+    let own = ast
+        .object_properties
+        .iter()
+        .filter(|property| {
+            literal.contains(property.span)
+                && !ast.object_properties.iter().any(|outer| {
+                    outer.span != property.span
+                        && literal.contains(outer.span)
+                        && outer.span.contains(property.span)
+                })
+        })
+        .collect::<Vec<_>>();
+    if !own
+        .iter()
+        .all(|property| property.data && !property.computed)
+    {
+        return None;
+    }
+    let mut matching = own.iter().filter(|property| {
+        file.source_text(property.key)
+            .map(|text| text.trim_matches(['\'', '"']))
+            == Some(key)
+    });
+    let property = matching.next()?;
+    if matching.next().is_some() {
+        return None;
+    }
+    Some(property.shorthand_binding.unwrap_or(property.value))
 }

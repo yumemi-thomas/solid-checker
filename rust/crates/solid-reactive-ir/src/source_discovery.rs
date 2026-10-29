@@ -42,6 +42,7 @@ mod props_reactivity;
 pub(crate) use props_reactivity::*;
 mod post_passes;
 mod post_rows;
+pub(crate) use post_rows::import_alias_declaration;
 pub(crate) mod trace;
 
 pub(crate) fn source_discovery_identity(

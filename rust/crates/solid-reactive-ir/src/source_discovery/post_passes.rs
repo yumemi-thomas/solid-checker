@@ -919,6 +919,12 @@ fn resolve_setter_action_aliases(
         summary_source_symbols,
         ..
     } = tables;
+    // ADR 0511: an import alias is exact where its source is a module-scope
+    // `const` of an analyzed file.
+    let module_consts = rows
+        .iter()
+        .flat_map(|rows| rows.module_consts.iter())
+        .collect::<HashSet<_>>();
     let mut frontier = setters
         .keys()
         .chain(actions.keys())
@@ -943,10 +949,12 @@ fn resolve_setter_action_aliases(
             let row = &rows[slot].aliases[ordinal as usize];
             let setter = setters.get(&row.source).cloned();
             let action = actions.get(&row.source).cloned();
-            let accessor = row
-                .exact
-                .then(|| accessors.get(&row.source).cloned())
-                .flatten();
+            let accessor = accessors
+                .get(&row.source)
+                .cloned()
+                .filter(|(_, declaration)| {
+                    row.exact || (row.import && module_consts.contains(declaration))
+                });
             if setter.is_none() && action.is_none() && accessor.is_none() {
                 continue;
             }
