@@ -12,6 +12,16 @@
       "fixes": 0
     },
     {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-phases/App.tsx",
+      "start": 176,
+      "end": 187,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-directive-application",
       "code": "SC6001",
       "kind": "violation",

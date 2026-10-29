@@ -28,7 +28,7 @@ import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
-import { LAYERS, MISUSE_CODES, SPEC, TEMPLATE_CODES, gridBindingsOf, gridVariantsOf } from "./misuse.mjs";
+import { LAYERS, MISUSE_CODES, MOUNTS, SPEC, TEMPLATE_CODES, gridBindingsOf, gridVariantsOf } from "./misuse.mjs";
 import { isSite, walk } from "./model.mjs";
 import { evaluate, finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
@@ -141,17 +141,27 @@ export function cellList({ codes, contexts } = {}) {
  * program of one shape had the same outcome, and no smaller key did, so one program per shape judges what the random draw judges and
  * reaches the shapes twenty random draws miss. In a fixed order: variants, then bindings, then layers.
  */
-export const gridShapes = (code, context) => gridVariantsOf(code)
+export const gridShapes = (code, context, mounts = ["root"]) => gridVariantsOf(code)
   .filter((variant) => context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context))
-  .flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.map((layer) => ({ variant, binding, layer }))));
+  .flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => mounts.map((mount) => ({ variant, binding, layer, ...(mount === "root" ? {} : { mount }) })))));
+
+/** `--mounts a,b` (misuse.mjs MOUNTS), default the entry's own render only. */
+export function mountsOption(value) {
+  const mounts = (value ?? "root").split(",");
+  for (const mount of mounts) if (!MOUNTS.includes(mount)) throw new Error(`--mounts: unknown mount ${mount} (${MOUNTS.join(", ")})`);
+  return mounts;
+}
+
+/** The id suffix of a shape's mount (none for the entry's own render, so a root program keeps its id). */
+export const mountSuffix = (shape) => (shape.mount ? `-m-${shape.mount}` : "");
 
 /** A shape's program seed depends on the run seed and the shape only, so a shape's program does not move when the grid grows. */
-export const shapeSeed = (base, code, context, { variant, binding, layer }) => programSeed((Number(base) ^ fnv(`${code}/${context}/${variant ?? "-"}/${binding}/${layer}`)) >>> 0, 0);
+export const shapeSeed = (base, code, context, { variant, binding, layer, mount }) => programSeed((Number(base) ^ fnv(`${code}/${context}/${variant ?? "-"}/${binding}/${layer}${mount ? `/${mount}` : ""}`)) >>> 0, 0);
 
 export function generateShape(options, { code, context }, shape, index) {
   const seed = shapeSeed(options.seed, code, context, shape);
   const program = generateProgram(seed, { profile: "misuse", misusePlan: { code, context, ...shape } });
-  const id = `mx-${code.toLowerCase().replaceAll("_", "-")}-${context}-${shape.variant ?? "x"}-${shape.binding}-${shape.layer.replace("+", "-")}`;
+  const id = `mx-${code.toLowerCase().replaceAll("_", "-")}-${context}-${shape.variant ?? "x"}-${shape.binding}-${shape.layer.replace("+", "-")}${mountSuffix(shape)}`;
   return { program, built: buildCase(program, { id }), index };
 }
 
@@ -436,6 +446,7 @@ const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] 
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--checker-label <commit>] [--tsc <tsrs>] [--all-cores]
   [--confirm-with-chrome [--chrome-sample 3] [--chrome-false-clean 4] [--chrome-other 2] [--browser <chromium>]] [--shrink [--budget N]]
   [--grid [--layers a,b]]               one program per shape (variant x binding x layer) of every cell, instead of --per-cell random draws
+  [--mounts root,child,show,for]        with --grid, also mount each program as a parent's child (misuse.mjs MOUNTS; default root)
   [--cache-dir <dir>] [--no-cache]      the runtime cache (type checks and fast-path records; default $TMPDIR/solid-checker-fuzz-cache)
   [--no-chrome-cache]                   run Chrome's browser half fresh (by default feedback run --execution-cache reuses it; the checker always reruns)
   [--baseline <matrix.json>]            fail when a judged program leaves agree or enters false-clean (same seeds); moves out of or into typed-away/harness are reported, not failed
@@ -461,7 +472,8 @@ async function sweep(options, config, out) {
   const entries = [];
   // `--layers a,b` keeps those layers' shapes (their index, and so their programs, as in the whole grid).
   const layerKept = (shape) => !options.layers || options.layers.split(",").includes(shape.layer);
-  if (options.grid) for (const cell of cells) gridShapes(cell.code, cell.context).forEach((shape, index) => { if (layerKept(shape)) entries.push({ cell, ...generateShape(options, cell, shape, index) }); });
+  const mounts = mountsOption(options.mounts);
+  if (options.grid) for (const cell of cells) gridShapes(cell.code, cell.context, mounts).forEach((shape, index) => { if (layerKept(shape)) entries.push({ cell, ...generateShape(options, cell, shape, index) }); });
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
@@ -594,7 +606,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir"], extraFlags: ["grid", "no-chrome-cache"] });
+      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts"], extraFlags: ["grid", "no-chrome-cache"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

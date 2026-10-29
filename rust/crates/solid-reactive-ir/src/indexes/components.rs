@@ -584,6 +584,22 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
+    /// Whether the call at `call` renders the component its argument loads
+    /// (`lazy(loader)`, [`solid_dialect::Dialect::renders_loaded_default_argument`]):
+    /// rendering its result runs the loader, so the result's tag is a
+    /// render site of the loader (ADR 0292), unlike any other call's result.
+    fn renders_loaded_default(&self, file: &FileFacts, call: Option<Span>) -> bool {
+        call.and_then(|span| file.ast.call_at(span))
+            .is_some_and(|call| {
+                self.primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        self.dialect
+                            .renders_loaded_default_argument(primitive, call.arguments.len())
+                            .is_some()
+                    })
+            })
+    }
+
     /// One file's candidates for [`Self::functions_by_symbol`], in the order
     /// the first of a symbol wins.
     fn file_symbol_functions(
@@ -613,6 +629,7 @@ impl<'a> SemanticLookup<'a> {
                 SymbolFunction::Resolved {
                     file: file_index,
                     function: function_index,
+                    through_call: false,
                 },
             ));
         }
@@ -647,6 +664,8 @@ impl<'a> SemanticLookup<'a> {
                         .map(|(function_index, _)| SymbolFunction::Resolved {
                             file: file_index,
                             function: function_index,
+                            through_call: !binding.initializer_function
+                                && !self.renders_loaded_default(file, binding.call_initializer),
                         }),
                 });
                 if let Some(outcome) = outcome {

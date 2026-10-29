@@ -99,10 +99,10 @@
     "symbols_by_id": 2
   },
   "rust/crates/solid-reactive-ir/src/indexes/census.rs": {
-    "files()": 3,
+    "files()": 4,
     "symbols_by_id": 2,
     "typescript-table": 1,
-    "hashmap-iteration": 2
+    "hashmap-iteration": 3
   },
   "rust/crates/solid-reactive-ir/src/indexes/closed_members.rs": {
     "files()": 1,

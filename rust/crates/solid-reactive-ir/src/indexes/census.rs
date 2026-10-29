@@ -149,6 +149,7 @@ census_tables! {
     redirected_callee: RedirectedCallee = 89;
     result_access: ResultAccessAnswered = 90;
     component_spans: ComponentSpansOf = 91;
+    call_result_symbols: FileCallResultSymbols = 92;
 }
 
 /// A memo over a lookup table not yet ported: its whole computation is one
@@ -205,6 +206,20 @@ adapter! {
     |lookup, table, id| {
         path_file(lookup, table, *id)
             .and_then(|file| lookup.census.function_symbols(lookup).get(file.path.as_str()).cloned())
+            .map(Arc::new)
+            .unwrap_or_default()
+    }
+}
+
+adapter! {
+    /// The symbols among [`FileFunctionSymbols`]' that name a function only
+    /// through a call's result (`SymbolFunction::Resolved { through_call }`),
+    /// sorted: no call or render of one proves a run of the function.
+    FileCallResultSymbols: FileId => Arc<Vec<Arc<str>>>, "census_call_result_symbols",
+    cycle: Arc::default(),
+    |lookup, table, id| {
+        path_file(lookup, table, *id)
+            .and_then(|file| lookup.census.call_result_symbols(lookup).get(file.path.as_str()).cloned())
             .map(Arc::new)
             .unwrap_or_default()
     }
@@ -584,9 +599,18 @@ impl Memo<BuildSchema> for CallSitesOf {
         target: &(FileId, Span),
     ) -> Result<Arc<Vec<CallSite>>, Cycle> {
         let symbols = function_symbols(ctx, *target)?;
+        let through_call = ctx.memo::<FileCallResultSymbols>(&target.0)?;
         let mut calls = Vec::new();
         let mut tags = Vec::new();
         for symbol in &symbols {
+            // A binding that holds a call's result (`wrapped = wrap(fn)`)
+            // names `fn` for identity, but calling or rendering it runs
+            // whatever the call returned: no site of it is a site of `fn`
+            // (`lazy`'s result, whose render runs its loader, is no such
+            // binding: `renders_loaded_default`).
+            if through_call.binary_search(symbol).is_ok() {
+                continue;
+            }
             for (file, rank, site) in ctx.callees(symbol) {
                 let rank = u32::try_from(rank).expect("fewer than 2^32 slots");
                 match site {
@@ -609,7 +633,9 @@ impl Memo<BuildSchema> for CallSitesOf {
             calls.extend(
                 redirected
                     .iter()
-                    .filter(|(.., symbol)| symbols.contains(symbol))
+                    .filter(|(.., symbol)| {
+                        symbols.contains(symbol) && through_call.binary_search(symbol).is_err()
+                    })
                     .map(|(file, rank, ordinal, _)| (*file, *rank, *ordinal)),
             );
         }
@@ -1806,6 +1832,9 @@ pub(super) struct State<'a> {
     /// `functions_by_symbol` inverted: each path's functions by span, with
     /// the symbols naming them, sorted.
     function_symbols: crate::base::reads::Recorded<HashMap<&'a str, FunctionSymbolsBySpan>>,
+    /// Each path's symbols that name one of its functions only through a
+    /// call's result, sorted.
+    call_result_symbols: crate::base::reads::Recorded<HashMap<&'a str, Vec<Arc<str>>>>,
     /// Symbol ids the TypeScript table lists more than once.
     duplicate_symbols: crate::base::reads::Recorded<HashSet<&'a str>>,
     route_values: crate::base::reads::Recorded<HashMap<FileId, Vec<Span>>>,
@@ -1820,7 +1849,7 @@ impl<'a> State<'a> {
             let files = lookup.files();
             let mut inverted = HashMap::<&'a str, FunctionSymbolsBySpan>::default();
             for (symbol, function) in lookup.functions_by_symbol() {
-                if let SymbolFunction::Resolved { file, function } = function {
+                if let SymbolFunction::Resolved { file, function, .. } = function {
                     let file = &files[*file];
                     inverted
                         .entry(file.path.as_str())
@@ -1837,6 +1866,31 @@ impl<'a> State<'a> {
                 }
             }
             inverted
+        })
+    }
+
+    fn call_result_symbols(&self, lookup: &SemanticLookup<'a>) -> &HashMap<&'a str, Vec<Arc<str>>> {
+        self.call_result_symbols.get_or_init(|| {
+            let files = lookup.files();
+            let mut by_path = HashMap::<&'a str, Vec<Arc<str>>>::default();
+            for (symbol, function) in lookup.functions_by_symbol() {
+                if let SymbolFunction::Resolved {
+                    file,
+                    through_call: true,
+                    ..
+                } = function
+                {
+                    by_path
+                        .entry(files[*file].path.as_str())
+                        .or_default()
+                        .push(Arc::from(*symbol));
+                }
+            }
+            for symbols in by_path.values_mut() {
+                symbols.sort_unstable();
+                symbols.dedup();
+            }
+            by_path
         })
     }
 

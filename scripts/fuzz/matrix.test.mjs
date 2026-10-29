@@ -242,3 +242,24 @@ describe("the grid", () => {
     expect(gate(random, { ...random }).ok).toBe(true);
   });
 });
+
+describe("the mount axis", () => {
+  it("keeps a root program's id and seed, and renders every other mount from an exported parent", async () => {
+    const { cellList, generateShape, gridShapes } = await import("./matrix.mjs");
+    const cell = cellList().find((c) => c.code === "REACTIVE_WRITE_IN_OWNED_SCOPE" && c.context === "body");
+    const [root] = gridShapes(cell.code, cell.context);
+    expect(gridShapes(cell.code, cell.context, ["root", "child"]).length).toBe(2 * gridShapes(cell.code, cell.context).length);
+    const plain = generateShape({ seed: 1 }, cell, root, 0);
+    expect(plain.built.id).not.toMatch(/-m-/);
+    expect(JSON.parse(plain.built.files["oracle.json"]).mount).toEqual(["C1"]);
+    const forms = { child: /<div>\n\s+<C1 \/>/, show: /<Show when=\{true\}>\n\s+<C1 \/>/, for: /<For each=\{\[1\]\}>\n\s+\{\(\) => <C1 \/>\}/ };
+    for (const [mount, form] of Object.entries(forms)) {
+      const { built } = generateShape({ seed: 1 }, cell, { ...root, mount }, 0);
+      expect(built.id).toBe(`${plain.built.id}-m-${mount}`);
+      expect(built.text).toMatch(/^function C1\(/m);
+      expect(built.text).toMatch(/^export function P1\(\)/m);
+      expect(built.text).toMatch(form);
+      expect(JSON.parse(built.files["oracle.json"]).mount).toEqual(["P1"]);
+    }
+  });
+});

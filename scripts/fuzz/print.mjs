@@ -458,7 +458,8 @@ function render(program, instrument) {
   for (const component of program.components) {
     const entry = entryFor(component, "component");
     const usesProps = [...walk(component)].some(({ node }) => node.k === "contain" && node.kind === "comp-prop");
-    out.push(`export function ${component.name}(${usesProps ? "props: { slot?: (c: () => unknown) => unknown }" : ""}) {${entry === null ? "" : ` __h(${entry});`}`);
+    // A component the mount axis renders as a child is the parent's, not the entry's: not exported (misuse.mjs MOUNTS).
+    out.push(`${component.mount ? "" : "export "}function ${component.name}(${usesProps ? "props: { slot?: (c: () => unknown) => unknown }" : ""}) {${entry === null ? "" : ` __h(${entry});`}`);
     within({ entry, inDefault: false }, () => {
       for (const sig of component.signals) out.push(`${INDENT}${signalLine(sig)}`);
       for (const [node, described] of useList) for (const line of described.preludeLines) out.push(`${INDENT}${auxLine(node, line)}`);
@@ -467,6 +468,14 @@ function render(program, instrument) {
       for (const item of component.view) out.push(...viewText(item, 3));
     });
     out.push(`${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
+  }
+  // The parents of the mount axis: each renders its child component in its own JSX.
+  for (const [index, component] of program.components.filter((c) => c.mount).entries()) {
+    const tag = `<${component.name} />`;
+    const mounted = component.mount === "show" ? (used.add("Show"), [`<Show when={true}>`, `${INDENT}${tag}`, `</Show>`])
+      : component.mount === "for" ? (used.add("For"), [`<For each={[1]}>`, `${INDENT}{() => ${tag}}`, `</For>`])
+      : [tag];
+    out.push(`export function P${index + 1}() {`, `${INDENT}return (`, `${INDENT}${INDENT}<div>`, ...mounted.map((line) => `${INDENT}${INDENT}${INDENT}${line}`), `${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
   const importNames = [...new Set([...used, ...useList.flatMap(([, described]) => described.solid)])].sort();
   const webNames = [...new Set(useList.flatMap(([, described]) => described.web))].sort();

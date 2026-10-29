@@ -162,7 +162,7 @@ function buildComponent(ctx, index, control) {
   if (profile === "misuse") {
     // Provokes one claimed diagnostic code at one marked site (misuse.mjs). Asked for with `--profile misuse`, never drawn at random.
     const built = buildMisuse({ rng, name: (prefix) => name(ctx, prefix), ensureHelper: (form, options) => ensureHelper(ctx, form, options) }, ctx.misusePlan);
-    return { ...component(`C${index + 1}`, built.sigs, built.body, built.view), shape: built.shape, misuse: built.misuse };
+    return { ...component(`C${index + 1}`, built.sigs, built.body, built.view), shape: built.shape, misuse: built.misuse, ...(built.misuse.mount === "root" ? {} : { mount: built.misuse.mount }) };
   }
   const sigs = [];
   const view = [];

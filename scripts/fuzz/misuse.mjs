@@ -21,6 +21,12 @@ import { codePolicy, policyOf } from "./codes.mjs";
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
 export const BINDINGS = ["direct", "namespace", "alias", "destructured", "wrapper"];
 export const LAYERS = ["none", "closure", "helper", "iife", "closure+helper", "module-helper"];
+/**
+ * Where the misuse component is mounted: by the entry's own `render` (`root`, every program before the mount axis), or as a child
+ * an exported parent renders: plainly (`child`), under `<Show when={true}>` (`show`), or in a one-row `<For>` (`for`). Grid-only
+ * (`--mounts`), never drawn: a root program keeps its seed, id and text.
+ */
+export const MOUNTS = ["root", "child", "show", "for"];
 
 /** Contexts where nothing owns the code that runs: a handler, a timer, a promise or microtask callback, after an await, runWithOwner(null). */
 const UNOWNED = ["handler", "timer", "then", "micro", "async", "owner-null"];
@@ -328,5 +334,7 @@ export function buildMisuse(kit, plan = {}) {
   let stmts = [expr(site)];
   for (const l of layer === "none" ? [] : layer.split("+")) stmts = applyLayer(l, stmts, kit);
   const placed = inContext(context, stmts, kit);
-  return { sigs, body: placed.body, view: placed.view, shape: `${code}/${context}/${binding}/${layer}`, misuse: { code, context, variant, binding, layer } };
+  const mount = plan.mount ?? "root";
+  if (!MOUNTS.includes(mount)) throw new Error(`unknown mount ${mount}`);
+  return { sigs, body: placed.body, view: placed.view, shape: `${code}/${context}/${binding}/${layer}${mount === "root" ? "" : `/${mount}`}`, misuse: { code, context, variant, binding, layer, mount } };
 }

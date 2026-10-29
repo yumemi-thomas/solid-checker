@@ -420,7 +420,7 @@ impl<'a> SemanticLookup<'a> {
         // A hand-out (`hand_outs`): the answer, and the file it names.
         self.note_function_for_symbol(symbol);
         match self.functions_by_symbol().get(symbol)? {
-            SymbolFunction::Resolved { file, function } => {
+            SymbolFunction::Resolved { file, function, .. } => {
                 self.note_slot_read(*file);
                 let file = &self.facts.files[*file];
                 Some((file, &file.ast.functions[*function]))

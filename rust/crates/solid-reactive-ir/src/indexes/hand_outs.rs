@@ -520,7 +520,7 @@ impl<'a> SemanticLookup<'a> {
             let mut buckets = vec![Vec::new(); usize::from(FUNCTION_BUCKETS)];
             for (symbol, answer) in self.functions_by_symbol() {
                 let answer = match answer {
-                    SymbolFunction::Resolved { file, function } => {
+                    SymbolFunction::Resolved { file, function, .. } => {
                         let (id, rank) = self.memo_slot_of(*file);
                         Some((
                             id,
