@@ -336,3 +336,47 @@ describe("the source axes", () => {
   });
 });
 
+describe("combination programs", () => {
+  it("marks the cell's site primary among one or two legal uses of other codes, deterministically, with an id and seed of its own", async () => {
+    const { cellList, combined, generateShape, gridShapes, shapeSeed, siteOf } = await import("./matrix.mjs");
+    const { validate } = await import("./model.mjs");
+    const cell = cellList().find((c) => c.code === "REACTIVE_WRITE_IN_OWNED_SCOPE" && c.context === "body");
+    const [plain] = gridShapes(cell.code, cell.context);
+    const [shape] = combined([plain], true);
+    expect(shapeSeed(1, cell.code, cell.context, shape)).not.toBe(shapeSeed(1, cell.code, cell.context, plain));
+    const a = generateShape({ seed: 1 }, cell, shape, 0);
+    expect(a.built.id).toBe(`${generateShape({ seed: 1 }, cell, plain, 0).built.id}-c`);
+    expect(generateShape({ seed: 1 }, cell, shape, 0).built.text).toBe(a.built.text);
+    expect(validate(a.program)).toEqual([]);
+    const uses = a.built.sites.filter((site) => site.code);
+    expect(uses.length).toBeGreaterThanOrEqual(2);
+    expect(uses.filter((site) => site.primary)).toHaveLength(1);
+    expect(siteOf(a.built)).toMatchObject({ code: cell.code, primary: true });
+    expect(uses.filter((site) => !site.primary).every((site) => site.code !== cell.code && site.bind === "direct")).toBe(true);
+  });
+  it("judges the primary site without the claims that cover another use", async () => {
+    const { judge } = await import("./matrix.mjs");
+    const site = { line: 10, aux: [] };
+    const runtime = { diagnostics: [{ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", positions: [{ file: "App.tsx", line: 10 }] }], errors: [] };
+    const elsewhere = { rule: "no-write-in-pure-computation", kind: "violation", line: 20, endLine: 20 };
+    const input = { code: "REACTIVE_WRITE_IN_OWNED_SCOPE", site, typecheck: { ok: true }, checker: { ok: true, findings: [elsewhere] }, runtime };
+    expect(judge(input).outcome).toBe("agree");
+    const { outcome, detail } = judge({ ...input, others: [[20]] });
+    expect(outcome).toBe("false-clean");
+    expect(detail.atOthers).toEqual(["no-write-in-pure-computation@20"]);
+  });
+  it("judges every use of a legal combination and takes the worst", async () => {
+    const { judgeLegalProgram } = await import("./legal.mjs");
+    const built = { sites: [{ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", line: 5, aux: [], hit: 1, primary: true }, { code: "NO_OWNER_CLEANUP", line: 9, aux: [], hit: 2 }], plan: { clicks: [] } };
+    const runtime = { diagnostics: [], errors: [], hits: { 1: 1, 2: 1 } };
+    const clean = judgeLegalProgram({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", built, typecheck: { ok: true }, checker: { ok: true, findings: [] }, runtime });
+    expect(clean.outcome).toBe("clean");
+    expect(clean.detail.sites).toEqual(["REACTIVE_WRITE_IN_OWNED_SCOPE@5:clean", "NO_OWNER_CLEANUP@9:clean"]);
+    const fp = judgeLegalProgram({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", built, typecheck: { ok: true }, checker: { ok: true, findings: [{ rule: "missing-owner", kind: "violation", line: 9, endLine: 9 }] }, runtime });
+    expect(fp).toMatchObject({ outcome: "false-positive", detail: { at: 9, code: "NO_OWNER_CLEANUP" } });
+    // Another use provoking a code on its own lines (a `-guarded-rerun` read) does not make a use of that code elsewhere not legal.
+    const shared = { sites: [{ code: "STRICT_READ_UNTRACKED", line: 5, aux: [], hit: 1, primary: true }, { code: "PENDING_ASYNC_UNTRACKED_READ", line: 9, aux: [], hit: 2 }], plan: { clicks: [] } };
+    const rerun = { ...runtime, diagnostics: [{ code: "STRICT_READ_UNTRACKED", positions: [{ file: "App.tsx", line: 9 }] }] };
+    expect(judgeLegalProgram({ code: "STRICT_READ_UNTRACKED", built: shared, typecheck: { ok: true }, checker: { ok: true, findings: [] }, runtime: rerun }).detail.sites).toEqual(["STRICT_READ_UNTRACKED@5:clean", "PENDING_ASYNC_UNTRACKED_READ@9:clean"]);
+  });
+});

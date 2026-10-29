@@ -53,7 +53,7 @@ export const regionOf = (site) => [site.line, ...(site.aux ?? [])].filter((line)
  * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object }} input
  * @returns {{ outcome: string, detail?: object }}
  */
-export function judge({ code, site, typecheck: typed, checker, runtime }) {
+export function judge({ code, site, typecheck: typed, checker, runtime, others = [] }) {
   if (typed && typed.ok === false) return { outcome: "typed-away", detail: { error: typed.errors?.[0] } };
   if (!checker?.ok) return { outcome: "harness", detail: { why: `checker: ${String(checker?.error ?? "not run").slice(0, 120)}` } };
   if (!runtime) return { outcome: "harness", detail: { why: "no runtime record" } };
@@ -77,7 +77,9 @@ export function judge({ code, site, typecheck: typed, checker, runtime }) {
   }
   const placed = atSite.length ? "placed" : "unplaced";
   const rules = codeRules[code] ?? [];
-  const relevant = checker.findings.filter((finding) => !ignoredRules.includes(finding.rule));
+  // A combination program's other uses are legal sites of other codes: a finding on their lines is theirs, never this site's.
+  const elsewhere = (finding) => others.some((lines) => inLines(finding, lines)) && !inLines(finding, region);
+  const relevant = checker.findings.filter((finding) => !ignoredRules.includes(finding.rule) && !elsewhere(finding));
   const claims = (finding) => rules.includes(finding.rule) || withholdingRules.includes(finding.rule);
   const covering = relevant.filter((finding) => inLines(finding, region));
   // The checker anchors a finding at the call that runs the misuse (a closure's call, a helper's call), not always at the misuse
@@ -97,7 +99,8 @@ export function judge({ code, site, typecheck: typed, checker, runtime }) {
       ? "agree"
       : relevant.some((finding) => codeRules[other].includes(finding.rule)) ? "recall-gap" : "false-clean"])
     .filter(([, verdict]) => verdict !== "agree"));
-  const detail = { placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(Object.keys(secondary).length ? { secondary } : {}) };
+  const atOthers = checker.findings.filter((finding) => finding.kind === "violation" && elsewhere(finding)).map((finding) => `${finding.rule}@${finding.line}`);
+  const detail = { ...(atOthers.length ? { atOthers } : {}), placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(Object.keys(secondary).length ? { secondary } : {}) };
   if (claimingViolation) return { outcome: "agree", detail };
   // A violation of another rule that the runtime substantiates on these lines (one of that rule's codes reported here: a store read
   // in a body is a strict read too) is a second defect at the site, not a wrong rule; the code is judged as if it were absent.
@@ -113,12 +116,14 @@ export function judge({ code, site, typecheck: typed, checker, runtime }) {
   if (claimingElsewhere) return { outcome: "recall-gap", detail: { ...detail, ...unrelated, remote: `${claimingElsewhere.rule}/${claimingElsewhere.kind}@${claimingElsewhere.line}` } };
   // Certified: the file has no uncertifiable finding at all, so the checker claims it proved the whole file. A false clean there is a
   // fail-closed break (invariant 2); in a file with an uncertifiable finding elsewhere it is a recall gap that only lost its place.
-  const certified = !relevant.some((finding) => finding.kind === "uncertifiable");
+  const certified = !checker.findings.some((finding) => !ignoredRules.includes(finding.rule) && finding.kind === "uncertifiable");
   return { outcome: "false-clean", detail: { ...detail, ...unrelated, certified } };
 }
 
 /** The misuse site of a built case: its only `use` site. */
-export const siteOf = (built) => built.sites.find((site) => site.code) ?? built.sites[0];
+export const siteOf = (built) => built.sites.find((site) => site.primary) ?? built.sites.find((site) => site.code) ?? built.sites[0];
+/** The regions of a combination program's other uses (misuse.mjs `buildCombo`): a finding there is about them, not the cell's site. */
+export const otherRegions = (built) => built.sites.filter((site) => site.code && !site.primary && built.sites.some((other) => other.primary)).map(regionOf);
 
 // ---------------------------------------------------------------------------------------------------------------------
 // The cells
@@ -165,9 +170,11 @@ export function mountsOption(value) {
 }
 
 /** The id suffix of a shape's mount (none for the entry's own render, so a root program keeps its id). */
-export const mountSuffix = (shape) => `${shape.mount ? `-m-${shape.mount}` : ""}${shape.source ? `-s-${shape.source}` : ""}`;
+export const mountSuffix = (shape) => `${shape.mount ? `-m-${shape.mount}` : ""}${shape.source ? `-s-${shape.source}` : ""}${shape.combo ? "-c" : ""}`;
 /** The seed key's tail of a shape's mount and source (none for a root, local program, so its seed stays). */
-export const axesKey = (shape) => `${shape.mount ? `/${shape.mount}` : ""}${shape.source ? `/s:${shape.source}` : ""}`;
+export const axesKey = (shape) => `${shape.mount ? `/${shape.mount}` : ""}${shape.source ? `/s:${shape.source}` : ""}${shape.combo ? "/combo" : ""}`;
+/** `--combine`: each shape's program is a combination program (misuse.mjs `buildCombo`) instead of the shape's own. */
+export const combined = (shapes, combine) => (combine ? shapes.map((shape) => ({ ...shape, combo: true })) : shapes);
 
 /** A shape's program seed depends on the run seed and the shape only, so a shape's program does not move when the grid grows. */
 export const shapeSeed = (base, code, context, shape) => programSeed((Number(base) ^ fnv(`${code}/${context}/${shape.variant ?? "-"}/${shape.binding}/${shape.layer}${axesKey(shape)}`)) >>> 0, 0);
@@ -201,7 +208,7 @@ async function chromeRecords(values, config, options, out) {
 /** Chrome's outcome for a program, and whether it equals the fast path's. */
 function judgeChrome(row, record) {
   if (!record || record.runtime?.failure || !record.checker?.ok || record.checker.perturbed?.length) return { status: "chrome-inconclusive", why: record?.runtime?.failure?.message ?? record?.checker?.error ?? record?.checker?.perturbed?.[0] ?? "no record" };
-  const { outcome, detail } = judge({ code: row.code, site: row.site, typecheck: { ok: true }, checker: record.checker, runtime: record.runtime });
+  const { outcome, detail } = judge({ code: row.code, site: row.site, typecheck: { ok: true }, checker: record.checker, runtime: record.runtime, others: row.others });
   return { status: outcome === row.outcome ? "same" : outcome === "not-fired" ? "not-fired-in-chrome" : "differs", outcome, detail };
 }
 
@@ -219,7 +226,7 @@ async function shrinkRepresentative(row, value, config, options, out) {
   const holds = ({ built, value: result }) => {
     const site = siteOf(built);
     if (!site || !result?.checker) return false;
-    const verdict = judge({ code: target.code, site, typecheck: result.typecheck, checker: result.checker, runtime: result.runtime });
+    const verdict = judge({ code: target.code, site, typecheck: result.typecheck, checker: result.checker, runtime: result.runtime, others: otherRegions(built) });
     return verdict.outcome === "false-clean";
   };
   const judgeBatch = async (programs) => (await evaluateAll(programs, "fc")).map(holds);
@@ -463,6 +470,8 @@ const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] 
   [--mounts root,child,show,for]        with --grid, also mount each program as a parent's child (misuse.mjs MOUNTS; default root)
   [--sources local,props,context,module,async]  with --grid, also take the values from a parent's props, a context, helpers.ts or an
                                         async parent (misuse.mjs SOURCES; axis or source names; default local)
+  [--combine]                           with --grid, each shape's program is a combination: the site among one or two legal uses of
+                                        other codes and unrelated reactive code, its values from a drawn source (misuse.mjs buildCombo)
   [--cache-dir <dir>] [--no-cache]      the runtime cache (type checks and fast-path records; default $TMPDIR/solid-checker-fuzz-cache)
   [--no-chrome-cache]                   run Chrome's browser half fresh (by default feedback run --execution-cache reuses it; the checker always reruns)
   [--baseline <matrix.json>]            fail when a judged program leaves agree or enters false-clean (same seeds); moves out of or into typed-away/harness are reported, not failed
@@ -490,7 +499,7 @@ async function sweep(options, config, out) {
   const layerKept = (shape) => !options.layers || options.layers.split(",").includes(shape.layer);
   const mounts = mountsOption(options.mounts);
   const sources = sourcesOption(options.sources);
-  if (options.grid) for (const cell of cells) gridShapes(cell.code, cell.context, mounts, sources).forEach((shape, index) => { if (layerKept(shape)) entries.push({ cell, ...generateShape(options, cell, shape, index) }); });
+  if (options.grid) for (const cell of cells) combined(gridShapes(cell.code, cell.context, mounts, sources), options.combine).forEach((shape, index) => { if (layerKept(shape)) entries.push({ cell, ...generateShape(options, cell, shape, index) }); });
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
@@ -513,9 +522,10 @@ async function sweep(options, config, out) {
     for (const { cell, index, program, built } of chunk) {
       const value = results.get(built.id);
       const site = siteOf(built);
-      const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : judge({ code: cell.code, site, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime });
+      const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : judge({ code: cell.code, site, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, others: otherRegions(built) });
       const misuse = program.components[0].misuse;
-      rows.push({ id: built.id, seed: program.seed, index, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), site, outcome: verdict.outcome, detail: verdict.detail, lines: built.text.split("\n").length });
+      const others = otherRegions(built);
+      rows.push({ id: built.id, seed: program.seed, index, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo, others } : {}), site, outcome: verdict.outcome, detail: verdict.detail, lines: built.text.split("\n").length });
       values.set(built.id, value);
     }
     console.error(`matrix: ${Math.min(at + CHUNK, entries.length)}/${entries.length} programs, ${Math.round((Date.now() - started) / 1000)}s, ${JSON.stringify(tally(rows))}`);
@@ -623,7 +633,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources"], extraFlags: ["grid", "no-chrome-cache"] });
+      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources"], extraFlags: ["grid", "no-chrome-cache", "combine"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

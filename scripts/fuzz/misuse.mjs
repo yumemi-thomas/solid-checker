@@ -13,7 +13,7 @@
 // in; a context where the call is legal (a write in a handler) is not in the list. `typedAway` codes have no template: the published
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
-  signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, storeNestedSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
+  walk, signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, storeNestedSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
   button, child, show, forEach, use, contain,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
@@ -408,6 +408,55 @@ function inContext(context, stmts, kit) {
  * @returns {{ sigs: object[], body: object[], view: object[], shape: string, misuse: object }}
  */
 export function buildMisuse(kit, plan = {}) {
+  return plan.combo ? buildCombo(kit, plan) : buildOne(kit, plan);
+}
+
+/**
+ * The extra uses a combination program may take: every legal (code, context) whose template prints no module-scope context line
+ * (two would declare `Ctx` twice), except the `-guarded-rerun` contexts, whose rerun is a strict read Solid reports (a defect in the file).
+ * An extra is bound directly: the other bindings' prelude names (`useIt`, `wrapUse`) are fixed.
+ */
+const extraCells = () => LEGAL_CODES().filter((code) => !SPEC[code].contextLine).flatMap((code) => SPEC[code].legal.filter((context) => !context.endsWith("-rerun")).map((context) => ({ code, context })));
+
+/**
+ * `plan.combo` (`--combine`): a combination program. The cell's site (marked `primary`, the one the grids judge as the cell's) shares
+ * its component with one or two legal uses of other codes (each its own site, in its own legal context) and, half the time, unrelated
+ * reactive code (a signal, a memo that reads it, an effect on the memo, a handler that writes the signal, the memo in the JSX). The
+ * values of the cell's site come from a source the shape takes, drawn (local, a parent's props, a context, `helpers.ts`), and the
+ * statements of the parts are interleaved. Every draw comes from the program's own seed.
+ */
+function buildCombo(kit, plan) {
+  const { rng } = kit;
+  const primary = buildOne(kit, { ...plan, combo: undefined, source: plan.source ?? "draw" });
+  const marked = primary.body.concat(primary.view).flatMap((node) => [...walk(node)]).find(({ node }) => node.k === "use");
+  marked.node.primary = true;
+  const pool = extraCells().filter((cell) => cell.code !== primary.misuse.code);
+  const extras = Array.from({ length: rng.int(1, 2) }, () => {
+    const cell = rng.pick(pool);
+    return buildOne(kit, { code: cell.code, context: cell.context, legal: true, binding: "direct", layer: rng.pick(["none", "closure", "helper", "iife"]) });
+  });
+  const parts = [primary, ...extras];
+  if (rng.chance(0.5)) {
+    const d = signal(kit.name("d"), 1, "src");
+    const m = kit.name("m");
+    parts.push({ sigs: [d], body: [decl(m, prim("memo", fn([ret(read(d.name))]))), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))],
+      view: [child(kit.name("v"), call(ref(m))), button(kit.name("b"), [expr(write(d.name, 2))])] });
+  }
+  // Interleaved: each part keeps its own order, the parts take turns in a drawn order.
+  const interleave = (lists) => {
+    const queues = lists.map((list) => [...list]).filter((list) => list.length);
+    const out = [];
+    while (queues.length) { const at = rng.int(0, queues.length - 1); out.push(queues[at].shift()); if (!queues[at].length) queues.splice(at, 1); }
+    return out;
+  };
+  const extra = extras.map((part) => `${part.misuse.code}@${part.misuse.context}`);
+  return {
+    sigs: parts.flatMap((part) => part.sigs), body: interleave(parts.map((part) => part.body)), view: interleave(parts.map((part) => part.view)),
+    shape: `${primary.shape}/combo`, misuse: { ...primary.misuse, combo: { extras: extra, decoys: parts.length > extras.length + 1 } },
+  };
+}
+
+function buildOne(kit, plan = {}) {
   const { rng } = kit;
   const code = plan.code ?? rng.pick(TEMPLATE_CODES);
   const spec = SPEC[code];
@@ -424,7 +473,7 @@ export function buildMisuse(kit, plan = {}) {
   let stmts = [expr(site)];
   for (const l of layer === "none" ? [] : layer.split("+")) stmts = applyLayer(l, stmts, kit);
   const placed = inContext(context, stmts, kit);
-  const source = plan.source ?? "local";
+  const source = plan.source === "draw" ? rng.pick(sourcesOf(code, variant, binding, context)) : plan.source ?? "local";
   if (!sourcesOf(code, variant, binding, context).includes(source)) throw new Error(`${code}/${variant}/${binding} cannot take source ${source}`);
   // A parent source renders the component from its parent, plainly; the mount axis is not crossed with it.
   const mount = parentSource(source) ? "child" : plan.mount ?? "root";

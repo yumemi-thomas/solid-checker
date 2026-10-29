@@ -523,7 +523,7 @@ function render(program, instrument) {
   const sites = sitePaths.map(({ node, path }, index) => ({
     id: `s${index + 1}`, kind: node.k, sig: node.sig, op: node.k === "own" ? node.op : undefined, value: node.k === "write" ? node.value : undefined,
     line: siteLines.get(index), path, witness: node.witness ?? null,
-    ...(node.k === "use" ? { code: node.code, bind: node.bind, aux: auxLines.get(index) ?? [] } : {}),
+    ...(node.k === "use" ? { code: node.code, bind: node.bind, aux: auxLines.get(index) ?? [], ...(node.primary ? { primary: true } : {}) } : {}),
   }));
   for (const row of ledger) row.line = hitLines.get(row.hit);
   return { text, sites, siteHits, ledger, lineTable };
