@@ -272,6 +272,7 @@ pub(super) fn module_source_pending(
                 context: None,
                 source,
                 hook: None,
+                handed: None,
             },
             lookup,
         )
@@ -285,6 +286,7 @@ pub(super) fn module_source_pending(
                     context: None,
                     source,
                     hook: None,
+                    handed: None,
                 },
                 lookup,
             ))
@@ -360,8 +362,21 @@ pub(super) fn parent_source_pending(
     let Some(read) = ast.call_at(site) else {
         return false;
     };
+    // ADR 0511: the callee, or a closed alias of the member declared in the
+    // body before the effect (a later one is in its temporal dead zone at
+    // the first run).
     let callee = ast.peel_ts_sugar_span(read.callee);
-    let Some(member) = ast.members.iter().find(|member| member.span == callee) else {
+    let Some(read_member) = handed_member_alias(file, callee) else {
+        return false;
+    };
+    if read_member != callee
+        && (crate::owners::containing_ast_function(ast, read_member)
+            .is_none_or(|function| function.span != component.span)
+            || read_member.end > effect.span.start)
+    {
+        return false;
+    }
+    let Some(member) = ast.members.iter().find(|member| member.span == read_member) else {
         return false;
     };
     let Some(name) = file.source_text(member.property) else {
@@ -425,7 +440,7 @@ pub(super) fn parent_source_pending(
         }
         Handed::Context { context }
     };
-    if written(object_declaration) || !only_called_members(file, object_declaration) {
+    if written(object_declaration) || !only_called_members(file, object_declaration, read_member) {
         return false;
     }
     let memo_name = binding.names.first().map(|named| named.span);
@@ -444,6 +459,7 @@ pub(super) fn parent_source_pending(
             context: provided,
             source: None,
             hook: None,
+            handed: Some(object_declaration),
         },
         lookup,
     ) && (render_effect
@@ -456,6 +472,7 @@ pub(super) fn parent_source_pending(
                 context: provided,
                 source: None,
                 hook: None,
+                handed: Some(object_declaration),
             },
             lookup,
         ))
@@ -533,10 +550,11 @@ fn source_name_in(
 }
 
 /// Every reference to the handed object (`props`, `ctx`) is the object of a
-/// member that is called (`props.data()`): nothing aliases it, hands it on,
+/// member that is called (`props.data()`) or is the read's own closed alias
+/// (`alias`, ADR 0511): nothing aliases it, hands it on,
 /// takes it apart or writes a member of it, so the member the read calls is
 /// the value the mount handed over.
-fn only_called_members(file: &solid_facts::FileFacts, declaration: Span) -> bool {
+fn only_called_members(file: &solid_facts::FileFacts, declaration: Span, alias: Span) -> bool {
     let ast = &file.ast;
     ast.identifiers
         .iter()
@@ -547,9 +565,10 @@ fn only_called_members(file: &solid_facts::FileFacts, declaration: Span) -> bool
         .all(|identifier| {
             ast.members.iter().any(|member| {
                 ast.peel_ts_sugar_span(member.object) == identifier.span
-                    && ast.calls.iter().any(|call| {
-                        !call.construct && ast.peel_ts_sugar_span(call.callee) == member.span
-                    })
+                    && (member.span == alias
+                        || ast.calls.iter().any(|call| {
+                            !call.construct && ast.peel_ts_sugar_span(call.callee) == member.span
+                        }))
                     && !ast
                         .assignments
                         .iter()
@@ -756,6 +775,7 @@ pub(super) fn hook_source_pending(
         context: None,
         source: None,
         hook: Some(call.span),
+        handed: None,
     };
     let render_effect =
         lookup.primitive_at_call(file, effect.span) == Some(Primitive::CreateRenderEffect);
@@ -771,4 +791,101 @@ pub(super) fn hook_source_pending(
             && crate::owners::module_render_sites(lookup, file, component)
                 .iter()
                 .any(|site| render_runs_first(lookup, site.entry, site.render))))
+}
+
+/// ADR 0511: the member a call's callee names through closed local forms,
+/// a named non-computed, non-optional member `X.N` with `X` an identifier:
+/// the callee itself (`props.k()`), or an identifier bound by an immutable,
+/// never-written `const` of one name whose whole initializer is that member
+/// (`const d = props.k`), or a slot of an object pattern with no default or
+/// rest whose initializer is an object literal written there, of plain data
+/// properties with no spread or computed key, whose property for the slot
+/// holds the member (`const { d } = { d: ctx.k }`). Answers the member's
+/// span; nothing else (a tuple, a hook's result, a reassigned name) is
+/// followed.
+pub(crate) fn handed_member_alias(file: &solid_facts::FileFacts, callee: Span) -> Option<Span> {
+    let ast = &file.ast;
+    let plain_member = |span: Span| {
+        let span = ast.peel_ts_sugar_span(span);
+        let member = ast.member_at(span)?;
+        (!ast.computed_members.contains(&span)
+            && ast.optional_members.binary_search(&span).is_err()
+            && ast.identifiers.iter().any(|identifier| {
+                identifier.span == ast.peel_ts_sugar_span(member.object)
+                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            }))
+        .then_some(span)
+    };
+    let callee = ast.peel_ts_sugar_span(callee);
+    if ast.member_at(callee).is_some() {
+        return plain_member(callee);
+    }
+    if !ast
+        .identifiers
+        .iter()
+        .any(|identifier| identifier.span == callee)
+    {
+        return None;
+    }
+    let declaration = ast.reference_declaration(callee)?;
+    let binding = ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == declaration))?;
+    if !binding.immutable
+        || binding.names.len() != 1
+        || crate::indexes::binding_written(file, declaration)
+    {
+        return None;
+    }
+    let initializer = ast.peel_ts_sugar_span(binding.initializer?);
+    match binding.shape {
+        BindingShape::Identifier => plain_member(initializer),
+        BindingShape::Object => {
+            let pattern = file.source_text(binding.pattern)?;
+            if pattern.contains('=') || pattern.contains("...") {
+                return None;
+            }
+            let slot = binding
+                .object_slots
+                .iter()
+                .find(|slot| slot.local.span == declaration && slot.plain_identifier_key)?;
+            let shape = ast
+                .object_get_shapes
+                .iter()
+                .find(|shape| shape.span == initializer)?;
+            if !shape.closed {
+                return None;
+            }
+            let own = ast
+                .object_properties
+                .iter()
+                .filter(|property| {
+                    initializer.contains(property.span)
+                        && !ast.object_properties.iter().any(|outer| {
+                            outer.span != property.span
+                                && initializer.contains(outer.span)
+                                && outer.span.contains(property.span)
+                        })
+                })
+                .collect::<Vec<_>>();
+            if !own
+                .iter()
+                .all(|property| property.data && !property.computed)
+            {
+                return None;
+            }
+            let mut matching = own.iter().filter(|property| {
+                file.source_text(property.key)
+                    .map(|key| key.trim_matches(['\'', '"']))
+                    == Some(slot.property.as_str())
+            });
+            let property = matching.next()?;
+            if matching.next().is_some() {
+                return None;
+            }
+            plain_member(property.value)
+        }
+        BindingShape::Array => None,
+    }
 }

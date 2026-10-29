@@ -1,4 +1,4 @@
-import { createMemo, createRenderEffect } from "solid-js";
+import { createContext, createMemo, createRenderEffect, useContext } from "solid-js";
 import type { Accessor } from "solid-js";
 import { useData, useDataThenParse } from "./hooks";
 
@@ -167,4 +167,75 @@ export function HookRunsCode() {
     },
   );
   return <p>static</p>;
+}
+
+function AliasChild(props: { data: Accessor<number> }) {
+  const read = props.data;
+  createRenderEffect(
+    () => 1,
+    () => {
+      read();
+    },
+  );
+  return <p>static</p>;
+}
+
+// Violation (SC5001, in `AliasChild`): a `const` alias of the prop, declared
+// before the effect, is the handed memo.
+export function PropAlias() {
+  const data = createMemo(async () => 1);
+  return (
+    <div>
+      <AliasChild data={data} />
+    </div>
+  );
+}
+
+function LateAliasChild(props: { data: Accessor<number> }) {
+  createRenderEffect(
+    () => 1,
+    () => {
+      read();
+    },
+  );
+  const read = props.data;
+  return <p>static</p>;
+}
+
+// Uncertifiable (in `LateAliasChild`): the alias is declared after the
+// effect; the first run meets it in its temporal dead zone.
+export function PropAliasLate() {
+  const data = createMemo(async () => 1);
+  return (
+    <div>
+      <LateAliasChild data={data} />
+    </div>
+  );
+}
+
+const DataCtx = createContext<{ shared: Accessor<number> }>();
+
+function DestructuredChild() {
+  const ctx = useContext(DataCtx);
+  const { read } = { read: ctx.shared };
+  createRenderEffect(
+    () => 1,
+    () => {
+      read();
+    },
+  );
+  return <p>static</p>;
+}
+
+// Violation (SC5001, in `DestructuredChild`): the provided memo taken out of
+// a local object literal of data properties.
+export function ContextDestructured() {
+  const data = createMemo(async () => 1);
+  return (
+    <div>
+      <DataCtx value={{ shared: data }}>
+        <DestructuredChild />
+      </DataCtx>
+    </div>
+  );
 }

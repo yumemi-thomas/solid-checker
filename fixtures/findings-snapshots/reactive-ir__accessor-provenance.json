@@ -372,13 +372,13 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 6203,
-      "end": 6207,
+      "end": 6209,
       "fixes": 0
     },
     {
@@ -462,13 +462,13 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 8920,
-      "end": 8925,
+      "end": 8927,
       "fixes": 0
     },
     {

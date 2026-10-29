@@ -2503,6 +2503,30 @@ pub(super) struct BodyAdmits {
     /// nothing else and returns an object literal of data properties, so the
     /// call and a destructuring of its result cannot throw.
     pub(super) hook: Option<Span>,
+    /// ADR 0511: the declaration of the object the mount hands over (the
+    /// one plain props parameter, or the `useContext` result of the provided
+    /// context): a named member read of it reads a data property of the
+    /// object the proven mount passes, and cannot throw.
+    pub(super) handed: Option<Span>,
+}
+
+/// ADR 0511: `member` reads a named, non-computed, non-optional member of the
+/// handed object ([`BodyAdmits::handed`]) directly.
+fn handed_member_read(
+    file: &solid_facts::FileFacts,
+    member: &solid_facts::ast::MemberFact,
+    admits: BodyAdmits,
+) -> bool {
+    let ast = &file.ast;
+    let object = ast.peel_ts_sugar_span(member.object);
+    admits.handed.is_some()
+        && !ast.computed_members.contains(&member.span)
+        && ast.optional_members.binary_search(&member.span).is_err()
+        && ast
+            .identifiers
+            .iter()
+            .any(|identifier| identifier.span == object)
+        && ast.reference_declaration(object) == admits.handed
 }
 
 /// ADR 0505's premises on the component itself, its mount aside: plain
@@ -2700,7 +2724,10 @@ fn body_runs_nothing_else(
                 || crate::indexes::declared_function(ast, function)
                 || computes.contains(&function.span)
         });
-    let quiet = !ast.members.iter().any(|member| own(member.span))
+    let quiet = !ast
+        .members
+        .iter()
+        .any(|member| own(member.span) && !handed_member_read(file, member, admits))
         && !ast.computed_members.iter().any(|member| own(*member))
         && !ast.tagged_template_tags.iter().any(|tag| in_code(*tag))
         && !ast.classes.iter().any(|class| in_code(class.span))
@@ -3086,7 +3113,9 @@ pub(super) fn throws_nothing_before(
                         )
                     }))
     };
-    !ast.members.iter().any(|member| own(member.span))
+    !ast.members
+        .iter()
+        .any(|member| own(member.span) && !handed_member_read(file, member, admits))
         && !ast.computed_members.iter().any(|member| own(*member))
         && !ast.spreads.iter().any(|spread| own(spread.span))
         && !ast.iterated_operands.iter().any(|operand| {

@@ -1,8 +1,11 @@
 import { render } from "@solidjs/web";
 import {
+  ContextDestructured,
   HookAfterEffect,
   HookDestructured,
   HookRunsCode,
+  PropAlias,
+  PropAliasLate,
   PropClosure,
   PropHelper,
   PropIife,
@@ -19,3 +22,6 @@ render(() => <PropThrowFirst />, host);
 render(() => <HookDestructured />, host);
 render(() => <HookAfterEffect />, host);
 render(() => <HookRunsCode />, host);
+render(() => <PropAlias />, host);
+render(() => <PropAliasLate />, host);
+render(() => <ContextDestructured />, host);

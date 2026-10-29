@@ -1701,7 +1701,14 @@ impl LocalAccessContext<'_, '_> {
         if inside_known_value_function_argument(file, call.callee, self.lookup) {
             return;
         }
-        if let Some((declaration, property)) = self.exact_props_callee(file, call.callee) {
+        // ADR 0511: or a closed alias of the prop (`const d = props.k`,
+        // `const { d } = { d: props.k }`).
+        let props_callee = self.exact_props_callee(file, call.callee).or_else(|| {
+            crate::execution_role::handed_member_alias(file, call.callee)
+                .filter(|member| *member != file.ast.peel_ts_sugar_span(call.callee))
+                .and_then(|member| self.exact_props_callee(file, member))
+        });
+        if let Some((declaration, property)) = props_callee {
             if self.discover_props_call(file, call, &declaration, &property, allowed, result) {
                 return;
             }
