@@ -4,6 +4,8 @@ import {
   HookAfterEffect,
   HookDestructured,
   HookRunsCode,
+  LoadingHolder,
+  LoadingOn,
   PropAlias,
   PropAliasLate,
   PropClosure,
@@ -25,3 +27,5 @@ render(() => <HookRunsCode />, host);
 render(() => <PropAlias />, host);
 render(() => <PropAliasLate />, host);
 render(() => <ContextDestructured />, host);
+render(() => <LoadingHolder />, host);
+render(() => <LoadingOn />, host);

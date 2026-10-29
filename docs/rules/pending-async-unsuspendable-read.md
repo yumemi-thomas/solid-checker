@@ -86,7 +86,8 @@ reads of the body's own literal signals and synchronous memos. No function
 between the read and the apply calls anything before it: a throw there ends
 the run first (`fixtures/reactive-ir/pending-source-first-run`); nor does any
 operator, template or loop there or in the body before the effect, which may
-throw through a coercion (ADR 0511 closes ADR 0507's residual).
+throw through a coercion (ADR 0511 closes ADR 0507's residual). The climb also passes a `<Loading>` with a literal
+`fallback` and no `on`, which renders its one child at creation (ADR 0511).
 
 ## Examples
 

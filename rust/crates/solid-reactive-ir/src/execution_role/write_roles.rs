@@ -3190,7 +3190,7 @@ fn compute_settles_synchronously(file: &solid_facts::FileFacts, argument: Span) 
 
 /// The text of a function body that is one primitive literal, or a block that
 /// only returns one.
-pub(super) fn primitive_literal_body(text: &str) -> bool {
+pub(crate) fn primitive_literal_body(text: &str) -> bool {
     let text = text.trim();
     let literal = match text
         .strip_prefix('{')

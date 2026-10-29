@@ -1,4 +1,4 @@
-import { createContext, createMemo, createRenderEffect, useContext } from "solid-js";
+import { Loading, createContext, createMemo, createRenderEffect, useContext } from "solid-js";
 import type { Accessor } from "solid-js";
 import { useData, useDataThenParse } from "./hooks";
 
@@ -236,6 +236,53 @@ export function ContextDestructured() {
       <DataCtx value={{ shared: data }}>
         <DestructuredChild />
       </DataCtx>
+    </div>
+  );
+}
+
+function LoadingChild(props: { data: Accessor<number> }) {
+  createRenderEffect(
+    () => 1,
+    () => {
+      props.data();
+    },
+  );
+  return <p>static</p>;
+}
+
+// Violation (SC5001, in `LoadingChild`): `<Loading>` builds its children in a
+// computed when it is created, so the child renders during this tree and its
+// render effect's first run, on the call, meets the memo pending.
+export function LoadingHolder() {
+  const data = createMemo(async () => 1);
+  return (
+    <div>
+      <Loading fallback={0}>
+        <LoadingChild data={data} />
+      </Loading>
+    </div>
+  );
+}
+
+function OnChild(props: { data: Accessor<number> }) {
+  createRenderEffect(
+    () => 1,
+    () => {
+      props.data();
+    },
+  );
+  return <p>static</p>;
+}
+
+// Uncertifiable (in `OnChild`): an `on` dependency list, which runs code and
+// may re-arm the boundary, is not admitted.
+export function LoadingOn() {
+  const data = createMemo(async () => 1);
+  return (
+    <div>
+      <Loading fallback={0} on={1}>
+        <OnChild data={data} />
+      </Loading>
     </div>
   );
 }

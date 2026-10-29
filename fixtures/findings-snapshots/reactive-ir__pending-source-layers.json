@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 606,
-      "end": 618,
+      "start": 615,
+      "end": 627,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 1026,
-      "end": 1038,
+      "start": 1035,
+      "end": 1047,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 1531,
-      "end": 1543,
+      "start": 1540,
+      "end": 1552,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 2067,
-      "end": 2077,
+      "start": 2076,
+      "end": 2086,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 2537,
-      "end": 2547,
+      "start": 2546,
+      "end": 2556,
       "fixes": 0
     },
     {
@@ -57,8 +57,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 3074,
-      "end": 3080,
+      "start": 3083,
+      "end": 3089,
       "fixes": 0
     },
     {
@@ -67,8 +67,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 3324,
-      "end": 3330,
+      "start": 3333,
+      "end": 3339,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 3595,
-      "end": 3601,
+      "start": 3604,
+      "end": 3610,
       "fixes": 0
     },
     {
@@ -87,8 +87,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 3779,
-      "end": 3785,
+      "start": 3788,
+      "end": 3794,
       "fixes": 0
     },
     {
@@ -97,8 +97,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 4205,
-      "end": 4211,
+      "start": 4214,
+      "end": 4220,
       "fixes": 0
     },
     {
@@ -107,8 +107,28 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
-      "start": 4789,
-      "end": 4795,
+      "start": 4798,
+      "end": 4804,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
+      "start": 5291,
+      "end": 5303,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
+      "start": 5874,
+      "end": 5886,
       "fixes": 0
     }
   ]

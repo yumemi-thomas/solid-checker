@@ -4,6 +4,8 @@
 
 A memo an inert hook of another module creates (`hooks.ts`) and the body takes apart before the effect is pending too (`HookDestructured`; variant `hook-member-effect`, a user effect reading `vals.data()`).
 
-Uncertifiable: `HookAfterEffect` (the hook is called after the effect), `HookRunsCode` (the hook runs code after the creation), `PropKept` (the helper keeps the callback and never calls it) and `PropThrowFirst` (the IIFE throws before the read).
+A child of `<Loading fallback={0}>` renders during the parent's tree (`LoadingHolder`; variant `loading-effect`, a user effect under a static tree).
 
-Stubs: `node_modules`, `jsx.d.ts` and `tsconfig.json` copied from `pending-source-first-run` (rc.17 published declarations); `package.json` makes the program closed.
+Uncertifiable: `LoadingOn` (an `on` list), variant `loading-tracked-effect` (the tree reads the memo, the boundary shows its fallback and holds the user effect), `HookAfterEffect` (the hook is called after the effect), `HookRunsCode` (the hook runs code after the creation), `PropKept` (the helper keeps the callback and never calls it) and `PropThrowFirst` (the IIFE throws before the read).
+
+Stubs: `node_modules`, `jsx.d.ts` and `tsconfig.json` copied from `pending-source-first-run` (rc.17 published declarations); `Loading` added to `solid-js` from `types/client/flow.d.ts:273`; `package.json` makes the program closed.

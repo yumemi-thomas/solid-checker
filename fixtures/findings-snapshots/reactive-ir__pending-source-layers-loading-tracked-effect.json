@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-source-layers/variants/loading-tracked-effect/App.tsx",
+      "start": 211,
+      "end": 223,
+      "fixes": 0
+    }
+  ]
+}

@@ -282,6 +282,7 @@ pub(crate) fn static_child_tag<'a>(
         if !intrinsic_element(file, holder) {
             if !shown_child(lookup, file, holder, at)
                 && !provided_child(lookup, file, parent, holder, at)
+                && !loading_child(lookup, file, holder, at)
             {
                 return None;
             }
@@ -335,6 +336,44 @@ fn significant_children<'f>(
                 .is_none_or(|text| !(text.trim().is_empty() && text.contains('\n')))
         })
         .collect()
+}
+
+/// ADR 0511: `holder` is the dialect's `<Loading fallback={<literal>}>` (one
+/// attribute, `fallback`, a primitive literal; no `on`, no spread) whose one
+/// child is `child`. `Loading` returns `createLoadingBoundary(() =>
+/// props.children, …)` (`solid-js@2.0.0-rc.17` `dist/solid.dev.js:1654-1659`),
+/// whose boundary builds the children in `computed(fn, { name: "children" })`
+/// when it is created (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:9463-9468`;
+/// `computed` runs a node that is not `lazy` at creation), so the child
+/// renders during the parent's tree, under that owner. A render effect
+/// created there runs its first apply on the call, which `runEffect`'s hold
+/// behind a fallback does not stop (only a queued run is held,
+/// `dist/dev.js:1947-1955`). A user effect's queued run is held while the
+/// boundary shows its fallback: ADR 0505's premises (a static tree, nothing
+/// else in the mount) leave nothing under it to make it show one.
+fn loading_child(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    holder: &solid_facts::ast::JsxElementFact,
+    child: Span,
+) -> bool {
+    let fallback = match holder.attributes.as_slice() {
+        [attribute]
+            if attribute.namespace.is_none()
+                && file.source_text(attribute.name) == Some("fallback") =>
+        {
+            attribute.expression
+        }
+        _ => return false,
+    };
+    element_primitive(lookup, file, holder) == Some(solid_dialect::Primitive::Loading)
+        && holder.spreads.is_empty()
+        && holder.boolean_properties.is_empty()
+        && fallback.is_some_and(|fallback| {
+            file.source_text(file.ast.peel_ts_sugar_span(fallback))
+                .is_some_and(crate::execution_role::primitive_literal_body)
+        })
+        && significant_children(file, holder) == [child]
 }
 
 /// ADR 0508: `holder` is the dialect's `<Show when={true}>` (one attribute,
