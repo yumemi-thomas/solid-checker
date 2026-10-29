@@ -2,10 +2,10 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
       "kind": "uncertifiable",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/reactive-ir/effect-apply-first-run/variants/member-read/App.tsx",
       "start": 288,
       "end": 295,

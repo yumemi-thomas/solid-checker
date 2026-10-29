@@ -703,6 +703,37 @@ pub fn project_findings(
         .filter(|read| read.apply_first_run_pending && read.pending_origin.is_none())
         .map(|read| &read.location)
         .collect::<std::collections::HashSet<_>>();
+    // ADR 0509: where a strict read of a proven async source is open because
+    // it may meet the source pending (`open_at`), the pending read is the
+    // other outcome: an obligation of its own rule.
+    if capabilities.async_reads {
+        let reported_open = program
+            .reads
+            .iter()
+            .filter(|read| {
+                read_reported(read, capabilities) && open_at.contains_key(&read.location)
+            })
+            .map(|read| &read.location)
+            .collect::<std::collections::HashSet<_>>();
+        findings.extend(
+            program
+                .async_reads
+                .iter()
+                .filter(|read| {
+                    read.async_provenance
+                        && !read.apply_first_run_pending
+                        && !async_read_reported(read)
+                        && reported_open.contains(&read.location)
+                })
+                .map(|read| {
+                    let mut pending = read.clone();
+                    pending.apply_first_run_pending = true;
+                    let mut finding = project_finding(FindingSeed::AsyncRead(&pending), catalog);
+                    finding.kind = "uncertifiable".into();
+                    finding
+                }),
+        );
+    }
     if capabilities.async_reads {
         findings.extend(
             program

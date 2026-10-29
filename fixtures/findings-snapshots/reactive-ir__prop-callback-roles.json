@@ -450,6 +450,16 @@
       "start": 3091,
       "end": 3101,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 3091,
+      "end": 3101,
+      "fixes": 0
     }
   ]
 }

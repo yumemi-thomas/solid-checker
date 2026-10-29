@@ -12,10 +12,10 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
       "kind": "uncertifiable",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/reactive-ir/effect-apply-first-run/App.tsx",
       "start": 867,
       "end": 874,

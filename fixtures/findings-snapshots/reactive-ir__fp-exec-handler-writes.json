@@ -172,10 +172,10 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
       "kind": "uncertifiable",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/reactive-ir/fp-exec-handler-writes/App.tsx",
       "start": 5073,
       "end": 5081,

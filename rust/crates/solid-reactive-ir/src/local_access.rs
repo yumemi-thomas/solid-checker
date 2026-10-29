@@ -37,6 +37,10 @@ use typefacts::{Declaration, Location};
 /// (ADR 0509), dropped where accessor transport resolves the call.
 pub(crate) const UNRESOLVED_HANDED_MEMBER: &str = "handed-member-dispatch";
 
+/// [`UNRESOLVED_HANDED_MEMBER`] where the call may only read (its role reports
+/// no write or action): a read row at the call speaks for it.
+pub(crate) const UNRESOLVED_HANDED_READ: &str = "handed-member-read";
+
 /// How many member, alias and destructuring steps [`UNRESOLVED_HANDED_MEMBER`]
 /// follows from a callee to the value a caller supplied.
 pub(crate) const HANDED_DEPTH: usize = 6;
@@ -221,6 +225,27 @@ fn returned_slot_is_literal_function(
         return false;
     };
     let returned = file.ast.peel_ts_sugar_span(returned);
+    // The whole result (`const task = make(); task()`): a function literal
+    // the hook returns, directly or through a `const` it binds to one.
+    if binding.shape == solid_facts::ast::BindingShape::Identifier {
+        if file.ast.function_at(returned).is_some() {
+            return true;
+        }
+        let Some(declaration) = file.ast.reference_declaration(returned) else {
+            return false;
+        };
+        return file.ast.bindings.iter().any(|local| {
+            local.immutable
+                && local.shape == solid_facts::ast::BindingShape::Identifier
+                && local.names.iter().any(|name| name.span == declaration)
+                && !crate::indexes::binding_written(file, declaration)
+                && local.initializer.is_some_and(|initializer| {
+                    file.ast
+                        .function_at(file.ast.peel_ts_sugar_span(initializer))
+                        .is_some()
+                })
+        });
+    }
     let Some(structure) = file
         .ast
         .returns
@@ -2145,7 +2170,11 @@ impl LocalAccessContext<'_, '_> {
                     member: None,
                 },
                 location: location(file.path.shared(), call.callee),
-                analysis_context: context.to_owned(),
+                analysis_context: if context == UNRESOLVED_HANDED_MEMBER && !may_write {
+                    UNRESOLVED_HANDED_READ.to_owned()
+                } else {
+                    context.to_owned()
+                },
                 fixes: vec![],
                 uncertain: true,
             });

@@ -236,7 +236,9 @@ pub(crate) fn collect_project<'facts>(
     }
     let mut handed = Vec::new();
     for obligation in dispatch_obligations {
-        if obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_MEMBER {
+        if obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_MEMBER
+            || obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_READ
+        {
             if !resolved_calls.contains(&obligation.location) {
                 handed.push(obligation);
             }
@@ -337,9 +339,12 @@ pub(crate) fn collect_project<'facts>(
                 && location.start_byte <= at.start_byte
                 && at.end_byte <= location.end_byte
         };
-        // Only a row whose role is reported speaks for the call.
+        // Only a row whose role is reported speaks for the call; a read row
+        // only for an obligation raised for a possible read.
+        let read_only = obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_READ;
         draft.reads.iter().any(|read| {
-            over(&read.location)
+            read_only
+                && over(&read.location)
                 && (read.execution.reports_untracked_read() || read.execution.reports_unplaced())
         }) || draft.writes.iter().any(|write| {
             over(&write.location)
