@@ -211,7 +211,18 @@ pub(crate) fn static_child_tag<'a>(
     {
         return None;
     }
-    let parent = crate::owners::containing_ast_function(ast, element.span)?;
+    // ADR 0508: a `<For>` row (`{() => <C />}`) runs the tag in the row
+    // function, which the climb steps over to the `<For>` element.
+    let mut at = element.span;
+    let mut holders = Vec::new();
+    let mut owner = crate::owners::containing_ast_function(ast, element.span)?;
+    if let Some((row, list)) = for_row(lookup, file, owner, element.span) {
+        holders.push(list.span);
+        holders.push(row.span);
+        at = list.span;
+        owner = crate::owners::containing_ast_function(ast, list.span)?;
+    }
+    let parent = owner;
     if parent.r#async
         || parent.generator
         || !lookup.function_may_be_component(file, parent)
@@ -223,9 +234,6 @@ pub(crate) fn static_child_tag<'a>(
         crate::owners::containing_ast_function(ast, span)
             .is_some_and(|function| function.span == parent.span)
     };
-    if !inert_parent(file, parent, element) {
-        return None;
-    }
     let returns = ast
         .returns
         .iter()
@@ -254,28 +262,168 @@ pub(crate) fn static_child_tag<'a>(
         return None;
     }
     // Climb from the tag to the returned element, each step the child of an
-    // intrinsic element.
-    let mut at = element.span;
+    // intrinsic element, or the one child of a `<Show when={true}>` (ADR 0508).
     for _ in 0..64 {
         if at == root {
-            return Some(parent);
+            return inert_parent(file, parent, element, &holders).then_some(parent);
         }
         let holder = ast
             .jsx_elements
             .iter()
             .filter(|candidate| candidate.span != at && candidate.span.contains(at))
             .min_by_key(|candidate| candidate.span.end - candidate.span.start)?;
-        let intrinsic = holder.member_object.is_none()
-            && file.source_text(holder.name.span).is_some_and(|name| {
-                name.chars().next().is_some_and(|c| c.is_ascii_lowercase())
-                    && name.chars().all(|c| c.is_ascii_alphanumeric())
-            });
-        if !intrinsic || !holder.children.contains(&at) || !own(holder.span) {
+        if !holder.children.contains(&at) || !own(holder.span) {
             return None;
+        }
+        if !intrinsic_element(file, holder) {
+            if !shown_child(lookup, file, holder, at) {
+                return None;
+            }
+            holders.push(holder.span);
         }
         at = holder.span;
     }
     None
+}
+
+/// A lowercase, non-member tag of letters and digits.
+fn intrinsic_element(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+) -> bool {
+    element.member_object.is_none()
+        && file.source_text(element.name.span).is_some_and(|name| {
+            name.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+                && name.chars().all(|c| c.is_ascii_alphanumeric())
+        })
+}
+
+/// The dialect primitive `element` renders, by its index in the file's JSX.
+fn element_primitive(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+) -> Option<solid_dialect::Primitive> {
+    let index = file
+        .ast
+        .jsx_elements
+        .iter()
+        .position(|candidate| candidate.span == element.span)?;
+    crate::known_primitive(lookup.primitives(file).jsx.get(index)?)
+}
+
+/// The children of `element` other than whitespace text that holds a line
+/// break: the compiler and TypeScript drop such text, but keep whitespace on
+/// one line (`<For> {() => <C />} </For>` hands `For` an array; ADR 0508
+/// review).
+fn significant_children<'f>(
+    file: &'f solid_facts::FileFacts,
+    element: &'f solid_facts::ast::JsxElementFact,
+) -> Vec<Span> {
+    element
+        .children
+        .iter()
+        .copied()
+        .filter(|child| {
+            file.source_text(*child)
+                .is_none_or(|text| !(text.trim().is_empty() && text.contains('\n')))
+        })
+        .collect()
+}
+
+/// ADR 0508: `holder` is the dialect's `<Show when={true}>` (one attribute,
+/// `when`, whose value is the literal `true`; no spread) whose one child is
+/// `child`. Its value memo computes when `Show` is created (`computed` runs
+/// a node that is not `lazy` at creation, `@solidjs/signals@2.0.0-rc.17`
+/// `dist/dev-shared.js:4913-4932`) and reads `props.children` when the
+/// condition holds (`solid-js@2.0.0-rc.17` `dist/solid.dev.js:1571-1600`), so
+/// the child renders inside that compute, during the parent's tree.
+fn shown_child(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    holder: &solid_facts::ast::JsxElementFact,
+    child: Span,
+) -> bool {
+    let when = match holder.attributes.as_slice() {
+        [attribute] if file.source_text(attribute.name) == Some("when") => attribute.expression,
+        _ => return false,
+    };
+    // `when={true}` is a boolean property too.
+    element_primitive(lookup, file, holder) == Some(solid_dialect::Primitive::Show)
+        && holder.spreads.is_empty()
+        && holder
+            .boolean_properties
+            .iter()
+            .all(|property| property.value && file.source_text(property.name) == Some("when"))
+        && when
+            .is_some_and(|when| file.source_text(file.ast.peel_ts_sugar_span(when)) == Some("true"))
+        && significant_children(file, holder) == [child]
+}
+
+/// ADR 0508: `row` is the one child of the dialect's `<For each={[…]}>` (one
+/// attribute, `each`, an array literal of primitive literals with at least one
+/// element; no spread): a function literal with no parameter whose expression
+/// body is `element`. `For` builds its `mapArray` on the first read
+/// of its result (`solid-js@2.0.0-rc.17` `dist/solid.dev.js:1548-1562`), which
+/// the parent's insert makes on its first pass, so the row runs during the
+/// parent's tree.
+fn for_row<'a>(
+    lookup: &SemanticLookup<'_>,
+    file: &'a solid_facts::FileFacts,
+    row: &'a solid_facts::ast::FunctionFact,
+    element: Span,
+) -> Option<(
+    &'a solid_facts::ast::FunctionFact,
+    &'a solid_facts::ast::JsxElementFact,
+)> {
+    let ast = &file.ast;
+    if row.r#async
+        || row.generator
+        || !row.parameters.is_empty()
+        || row.rest_parameter
+        || !row.expression_body
+        || ast.peel_ts_sugar_span(row.body) != element
+    {
+        return None;
+    }
+    let list = ast
+        .jsx_elements
+        .iter()
+        .filter(|candidate| candidate.span.contains(row.span))
+        .min_by_key(|candidate| candidate.span.end - candidate.span.start)?;
+    let [container] = significant_children(file, list)[..] else {
+        return None;
+    };
+    let inner = file.source_text(container)?.trim();
+    let held = inner
+        .strip_prefix('{')
+        .and_then(|rest| rest.strip_suffix('}'))
+        .map(str::trim)?;
+    let each = match list.attributes.as_slice() {
+        [attribute] if file.source_text(attribute.name) == Some("each") => attribute.expression?,
+        _ => return None,
+    };
+    let each = file.source_text(ast.peel_ts_sugar_span(each))?.trim();
+    let elements = each
+        .strip_prefix('[')
+        .and_then(|rest| rest.strip_suffix(']'))?;
+    let literals = elements.split(',').map(str::trim).collect::<Vec<_>>();
+    let primitive = |text: &str| {
+        matches!(text, "true" | "false" | "null")
+            || (!text.is_empty()
+                && text
+                    .trim_start_matches('-')
+                    .chars()
+                    .all(|c| c.is_ascii_digit())
+                && !text.trim_start_matches('-').is_empty())
+    };
+    (element_primitive(lookup, file, list) == Some(solid_dialect::Primitive::For)
+        && list.spreads.is_empty()
+        && list.boolean_properties.is_empty()
+        && file.source_text(row.span).map(str::trim) == Some(held)
+        && !literals.is_empty()
+        && literals.iter().all(|literal| primitive(literal)))
+    .then_some((row, list))
 }
 
 /// ADR 0507: the parent runs nothing but the render of `child`: its body is
@@ -292,6 +440,7 @@ fn inert_parent(
     file: &solid_facts::FileFacts,
     parent: &solid_facts::ast::FunctionFact,
     child: &solid_facts::ast::JsxElementFact,
+    holders: &[Span],
 ) -> bool {
     let ast = &file.ast;
     let inside = |span: Span| parent.span.contains(span);
@@ -302,7 +451,9 @@ fn inert_parent(
     let elements_static = ast
         .jsx_elements
         .iter()
-        .filter(|element| inside(element.span) && element.span != child.span)
+        .filter(|element| {
+            inside(element.span) && element.span != child.span && !holders.contains(&element.span)
+        })
         .all(|element| {
             let intrinsic = element.member_object.is_none()
                 && file.source_text(element.name.span).is_some_and(|name| {
@@ -366,10 +517,11 @@ fn inert_parent(
             .iter()
             .any(|statement| inside(*statement))
         && !ast.jsx_fragments.iter().any(|fragment| inside(*fragment))
-        && !ast
-            .functions
-            .iter()
-            .any(|function| function.span != parent.span && inside(function.span))
+        && !ast.functions.iter().any(|function| {
+            function.span != parent.span
+                && inside(function.span)
+                && !holders.contains(&function.span)
+        })
 }
 
 /// The module-scope renders that mount `component` itself (ADR 0503).

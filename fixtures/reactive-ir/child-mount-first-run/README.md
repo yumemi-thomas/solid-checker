@@ -4,6 +4,8 @@
 
 Violations: `PlainParent` (SC2001, a render-effect first-run write), `Grand` (SC5001, two parents deep), `variants/effect-child` (SC5001, a user effect, ADR 0505).
 
-Uncertifiable, one premise each: `CallingParent` (the parent runs code), `ShowParent` (`<Show>` runs children in a computation), `PropParent` (a prop on the tag), `ConditionalParent` (two returns).
+ADR 0508: a holder may also be the dialect's `<Show when={true}>` (its value memo computes when `Show` is created and renders the child) or a `<For each={[literal, …]}>` whose one child is a parameterless arrow returning the tag (its `mapArray` runs on the parent's insert's first pass): violations `ShowParent`, `ForParent`.
+
+Uncertifiable, one premise each: `CallingParent` (the parent runs code), `PropParent` (a prop on the tag), `ConditionalParent` (two returns), `ShowBindingParent` (`when` not the literal `true`), `ForEmptyParent` (no row), `ForItemParent` (the row takes the item).
 
 Stubs: `node_modules` and `jsx.d.ts` copied from `effect-apply-first-run` (rc.17 published declarations); the variant shares them.

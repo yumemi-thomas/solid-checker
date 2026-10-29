@@ -1,4 +1,4 @@
-import { createRenderEffect, createSignal } from "solid-js";
+import { createMemo, createRenderEffect, createSignal } from "solid-js";
 
 declare const flag: boolean;
 const later: { defer: boolean } = { defer: false };
@@ -188,6 +188,22 @@ export function UnderCondition() {
   createRenderEffect(
     () => 1,
     () => {
+      setCount(1);
+    },
+  );
+  return <p>{count()}</p>;
+}
+
+// Uncertifiable (ADR 0508 review): a call before the write in the apply may
+// throw first; here the read of the pending source does (SC5001), so the
+// write never runs.
+export function ReadThenWrite() {
+  const [count, setCount] = createSignal(0);
+  const data = createMemo(async () => 1);
+  createRenderEffect(
+    () => 1,
+    () => {
+      data();
       setCount(1);
     },
   );

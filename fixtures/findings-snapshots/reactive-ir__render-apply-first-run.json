@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 632,
-      "end": 643,
+      "start": 644,
+      "end": 655,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 922,
-      "end": 933,
+      "start": 934,
+      "end": 945,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 1194,
-      "end": 1205,
+      "start": 1206,
+      "end": 1217,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 1439,
-      "end": 1450,
+      "start": 1451,
+      "end": 1462,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 1717,
-      "end": 1728,
+      "start": 1729,
+      "end": 1740,
       "fixes": 0
     },
     {
@@ -57,8 +57,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 1988,
-      "end": 1999,
+      "start": 2000,
+      "end": 2011,
       "fixes": 0
     },
     {
@@ -67,8 +67,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 2266,
-      "end": 2277,
+      "start": 2278,
+      "end": 2289,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 2524,
-      "end": 2535,
+      "start": 2536,
+      "end": 2547,
       "fixes": 0
     },
     {
@@ -87,8 +87,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 2783,
-      "end": 2794,
+      "start": 2795,
+      "end": 2806,
       "fixes": 0
     },
     {
@@ -97,8 +97,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 3081,
-      "end": 3092,
+      "start": 3093,
+      "end": 3104,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 3284,
-      "end": 3295,
+      "start": 3296,
+      "end": 3307,
       "fixes": 0
     },
     {
@@ -117,8 +117,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 3487,
-      "end": 3498,
+      "start": 3499,
+      "end": 3510,
       "fixes": 0
     },
     {
@@ -127,8 +127,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 3737,
-      "end": 3748,
+      "start": 3749,
+      "end": 3760,
       "fixes": 0
     },
     {
@@ -137,8 +137,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 4027,
-      "end": 4038,
+      "start": 4039,
+      "end": 4050,
       "fixes": 0
     },
     {
@@ -147,8 +147,28 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
-      "start": 4215,
-      "end": 4226,
+      "start": 4227,
+      "end": 4238,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
+      "start": 4628,
+      "end": 4634,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-apply-first-run/App.tsx",
+      "start": 4642,
+      "end": 4653,
       "fixes": 0
     }
   ]

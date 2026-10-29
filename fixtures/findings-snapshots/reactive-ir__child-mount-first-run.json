@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
-      "start": 463,
-      "end": 474,
+      "start": 468,
+      "end": 479,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
-      "start": 805,
-      "end": 811,
+      "start": 810,
+      "end": 816,
       "fixes": 0
     },
     {
@@ -27,8 +27,18 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
-      "start": 1229,
-      "end": 1240,
+      "start": 1234,
+      "end": 1245,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 1679,
+      "end": 1690,
       "fixes": 0
     },
     {
@@ -37,8 +47,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
-      "start": 1674,
-      "end": 1685,
+      "start": 2150,
+      "end": 2161,
       "fixes": 0
     },
     {
@@ -47,8 +57,18 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
-      "start": 2079,
-      "end": 2090,
+      "start": 2468,
+      "end": 2479,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 2878,
+      "end": 2889,
       "fixes": 0
     },
     {
@@ -57,8 +77,28 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
-      "start": 2397,
-      "end": 2408,
+      "start": 3283,
+      "end": 3294,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 3687,
+      "end": 3698,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 4049,
+      "end": 4060,
       "fixes": 0
     }
   ]
