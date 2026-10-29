@@ -37,10 +37,13 @@ export const MOUNTS = ["root", "child", "show", "for"];
  *            `omit(props, "extra")` (rc.17 has no `mergeProps`/`splitProps`), or gets them through `M1`, which spreads its props
  *            on `<C1 {...props} />` (`prop-spread`). `prop-value` passes a read's value (`w1={w1()}`, a getter the compiled JSX
  *            makes) and the misuse reads `props.w1`.
- * `props` takes the templates whose values are not async.
+ *   context  the parent provides them (`<ValCtx value={{ w1, setW1 }}>`) and the component reads `useContext(ValCtx)`, as an object
+ *            (`ctx.setW1`) or destructured.
+ * `props` and `context` take the templates whose values are not async.
  */
 export const SOURCE_AXES = {
   props: ["prop", "prop-destructured", "prop-merge", "prop-omit", "prop-spread", "prop-value"],
+  context: ["context", "context-destructured"],
 };
 export const SOURCES = ["local", ...Object.values(SOURCE_AXES).flat()];
 /** A source whose values a parent component creates (the component is then rendered by `P1`, not exported). */
@@ -49,8 +52,8 @@ export const parentSource = (source) => source !== "local";
 const valueSource = (source) => source === "prop-value";
 
 /**
- * The sources a (code, variant, binding) can take: the template must have values (`setup`); `props` needs values that are not
- * async; a value source needs a bare read (`w1()`) at the site and a binding that keeps the read there (an alias
+ * The sources a (code, variant, binding) can take: the template must have values (`setup`); `props`/`context` need values that
+ * are not async; a value source needs a bare read (`w1()`) at the site and a binding that keeps the read there (an alias
  * of `props.w1` would read it on the alias's line).
  */
 export function sourcesOf(code, variant, binding) {
@@ -68,7 +71,7 @@ export function sourcesOf(code, variant, binding) {
   });
 }
 
-/** `--sources a,b`: source names or axis names (`props`); default `local` only. */
+/** `--sources a,b`: source names or axis names (`props`, `context`); default `local` only. */
 export function sourcesOption(value) {
   const sources = (value ?? "local").split(",").flatMap((name) => SOURCE_AXES[name] ?? [name]);
   for (const source of sources) if (!SOURCES.includes(source)) throw new Error(`--sources: unknown source ${source} (${[...Object.keys(SOURCE_AXES), ...SOURCES].join(", ")})`);
@@ -85,6 +88,7 @@ export function sourcedName(source, name) {
     case "prop": case "prop-spread": case "prop-value": return `props.${name}`;
     case "prop-merge": return `merged.${name}`;
     case "prop-omit": return `rest.${name}`;
+    case "context": return `ctx.${name}`;
     default: return name;
   }
 }

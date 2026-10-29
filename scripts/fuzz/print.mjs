@@ -466,13 +466,13 @@ function render(program, instrument) {
     out.push(`${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
   // The parents of the mount axis: each renders its child component in its own JSX.
-  // A parent source (misuse.mjs SOURCES) creates the component's values in the parent and hands them on as props.
+  // A parent source (misuse.mjs SOURCES) creates the component's values in the parent and hands them on as props or by context.
   for (const [index, component] of program.components.filter((c) => c.mount).entries()) {
     const { source } = component;
     const keys = source ? sourceKeys(component, signals) : [];
     const attrs = keys.map(([key]) => ` ${key}={${key}${sourcedRead(source) === "value" ? "()" : ""}}`).join("") + (source === "prop-omit" ? " extra={1}" : "");
-    const passed = source === "prop-spread" ? `<M${index + 1}${attrs} />` : `<${component.name}${attrs} />`;
-    const wrapped = [passed];
+    const passed = source === "prop-spread" ? `<M${index + 1}${attrs} />` : source?.includes("context") ? `<${component.name} />` : `<${component.name}${attrs} />`;
+    const wrapped = source?.includes("context") ? [`<ValCtx value={{ ${keys.map(([key]) => key).join(", ")} }}>`, `${INDENT}${passed}`, "</ValCtx>"] : [passed];
     const mounted = component.mount === "show" ? (used.add("Show"), [`<Show when={true}>`, ...wrapped.map((line) => `${INDENT}${line}`), `</Show>`])
       : component.mount === "for" ? (used.add("For"), [`<For each={[1]}>`, `${INDENT}{() => ${wrapped.join("")}}`, `</For>`])
       : wrapped;
@@ -480,8 +480,8 @@ function render(program, instrument) {
     const created = source ? component.signals.filter((sig) => component.sourced.includes(sig.name)).map((sig) => `${INDENT}${signalLine(sig)}`) : [];
     out.push(`export function P${index + 1}() {`, ...created, `${INDENT}return (`, `${INDENT}${INDENT}<div>`, ...mounted.map((line) => `${INDENT}${INDENT}${INDENT}${line}`), `${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
-  // The source's types, above the components that name them.
-  const declared = program.components.flatMap((component) => sourceDeclarations(component, signals));
+  // The source's types and its context, above the components that name them.
+  const declared = program.components.flatMap((component) => sourceDeclarations(component, signals, used));
   if (declared.length) out.unshift(...declared, "");
   const importNames = [...new Set([...used, ...useList.flatMap(([, described]) => described.solid)])].sort();
   const webNames = [...new Set(useList.flatMap(([, described]) => described.web))].sort();
@@ -580,26 +580,31 @@ function sourcedSignals(component, signals) {
 
 function sourceParameter(component, signals) {
   const { source } = component;
-  if (!source) return "";
+  if (!source || source.includes("context")) return "";
   if (source === "prop-destructured") return `{ ${sourceKeys(component, signals).map(([key]) => key).join(", ")} }: ${component.name}Props`;
   return `props: ${component.name}Props`;
 }
 
 function sourcePrelude(component, signals, used) {
+  const keys = () => sourceKeys(component, signals).map(([key]) => key).join(", ");
   switch (component.source) {
     case "prop-merge": used.add("merge"); return ["const merged = merge({ extra: 1 }, props);"];
     case "prop-omit": used.add("omit"); return ['const rest = omit(props, "extra");'];
+    case "context": used.add("useContext"); return ["const ctx = useContext(ValCtx);"];
+    case "context-destructured": used.add("useContext"); return [`const { ${keys()} } = useContext(ValCtx);`];
     default: return [];
   }
 }
 
-/** The module-scope lines a source needs in App.tsx: the props type. */
-function sourceDeclarations(component, signals) {
+/** The module-scope lines a source needs in App.tsx: the props type, or the context's value type and the context. */
+function sourceDeclarations(component, signals, used) {
   const { source } = component;
   if (!source) return [];
   const fields = sourceKeys(component, signals).map(([key, type]) => `${key}: ${type}`);
   if (source === "prop-omit") fields.push("extra: number");
-  return [`type ${component.name}Props = { ${fields.join("; ")} };`];
+  if (!source.includes("context")) return [`type ${component.name}Props = { ${fields.join("; ")} };`];
+  used.add("createContext");
+  return [`type ${component.name}Vals = { ${fields.join("; ")} };`, `const ValCtx = createContext<${component.name}Vals>();`];
 }
 
 function sourceTypeNames(component, signals) {

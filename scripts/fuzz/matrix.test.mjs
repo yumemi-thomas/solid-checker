@@ -278,7 +278,7 @@ describe("the source axes", () => {
   });
   it("expands axis names and refuses an unknown source", async () => {
     const { SOURCE_AXES, sourcesOption } = await import("./misuse.mjs");
-    expect(sourcesOption("props,prop")).toEqual(SOURCE_AXES.props);
+    expect(sourcesOption("props,context")).toEqual([...SOURCE_AXES.props, ...SOURCE_AXES.context]);
     expect(() => sourcesOption("nowhere")).toThrow(/unknown source/);
   });
   it("creates a prop source's values in the exported parent and names them through props", async () => {
@@ -300,6 +300,8 @@ describe("the source axes", () => {
       "prop-merge": [/const merged = merge\(\{ extra: 1 \}, props\);/, /merged\.setW1\(7\)/],
       "prop-omit": [/const rest = omit\(props, "extra"\);/, /extra=\{1\}/],
       "prop-spread": [/^function M1\(props: C1Props\) \{\n {2}return <C1 \{\.\.\.props\} \/>;/m, /<M1 w1=\{w1\} setW1=\{setW1\} \/>/],
+      context: [/const ValCtx = createContext<C1Vals>\(\);/, /const ctx = useContext\(ValCtx\);/, /<ValCtx value=\{\{ w1, setW1 \}\}>/],
+      "context-destructured": [/const \{ w1, setW1 \} = useContext\(ValCtx\);/],
     };
     const cell = cellList().find((c) => c.code === "REACTIVE_WRITE_IN_OWNED_SCOPE" && c.context === "body");
     for (const [source, patterns] of Object.entries(forms)) {

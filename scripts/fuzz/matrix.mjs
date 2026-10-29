@@ -461,8 +461,8 @@ const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] 
   [--confirm-with-chrome [--chrome-sample 3] [--chrome-false-clean 4] [--chrome-other 2] [--browser <chromium>]] [--shrink [--budget N]]
   [--grid [--layers a,b]]               one program per shape (variant x binding x layer) of every cell, instead of --per-cell random draws
   [--mounts root,child,show,for]        with --grid, also mount each program as a parent's child (misuse.mjs MOUNTS; default root)
-  [--sources local,props]               with --grid, also take the values from a parent's props (misuse.mjs SOURCES;
-                                        axis or source names; default local)
+  [--sources local,props,context]       with --grid, also take the values from a parent's props or a context
+                                        (misuse.mjs SOURCES; axis or source names; default local)
   [--cache-dir <dir>] [--no-cache]      the runtime cache (type checks and fast-path records; default $TMPDIR/solid-checker-fuzz-cache)
   [--no-chrome-cache]                   run Chrome's browser half fresh (by default feedback run --execution-cache reuses it; the checker always reruns)
   [--baseline <matrix.json>]            fail when a judged program leaves agree or enters false-clean (same seeds); moves out of or into typed-away/harness are reported, not failed
