@@ -37,6 +37,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-helper-demand/App.tsx",
+      "start": 1002,
+      "end": 1008,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-helper-demand/App.tsx",
       "start": 1177,
       "end": 1189,
       "fixes": 0

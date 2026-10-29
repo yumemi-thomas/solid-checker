@@ -100,6 +100,16 @@
       "start": 760,
       "end": 779,
       "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-mutators/App.tsx",
+      "start": 973,
+      "end": 985,
+      "fixes": 0
     }
   ]
 }

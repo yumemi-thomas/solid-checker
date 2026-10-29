@@ -10,6 +10,26 @@
       "start": 182,
       "end": 192,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-identity-open/App.tsx",
+      "start": 635,
+      "end": 650,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-identity-open/App.tsx",
+      "start": 1106,
+      "end": 1118,
+      "fixes": 0
     }
   ]
 }

@@ -727,6 +727,32 @@ fn solid_primitive_declaration(declaration: &Declaration, dialect: &dyn Dialect)
         && dialect.declares_primitive(declaration.name.as_ref())
 }
 
+/// The Solid type role of one alias declaration a Type Facts descriptor
+/// carries. The descriptor's origin module names it where a `declare module`
+/// encloses the declaration (a stub). ADR 0509: a published `.d.ts` file has
+/// none, so the producer leaves the origin empty; a declaration in a file
+/// inside an installed Solid package (the identity primitives are granted
+/// by, [`declaration_path_is_solid_package`]) declares the type those
+/// packages export, and the dialect answers for it under its own modules.
+/// Only the handed-member net's read exemption asks this: arming every typed
+/// rule with it moved proofs (ADR 0509).
+pub(crate) fn descriptor_type_role(
+    dialect: &dyn solid_dialect::Dialect,
+    descriptor: &typefacts::TypeDescriptor,
+    declaration: &typefacts::Declaration,
+) -> Option<solid_dialect::TypeRole> {
+    if !descriptor.origin_module.is_empty() {
+        return dialect.type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref());
+    }
+    if !declaration_path_is_solid_package(declaration.location.path.as_ref()) {
+        return None;
+    }
+    dialect
+        .modules()
+        .iter()
+        .find_map(|module| dialect.type_role(module, declaration.name.as_ref()))
+}
+
 fn declaration_path_is_solid_package(path: &str) -> bool {
     path.replace('\\', "/")
         .split('/')

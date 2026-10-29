@@ -598,7 +598,10 @@ fn resolve_call_target<'b>(
         Some(accessor_provenance::Callable::ArrayMembers(_)) => {
             Some("project-array-members".into())
         }
-        None => None,
+        Some(
+            accessor_provenance::Callable::Setter(_) | accessor_provenance::Callable::Action(_),
+        )
+        | None => None,
     };
     let symbol = transported_symbol.as_deref().or_else(|| {
         candidate_symbols
@@ -692,6 +695,10 @@ fn call_summary(
                     }
                 }
                 (label, reads, None)
+            }
+            // Kept out of `source_call_targets` (`write_call_targets`).
+            accessor_provenance::Callable::Setter(_) | accessor_provenance::Callable::Action(_) => {
+                return None;
             }
         }
     } else if let Some(candidates) = ambiguous_candidates {

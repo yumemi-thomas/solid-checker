@@ -658,6 +658,10 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// but the props object itself remains a reactive proxy.
     pub(super) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(super) uncertain_prop_sources: &'a HashSet<SymbolId>,
+    /// Values found as sources by their type alone (ADR 0294). A store among
+    /// them is written through like a proven one, but which store it is, and
+    /// so whether the write is dropped, is not known.
+    pub(super) typed_sources: &'a HashMap<SymbolId, crate::source_discovery::TypedSource>,
     /// Caller-proven props reactivity per props declaration; answers
     /// `Reactive` everywhere for dialects that keep the upstream
     /// over-approximation.
@@ -738,6 +742,7 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         source_primitives: ctx.source_primitives,
         prop_sources: ctx.prop_sources,
         uncertain_prop_sources: ctx.uncertain_prop_sources,
+        typed_sources: ctx.typed_sources,
         props_reactivity: ctx.props_reactivity,
         reactive_reads,
         source_reference_index: crate::symbols::source_reference_locations(

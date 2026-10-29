@@ -1,4 +1,15 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-namespace-provider/NamespaceProvider.tsx",
+      "start": 801,
+      "end": 811,
+      "fixes": 0
+    }
+  ]
 }

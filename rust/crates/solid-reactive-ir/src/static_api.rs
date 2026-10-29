@@ -507,7 +507,60 @@ impl StaticApiContext<'_> {
                 // (`Refreshable<T>`), so TypeScript answers it completely: an
                 // unbranded target is TS2345 and a branded one type-checks.
                 // An unprovable target therefore needs no finding, only the
-                // absence of a write claim below.
+                // absence of a write claim below. ADR 0509: but a branded
+                // target this cannot resolve (a prop through a `merge` view,
+                // a context member) is still a write, where it runs: the
+                // write is unplaced, an obligation, never silent.
+                if is_refresh
+                    // Only a call TypeScript accepts: an unbranded target is
+                    // TS2345, which this never reports (invariant 1).
+                    && self
+                        .lookup
+                        .resolved_callee_call(file, call.callee)
+                        .is_some_and(|resolved| {
+                            resolved.validity == typefacts::ResolvedCallValidity::Valid
+                        })
+                    && let Some(multiplicity) = self
+                        .reachable_calls
+                        .get(&location(file.path.shared(), call.callee))
+                        .copied()
+                {
+                    let role = semantic_write_execution_role(
+                        file,
+                        call.callee,
+                        &allowed,
+                        self.entities,
+                        self.symbol_names,
+                        self.lookup,
+                        RootBodyGuard::RejectsOutsideDisposal,
+                    );
+                    if role.reports_disallowed_write() || role.reports_unplaced() {
+                        for _ in 0..multiplicity {
+                            result.writes.push(ReactiveWrite {
+                                setter: format!(
+                                    "refresh({})",
+                                    file.source_text(target.span).unwrap_or("…")
+                                )
+                                .into(),
+                                operation: crate::ReactiveWriteOperation::Refresh,
+                                source_kind: ReactiveSourceKind::Accessor,
+                                location: location(file.path.as_str(), call.span),
+                                declaration: location(file.path.as_str(), target.span),
+                                execution: crate::ExecutionRole::Unknown,
+                                owned_write: Default::default(),
+                                context: analysis_context(
+                                    file,
+                                    call.span,
+                                    self.entities,
+                                    self.symbol_names,
+                                    dialect,
+                                    self.lookup,
+                                )
+                                .into(),
+                            });
+                        }
+                    }
+                }
                 continue;
             };
             // A member or call chain rooted at an accessor reads a plain

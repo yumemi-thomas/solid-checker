@@ -207,6 +207,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callee-callback-timing/Props.tsx",
+      "start": 932,
+      "end": 949,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Props.tsx",
+      "start": 1097,
+      "end": 1137,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Props.tsx",
       "start": 1355,
       "end": 1366,
       "fixes": 0

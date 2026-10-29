@@ -40,6 +40,16 @@
       "start": 249,
       "end": 258,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-exported-namespace/Page.tsx",
+      "start": 249,
+      "end": 258,
+      "fixes": 0
     }
   ]
 }

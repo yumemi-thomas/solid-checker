@@ -610,6 +610,34 @@ impl<'f, 'a> Reach<'f, 'a> {
                         .insert((call.path.to_string(), call.start_byte, call.end_byte))
                 {
                     draft.push_defect(typed_after_await_obligation(file, candidate.callee));
+                } else if let Some((file, candidate)) = ast_call
+                    && symbol.is_none_or(|symbol| {
+                        !ctx.setters.contains_key(symbol) && !ctx.actions.contains_key(symbol)
+                    })
+                    && crate::local_access::handed_value(
+                        &crate::local_access::HandedTables {
+                            lookup: ctx.semantic_lookup,
+                            entities: ctx.entities,
+                            prop_sources: ctx.prop_sources,
+                            source_kinds: ctx.source_kinds,
+                            accessors: ctx.accessors,
+                            setters: ctx.setters,
+                            actions: ctx.actions,
+                            props_reactivity: ctx.props_reactivity,
+                        },
+                        file,
+                        candidate.callee,
+                        crate::local_access::HANDED_DEPTH,
+                    )
+                    && walk
+                        .reported
+                        .insert((call.path.to_string(), call.start_byte, call.end_byte))
+                {
+                    // ADR 0509: the callee is a value a caller supplied (a
+                    // prop, a context or hook member); it may be an accessor.
+                    let mut obligation = typed_after_await_obligation(file, candidate.callee);
+                    obligation.analysis_context = "handed-read-after-await".to_owned();
+                    draft.push_defect(obligation);
                 }
                 continue;
             };

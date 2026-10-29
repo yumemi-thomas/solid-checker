@@ -92,6 +92,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-host-timing/App.tsx",
+      "start": 2906,
+      "end": 2922,
+      "fixes": 0
+    },
+    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",

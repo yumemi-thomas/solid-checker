@@ -1,0 +1,3 @@
+# A setter of unknown source is an obligation where optimistic setters meet no guard
+
+On rc.17 `createOptimistic`'s setter meets no owned-scope guard, so a write is reported only through a setter proven `createSignal`'s. A setter found by its `Setter` type alone (returned from a hook, as a tuple, an object or a member) could be either: its body write is uncertifiable, never certified clean (the fuzzer's `module-hook` source found these silent). A proven `createSignal` setter stays a violation and a proven `createOptimistic` one stays silent. Stub: rc.17 `createSignal` and `createOptimistic` plain-value overloads.

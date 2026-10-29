@@ -132,6 +132,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
+      "start": 918,
+      "end": 931,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -182,8 +192,28 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
+      "start": 2408,
+      "end": 2421,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
+      "start": 3031,
+      "end": 3046,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
@@ -209,6 +239,16 @@
       "path": "fixtures/reactive-ir/forwarded-event-prop/EvalHandler.tsx",
       "start": 311,
       "end": 318,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/NamedHandlers.tsx",
+      "start": 2107,
+      "end": 2120,
       "fixes": 0
     },
     {

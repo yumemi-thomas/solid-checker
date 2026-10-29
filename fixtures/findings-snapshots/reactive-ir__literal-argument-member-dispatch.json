@@ -362,6 +362,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 1022,
+      "end": 1033,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -417,6 +427,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 1501,
+      "end": 1511,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 2034,
+      "end": 2045,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
       "start": 2034,
       "end": 2045,
       "fixes": 0
@@ -462,6 +492,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 3222,
+      "end": 3233,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -487,6 +527,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 3238,
+      "end": 3248,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
       "start": 3543,
       "end": 3554,
       "fixes": 0
@@ -499,6 +549,16 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
       "start": 3786,
       "end": 3797,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 4153,
+      "end": 4164,
       "fixes": 0
     },
     {

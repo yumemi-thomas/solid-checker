@@ -14,7 +14,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-apply-first-run/App.tsx",
       "start": 867,

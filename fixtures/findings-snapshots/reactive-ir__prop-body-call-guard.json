@@ -42,6 +42,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
+      "start": 617,
+      "end": 622,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -72,6 +82,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
+      "start": 995,
+      "end": 1000,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -79,6 +99,16 @@
       "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
       "start": 1148,
       "end": 1155,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
+      "start": 1393,
+      "end": 1398,
       "fixes": 0
     },
     {
@@ -109,6 +139,16 @@
       "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
       "start": 1878,
       "end": 1890,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
+      "start": 1909,
+      "end": 1914,
       "fixes": 0
     },
     {
@@ -174,6 +214,16 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
+      "start": 3295,
+      "end": 3307,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",

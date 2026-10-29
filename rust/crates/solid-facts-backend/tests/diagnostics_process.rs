@@ -871,7 +871,17 @@ fn named_event_prop_forwarding_requires_an_exclusive_reference_census() {
                 .is_some_and(|path| path.ends_with("/NamedHandlers.tsx"))
         })
         .collect::<Vec<_>>();
-    assert_eq!(rows.len(), 7, "{rows:#?}");
+    // Seven SC1001 rows below, and ADR 0509's obligation at `NamedCycle`'s
+    // `props.onPress()`: the component renders itself passing a named
+    // handler, a value pass 10 cannot follow.
+    assert_eq!(rows.len(), 8, "{rows:#?}");
+    assert_eq!(
+        rows.iter()
+            .filter(|row| row["analysisContext"] == "closed-parameter-member-dispatch")
+            .count(),
+        1,
+        "{rows:#?}"
+    );
     for (name, unresolved) in [
         ("UsesNamed", false),
         ("UsesWrappedNamed", false),
@@ -1331,13 +1341,15 @@ fn write_scope_diagnostics_have_semantic_locations() {
     // setters directly in the component body count too: the fixture resolves
     // no solid-js, so it is analyzed as the audited release, whose store
     // setter guard rejects a root owner (ADR 0127; rc.13 keeps rc.9's
-    // answer, ADR 0194).
+    // answer, ADR 0194). Fifteen with ADR 0509: the `let` alias of
+    // `setCount`, which may be reassigned, is an uncertifiable write by its
+    // `Setter` type, no longer silent.
     assert_eq!(
         (
             findings_for_rule(&findings, "no-write-in-pure-computation").len(),
             findings_for_rule(&findings, "action-called-in-owned-scope").len(),
         ),
-        (14, 2)
+        (15, 2)
     );
     assert!(
         findings
@@ -1353,7 +1365,9 @@ fn write_scope_diagnostics_have_semantic_locations() {
                     .as_str()
                     .is_some_and(|path| path.ends_with(".tsx"))
                     && finding["message"].as_str().is_some_and(|message| {
-                        message.contains("owned scope") || message.contains("action")
+                        message.contains("owned scope")
+                            || message.contains("action")
+                            || message.contains("children-capable owner")
                     })
             })
     );
@@ -1788,7 +1802,14 @@ fn props_container_and_callback_creation_do_not_prove_nested_behavior() {
         .expect("eager component-body read");
     assert_eq!(eager["kind"], "violation", "{eager:#?}");
     let mutations = findings_for_rule(&props, "no-store-mutation-outside-setter");
-    assert_eq!(mutations.len(), 1, "{props:#?}");
+    // ADR 0509: `props.state.count++` (line 27) and the cast write (line 31)
+    // write past a props root a caller may have handed a store: obligations.
+    assert_eq!(mutations.len(), 3, "{props:#?}");
+    for (index, line) in [(0, 27), (1, 31)] {
+        assert_eq!(mutations[index]["primaryLocation"]["line"], line);
+        assert_eq!(mutations[index]["kind"], "uncertifiable");
+    }
+    let mutations = &mutations[2..];
     assert_eq!(mutations[0]["primaryLocation"]["line"], 36);
     // A write through the props container is an obligation: the props object
     // may be the compiler's plain object, where the write succeeds.

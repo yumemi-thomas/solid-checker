@@ -104,6 +104,16 @@
     {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-scope/App.tsx",
+      "start": 1614,
+      "end": 1630,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope/App.tsx",

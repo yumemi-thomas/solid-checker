@@ -540,10 +540,14 @@ pub(crate) fn reactive_read_after_await_through_calls<'a>(
             .or_default()
             .push(read);
     }
+    let mut defects = Vec::new();
+    handed_reads_after_await_through_calls(ctx, computations, &files_by_path, &mut defects);
     if attributed.is_empty() {
+        for defect in defects {
+            draft.push_defect(defect);
+        }
         return;
     }
-    let mut defects = Vec::new();
     let proven_identity = StaticDefectKind::ReactiveReadAfterAwait {
         accessor: String::new(),
     }
@@ -625,6 +629,233 @@ pub(crate) fn reactive_read_after_await_through_calls<'a>(
     for defect in defects {
         draft.push_defect(defect);
     }
+}
+
+/// ADR 0509: a project helper called after the first await of a tracked
+/// async computation whose body (or a helper it calls, a few deep) calls a
+/// value a caller supplied ([`crate::local_access::handed_value`]): that
+/// value may be an accessor, so the read after the await is an obligation.
+fn handed_reads_after_await_through_calls<'a>(
+    ctx: &AnalysisContext<'a>,
+    computations: &SharedAsyncComputations<'a>,
+    files_by_path: &std::collections::HashMap<&str, &'a solid_facts::FileFacts>,
+    defects: &mut Vec<StaticDefect>,
+) {
+    let tables = crate::local_access::HandedTables {
+        lookup: ctx.semantic_lookup,
+        entities: ctx.entities,
+        prop_sources: ctx.prop_sources,
+        source_kinds: ctx.source_kinds,
+        accessors: ctx.accessors,
+        setters: ctx.setters,
+        actions: ctx.actions,
+        props_reactivity: ctx.props_reactivity,
+    };
+    for typescript_file in ctx.facts.typescript.files() {
+        for function in typescript_file.async_functions.iter() {
+            let mut context = None;
+            // IIFEs after the first await of the function's own body, which
+            // the producer's call list does not carry.
+            if let Some(file) = files_by_path
+                .get(function.expression.path.as_ref())
+                .copied()
+                && let (Ok(start), Ok(end)) = (
+                    u32::try_from(function.expression.start_byte),
+                    u32::try_from(function.expression.end_byte),
+                )
+                && let Some(async_function) = file
+                    .ast
+                    .function_at(solid_facts::core::Span::new(start, end))
+                && let Some(first_await) = file
+                    .ast
+                    .awaits
+                    .iter()
+                    .filter(|span| {
+                        crate::owners::containing_ast_function(&file.ast, **span)
+                            .is_some_and(|owner| owner.span == async_function.span)
+                    })
+                    .map(|span| span.end)
+                    .min()
+            {
+                for call in file.ast.calls.iter().filter(|call| {
+                    call.span.start >= first_await
+                        && async_function.body.contains(call.span)
+                        && crate::owners::containing_ast_function(&file.ast, call.span)
+                            .is_some_and(|owner| owner.span == async_function.span)
+                }) {
+                    let Some(literal) = file
+                        .ast
+                        .function_at(file.ast.peel_ts_sugar_span(call.callee))
+                    else {
+                        continue;
+                    };
+                    let Some((read_file, read)) =
+                        region_calls_handed(ctx, &tables, file, literal.body, literal.span, 3)
+                    else {
+                        continue;
+                    };
+                    let Some(analysis_context) =
+                        tracked_async_computation_context(ctx, function, computations.get(ctx))
+                    else {
+                        break;
+                    };
+                    defects.push(StaticDefect {
+                        kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                            callee: "this function".to_owned(),
+                            member: None,
+                        },
+                        location: location(read_file.path.shared(), read),
+                        analysis_context: format!("handed-read-after-await {analysis_context}"),
+                        fixes: vec![],
+                        uncertain: true,
+                    });
+                }
+            }
+            for call in &function.calls_after_await {
+                let Some(file) = files_by_path.get(call.path.as_ref()).copied() else {
+                    continue;
+                };
+                let Some(candidate) = file.ast.calls.iter().find(|candidate| {
+                    u64::from(candidate.callee.start) == call.start_byte
+                        && u64::from(candidate.callee.end) == call.end_byte
+                }) else {
+                    continue;
+                };
+                // The helper's body, or a function literal the call hands it
+                // (`h(() => read())`), which it may run.
+                let through_helper = ctx
+                    .semantic_lookup
+                    .function_called_at(
+                        file.path.as_str(),
+                        file.ast.peel_ts_sugar_span(candidate.callee),
+                    )
+                    .and_then(|(helper_file, helper)| {
+                        region_calls_handed(ctx, &tables, helper_file, helper.body, helper.span, 3)
+                    });
+                let through_argument = || {
+                    candidate.arguments.iter().find_map(|argument| {
+                        file.ast
+                            .function_at(file.ast.peel_ts_sugar_span(argument.span))
+                            .and_then(|_| {
+                                region_calls_handed(
+                                    ctx,
+                                    &tables,
+                                    file,
+                                    argument.span,
+                                    argument.span,
+                                    3,
+                                )
+                            })
+                    })
+                };
+                let through_literal = || {
+                    file.ast
+                        .function_at(file.ast.peel_ts_sugar_span(candidate.callee))
+                        .and_then(|literal| {
+                            region_calls_handed(ctx, &tables, file, literal.body, literal.span, 3)
+                        })
+                };
+                let Some((read_file, read)) = through_helper
+                    .or_else(through_argument)
+                    .or_else(through_literal)
+                else {
+                    continue;
+                };
+                let analysis_context = match &context {
+                    Some(found) => found,
+                    None => {
+                        let Some(found) =
+                            tracked_async_computation_context(ctx, function, computations.get(ctx))
+                        else {
+                            break;
+                        };
+                        context.insert(found)
+                    }
+                };
+                defects.push(StaticDefect {
+                    kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                        callee: file
+                            .source_text(candidate.callee)
+                            .unwrap_or("this helper")
+                            .to_owned(),
+                        member: None,
+                    },
+                    location: location(read_file.path.shared(), read),
+                    analysis_context: format!("handed-read-after-await {analysis_context}"),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
+        }
+    }
+}
+
+/// The first read in `region` (or a helper it calls, `depth` deep) of a
+/// value a caller supplied: a call of one, or a prop read the callers do not
+/// prove static. Its file and span.
+fn region_calls_handed<'f>(
+    ctx: &AnalysisContext<'f>,
+    tables: &crate::local_access::HandedTables<'_, '_>,
+    file: &'f solid_facts::FileFacts,
+    region: solid_facts::core::Span,
+    owner: solid_facts::core::Span,
+    depth: usize,
+) -> Option<(&'f solid_facts::FileFacts, solid_facts::core::Span)> {
+    if depth == 0 {
+        return None;
+    }
+    // A prop read the callers do not prove static (a getter-backed prop).
+    let prop_read = file.ast.members.iter().find(|member| {
+        if !region.contains(member.span) || file.ast.computed_members.contains(&member.span) {
+            return false;
+        }
+        let object = file.ast.peel_ts_sugar_span(member.object);
+        let Some(symbol) = ctx.entities.at(file.path.as_str(), object) else {
+            return false;
+        };
+        let Some((_, declaration)) = ctx.prop_sources.get(symbol) else {
+            return false;
+        };
+        file.source_text(member.property).is_some_and(|name| {
+            ctx.props_reactivity.prop_use(declaration, name)
+                != crate::source_discovery::PropUse::Static
+        })
+    });
+    if let Some(member) = prop_read {
+        return Some((file, member.span));
+    }
+    file.ast
+        .calls
+        .iter()
+        .filter(|call| region.contains(call.span))
+        .find_map(|call| {
+            let resolved = ctx
+                .semantic_lookup
+                .callee_symbol(file, call.callee)
+                .is_some_and(|symbol| {
+                    ctx.accessors.contains_key(symbol)
+                        || ctx.setters.contains_key(symbol)
+                        || ctx.actions.contains_key(symbol)
+                });
+            if resolved {
+                return None;
+            }
+            if crate::local_access::handed_value(
+                tables,
+                file,
+                call.callee,
+                crate::local_access::HANDED_DEPTH,
+            ) {
+                return Some((file, call.callee));
+            }
+            let (inner_file, inner) = ctx
+                .semantic_lookup
+                .function_called_at(file.path.as_str(), file.ast.peel_ts_sugar_span(call.callee))?;
+            if inner.span == owner {
+                return None;
+            }
+            region_calls_handed(ctx, tables, inner_file, inner.body, inner.span, depth - 1)
+        })
 }
 
 /// ADR 0294: a typed candidate whose implementation is not visible.

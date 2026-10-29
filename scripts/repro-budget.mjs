@@ -49,7 +49,10 @@ export const BUDGETS = {
     // Raised from 180 and 3_450 when verified coverage was taken past 70%:
     // SC9012 results the dispatch veto holds, open-program families, cases on
     // published package declarations: 197 files and 3_897 lines at 186 cases.
-    uncertifiable: { files: 200, lines: 3_950 },
+    // Raised from 200 and 3_950 when ADR 0509's fail-closed net on members
+    // of caller-supplied values moved two clean cases (a context member
+    // called in JSX) to this kind: 201 files and 3_999 lines.
+    uncertifiable: { files: 201, lines: 4_000 },
     violation: { files: 16, lines: 400 },
     // Raised from 16 and 400 for 30 certified corpus shapes, each confirmed
     // quiet on the rc.17 runtime: 40 files and 798 lines.

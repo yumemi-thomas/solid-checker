@@ -50,6 +50,9 @@ pub(crate) enum PropsReactivity {
         /// that value performs a reactive read and must stay distinguishable
         /// from ordinary prop backing.
         accessor_values: BTreeSet<String>,
+        /// What the call sites pass for each prop a call of the prop's value
+        /// may act through ([`PassedSources`]).
+        passed: PassedSources,
     },
     /// The component escapes enumeration — exported, referenced outside JSX,
     /// or spread into at a call site — so no prop can be proven *static*.
@@ -69,7 +72,27 @@ pub(crate) enum PropsReactivity {
     Escaping {
         reactive: BTreeSet<String>,
         accessor_values: BTreeSet<String>,
+        passed: PassedSources,
     },
+}
+
+/// ADR 0509: per prop name, the exact sources (a primitive's accessor, setter
+/// or action binding) the visible call sites pass as the attribute's whole
+/// value, and whether some visible site passes anything else. A call of
+/// `props.name(…)` calls one of these sources at the site that passed it:
+/// "some caller passes this setter" is monotone under adding callers, as the
+/// `reactive` witness is. A component with an escaping or unclassified value
+/// keeps every call of the prop an obligation.
+pub(crate) type PassedSources = BTreeMap<String, PassedSource>;
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct PassedSource {
+    pub(crate) sources: BTreeSet<SymbolId>,
+    /// Some visible site passes a value that is not an exact source.
+    pub(crate) other: bool,
+    /// Some visible site passes a getter that calls an async source
+    /// (`a={data()}`): reading the prop reads it, pending or not.
+    pub(crate) async_getter: bool,
 }
 
 /// The per-declaration classification map, keyed by the props parameter's
@@ -154,6 +177,46 @@ impl PropsReactivityIndex {
         }
     }
 
+    /// ADR 0509: the exact sources the call sites pass for `name`, and
+    /// whether they are all a call of `props.name(…)` can reach: every caller
+    /// enumerated, and none passing anything else.
+    pub(crate) fn passed_sources(
+        &self,
+        declaration: &Location,
+        name: &str,
+    ) -> (Vec<SymbolId>, bool) {
+        if !self.caller_proof {
+            return (Vec::new(), false);
+        }
+        match self.by_declaration.get(declaration) {
+            Some(PropsReactivity::Enumerated { passed, .. }) => {
+                passed.get(name).map_or((Vec::new(), true), |passed| {
+                    (passed.sources.iter().cloned().collect(), !passed.other)
+                })
+            }
+            Some(PropsReactivity::Escaping { passed, .. }) => (
+                passed
+                    .get(name)
+                    .map(|passed| passed.sources.iter().cloned().collect())
+                    .unwrap_or_default(),
+                false,
+            ),
+            None => (Vec::new(), false),
+        }
+    }
+
+    /// ADR 0509: whether some visible call site passes `name` a getter that
+    /// calls an async source.
+    pub(crate) fn async_getter(&self, declaration: &Location, name: &str) -> bool {
+        match self.by_declaration.get(declaration) {
+            Some(
+                PropsReactivity::Enumerated { passed, .. }
+                | PropsReactivity::Escaping { passed, .. },
+            ) => passed.get(name).is_some_and(|passed| passed.async_getter),
+            None => false,
+        }
+    }
+
     /// The worst classification across an enumerated set of prop names.
     /// Without caller proof every destructure keeps the upstream answer —
     /// including the empty pattern, which binds nothing but is still the
@@ -195,6 +258,17 @@ pub(super) struct ComponentInputs<'s> {
     pub(super) accessors: &'s HashMap<SymbolId, (SymbolId, Location)>,
     pub(super) source_kinds: &'s HashMap<SymbolId, ReactiveSourceKind>,
     pub(super) prop_sources: &'s HashMap<SymbolId, (SymbolId, Location)>,
+    pub(super) setters: &'s HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    >,
+    pub(super) actions: &'s HashMap<SymbolId, (SymbolId, Location)>,
+    pub(super) async_sources: &'s HashSet<SymbolId>,
     /// Runtime sources no file writes.
     pub(super) runtime_sources: &'s HashSet<SymbolId>,
     /// The JSX elements rendering each project function, in file order:
@@ -238,6 +312,9 @@ impl ComponentInputs<'_> {
             StateKey::Accessor(symbol) => u64::from(self.accessors.contains_key(symbol)),
             StateKey::Kind(symbol) => kind_fingerprint(self.source_kinds.get(symbol)),
             StateKey::PropSource(symbol) => fingerprint(&self.prop_sources.get(symbol)),
+            StateKey::Setter(symbol) => u64::from(self.setters.contains_key(symbol)),
+            StateKey::Action(symbol) => u64::from(self.actions.contains_key(symbol)),
+            StateKey::Async(symbol) => u64::from(self.async_sources.contains(symbol)),
             StateKey::Runtime(symbol) => u64::from(self.runtime_sources.contains(symbol)),
             StateKey::Uses(path, span) => fingerprint(&self.uses.get(&(Arc::clone(path), *span))),
             StateKey::Exported(symbol) => u64::from(self.exported.contains_key(symbol)),
@@ -258,6 +335,21 @@ impl ComponentInputs<'_> {
     fn is_accessor(&self, symbol: &SymbolId) -> bool {
         self.note(super::trace::StateKey::Accessor(symbol.clone()));
         self.accessors.contains_key(symbol)
+    }
+
+    fn is_setter(&self, symbol: &SymbolId) -> bool {
+        self.note(super::trace::StateKey::Setter(symbol.clone()));
+        self.setters.contains_key(symbol)
+    }
+
+    fn is_async(&self, symbol: &SymbolId) -> bool {
+        self.note(super::trace::StateKey::Async(symbol.clone()));
+        self.async_sources.contains(symbol)
+    }
+
+    fn is_action(&self, symbol: &SymbolId) -> bool {
+        self.note(super::trace::StateKey::Action(symbol.clone()));
+        self.actions.contains_key(symbol)
     }
 
     fn kind(&self, symbol: &SymbolId) -> Option<ReactiveSourceKind> {
@@ -553,6 +645,7 @@ pub(super) fn classify_one_component(
             PropsReactivity::Escaping {
                 reactive: BTreeSet::new(),
                 accessor_values: BTreeSet::new(),
+                passed: PassedSources::new(),
             },
             forwarded,
             Vec::new(),
@@ -625,6 +718,7 @@ pub(super) fn classify_one_component(
     let mut reactive = BTreeSet::new();
     let mut unresolved = BTreeSet::new();
     let mut accessor_values = BTreeSet::new();
+    let mut passed = PassedSources::new();
     let mut spreads = Vec::new();
     for (use_file, element) in component_uses {
         // A spread hands over an object whose properties this cannot
@@ -680,6 +774,39 @@ pub(super) fn classify_one_component(
                 })
             {
                 accessor_values.insert(attribute_name.to_owned());
+            }
+            let entry = passed.entry(attribute_name.to_owned()).or_default();
+            match attribute
+                .expression
+                .filter(|_| {
+                    attribute.namespace.is_none()
+                        && attribute.value_kind
+                            == solid_facts::ast::JsxAttributeValueKind::Expression
+                })
+                .and_then(|expression| {
+                    passed_source(lookup, entities, inputs, use_file, expression)
+                }) {
+                Some(source) => {
+                    entry.sources.insert(source);
+                }
+                // A function literal written at the site: the call graph
+                // follows a call of the prop into its body (the visible-
+                // literal path), so it is not an unknown value.
+                None if attribute.expression.is_some_and(|expression| {
+                    use_file
+                        .ast
+                        .function_at(use_file.ast.peel_ts_sugar_span(expression))
+                        .is_some()
+                }) => {}
+                None => entry.other = true,
+            }
+            if attribute.namespace.is_none()
+                && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+                && attribute.expression.is_some_and(|expression| {
+                    getter_calls_async_source(lookup, entities, inputs, use_file, expression)
+                })
+            {
+                entry.async_getter = true;
             }
             match value_use {
                 PropUse::Static => {}
@@ -744,6 +871,7 @@ pub(super) fn classify_one_component(
             PropsReactivity::Escaping {
                 reactive,
                 accessor_values,
+                passed,
             },
             forwarded,
             spreads,
@@ -754,6 +882,7 @@ pub(super) fn classify_one_component(
             reactive,
             unresolved,
             accessor_values,
+            passed,
         },
         forwarded,
         spreads,
@@ -936,6 +1065,55 @@ fn passed_expression_is_accessor(
         .cloned()
         .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), expression))
         .is_some_and(|symbol| inputs.is_accessor(&symbol))
+}
+
+/// ADR 0509: whether an attribute's expression calls an async source
+/// anywhere outside a nested function (the compiled getter runs it).
+fn getter_calls_async_source(
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    inputs: &ComponentInputs<'_>,
+    file: &FileFacts,
+    expression: solid_facts::core::Span,
+) -> bool {
+    file.ast.calls.iter().any(|call| {
+        expression.contains(call.span)
+            && !file.ast.functions.iter().any(|function| {
+                expression.contains(function.span) && function.span.contains(call.span)
+            })
+            && {
+                let callee = file.ast.peel_ts_sugar_span(call.callee);
+                entities
+                    .get(&location(file.path.shared(), callee))
+                    .cloned()
+                    .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), callee))
+                    .is_some_and(|symbol| inputs.is_async(&symbol))
+            }
+    })
+}
+
+/// ADR 0509: the exact source an attribute's whole value is: an identifier
+/// bound to a primitive's accessor, setter or action.
+fn passed_source(
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    inputs: &ComponentInputs<'_>,
+    file: &FileFacts,
+    expression: solid_facts::core::Span,
+) -> Option<SymbolId> {
+    let expression = file.ast.peel_ts_sugar_span(expression);
+    if !file.ast.identifiers.iter().any(|identifier| {
+        identifier.span == expression
+            && identifier.role == solid_facts::ast::IdentifierRole::Reference
+    }) {
+        return None;
+    }
+    let symbol = entities
+        .get(&location(file.path.shared(), expression))
+        .cloned()
+        .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), expression))?;
+    (inputs.is_setter(&symbol) || inputs.is_action(&symbol) || inputs.is_accessor(&symbol))
+        .then_some(symbol)
 }
 
 /// Whether a reference span is an export specifier's local name in the file it

@@ -68,6 +68,13 @@ pub(crate) enum Callable {
     },
     /// Exact synchronous element-member invocations at a built-in map/forEach.
     ArrayMembers(Vec<(String, Span)>),
+    /// The setter slot of a reactive tuple a dialect primitive created
+    /// (`const [, set] = createSignal(0)`), by that binding's symbol: a call
+    /// writes through it and reads nothing.
+    Setter(SymbolId),
+    /// The binding of an `action(…)` result, by its symbol: a call invokes
+    /// the action.
+    Action(SymbolId),
 }
 
 enum Value {

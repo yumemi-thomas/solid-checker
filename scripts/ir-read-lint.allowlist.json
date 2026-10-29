@@ -211,7 +211,8 @@
   },
   "rust/crates/solid-reactive-ir/src/local_access.rs": {
     "facts.files": 3,
-    "hashmap-iteration": 2
+    "file_by_path": 1,
+    "hashmap-iteration": 4
   },
   "rust/crates/solid-reactive-ir/src/name_matcher.rs": {
     "hashmap-iteration": 1
@@ -318,8 +319,8 @@
   },
   "rust/crates/solid-reactive-ir/src/static_rules.rs": {
     "facts.files": 6,
-    "files()": 1,
-    "typescript-table": 1
+    "files()": 2,
+    "typescript-table": 2
   },
   "rust/crates/solid-reactive-ir/src/symbols.rs": {
     "facts.files": 1,
@@ -332,7 +333,7 @@
     "hashmap-iteration": 1
   },
   "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs": {
-    "hashmap-iteration": 3
+    "hashmap-iteration": 4
   },
   "rust/crates/solid-reactive-ir/src/valid_use_server.rs": {
     "facts.files": 1

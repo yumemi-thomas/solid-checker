@@ -1,0 +1,3 @@
+# Setters and actions travel with accessor transport
+
+Accessor transport (ADR 0273) carries a hook's returned object and a context value to the caller; a member that is a primitive's own setter slot or `action(…)` binding is now carried too (`Callable::Setter`, `Callable::Action`), and a call of it writes or acts with that source's row. `Destructured`, `Member` and `Reader` write and act in the component body: violations, where they were certified clean (fuzzer sources `module-hook`, `module-hook-member`, `context`). `InHandler` stays legal; `Optimistic`'s setter is `createOptimistic`'s, which meets no owned-scope guard on rc.17, so it stays silent. Stub: rc.13 signal, effect and context signatures with rc.17 `createOptimistic` and `action`.

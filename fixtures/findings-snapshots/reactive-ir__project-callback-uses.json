@@ -22,6 +22,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/App.tsx",
+      "start": 1454,
+      "end": 1459,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -422,6 +432,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/App.tsx",
+      "start": 8080,
+      "end": 8084,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -429,6 +449,16 @@
       "path": "fixtures/reactive-ir/project-callback-uses/App.tsx",
       "start": 8200,
       "end": 8207,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/App.tsx",
+      "start": 8225,
+      "end": 8229,
       "fixes": 0
     },
     {
@@ -477,6 +507,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 2070,
+      "end": 2080,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 2193,
+      "end": 2203,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 2332,
       "end": 2444,
       "fixes": 0
@@ -484,6 +534,16 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 2400,
+      "end": 2410,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
@@ -522,8 +582,28 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 4171,
+      "end": 4181,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 4204,
+      "end": 4215,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
@@ -579,6 +659,36 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 5011,
       "end": 5023,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 5011,
+      "end": 5023,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 5242,
+      "end": 5252,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 6480,
+      "end": 6490,
       "fixes": 0
     },
     {

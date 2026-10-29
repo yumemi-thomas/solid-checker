@@ -605,6 +605,30 @@ pub fn project_findings(
             })
         })
     };
+    // ADR 0509: a strict read of a proven async source that may meet it
+    // pending (its async row's role reports nothing it proves) is unproven:
+    // a pending read throws before rc.17 warns, and an apply whose compute
+    // reads nothing never re-runs to warn later. The read is an obligation.
+    let async_unproven_reads = program
+        .async_reads
+        .iter()
+        .filter(|read| read.async_provenance && !read.apply_first_run_pending)
+        .map(|read| &read.location)
+        .collect::<std::collections::HashSet<_>>();
+    let open_reads = program
+        .reads
+        .iter()
+        .filter(|read| async_unproven_reads.contains(&read.location) && !read.uncertain)
+        .map(|read| {
+            let mut open = read.clone();
+            open.uncertain = true;
+            open
+        })
+        .collect::<Vec<_>>();
+    let open_at = open_reads
+        .iter()
+        .map(|read| (&read.location, read))
+        .collect::<std::collections::HashMap<_, _>>();
     findings.extend(
         program
             .reads
@@ -614,6 +638,11 @@ pub fn project_findings(
                 !pending_first_runs.contains(&read.location) && !withdrawn_through_origin(read)
             })
             .map(|read| {
+                let read = if read.uncertain {
+                    read
+                } else {
+                    open_at.get(&read.location).copied().unwrap_or(read)
+                };
                 project_finding(
                     FindingSeed::StrictRead {
                         read,

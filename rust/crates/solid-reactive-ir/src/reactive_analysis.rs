@@ -5,7 +5,7 @@
 //! its cache slots, timing split, and the merge into `ProgramDraft`; the
 //! top-level pipeline only sequences the resulting stage.
 
-use crate::HashMap;
+use crate::{HashMap, HashSet};
 use std::time::Instant;
 
 use solid_facts::core::SourcePath;
@@ -210,9 +210,82 @@ pub(crate) fn collect_project<'facts>(
     // at the same byte suppressed one another, and which survived depended on
     // push order. `push_defect` therefore derives the identity from the defect
     // kind's family and never from the vector it arrived in.
+    // ADR 0509: a call transport resolves exactly drops the obligation its
+    // type alone, or its caller-supplied receiver, gave it.
+    // A transported async source keeps it: where its read runs (a leaf
+    // owner's callback, through helpers) is not the transported read's.
+    let resolved_calls = interprocedural
+        .source_call_targets
+        .iter()
+        .filter(|(_, target)| {
+            !matches!(
+                target,
+                crate::interproc::accessor_provenance::Callable::Accessor(symbol)
+                    if source.async_sources.contains(symbol)
+            )
+        })
+        .map(|(callee, _)| callee)
+        .chain(interprocedural.write_call_targets.keys())
+        .collect::<HashSet<_>>();
+    // A handed-member obligation is the last resort at its site: pushed after
+    // every other producer's, it yields to a cause already recorded there.
+    if std::env::var_os("SC_DBG").is_some() {
+        for (k, v) in interprocedural.source_call_targets.iter() {
+            eprintln!("DBG target {}:{} {:?}", k.path, k.start_byte, v);
+        }
+    }
+    let mut handed = Vec::new();
     for obligation in dispatch_obligations {
+        if obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_MEMBER {
+            if !resolved_calls.contains(&obligation.location) {
+                handed.push(obligation);
+            }
+            continue;
+        }
+        // The type-only obligation yields only to a write or an action
+        // transport now places; a transported read keeps it, as before.
+        if obligation.analysis_context == crate::TYPE_ONLY_SOURCE
+            && interprocedural
+                .write_call_targets
+                .contains_key(&obligation.location)
+        {
+            continue;
+        }
         draft.push_defect(obligation);
     }
+    // A call of a setter or action transport carried here (a hook's returned
+    // tuple or object, a context value) writes or acts with its source's row;
+    // the row its callee's type alone gave it is replaced.
+    let transported = local_access_context.transported_writes(
+        &interprocedural.write_call_targets,
+        &interprocedural.source_call_targets,
+    );
+    draft
+        .async_reads
+        .extend(transported.async_reads.iter().map(|read| (**read).clone()));
+    if !transported.writes.is_empty() || !transported.action_invocations.is_empty() {
+        let replaced = transported
+            .writes
+            .iter()
+            .map(|write| write.location.clone())
+            .collect::<HashSet<_>>();
+        draft
+            .writes
+            .retain(|write| !replaced.contains(&write.location));
+        draft
+            .writes
+            .extend(transported.writes.iter().map(|write| (**write).clone()));
+        draft.action_invocations.extend(
+            transported
+                .action_invocations
+                .iter()
+                .map(|action| (**action).clone()),
+        );
+    }
+    draft
+        .write_action_obligations
+        .extend(transported.write_action_obligations);
+    handed.extend(transported.dispatch_obligations);
     timings.absorb_interprocedural(&interprocedural.timings);
     draft.source_call_targets = interprocedural.source_call_targets.clone();
     draft.strict_read_obligations += interprocedural.reads.len();
@@ -254,6 +327,36 @@ pub(crate) fn collect_project<'facts>(
     }
     for obligation in interprocedural.dispatch_obligations.iter() {
         draft.push_defect(obligation.clone());
+    }
+    // A row any other producer placed over the call (a read, a write, an
+    // action) already speaks for it.
+    let covered = |obligation: &crate::StaticDefect| {
+        let at = &obligation.location;
+        let over = |location: &typefacts::Location| {
+            location.path == at.path
+                && location.start_byte <= at.start_byte
+                && at.end_byte <= location.end_byte
+        };
+        // Only a row whose role is reported speaks for the call.
+        draft.reads.iter().any(|read| {
+            over(&read.location)
+                && (read.execution.reports_untracked_read() || read.execution.reports_unplaced())
+        }) || draft.writes.iter().any(|write| {
+            over(&write.location)
+                && (write.execution.reports_disallowed_write()
+                    || write.execution.reports_unplaced())
+        }) || draft.action_invocations.iter().any(|action| {
+            over(&action.location)
+                && (action.execution.reports_disallowed_write()
+                    || action.execution.reports_unplaced())
+        })
+    };
+    let handed = handed
+        .into_iter()
+        .filter(|obligation| !covered(obligation))
+        .collect::<Vec<_>>();
+    for obligation in handed {
+        draft.push_defect(obligation);
     }
     static_rules::component_returns_conditionally(ctx, draft);
     // After every read, write and action table is merged: the rule's

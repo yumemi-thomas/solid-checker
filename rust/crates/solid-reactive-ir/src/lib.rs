@@ -60,7 +60,7 @@ mod indexes;
 mod interproc;
 mod late_chunks;
 mod literal_member_slots;
-mod local_access;
+pub(crate) mod local_access;
 mod name_matcher;
 mod owners;
 /// The crate's maps and sets hash spans, symbol ids and paths on every

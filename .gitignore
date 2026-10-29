@@ -728,3 +728,9 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-write-literal-links/node_modules/**
 !fixtures/reactive-ir/callee-spelling/node_modules/
 !fixtures/reactive-ir/callee-spelling/node_modules/**
+!fixtures/reactive-ir/typed-setter-unknown-source/node_modules/
+!fixtures/reactive-ir/typed-setter-unknown-source/node_modules/**
+!fixtures/reactive-ir/transported-setters-actions/node_modules/
+!fixtures/reactive-ir/transported-setters-actions/node_modules/**
+!fixtures/reactive-ir/props-passed-sources/node_modules/
+!fixtures/reactive-ir/props-passed-sources/node_modules/**

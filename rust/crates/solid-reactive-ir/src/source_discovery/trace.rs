@@ -69,6 +69,12 @@ pub(crate) enum StateKey {
     Kind(SymbolId),
     /// A prop source's declaration (after pass 8).
     PropSource(SymbolId),
+    /// Whether a symbol has a setter row (ADR 0509).
+    Setter(SymbolId),
+    /// Whether a symbol has an action row (ADR 0509).
+    Action(SymbolId),
+    /// Whether a symbol is an async source (ADR 0509).
+    Async(SymbolId),
     /// The prop sources attached to a declaration (path, start, end).
     Attached(Arc<str>, u64, u64),
     /// A runtime source no file writes (after pass 9).

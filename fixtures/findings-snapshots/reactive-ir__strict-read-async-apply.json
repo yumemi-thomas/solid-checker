@@ -44,7 +44,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
       "start": 1344,
@@ -64,7 +64,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
       "start": 1529,
@@ -74,7 +74,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
       "start": 1835,
@@ -104,7 +104,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
       "start": 2633,
@@ -134,7 +134,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
       "start": 3338,
@@ -154,7 +154,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
       "start": 3519,
@@ -164,7 +164,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
       "start": 3905,
@@ -174,7 +174,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/strict-read-async-apply/App.tsx",
       "start": 4211,
