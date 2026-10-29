@@ -73,7 +73,8 @@ export const FILE_BUDGETS = {
   // And the ADR 0483 shared apply-owner premise line: 56,087 bytes: 56_300.
   // And ADR 0491 (its open-work clause, the writeOverride premise): 56,528 bytes: 56_700.
   // And ADR 0500's known miss (a hook holder that is no member alias): 57_000.
-  "docs/open-work.md": 57_000,
+  // And ADR 0506's mount-axis known miss: 57_500.
+  "docs/open-work.md": 57_500,
   // Raised for ADR 0378: the file stood 2 bytes under 113_200; for ADR 0379,
   // 14 bytes under 113_800; for ADR 0380, 3 bytes under 114_700; and for the
   // catalog review's ADRs 0381 and 0424-0434, 4 bytes under 115_600; and for ADR 0435,
@@ -185,7 +186,8 @@ export const FILE_BUDGETS = {
   // And ADR 0502 (schedule withholds a first run): 337_800.
   // And ADR 0503 (a render effect first run under a module-scope render): 339_800.
   // And the ADR 0503 review and ADR 0504 (an apply first read of a pending source): 343_500.
-  "docs/decisions.md": 343_500,
+  // And ADR 0506 (reachability of function literals, call-result bindings) with its review: 345_000.
+  "docs/decisions.md": 345_000,
 };
 
 export const GROUP_BUDGETS = [
@@ -301,7 +303,8 @@ export const GROUP_BUDGETS = [
     // And ADR 0503's render-apply-first-run fixture: 363_700.
     // And ADR 0503's review rows and ADR 0504's strict-read-async-apply paragraph: 365_200.
     // And ADR 0505's effect-apply-first-run fixture and strict-read-async-apply sentence: 366_000.
-    bytes: 366_000,
+    // And ADR 0506's private-component-layers and call-result-binding fixtures and two moved-row notes: 368_500.
+    bytes: 368_500,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

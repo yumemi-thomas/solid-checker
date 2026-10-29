@@ -92,6 +92,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
+      "start": 478,
+      "end": 485,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -99,6 +109,16 @@
       "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
       "start": 498,
       "end": 510,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
+      "start": 528,
+      "end": 535,
       "fixes": 0
     },
     {
@@ -119,6 +139,16 @@
       "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
       "start": 706,
       "end": 718,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
+      "start": 733,
+      "end": 740,
       "fixes": 0
     },
     {

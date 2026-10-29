@@ -121,6 +121,10 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/render-apply-first-run/node_modules/**
 !fixtures/reactive-ir/effect-apply-first-run/node_modules/
 !fixtures/reactive-ir/effect-apply-first-run/node_modules/**
+!fixtures/reactive-ir/private-component-layers/node_modules/
+!fixtures/reactive-ir/private-component-layers/node_modules/**
+!fixtures/reactive-ir/call-result-binding/node_modules/
+!fixtures/reactive-ir/call-result-binding/node_modules/**
 !fixtures/reactive-ir/effect-phase-layers/node_modules/
 !fixtures/reactive-ir/effect-phase-layers/node_modules/**
 !fixtures/reactive-ir/after-await-helper-callback/node_modules/

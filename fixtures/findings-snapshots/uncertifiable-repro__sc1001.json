@@ -12,6 +12,26 @@
       "fixes": 0
     },
     {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/callback-async-closure.tsx",
+      "start": 406,
+      "end": 425,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/callback-async-closure.tsx",
+      "start": 431,
+      "end": 457,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -729,6 +749,16 @@
       "path": "fixtures/uncertifiable-repro/sc1001/src/read-in-handler-bind.tsx",
       "start": 479,
       "end": 489,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/read-in-hook-listener.tsx",
+      "start": 337,
+      "end": 364,
       "fixes": 0
     },
     {

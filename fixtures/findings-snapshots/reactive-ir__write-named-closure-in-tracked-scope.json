@@ -280,6 +280,16 @@
       "start": 9656,
       "end": 9671,
       "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-tracked-scope/App.tsx",
+      "start": 9961,
+      "end": 9976,
+      "fixes": 0
     }
   ]
 }

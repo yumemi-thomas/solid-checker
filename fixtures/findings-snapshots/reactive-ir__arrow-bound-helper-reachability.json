@@ -294,6 +294,26 @@
     {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
+      "start": 2958,
+      "end": 2969,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
+      "start": 3568,
+      "end": 3579,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",

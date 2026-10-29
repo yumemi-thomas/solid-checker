@@ -754,9 +754,21 @@ impl CachedAstFileIndex {
 /// `Aborted` reproduces the legacy scan's early return: a matching
 /// function-initialized binding without a recorded initializer span ends the
 /// project search with no result, even if later files also match.
+///
+/// `through_call`: the symbol is a binding initialized by a call
+/// (`const wrapped = wrap(() => …)`), which names the function nested in the
+/// call's arguments. That is identity evidence only (a server function a
+/// `query` wraps): the binding holds the call's result, so no call or render
+/// of it proves a run of the function ([`super::census::CallSitesOf`] drops
+/// its sites). Not set for `lazy(loader)`, whose rendered result runs the
+/// loader (ADR 0292).
 #[derive(Clone, Copy)]
 enum SymbolFunction {
-    Resolved { file: usize, function: usize },
+    Resolved {
+        file: usize,
+        function: usize,
+        through_call: bool,
+    },
     Aborted,
 }
 

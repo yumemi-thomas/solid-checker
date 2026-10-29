@@ -116,7 +116,7 @@ impl SemanticLookup<'_> {
             ),
             (Probe::FunctionForSymbol, PolledKey::Text(symbol)) => {
                 ProbeAnswer::Item(match self.functions_by_symbol().get(symbol.as_ref()) {
-                    Some(SymbolFunction::Resolved { file, function }) => {
+                    Some(SymbolFunction::Resolved { file, function, .. }) => {
                         let (id, rank) = self.memo_slot_of(*file);
                         Some((
                             id,

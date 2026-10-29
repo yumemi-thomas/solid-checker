@@ -1423,8 +1423,10 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
             &[
                 // Building a directive value happens while the component
                 // renders; only invoking the returned directive is in the
-                // compiler's directive-application phase.
-                ("no-write-in-pure-computation", 2),
+                // compiler's directive-application phase. The returned
+                // function's own write is reached since ADR 0506 (a function
+                // nested in a reached body) and uncertifiable.
+                ("no-write-in-pure-computation", 3),
                 // Owner-attaching creations only: the direct createMemo, the
                 // forwarded createEffect, and the function-form createSignal.
                 // The three value-form createSignal(element) calls allocate

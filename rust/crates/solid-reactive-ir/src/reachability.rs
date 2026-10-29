@@ -437,6 +437,26 @@ fn discover_reachability_file(
                 }
             }
         }
+        // A function literal the call invokes (an IIFE's callee) or receives as an argument (a project helper's callback,
+        // `[1].forEach(fn)`) may run whenever the call does. Without these edges such a function was reached only as a
+        // root, which every function nested in an exported declaration is but nothing in a component a parent renders
+        // by JSX alone is: its writes were dropped and the program certified (fuzzer mount axis). Reaching a function
+        // proves nothing about when it runs: the write and read roles still decide that.
+        let peeled_callee = file.ast.peel_ts_sugar_span(call.callee);
+        for function in &functions {
+            let invoked = function.span == peeled_callee;
+            let handed = primitive.is_none()
+                && call
+                    .arguments
+                    .iter()
+                    .any(|argument| file.ast.peel_ts_sugar_span(argument.span) == function.span);
+            if invoked || handed {
+                edges.push(ReachabilityEdge {
+                    owner,
+                    target: ReachabilityTarget::LocalSpan(function.span),
+                });
+            }
+        }
         if let Some(owner) = list_call_owners[call_index] {
             let added = edges[edges_before..]
                 .iter()
@@ -446,6 +466,23 @@ fn discover_reachability_file(
                 })
                 .collect::<Vec<_>>();
             edges.extend(added);
+        }
+    }
+    // A function created in a function's body (or parameter list) is reached
+    // whenever that function is, as every function nested in an exported
+    // declaration is a root: reaching it proves nothing about when it runs, and
+    // without it a function a reached body only returns or stores (`(() => ()
+    // => set(1))()`, `[() => set(1)]`) was dropped from a component a parent
+    // renders by JSX alone and the program certified (ADR 0506 review).
+    for function in &functions {
+        for owner in [body_owner(function.span), list_owner(function.span)]
+            .into_iter()
+            .flatten()
+        {
+            edges.push(ReachabilityEdge {
+                owner: Some(owner),
+                target: ReachabilityTarget::LocalSpan(function.span),
+            });
         }
     }
     let mut callback_edges = Vec::new();
