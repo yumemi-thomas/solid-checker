@@ -28,6 +28,68 @@ export const LAYERS = ["none", "closure", "helper", "iife", "closure+helper", "m
  */
 export const MOUNTS = ["root", "child", "show", "for"];
 
+/**
+ * Where the values the misuse uses come from (the template's `setup` signals; a context's own trigger signal stays local). `local`
+ * (every program before the source axes): the misuse component creates them. The others, grid-only (`--sources`), never drawn, so a
+ * local program keeps its seed, id and text:
+ *   props    an exported parent `P1` creates them and renders `<C1 w1={w1} setW1={setW1} />`; the component reads `props.w1`
+ *            (`prop`), destructures its parameter (`prop-destructured`), reads them through `merge({ extra: 1 }, props)` or
+ *            `omit(props, "extra")` (rc.17 has no `mergeProps`/`splitProps`), or gets them through `M1`, which spreads its props
+ *            on `<C1 {...props} />` (`prop-spread`). `prop-value` passes a read's value (`w1={w1()}`, a getter the compiled JSX
+ *            makes) and the misuse reads `props.w1`.
+ * `props` takes the templates whose values are not async.
+ */
+export const SOURCE_AXES = {
+  props: ["prop", "prop-destructured", "prop-merge", "prop-omit", "prop-spread", "prop-value"],
+};
+export const SOURCES = ["local", ...Object.values(SOURCE_AXES).flat()];
+/** A source whose values a parent component creates (the component is then rendered by `P1`, not exported). */
+export const parentSource = (source) => source !== "local";
+/** A source that hands the component a read's value, not the accessor: only a read written as the misuse itself can use it. */
+const valueSource = (source) => source === "prop-value";
+
+/**
+ * The sources a (code, variant, binding) can take: the template must have values (`setup`); `props` needs values that are not
+ * async; a value source needs a bare read (`w1()`) at the site and a binding that keeps the read there (an alias
+ * of `props.w1` would read it on the alias's line).
+ */
+export function sourcesOf(code, variant, binding) {
+  const spec = SPEC[code];
+  const sigs = spec.setup(variant, (prefix) => `${prefix}1`);
+  if (!sigs.length) return ["local"];
+  const isAsync = sigs.some((sig) => sig.kind === "async");
+  const target = spec.call({ code, variant }, sigs);
+  const bareRead = target.kind === "local" && !target.args && sigs.some((sig) => sig.name === target.name && [undefined, "memo", "async"].includes(sig.kind));
+  return SOURCES.filter((source) => {
+    if (source === "local") return true;
+    if (isAsync) return false;
+    if (valueSource(source)) return bareRead && ["direct", "wrapper"].includes(binding);
+    return true;
+  });
+}
+
+/** `--sources a,b`: source names or axis names (`props`); default `local` only. */
+export function sourcesOption(value) {
+  const sources = (value ?? "local").split(",").flatMap((name) => SOURCE_AXES[name] ?? [name]);
+  for (const source of sources) if (!SOURCES.includes(source)) throw new Error(`--sources: unknown source ${source} (${[...Object.keys(SOURCE_AXES), ...SOURCES].join(", ")})`);
+  return [...new Set(sources)];
+}
+
+/**
+ * How the component names a value of a source: the text of the value `name` the component created it as. `props.w1` (an object
+ * the component reads), `w1` (a destructured or imported binding), and `read: "value"` for a value source (the read is `props.w1`,
+ * not a call).
+ */
+export function sourcedName(source, name) {
+  switch (source) {
+    case "prop": case "prop-spread": case "prop-value": return `props.${name}`;
+    case "prop-merge": return `merged.${name}`;
+    case "prop-omit": return `rest.${name}`;
+    default: return name;
+  }
+}
+export const sourcedRead = (source) => (valueSource(source) ? "value" : "call");
+
 /** Contexts where nothing owns the code that runs: a handler, a timer, a promise or microtask callback, after an await, runWithOwner(null). */
 const UNOWNED = ["handler", "timer", "then", "micro", "async", "owner-null"];
 /** Contexts that run under a children-capable owner while the code runs, so a write or an action call is refused. */
@@ -227,14 +289,16 @@ export function describeUse(node, signals) {
   }
   if (target.kind === "local") {
     const { name, args } = target;
+    // A value source (`prop-value`): the value is a getter on `props`, so the read is the member itself, not a call.
+    const bare = sigs.some((sig) => sig?.read === "value" && sig.name === name);
     switch (node.bind) {
       case "alias": out.preludeLines.push(`const useIt = ${name};`); out.text = `useIt(${args})`; break;
       case "destructured": out.preludeLines.push(`const { useIt } = { useIt: ${name} };`); out.text = `useIt(${args})`; break;
-      case "wrapper": out.preludeLines.push(`const wrapUse = () => { ${AUX}${name}(${args}); };`); out.text = "wrapUse()"; break;
+      case "wrapper": out.preludeLines.push(`const wrapUse = () => { ${AUX}${bare ? name : `${name}(${args})`}; };`); out.text = "wrapUse()"; break;
       case "hook": out.preludeLines.push(`const useThing = () => ({ useIt: ${name} });`, "const { useIt } = useThing();"); out.text = `useIt(${args})`; break;
       case "hook-member": out.preludeLines.push(`const useThing = () => ({ useIt: ${name} });`, "const thing = useThing();"); out.text = `thing.useIt(${args})`; break;
       case "tuple": out.preludeLines.push(`const pair = [0, ${name}] as const;`, "const [, useIt] = pair;"); out.text = `useIt(${args})`; break;
-      default: out.text = `${name}(${args})`;
+      default: out.text = bare ? name : `${name}(${args})`;
     }
     return out;
   }
@@ -345,7 +409,15 @@ export function buildMisuse(kit, plan = {}) {
   let stmts = [expr(site)];
   for (const l of layer === "none" ? [] : layer.split("+")) stmts = applyLayer(l, stmts, kit);
   const placed = inContext(context, stmts, kit);
-  const mount = plan.mount ?? "root";
+  const source = plan.source ?? "local";
+  if (!sourcesOf(code, variant, binding).includes(source)) throw new Error(`${code}/${variant}/${binding} cannot take source ${source}`);
+  // A parent source renders the component from its parent, plainly; the mount axis is not crossed with it.
+  const mount = parentSource(source) ? "child" : plan.mount ?? "root";
   if (!MOUNTS.includes(mount)) throw new Error(`unknown mount ${mount}`);
-  return { sigs: [...sigs, ...(placed.sigs ?? [])], body: placed.body, view: placed.view, shape: `${code}/${context}/${binding}/${layer}${mount === "root" ? "" : `/${mount}`}`, misuse: { code, context, variant, binding, layer, mount } };
+  const sourced = source === "local" ? {} : { source, sourced: sigs.map((sig) => sig.name) };
+  return {
+    sigs: [...sigs, ...(placed.sigs ?? [])], body: placed.body, view: placed.view,
+    shape: `${code}/${context}/${binding}/${layer}${mount === "root" || source !== "local" ? "" : `/${mount}`}${source === "local" ? "" : `/${source}`}`,
+    misuse: { code, context, variant, binding, layer, mount, ...sourced },
+  };
 }

@@ -263,3 +263,58 @@ describe("the mount axis", () => {
     }
   });
 });
+
+describe("the source axes", () => {
+  const firstOf = async (code, context, source) => {
+    const { gridShapes } = await import("./matrix.mjs");
+    return gridShapes(code, context, ["root"], [source]);
+  };
+  it("adds no shape and moves no program without --sources", async () => {
+    const { gridShapes, shapeSeed } = await import("./matrix.mjs");
+    const local = gridShapes("REACTIVE_WRITE_IN_OWNED_SCOPE", "body");
+    expect(gridShapes("REACTIVE_WRITE_IN_OWNED_SCOPE", "body", ["root"], ["local"])).toEqual(local);
+    expect(local.every((shape) => !("source" in shape))).toBe(true);
+    expect(shapeSeed(1, "REACTIVE_WRITE_IN_OWNED_SCOPE", "body", local[0])).toBe(shapeSeed(1, "REACTIVE_WRITE_IN_OWNED_SCOPE", "body", { ...local[0] }));
+  });
+  it("expands axis names and refuses an unknown source", async () => {
+    const { SOURCE_AXES, sourcesOption } = await import("./misuse.mjs");
+    expect(sourcesOption("props,prop")).toEqual(SOURCE_AXES.props);
+    expect(() => sourcesOption("nowhere")).toThrow(/unknown source/);
+  });
+  it("creates a prop source's values in the exported parent and names them through props", async () => {
+    const { cellList, generateShape } = await import("./matrix.mjs");
+    const cell = cellList().find((c) => c.code === "REACTIVE_WRITE_IN_OWNED_SCOPE" && c.context === "body");
+    const [shape] = (await firstOf(cell.code, cell.context, "prop")).filter((s) => s.variant === "signal" && s.binding === "direct");
+    const { built } = generateShape({ seed: 1 }, cell, shape, 0);
+    expect(built.id).toMatch(/-s-prop$/);
+    expect(built.text).toMatch(/^function C1\(props: C1Props\)/m);
+    expect(built.text).toMatch(/^export function P1\(\) \{\n {2}const \[w1, setW1\] = createSignal\(0\);/m);
+    expect(built.text).toContain("<C1 w1={w1} setW1={setW1} />");
+    expect(built.text.split("\n")[built.sites[0].line - 1]).toContain("props.setW1(7)");
+    expect(JSON.parse(built.files["oracle.json"]).mount).toEqual(["P1"]);
+  });
+  it("prints each source in its own form", async () => {
+    const { cellList, generateShape } = await import("./matrix.mjs");
+    const forms = {
+      "prop-destructured": [/^function C1\(\{ w1, setW1 \}: C1Props\)/m, /setW1\(7\)/],
+      "prop-merge": [/const merged = merge\(\{ extra: 1 \}, props\);/, /merged\.setW1\(7\)/],
+      "prop-omit": [/const rest = omit\(props, "extra"\);/, /extra=\{1\}/],
+      "prop-spread": [/^function M1\(props: C1Props\) \{\n {2}return <C1 \{\.\.\.props\} \/>;/m, /<M1 w1=\{w1\} setW1=\{setW1\} \/>/],
+    };
+    const cell = cellList().find((c) => c.code === "REACTIVE_WRITE_IN_OWNED_SCOPE" && c.context === "body");
+    for (const [source, patterns] of Object.entries(forms)) {
+      const [shape] = (await firstOf(cell.code, cell.context, source)).filter((s) => s.variant === "signal" && s.binding === "direct");
+      const { built } = generateShape({ seed: 1 }, cell, shape, 0);
+      for (const pattern of patterns) expect(built.text, source).toMatch(pattern);
+    }
+  });
+  it("passes a read's value as a getter prop only where the site reads it", async () => {
+    const { sourcesOf } = await import("./misuse.mjs");
+    expect(sourcesOf("STRICT_READ_UNTRACKED", "signal", "direct")).toContain("prop-value");
+    expect(sourcesOf("STRICT_READ_UNTRACKED", "signal", "alias")).not.toContain("prop-value");
+    expect(sourcesOf("REACTIVE_WRITE_IN_OWNED_SCOPE", "signal", "direct")).not.toContain("prop-value");
+    expect(sourcesOf("PENDING_ASYNC_UNTRACKED_READ", null, "direct")).not.toContain("prop");
+    expect(sourcesOf("FLUSH_IN_ACTION", null, "direct")).toEqual(["local"]);
+  });
+});
+

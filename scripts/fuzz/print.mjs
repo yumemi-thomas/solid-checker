@@ -14,7 +14,7 @@
 // the last line, so no line moves. The type check, the fast path and Chrome run `runText`.
 import { INSTRUMENT_PRELUDE } from "./hits.mjs";
 import { isSite, paramTsType, signalTable, walk } from "./model.mjs";
-import { AUX, MODULE, describeUse } from "./misuse.mjs";
+import { AUX, MODULE, describeUse, sourcedName, sourcedRead } from "./misuse.mjs";
 import { accessOf, packageFiles } from "./package.mjs";
 
 const MARK_OPEN = "\u0001";
@@ -152,7 +152,10 @@ function render(program, instrument) {
   const packageHelpers = new Map(usedPackageHelpers(program).map((helper) => [helper.name, helper]));
   // The misuse profile: what each `use` node prints and needs (imports, wrapper functions, aliases).
   const uses = new Map();
-  for (const { node } of walk(program)) if (node.k === "use") uses.set(node, describeUse(node, signals));
+  for (const component of program.components) {
+    const seen = sourcedSignals(component, signals);
+    for (const { node } of walk(component)) if (node.k === "use") uses.set(node, describeUse(node, seen));
+  }
   const auxLine = (node, line) => line.replace(AUX, siteIndex.has(node) ? `${AUX_OPEN}${siteIndex.get(node)}${AUX_CLOSE}` : "");
 
   // The hit ledger: one id per counter, allocated in print order (a function of the tree alone).
@@ -429,17 +432,7 @@ function render(program, instrument) {
     }
   }
 
-  const signalLine = (sig) => {
-    switch (sig.kind) {
-      case "store": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init} });`;
-      case "memo": used.add("createMemo"); return `const ${sig.name} = createMemo(() => 1);`;
-      case "action": used.add("action"); return `const ${sig.name} = action(function* () { ${signals.get(sig.target).setter}(${sig.value}); });`;
-      case "async": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => 1);`;
-      case "store-opt": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({ v: ${sig.init} });`;
-      case "store-nested": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, a: { v: ${sig.init} }, items: [${sig.init}] });`;
-      default: return `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
-    }
-  };
+  const signalLine = (sig) => signalText(sig, signals, used);
   const out = [];
   // `useContext(Ctx)`: one module-level context with a default value (a read with no provider is then not an error; no owner is).
   const usesContext = [...walk(program)].some(({ node }) => node.k === "own" && node.op === "context");
@@ -459,9 +452,12 @@ function render(program, instrument) {
     const entry = entryFor(component, "component");
     const usesProps = [...walk(component)].some(({ node }) => node.k === "contain" && node.kind === "comp-prop");
     // A component the mount axis renders as a child is the parent's, not the entry's: not exported (misuse.mjs MOUNTS).
-    out.push(`${component.mount ? "" : "export "}function ${component.name}(${usesProps ? "props: { slot?: (c: () => unknown) => unknown }" : ""}) {${entry === null ? "" : ` __h(${entry});`}`);
+    const hosted = new Set(component.sourced ?? []);
+    const parameter = usesProps ? "props: { slot?: (c: () => unknown) => unknown }" : sourceParameter(component, signals);
+    out.push(`${component.mount ? "" : "export "}function ${component.name}(${parameter}) {${entry === null ? "" : ` __h(${entry});`}`);
     within({ entry, inDefault: false }, () => {
-      for (const sig of component.signals) out.push(`${INDENT}${signalLine(sig)}`);
+      for (const sig of component.signals) if (!hosted.has(sig.name)) out.push(`${INDENT}${signalLine(sig)}`);
+      for (const line of sourcePrelude(component, signals, used)) out.push(`${INDENT}${line}`);
       for (const [node, described] of useList) for (const line of described.preludeLines) out.push(`${INDENT}${auxLine(node, line)}`);
       for (const stmt of component.body) out.push(`${INDENT}${stmtText(stmt, 1)}`);
       out.push(`${INDENT}return (`, `${INDENT}${INDENT}<div>`);
@@ -470,19 +466,30 @@ function render(program, instrument) {
     out.push(`${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
   // The parents of the mount axis: each renders its child component in its own JSX.
+  // A parent source (misuse.mjs SOURCES) creates the component's values in the parent and hands them on as props.
   for (const [index, component] of program.components.filter((c) => c.mount).entries()) {
-    const tag = `<${component.name} />`;
-    const mounted = component.mount === "show" ? (used.add("Show"), [`<Show when={true}>`, `${INDENT}${tag}`, `</Show>`])
-      : component.mount === "for" ? (used.add("For"), [`<For each={[1]}>`, `${INDENT}{() => ${tag}}`, `</For>`])
-      : [tag];
-    out.push(`export function P${index + 1}() {`, `${INDENT}return (`, `${INDENT}${INDENT}<div>`, ...mounted.map((line) => `${INDENT}${INDENT}${INDENT}${line}`), `${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
+    const { source } = component;
+    const keys = source ? sourceKeys(component, signals) : [];
+    const attrs = keys.map(([key]) => ` ${key}={${key}${sourcedRead(source) === "value" ? "()" : ""}}`).join("") + (source === "prop-omit" ? " extra={1}" : "");
+    const passed = source === "prop-spread" ? `<M${index + 1}${attrs} />` : `<${component.name}${attrs} />`;
+    const wrapped = [passed];
+    const mounted = component.mount === "show" ? (used.add("Show"), [`<Show when={true}>`, ...wrapped.map((line) => `${INDENT}${line}`), `</Show>`])
+      : component.mount === "for" ? (used.add("For"), [`<For each={[1]}>`, `${INDENT}{() => ${wrapped.join("")}}`, `</For>`])
+      : wrapped;
+    if (source === "prop-spread") out.push(`function M${index + 1}(props: ${component.name}Props) {`, `${INDENT}return <${component.name} {...props} />;`, "}", "");
+    const created = source ? component.signals.filter((sig) => component.sourced.includes(sig.name)).map((sig) => `${INDENT}${signalLine(sig)}`) : [];
+    out.push(`export function P${index + 1}() {`, ...created, `${INDENT}return (`, `${INDENT}${INDENT}<div>`, ...mounted.map((line) => `${INDENT}${INDENT}${INDENT}${line}`), `${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
+  // The source's types, above the components that name them.
+  const declared = program.components.flatMap((component) => sourceDeclarations(component, signals));
+  if (declared.length) out.unshift(...declared, "");
   const importNames = [...new Set([...used, ...useList.flatMap(([, described]) => described.solid)])].sort();
   const webNames = [...new Set(useList.flatMap(([, described]) => described.web))].sort();
   const namespaces = [...new Set(useList.flatMap(([, described]) => described.namespaces))].sort();
   const packageImports = [...new Set([...packageHelpers.values()].map((helper) => accessOf(helper).importLine))];
   if (moduleHelpers.length) packageImports.push(`import { ${moduleHelpers.map((helper) => helper.name).join(", ")} } from "./helpers";`);
-  const header = `import { ${importNames.join(", ")} } from "solid-js";\n${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}${packageImports.map((line) => `${line}\n`).join("")}\n`;
+  const typeNames = [...new Set(program.components.flatMap((component) => sourceTypeNames(component, signals)))].sort();
+  const header = `import { ${importNames.join(", ")} } from "solid-js";\n${typeNames.length ? `import type { ${typeNames.join(", ")} } from "solid-js";\n` : ""}${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}${packageImports.map((line) => `${line}\n`).join("")}\n`;
   // Printing the body filled `used`; the header goes first, so line numbers shift by its height.
   const body = out.join("\n");
   const full = `${header}${body}`.replace(/\n+$/, "\n");
@@ -523,6 +530,82 @@ export function moduleFiles(program) {
   const moduleHelpers = (program.helpers ?? []).filter((helper) => helper.module);
   if (!moduleHelpers.length) return {};
   return { "helpers.ts": `${moduleHelpers.map((helper) => ["export " + helperText(helper)[0], ...helperText(helper).slice(1)].join("\n")).join("\n\n")}\n` };
+}
+
+/** The declaration of a signal (model.mjs signal kinds); `used` collects the imports it needs. */
+function signalText(sig, signals, used) {
+  switch (sig.kind) {
+    case "store": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init} });`;
+    case "memo": used.add("createMemo"); return `const ${sig.name} = createMemo(() => 1);`;
+    case "action": used.add("action"); return `const ${sig.name} = action(function* () { ${signals.get(sig.target).setter}(${sig.value}); });`;
+    case "async": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => 1);`;
+    case "store-opt": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({ v: ${sig.init} });`;
+    case "store-nested": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, a: { v: ${sig.init} }, items: [${sig.init}] });`;
+    default: used.add("createSignal"); return `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The source axes (misuse.mjs SOURCES): where a misuse component's values come from.
+
+/** The published type of each name a signal declares, by kind (the typings `Accessor`, `Setter`, `StoreSetter`, `SourceAccessor`). */
+function signalKeys(sig) {
+  const store = { store: "{ v: number }", "store-opt": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }" }[sig.kind];
+  if (store) return [[sig.name, store], [sig.setter, `StoreSetter<${store}>`]];
+  switch (sig.kind) {
+    case "memo": return [[sig.name, "SourceAccessor<number>"]];
+    case "async": return [[sig.name, "Accessor<number>"]];
+    case "action": return [[sig.name, "() => Promise<void>"]];
+    default: return [[sig.name, "Accessor<number>"], [sig.setter, "Setter<number>"]];
+  }
+}
+
+/** The names a source hands the component, with their types: every name of its signals, or a read's value (`number`). */
+function sourceKeys(component, signals) {
+  if (!component.source) return [];
+  const sigs = component.sourced.map((name) => signals.get(name));
+  return sourcedRead(component.source) === "value" ? sigs.map((sig) => [sig.name, "number"]) : sigs.flatMap(signalKeys);
+}
+
+/** The signal table as the component sees it: a sourced signal's names are the source's (`props.w1`, `ctx.setW1`). */
+function sourcedSignals(component, signals) {
+  if (!component.source) return signals;
+  const seen = new Map(signals);
+  for (const name of component.sourced) {
+    const sig = signals.get(name);
+    seen.set(name, { ...sig, name: sourcedName(component.source, sig.name), setter: sourcedName(component.source, sig.setter), read: sourcedRead(component.source) });
+  }
+  return seen;
+}
+
+function sourceParameter(component, signals) {
+  const { source } = component;
+  if (!source) return "";
+  if (source === "prop-destructured") return `{ ${sourceKeys(component, signals).map(([key]) => key).join(", ")} }: ${component.name}Props`;
+  return `props: ${component.name}Props`;
+}
+
+function sourcePrelude(component, signals, used) {
+  switch (component.source) {
+    case "prop-merge": used.add("merge"); return ["const merged = merge({ extra: 1 }, props);"];
+    case "prop-omit": used.add("omit"); return ['const rest = omit(props, "extra");'];
+    default: return [];
+  }
+}
+
+/** The module-scope lines a source needs in App.tsx: the props type. */
+function sourceDeclarations(component, signals) {
+  const { source } = component;
+  if (!source) return [];
+  const fields = sourceKeys(component, signals).map(([key, type]) => `${key}: ${type}`);
+  if (source === "prop-omit") fields.push("extra: number");
+  return [`type ${component.name}Props = { ${fields.join("; ")} };`];
+}
+
+function sourceTypeNames(component, signals) {
+  const { source } = component;
+  if (!source) return [];
+  return [...new Set(sourceKeys(component, signals).flatMap(([, type]) => type.match(/\b(Accessor|Setter|StoreSetter|SourceAccessor)\b/g) ?? []))];
 }
 
 function helperText(helper) {

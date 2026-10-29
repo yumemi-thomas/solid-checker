@@ -29,7 +29,8 @@ import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
 import { fnv, regionOf, siteOf } from "./matrix.mjs";
 import { LAYERS, LEGAL_CODES, SPEC, gridBindingsOf, legalVariantsOf } from "./misuse.mjs";
-import { mountSuffix, mountsOption } from "./matrix.mjs";
+import { axesKey, mountSuffix, mountsOption, shapeAxes } from "./matrix.mjs";
+import { sourcesOption } from "./misuse.mjs";
 import { finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
@@ -84,11 +85,11 @@ export function legalCells({ codes } = {}) {
 }
 
 /** The legal shapes of a code (`--grid`): its legal variants x its grid bindings x the layers. */
-export const legalShapes = (code, mounts = ["root"]) => legalVariantsOf(code).flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => mounts.map((mount) => ({ variant, binding, layer, ...(mount === "root" ? {} : { mount }) })))));
+export const legalShapes = (code, mounts = ["root"], sources = ["local"]) => legalVariantsOf(code).flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => shapeAxes(code, variant, binding, mounts, sources).map((axes) => ({ variant, binding, layer, ...axes })))));
 
 /** One legal program: its seed depends on the run seed and the cell and the index (random) or the shape (grid) only. */
 export function generateLegal(options, { code, context }, { index, shape }) {
-  const key = shape ? `legal/${code}/${context}/${shape.variant ?? "-"}/${shape.binding}/${shape.layer}${shape.mount ? `/${shape.mount}` : ""}` : `legal/${code}/${context}`;
+  const key = shape ? `legal/${code}/${context}/${shape.variant ?? "-"}/${shape.binding}/${shape.layer}${axesKey(shape)}` : `legal/${code}/${context}`;
   const seed = programSeed((Number(options.seed) ^ fnv(key)) >>> 0, shape ? 0 : index);
   const program = generateProgram(seed, { profile: "misuse", misusePlan: { code, context, legal: true, ...(shape ?? {}) } });
   const suffix = shape ? `${shape.variant ?? "x"}-${shape.binding}-${shape.layer.replace("+", "-")}${mountSuffix(shape)}` : String(index);
@@ -107,7 +108,7 @@ export async function runLegal(options) {
     const cells = legalCells({ codes: options.codes?.split(",") });
     const entries = [];
     for (const cell of cells) {
-      if (options.grid) legalShapes(cell.code, mountsOption(options.mounts)).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => entries.push({ cell, index, ...generateLegal(options, cell, { shape }) }));
+      if (options.grid) legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources)).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => entries.push({ cell, index, ...generateLegal(options, cell, { shape }) }));
       else for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateLegal(options, cell, { index }) });
     }
     console.error(`legal: ${cells.length} cells, ${entries.length} programs`);
@@ -133,7 +134,7 @@ export async function runLegal(options) {
         const site = siteOf(built);
         const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : judgeLegal({ code: cell.code, site, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, plan: built.plan });
         const misuse = program.components[0].misuse;
-        rows.push({ id: built.id, seed: program.seed, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, outcome: verdict.outcome, detail: verdict.detail, site: { line: site.line, hit: site.hit, aux: site.aux } });
+        rows.push({ id: built.id, seed: program.seed, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), outcome: verdict.outcome, detail: verdict.detail, site: { line: site.line, hit: site.hit, aux: site.aux } });
         values.set(built.id, value);
       }
       console.error(`legal: ${Math.min(at + 150, entries.length)}/${entries.length}, ${Math.round((Date.now() - started) / 1000)}s, ${JSON.stringify(tally(rows))}`);
@@ -201,12 +202,12 @@ export async function runLegal(options) {
   }
 }
 
-const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2]]
+const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for] [--sources local,props]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2]]
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--tsc <tsrs>] [--cache-dir <dir>] [--no-cache]`;
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["per-cell", "codes", "cache-dir", "chrome-sample", "layers", "mounts"], extraFlags: ["grid", "no-chrome-cache"] });
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["per-cell", "codes", "cache-dir", "chrome-sample", "layers", "mounts", "sources"], extraFlags: ["grid", "no-chrome-cache"] });
     for (const key of ["perCell", "chromeSample"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }
