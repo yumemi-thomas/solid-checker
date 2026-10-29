@@ -12,7 +12,7 @@
 // in; a context where the call is legal (a write in a handler) is not in the list. `typedAway` codes have no template: the published
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
-  signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt,
+  signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, storeNestedSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt,
   button, child, show, forEach, use,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
@@ -44,26 +44,41 @@ const member = (object, text) => ({ kind: "member", object, text });
  *   call(node, sigs) -> api | local | member
  */
 export const SPEC = {
-  REACTIVE_WRITE_IN_OWNED_SCOPE: {
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply"],
     variants: ["signal", "store", "refresh"], contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [variant === "store" ? storeSignal(name("w"), 0) : variant === "refresh" ? memoSignal(name("m")) : signal(name("w"), 0, "probe")],
     call: (node, [sig]) => (node.variant === "store" ? local(sig.setter, "(s) => { s.v = 7; }") : node.variant === "refresh" ? api("refresh", sig.name, { locals: true }) : local(sig.setter, "7")),
     // refresh is an API; the other two are local functions, which have no namespace form.
     bindingsFor: (variant) => (variant === "refresh" ? BINDINGS : ["direct", "alias", "destructured", "wrapper"]),
   },
-  STORE_WRITE_OUTSIDE_SETTER: {
-    variants: ["assign", "delete"], contexts: [...OWNED_PURE.filter((c) => !["show", "for"].includes(c)), "effect-apply", "handler", "timer", "then", "async"],
+  STORE_WRITE_OUTSIDE_SETTER: { legal: ["handler", "timer", "then"],
+    variants: ["assign", "delete"],
+    contexts: [...OWNED_PURE.filter((c) => !["show", "for"].includes(c)), "effect-apply", "handler", "timer", "then", "async"],
     bindings: ["direct", "alias", "wrapper"],
-    setup: (variant, name) => [variant === "delete" ? storeOptSignal(name("s"), 0) : storeSignal(name("s"), 0)],
-    call: (node, [sig]) => member(sig.name, (object) => (node.variant === "delete" ? `delete ${object}.v` : `${object}.v = 7`)),
+    // Grid-only (`gridVariantsOf`): writes past the root (a nested record's field, an array mutator), and a write deferred out of the
+    // store's own setter callback (a microtask, a timer, a promise callback), which runs once the draft has closed and is dropped
+    // (ADR 0476; Chrome-witnessed in probes/store-setter). A deferred write calls the setter, which is itself a defect in an owned
+    // scope, so it runs only where the call is legal (`variantContexts`).
+    gridVariants: ["nested-assign", "nested-push", "deferred-micro", "deferred-timer", "deferred-then"],
+    variantContexts: { "deferred-micro": ["handler", "timer", "then"], "deferred-timer": ["handler", "timer", "then"], "deferred-then": ["handler", "timer", "then"] },
+    // Legal (legal.mjs): a write through the draft, and one through the read proxy inside its own setter, synchronously; both commit.
+    legalVariants: ["draft", "in-setter"],
+    setup: (variant, name) => [variant === "delete" ? storeOptSignal(name("s"), 0) : variant?.startsWith("nested") ? storeNestedSignal(name("s"), 0) : storeSignal(name("s"), 0)],
+    call: (node, [sig]) => member(sig.name, (object) => {
+      const deferred = { "deferred-micro": (w) => `queueMicrotask(() => { ${w}; })`, "deferred-timer": (w) => `setTimeout(() => { ${w}; }, 0)`, "deferred-then": (w) => `Promise.resolve().then(() => { ${w}; })` }[node.variant];
+      if (deferred) return `${sig.setter}(() => { ${deferred(`${object}.v = 7`)}; })`;
+      if (node.variant === "in-setter") return `${sig.setter}(() => { ${object}.v = 7; })`;
+      if (node.variant === "draft") return `${sig.setter}((draft) => { draft.v = 7; })`;
+      return node.variant === "delete" ? `delete ${object}.v` : node.variant === "nested-assign" ? `${object}.a.v = 7` : node.variant === "nested-push" ? `${object}.items.push(1)` : `${object}.v = 7`;
+    }),
   },
-  STRICT_READ_UNTRACKED: {
+  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "untrack"],
     variants: ["signal", "memo"], contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : signal(name("r"), 3, "src")],
     call: (node, [sig]) => local(sig.name),
   },
-  NO_OWNER_CLEANUP: { contexts: UNOWNED, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
-  NO_OWNER_EFFECT: {
+  NO_OWNER_CLEANUP: { legal: ["body", "memo", "effect-compute", "render-compute", "root"], contexts: UNOWNED, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
+  NO_OWNER_EFFECT: { legal: ["body", "root"],
     variants: ["effect", "render"], contexts: UNOWNED, bindings: BINDINGS, setup: () => [],
     call: (node) => api(node.variant === "render" ? "createRenderEffect" : "createEffect", "() => 1, () => {}"),
   },
@@ -71,14 +86,14 @@ export const SPEC = {
     variants: ["loading", "errored"], contexts: UNOWNED, bindings: BINDINGS, setup: () => [],
     call: (node) => api(node.variant === "errored" ? "Errored" : "Loading", "{ fallback: 0, children: 1 }"),
   },
-  NO_OWNER_CONTEXT: { contexts: UNOWNED, bindings: BINDINGS, setup: () => [], contextLine: "const Ctx = createContext(7);", call: () => api("useContext", "Ctx") },
+  NO_OWNER_CONTEXT: { legal: ["body", "memo", "root"], contexts: UNOWNED, bindings: BINDINGS, setup: () => [], contextLine: "const Ctx = createContext(7);", call: () => api("useContext", "Ctx") },
   CONTEXT_NOT_FOUND: {
     contexts: ["body", "memo", "render-compute", "root", "jsx", "show", "for"], bindings: BINDINGS, setup: () => [],
     contextLine: "const Ctx = createContext<number>();", call: () => api("useContext", "Ctx"),
   },
-  SETTLED_CLEANUP_UNOWNED: { contexts: [...UNOWNED, "effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("onSettled", "() => () => {}") },
-  CLEANUP_IN_FORBIDDEN_SCOPE: { contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
-  PRIMITIVE_IN_FORBIDDEN_SCOPE: {
+  SETTLED_CLEANUP_UNOWNED: { legal: ["body", "root"], contexts: [...UNOWNED, "effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("onSettled", "() => () => {}") },
+  CLEANUP_IN_FORBIDDEN_SCOPE: { legal: ["body", "root"], contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
+  PRIMITIVE_IN_FORBIDDEN_SCOPE: { legal: ["body", "root"],
     variants: ["memo", "root", "effect"], contexts: LEAF, bindings: BINDINGS, setup: () => [],
     call: (node) => (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
   },
@@ -91,7 +106,7 @@ export const SPEC = {
     contexts: LEAF, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
   },
-  PENDING_ASYNC_UNTRACKED_READ: {
+  PENDING_ASYNC_UNTRACKED_READ: { legal: ["memo"],
     contexts: ["body", "root", "effect-apply", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
   },
@@ -105,7 +120,7 @@ export const SPEC = {
   },
   // Defect codes no rule claims (codes.mjs `defect-unclaimed`): measured for "never quieter than Solid"; a silent checker is a false clean.
   // rc.17 dev-shared.js `assertNotInEffectCallback`: a memo, effect or root created with no owner in an effect callback belongs to nobody.
-  PRIMITIVE_IN_EFFECT_CALLBACK: {
+  PRIMITIVE_IN_EFFECT_CALLBACK: { legal: ["body", "root"],
     // Effect apply only: in a render effect's apply rc.17 does not report it (the fast path fires it in every effect-apply cell).
     variants: ["memo", "root", "effect"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [],
     call: (node) => (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
@@ -120,16 +135,16 @@ export const SPEC = {
     probe: 'import { createEffect } from "solid-js";\nexport function C1() {\n  createEffect(() => 1);\n  return <div></div>;\n}\n',
     why: "createEffect(compute, effectFn) takes two functions: the typings reject the call (TS2554 \"Expected 2-3 arguments\"), so tsc already reports it",
   },
-  ACTION_CALLED_IN_OWNED_SCOPE: {
+  ACTION_CALLED_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro"],
     contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => { const target = signal(name("w"), 0, "probe"); return [target, actionSignal(name("a"), target.name, 7)]; },
     call: (node, [, act]) => local(act.name),
   },
-  RESOLVE_IN_REACTIVE_SCOPE: { contexts: ["memo", "render-compute"], bindings: BINDINGS, setup: () => [], call: () => api("resolve", "() => 1") },
-  UNTIL_IN_REACTIVE_SCOPE: { contexts: ["memo", "render-compute"], bindings: BINDINGS, setup: () => [], call: () => api("until", "() => 1") },
-  FLUSH_IN_ACTION: { contexts: ["action"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
-  FLUSH_IN_EFFECT_CALLBACK: { contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
-  FLUSH_IN_TRACKED_QUEUE_CALLBACK: { contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("flush") },
+  RESOLVE_IN_REACTIVE_SCOPE: { legal: ["handler", "timer"], contexts: ["memo", "render-compute"], bindings: BINDINGS, setup: () => [], call: () => api("resolve", "() => 1") },
+  UNTIL_IN_REACTIVE_SCOPE: { legal: ["handler", "timer"], contexts: ["memo", "render-compute"], bindings: BINDINGS, setup: () => [], call: () => api("until", "() => 1") },
+  FLUSH_IN_ACTION: { legal: ["handler", "timer"], contexts: ["action"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
+  FLUSH_IN_EFFECT_CALLBACK: { legal: ["handler", "timer"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
+  FLUSH_IN_TRACKED_QUEUE_CALLBACK: { legal: ["handler", "timer"], contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   DYNAMIC_STATIC_PROMISE: {
     contexts: ["body", "root", "untrack", "memo"], bindings: BINDINGS, setup: () => [],
     call: () => api("dynamic", '() => Promise.resolve("p" as const), { static: true }', { module: "@solidjs/web" }),
@@ -146,6 +161,12 @@ export const TEMPLATE_CODES = MISUSE_CODES.filter((code) => !SPEC[code].typedAwa
 export const contextsOf = (code) => SPEC[code].contexts;
 export const bindingsOf = (code, variant) => SPEC[code].bindingsFor?.(variant) ?? SPEC[code].bindings;
 export const variantsOf = (code) => SPEC[code].variants ?? [null];
+/** The variants of a code's legal programs (legal.mjs): `legalVariants`, else the misuse variants. */
+export const legalVariantsOf = (code) => SPEC[code].legalVariants ?? variantsOf(code);
+/** The codes that have legal contexts. */
+export const LEGAL_CODES = () => TEMPLATE_CODES.filter((code) => SPEC[code].legal?.length);
+/** The variants the grid enumerates: the random draw's, then `gridVariants` (never drawn at random, so the random matrix keeps its programs). */
+export const gridVariantsOf = (code) => [...variantsOf(code), ...(SPEC[code].gridVariants ?? [])];
 
 /**
  * Bindings of a component-scope value (a setter, an accessor, an action, a store) in the shapes real code hands one on: a hook that
@@ -284,9 +305,11 @@ export function buildMisuse(kit, plan = {}) {
   const code = plan.code ?? rng.pick(TEMPLATE_CODES);
   const spec = SPEC[code];
   if (!spec || spec.typedAway) throw new Error(`no misuse template for ${code}`);
-  const context = plan.context ?? rng.pick(spec.contexts);
-  if (!spec.contexts.includes(context)) throw new Error(`${code} has no ${context} context`);
-  const variant = "variant" in plan && plan.variant !== undefined ? plan.variant : rng.pick(variantsOf(code));
+  // `plan.legal` (legal.mjs): the same call where it is correct Solid, one of the template's `legal` contexts.
+  const contexts = plan.legal ? spec.legal ?? [] : spec.contexts;
+  const context = plan.context ?? rng.pick(contexts);
+  if (!contexts.includes(context)) throw new Error(`${code} has no ${plan.legal ? "legal " : ""}${context} context`);
+  const variant = "variant" in plan && plan.variant !== undefined ? plan.variant : rng.pick(plan.legal ? legalVariantsOf(code) : variantsOf(code));
   const binding = plan.binding ?? rng.pick(bindingsOf(code, variant));
   const layer = plan.layer ?? rng.weighted([[5, "none"], [3, "closure"], [2, "helper"], [1, "iife"], [1, "closure+helper"]]);
   const sigs = spec.setup(variant, kit.name);

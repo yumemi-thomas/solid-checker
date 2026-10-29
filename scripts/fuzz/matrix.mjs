@@ -28,7 +28,7 @@ import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
-import { LAYERS, MISUSE_CODES, SPEC, TEMPLATE_CODES, gridBindingsOf, variantsOf } from "./misuse.mjs";
+import { LAYERS, MISUSE_CODES, SPEC, TEMPLATE_CODES, gridBindingsOf, gridVariantsOf } from "./misuse.mjs";
 import { isSite, walk } from "./model.mjs";
 import { evaluate, finishEntries, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
@@ -126,7 +126,9 @@ export function cellList({ codes, contexts } = {}) {
  * program of one shape had the same outcome, and no smaller key did, so one program per shape judges what the random draw judges and
  * reaches the shapes twenty random draws miss. In a fixed order: variants, then bindings, then layers.
  */
-export const gridShapes = (code) => variantsOf(code).flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.map((layer) => ({ variant, binding, layer }))));
+export const gridShapes = (code, context) => gridVariantsOf(code)
+  .filter((variant) => context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context))
+  .flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.map((layer) => ({ variant, binding, layer }))));
 
 /** A shape's program seed depends on the run seed and the shape only, so a shape's program does not move when the grid grows. */
 export const shapeSeed = (base, code, context, { variant, binding, layer }) => programSeed((Number(base) ^ fnv(`${code}/${context}/${variant ?? "-"}/${binding}/${layer}`)) >>> 0, 0);
@@ -423,7 +425,7 @@ export async function runMatrix(options) {
 async function sweep(options, config, out) {
   const cells = cellList({ codes: options.codes?.split(","), contexts: options.contexts?.split(",") });
   const entries = [];
-  if (options.grid) for (const cell of cells) gridShapes(cell.code).forEach((shape, index) => entries.push({ cell, ...generateShape(options, cell, shape, index) }));
+  if (options.grid) for (const cell of cells) gridShapes(cell.code, cell.context).forEach((shape, index) => entries.push({ cell, ...generateShape(options, cell, shape, index) }));
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
