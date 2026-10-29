@@ -162,8 +162,8 @@ export function treeStat(directory) {
   return hash.digest("hex");
 }
 
-/** The runner's settings from the environment (fast/runner.tsx reads them): they change what a record holds. */
-const RUNNER_ENV = ["FUZZ_PAUSE_MS", "FUZZ_FINAL_MS"];
+/** The runner's settings from the environment (fast/runner.tsx and fast/vitest.config.mjs read them): they change what a record holds. */
+const RUNNER_ENV = ["FUZZ_PAUSE_MS", "FUZZ_FINAL_MS", "FUZZ_FAST_POOL"];
 
 /**
  * The part of every cache key that says what the run executes with, beyond the lockfiles: Node's version, the runner's environment
@@ -171,7 +171,8 @@ const RUNNER_ENV = ["FUZZ_PAUSE_MS", "FUZZ_FINAL_MS"];
  */
 export function installedKey(config, { env = process.env, node = process.version } = {}) {
   return sha256(JSON.stringify({
-    node, env: Object.fromEntries(RUNNER_ENV.map((name) => [name, env[name] ?? null])),
+    // The runtime that hosts the fast path (fast/vitest.config.mjs picks its pool by it).
+    node, bun: process.versions.bun ?? null, env: Object.fromEntries(RUNNER_ENV.map((name) => [name, env[name] ?? null])),
     fast: config.fastInstall ? treeStat(join(config.fastInstall, "node_modules")) : "none",
     oracle: config.install ? treeStat(join(config.install, "node_modules")) : "none",
   }));

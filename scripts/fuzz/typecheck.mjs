@@ -3,8 +3,8 @@
 // direction). A generated program that does not type-check proves nothing: the
 // checker must stay silent on it (invariant 1), so the fuzzer discards it.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, rmSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const TSRS_RELATIVE = "tsrs/target/release/tsrs";
@@ -93,5 +93,69 @@ export function typecheck(dir, { tsc = resolveTsc(), timeoutMs = 60000 } = {}) {
       const errors = out.split("\n").filter((line) => /error TS\d+/.test(line));
       resolve({ ok: status === 0 && errors.length === 0, errors });
     });
+  });
+}
+
+/**
+ * Type-checks many projects in one `<tsc> -b --force <p1> <p2> … --noEmit` (build mode: each project checked on its own, as `-p`
+ * does, in one process). Returns `Map<dir, { ok, errors }>` with each error line as a lone `-p` run in that directory prints it
+ * (its path relative to the project). Build mode writes `tsconfig.tsbuildinfo` beside each tsconfig; it is removed. Any error
+ * line that names no project of the batch, a missing answer, or a run that fails (a crash, the timeout) gives `null`: the caller
+ * then checks each project alone.
+ */
+export function typecheckBatch(dirs, { tsc = resolveTsc(), timeoutMs = 120000 } = {}) {
+  return new Promise((done) => {
+    if (!existsSync(tsc) || !dirs.length) { done(null); return; }
+    const roots = dirs.map((dir) => resolve(dir));
+    const child = spawn(tsc, ["-b", "--force", ...roots.map((dir) => join(dir, "tsconfig.json")), "--noEmit"], { cwd: roots[0], stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    let killed = false;
+    const timer = setTimeout(() => { killed = true; child.kill("SIGKILL"); }, timeoutMs);
+    child.stdout.on("data", (chunk) => { out += chunk; });
+    child.stderr.on("data", (chunk) => { out += chunk; });
+    child.on("error", () => { clearTimeout(timer); done(null); });
+    child.on("close", (status) => {
+      clearTimeout(timer);
+      for (const dir of roots) rmSync(join(dir, "tsconfig.tsbuildinfo"), { force: true });
+      const lines = out.split("\n").filter((text) => /error TS\d+/.test(text));
+      // A failed run with no diagnostic to say which project failed (a crash) answers nothing.
+      if (killed || (status !== 0 && !lines.length)) { done(null); return; }
+      const answers = new Map(roots.map((dir) => [dir, { ok: true, errors: [] }]));
+      for (const line of lines) {
+        const match = /^(.*?)\(\d+,\d+\): error TS\d+/.exec(line);
+        const file = match ? resolve(roots[0], match[1]) : null;
+        const dir = file && roots.find((root) => file.startsWith(`${root}/`));
+        if (!dir) { done(null); return; }
+        const answer = answers.get(dir);
+        answer.ok = false;
+        answer.errors.push(`${relative(dir, file)}${line.slice(match[1].length)}`);
+      }
+      done(new Map([...answers].map(([dir, answer], index) => [dirs[index], answer])));
+    });
+  });
+}
+
+/**
+ * A `typecheck(dir, options)` that gathers the calls made within `waitMs` (or `size` of them) into one `typecheckBatch`, and checks
+ * a batch's projects alone when the batch gives no answer. Same answers as `typecheck`, one process per batch instead of per project.
+ */
+export function createTypecheckBatcher({ size = 32, waitMs = 10 } = {}) {
+  let pending = [];
+  let timer = null;
+  const flush = () => {
+    clearTimeout(timer);
+    timer = null;
+    const batch = pending;
+    pending = [];
+    if (!batch.length) return;
+    const options = batch[0].options;
+    typecheckBatch(batch.map((item) => item.dir), options).then(async (answers) => {
+      for (const item of batch) item.resolve(answers?.get(item.dir) ?? await typecheck(item.dir, item.options));
+    });
+  };
+  return (dir, options = {}) => new Promise((resolveAnswer) => {
+    pending.push({ dir, options, resolve: resolveAnswer });
+    if (pending.length >= size) flush();
+    else if (!timer) timer = setTimeout(flush, waitMs);
   });
 }

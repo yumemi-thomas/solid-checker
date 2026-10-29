@@ -20,7 +20,7 @@ import { closedGrammar } from "./model.mjs";
 import { signature as findingSignature } from "./dedupe.mjs";
 import { callAtLine } from "./falseclean.mjs";
 import { registrationLines } from "./registration.mjs";
-import { typecheck } from "./typecheck.mjs";
+import { createTypecheckBatcher, typecheck } from "./typecheck.mjs";
 import { judgeUnexecuted, lexicallyDeadHits } from "./unexecuted.mjs";
 
 /** A case that ships a generated package is checked as a user's run is (checker.mjs ORDINARY_ARGS): the package is read from source. */
@@ -68,7 +68,9 @@ const timed = (phase, work) => {
  * halves are `evaluate`'s, so the records and classifications are the same.
  */
 export async function prepareEntries(entries, config, deps = {}) {
-  const { runChecker: check = runChecker, typecheck: types = typecheck } = deps;
+  // Type checks of this call share `tsrs -b` processes (as many at a time as the pool runs), unless a test injects one or the run
+  // asks for one process each.
+  const { runChecker: check = runChecker, typecheck: types = config.typecheckBatch ? createTypecheckBatcher({ size: config.concurrency }) : typecheck } = deps;
   const results = new Map();
   const { install, casesDir } = config;
   const instrument = config.instrument !== false;

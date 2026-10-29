@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
-import { DEFAULT_TSC, TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
+import { DEFAULT_TSC, TYPE_ERROR_REFUSAL_SHARE, createTypecheckBatcher, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheckBatch } from "./typecheck.mjs";
 import { configFrom, parseArgs } from "./run.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -79,4 +79,42 @@ describe("every entry point refuses a missing type checker with exit 2", () => {
       expect(existsSync(out)).toBe(false);
     });
   }
+});
+
+describe("typecheckBatch", () => {
+  // A fake tsrs: with `-b` it prints the lines of $FAKE_BATCH (paths relative to its cwd, the first project) and exits $FAKE_STATUS;
+  // with `-p` it prints $FAKE_SINGLE_<n> for project n. It also writes the build-info file `-b` writes.
+  const fake = join(scratch, "fake-tsrs");
+  writeFileSync(fake, `#!/bin/sh
+if [ "$1" = "-b" ]; then
+  shift; shift
+  for p in "$@"; do case "$p" in *tsconfig.json) : > "$(dirname "$p")/tsconfig.tsbuildinfo";; esac; done
+  printf "%b" "$FAKE_BATCH"; exit \${FAKE_STATUS:-0}
+fi
+printf "single %s error TS1111: alone\\n" "$(basename "$(pwd)")"; exit 1
+`);
+  chmodSync(fake, 0o755);
+  const dirs = ["p1", "p2", "p3"].map((name) => { const dir = join(scratch, "batch", name); mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, "tsconfig.json"), "{}"); return dir; });
+  const run = (batch, status = 0) => { process.env.FAKE_BATCH = batch; process.env.FAKE_STATUS = String(status); return typecheckBatch(dirs, { tsc: fake }); };
+
+  it("answers each project as a lone -p run prints it, and removes the build-info files", async () => {
+    const answers = await run("App.tsx(1,2): error TS2322: in p1\\n../p3/App.tsx(3,4): error TS2345: in p3\\nFound 2 errors.\\n", 1);
+    expect(answers.get(dirs[0])).toEqual({ ok: false, errors: ["App.tsx(1,2): error TS2322: in p1"] });
+    expect(answers.get(dirs[1])).toEqual({ ok: true, errors: [] });
+    expect(answers.get(dirs[2])).toEqual({ ok: false, errors: ["App.tsx(3,4): error TS2345: in p3"] });
+    expect(dirs.some((dir) => existsSync(join(dir, "tsconfig.tsbuildinfo")))).toBe(false);
+  });
+
+  it("answers nothing for an error it cannot place, or a failed run with no diagnostic", async () => {
+    expect(await run("error TS2318: Cannot find global type 'Array'.\\n", 1)).toBeNull();
+    expect(await run("../elsewhere/x.ts(1,1): error TS1005: outside\\n", 1)).toBeNull();
+    expect(await run("", 3)).toBeNull();
+  });
+
+  it("the batcher checks each project alone when the batch answers nothing", async () => {
+    process.env.FAKE_BATCH = "error TS2318: unplaced\\n"; process.env.FAKE_STATUS = "1";
+    const check = createTypecheckBatcher({ size: 3 });
+    const answers = await Promise.all(dirs.map((dir) => check(dir, { tsc: fake })));
+    expect(answers.map((answer) => answer.errors)).toEqual([["single p1 error TS1111: alone"], ["single p2 error TS1111: alone"], ["single p3 error TS1111: alone"]]);
+  });
 });
