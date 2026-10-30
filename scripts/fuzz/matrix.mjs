@@ -37,6 +37,7 @@ import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { legalTwin } from "./falseclean.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
+import { keepIds } from "./smoke.mjs";
 import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
@@ -545,13 +546,15 @@ export async function runMatrix(options) {
 
 async function sweep(options, config, out) {
   const cells = cellList({ codes: options.codes?.split(","), contexts: options.contexts?.split(",") });
-  const entries = [];
+  let entries = [];
   // `--layers a,b` keeps those layers' shapes (their index, and so their programs, as in the whole grid).
   const layerKept = (shape) => !options.layers || options.layers.split(",").includes(shape.layer);
   const mounts = mountsOption(options.mounts);
   const sources = sourcesOption(options.sources);
   if (options.grid) for (const cell of cells) combined(gridShapes(cell.code, cell.context, mounts, sources), options.combine).forEach((shape, index) => { if (layerKept(shape)) entries.push({ cell, ...generateShape(options, cell, shape, index) }); });
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
+  // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
+  if (options.ids) entries = keepIds(entries, options.ids, "matrix");
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
   const started = Date.now();
@@ -691,7 +694,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata"] });
+      const options = parseArgs(argv, { extraValues: ["ids", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

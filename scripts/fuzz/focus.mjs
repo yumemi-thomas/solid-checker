@@ -7,7 +7,8 @@
 //
 //   node scripts/fuzz/focus.mjs --codes A,B --checker-bin <solid-checker-rust> --typefacts <solid-typefacts>
 //     [--grids mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo] [--seed 1] [--out <dir>] [--runtime-diff <per stratum>]
-//     [--oracle-axes code,context,outcome] [-- <grid args>]
+//     [--oracle-axes code,context,outcome] [--smoke] [-- <grid args>]
+// `--smoke` (`make fuzz-smoke`): every code, each grid restricted to its smoke manifest (smoke.mjs, scripts/fuzz/smoke/<grid>.json).
 // The loop's oracle sample is stratified by code, context and outcome (every outcome of every context in real Chrome); the full run's
 // by code, context, source, mount and outcome (runtime-diff.mjs DEFAULT_DIFF_AXES), many more programs. `--oracle-axes` picks.
 import { spawnSync } from "node:child_process";
@@ -17,6 +18,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { legalCells } from "./legal.mjs";
 import { cellList } from "./matrix.mjs";
+import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MOUNTS = ["--mounts", "root,child,show,for"];
@@ -57,6 +59,7 @@ function parse(argv) {
   const options = { grids: Object.keys(GRIDS).join(","), seed: "1", runtimeDiff: "1", oracleAxes: "code,context,outcome", extra: split < 0 ? [] : argv.slice(split + 1) };
   for (let index = 0; index < own.length; index += 2) {
     const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
     if (!["codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "checkerBin", "typefacts"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
     options[key] = own[index + 1];
   }
@@ -70,17 +73,22 @@ function main() {
   const out = resolve(options.out ?? join(tmpdir(), "solid-checker-fuzz-focus", `${Date.now()}`));
   mkdirSync(out, { recursive: true });
   const tools = [...(options.checkerBin ? ["--checker-bin", options.checkerBin] : []), ...(options.typefacts ? ["--typefacts", options.typefacts] : [])];
-  const host = ["--all-cores", "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", "--runtime-diff", options.runtimeDiff, "--runtime-diff-axes", options.oracleAxes];
+  const oracle = options.runtimeDiff === "0" ? [] : ["--runtime-diff", options.runtimeDiff, "--runtime-diff-axes", options.oracleAxes];
+  const host = ["--all-cores", "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...oracle];
   const attention = [];
-  console.log(`fuzz-focus: codes ${options.codes}; output ${out}`);
-  const codes = options.codes.split(",");
+  console.log(`fuzz-${options.smoke ? "smoke" : "focus"}: codes ${options.codes}; output ${out}`);
+  // `--codes all`: every code (the full grids); `--runtime-diff 0`: no oracle sample.
+  const codes = options.codes === "all" ? undefined : options.codes.split(",");
   for (const grid of options.grids.split(",")) {
     const [script, ...shape] = GRIDS[grid];
     // A grid with no cell for these codes (a code with no legal context, say) has nothing to run.
     const cells = script === "legal.mjs" ? legalCells({ codes }) : cellList({ codes });
     if (!cells.length) { console.log(`  ${grid.padEnd(8)}    -  no cells for these codes`); continue; }
     const started = Date.now();
-    const run = spawnSync(process.execPath, [join(here, script), "--seed", options.seed, "--grid", ...shape, "--codes", options.codes, "--out", join(out, grid), ...tools, ...host, ...options.extra], { encoding: "utf8", maxBuffer: 1 << 30 });
+    const manifest = join(SMOKE_DIR, `${grid}.json`);
+    if (options.smoke && !existsSync(manifest)) { attention.push(`${grid}: no smoke manifest ${manifest} (smoke.mjs select)`); continue; }
+    const select = [...(codes ? ["--codes", codes.join(",")] : []), ...(options.smoke ? ["--ids", manifest] : [])];
+    const run = spawnSync(process.execPath, [join(here, script), "--seed", options.seed, "--grid", ...shape, ...select, "--out", join(out, grid), ...tools, ...host, ...options.extra], { encoding: "utf8", maxBuffer: 1 << 30 });
     const seconds = Math.round((Date.now() - started) / 1000);
     const { outcomes, flagged, oracle, behaviour } = readGrid(join(out, grid));
     const total = Object.values(outcomes).reduce((a, b) => a + b, 0);
@@ -90,6 +98,14 @@ function main() {
     for (const row of flagged.slice(0, 10)) attention.push(`${grid}: ${row.outcome} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
     if (flagged.length > 10) attention.push(`${grid}: ... ${flagged.length - 10} more (${join(out, grid, "programs.jsonl")})`);
     for (const result of behaviour.slice(0, 10)) attention.push(`${grid}: oracle differs ${result.id} ${result.diffs.filter((d) => d.kind !== "moved").map((d) => `${d.kind} ${d.detail}`).join("; ").slice(0, 200)}`);
+    // A smoke run: every program whose behaviour moved from the manifest's; a move to a worse outcome needs a look.
+    if (options.smoke && existsSync(join(out, grid, "programs.jsonl"))) {
+      const moved = movedVerdicts(JSON.parse(readFileSync(manifest, "utf8")), readRows(join(out, grid)));
+      if (moved.worse.length || moved.other.length) console.log(`           moved from the manifest: ${moved.worse.length} worse, ${moved.other.length} better or changed`);
+      for (const move of moved.worse.slice(0, 10)) attention.push(`${grid}: worse ${move.id} ${move.from} -> ${move.to}`);
+      if (moved.worse.length > 10) attention.push(`${grid}: ... ${moved.worse.length - 10} more worse`);
+      for (const move of moved.other.slice(0, 5)) console.log(`             ${move.id} ${move.from} -> ${move.to}`);
+    }
     if (oracle?.inconclusive) attention.push(`${grid}: ${oracle.inconclusive} oracle runs inconclusive (${join(out, grid, "runtime-diff.jsonl")})`);
     writeFileSync(join(out, `${grid}.log`), `${run.stdout ?? ""}${run.stderr ?? ""}`);
   }

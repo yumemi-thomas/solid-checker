@@ -53,6 +53,15 @@ oracle sample stratified by code, context and outcome, and exits 1 when somethin
 false positive, a contradicted legal program, a harness failure, a behaviour difference from the oracle). About 1.5 minutes cold
 for one code, under a minute when the cache holds its programs. The full grids, with the full oracle sample, run before a PR.
 
+After any checker change: `make fuzz-smoke`, every grid restricted to its smoke manifest (`scripts/fuzz/smoke/<grid>.json`, about 4%
+of the programs). `scripts/fuzz/smoke.mjs select --from <full run>` chooses them greedily to hold every behaviour of the run (code,
+context, outcome, the findings at the site) five times, every value of every axis and every pair of the core axes for each code, and
+every program the run judged a problem; each manifest records the behaviour every program had. A smoke run fails on a problem and on
+any program whose outcome moved to a worse one (agree to recall gap, clean to uncertifiable, anything to a false clean or false
+positive), and lists the others that moved. Validation: against the reference run, the full grids of the first ADR 0511 build moved
+7,745 programs in 212 kinds of move; the set held moved programs in all six grids and 192 of the 212 kinds
+(`smoke.mjs check --reference <run> --against <run>`). After an intended change, reselect from the full run before the PR.
+
 ```sh
 export SOLID_CHECKER_NATIVE_BIN=<release solid-checker>   # a release build; debug inflates certification about 19x
 export SOLID_TYPEFACTS_BIN=<solid-typefacts>
