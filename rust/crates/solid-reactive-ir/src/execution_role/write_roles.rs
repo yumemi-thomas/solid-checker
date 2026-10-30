@@ -2462,7 +2462,16 @@ pub(crate) fn pending_apply_first_read_from(
             binding,
             memo,
             lookup,
-        ) || hook_source_pending(file, component, call, source_file, binding, memo, lookup)
+        ) || hook_source_pending(
+            file,
+            origin,
+            component,
+            call,
+            source_file,
+            binding,
+            memo,
+            lookup,
+        )
     };
     ok.then_some(apply.span)
 }

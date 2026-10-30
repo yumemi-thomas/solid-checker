@@ -747,8 +747,10 @@ fn hook_call_in_body<'f>(
 /// to its declaration. The component takes plain parameters and runs nothing
 /// else in its body before the effect; a `createEffect` also meets ADR
 /// 0505's premises on a mount whose `render` runs first.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn hook_source_pending(
     file: &solid_facts::FileFacts,
+    origin: Span,
     component: &FunctionFact,
     effect: &CallFact,
     hook_file: &solid_facts::FileFacts,
@@ -771,6 +773,9 @@ pub(super) fn hook_source_pending(
     let Some(call) = hook_call_in_body(file, component, effect, hook_file, hook, lookup) else {
         return false;
     };
+    if !read_through_hook_call(file, origin, call, hook_file, hook, binding) {
+        return false;
+    }
     let admits = BodyAdmits {
         context: None,
         source: None,
@@ -904,4 +909,86 @@ pub(crate) fn closed_literal_slot_value(
         return None;
     }
     Some(property.shorthand_binding.unwrap_or(property.value))
+}
+
+/// ADR 0511 review: the read at `origin` reaches the memo through the object
+/// the body's hook call `call` returned, not another instance: its callee is
+/// `x.N` with `x` the `const` the call initializes, or `N` a slot of the
+/// object pattern the call initializes, and the hook's returned literal holds
+/// the memo (`binding`) under `N`. Before this, any call of the hook in the
+/// body stood for a read of a memo another call created (`shared.a1()` of a
+/// module-scope `useVals()`, settled long before).
+fn read_through_hook_call(
+    file: &solid_facts::FileFacts,
+    origin: Span,
+    call: &CallFact,
+    hook_file: &solid_facts::FileFacts,
+    hook: &FunctionFact,
+    binding: &BindingFact,
+) -> bool {
+    let ast = &file.ast;
+    let Some(read) = ast.call_at(origin) else {
+        return false;
+    };
+    let callee = ast.peel_ts_sugar_span(read.callee);
+    let call_binding = |declaration: Span| {
+        ast.bindings.iter().find(|candidate| {
+            candidate.immutable
+                && candidate.names.iter().any(|name| name.span == declaration)
+                && candidate
+                    .initializer
+                    .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call.span)
+        })
+    };
+    let key = if let Some(member) = ast.member_at(callee) {
+        let object = ast.peel_ts_sugar_span(member.object);
+        let named = !ast.computed_members.contains(&callee)
+            && ast.optional_members.binary_search(&callee).is_err()
+            && ast
+                .identifiers
+                .iter()
+                .any(|identifier| identifier.span == object)
+            && ast
+                .reference_declaration(object)
+                .and_then(call_binding)
+                .is_some_and(|holder| holder.shape == BindingShape::Identifier);
+        if !named {
+            return false;
+        }
+        file.source_text(member.property).map(str::to_owned)
+    } else {
+        let Some(declaration) = ast.reference_declaration(callee) else {
+            return false;
+        };
+        call_binding(declaration)
+            .filter(|holder| holder.shape == BindingShape::Object)
+            .and_then(|holder| {
+                holder
+                    .object_slots
+                    .iter()
+                    .find(|slot| slot.local.span == declaration && slot.plain_identifier_key)
+            })
+            .map(|slot| slot.property.to_string())
+    };
+    let Some(key) = key else {
+        return false;
+    };
+    let hook_ast = &hook_file.ast;
+    let memo_name = binding.names.first().map(|name| name.span);
+    hook_ast
+        .returns
+        .iter()
+        .filter(|returned| {
+            crate::owners::containing_ast_function(hook_ast, returned.span)
+                .is_some_and(|function| function.span == hook.span)
+        })
+        .filter_map(|returned| returned.argument)
+        .map(|argument| hook_ast.peel_ts_sugar_span(argument))
+        .any(|object| {
+            closed_literal_slot_value(hook_file, object, &key).is_some_and(|value| {
+                let value = hook_ast.peel_ts_sugar_span(value);
+                // A shorthand property's value is the binder's own span.
+                Some(value) == memo_name || hook_ast.reference_declaration(value) == memo_name
+            })
+        })
 }
