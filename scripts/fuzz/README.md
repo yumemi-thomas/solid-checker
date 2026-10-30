@@ -69,7 +69,7 @@ export SOLID_TYPEFACTS_BIN=<solid-typefacts>
 # Phase 1: generate and type-check only (no checker, no runtime)
 node scripts/fuzz/run.mjs --generate-only --seed 1 --count 200 --out /tmp/fuzz-gen-1
 
-# Fast path: checker + Happy DOM runtime, classify
+# Fast path: checker + the runner in Chrome (the Rust executor), classify; --fast-host happy-dom for the Vitest daemon
 node scripts/fuzz/run.mjs --seed 1 --count 200 --out /tmp/fuzz-run-1
 
 # Confirm candidates in Chrome, shrink what Chrome confirms
@@ -312,7 +312,7 @@ A plan may list `edits` (`{ selector, text }`): the user types into an input bef
 
 ## Known limits
 
-* The fast path is Happy DOM, not a browser, and Chrome judges only its candidates: a false positive the fast path does not produce is not looked for in Chrome. A candidate the fast path invents is refuted by Chrome and noted, not reported as a checker bug.
+* The fast path runs in Chrome (ADR 0512), with the fast runner's driving, not the oracle's (`feedback run`): the runtime differential (`--runtime-diff`) measures the two against each other per stratum, and the oracle still judges candidates. With `--fast-host happy-dom`, a false positive the fast path does not produce is not looked for in Chrome.
 * One component per case, plus the parents and `helpers.ts` of the mount and source axes; no event handler passed by name (containers).
 * A program `tsrs` rejects is dropped (invariant 1), so a defect the published typings catch is out of reach by design: the matrix records such codes as `typed-away` (`MISSING_EFFECT_FN` has no template).
 * A site that never ran, or ran without landing its witness, is `inconclusive` or an unexecuted candidate, never agreement. Sites in containers that never ran, programs that throw or halt reactivity, and diagnostics Chrome cannot place on a line limit what a run can say.
@@ -337,7 +337,11 @@ A plan may list `edits` (`{ selector, text }`): the user types into an input bef
 | `unexecuted.mjs`, `deadsite.mjs` | the unexecuted candidate (the ledger's proof), Chrome's judgement of it, and the confirmation conditions as code |
 | `typecheck.mjs` | `tsrs -p ... --noEmit` against the published typings; a program that does not type-check is dropped |
 | `checker.mjs` | materializes a case as the oracle does and runs the native checker; per-site verdicts |
-| `fast.mjs`, `fast/` | the Happy DOM + `@solidjs/diagnostics` runtime path (Vitest) |
+| `chrome-host.mjs`, `chrome-host/` | the default fast path: the runner in Chrome, its Vite server (cases served from memory) and source-map placement |
+| `exec.mjs`, `exec/` | the Rust executor: projects, type checks, checker runs and the Chrome pages off the orchestrator's thread; `exec/vite-host.mjs` its Vite helper |
+| `runtime-diff.mjs` | the runtime differential: the fast path's records against the oracle's, behaviour apart from attribution |
+| `focus.mjs`, `smoke.mjs`, `smoke/` | `make fuzz-focus` (the grids for some codes) and `make fuzz-smoke` (the smoke manifests, their selection and validation) |
+| `fast.mjs`, `fast/` | the Happy DOM + `@solidjs/diagnostics` runtime path (Vitest), `--fast-host happy-dom` |
 | `classify.mjs`, `codes.mjs` | the comparator; the policy table per rc.17 code and the oracle's code/rule tables (tests fail when they drift) |
 | `falseclean.mjs`, `falseclean-run.mjs`, `known-open.json` | the false-clean stream: coarse key, ledger, Chrome confirmation, focused shrink with a control |
 | `shrink.mjs`, `dedupe.mjs` | delta debugging over the tree; signatures by construct path |
