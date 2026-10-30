@@ -92,7 +92,8 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
       configFile: false, root: work, logLevel: "error", mode: "development", cacheDir: join(work, ".vite"),
       plugins: [serveCached, solid({ hot: false, performanceTracks: false, diagnostics: false, solid: { sourceNames: { locations: true } } })],
       resolve: { conditions: ["browser", "development"], dedupe: ["solid-js", "@solidjs/signals", "@solidjs/web"] },
-      server: { host: "127.0.0.1", port: 0, hmr: false, fs: { strict: false }, watch: null },
+      // forwardConsole: off whoever launches the run (Vite 8 turns it on under a coding agent; feedback-browser.mjs says why).
+      server: { host: "127.0.0.1", port: 0, hmr: false, forwardConsole: false, fs: { strict: false }, watch: null },
       optimizeDeps: { include: ["solid-js", "@solidjs/web", "@solidjs/signals", "@solidjs/diagnostics"] },
     });
     dbg("server created");
@@ -102,7 +103,9 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
     const playwright = await import(pathToFileURL(createRequire(join(resolve(oracleInstall), "package.json")).resolve("playwright-core")).href);
     const chromium = playwright.chromium ?? playwright.default?.chromium;
     dbg("playwright loaded");
-    const browser = await chromium.launch({ executablePath: browserPath ?? defaultChromium(), headless: true });
+    // The GPU process's compositing in the browser process: a page's frames no longer cross a process boundary (about a fifth of Chrome's
+    // system time on macOS; the records of 768 programs were identical with and without it).
+    const browser = await chromium.launch({ executablePath: browserPath ?? defaultChromium(), headless: true, args: ["--in-process-gpu"] });
     dbg("browser launched");
     // Warm the dependency bundles and the runner once, so no case pays for them or meets Vite's dependency reload; then freeze the
     // runner and its clock as transformed (their imports name the versioned dependency bundles, which Vite serves immutable).

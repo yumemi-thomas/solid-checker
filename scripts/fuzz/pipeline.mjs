@@ -20,7 +20,7 @@ import { closedGrammar } from "./model.mjs";
 import { signature as findingSignature } from "./dedupe.mjs";
 import { callAtLine } from "./falseclean.mjs";
 import { registrationLines } from "./registration.mjs";
-import { createTypecheckBatcher, typecheck } from "./typecheck.mjs";
+import { createTypecheckBatcher, typecheck, typecheckBatch } from "./typecheck.mjs";
 import { judgeUnexecuted, lexicallyDeadHits } from "./unexecuted.mjs";
 
 /** A case that ships a generated package is checked as a user's run is (checker.mjs ORDINARY_ARGS): the package is read from source. */
@@ -70,7 +70,7 @@ const timed = (phase, work) => {
 export async function prepareEntries(entries, config, deps = {}) {
   // Type checks of this call share `tsrs -b` processes (as many at a time as the pool runs), unless a test injects one or the run
   // asks for one process each.
-  const { runChecker: check = runChecker, typecheck: types = config.typecheckBatch ? createTypecheckBatcher({ size: config.concurrency }) : typecheck } = deps;
+  const { runChecker: check = runChecker, typecheck: batched = config.typecheckBatch ? createTypecheckBatcher({ size: config.concurrency }) : typecheck } = deps;
   const results = new Map();
   const { install, casesDir } = config;
   const instrument = config.instrument !== false;
@@ -98,19 +98,56 @@ export async function prepareEntries(entries, config, deps = {}) {
   };
   mkdirSync(casesDir, { recursive: true });
 
+  // 0. With batched type checks, every project of the call is written first and the type checks the cache does not answer start as one
+  // `tsrs -b` per pool slot over a share of them: a tsrs process spends most of its time reading the libraries, so a few large batches
+  // cost a fraction of the small ones step 1's pool would gather (typecheck.mjs createTypecheckBatcher). The answers are typecheckBatch's,
+  // the projects alone where a batch gives none, as the batcher's are. A test that injects `typecheck` skips this step.
+  const staged = new Map();
+  const answers = new Map();
+  if (config.typecheckBatch && !deps.typecheck) {
+    const pending = [];
+    for (const { built } of entries) {
+      const stage = {
+        caseDir: timed("materialize", () => writeCase(join(casesDir, built.id), built)),
+        dir: timed("materialize", () => materializeForChecker(built, install, built.id)),
+        twinDir: null,
+      };
+      if (!cache?.has(caseKey(built.files, "typecheck"))) pending.push(stage.dir);
+      if (instrument && !cache?.has(caseKey(built.files, "typecheck-twin"))) {
+        stage.twinDir = timed("materialize", () => materializeForChecker(built, install, `${built.id}-run`, { twin: true }));
+        pending.push(stage.twinDir);
+      }
+      staged.set(built.id, stage);
+      // The Chrome host serves its pages from this event loop (chrome-host.mjs): writing a whole call's projects in one go would stall them.
+      await new Promise((resume) => setImmediate(resume));
+    }
+    const slots = Math.max(1, Math.min(config.concurrency ?? 1, pending.length));
+    const groups = Array.from({ length: slots }, (_, slot) => pending.filter((_, index) => index % slots === slot)).filter((group) => group.length);
+    // Not awaited here: step 1's pool starts at once, and a program waits for its own batch only.
+    for (const group of groups) {
+      const batch = timed("typecheck", () => typecheckBatch(group, { tsc: config.tsc }));
+      for (const dir of group) answers.set(dir, batch.then((got) => got?.get(dir) ?? typecheck(dir, { tsc: config.tsc })));
+    }
+  }
+  const types = (dir, options) => (answers.has(dir) ? answers.get(dir) : batched(dir, options));
+
   // 1. Write the case, type-check it as the oracle compiles it, and ask the checker (on the clean text).
   const prepared = await mapPoolSettled(entries, async ({ program, built }) => {
-    const caseDir = timed("materialize", () => writeCase(join(casesDir, built.id), built));
-    const dir = timed("materialize", () => materializeForChecker(built, install, built.id));
+    const stage = staged.get(built.id);
+    const caseDir = stage?.caseDir ?? timed("materialize", () => writeCase(join(casesDir, built.id), built));
+    const dir = stage?.dir ?? timed("materialize", () => materializeForChecker(built, install, built.id));
     const typed = await remembered(built, "typecheck", () => timed("typecheck", () => types(dir, { tsc: config.tsc })), cacheableTypecheck);
-    if (!typed.ok) return { program, built, caseDir, dir, typecheck: typed };
+    if (!typed.ok) {
+      if (stage?.twinDir && !config.keepWork) rmSync(stage.twinDir, { recursive: true, force: true });
+      return { program, built, caseDir, dir, typecheck: typed };
+    }
     const ordinary = hasPackages(built);
     const checker = await timed("checker", () => check(dir, { bin: config.bin, typefacts: config.typefacts, ordinary }));
     const value = { program, built, caseDir, dir, typecheck: typed, checker };
     if (instrument) {
       // The twin's project is written only when something reads it: a type check that is not a cache hit (or is spot-checked),
       // or the twin's checker control.
-      let twinDir = null;
+      let twinDir = stage?.twinDir ?? null;
       const twin = () => (twinDir ??= timed("materialize", () => materializeForChecker(built, install, `${built.id}-run`, { twin: true })));
       value.twinTypecheck = await remembered(built, "typecheck-twin", () => timed("typecheck", () => types(twin(), { tsc: config.tsc })), cacheableTypecheck);
       if (control && checker.ok && value.twinTypecheck.ok) value.twinChecker = await timed("checker", () => check(twin(), { bin: config.bin, typefacts: config.typefacts, ordinary }));
