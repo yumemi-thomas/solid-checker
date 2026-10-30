@@ -26,6 +26,8 @@ import { browserExecutionCache, withRuntimeCache } from "./cache.mjs";
 import { codeRules, codesForRule, ignoredRules, policyOf, withholdingRules } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
+import { fnv } from "./rng.mjs";
+import { chromeUnreadable, evidenceOf, parseAxes, parsePerStratum, runtimeDiff, sampleStrata, stratumOf, summarize } from "./runtime-diff.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import { LAYERS, MISUSE_CODES, MOUNTS, SPEC, TEMPLATE_CODES, gridBindingsOf, gridVariantsOf, sourcesOf, sourcesOption } from "./misuse.mjs";
@@ -128,7 +130,7 @@ export const otherRegions = (built) => built.sites.filter((site) => site.code &&
 // ---------------------------------------------------------------------------------------------------------------------
 // The cells
 
-export const fnv = (text) => { let hash = 0x811c9dc5; for (const ch of text) hash = Math.imul(hash ^ ch.charCodeAt(0), 0x01000193) >>> 0; return hash; };
+export { fnv };
 /** A program's seed depends on the run seed, its cell and its index in the cell, so a cell's programs do not move when others are added. */
 export const cellSeed = (base, code, context, index) => programSeed((Number(base) ^ fnv(`${code}/${context}`)) >>> 0, index);
 
@@ -198,11 +200,15 @@ const tally = (rows) => rows.reduce((counts, row) => { counts[row.outcome] += 1;
 // ---------------------------------------------------------------------------------------------------------------------
 // Chrome
 
-/** Chrome's records for evaluated values: the twin, judged against the clean case's findings, which run beside it in the same oracle call. */
-async function chromeRecords(values, config, options, out) {
-  const chromeOptions = { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency, executionCache: browserExecutionCache(options) };
+/**
+ * Chrome's records for evaluated values: the twin, judged against the clean case's findings, which run beside it in the same oracle
+ * call. `withClean: false` runs the twin alone (the runtime differential reads no finding). `--chrome-concurrency` sizes the oracle's
+ * page pool (default its own: at most 8); a page mostly waits on the driver's pauses, so a larger pool overlaps them.
+ */
+async function chromeRecords(values, config, options, out, { withClean = true } = {}) {
+  const chromeOptions = { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.chromeConcurrency ?? options.concurrency, executionCache: browserExecutionCache(options) };
   const cases = values.map((value) => ({ id: value.built.id, dir: value.caseDir, sites: value.built.sites }));
-  return runChrome(cases, { ...chromeOptions, withClean: true });
+  return runChrome(cases, { ...chromeOptions, withClean });
 }
 
 /** Chrome's outcome for a program, and whether it equals the fast path's. */
@@ -460,12 +466,57 @@ function reportGate(result) {
   return result.ok ? 0 : 1;
 }
 
+/**
+ * The runtime differential over evaluated grid rows: Chrome runs the sampled programs (the same twin the fast path ran) and each
+ * record is compared with the fast path's (`runtime-diff.mjs`). Writes `runtime-diff.json` (summary, per-kind counts, the differing
+ * programs) and `runtime-diff.jsonl` (one line per compared program). A Chrome record the harness could not read is retried once.
+ */
+export async function runtimeDifferential(rows, values, perStratum, config, options, out, label) {
+  const axes = parseAxes(options.runtimeDiffAxes);
+  const picked = sampleStrata(rows, perStratum, (row) => Boolean(values.get(row.id)?.runtime), axes);
+  console.error(`${label}: runtime differential (Happy DOM vs Chrome) on ${picked.length} programs`);
+  const started = Date.now();
+  const results = [];
+  const CHUNK_SIZE = 160;
+  for (let at = 0; at < picked.length; at += CHUNK_SIZE) {
+    const chunk = picked.slice(at, at + CHUNK_SIZE);
+    const records = await chromeRecords(chunk.map((row) => values.get(row.id)), config, options, out, { withClean: false });
+    const unreadable = chunk.filter((row) => chromeUnreadable(records.get(row.id)));
+    if (unreadable.length) {
+      const again = await chromeRecords(unreadable.map((row) => values.get(row.id)), config, options, out, { withClean: false });
+      for (const row of unreadable) if (!chromeUnreadable(again.get(row.id))) records.set(row.id, again.get(row.id));
+    }
+    for (const row of chunk) {
+      const record = records.get(row.id);
+      const base = { id: row.id, stratum: stratumOf(row, axes), outcome: row.outcome };
+      results.push(chromeUnreadable(record)
+        ? { ...base, diffs: [], inconclusive: record?.runtime?.failure?.message ?? "no Chrome record" }
+        : (() => {
+          const diffs = runtimeDiff(values.get(row.id).runtime, record.runtime);
+          return diffs.length ? { ...base, diffs, happy: evidenceOf(values.get(row.id).runtime), chrome: evidenceOf(record.runtime) } : { ...base, diffs };
+        })());
+    }
+    console.error(`${label}: runtime differential ${Math.min(at + CHUNK_SIZE, picked.length)}/${picked.length}, ${Math.round((Date.now() - started) / 1000)}s`);
+  }
+  const judged = results.filter((result) => !result.inconclusive);
+  const summary = { ...summarize(judged), inconclusive: results.length - judged.length, perStratum: perStratum === Infinity ? "all" : perStratum, axes };
+  writeFileSync(join(out, "runtime-diff.jsonl"), results.map((result) => JSON.stringify(result)).join("\n") + (results.length ? "\n" : ""));
+  writeFileSync(join(out, "runtime-diff.json"), `${JSON.stringify({ summary, differing: judged.filter((result) => result.diffs.length) }, null, 2)}\n`);
+  console.error(`${label}: runtime differential ${JSON.stringify(summary)}`);
+  return summary;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Main
 
 const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] [--per-cell N] [--codes A,B] [--contexts a,b]
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--checker-label <commit>] [--tsc <tsrs>] [--all-cores]
-  [--confirm-with-chrome [--chrome-sample 3] [--chrome-false-clean 4] [--chrome-other 2] [--browser <chromium>]] [--shrink [--budget N]]
+  [--confirm-with-chrome [--chrome-sample 3] [--chrome-false-clean 4] [--chrome-other 2] [--chrome-strata] [--browser <chromium>]] [--shrink [--budget N]]
+  [--chrome-concurrency N]              Chrome pages at a time (default the oracle's: at most 8)
+  [--chrome-strata]                     sample Chrome per stratum (--runtime-diff-axes; default code, context, source, mount, outcome), not per cell
+  [--runtime-diff <N|all>]              compare Happy DOM's runtime record with Chrome's on up to N programs per stratum, or all
+  [--runtime-diff-axes a,b]             the stratum (default code,context,source,mount,outcome; runtime-diff.mjs STRATUM_AXES)
+                                        (runtime-diff.json, runtime-diff.jsonl; the checker plays no part)
   [--grid [--layers a,b]]               one program per shape (variant x binding x layer) of every cell, instead of --per-cell random draws
   [--mounts root,child,show,for]        with --grid, also mount each program as a parent's child (misuse.mjs MOUNTS; default root)
   [--sources local,props,context,module,async]  with --grid, also take the values from a parent's props, a context, helpers.ts or an
@@ -550,7 +601,9 @@ async function sweep(options, config, out) {
     const limits = { agree: options.chromeSample ?? 3, "false-clean": options.chromeFalseClean ?? 4, "wrong-rule": Infinity, "recall-gap": other, "not-fired": other };
     for (const row of [...rows].sort((a, b) => (a.binding === "destructured") - (b.binding === "destructured") || a.lines - b.lines || a.index - b.index)) {
       if (!(row.outcome in limits)) continue;
-      const key = `${row.code}|${row.context}|${row.outcome}`;
+      // `--chrome-strata`: per stratum (`--runtime-diff-axes`, default code, context, source, mount and outcome), so a source or a
+      // mount is sampled on its own.
+      const key = options.chromeStrata ? stratumOf(row, parseAxes(options.runtimeDiffAxes)) : `${row.code}|${row.context}|${row.outcome}`;
       const n = bySample.get(key) ?? 0;
       if (n < limits[row.outcome]) { bySample.set(key, n + 1); pick.push(row); }
     }
@@ -572,6 +625,11 @@ async function sweep(options, config, out) {
       console.error(`matrix: Chrome ${Math.min(at + CHROME_CHUNK, pick.length)}/${pick.length}, ${Math.round((Date.now() - chromeStarted) / 1000)}s`);
     }
   }
+
+  // The runtime differential (`--runtime-diff <N|all>`): Happy DOM's record against Chrome's, without the checker, on up to N programs
+  // per stratum. Beside the matrix, never in it.
+  const perStratum = parsePerStratum(options.runtimeDiff);
+  if (perStratum) await runtimeDifferential(rows, values, perStratum, config, options, out, "matrix");
 
   // Shrink one representative per false-clean cell (the smallest program that Chrome did not refute).
   if (options.shrink) {
@@ -633,8 +691,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources"], extraFlags: ["grid", "no-chrome-cache", "combine"] });
-      for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther"]) if (options[key] !== undefined) options[key] = Number(options[key]);
+      const options = parseArgs(argv, { extraValues: ["per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata"] });
+      for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }
       else process.exitCode = await runMatrix(options);
