@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { legalCells } from "./legal.mjs";
 import { cellList } from "./matrix.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
+import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MOUNTS = ["--mounts", "root,child,show,for"];
@@ -50,7 +51,7 @@ export function readGrid(out) {
   }
   const diff = join(out, "runtime-diff.json");
   const oracle = existsSync(diff) ? JSON.parse(readFileSync(diff, "utf8")) : null;
-  const behaviour = (oracle?.differing ?? []).filter((result) => result.diffs.some((d) => d.kind !== "moved"));
+  const behaviour = (oracle?.differing ?? []).filter((result) => result.diffs.some((d) => BEHAVIOUR_KINDS.includes(d.kind)));
   return { outcomes, flagged, oracle: oracle?.summary ?? null, behaviour };
 }
 
@@ -98,7 +99,7 @@ function main() {
     if (run.status !== 0) attention.push(`${grid}: exited ${run.status} (${join(out, grid)}.log): ${String(run.stderr || run.stdout).trim().split("\n").slice(-3).join(" | ").slice(0, 400)}`);
     for (const row of flagged.slice(0, 10)) attention.push(`${grid}: ${row.outcome} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
     if (flagged.length > 10) attention.push(`${grid}: ... ${flagged.length - 10} more (${join(out, grid, "programs.jsonl")})`);
-    for (const result of behaviour.slice(0, 10)) attention.push(`${grid}: oracle differs ${result.id} ${result.diffs.filter((d) => d.kind !== "moved").map((d) => `${d.kind} ${d.detail}`).join("; ").slice(0, 200)}`);
+    for (const result of behaviour.slice(0, 10)) attention.push(`${grid}: oracle differs ${result.id} ${result.diffs.map((d) => `${d.kind} ${d.detail}`).join("; ").slice(0, 200)}`);
     // A smoke run: every program whose behaviour moved from the manifest's; a move to a worse outcome needs a look.
     if (options.smoke && existsSync(join(out, grid, "programs.jsonl"))) {
       const moved = movedVerdicts(JSON.parse(readFileSync(manifest, "utf8")), readRows(join(out, grid)));

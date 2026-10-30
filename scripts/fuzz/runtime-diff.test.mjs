@@ -32,11 +32,11 @@ describe("runtimeDiff", () => {
     expect(sameCode.filter((d) => d.kind === "chrome-only" || d.kind === "happy-only")).toEqual([]);
   });
 
-  it("counts an extra line of a code both sides report as attribution, a code one side lacks as behaviour", () => {
+  it("counts an extra line of a code both sides report as behaviour: an event at a site one side never placed one at", () => {
     const one = record({ diagnostics: [diagnostic("CONTEXT_NOT_FOUND", 18)] });
     const two = record({ diagnostics: [diagnostic("CONTEXT_NOT_FOUND", 16), diagnostic("CONTEXT_NOT_FOUND", 18)] });
     expect(runtimeDiff(two, one)).toEqual([{ kind: "moved", detail: "CONTEXT_NOT_FOUND happy@16,18 chrome@18" }]);
-    expect(summarize([{ diffs: runtimeDiff(two, one) }])).toMatchObject({ behaviour: 0, attributionOnly: 1 });
+    expect(summarize([{ diffs: runtimeDiff(two, one) }])).toMatchObject({ behaviour: 1, attributionOnly: 0 });
   });
 
   it("matches a positionless event to its code on the other side, and drops one the same side places", () => {
