@@ -16,7 +16,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus
+.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus fuzz-focus
 
 build: build-rust
 
@@ -195,6 +195,14 @@ tsc-oracle: tsc-oracle-provision build-checker-debug
 obligation-audit: tsc-oracle-provision build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/obligation-audit.mjs
+
+# The differential fuzzer's short loop (scripts/fuzz/focus.mjs): the six grids restricted to CODES, on the
+# Rust executor and the Chrome host, each with its oracle sample; exits 1 when anything needs a look.
+#   make fuzz-focus CODES=STRICT_READ_UNTRACKED[,...] [FUZZ_GRIDS=mx-base,lg-base] [FUZZ_FOCUS_ARGS="-- --per-cell 8"]
+fuzz-focus: build-checker-release
+	@test -n "$(CODES)" || { echo "make fuzz-focus CODES=A[,B]: the codes the change touches"; exit 2; }
+	node scripts/fuzz/focus.mjs --codes "$(CODES)" $(if $(FUZZ_GRIDS),--grids "$(FUZZ_GRIDS)") \
+	  --checker-bin "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts" $(FUZZ_FOCUS_ARGS)
 
 # The retained IR's safety net (scripts/ir-read-lint.mjs, scripts/ir-edit-fuzz.mjs).
 # The lint ratchets raw cross-file reads against scripts/ir-read-lint.allowlist.json.

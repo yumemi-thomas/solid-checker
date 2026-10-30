@@ -47,6 +47,12 @@ The type checker is `tsrs`, never `tsc` from node_modules. It is found from `--t
 
 ## Running
 
+The short loop, after a change to a shape or a rule: `make fuzz-focus CODES=A[,B]` runs the six grids (misuse and legal; base,
+sources, combinations) restricted to those codes, on the Rust executor (`--executor rust`) and the Chrome host, each with an
+oracle sample stratified by code, context and outcome, and exits 1 when something needs a look (a false clean, a wrong rule, a
+false positive, a contradicted legal program, a harness failure, a behaviour difference from the oracle). About 1.5 minutes cold
+for one code, under a minute when the cache holds its programs. The full grids, with the full oracle sample, run before a PR.
+
 ```sh
 export SOLID_CHECKER_NATIVE_BIN=<release solid-checker>   # a release build; debug inflates certification about 19x
 export SOLID_TYPEFACTS_BIN=<solid-typefacts>
