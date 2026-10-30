@@ -223,7 +223,8 @@ read in the literal is SC1001 only where ADR 0204's direct body call proves it:
 a prop forwarded to a child that calls it, or aliased, stays uncertifiable.
 A `let` binding that is reassigned names more than one function, so its
 positions prove no violation either; a named function expression is entered
-through the binding holding it as well as its own name; a call that renders
+through the binding holding it as well as its own name, unless its own name is
+never referenced, when the binding alone names it (ADR 0515); a call that renders
 the function again as a component (`<Reset />` inside `Reset`) runs it under
 a new owner. A closure written inside a named handler takes the handler's
 role only when every layer between runs inline (`[x].forEach(fn)`, an IIFE)

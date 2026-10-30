@@ -1205,7 +1205,8 @@ pub struct NamespaceMemberBindingFact {
 /// value of another binding of this module that is a `const` variable (the
 /// binder resolves the reference, so a shadowing name is that name's binding):
 /// `const local = source` (the initializer an identifier under parentheses and
-/// TypeScript wrappers), or a slot `const { key: local } = { key: source }` of
+/// TypeScript wrappers; or, ADR 0515, a conditional both of whose arms are
+/// `source`, or an inline identity arrow called on `source`), or a slot `const { key: local } = { key: source }` of
 /// an object pattern initialized by an object literal that holds only data
 /// properties with static keys (identifiers, string literals; no spread, no
 /// computed or numeric key, no getter, setter or method, no `__proto__`), the

@@ -283,3 +283,25 @@ export function CleanupBind() {
   }, 0);
   return <p />;
 }
+
+// ADR 0515: a plain assignment to a binding, as a callee, calls its right operand.
+export function WriteAssignedInMemo() {
+  const [x, setX] = createSignal(0);
+  let slot: typeof setX | undefined;
+  createMemo(() => { (slot = setX)(1); return 0; });
+  return <p>{x()}{String(slot)}</p>;
+}
+
+export function ReadAssignedInBody() {
+  const [x] = createSignal(0);
+  let slot: typeof x | undefined;
+  (slot = x)();
+  return <p>{String(slot)}</p>;
+}
+
+export function WriteAssignedInTimer() {
+  const [x, setX] = createSignal(0);
+  let slot: typeof setX | undefined;
+  setTimeout(() => { (slot = setX)(1); }, 0);
+  return <p>{x()}{String(slot)}</p>;
+}

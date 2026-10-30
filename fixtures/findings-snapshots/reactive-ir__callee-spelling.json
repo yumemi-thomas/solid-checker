@@ -290,6 +290,26 @@
       "start": 6646,
       "end": 6655,
       "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 7256,
+      "end": 7272,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 7434,
+      "end": 7446,
+      "fixes": 0
     }
   ]
 }

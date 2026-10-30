@@ -3057,6 +3057,15 @@ fn namespace_member_bindings_record_only_exact_const_slots_of_an_import_namespac
         "export function inside() { const { onCleanup: r } = S; return r; }\n",
         "const { onCleanup: t } = S;\n",
         "export function usesT() { return t; }\n",
+        // ADR 0515: a slot over a `const` holding the namespace, and over a chain of them.
+        "const S2 = S;\n",
+        "const { onCleanup: u } = S2;\n",
+        "const S3 = S2;\n",
+        "const { onCleanup: v } = S3;\n",
+        "const notNs = flush;\n",
+        "const { onSettled: w } = notNs as any;\n",
+        "let S4 = S;\n",
+        "const { onCleanup: x } = S4;\n",
     );
     let facts = extract("namespace.ts", source).unwrap();
     let text = |span: Span| &source[span.start as usize..span.end as usize];
@@ -3075,6 +3084,8 @@ fn namespace_member_bindings_record_only_exact_const_slots_of_an_import_namespac
             ("l", "useContext", "S"),
             ("r", "onCleanup", "S"),
             ("t", "onCleanup", "S"),
+            ("u", "onCleanup", "S"),
+            ("v", "onCleanup", "S"),
         ]
     );
     let local = facts.namespace_member_bindings[0].local;
@@ -3267,6 +3278,11 @@ fn local_alias_bindings_record_only_exact_const_copies_of_a_const_variable() {
         "const later = r;\n",
         "export { later };\n",
         "declare const ambient: typeof r;\n",
+        "const ident = ((x: () => number) => x)(r);\n",
+        "const notIdent = ((x: () => number) => r)(r);\n",
+        "const condDiff = Math.random() ? r : fromLet;\n",
+        "const withDefault = ((x: () => number = r) => x)(r);\n",
+        "const nested = Math.random() ? ((x: () => number) => x)(r) : a;\n",
     );
     let facts = extract("alias.ts", source).unwrap();
     let text = |span: Span| &source[span.start as usize..span.end as usize];
@@ -3288,6 +3304,9 @@ fn local_alias_bindings_record_only_exact_const_copies_of_a_const_variable() {
             ("g", r),
             ("w", r),
             ("x", c),
+            // ADR 0515: a conditional of one variable in both arms, an inline identity arrow on it.
+            ("cond", r),
+            ("ident", r),
         ]
     );
     let local = facts.local_alias_bindings[0].local;
@@ -3331,7 +3350,10 @@ fn records_the_invoked_identifier_of_a_callee_spelling() {
                   declare const o: { m(): void };\n\
                   declare function g(): void;\n\
                   f(); (f)(); ((f))(); (void 0, f)(); (0, f)(); (0, void 0, (f))(); f?.(); new (f as any)();\n\
-                  (0, o.m)(); (o.m)(); (g(), f)(); (0, eval)(\"1\"); (f as any)(); f!();\n";
+                  (0, o.m)(); (o.m)(); (g(), f)(); (0, eval)(\"1\"); (f as any)(); f!();\n\
+                  let slot: (() => void) | undefined;\n\
+                  (slot = f)(); (slot ||= f)(); (slot = o.m)();\n\
+                  async function later() { (slot = f)(); }\n";
     let facts = extract("/project/App.ts", source).unwrap();
     let text = |span: Span| &source[span.start as usize..span.end as usize];
     let callees = facts
@@ -3357,6 +3379,12 @@ fn records_the_invoked_identifier_of_a_callee_spelling() {
             ("0, eval", false),
             ("f as any", false),
             ("f!", false),
+            // ADR 0515: a plain assignment to a binding is its right operand.
+            ("f", true),
+            ("slot ||= f", false),
+            ("slot = o.m", false),
+            // Not in an async function.
+            ("slot = f", false),
         ]
     );
 }

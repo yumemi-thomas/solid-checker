@@ -80,6 +80,16 @@
       "start": 2083,
       "end": 2091,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
+      "start": 4234,
+      "end": 4245,
+      "fixes": 0
     }
   ]
 }

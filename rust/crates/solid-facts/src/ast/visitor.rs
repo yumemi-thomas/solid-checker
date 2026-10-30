@@ -199,6 +199,31 @@ impl Collector<'_, '_> {
         }
     }
 
+    /// ADR 0515: a non-ambient `const` bound to an identifier the binder
+    /// resolves (`const N = S`), with that identifier's declaration
+    /// (`namespace_holders`; `finish` follows it when `S` is a namespace import
+    /// binding). A module namespace object is frozen, so `N` holds exactly the
+    /// object `S` names, and a slot of `const { key: local } = N` holds the
+    /// export `key` as `S.key` would read it.
+    fn record_namespace_holders(&mut self, declaration: &VariableDeclarator<'_>) {
+        if declaration.kind != oxc_ast::ast::VariableDeclarationKind::Const
+            || self.ambient_variable
+            || self.ambient_module_depth != 0
+        {
+            return;
+        }
+        let BindingPattern::BindingIdentifier(holder) = &declaration.id else {
+            return;
+        };
+        let Some(Expression::Identifier(initializer)) = declaration.init.as_ref().map(unwrapped)
+        else {
+            return;
+        };
+        if let Some(target) = self.declaration_of(initializer) {
+            self.namespace_holders.push((span(holder.span), target));
+        }
+    }
+
     /// The `const` variable symbol the binder resolves `expression` (under
     /// parentheses and TypeScript wrappers) to.
     fn const_symbol_of(&self, expression: &Expression<'_>) -> Option<oxc_semantic::SymbolId> {
@@ -229,6 +254,64 @@ impl Collector<'_, '_> {
             .symbol_flags(symbol)
             .contains(oxc_semantic::SymbolFlags::ConstVariable)
             .then(|| span(self.scoping.symbol_span(symbol)))
+    }
+
+    /// The `const` variable an initializer evaluates to exactly: the variable
+    /// itself (`const_variable_of`), a conditional both of whose arms are that
+    /// same variable (`c ? r : r`: the test runs, then either arm yields `r`),
+    /// or a call of an inline identity arrow on it (`((x: T) => x)(r)`: a
+    /// synchronous, non-generator arrow with one plain parameter, no default
+    /// and no rest, whose expression body is that parameter, called once,
+    /// not optionally, with one non-spread argument). Each yields the very
+    /// value of the variable; nothing else is an exact copy.
+    fn exact_const_copy_of(&self, expression: &Expression<'_>) -> Option<Span> {
+        if let Some(source) = self.const_variable_of(expression) {
+            return Some(source);
+        }
+        match unwrapped(expression) {
+            Expression::ConditionalExpression(conditional) => {
+                let consequent = self.exact_const_copy_of(&conditional.consequent)?;
+                (self.exact_const_copy_of(&conditional.alternate)? == consequent)
+                    .then_some(consequent)
+            }
+            Expression::CallExpression(call) if !call.optional && call.arguments.len() == 1 => {
+                let Expression::ArrowFunctionExpression(arrow) = unwrapped(&call.callee) else {
+                    return None;
+                };
+                if arrow.r#async
+                    || !arrow.expression
+                    || arrow.params.rest.is_some()
+                    || arrow.params.items.len() != 1
+                {
+                    return None;
+                }
+                let parameter = &arrow.params.items[0];
+                if parameter.initializer.is_some() || parameter.optional {
+                    return None;
+                }
+                let BindingPattern::BindingIdentifier(parameter) = &parameter.pattern else {
+                    return None;
+                };
+                let Some(oxc_ast::ast::Statement::ExpressionStatement(body)) =
+                    arrow.body.statements.first()
+                else {
+                    return None;
+                };
+                let Expression::Identifier(returned) = unwrapped(&body.expression) else {
+                    return None;
+                };
+                let returns_parameter = returned
+                    .reference_id
+                    .get()
+                    .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+                    .is_some_and(|symbol| Some(symbol) == parameter.symbol_id.get());
+                if !returns_parameter {
+                    return None;
+                }
+                self.exact_const_copy_of(call.arguments[0].as_expression()?)
+            }
+            _ => None,
+        }
     }
 
     /// Records the local aliases of a non-ambient `const` declarator
@@ -268,7 +351,7 @@ impl Collector<'_, '_> {
         };
         match &declaration.id {
             BindingPattern::BindingIdentifier(local) => {
-                if let Some(source) = self.const_variable_of(init) {
+                if let Some(source) = self.exact_const_copy_of(init) {
                     self.local_alias_candidates.push((span(local.span), source));
                 }
                 // ADR 0480: a holder a later pattern may read through.
@@ -620,7 +703,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             self.lazy_import_glob_callees.push(span(member.span));
         }
         // ADR 0468: `(void 0, f)()` calls `f` as `f()` does.
-        let invoked = invoked_identifier(&call.callee);
+        let invoked = invoked_identifier(
+            !self.function_async.last().copied().unwrap_or(false),
+            &call.callee,
+        );
         let callee_span = invoked.map_or_else(|| call.callee.span(), |identifier| identifier.span);
         self.calls.push(CallFact {
             span: span(call.span),
@@ -651,7 +737,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             self.straight_line_constructs.push(span(expression.span));
         }
         self.record_completion_site(expression.span);
-        let invoked = invoked_identifier(&expression.callee);
+        let invoked = invoked_identifier(
+            !self.function_async.last().copied().unwrap_or(false),
+            &expression.callee,
+        );
         let callee_span =
             invoked.map_or_else(|| expression.callee.span(), |identifier| identifier.span);
         self.calls.push(CallFact {
@@ -686,6 +775,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .push((span(declaration.id.span()), span(init.span())));
         }
         self.record_namespace_member_candidates(declaration);
+        self.record_namespace_holders(declaration);
         self.record_local_alias_candidates(declaration);
         // `const { a, b } = await import(x)`: the export names the pattern reads.
         if let BindingPattern::ObjectPattern(pattern) = &declaration.id
@@ -833,11 +923,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             });
         }
         self.function_flow_depths.push(self.conditional_flow_depth);
+        self.function_async.push(function.r#async);
         self.function_exits.push(false);
         self.function_try_blocks.push(0);
         walk::walk_function(self, function, flags);
         self.function_try_blocks.pop();
         self.function_exits.pop();
+        self.function_async.pop();
         self.function_flow_depths.pop();
     }
 
@@ -975,6 +1067,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             },
         });
         self.function_flow_depths.push(self.conditional_flow_depth);
+        self.function_async.push(function.r#async);
         self.function_exits.push(false);
         self.function_try_blocks.push(0);
         let concise = function.get_expression().map(GetSpan::span);
@@ -987,6 +1080,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         }
         self.function_try_blocks.pop();
         self.function_exits.pop();
+        self.function_async.pop();
         self.function_flow_depths.pop();
     }
 

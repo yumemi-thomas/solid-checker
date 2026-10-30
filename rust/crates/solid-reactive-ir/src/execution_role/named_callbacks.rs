@@ -122,7 +122,7 @@ impl<'a> NamedCallbackIndex<'a> {
         symbol_names: &'a HashMap<SymbolId, SymbolId>,
         lookup: &SemanticLookup<'_>,
     ) -> Self {
-        let candidates = file
+        let mut candidates = file
             .ast
             .functions
             .iter()
@@ -130,6 +130,18 @@ impl<'a> NamedCallbackIndex<'a> {
                 Some((function.span, function_symbol(file, function, entities)?))
             })
             .collect::<Vec<_>>();
+        // A named function expression its binding names (see
+        // `named_expression_binding`) is a candidate under that binding too.
+        for function in &file.ast.functions {
+            if let Some(name) = named_expression_binding(file, function, lookup)
+                && let Some(symbol) = entities.exact(&location(file.path.shared(), name.span))
+                && !candidates
+                    .iter()
+                    .any(|(span, existing)| *span == function.span && *existing == symbol)
+            {
+                candidates.push((function.span, symbol));
+            }
+        }
         let mut by_symbol = HashMap::<&str, Vec<usize>>::default();
         let mut by_reference = HashMap::<Span, Vec<usize>>::default();
         let mut by_canonical_name = HashMap::<&str, Vec<usize>>::default();
@@ -155,6 +167,69 @@ impl<'a> NamedCallbackIndex<'a> {
                     .entry(Span::new(start, end))
                     .or_default()
                     .push(index);
+            }
+        }
+        // An exact `const` copy of a function's binding names that function
+        // (`const apply = run; createEffect(c, apply)`): `local_alias_bindings`
+        // records only a non-exported `const` whose initializer is an exact
+        // copy of the binding (ADR 0463, ADR 0515), so a reference to the copy
+        // is the function's value -- once the copy's declarator has run. A
+        // reference from a nested function may run before it (`const early =
+        // () => createMemo(apply); early(); const apply = run;` throws a
+        // ReferenceError, and nothing is written), which `tsc` does not
+        // report. So a copy names the function only when every reference to it
+        // is in the declarator's own function and after the declarator; any
+        // other copy names nothing, as before. Chains follow, bounded.
+        let initialized_before_every_use =
+            |alias: &solid_facts::ast::LocalAliasBindingFact, local: &SymbolId| {
+                let declared_in =
+                    containing_ast_function(&file.ast, alias.local).map(|function| function.span);
+                lookup
+                    .symbol_references(local.as_str())
+                    .iter()
+                    .all(|reference| {
+                        if reference.path.as_ref() != file.path.as_str() {
+                            return false;
+                        }
+                        let (Ok(start), Ok(end)) = (
+                            u32::try_from(reference.start_byte),
+                            u32::try_from(reference.end_byte),
+                        ) else {
+                            return false;
+                        };
+                        let use_span = Span::new(start, end);
+                        use_span == alias.local
+                            || (use_span.start > alias.local.end
+                                && containing_ast_function(&file.ast, use_span)
+                                    .map(|function| function.span)
+                                    == declared_in)
+                    })
+            };
+        for _ in 0..8 {
+            let mut added = false;
+            for alias in &file.ast.local_alias_bindings {
+                let (Some(local), Some(source)) = (
+                    entities.exact(&location(file.path.shared(), alias.local)),
+                    entities.exact(&location(file.path.shared(), alias.source)),
+                ) else {
+                    continue;
+                };
+                if !initialized_before_every_use(alias, local) {
+                    continue;
+                }
+                let Some(targets) = by_symbol.get(source.as_str()).cloned() else {
+                    continue;
+                };
+                let entry = by_symbol.entry(local.as_str()).or_default();
+                for target in targets {
+                    if !entry.contains(&target) {
+                        entry.push(target);
+                        added = true;
+                    }
+                }
+            }
+            if !added {
+                break;
             }
         }
         Self {
@@ -425,6 +500,72 @@ pub(super) fn named_callback_containing<'f>(
     file.ast
         .functions_body_containing(span)
         .find(|function| roles.get(function.span).admitted)
+}
+
+/// ADR 0515: the `const` binding that names a named function expression
+/// (`const apply = function step() { ... }`) the way a binding names an arrow:
+/// the expression is the binding's whole initializer and its own name `step`
+/// is never referenced, so the function has no entry but the binding's. A
+/// self-referencing expression (recursion through `step`) is entered by its
+/// own name too, which no position of the binding accounts for: `None`.
+pub(crate) fn named_expression_binding<'f>(
+    file: &'f solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f solid_facts::ast::NamedSpan> {
+    let own = function.name.as_ref()?;
+    if function.kind != solid_facts::ast::FunctionKind::Expression
+        || function.generator
+        || function.method_name.is_some()
+    {
+        return None;
+    }
+    let own_symbol = lookup.entities().at(file.path.as_str(), own.span)?;
+    let unreferenced = lookup
+        .symbol_references_if_present(own_symbol.as_str())
+        .is_some_and(|references| {
+            references.iter().all(|reference| {
+                reference.path.as_ref() == file.path.as_str()
+                    && u32::try_from(reference.start_byte)
+                        .is_ok_and(|start| start == own.span.start)
+            })
+        });
+    if !unreferenced {
+        return None;
+    }
+    let binding = file
+        .ast
+        .bindings_initializer_containing(function.span)
+        .find(|binding| {
+            binding.immutable
+                && binding.initializer_function
+                && binding.initializer.is_some_and(|initializer| {
+                    file.ast
+                        .functions_within(initializer)
+                        .max_by_key(|candidate| candidate.span.end - candidate.span.start)
+                        .is_some_and(|candidate| candidate.span == function.span)
+                })
+        })?;
+    match binding.names.as_slice() {
+        [name] => Some(name),
+        _ => None,
+    }
+}
+
+/// Whether `span` is in a function nested in a named callback (not in the
+/// callback's own body): code [`named_callback_execution_role`] places as
+/// deferred unless the in-place layers between them place it at a call in the
+/// callback's body.
+pub(super) fn nested_in_named_callback(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    named_callback_containing(file, span, lookup).is_some_and(|callback| {
+        lookup.function_component_status(file, callback) == ComponentStatus::No
+            && containing_ast_function(&file.ast, span)
+                .is_some_and(|owner| owner.span != callback.span)
+    })
 }
 
 pub(crate) fn named_callback_execution_role(

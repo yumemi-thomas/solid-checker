@@ -207,6 +207,41 @@ pub(super) fn semantic_role_before_awaits(
     if assigned_member_function_contains(file, span, entities) {
         return ExecutionRole::DeferredCallback;
     }
+    // A read in a function nested in a named callback runs where the in-place
+    // layers between them (a helper's callback, an IIFE, an inline library
+    // callback; `climb_in_place_layers`) put it: at a call in the callback's
+    // body, whose role the named callback gives. The same climb places the
+    // inline callback's nested reads (the `allowed` arm below); without it a
+    // helper's callback in a named apply (`const cb = () => { h(() => r()) };
+    // createEffect(c, cb)`) was placed deferred, a read no rule reports. A
+    // nested function no layer places (stored, handed on, a timer's) stays
+    // deferred, as before.
+    if !classifying.contains(&write_classification_marker())
+        && super::named_callbacks::nested_in_named_callback(file, span, lookup)
+        && let Some(climb) = super::write_roles::climb_in_place_layers(file, span, lookup)
+    {
+        let role = semantic_execution_role_within(
+            file,
+            climb.at,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            classifying,
+        );
+        // Only a climb that reaches a reporting role answers here: a tracked or
+        // deferred role at the call keeps the named arm's answer below, which
+        // other rules read (a named memo compute's `TrackedJsx` is SC5003's), so
+        // no legal shape moves.
+        if role.reports_untracked_read() {
+            return match climb.suspended {
+                Some(true) => ExecutionRole::Unreported,
+                Some(false) => ExecutionRole::Unknown,
+                None if climb.in_list => ExecutionRole::Unknown,
+                None => role,
+            };
+        }
+    }
     if let Some(role) = named_callback_execution_role(file, span, lookup) {
         return role;
     }

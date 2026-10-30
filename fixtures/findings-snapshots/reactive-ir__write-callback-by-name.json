@@ -144,7 +144,7 @@
     {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
-      "kind": "uncertifiable",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-callback-by-name/App.tsx",
       "start": 5910,

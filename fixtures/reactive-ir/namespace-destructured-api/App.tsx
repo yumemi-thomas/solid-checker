@@ -121,3 +121,17 @@ export function ExportedSlot() {
   }, 0);
   return <i>exported</i>;
 }
+
+// ADR 0515: a slot over a `const` holding the namespace is the namespace's.
+const HeldS = S;
+const { onCleanup: heldCleanup } = HeldS;
+
+export function HeldTimer() {
+  setTimeout(() => heldCleanup(() => {}), 0);
+  return <div />;
+}
+
+export function HeldOwned() {
+  heldCleanup(() => {});
+  return <div />;
+}

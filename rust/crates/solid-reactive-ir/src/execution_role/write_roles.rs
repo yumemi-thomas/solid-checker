@@ -3322,22 +3322,28 @@ pub(super) struct ByNamePosition<'f> {
 /// this function now ([`SemanticLookup::function_value_is_current`]). A `const`
 /// named before its declarator is evaluated throws instead of passing the
 /// function, so the argument must follow the declarator in the same function.
-/// A method, a generator, a named function expression (entered by its own name
-/// too) and a function two primitive positions name answer nothing.
+/// A method, a generator, a named function expression entered by its own name
+/// too (ADR 0515: one its own name never references is named by its binding,
+/// `named_expression_binding`) and a function two primitive positions name
+/// answer nothing.
 pub(super) fn by_name_position<'f>(
     file: &'f solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> Option<ByNamePosition<'f>> {
     use solid_facts::ast::FunctionKind;
+    let named_expression = function.kind == FunctionKind::Expression && function.name.is_some();
     if function.method_name.is_some()
         || function.generator
-        || (function.kind == FunctionKind::Expression && function.name.is_some())
         || !lookup.function_value_is_current(file, function)
     {
         return None;
     }
-    let name = function_binding_name(file, function)?;
+    let name = if named_expression {
+        super::named_callbacks::named_expression_binding(file, function, lookup)?
+    } else {
+        function_binding_name(file, function)?
+    };
     let path = file.path.as_str();
     let symbol = lookup.entities().at(path, name.span)?;
     let mut found = None;

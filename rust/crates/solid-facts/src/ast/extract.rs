@@ -96,6 +96,8 @@ pub(super) struct Collector<'s, 'semantic> {
     /// identifier; kept in `finish` only where the declaration is a runtime
     /// namespace import binding.
     pub(super) namespace_member_candidates: Vec<(Span, Span, CompactString)>,
+    /// ADR 0515: `const N = S`: the holder's binding and the declaration `S` resolves to.
+    pub(super) namespace_holders: Vec<(Span, Span)>,
     /// `(local, source)` of every local alias (`LocalAliasBindingFact`) but
     /// the export test, which `finish` applies.
     pub(super) local_alias_candidates: Vec<(Span, Span)>,
@@ -208,6 +210,8 @@ pub(super) struct Collector<'s, 'semantic> {
     /// The [`Collector::conditional_flow_depth`] at each enclosing function's
     /// entry, innermost last.
     pub(super) function_flow_depths: Vec<usize>,
+    /// Whether each enclosing function is `async` (innermost last).
+    pub(super) function_async: Vec<bool>,
     /// Whether each enclosing function, innermost last, has so far written a
     /// `return`, `break` or `continue` that may skip what follows it.
     pub(super) function_exits: Vec<bool>,
@@ -364,6 +368,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             sequences: Vec::new(),
             import_equals: Vec::new(),
             namespace_member_candidates: Vec::new(),
+            namespace_holders: Vec::new(),
             local_alias_candidates: Vec::new(),
             const_array_slots: Vec::new(),
             array_destructures: Vec::new(),
@@ -445,6 +450,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             method_names: Vec::new(),
             conditional_flow_depth: 0,
             function_flow_depths: Vec::new(),
+            function_async: Vec::new(),
             // ADR 0503: the module is the outermost frame, so its own `try`
             // blocks and exits weigh as a function's do.
             function_exits: vec![false],
@@ -550,15 +556,30 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             .iter()
             .copied()
             .collect::<std::collections::HashSet<_>>();
+        // ADR 0515: a slot over a `const` holding the namespace (`const N = S;
+        // const { key } = N`, chains of such holders) is a slot over `S`.
+        let holders = std::mem::take(&mut self.namespace_holders)
+            .into_iter()
+            .collect::<std::collections::HashMap<_, _>>();
+        let namespace_of = |declaration: Span| {
+            let mut current = declaration;
+            for _ in 0..8 {
+                if namespace_bindings.contains(&current) {
+                    return Some(current);
+                }
+                current = *holders.get(&current)?;
+            }
+            None
+        };
         let mut namespace_member_bindings = std::mem::take(&mut self.namespace_member_candidates)
             .into_iter()
-            .filter(|(local, namespace, _)| {
-                namespace_bindings.contains(namespace) && !exported.contains(local)
-            })
-            .map(|(local, namespace, key)| NamespaceMemberBindingFact {
-                local,
-                namespace,
-                key,
+            .filter(|(local, _, _)| !exported.contains(local))
+            .filter_map(|(local, namespace, key)| {
+                Some(NamespaceMemberBindingFact {
+                    local,
+                    namespace: namespace_of(namespace)?,
+                    key,
+                })
             })
             .collect::<Vec<_>>();
         namespace_member_bindings.sort_by_key(|fact| fact.local);
