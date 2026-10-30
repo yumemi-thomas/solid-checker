@@ -574,20 +574,35 @@ impl Chrome {
         let loader = navigated.get("loaderId").and_then(Value::as_str).unwrap_or("").to_string();
         let deadline = Instant::now() + PAGE_TIMEOUT;
         let mut evaluate: Option<u64> = None;
-        let grant = |granted: &mut u64| {
-            if *granted < VIRTUAL_CAP_MS {
-                *granted += VIRTUAL_BUDGET_MS;
+        // Until the new document commits, the last program's document still runs and may spend budgets; those grants do not count
+        // toward this program's cap (the old document is gone at the commit).
+        let mut committed = false;
+        let mut loaded = false;
+        let grant = |granted: &mut u64, committed: bool| {
+            if !committed || *granted < VIRTUAL_CAP_MS {
+                if committed {
+                    *granted += VIRTUAL_BUDGET_MS;
+                }
                 cdp.send(s, "Emulation.setVirtualTimePolicy", policy(VIRTUAL_BUDGET_MS), page.reply.clone());
             }
         };
         let record = loop {
             let message = match page.events.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
                 Ok(message) => message,
-                Err(RecvTimeoutError::Timeout) => return Err(format!("no record within {} ms", PAGE_TIMEOUT.as_millis())),
+                Err(RecvTimeoutError::Timeout) => {
+                    return Err(format!("no record within {} ms (committed {committed}, loaded {loaded}, record asked {}, virtual time granted {granted} ms)", PAGE_TIMEOUT.as_millis(), evaluate.is_some()));
+                }
                 Err(RecvTimeoutError::Disconnected) => return Err("the browser closed".into()),
             };
             match message.get("method").and_then(Value::as_str) {
-                Some("Emulation.virtualTimeBudgetExpired") => grant(&mut granted),
+                Some("Emulation.virtualTimeBudgetExpired") => grant(&mut granted, committed),
+                Some("Page.lifecycleEvent") if !committed && message["params"]["loaderId"] == loader.as_str() => {
+                    committed = true;
+                    if message["params"]["name"] == "DOMContentLoaded" {
+                        loaded = true;
+                        evaluate = Some(cdp.send(s, "Runtime.evaluate", json!({ "expression": "globalThis.__scRecordPromise", "awaitPromise": true, "returnByValue": true, "userGesture": true }), page.reply.clone()));
+                    }
+                }
                 // `goto(..., { waitUntil: "domcontentloaded" })`, then `evaluate(() => globalThis.__scRecordPromise)`.
                 Some("Page.lifecycleEvent")
                     if evaluate.is_none()
@@ -595,6 +610,7 @@ impl Chrome {
                         && message["params"]["frameId"] == page.frame.as_str()
                         && message["params"]["loaderId"] == loader.as_str() =>
                 {
+                    loaded = true;
                     evaluate = Some(cdp.send(s, "Runtime.evaluate", json!({ "expression": "globalThis.__scRecordPromise", "awaitPromise": true, "returnByValue": true, "userGesture": true }), page.reply.clone()));
                 }
                 None if evaluate.is_some() && message.get("id").and_then(Value::as_u64) == evaluate => {
@@ -654,11 +670,23 @@ impl Chrome {
                                 }
                             }
                         }
-                        match chrome.run_on(page.as_ref().unwrap(), &id) {
+                        // A page that gave no record is the host's failure, not the program's: once more, on a fresh page.
+                        let mut outcome = chrome.run_on(page.as_ref().unwrap(), &id);
+                        if outcome.is_err() {
+                            chrome.close_page(page.take().unwrap());
+                            outcome = chrome.open_page().and_then(|fresh| {
+                                let again = chrome.run_on(&fresh, &id);
+                                page = Some(fresh);
+                                again
+                            });
+                        }
+                        match outcome {
                             Ok(record) => results.lock().unwrap().push((id, record)),
                             Err(error) => {
                                 results.lock().unwrap().push((id.clone(), failed(&id, error)));
-                                chrome.close_page(page.take().unwrap());
+                                if let Some(page) = page.take() {
+                                    chrome.close_page(page);
+                                }
                             }
                         }
                     }

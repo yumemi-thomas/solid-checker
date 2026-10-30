@@ -351,7 +351,8 @@ export class EntryCache {
 /** A type check that says something about the program (not a missing binary, not a timeout: a killed tsrs prints no error and a non-zero status). */
 export const cacheableTypecheck = (typed) => Boolean(typed) && !typed.missing && (typed.ok || typed.errors?.length > 0);
 /** A fast-path record that says something about the program: the runner wrote it (a vitest record is the harness's). */
-export const cacheableRecord = (record) => Boolean(record) && record.failure?.phase !== "vitest";
+/** A record the runtime cache may keep: not a host's own failure (Vitest's, or the Chrome host's), which says nothing of the program. */
+export const cacheableRecord = (record) => Boolean(record) && !["vitest", "chrome-host"].includes(record.failure?.phase);
 
 /** Where the caches live: `--cache-dir`, else `$TMPDIR/solid-checker-fuzz-cache` (the neutrality baseline's default too). */
 export const cacheDirectory = (options) => resolve(options.cacheDir ?? join(tmpdir(), "solid-checker-fuzz-cache"));
