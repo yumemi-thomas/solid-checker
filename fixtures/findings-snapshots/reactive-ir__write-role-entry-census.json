@@ -2,6 +2,16 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/write-role-entry-census/App.tsx",
+      "start": 190,
+      "end": 199,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -69,6 +79,16 @@
       "path": "fixtures/reactive-ir/write-role-entry-census/App.tsx",
       "start": 4029,
       "end": 4040,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/write-role-entry-census/Review.tsx",
+      "start": 185,
+      "end": 194,
       "fixes": 0
     },
     {

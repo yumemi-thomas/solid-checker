@@ -12,6 +12,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
+      "start": 401,
+      "end": 410,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -67,6 +77,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
+      "start": 1263,
+      "end": 1269,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
       "start": 1386,
       "end": 1395,
       "fixes": 0
@@ -89,6 +109,26 @@
       "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
       "start": 1662,
       "end": 1670,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
+      "start": 1678,
+      "end": 1682,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
+      "start": 1817,
+      "end": 1827,
       "fixes": 0
     },
     {
@@ -169,6 +209,16 @@
       "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
       "start": 3503,
       "end": 3514,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
+      "start": 3928,
+      "end": 3934,
       "fixes": 0
     },
     {

@@ -446,7 +446,15 @@ pub(super) fn interprocedural_reads(
     );
     let resolver = step_started.elapsed();
     let step_started = Instant::now();
-    let (transported_calls, unavailable_calls) = transported_call_targets(context, &provenance);
+    let (mut transported_calls, unavailable_calls) = transported_call_targets(context, &provenance);
+    let write_call_targets = transported_calls
+        .extract_if(|_, target| {
+            matches!(
+                target,
+                accessor_provenance::Callable::Setter(_) | accessor_provenance::Callable::Action(_)
+            )
+        })
+        .collect::<HashMap<_, _>>();
     let transport = step_started.elapsed();
     let (transported_bodies, array_member_bodies) = transported_body_sets(&transported_calls);
     let mut summaries = vec![SummaryReads::default(); nodes.len()];
@@ -717,6 +725,7 @@ pub(super) fn interprocedural_reads(
     InterproceduralResult {
         reads: result.into(),
         source_call_targets: Arc::new(transported_calls),
+        write_call_targets: Arc::new(write_call_targets),
         dispatch_obligations: dispatch_obligations.into(),
         factory_instances,
         timings: InterproceduralTimings {
@@ -765,7 +774,9 @@ fn transported_body_sets(
                 transported_bodies
                     .extend(targets.iter().map(|(path, span)| (path.as_str(), *span)));
             }
-            accessor_provenance::Callable::Accessor(_) => {}
+            accessor_provenance::Callable::Accessor(_)
+            | accessor_provenance::Callable::Setter(_)
+            | accessor_provenance::Callable::Action(_) => {}
         }
     }
     (transported_bodies, array_member_bodies)
@@ -1139,6 +1150,8 @@ fn add_transported_call_summaries(
                         }
                     }
                 }
+                accessor_provenance::Callable::Setter(_)
+                | accessor_provenance::Callable::Action(_) => {}
             }
         }
     }

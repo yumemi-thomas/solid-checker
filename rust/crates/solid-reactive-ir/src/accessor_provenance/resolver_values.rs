@@ -281,6 +281,9 @@ pub(super) trait Values<'w>: World<'w> {
                 transported,
             );
         }
+        if let Some(callable) = created_write_callable(self, bound_file, binding, &symbol) {
+            return Some(Value::Callable(callable));
+        }
         if self.source_kind(&symbol) != Some(crate::ReactiveSourceKind::Store)
             && (self.source_has_runtime_witness(&symbol)
                 || (binding.shape == ast::BindingShape::Identifier
@@ -400,7 +403,24 @@ pub(super) trait Values<'w>: World<'w> {
         }
         // A slot past the literal's end destructures `undefined`.
         let element = *elements.get(index)?;
-        let span = self.slot_closure(self.file(&path)?, factory, element)?;
+        let factory_file = self.file(&path)?;
+        // ADR 0509: a slot naming a primitive's own setter or action binding
+        // (`return [count, setCount] as const`) is that binding. An accessor
+        // slot keeps its own path (ADR 0222's returned sources).
+        if factory_file
+            .ast
+            .identifiers
+            .iter()
+            .any(|identifier| identifier.span == factory_file.ast.peel_ts_sugar_span(element))
+            && let Some(Value::Callable(callable @ (Callable::Setter(_) | Callable::Action(_)))) =
+                self.value(factory_file, element, depth - 1, &mut false)
+        {
+            if self.tuple_iteration() {
+                return Some(Value::VetoedTuple);
+            }
+            return Some(Value::Callable(callable));
+        }
+        let span = self.slot_closure(factory_file, factory, element)?;
         // Retain the transported-call obligation after establishing this is
         // a tuple closure. A mutation withdraws its identity, never certifies
         // silence or substitutes another violating implementation.
@@ -551,3 +571,50 @@ pub(super) trait Values<'w>: World<'w> {
 }
 
 impl<'w, T: World<'w> + ?Sized> Values<'w> for T {}
+
+/// The setter or action the binding of `symbol` holds when a dialect
+/// primitive created it in the binding's own initializer: the setter slot of
+/// a reactive tuple (`const [v, setV] = createSignal(0)`, the slot source
+/// discovery gives a setter row) or an `action(…)` result. The binding is a
+/// `const` no write reaches (the caller checked), so every call through a
+/// transported value of it calls that setter or action.
+fn created_write_callable<'w>(
+    world: &(impl World<'w> + ?Sized),
+    file: &'w FileFacts,
+    binding: &'w ast::BindingFact,
+    symbol: &SymbolId,
+) -> Option<Callable> {
+    let initializer = file.ast.peel_ts_sugar_span(binding.initializer?);
+    if binding.call_initializer != Some(initializer) {
+        return None;
+    }
+    let call = file.ast.call_at(initializer)?;
+    if call.construct {
+        return None;
+    }
+    let primitive = world.primitive(file, call)?;
+    let dialect = world.dialect();
+    match binding.shape {
+        ast::BindingShape::Array
+            if dialect.creates_reactive_source(primitive)
+                && dialect.returns_reactive_tuple(primitive)
+                && primitive != solid_dialect::Primitive::CreateMemo
+                && simple_array_binding(binding)
+                && binding
+                    .array_slots
+                    .get(1)
+                    .and_then(Option::as_ref)
+                    .is_some_and(|slot| world.symbol_at(file, slot.span) == Some(symbol)) =>
+        {
+            Some(Callable::Setter(symbol.clone()))
+        }
+        ast::BindingShape::Identifier
+            if primitive == solid_dialect::Primitive::Action
+                && binding.names.len() == 1
+                && world.symbol_at(file, binding.names[0].span) == Some(symbol) =>
+        {
+            Some(Callable::Action(symbol.clone()))
+        }
+        _ => None,
+    }
+}

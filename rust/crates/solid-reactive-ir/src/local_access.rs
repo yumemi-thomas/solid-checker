@@ -33,6 +33,265 @@ use crate::indexes::{EntitySymbols, SemanticLookup};
 use solid_facts::ProjectFacts;
 use typefacts::{Declaration, Location};
 
+/// The obligation context of a member call on a caller-supplied value
+/// (ADR 0509), dropped where accessor transport resolves the call.
+pub(crate) const UNRESOLVED_HANDED_MEMBER: &str = "handed-member-dispatch";
+
+/// [`UNRESOLVED_HANDED_MEMBER`] where the call may only read (its role reports
+/// no write or action): a read row at the call speaks for it.
+pub(crate) const UNRESOLVED_HANDED_READ: &str = "handed-member-read";
+
+/// How many member, alias and destructuring steps [`UNRESOLVED_HANDED_MEMBER`]
+/// follows from a callee to the value a caller supplied.
+pub(crate) const HANDED_DEPTH: usize = 6;
+
+/// The tables [`handed_value`] reads.
+pub(crate) struct HandedTables<'a, 'l> {
+    pub(crate) lookup: &'a SemanticLookup<'l>,
+    pub(crate) entities: &'a EntitySymbols,
+    pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
+    pub(crate) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(crate) setters: &'a HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    >,
+    pub(crate) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(crate) props_reactivity: &'a PropsReactivityIndex,
+}
+
+/// ADR 0509: whether the value at `span` is one a caller supplied
+/// ([`UNRESOLVED_HANDED_MEMBER`]), through at most `depth` steps.
+pub(crate) fn handed_value(
+    t: &HandedTables<'_, '_>,
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    depth: usize,
+) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    let span = file.ast.peel_ts_sugar_span(span);
+    if let Some(member) = file.ast.member_at(span) {
+        // A computed member too (`pair[1]`): this only opens obligations.
+        return handed_value(t, file, member.object, depth - 1);
+    }
+    // A local literal destructured or indexed later (`const [, f] = [0,
+    // ctx.read]`, `const { f } = { f: imported }`): one of its values.
+    if let Some(literal) = file.ast.array_literal_at(span) {
+        return literal
+            .elements
+            .iter()
+            .any(|element| handed_value(t, file, element.span, depth - 1));
+    }
+    // A local object literal exactly at `span`: its own top-level values
+    // (an open literal, with a spread or a computed key, may hold anything).
+    if let Some(shape) = file
+        .ast
+        .object_get_shapes
+        .iter()
+        .find(|shape| shape.span == span)
+    {
+        if !shape.closed {
+            return true;
+        }
+        let own = |property: &&solid_facts::ast::ObjectPropertyFact| {
+            span.contains(property.span)
+                && !file.ast.object_properties.iter().any(|outer| {
+                    outer.span != property.span
+                        && span.contains(outer.span)
+                        && outer.span.contains(property.span)
+                })
+        };
+        return file
+            .ast
+            .object_properties
+            .iter()
+            .filter(own)
+            .any(|property| {
+                handed_value(
+                    t,
+                    file,
+                    property.shorthand_binding.unwrap_or(property.value),
+                    depth - 1,
+                )
+            });
+    }
+    if !file.ast.identifiers.iter().any(|identifier| {
+        identifier.span == span && identifier.role == solid_facts::ast::IdentifierRole::Reference
+    }) {
+        return false;
+    }
+    if t.entities
+        .get(&location(file.path.shared(), span))
+        .is_some_and(|symbol| {
+            t.prop_sources.contains_key(symbol)
+                && t.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+        })
+    {
+        return true;
+    }
+    // An alias whose own binding has no row of a value that has one (`const
+    // { f } = { f: imported }`): the alias was not followed, so the call may
+    // read, write or act. The value's symbol is the one a call of it
+    // resolves to (through an import).
+    let is_source = |symbol: &str| {
+        t.accessors.contains_key(symbol)
+            || t.setters.contains_key(symbol)
+            || t.actions.contains_key(symbol)
+    };
+    if depth < HANDED_DEPTH
+        && (t.lookup.callee_symbol(file, span).is_some_and(is_source)
+            // A value position no symbol was demanded at: its binder's
+            // declaration (an import's local name) carries it.
+            || file
+                .ast
+                .reference_declaration(span)
+                .and_then(|declaration| t.lookup.callee_symbol(file, declaration))
+                .is_some_and(is_source))
+    {
+        return true;
+    }
+    let Some(declaration) = file.ast.reference_declaration(span) else {
+        return false;
+    };
+    // A slot of a component's destructured props parameter.
+    if file.ast.functions.iter().any(|function| {
+        function.parameters.first().is_some_and(|parameter| {
+            parameter.shape == solid_facts::ast::BindingShape::Object
+                && parameter
+                    .object_slots
+                    .iter()
+                    .any(|slot| slot.local.span == declaration)
+                && t.props_reactivity
+                    .for_declaration(&location(file.path.shared(), parameter.pattern))
+                    .is_some()
+        })
+    }) {
+        return true;
+    }
+    let Some(binding) = file
+        .ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+    else {
+        return false;
+    };
+    if let Some(call) = binding
+        .call_initializer
+        .and_then(|initializer| file.ast.call_at(initializer))
+    {
+        if call.construct {
+            return false;
+        }
+        return match t.lookup.primitive_at_call(file, call.span) {
+            Some(primitive) => {
+                t.lookup
+                    .dialect
+                    .name_of(primitive)
+                    .and_then(|name| t.lookup.dialect.context_role(name))
+                    == Some(solid_dialect::ContextRole::Read)
+            }
+            None => t
+                .lookup
+                .function_called_at(file.path.as_str(), file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|(hook_file, hook)| {
+                    !returned_slot_is_literal_function(hook_file, hook, binding, declaration)
+                }),
+        };
+    }
+    binding
+        .initializer
+        .is_some_and(|initializer| handed_value(t, file, initializer, depth - 1))
+}
+
+/// Whether the slot of `binding` named at `declaration` is, in the one
+/// return of `hook` (a literal), a function literal written there: its body
+/// is visible, and the call graph follows a call of it (ADR 0282), so the
+/// handed-member net is not needed for it.
+fn returned_slot_is_literal_function(
+    file: &solid_facts::FileFacts,
+    hook: &solid_facts::ast::FunctionFact,
+    binding: &solid_facts::ast::BindingFact,
+    declaration: solid_facts::core::Span,
+) -> bool {
+    let Some(returned) = crate::interproc::accessor_provenance::single_return(file, hook) else {
+        return false;
+    };
+    let returned = file.ast.peel_ts_sugar_span(returned);
+    // The whole result (`const task = make(); task()`): a function literal
+    // the hook returns, directly or through a `const` it binds to one.
+    if binding.shape == solid_facts::ast::BindingShape::Identifier {
+        if file.ast.function_at(returned).is_some() {
+            return true;
+        }
+        let Some(declaration) = file.ast.reference_declaration(returned) else {
+            return false;
+        };
+        return file.ast.bindings.iter().any(|local| {
+            local.immutable
+                && local.shape == solid_facts::ast::BindingShape::Identifier
+                && local.names.iter().any(|name| name.span == declaration)
+                && !crate::indexes::binding_written(file, declaration)
+                && local.initializer.is_some_and(|initializer| {
+                    file.ast
+                        .function_at(file.ast.peel_ts_sugar_span(initializer))
+                        .is_some()
+                })
+        });
+    }
+    let Some(structure) = file
+        .ast
+        .returns
+        .iter()
+        .chain(
+            file.ast
+                .functions
+                .iter()
+                .filter_map(|function| function.expression_return.as_ref()),
+        )
+        .find(|candidate| {
+            candidate
+                .argument
+                .is_some_and(|argument| file.ast.peel_ts_sugar_span(argument) == returned)
+        })
+        .and_then(|candidate| candidate.structure.as_deref())
+        .filter(|structure| structure.complete_literal)
+    else {
+        return false;
+    };
+    let value = match binding.shape {
+        solid_facts::ast::BindingShape::Array => binding
+            .array_slots
+            .iter()
+            .position(|slot| slot.as_ref().is_some_and(|slot| slot.span == declaration))
+            .and_then(|index| structure.elements.get(index).copied().flatten()),
+        solid_facts::ast::BindingShape::Object => binding
+            .object_slots
+            .iter()
+            .find(|slot| slot.local.span == declaration)
+            .and_then(|slot| {
+                structure
+                    .properties
+                    .iter()
+                    .find(|property| property.name.as_str() == slot.property.as_str())
+                    .map(|property| property.value)
+            }),
+        solid_facts::ast::BindingShape::Identifier => None,
+    };
+    value.is_some_and(|value| {
+        file.ast
+            .function_at(file.ast.peel_ts_sugar_span(value))
+            .is_some()
+    })
+}
+
 /// Do not apply an incoming-prop witness to a replaced or escaping root.
 /// Unknown writes through aliases/views need their own value-flow proof.
 pub(super) fn props_root_is_current(
@@ -1149,6 +1408,10 @@ impl LocalAccessContext<'_, '_> {
         // facts open the proof rather than hiding an observed call or escape.
         let mut unproven_use = dynamic_lexical_observation;
         let mut retained_in_layer = false;
+        // ADR 0509: an unproven call from another named local function
+        // (`const outer = () => helper()`) runs the read wherever that
+        // function runs, which nothing here follows.
+        let mut nested_in_named = false;
         for reference in file.ast.identifiers.iter().filter(|identifier| {
             identifier.role == solid_facts::ast::IdentifierRole::Reference
                 && file.ast.reference_declaration(identifier.span) == Some(name.span)
@@ -1310,6 +1573,19 @@ impl LocalAccessContext<'_, '_> {
             let direct = timing_proven && execution.reports_untracked_read();
             if !direct {
                 unproven_use = true;
+                // The call's own role reports, but its timing is unproven; or
+                // it is in another named local function, which runs where
+                // nothing here follows.
+                if execution.reports_untracked_read()
+                    || (!non_strict_role
+                        && caller.is_some_and(|caller| {
+                            caller.span != helper.span
+                                && function_binding_name(file, caller).is_some()
+                                && !component
+                        }))
+                {
+                    nested_in_named = true;
+                }
                 continue;
             }
             let mut attributed = read.clone();
@@ -1342,7 +1618,7 @@ impl LocalAccessContext<'_, '_> {
             if counts {
                 result.strict_read_obligations += 1;
             }
-        } else if retained_in_layer {
+        } else if retained_in_layer || nested_in_named {
             // The helper may run in the render window through the reference
             // that keeps it: not proven, not silent.
             let mut retained = read;
@@ -1424,6 +1700,43 @@ impl LocalAccessContext<'_, '_> {
         };
         if inside_known_value_function_argument(file, call.callee, self.lookup) {
             return;
+        }
+        if let Some((declaration, property)) = self.exact_props_callee(file, call.callee) {
+            if self.discover_props_call(file, call, &declaration, &property, allowed, result) {
+                return;
+            }
+        } else if !self.setters.contains_key(symbol)
+            && !self.actions.contains_key(symbol)
+            && !self.accessors.contains_key(symbol)
+            // A standard-library method (`props.label.trim()`) runs no
+            // setter, action or read.
+            && self
+                .lookup
+                .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                .is_none()
+            && self.handed_member_callee(file, call.callee)
+        {
+            let execution = semantic_execution_role(
+                file,
+                call.callee,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            );
+            // Its type proves it a Solid accessor, signal or store: it may
+            // read, never write or act.
+            let read_only = self.typed_sources.contains_key(symbol)
+                || self.declared_read_type(file, call.callee);
+            self.push_owned_dispatch_obligation_for(
+                file,
+                call,
+                allowed,
+                execution,
+                UNRESOLVED_HANDED_MEMBER,
+                !read_only,
+                result,
+            );
         }
         let inside_function = file.ast.any_function_body_containing(call.span);
         if inside_function && self.setters.contains_key(symbol) {
@@ -1549,6 +1862,464 @@ impl LocalAccessContext<'_, '_> {
                 .dispatch_obligations
                 .push(typed_source_obligation(file, call.callee));
         }
+        self.push_setter_write(
+            file,
+            call,
+            symbol,
+            allowed,
+            alias_withheld,
+            multiplicity,
+            result,
+        );
+        self.push_action_invocation(
+            file,
+            call,
+            symbol,
+            allowed,
+            alias_withheld,
+            multiplicity,
+            result,
+        );
+    }
+
+    /// ADR 0509: the props declaration and prop name of a callee that is a
+    /// prop of a component's exact props parameter: `props.name` on the
+    /// current, unaliased parameter (the identity `discover_member`'s exact
+    /// root requires), or a binding of the parameter's object pattern
+    /// (`function C({ name })`).
+    fn exact_props_callee(
+        &self,
+        file: &solid_facts::FileFacts,
+        callee: solid_facts::core::Span,
+    ) -> Option<(Location, String)> {
+        let callee = file.ast.peel_ts_sugar_span(callee);
+        if let Some(member) = file.ast.member_at(callee) {
+            if file
+                .ast
+                .computed_members
+                .binary_search(&member.span)
+                .is_ok()
+                || file
+                    .ast
+                    .optional_members
+                    .binary_search(&member.span)
+                    .is_ok()
+            {
+                return None;
+            }
+            let object = file.ast.peel_ts_sugar_span(member.object);
+            if !file.ast.identifiers.iter().any(|identifier| {
+                identifier.span == object
+                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            }) {
+                return None;
+            }
+            let root = self.entities.get(&location(file.path.shared(), object))?;
+            if self.source_kinds.get(root) == Some(&ReactiveSourceKind::Store) {
+                return None;
+            }
+            let (_, declaration) = self.prop_sources.get(root)?;
+            let exact = self.entities.get(declaration) == Some(root)
+                && props_root_is_current(file, declaration, root, self.entities, self.lookup)
+                && props_root_attachments_are_views(
+                    file,
+                    self.prop_sources,
+                    declaration,
+                    root,
+                    self.entities,
+                    self.lookup,
+                );
+            if !exact {
+                return None;
+            }
+            let name = file.source_text(member.property)?.to_owned();
+            return Some((declaration.clone(), name));
+        }
+        // A destructured props parameter: the classification is addressed by
+        // the parameter's pattern.
+        let declaration = file.ast.reference_declaration(callee)?;
+        let function = containing_ast_function(&file.ast, callee)?;
+        let mut owner = Some(function);
+        while let Some(function) = owner {
+            if let Some(parameter) = function.parameters.first()
+                && parameter.shape == solid_facts::ast::BindingShape::Object
+                && let Some(slot) = parameter
+                    .object_slots
+                    .iter()
+                    .find(|slot| slot.local.span == declaration)
+            {
+                if crate::indexes::binding_written(file, declaration) {
+                    return None;
+                }
+                let pattern = location(file.path.shared(), parameter.pattern);
+                return self
+                    .props_reactivity
+                    .for_declaration(&pattern)
+                    .is_some()
+                    .then(|| (pattern, slot.property.to_string()));
+            }
+            owner = file
+                .ast
+                .functions
+                .iter()
+                .filter(|outer| outer.span != function.span && outer.span.contains(function.span))
+                .min_by_key(|outer| outer.span.end - outer.span.start);
+        }
+        None
+    }
+
+    /// ADR 0509: a call of a prop's value, `props.name(…)`. Each exact source
+    /// a visible call site passes for the prop (a primitive's setter, action
+    /// or accessor) is called at that site's render: the call writes, acts or
+    /// reads with that source's row. Where some call site passes anything
+    /// else, or the component is not enumerated, the call is an obligation
+    /// wherever it would report a write or a read. Returns whether the call
+    /// is decided here.
+    fn discover_props_call(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        declaration: &Location,
+        property: &str,
+        allowed: &[solid_facts::core::Span],
+        result: &mut LocalAccessResult,
+    ) -> bool {
+        let (sources, complete) = self.props_reactivity.passed_sources(declaration, property);
+        if complete && sources.is_empty() {
+            // Every caller passes nothing for it, or a non-source value
+            // `passed` classified: not decided here.
+            return false;
+        }
+        let callee = location(file.path.shared(), call.callee);
+        let alias_withheld = self.lookup.local_alias_mention_withheld(file, call.callee);
+        let execution = if alias_withheld {
+            ExecutionRole::Unknown
+        } else {
+            semantic_execution_role(
+                file,
+                call.callee,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            )
+        };
+        // As `discover_call`: a write or an action needs a reached call; an
+        // accessor read is also placed by its own role.
+        let reached = self.reachable_calls.get(&callee).copied();
+        let read_multiplicity = reached.or_else(|| {
+            (execution == ExecutionRole::EffectApply
+                || control_flow_execution_role(
+                    file,
+                    call.callee,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup.dialect,
+                )
+                .is_some()
+                || named_callback_execution_role(file, call.callee, self.lookup).is_some()
+                || enclosing_render_function(file, call.callee, self.lookup))
+            .then_some(1)
+        });
+        // As `discover_call`: a read in a non-component function is placed
+        // by the summaries of its callers, which a prop's value has none of:
+        // there the read is an obligation.
+        let placed = self.props_call_placed(file, call);
+        let mut unplaced_read = false;
+        for source in &sources {
+            if let Some(accessor) = self.accessors.get(source.as_str())
+                && read_multiplicity.is_some()
+            {
+                if placed {
+                    self.push_accessor_read(
+                        file,
+                        call,
+                        source.as_str(),
+                        accessor,
+                        execution,
+                        result,
+                    );
+                } else {
+                    unplaced_read = true;
+                }
+            }
+        }
+        if let Some(multiplicity) = reached.filter(|_| placed) {
+            for source in &sources {
+                self.push_setter_write(
+                    file,
+                    call,
+                    source.as_str(),
+                    allowed,
+                    alias_withheld,
+                    multiplicity,
+                    result,
+                );
+                self.push_action_invocation(
+                    file,
+                    call,
+                    source.as_str(),
+                    allowed,
+                    alias_withheld,
+                    multiplicity,
+                    result,
+                );
+            }
+        }
+        if !complete || unplaced_read || (!placed && !sources.is_empty()) {
+            self.push_owned_dispatch_obligation(
+                file,
+                call,
+                allowed,
+                execution,
+                "closed-parameter-member-dispatch",
+                result,
+            );
+        }
+        true
+    }
+
+    /// ADR 0509: whether a call of a prop's value is placed where its roles
+    /// alone decide it: written directly in the component's body, or directly
+    /// in a function literal a dialect primitive's call receives (an effect's
+    /// compute or apply, a memo). Anywhere deeper (a closure, a guard, an
+    /// IIFE) its run is its callers', which nothing follows for a prop.
+    fn props_call_placed(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        let Some(function) = containing_ast_function(&file.ast, call.span) else {
+            return false;
+        };
+        if self.lookup.function_is_component(file, function) {
+            return true;
+        }
+        file.ast
+            .arguments_containing(function.span)
+            .any(|(outer, index)| {
+                !outer.arguments[index].spread
+                    && file.ast.peel_ts_sugar_span(outer.arguments[index].span) == function.span
+                    && self.lookup.primitive_at_call(file, outer.span).is_some()
+                    && containing_ast_function(&file.ast, outer.span)
+                        .is_some_and(|owner| self.lookup.function_is_component(file, owner))
+            })
+    }
+
+    /// An obligation at a call whose callee may be a setter, an action or an
+    /// accessor this cannot see, where the call's role would report a write,
+    /// an action or an untracked read.
+    fn push_owned_dispatch_obligation(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        allowed: &[solid_facts::core::Span],
+        execution: ExecutionRole,
+        context: &str,
+        result: &mut LocalAccessResult,
+    ) {
+        self.push_owned_dispatch_obligation_for(
+            file, call, allowed, execution, context, true, result,
+        );
+    }
+
+    /// [`Self::push_owned_dispatch_obligation`], where `may_write` says
+    /// whether the callee may be a setter or an action at all.
+    #[allow(clippy::too_many_arguments)]
+    fn push_owned_dispatch_obligation_for(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        allowed: &[solid_facts::core::Span],
+        execution: ExecutionRole,
+        context: &str,
+        may_write_or_act: bool,
+        result: &mut LocalAccessResult,
+    ) {
+        let write = semantic_write_execution_role(
+            file,
+            call.callee,
+            allowed,
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+            RootBodyGuard::Rejects,
+        );
+        // A write or an action call, with or without arguments (an action is
+        // usually called with none): in tracked JSX too, where a read is
+        // legal, this call may be either.
+        // A function every reference of which is an event handler runs only
+        // as one, outside any owned scope (the read path's proof).
+        if containing_ast_function(&file.ast, call.span)
+            .is_some_and(|function| self.exclusive_event_caller(file, function))
+        {
+            return;
+        }
+        let may_write =
+            may_write_or_act && (write.reports_disallowed_write() || write.reports_unplaced());
+        if may_write
+            || execution.reports_untracked_read()
+            || self.may_run_in_leaf_owner(file, call.callee)
+        {
+            result.dispatch_obligations.push(crate::StaticDefect {
+                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: file
+                        .source_text(call.callee)
+                        .unwrap_or("this callee")
+                        .to_owned(),
+                    member: None,
+                },
+                location: location(file.path.shared(), call.callee),
+                analysis_context: if context == UNRESOLVED_HANDED_MEMBER && !may_write {
+                    UNRESOLVED_HANDED_READ.to_owned()
+                } else {
+                    context.to_owned()
+                },
+                fixes: vec![],
+                uncertain: true,
+            });
+        }
+    }
+
+    /// Whether `span` is inside a leaf owner's callback (`onSettled`,
+    /// `createTrackedEffect`), where a pending async read is forbidden, or in
+    /// a named local function a reference inside one names.
+    fn may_run_in_leaf_owner(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: solid_facts::core::Span,
+    ) -> bool {
+        self.may_run_in_leaf_owner_within(file, span, 3)
+    }
+
+    fn may_run_in_leaf_owner_within(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: solid_facts::core::Span,
+        depth: usize,
+    ) -> bool {
+        if containing_leaf_owner(file, span, self.entities, self.symbol_names, self.lookup)
+            .is_some()
+            || file.ast.functions.iter().any(|leaf| {
+                leaf.span.contains(span)
+                    && containing_leaf_owner(
+                        file,
+                        leaf.span,
+                        self.entities,
+                        self.symbol_names,
+                        self.lookup,
+                    )
+                    .is_some()
+            })
+        {
+            return true;
+        }
+        if depth == 0 {
+            return false;
+        }
+        let Some(function) = containing_ast_function(&file.ast, span) else {
+            return false;
+        };
+        let Some(name) = function_binding_name(file, function) else {
+            return false;
+        };
+        file.ast.identifiers.iter().any(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && file.ast.reference_declaration(identifier.span) == Some(name.span)
+                && self.may_run_in_leaf_owner_within(file, identifier.span, depth - 1)
+        })
+    }
+
+    /// Whether the callee, or the binding it names, is typed as a Solid
+    /// accessor, signal or store (ADR 0294's type roles): a read, never a
+    /// setter or an action.
+    fn declared_read_type(
+        &self,
+        file: &solid_facts::FileFacts,
+        callee: solid_facts::core::Span,
+    ) -> bool {
+        let read_role = |span| {
+            self.lookup
+                .smallest_contained_descriptor(file.path.as_str(), span)
+                .is_some_and(|descriptor| {
+                    descriptor.alias_declarations.iter().any(|declaration| {
+                        matches!(
+                            crate::symbols::descriptor_type_role(
+                                self.lookup.dialect,
+                                descriptor,
+                                declaration
+                            ),
+                            Some(
+                                solid_dialect::TypeRole::Accessor
+                                    | solid_dialect::TypeRole::Signal
+                                    | solid_dialect::TypeRole::Store
+                            )
+                        )
+                    })
+                })
+        };
+        let callee = file.ast.peel_ts_sugar_span(callee);
+        read_role(callee)
+            || file
+                .ast
+                .reference_declaration(callee)
+                .is_some_and(read_role)
+    }
+
+    /// ADR 0509: a callee whose value a caller supplied: a member of, an
+    /// alias of, or a slot destructured from a `useContext` result, a project
+    /// function's result (a hook's), or a props object (a view of one too),
+    /// through at most a few such steps. It may hold a setter, action or
+    /// accessor this cannot see ([`UNRESOLVED_HANDED_MEMBER`]). Accessor
+    /// transport may still resolve it; the obligation is dropped where it
+    /// does (`reactive_analysis`).
+    fn handed_member_callee(
+        &self,
+        file: &solid_facts::FileFacts,
+        callee: solid_facts::core::Span,
+    ) -> bool {
+        // At most one member step from the value a caller supplied
+        // (`ctx.save()`, not `props.label.trim()`).
+        let peeled = file.ast.peel_ts_sugar_span(callee);
+        if let Some(member) = file.ast.member_at(peeled)
+            && file
+                .ast
+                .member_at(file.ast.peel_ts_sugar_span(member.object))
+                .is_some()
+        {
+            return false;
+        }
+        handed_value(
+            &HandedTables {
+                lookup: self.lookup,
+                entities: self.entities,
+                prop_sources: self.prop_sources,
+                source_kinds: self.source_kinds,
+                accessors: self.accessors,
+                setters: self.setters,
+                actions: self.actions,
+                props_reactivity: self.props_reactivity,
+            },
+            file,
+            callee,
+            HANDED_DEPTH,
+        )
+    }
+
+    /// The write a call of the setter whose row is `symbol`'s makes: the
+    /// callee's own row, or the row of the setter accessor transport carried
+    /// to it ([`Self::transported_writes`]).
+    #[allow(clippy::too_many_arguments)]
+    fn push_setter_write(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        symbol: &str,
+        allowed: &[solid_facts::core::Span],
+        alias_withheld: bool,
+        multiplicity: usize,
+        result: &mut LocalAccessResult,
+    ) {
         if let Some((name, declaration, owned_write, source_kind)) = self.setters.get(symbol) {
             // Under a root owner `setSignal`'s guard throws on every
             // release; a store setter's only where the resolved signals
@@ -1580,34 +2351,40 @@ impl LocalAccessContext<'_, '_> {
             // owned-scope guard (rc.0), a store setter is reported only when
             // it is proven to be `createStore`'s, whose writes do reach the
             // guard. An optimistic-store setter is legal in every owned
-            // scope, and a store setter found only by its type could be
-            // either, so both take the role that reports nothing, as an
-            // exempted root-body write does: the second is a miss, never a
-            // violation the runtime does not raise.
+            // scope, so it takes the role that reports nothing, as an
+            // exempted root-body write does. A store setter found only by
+            // its type could be either: the write is unplaced, an
+            // obligation, never a silent clean.
+            let primitive = self
+                .source_primitives
+                .get(symbol)
+                .and_then(|primitive| self.lookup.dialect.primitive(primitive));
             if write_execution.reports_disallowed_write()
                 && *source_kind == ReactiveSourceKind::Store
                 && !self.lookup.dialect.optimistic_store_setter_guarded()
-                && self
-                    .source_primitives
-                    .get(symbol)
-                    .and_then(|primitive| self.lookup.dialect.primitive(primitive))
-                    != Some(solid_dialect::Primitive::CreateStore)
+                && primitive != Some(solid_dialect::Primitive::CreateStore)
             {
-                write_execution = ExecutionRole::UntrackedCallback;
+                write_execution =
+                    if primitive == Some(solid_dialect::Primitive::CreateOptimisticStore) {
+                        ExecutionRole::UntrackedCallback
+                    } else {
+                        ExecutionRole::Unknown
+                    };
             }
             // The same for a signal setter where `createOptimistic`'s setter
             // meets no owned-scope guard (rc.17's `optimisticWrite`): only a
-            // setter proven to be `createSignal`'s is reported.
+            // setter proven to be `createSignal`'s is reported, and one of
+            // unknown source is an obligation.
             if write_execution.reports_disallowed_write()
                 && *source_kind == ReactiveSourceKind::Accessor
                 && !self.lookup.dialect.optimistic_signal_setter_guarded()
-                && self
-                    .source_primitives
-                    .get(symbol)
-                    .and_then(|primitive| self.lookup.dialect.primitive(primitive))
-                    != Some(solid_dialect::Primitive::CreateSignal)
+                && primitive != Some(solid_dialect::Primitive::CreateSignal)
             {
-                write_execution = ExecutionRole::UntrackedCallback;
+                write_execution = if primitive == Some(solid_dialect::Primitive::CreateOptimistic) {
+                    ExecutionRole::UntrackedCallback
+                } else {
+                    ExecutionRole::Unknown
+                };
             }
             for _ in 0..multiplicity {
                 result.writes.push(Arc::new(ReactiveWrite {
@@ -1630,6 +2407,21 @@ impl LocalAccessContext<'_, '_> {
                 }));
             }
         }
+    }
+
+    /// The action invocation a call of the action whose row is `symbol`'s
+    /// makes ([`Self::push_setter_write`]).
+    #[allow(clippy::too_many_arguments)]
+    fn push_action_invocation(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        symbol: &str,
+        allowed: &[solid_facts::core::Span],
+        alias_withheld: bool,
+        multiplicity: usize,
+        result: &mut LocalAccessResult,
+    ) {
         if let Some((name, declaration)) = self.actions.get(symbol) {
             // An action call's guard has no root exemption on any release:
             // it throws `ACTION_CALLED_IN_OWNED_SCOPE` directly in a
@@ -1668,6 +2460,142 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
+    /// Calls whose callee accessor transport resolves to a setter or an
+    /// action a primitive created ([`Callable::Setter`], [`Callable::Action`]):
+    /// a hook's returned tuple or object, a context value. The call writes or
+    /// acts as a call of the source's own binding does, at the call site's
+    /// role, with the source's row (its primitive and options). Its callee
+    /// has no row of its own, or only the one its type gave it (ADR 0294),
+    /// which the exact source replaces: the caller drops the call's other
+    /// writes ([`LocalAccessResult::writes`] at the same location).
+    ///
+    /// [`Callable::Setter`]: crate::interproc::accessor_provenance::Callable::Setter
+    /// [`Callable::Action`]: crate::interproc::accessor_provenance::Callable::Action
+    pub(crate) fn transported_writes(
+        &self,
+        targets: &HashMap<Location, crate::interproc::accessor_provenance::Callable>,
+        reads: &HashMap<Location, crate::interproc::accessor_provenance::Callable>,
+    ) -> LocalAccessResult {
+        use crate::interproc::accessor_provenance::Callable;
+        let mut sites = targets
+            .iter()
+            .filter_map(|(callee, target)| match target {
+                Callable::Setter(symbol) | Callable::Action(symbol) => Some((callee, symbol)),
+                _ => None,
+            })
+            .chain(reads.iter().filter_map(|(callee, target)| match target {
+                // The read row is the summaries'; the async read is made here.
+                Callable::Accessor(symbol) if self.async_sources.contains(symbol.as_str()) => {
+                    Some((callee, symbol))
+                }
+                _ => None,
+            }))
+            .collect::<Vec<_>>();
+        sites.sort_by(|(left, _), (right, _)| {
+            (left.path.as_ref(), left.start_byte, left.end_byte).cmp(&(
+                right.path.as_ref(),
+                right.start_byte,
+                right.end_byte,
+            ))
+        });
+        let mut result = LocalAccessResult::default();
+        for (callee, symbol) in sites {
+            let Some(file) = self.lookup.file_by_path(callee.path.as_ref()) else {
+                continue;
+            };
+            let Some(call) = file
+                .ast
+                .calls
+                .iter()
+                .find(|call| location(file.path.shared(), call.callee) == *callee)
+            else {
+                continue;
+            };
+            if inside_known_value_function_argument(file, call.callee, self.lookup) {
+                continue;
+            }
+            if let Some(accessor) = self.accessors.get(symbol.as_str())
+                && self.async_sources.contains(symbol.as_str())
+                && !self.setters.contains_key(symbol.as_str())
+            {
+                let allowed = allowed_callback_spans(file, self.lookup);
+                let execution = if self.lookup.local_alias_mention_withheld(file, call.callee) {
+                    ExecutionRole::Unknown
+                } else {
+                    semantic_execution_role(
+                        file,
+                        call.callee,
+                        &allowed,
+                        self.entities,
+                        self.symbol_names,
+                        self.lookup,
+                    )
+                };
+                // As `discover_call`: a read in a non-component function is
+                // placed by its callers, so only an obligation here.
+                if !inside_non_component_function(file, call.callee, self.lookup)
+                    || named_callback_execution_role(file, call.callee, self.lookup).is_some()
+                {
+                    self.push_async_read(
+                        file,
+                        call,
+                        symbol.as_str(),
+                        accessor,
+                        execution,
+                        &mut result,
+                    );
+                } else {
+                    self.push_owned_dispatch_obligation(
+                        file,
+                        call,
+                        &allowed,
+                        execution,
+                        UNRESOLVED_HANDED_MEMBER,
+                        &mut result,
+                    );
+                }
+                continue;
+            }
+            if file.ast.any_function_body_containing(call.span) {
+                let kind = if self.setters.contains_key(symbol.as_str()) {
+                    "write"
+                } else {
+                    "action"
+                };
+                result.write_action_obligations.insert((
+                    kind,
+                    callee.path.to_string(),
+                    callee.start_byte,
+                    callee.end_byte,
+                ));
+            }
+            let Some(multiplicity) = self.reachable_calls.get(callee).copied() else {
+                continue;
+            };
+            let allowed = allowed_callback_spans(file, self.lookup);
+            let alias_withheld = self.lookup.local_alias_mention_withheld(file, call.callee);
+            self.push_setter_write(
+                file,
+                call,
+                symbol.as_str(),
+                &allowed,
+                alias_withheld,
+                multiplicity,
+                &mut result,
+            );
+            self.push_action_invocation(
+                file,
+                call,
+                symbol.as_str(),
+                &allowed,
+                alias_withheld,
+                multiplicity,
+                &mut result,
+            );
+        }
+        result
+    }
+
     /// ADR 0462: an async source read written directly in a named local
     /// function (`const wrapUse = () => { a1(); }`) is rendered where a call
     /// of that function sits in rendered JSX, through at most
@@ -1692,9 +2620,11 @@ impl LocalAccessContext<'_, '_> {
         // The flag: the read runs on every completion of each function from
         // its own to the current call's (ADR 0504 review: a guard in a
         // called closure skips it on the apply's first run).
-        let mut sites = vec![(read.span, 0_usize, true)];
+        // The second flag (ADR 0510): no call of each function's own body is
+        // written before the site, so nothing there throws first.
+        let mut sites = vec![(read.span, 0_usize, true, true)];
         let mut visited = HashSet::<solid_facts::core::Span>::default();
-        while let Some((site, depth, every)) = sites.pop() {
+        while let Some((site, depth, every, first)) = sites.pop() {
             let Some(function) = containing_ast_function(&file.ast, site) else {
                 continue;
             };
@@ -1713,6 +2643,13 @@ impl LocalAccessContext<'_, '_> {
                     function.span,
                     site,
                 );
+            let first = first
+                && !file.ast.calls.iter().any(|other| {
+                    function.body.contains(other.span)
+                        && other.span.end <= site.start
+                        && containing_ast_function(&file.ast, other.span)
+                            .is_some_and(|owner| owner.span == function.span)
+                });
             let Some(binding) = function_binding_name(file, function) else {
                 continue;
             };
@@ -1781,6 +2718,7 @@ impl LocalAccessContext<'_, '_> {
                 // ADR 0504: a call in an effect apply whose first run is
                 // proven to meet the source pending reads it there.
                 if every
+                    && first
                     && !options.declared_loading
                     && !options.opaque
                     && let Some(apply) = crate::execution_role::pending_apply_first_read(
@@ -1823,7 +2761,7 @@ impl LocalAccessContext<'_, '_> {
                 if execution != ExecutionRole::TrackedJsx && !unsuspendable {
                     // The call may itself sit in a named local function a
                     // rendered call runs.
-                    sites.push((call.span, depth + 1, every));
+                    sites.push((call.span, depth + 1, every, first));
                     continue;
                 }
                 let call_location = location(file.path.shared(), call.span);
@@ -1908,6 +2846,23 @@ impl LocalAccessContext<'_, '_> {
         if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
             result.strict_read_obligations += 1;
         }
+        self.push_async_read(file, call, symbol, accessor, execution, result);
+    }
+
+    /// The pending-async half of [`Self::push_accessor_read`]: the async read
+    /// a call of an async source makes. A read accessor transport carries
+    /// (`ctx.data()`, ADR 0509) has its read row from the interprocedural
+    /// summaries, and only this half here.
+    fn push_async_read(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        symbol: &str,
+        accessor: &(SymbolId, Location),
+        execution: ExecutionRole,
+        result: &mut LocalAccessResult,
+    ) {
+        let (name, declaration) = accessor;
         let async_provenance = self.async_sources.contains(symbol);
         let async_options = self.effective_async_options(symbol);
         if (async_provenance
@@ -2258,6 +3213,42 @@ impl LocalAccessContext<'_, '_> {
                 PropUse::Static => return,
                 PropUse::Reactive => {}
                 PropUse::Unknown => uncertain = true,
+            }
+            // ADR 0509: the getter a caller passed reads an async source, so
+            // this read may read it pending: the strict read is not proven
+            // (rc.17 may throw the pending read first), and outside tracked
+            // JSX the pending read is an obligation.
+            if exact_root
+                && backing == PropUse::Reactive
+                && property.is_some_and(|property| {
+                    self.props_reactivity
+                        .async_getter(prop_declaration, property)
+                })
+            {
+                uncertain = true;
+            }
+            if exact_root
+                && backing == PropUse::Reactive
+                && (execution != ExecutionRole::TrackedJsx
+                    || self.may_run_in_leaf_owner(file, member.span))
+                && property.is_some_and(|property| {
+                    self.props_reactivity
+                        .async_getter(prop_declaration, property)
+                })
+            {
+                result.dispatch_obligations.push(crate::StaticDefect {
+                    kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                        callee: file
+                            .source_text(member.span)
+                            .unwrap_or("this prop")
+                            .to_owned(),
+                        member: None,
+                    },
+                    location: location(file.path.shared(), member.span),
+                    analysis_context: "async-prop-getter".to_owned(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
             }
         }
         // ADR 0293: the store's strict-read warning is its head Get's.

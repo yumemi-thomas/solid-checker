@@ -22,6 +22,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
+      "start": 1542,
+      "end": 1553,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
@@ -49,6 +59,16 @@
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
       "start": 1940,
       "end": 1966,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
+      "start": 2885,
+      "end": 2899,
       "fixes": 0
     },
     {

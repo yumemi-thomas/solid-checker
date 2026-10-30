@@ -102,6 +102,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 489,
+      "end": 492,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -129,6 +139,16 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 961,
       "end": 968,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 1110,
+      "end": 1113,
       "fixes": 0
     },
     {
@@ -179,6 +199,16 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 2687,
       "end": 2694,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 2721,
+      "end": 2731,
       "fixes": 0
     },
     {
@@ -272,6 +302,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 4580,
+      "end": 4587,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -289,6 +329,16 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 4782,
       "end": 4790,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 4895,
+      "end": 4903,
       "fixes": 0
     },
     {
@@ -392,6 +442,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 6638,
+      "end": 6641,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -399,6 +459,26 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 6815,
       "end": 6822,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 6909,
+      "end": 6912,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 7335,
+      "end": 7341,
       "fixes": 0
     },
     {

@@ -12,6 +12,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 1349,
+      "end": 1355,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -19,6 +29,16 @@
       "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
       "start": 1999,
       "end": 2007,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 2038,
+      "end": 2045,
       "fixes": 0
     },
     {

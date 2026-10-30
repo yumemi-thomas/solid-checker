@@ -297,6 +297,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 1217,
+      "end": 1231,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
       "start": 1495,
       "end": 1605,
       "fixes": 0
@@ -304,6 +314,16 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 1528,
+      "end": 1542,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
@@ -337,6 +357,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 1723,
+      "end": 1737,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 1949,
+      "end": 1963,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
       "start": 1949,
       "end": 1963,
       "fixes": 0
@@ -349,6 +389,16 @@
       "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
       "start": 2103,
       "end": 2117,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 2121,
+      "end": 2123,
       "fixes": 0
     },
     {
@@ -382,8 +432,28 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 2888,
+      "end": 2890,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 3091,
+      "end": 3101,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",

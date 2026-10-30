@@ -1123,21 +1123,29 @@ fn no_direct_mutation(
         // expression shape entity facts may skip (see the field doc on
         // `source_reference_index`).
         let root = member_root(file, assignment.target).unwrap_or(assignment.target);
-        let Some(symbol) = source_symbol_at(context, file, root) else {
+        let Some(symbol) = source_symbol_at(context, file, root).filter(|symbol| {
+            context.accessors.contains_key(*symbol)
+                || context.prop_sources.contains_key(*symbol)
+                || typed_store_name(context, symbol).is_some()
+        }) else {
+            if root != assignment.target {
+                push_unproven_container_write(file, context, assignment.target, root, defects);
+            }
             continue;
         };
         // `prop_sources` proves the props container, not the mutability of
         // values supplied through it. Store sources have their own proof.
-        let (name, _) = match context.accessors.get(symbol) {
-            Some(source) => source,
-            None => {
-                let Some(source) = context.prop_sources.get(symbol) else {
+        let typed_store = typed_store_name(context, symbol);
+        let name = match (context.accessors.get(symbol), typed_store) {
+            (Some((name, _)), _) | (None, Some(name)) => name,
+            (None, None) => {
+                let Some((name, _)) = context.prop_sources.get(symbol) else {
                     continue;
                 };
-                source
+                name
             }
         };
-        let props = !context.accessors.contains_key(symbol);
+        let props = !context.accessors.contains_key(symbol) && typed_store.is_none();
         // `const { program } = props` binds the *value* of one property, not
         // the props container: `program.x = y` writes to whatever object the
         // caller passed (a plain mutable one as often as not), so it is not a
@@ -1158,7 +1166,11 @@ fn no_direct_mutation(
         }
         let name = name.as_str();
         let through_member = root != assignment.target;
-        let kind = context.source_kinds.get(symbol).copied();
+        let kind = context
+            .source_kinds
+            .get(symbol)
+            .copied()
+            .or(typed_store.map(|_| ReactiveSourceKind::Store));
         // A member chain rooted at a *call* writes to whatever that call
         // returned, and this rule's claim -- the write is dropped because
         // Solid handed out a readonly proxy -- is a claim about the reactive
@@ -1224,6 +1236,8 @@ fn no_direct_mutation(
                             == file.ast.peel_ts_sugar_span(root)
                     }))
         {
+            // ADR 0509: the caller may have passed a store for the prop.
+            push_unproven_container_write(file, context, assignment.target, root, defects);
             continue;
         }
         // A member written on an accessor function (`memo.a = 1`) is not a
@@ -1286,9 +1300,215 @@ fn no_direct_mutation(
             // `-writeomit`, `review-r1-alias-mutation`). Only a getter-backed
             // prop rejects it (a TypeError), and which props are getters is
             // not proven here, so the claim stays an obligation.
-            uncertain: props || past_root || standing == WriteStanding::Unproven,
+            uncertain: props
+                || typed_store.is_some()
+                || past_root
+                || standing == WriteStanding::Unproven,
         });
     }
+}
+
+/// ADR 0509: a write, mutator call or delete at `site` through a member chain
+/// whose root may hold a store the rule cannot see, because its value came
+/// from a caller: a props parameter written past its own property
+/// (`props.s.v = 1`), a binding of a destructured props parameter, a
+/// `useContext` result, or a project function's result (a hook), or a slot
+/// destructured from either. The store, if it is one, is out of view, so the
+/// write is an obligation, never a violation and never silent.
+fn push_unproven_container_write(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    site: Span,
+    root: Span,
+    defects: &mut Vec<StaticDefect>,
+) {
+    // `member_root` stops at a wrapped link (`(props.state as T).count`):
+    // through the wrapper, the chain's own root.
+    let root = {
+        let peeled = file.ast.peel_ts_sugar_span(root);
+        member_root(file, peeled).map_or(peeled, |inner| file.ast.peel_ts_sugar_span(inner))
+    };
+    if !bare_root(file, root) || !handed_container(file, context, root, 6) {
+        return;
+    }
+    // Every enumerated caller passes the prop a static value (a plain
+    // binding, never a store, which pass 10 classifies reactive): the write
+    // lands on a plain object, and stays this rule's silence.
+    if let Some(member) = file.ast.members.iter().find(|member| {
+        file.ast.peel_ts_sugar_span(member.object) == root && site.contains(member.span)
+    }) && let Some(symbol) = source_symbol_at(context, file, root)
+        && let Some((_, declaration)) = context.prop_sources.get(symbol)
+        && let Some(name) = file.source_text(member.property)
+        && context.props_reactivity.prop_use(declaration, name)
+            == crate::source_discovery::PropUse::Static
+    {
+        return;
+    }
+    defects.push(StaticDefect {
+        kind: StaticDefectKind::DirectMutation {
+            name: text(file, root).to_owned(),
+            target: DirectMutationTarget::Store,
+        },
+        location: location(file.path.shared(), site),
+        analysis_context: "unproven-container-root".to_owned(),
+        fixes: vec![],
+        uncertain: true,
+    });
+}
+
+/// Whether the value at `span` came from a caller ([`push_unproven_container_write`]):
+/// a props parameter or a slot of a destructured one, a `useContext` result,
+/// a project function's result, or a member, alias, destructured slot or
+/// local literal holding one.
+fn handed_container(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    span: Span,
+    depth: usize,
+) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    let span = file.ast.peel_ts_sugar_span(span);
+    if let Some(member) = file.ast.member_at(span) {
+        return file
+            .ast
+            .computed_members
+            .binary_search(&member.span)
+            .is_err()
+            && handed_container(file, context, member.object, depth - 1);
+    }
+    if let Some(literal) = file.ast.array_literal_at(span) {
+        return literal
+            .elements
+            .iter()
+            .any(|element| handed_container(file, context, element.span, depth - 1));
+    }
+    // A local object literal exactly at `span`: its own top-level values
+    // (an open literal, with a spread or a computed key, may hold anything).
+    if let Some(shape) = file
+        .ast
+        .object_get_shapes
+        .iter()
+        .find(|shape| shape.span == span)
+    {
+        if !shape.closed {
+            return true;
+        }
+        let own = |property: &&solid_facts::ast::ObjectPropertyFact| {
+            span.contains(property.span)
+                && !file.ast.object_properties.iter().any(|outer| {
+                    outer.span != property.span
+                        && span.contains(outer.span)
+                        && outer.span.contains(property.span)
+                })
+        };
+        return file
+            .ast
+            .object_properties
+            .iter()
+            .filter(own)
+            .any(|property| {
+                handed_container(
+                    file,
+                    context,
+                    property.shorthand_binding.unwrap_or(property.value),
+                    depth - 1,
+                )
+            });
+    }
+    if !file
+        .ast
+        .identifiers
+        .iter()
+        .any(|identifier| identifier.span == span)
+    {
+        return false;
+    }
+    if source_symbol_at(context, file, span)
+        .is_some_and(|symbol| context.prop_sources.contains_key(symbol))
+    {
+        return true;
+    }
+    let declaration = file.ast.reference_declaration(span).unwrap_or(span);
+    // An alias with no row of a proven store (`const s = imported`): the
+    // alias was not followed.
+    let store = |symbol: &str| context.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store);
+    if depth < 6
+        && (context.lookup.callee_symbol(file, span).is_some_and(store)
+            || context
+                .lookup
+                .callee_symbol(file, declaration)
+                .is_some_and(store))
+    {
+        return true;
+    }
+    let props_slot = file.ast.functions.iter().any(|function| {
+        function.parameters.first().is_some_and(|parameter| {
+            parameter.shape == solid_facts::ast::BindingShape::Object
+                && parameter
+                    .object_slots
+                    .iter()
+                    .any(|slot| slot.local.span == declaration)
+                && context
+                    .props_reactivity
+                    .for_declaration(&location(file.path.shared(), parameter.pattern))
+                    .is_some()
+        })
+    });
+    if props_slot {
+        return true;
+    }
+    let Some(binding) = file
+        .ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+    else {
+        return false;
+    };
+    if let Some(call) = binding
+        .call_initializer
+        .and_then(|initializer| file.ast.call_at(initializer))
+    {
+        if call.construct {
+            return false;
+        }
+        return match context.lookup.primitive_at_call(file, call.span) {
+            Some(primitive) => {
+                context
+                    .dialect
+                    .name_of(primitive)
+                    .and_then(|name| context.dialect.context_role(name))
+                    == Some(solid_dialect::ContextRole::Read)
+            }
+            None => context
+                .lookup
+                .function_called_at(file.path.as_str(), file.ast.peel_ts_sugar_span(call.callee))
+                .is_some(),
+        };
+    }
+    binding
+        .initializer
+        .is_some_and(|initializer| handed_container(file, context, initializer, depth - 1))
+}
+
+/// The display name of a store found by its type alone, whose implementation
+/// is not in view (ADR 0294): a write through it is an obligation, never a
+/// violation and never silent, because the type cannot say which store the
+/// value is (an optimistic or mutable one lands the write).
+fn typed_store_name<'a>(
+    context: &'a UpstreamCompatContext<'_>,
+    symbol: &crate::SymbolId,
+) -> Option<&'a crate::SymbolId> {
+    if context.accessors.contains_key(symbol) {
+        return None;
+    }
+    context
+        .typed_sources
+        .get(symbol)
+        .filter(|typed| typed.kind == ReactiveSourceKind::Store && !typed.implementation_visible)
+        .map(|typed| &typed.name)
 }
 
 /// A store write the rule is about to report: the whole write (an assignment
@@ -2694,13 +2914,21 @@ fn no_store_mutator_call(
         let Some(root) = member_root(file, callee) else {
             continue;
         };
-        let Some(symbol) = source_symbol_at(context, file, root) else {
-            continue;
-        };
-        if context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store) {
-            continue;
-        }
-        let Some((name, _)) = context.accessors.get(symbol) else {
+        let source = source_symbol_at(context, file, root);
+        let typed_store = source.and_then(|symbol| typed_store_name(context, symbol));
+        let proven = source.and_then(|symbol| {
+            context
+                .accessors
+                .get(symbol)
+                .filter(|_| context.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store))
+                .map(|(name, _)| name)
+                .or(typed_store)
+                .map(|name| (symbol, name))
+        });
+        let Some((symbol, name)) = proven else {
+            if source.is_none_or(|symbol| !context.accessors.contains_key(symbol)) {
+                push_unproven_container_write(file, context, call.span, root, defects);
+            }
             continue;
         };
         // A member chain rooted at a call writes to what the call returned
@@ -2740,7 +2968,7 @@ fn no_store_mutator_call(
             location: location(file.path.shared(), call.span),
             analysis_context: String::new(),
             fixes: vec![],
-            uncertain: past_root || standing == WriteStanding::Unproven,
+            uncertain: typed_store.is_some() || past_root || standing == WriteStanding::Unproven,
         });
     }
 }
@@ -2800,13 +3028,21 @@ fn no_store_delete(
         if !plain || link != root || !bare_root(file, root) {
             continue;
         }
-        let Some(symbol) = source_symbol_at(context, file, root) else {
-            continue;
-        };
-        if context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store) {
-            continue;
-        }
-        let Some((name, _)) = context.accessors.get(symbol) else {
+        let source = source_symbol_at(context, file, root);
+        let typed_store = source.and_then(|symbol| typed_store_name(context, symbol));
+        let proven = source.and_then(|symbol| {
+            context
+                .accessors
+                .get(symbol)
+                .filter(|_| context.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store))
+                .map(|(name, _)| name)
+                .or(typed_store)
+                .map(|name| (symbol, name))
+        });
+        let Some((symbol, name)) = proven else {
+            if source.is_none_or(|symbol| !context.accessors.contains_key(symbol)) {
+                push_unproven_container_write(file, context, member, root, defects);
+            }
             continue;
         };
         let standing = store_write_standing(
@@ -2839,7 +3075,7 @@ fn no_store_delete(
             location: location(file.path.shared(), member),
             analysis_context: String::new(),
             fixes: vec![],
-            uncertain: uncertain || standing == WriteStanding::Unproven,
+            uncertain: uncertain || typed_store.is_some() || standing == WriteStanding::Unproven,
         });
     }
 }

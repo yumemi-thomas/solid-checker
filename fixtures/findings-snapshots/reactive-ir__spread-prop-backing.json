@@ -82,6 +82,16 @@
       "fixes": 0
     },
     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/spread-prop-backing/App.tsx",
+      "start": 3022,
+      "end": 3033,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -89,6 +99,16 @@
       "path": "fixtures/reactive-ir/spread-prop-backing/App.tsx",
       "start": 3137,
       "end": 3148,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/spread-prop-backing/App.tsx",
+      "start": 3919,
+      "end": 3930,
       "fixes": 0
     },
     {

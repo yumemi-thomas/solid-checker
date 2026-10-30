@@ -5,7 +5,7 @@
 //! its cache slots, timing split, and the merge into `ProgramDraft`; the
 //! top-level pipeline only sequences the resulting stage.
 
-use crate::HashMap;
+use crate::{HashMap, HashSet};
 use std::time::Instant;
 
 use solid_facts::core::SourcePath;
@@ -210,9 +210,84 @@ pub(crate) fn collect_project<'facts>(
     // at the same byte suppressed one another, and which survived depended on
     // push order. `push_defect` therefore derives the identity from the defect
     // kind's family and never from the vector it arrived in.
+    // ADR 0509: a call transport resolves exactly drops the obligation its
+    // type alone, or its caller-supplied receiver, gave it.
+    // A transported async source keeps it: where its read runs (a leaf
+    // owner's callback, through helpers) is not the transported read's.
+    let resolved_calls = interprocedural
+        .source_call_targets
+        .iter()
+        .filter(|(_, target)| {
+            !matches!(
+                target,
+                crate::interproc::accessor_provenance::Callable::Accessor(symbol)
+                    if source.async_sources.contains(symbol)
+            )
+        })
+        .map(|(callee, _)| callee)
+        .chain(interprocedural.write_call_targets.keys())
+        .collect::<HashSet<_>>();
+    // A handed-member obligation is the last resort at its site: pushed after
+    // every other producer's, it yields to a cause already recorded there.
+    if std::env::var_os("SC_DBG").is_some() {
+        for (k, v) in interprocedural.source_call_targets.iter() {
+            eprintln!("DBG target {}:{} {:?}", k.path, k.start_byte, v);
+        }
+    }
+    let mut handed = Vec::new();
     for obligation in dispatch_obligations {
+        if obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_MEMBER
+            || obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_READ
+        {
+            if !resolved_calls.contains(&obligation.location) {
+                handed.push(obligation);
+            }
+            continue;
+        }
+        // The type-only obligation yields only to a write or an action
+        // transport now places; a transported read keeps it, as before.
+        if obligation.analysis_context == crate::TYPE_ONLY_SOURCE
+            && interprocedural
+                .write_call_targets
+                .contains_key(&obligation.location)
+        {
+            continue;
+        }
         draft.push_defect(obligation);
     }
+    // A call of a setter or action transport carried here (a hook's returned
+    // tuple or object, a context value) writes or acts with its source's row;
+    // the row its callee's type alone gave it is replaced.
+    let transported = local_access_context.transported_writes(
+        &interprocedural.write_call_targets,
+        &interprocedural.source_call_targets,
+    );
+    draft
+        .async_reads
+        .extend(transported.async_reads.iter().map(|read| (**read).clone()));
+    if !transported.writes.is_empty() || !transported.action_invocations.is_empty() {
+        let replaced = transported
+            .writes
+            .iter()
+            .map(|write| write.location.clone())
+            .collect::<HashSet<_>>();
+        draft
+            .writes
+            .retain(|write| !replaced.contains(&write.location));
+        draft
+            .writes
+            .extend(transported.writes.iter().map(|write| (**write).clone()));
+        draft.action_invocations.extend(
+            transported
+                .action_invocations
+                .iter()
+                .map(|action| (**action).clone()),
+        );
+    }
+    draft
+        .write_action_obligations
+        .extend(transported.write_action_obligations);
+    handed.extend(transported.dispatch_obligations);
     timings.absorb_interprocedural(&interprocedural.timings);
     draft.source_call_targets = interprocedural.source_call_targets.clone();
     draft.strict_read_obligations += interprocedural.reads.len();
@@ -255,6 +330,118 @@ pub(crate) fn collect_project<'facts>(
     for obligation in interprocedural.dispatch_obligations.iter() {
         draft.push_defect(obligation.clone());
     }
+    // A row any other producer placed over the call (a read, a write, an
+    // action) already speaks for it.
+    let covered = |obligation: &crate::StaticDefect| {
+        let at = &obligation.location;
+        let over = |location: &typefacts::Location| {
+            location.path == at.path
+                && location.start_byte <= at.start_byte
+                && at.end_byte <= location.end_byte
+        };
+        // Only a row whose role is reported speaks for the call; a read row
+        // only for an obligation raised for a possible read.
+        let read_only = obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_READ;
+        draft.reads.iter().any(|read| {
+            read_only
+                && over(&read.location)
+                && (read.execution.reports_untracked_read() || read.execution.reports_unplaced())
+        }) || draft.writes.iter().any(|write| {
+            over(&write.location)
+                && (write.execution.reports_disallowed_write()
+                    || write.execution.reports_unplaced())
+        }) || draft.action_invocations.iter().any(|action| {
+            over(&action.location)
+                && (action.execution.reports_disallowed_write()
+                    || action.execution.reports_unplaced())
+        })
+    };
+    let handed = handed
+        .into_iter()
+        .filter(|obligation| !covered(obligation))
+        .collect::<Vec<_>>();
+    for obligation in handed {
+        draft.push_defect(obligation);
+    }
+    // ADR 0509: a reported read of a proven async source with no async row
+    // (a transported read, a module source read in another file) may meet the
+    // source pending; give it the row the projection opens it with
+    // (`options_opaque`: nothing it projects is a proven violation).
+    let async_rows = draft
+        .async_reads
+        .iter()
+        .map(|read| read.location.clone())
+        .collect::<HashSet<_>>();
+    let synthesized = draft
+        .reads
+        .iter()
+        .filter(|read| {
+            (read.execution.reports_untracked_read() || read.execution.reports_unplaced())
+                && !async_rows.contains(&read.location)
+                // Local access decided the rows of a component's own source;
+                // these are the sources it could not see: transported, in
+                // another file, or at module scope, and a read a local
+                // function makes at its call (`wrapUse()`, ADR 0510) whose
+                // call it placed no row at.
+                && (read.transported
+                    || read.origin.is_some()
+                    || read.declaration.path != read.location.path
+                    || ctx
+                        .semantic_lookup
+                        .file_by_path(read.declaration.path.as_ref())
+                        .and_then(|file| {
+                            let start = u32::try_from(read.declaration.start_byte).ok()?;
+                            let end = u32::try_from(read.declaration.end_byte).ok()?;
+                            Some(crate::indexes::at_module_scope(
+                                &file.ast,
+                                solid_facts::core::Span::new(start, end),
+                            ))
+                        })
+                        .unwrap_or(false))
+                && ctx
+                    .entities
+                    .get(&read.declaration)
+                    .is_some_and(|symbol| source.async_sources.contains(symbol))
+                // A read inside a pending probe (`isPending(() => read())`)
+                // is the legal way to meet the source pending.
+                && !ctx
+                    .semantic_lookup
+                    .file_by_path(read.location.path.as_ref())
+                    .and_then(|file| {
+                        let start = u32::try_from(read.location.start_byte).ok()?;
+                        let end = u32::try_from(read.location.end_byte).ok()?;
+                        let call = file.ast.call_at(solid_facts::core::Span::new(start, end))?;
+                        Some(crate::execution_role::pending_accessor_probe(
+                            file,
+                            call.callee,
+                            ctx.semantic_lookup,
+                        ))
+                    })
+                    .unwrap_or(false)
+        })
+        .map(|read| crate::AsyncRead {
+            accessor: read.accessor.clone(),
+            location: read.location.clone(),
+            declaration: read.declaration.clone(),
+            execution: read.execution,
+            leaf_owner: None,
+            under_loading: false,
+            async_provenance: true,
+            declared_loading: false,
+            options_opaque: true,
+            ssr_client_hole: false,
+            server_rendering_unresolved: false,
+            host_callback_timing: read.host_callback_timing,
+            callee_callback_timing: read.callee_callback_timing,
+            invocation_context_unproven: false,
+            mount_unresolved: false,
+            call_attributed: false,
+            apply_first_run_pending: false,
+            pending_origin: None,
+            pending_apply: None,
+        })
+        .collect::<Vec<_>>();
+    draft.async_reads.extend(synthesized);
     static_rules::component_returns_conditionally(ctx, draft);
     // After every read, write and action table is merged: the rule's
     // negative proof is that none of them lies inside the predicate.

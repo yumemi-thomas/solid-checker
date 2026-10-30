@@ -364,10 +364,29 @@
    "presets": [],
    "enableRules": [],
    "expect": {
-    "findings": [],
-    "absent": [{ "rule": "no-store-mutation-outside-setter" }]
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": { "marker": "props.state.count", "occurrence": 1 },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": { "marker": "(props.state as { count: number }).count" },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     }
+    ],
+    "absent": []
    },
-   "note": "Solid 2 props container behavior is shallow. Its nested value can be a plain mutable object or an application-owned writable proxy; a root props fact does not prove a dropped nested write. This product-owned control follows the unchanged invoicer application whose proxy delegates writes to setStore. The existing positive store case still proves nested readonly store writes. Published typings accept these writes."
+   "note": "ADR 0509: both components are exported, so an unseen caller may pass a store for `state`, and a write past the props root is an internal obligation, never a violation and never silent (Wrapped through the cast too). Solid 2 props container behavior is shallow. Its nested value can be a plain mutable object or an application-owned writable proxy; a root props fact does not prove a dropped nested write. This product-owned control follows the unchanged invoicer application whose proxy delegates writes to setStore. The existing positive store case still proves nested readonly store writes. Published typings accept these writes."
   },
   {
    "id": "no-write-in-pure-computation/positive/001",

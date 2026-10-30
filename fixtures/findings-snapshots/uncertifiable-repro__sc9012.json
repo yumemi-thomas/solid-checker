@@ -216,6 +216,16 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-project-call-result.tsx",
+      "start": 652,
+      "end": 660,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-project-function.tsx",
       "start": 581,
       "end": 598,
@@ -229,6 +239,16 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-project-member-of-parameter.tsx",
       "start": 487,
       "end": 498,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-project-member.tsx",
+      "start": 630,
+      "end": 641,
       "fixes": 0
     },
     {
@@ -277,6 +297,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/package-relay-commit.tsx",
+      "start": 900,
+      "end": 906,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/package-relay-commit.tsx",
       "start": 1218,
       "end": 1233,
       "fixes": 0
@@ -309,6 +339,16 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/package-webgpu-context.tsx",
       "start": 590,
       "end": 628,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/package-webgpu-context.tsx",
+      "start": 590,
+      "end": 615,
       "fixes": 0
     },
     {
@@ -609,6 +649,16 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-use-spread-wrapper.tsx",
       "start": 621,
       "end": 638,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/primitive-result-method.tsx",
+      "start": 330,
+      "end": 339,
       "fixes": 0
     },
     {

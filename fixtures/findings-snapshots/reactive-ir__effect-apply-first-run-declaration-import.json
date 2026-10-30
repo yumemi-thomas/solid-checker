@@ -1,11 +1,11 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/effect-apply-first-run/variants/declaration-import/App.tsx",
       "start": 314,
       "end": 321,

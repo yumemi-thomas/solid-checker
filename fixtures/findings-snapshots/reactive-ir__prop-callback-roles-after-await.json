@@ -70,6 +70,16 @@
       "start": 143,
       "end": 152,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/variants/after-await/children.tsx",
+      "start": 143,
+      "end": 152,
+      "fixes": 0
     }
   ]
 }

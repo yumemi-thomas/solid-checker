@@ -77,7 +77,14 @@ run is in `render`'s flush, which a pending render effect anywhere in the mount
 can hold. It is claimed only where nothing can create one (ADR 0505): the
 component renders a static intrinsic tree, its body runs nothing else, and that
 `render` is the first code in the program that can create a reactive node
-(`fixtures/reactive-ir/effect-apply-first-run`).
+(`fixtures/reactive-ir/effect-apply-first-run`). The source may also be a
+module-scope async memo of a literal in a module whose scope only creates nodes,
+under the first `render` of an entry no module imports, or a memo the mounting
+parent creates and hands over as an exact prop or through one context provider
+(ADR 0510). The static tree may hold string attributes, literal children and
+reads of the body's own literal signals and synchronous memos. No function
+between the read and the apply calls anything before it: a throw there ends
+the run first (`fixtures/reactive-ir/pending-source-first-run`).
 
 ## Examples
 

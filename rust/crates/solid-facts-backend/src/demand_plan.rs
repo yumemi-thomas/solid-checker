@@ -89,6 +89,7 @@ fn plan_file(
         .filter_map(|returned| returned.callee)
         .collect::<HashSet<_>>();
     let (import_bindings, import_references) = collect_symbol_spans(file, &mut spans);
+    collect_call_result_binding_spans(dialect, file, &mut spans);
     collect_jsx_spans(dialect, file, &mut spans);
     collect_coercion_spans(dialect, options, file, &mut spans);
     collect_return_spans(file, &mut spans, demands, (&path, &returned_callees));
@@ -133,6 +134,51 @@ fn collect_delete_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut
         spans
             .chain_link_spans
             .extend(file.ast.member_chain_links(member));
+    }
+}
+
+/// ADR 0509: a name destructured from a call that is not a dialect primitive
+/// (`const [, set] = useCount()`, `const { set } = useContext(Ctx)`) holds a
+/// value whose implementation may be out of view. Its type is the evidence
+/// that it may be a setter, store or accessor (ADR 0294), so it is demanded.
+fn collect_call_result_binding_spans(
+    dialect: &'static Dialect,
+    file: &FileFacts,
+    spans: &mut DemandSpans,
+) {
+    let primitive_imports = PrimitiveImports::new(dialect, file);
+    for binding in &file.ast.bindings {
+        if !matches!(
+            binding.shape,
+            solid_facts::ast::BindingShape::Array | solid_facts::ast::BindingShape::Object
+        ) {
+            continue;
+        }
+        let Some(call) = binding
+            .call_initializer
+            .and_then(|initializer| file.ast.call_at(initializer))
+        else {
+            continue;
+        };
+        // A primitive's own tuple is source discovery's; a context read's
+        // value is a caller's.
+        if call
+            .static_callee(&file.source)
+            .and_then(|callee| primitive_imports.primitive(callee))
+            .is_some_and(|primitive| {
+                dialect
+                    .vocabulary
+                    .name_of(primitive)
+                    .and_then(|name| dialect.vocabulary.context_role(name))
+                    != Some(solid_dialect::ContextRole::Read)
+            })
+        {
+            continue;
+        }
+        for name in &binding.names {
+            add_symbol_span(&mut spans.symbol_spans, name.span, true);
+            spans.type_descriptor_spans.insert(name.span);
+        }
     }
 }
 

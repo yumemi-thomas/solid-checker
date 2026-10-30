@@ -132,6 +132,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/App.tsx",
+      "start": 4165,
+      "end": 4179,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -162,10 +172,10 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
       "kind": "uncertifiable",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/reactive-ir/fp-exec-handler-writes/App.tsx",
       "start": 5073,
       "end": 5081,

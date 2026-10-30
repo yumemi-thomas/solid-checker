@@ -162,6 +162,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/use-site-role/hooks.tsx",
+      "start": 1894,
+      "end": 1904,
+      "fixes": 0
+    },
+    {
       "rule": "components-return-once",
       "code": "SC1004",
       "kind": "uncertifiable",

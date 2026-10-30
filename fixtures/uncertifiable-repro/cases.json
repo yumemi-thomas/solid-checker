@@ -14000,10 +14000,21 @@
   },
   {
    "id": "clean-context-provider",
-   "kind": "clean",
+   "kind": "uncertifiable",
    "project": "sc1001",
    "files": [
     "src/clean-context-provider.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/handed-member-dispatch"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "handed-member-dispatch",
+     "cause": "SC9012/runtime-target-unselected/handed-member-dispatch"
+    }
    ],
    "source": {
     "app": "donegeon-client",
@@ -14011,8 +14022,14 @@
     "line": 12,
     "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
    },
-   "weight": 11,
-   "status": "certified"
+   "status": "uncertifiable",
+   "labelWeight": 11,
+   "sites": 0,
+   "verification": {
+    "samples": []
+   },
+   "verifiedWeight": 0,
+   "note": "ADR 0509: certified before. A member of a context value, called where a write or an action would be reported, may be a setter or an action the open program cannot follow; open until context transport proves it. Not yet corpus-verified."
   },
   {
    "id": "clean-for-keyed-fn",
@@ -14128,10 +14145,21 @@
   },
   {
    "id": "clean-store-draft",
-   "kind": "clean",
+   "kind": "uncertifiable",
    "project": "sc1001",
    "files": [
     "src/clean-store-draft.tsx"
+   ],
+   "causes": [
+    "SC9012/runtime-target-unselected/handed-member-dispatch"
+   ],
+   "expect": [
+    {
+     "rule": "SC9012",
+     "family": "runtime-target-unselected",
+     "context": "handed-member-dispatch",
+     "cause": "SC9012/runtime-target-unselected/handed-member-dispatch"
+    }
    ],
    "source": {
     "app": "compass-ui",
@@ -14139,8 +14167,14 @@
     "line": 88,
     "commit": "2e4e7b875e371e45c5ffa4ee39715d57cf2049a5"
    },
-   "weight": 6,
-   "status": "certified"
+   "status": "uncertifiable",
+   "labelWeight": 6,
+   "sites": 0,
+   "verification": {
+    "samples": []
+   },
+   "verifiedWeight": 0,
+   "note": "ADR 0509: certified before. A member of a context value, called where a write or an action would be reported, may be a setter or an action the open program cannot follow; open until context transport proves it. Not yet corpus-verified."
   },
   {
    "id": "clean-action-optimistic",

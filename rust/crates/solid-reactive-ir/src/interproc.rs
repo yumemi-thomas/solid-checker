@@ -454,6 +454,11 @@ impl FunctionBoundary for SummaryNode {
 pub(super) struct InterproceduralResult {
     pub(super) reads: Arc<[ReactiveRead]>,
     pub(super) source_call_targets: Arc<HashMap<Location, accessor_provenance::Callable>>,
+    /// The calls transport resolves to a setter or an action a primitive
+    /// created ([`accessor_provenance::Callable::Setter`], `Action`), kept
+    /// apart from `source_call_targets`: they read nothing, and every reader
+    /// of that table answers as it did before they existed.
+    pub(super) write_call_targets: Arc<HashMap<Location, accessor_provenance::Callable>>,
     pub(super) dispatch_obligations: Arc<[StaticDefect]>,
     pub(super) factory_instances: usize,
     pub(super) timings: InterproceduralTimings,

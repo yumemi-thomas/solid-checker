@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-source-first-run/variants/second-root/App.tsx",
+      "start": 385,
+      "end": 393,
+      "fixes": 0
+    }
+  ]
+}

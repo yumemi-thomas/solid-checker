@@ -21,6 +21,8 @@ mod jsx_census;
 pub(crate) use jsx_census::*;
 mod write_roles;
 pub(crate) use write_roles::*;
+mod pending_sources;
+pub(crate) use pending_sources::*;
 mod cleanup_handle;
 use cleanup_handle::*;
 mod site_reach;

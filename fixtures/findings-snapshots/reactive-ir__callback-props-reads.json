@@ -170,6 +170,16 @@
       "start": 1831,
       "end": 1834,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-props-reads/Silent.tsx",
+      "start": 2002,
+      "end": 2009,
+      "fixes": 0
     }
   ]
 }

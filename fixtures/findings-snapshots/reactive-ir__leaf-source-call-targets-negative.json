@@ -17,6 +17,36 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-source-call-targets-negative/App.tsx",
+      "start": 349,
+      "end": 369,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-source-call-targets-negative/App.tsx",
+      "start": 473,
+      "end": 492,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-source-call-targets-negative/App.tsx",
+      "start": 535,
+      "end": 554,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-source-call-targets-negative/App.tsx",
       "start": 535,
       "end": 554,
       "fixes": 0
@@ -29,6 +59,36 @@
       "path": "fixtures/reactive-ir/leaf-source-call-targets-negative/App.tsx",
       "start": 706,
       "end": 725,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-source-call-targets-negative/App.tsx",
+      "start": 706,
+      "end": 725,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-source-call-targets-negative/App.tsx",
+      "start": 834,
+      "end": 846,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-source-call-targets-negative/App.tsx",
+      "start": 881,
+      "end": 902,
       "fixes": 0
     },
     {

@@ -204,11 +204,7 @@ pub(crate) fn static_child_tag<'a>(
         .jsx_elements
         .iter()
         .find(|element| element.name.span == tag)?;
-    if !element.self_closing
-        || !element.attributes.is_empty()
-        || !element.spreads.is_empty()
-        || !element.children.is_empty()
-    {
+    if !element.self_closing || !element.spreads.is_empty() || !element.children.is_empty() {
         return None;
     }
     // ADR 0508: a `<For>` row (`{() => <C />}`) runs the tag in the row
@@ -227,6 +223,14 @@ pub(crate) fn static_child_tag<'a>(
         || parent.generator
         || !lookup.function_may_be_component(file, parent)
         || !lookup.function_value_is_current(file, parent)
+    {
+        return None;
+    }
+    // ADR 0510: each attribute hands the child a node the parent created.
+    if !element
+        .attributes
+        .iter()
+        .all(|attribute| handed_attribute(lookup, file, parent, attribute))
     {
         return None;
     }
@@ -265,7 +269,7 @@ pub(crate) fn static_child_tag<'a>(
     // intrinsic element, or the one child of a `<Show when={true}>` (ADR 0508).
     for _ in 0..64 {
         if at == root {
-            return inert_parent(file, parent, element, &holders).then_some(parent);
+            return inert_parent(lookup, file, parent, element, &holders).then_some(parent);
         }
         let holder = ast
             .jsx_elements
@@ -276,7 +280,9 @@ pub(crate) fn static_child_tag<'a>(
             return None;
         }
         if !intrinsic_element(file, holder) {
-            if !shown_child(lookup, file, holder, at) {
+            if !shown_child(lookup, file, holder, at)
+                && !provided_child(lookup, file, parent, holder, at)
+            {
                 return None;
             }
             holders.push(holder.span);
@@ -437,6 +443,7 @@ fn for_row<'a>(
 /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:1690-1708`), and code
 /// that throws ends the mount.
 fn inert_parent(
+    lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     parent: &solid_facts::ast::FunctionFact,
     child: &solid_facts::ast::JsxElementFact,
@@ -444,6 +451,15 @@ fn inert_parent(
 ) -> bool {
     let ast = &file.ast;
     let inside = |span: Span| parent.span.contains(span);
+    // ADR 0510: the `const` creations written before the return.
+    let Some((creations, after_creations)) = parent_creations(lookup, file, parent) else {
+        return false;
+    };
+    let computes = creations
+        .iter()
+        .filter_map(|call| call.arguments.first())
+        .map(|argument| ast.peel_ts_sugar_span(argument.span))
+        .collect::<Vec<_>>();
     let plain_parameters = parent.parameters.iter().all(|parameter| {
         parameter.shape == solid_facts::ast::BindingShape::Identifier
             && parameter.initializer.is_none()
@@ -482,12 +498,13 @@ fn inert_parent(
                 .is_some_and(|function| function.span == parent.span)
         })
         .collect::<Vec<_>>();
-    let only_return = parent.expression_body
+    let only_return = (parent.expression_body && creations.is_empty())
         || match own_returns.as_slice() {
             [only] => {
                 let returned = file
-                    .source_text(parent.body)
-                    .and_then(|body| body.trim().strip_prefix('{')?.strip_suffix('}'))
+                    .source
+                    .get(after_creations as usize..parent.body.end as usize)
+                    .and_then(|body| body.trim().strip_suffix('}'))
                     .and_then(|inner| inner.trim().strip_prefix("return"))
                     .map(|rest| {
                         let mut rest = rest.trim().trim_end_matches(';').trim_end();
@@ -507,7 +524,9 @@ fn inert_parent(
     only_return
         && plain_parameters
         && elements_static
-        && !ast.calls.iter().any(|call| inside(call.span))
+        && !ast.calls.iter().any(|call| {
+            inside(call.span) && !creations.iter().any(|created| created.span == call.span)
+        })
         && !ast.members.iter().any(|member| inside(member.span))
         && !ast.computed_members.iter().any(|member| inside(*member))
         && !ast.tagged_template_tags.iter().any(|tag| inside(*tag))
@@ -521,7 +540,277 @@ fn inert_parent(
             function.span != parent.span
                 && inside(function.span)
                 && !holders.contains(&function.span)
+                && !computes.contains(&function.span)
         })
+}
+
+/// ADR 0510: the statements of `parent`'s block body before its return, each
+/// `const <pattern> = <creation>;` with an inert creation
+/// ([`crate::execution_role::inert_creation`]: a memo of one primitive
+/// literal, a signal of at most one, a context), and the offset where the
+/// rest of the body starts. An expression body has none.
+fn parent_creations<'f>(
+    lookup: &SemanticLookup<'_>,
+    file: &'f solid_facts::FileFacts,
+    parent: &solid_facts::ast::FunctionFact,
+) -> Option<(Vec<&'f solid_facts::ast::CallFact>, u32)> {
+    let ast = &file.ast;
+    if parent.expression_body {
+        return Some((Vec::new(), parent.body.start));
+    }
+    let source = file.source.as_bytes();
+    let skip = |mut at: usize| {
+        while source.get(at).is_some_and(u8::is_ascii_whitespace) {
+            at += 1;
+        }
+        at
+    };
+    if source.get(parent.body.start as usize) != Some(&b'{') {
+        return None;
+    }
+    let mut at = skip(parent.body.start as usize + 1);
+    let mut creations = Vec::new();
+    for _ in 0..16 {
+        let rest = file.source.get(at..parent.body.end as usize)?;
+        let Some(after) = rest.strip_prefix("const") else {
+            break;
+        };
+        if !after.starts_with(|c: char| c.is_ascii_whitespace()) {
+            break;
+        }
+        let pattern = skip(at + "const".len());
+        let binding = ast.bindings.iter().find(|binding| {
+            binding.pattern.start as usize == pattern
+                && crate::owners::containing_ast_function(ast, binding.declaration)
+                    .is_some_and(|function| function.span == parent.span)
+        })?;
+        let initializer = ast.peel_ts_sugar_span(binding.initializer?);
+        let call = ast.call_at(initializer)?;
+        let between = file
+            .source
+            .get(binding.pattern.end as usize..initializer.start as usize)?;
+        if between.trim() != "=" || !crate::execution_role::inert_creation(file, call, lookup) {
+            return None;
+        }
+        creations.push(call);
+        at = skip(initializer.end as usize);
+        if source.get(at) == Some(&b';') {
+            at = skip(at + 1);
+        }
+    }
+    Some((creations, u32::try_from(at).ok()?))
+}
+
+/// ADR 0510: `expression` names a node `parent` created in its own body: an
+/// identifier bound by a `const` there (a name, or a slot of an array
+/// pattern) whose initializer is an inert creation. Reading it runs nothing.
+fn handed_name(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    parent: &solid_facts::ast::FunctionFact,
+    expression: Span,
+) -> bool {
+    let ast = &file.ast;
+    let expression = ast.peel_ts_sugar_span(expression);
+    ast.identifiers.iter().any(|identifier| {
+        identifier.span == expression
+            && identifier.role == solid_facts::ast::IdentifierRole::Reference
+    }) && ast
+        .reference_declaration(expression)
+        .and_then(|declaration| {
+            ast.bindings.iter().find(|binding| {
+                binding.immutable && binding.names.iter().any(|name| name.span == declaration)
+            })
+        })
+        .is_some_and(|binding| {
+            crate::owners::containing_ast_function(ast, binding.declaration)
+                .is_some_and(|function| function.span == parent.span)
+                && binding
+                    .call_initializer
+                    .and_then(|call| ast.call_at(call))
+                    .is_some_and(|call| crate::execution_role::inert_creation(file, call, lookup))
+        })
+}
+
+/// ADR 0510: a child's attribute `name={x}`, `x` a node the parent created
+/// ([`handed_name`]): the compiler hands an identifier over as the prop's
+/// value, and nothing runs when the child reads it.
+fn handed_attribute(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    parent: &solid_facts::ast::FunctionFact,
+    attribute: &solid_facts::ast::JsxAttributeFact,
+) -> bool {
+    attribute.namespace.is_none()
+        && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+        && file.source_text(attribute.name) != Some("ref")
+        && attribute
+            .expression
+            .is_some_and(|expression| handed_name(lookup, file, parent, expression))
+}
+
+/// The module-scope `const` holding a context the dialect's `createContext`
+/// created ([`crate::execution_role::inert_creation`]) that `name` names.
+fn context_declaration(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    name: Span,
+) -> Option<Span> {
+    let ast = &file.ast;
+    let declaration = ast.reference_declaration(name)?;
+    let binding = ast.bindings.iter().find(|binding| {
+        binding.immutable && binding.names.iter().any(|named| named.span == declaration)
+    })?;
+    let call = ast.call_at(binding.call_initializer?)?;
+    (crate::indexes::at_module_scope(ast, binding.declaration)
+        && lookup.primitive_at_call(file, call.span)
+            == Some(solid_dialect::Primitive::CreateContext)
+        && crate::execution_role::inert_creation(file, call, lookup))
+    .then_some(declaration)
+}
+
+/// The object literal `holder`'s one `value` attribute holds, when `holder`
+/// is a context's provider (`<K value={{ … }}>`, [`context_declaration`]) with
+/// no other attribute or spread: each property a plain `key: x` or `{ x }`
+/// whose value names a node `parent` created ([`handed_name`]).
+fn provider_value<'f>(
+    lookup: &SemanticLookup<'_>,
+    file: &'f solid_facts::FileFacts,
+    parent: &solid_facts::ast::FunctionFact,
+    holder: &solid_facts::ast::JsxElementFact,
+) -> Option<(Span, Vec<&'f solid_facts::ast::ObjectPropertyFact>)> {
+    let ast = &file.ast;
+    if holder.member_object.is_some()
+        || !holder.spreads.is_empty()
+        || !holder.boolean_properties.is_empty()
+    {
+        return None;
+    }
+    let context = context_declaration(lookup, file, holder.name.span)?;
+    let [attribute] = holder.attributes.as_slice() else {
+        return None;
+    };
+    if attribute.namespace.is_some()
+        || file.source_text(attribute.name) != Some("value")
+        || attribute.value_kind != solid_facts::ast::JsxAttributeValueKind::Expression
+    {
+        return None;
+    }
+    let value = ast.peel_ts_sugar_span(attribute.expression?);
+    let text = file.source_text(value)?;
+    if !text.starts_with('{')
+        || ast.spreads.iter().any(|spread| value.contains(spread.span))
+        || ast
+            .functions
+            .iter()
+            .any(|function| value.contains(function.span))
+        || ast.calls.iter().any(|call| value.contains(call.span))
+        || ast.members.iter().any(|member| value.contains(member.span))
+    {
+        return None;
+    }
+    let properties = ast
+        .object_properties
+        .iter()
+        .filter(|property| value.contains(property.span))
+        .collect::<Vec<_>>();
+    properties
+        .iter()
+        .all(|property| {
+            !property.computed
+                && !property.method
+                && handed_name(lookup, file, parent, property.value)
+        })
+        .then_some((context, properties))
+}
+
+/// ADR 0510: `holder` is a context's provider ([`provider_value`]) whose one
+/// child is `child`. The provider sets its value on a root it creates and
+/// returns `children(() => props.children)` (`solid-js@2.0.0-rc.17`
+/// `dist/solid.dev.js:11-15`), lazy memos the parent's insert reads on its
+/// first pass (ADR 0508's `<For>` argument), so the child renders during the
+/// parent's tree, under an owner that carries the value.
+fn provided_child(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    parent: &solid_facts::ast::FunctionFact,
+    holder: &solid_facts::ast::JsxElementFact,
+    child: Span,
+) -> bool {
+    provider_value(lookup, file, parent, holder).is_some()
+        && significant_children(file, holder) == [child]
+}
+
+/// ADR 0510: the tag at `tag` in `file` passes `memo` (a name of the
+/// parent's) as its prop `name`.
+pub(crate) fn tag_passes_prop(
+    file: &solid_facts::FileFacts,
+    tag: Span,
+    name: &str,
+    memo: Option<Span>,
+) -> bool {
+    let ast = &file.ast;
+    ast.jsx_elements
+        .iter()
+        .find(|element| element.name.span == tag)
+        .is_some_and(|element| {
+            element.attributes.iter().any(|attribute| {
+                attribute.namespace.is_none()
+                    && file.source_text(attribute.name) == Some(name)
+                    && attribute.expression.is_some_and(|expression| {
+                        memo.is_some()
+                            && ast.reference_declaration(ast.peel_ts_sugar_span(expression)) == memo
+                    })
+            })
+        })
+}
+
+/// ADR 0510: the tag at `tag` in `file` is the one child of a provider of
+/// the context declared at `context` whose value object holds `memo` (a name
+/// of the parent's) under the key `name`; the nearest provider of that context
+/// above the child is that one.
+pub(crate) fn tag_provided(
+    file: &solid_facts::FileFacts,
+    tag: Span,
+    context: Span,
+    name: &str,
+    memo: Option<Span>,
+) -> bool {
+    let ast = &file.ast;
+    let Some(element) = ast
+        .jsx_elements
+        .iter()
+        .find(|element| element.name.span == tag)
+    else {
+        return false;
+    };
+    let Some(holder) = ast
+        .jsx_elements
+        .iter()
+        .filter(|candidate| candidate.span != element.span && candidate.span.contains(element.span))
+        .min_by_key(|candidate| candidate.span.end - candidate.span.start)
+    else {
+        return false;
+    };
+    let Some(value) = holder
+        .attributes
+        .iter()
+        .find(|attribute| file.source_text(attribute.name) == Some("value"))
+        .and_then(|attribute| attribute.expression)
+        .map(|expression| ast.peel_ts_sugar_span(expression))
+    else {
+        return false;
+    };
+    memo.is_some()
+        && ast.reference_declaration(holder.name.span) == Some(context)
+        && ast
+            .object_properties
+            .iter()
+            .filter(|property| value.contains(property.span))
+            .any(|property| {
+                file.source_text(property.key) == Some(name)
+                    && ast.reference_declaration(ast.peel_ts_sugar_span(property.value)) == memo
+            })
 }
 
 /// The module-scope renders that mount `component` itself (ADR 0503).

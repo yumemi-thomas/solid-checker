@@ -107,6 +107,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/literal-member-handoff/App.tsx",
+      "start": 1919,
+      "end": 1928,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-member-handoff/App.tsx",
+      "start": 2097,
+      "end": 2106,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-member-handoff/App.tsx",
       "start": 2366,
       "end": 2375,
       "fixes": 0

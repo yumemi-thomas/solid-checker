@@ -1,4 +1,15 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api-unresolved/App.tsx",
+      "start": 1177,
+      "end": 1192,
+      "fixes": 0
+    }
+  ]
 }

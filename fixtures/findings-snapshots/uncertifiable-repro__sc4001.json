@@ -222,8 +222,28 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-callback-to-package.tsx",
+      "start": 317,
+      "end": 327,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-callback-to-package.tsx",
+      "start": 339,
+      "end": 353,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-callback-to-package.tsx",
@@ -262,6 +282,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-event-listener-target.tsx",
+      "start": 679,
+      "end": 692,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -272,8 +302,28 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-forward.tsx",
+      "start": 606,
+      "end": 624,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-read.tsx",
+      "start": 379,
+      "end": 391,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-read.tsx",
@@ -356,9 +406,29 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-member.ts",
+      "start": 406,
+      "end": 419,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-namespace-member.ts",
       "start": 502,
       "end": 514,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-memo-package-callback.tsx",
+      "start": 374,
+      "end": 384,
       "fixes": 0
     },
     {
@@ -382,6 +452,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-raf.tsx",
+      "start": 409,
+      "end": 414,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -389,6 +469,16 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-raf.tsx",
       "start": 625,
       "end": 664,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-raf.tsx",
+      "start": 668,
+      "end": 673,
       "fixes": 0
     },
     {

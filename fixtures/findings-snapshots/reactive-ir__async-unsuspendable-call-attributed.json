@@ -42,10 +42,10 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
       "kind": "uncertifiable",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/reactive-ir/async-unsuspendable-call-attributed/App.tsx",
       "start": 2016,
       "end": 2020,

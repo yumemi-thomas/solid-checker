@@ -80,6 +80,14 @@ fn callable_answer(callable: Option<&accessor_provenance::Callable>) -> u64 {
             3_u8.hash(&mut hasher);
             targets.hash(&mut hasher);
         }
+        Some(accessor_provenance::Callable::Setter(symbol)) => {
+            4_u8.hash(&mut hasher);
+            symbol.hash(&mut hasher);
+        }
+        Some(accessor_provenance::Callable::Action(symbol)) => {
+            5_u8.hash(&mut hasher);
+            symbol.hash(&mut hasher);
+        }
     }
     hasher.finish()
 }
