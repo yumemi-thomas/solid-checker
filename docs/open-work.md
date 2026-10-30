@@ -6,7 +6,6 @@ Case ids name directories under `fixtures/runtime-oracle/`; each `oracle.json` `
 
 ## 1. Known open detections
 
-- A false positive, open (found by the fuzzer's `module-hook-shared` source, oracle `static-only`): `async-outside-loading-boundary` is proven on a module-scope async memo that settled before the mount (a root reads it, then the module awaits) when a render effect's compute reads it; rc.17 reports nothing. `scripts/fuzz/rediscovery.json` lists its 50 legal programs.
 - A block-bodied or imported hook, a hook result read any other way than a static member, and a literal holder read any other way are not followed to the primitive (ADRs 0480-0482 cover destructured slots, member calls and member store roots). On rc.0-rc.6 the readonly-root exemption trusts the declared type, so a hook or alias annotated with a non-readonly type (`(): { state: { v: number } } => ({ state })`) erases TS2540 and the root write is a false clean (also for `const s2: { v: number } = state`). A store imported from another module and aliased (`const a = shared`) is not seen as a store at all.
 Defects the runtime reports and the checker does not. Each is a missing violation, not a false positive; the named rule should claim it. Codes are the runtime's.
 
@@ -142,6 +141,7 @@ A violation withheld, or turned uncertifiable, to keep zero false positives. Eac
 - Code in a component's element children (`<Show>`, `<Loading>`, `<Errored>`, portals, wrappers rendering `props.children`) has no proven placement (`inside_component_element_children`); a read there is an uncertifiable `strict-read-untracked`, even where the runtime warns.
 - `reactive-handler-frozen` (SC1007) on an element inside a tracked JSX expression or a component's children is uncertifiable: the listener is replaced when the scope re-runs.
 - `async-outside-loading-boundary` (SC5003) through a forwarding wrapper that reads `children` with no `Loading` of its own is unresolved (`loading_cover_at`), as is a wrapper resolving `children()` outside any `Loading`.
+- `async-outside-loading-boundary` (SC5003) in a project where any module awaits at its top level (or a load is unseen) is uncertifiable for every async source, even a memo the reading body creates: which nodes the checkpoint settles is not modeled (ADR 0513).
 - `no-store-mutation-outside-setter` (SC2003): a write through a 2.0 props object or a `merge`/`omit` view is uncertifiable: the compiler's props object is plain, so only a proxy drops the write.
 - `no-destructure` (SC1003) with an unknown or mixed role is uncertifiable, not a proven snapshot.
 - ADR 0509: a strict read of an async source whose first run is not proven pending (ADR 0504/0505) is uncertifiable: rc.17 throws the pending read first, and an apply that never re-runs never warns. Includes the `effect-apply-first-run` premise variants and `strict-read-async-apply`, which were SC1001; ADR 0510 proves module-scope and parent-handed memos pending; the shapes the SC5001 line lists stay open.

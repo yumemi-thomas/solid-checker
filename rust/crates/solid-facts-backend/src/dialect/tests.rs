@@ -122,6 +122,7 @@ fn catalog_prose_program() -> Program {
             callee_callback_timing: false,
             invocation_context_unproven: false,
             mount_unresolved: false,
+            settle_unproven: false,
             call_attributed: false,
             apply_first_run_pending: false,
             pending_origin: None,

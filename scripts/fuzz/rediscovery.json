@@ -24,7 +24,7 @@
   {
     "finding": "async-outside-loading-boundary proven on a module-scope async memo that settled before the mount (the module awaits after a root reads it), read in a render effect's compute: rc.17 reports nothing",
     "found": "the fuzzer (source module-hook-shared, 2026-10-30), confirmed by the oracle (static-only)",
-    "fixed": null,
+    "fixed": "ADR 0513",
     "grid": "lg-src",
     "code": "STRICT_READ_UNTRACKED",
     "ids": [
