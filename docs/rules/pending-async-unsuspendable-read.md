@@ -81,10 +81,13 @@ component renders a static intrinsic tree, its body runs nothing else, and that
 module-scope async memo of a literal in a module whose scope only creates nodes,
 under the first `render` of an entry no module imports, or a memo the mounting
 parent creates and hands over as an exact prop or through one context provider
-(ADR 0510). The static tree may hold string attributes, literal children and
+(ADR 0510); the prop may be read through the apply's IIFEs, closures called once, helpers that call their callback first and a wrapper of the body whose one call is in the apply, and the memo may be one an inert project hook creates when the body calls it before the effect; the handed or imported value may be read through a `const` alias or an inline object literal's slot declared before the effect (ADR 0511). The static tree may hold string attributes, literal children and
 reads of the body's own literal signals and synchronous memos. No function
 between the read and the apply calls anything before it: a throw there ends
-the run first (`fixtures/reactive-ir/pending-source-first-run`).
+the run first (`fixtures/reactive-ir/pending-source-first-run`); nor does any
+operator, template or loop there or in the body before the effect, which may
+throw through a coercion (ADR 0511 closes ADR 0507's residual). The climb also passes a `<Loading>` with a literal
+`fallback` and no `on`, which renders its one child at creation (ADR 0511).
 
 ## Examples
 

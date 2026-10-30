@@ -268,8 +268,12 @@ pub(super) fn module_source_pending(
             component,
             component.body.start,
             effect.span.start,
-            None,
-            source,
+            BodyAdmits {
+                context: None,
+                source,
+                hook: None,
+                handed: None,
+            },
             lookup,
         )
         && (render_effect
@@ -281,6 +285,8 @@ pub(super) fn module_source_pending(
                 BodyAdmits {
                     context: None,
                     source,
+                    hook: None,
+                    handed: None,
                 },
                 lookup,
             ))
@@ -356,8 +362,21 @@ pub(super) fn parent_source_pending(
     let Some(read) = ast.call_at(site) else {
         return false;
     };
+    // ADR 0511: the callee, or a closed alias of the member declared in the
+    // body before the effect (a later one is in its temporal dead zone at
+    // the first run).
     let callee = ast.peel_ts_sugar_span(read.callee);
-    let Some(member) = ast.members.iter().find(|member| member.span == callee) else {
+    let Some(read_member) = handed_member_alias(file, callee) else {
+        return false;
+    };
+    if read_member != callee
+        && (crate::owners::containing_ast_function(ast, read_member)
+            .is_none_or(|function| function.span != component.span)
+            || read_member.end > effect.span.start)
+    {
+        return false;
+    }
+    let Some(member) = ast.members.iter().find(|member| member.span == read_member) else {
         return false;
     };
     let Some(name) = file.source_text(member.property) else {
@@ -421,7 +440,7 @@ pub(super) fn parent_source_pending(
         }
         Handed::Context { context }
     };
-    if written(object_declaration) || !only_called_members(file, object_declaration) {
+    if written(object_declaration) || !only_called_members(file, object_declaration, read_member) {
         return false;
     }
     let memo_name = binding.names.first().map(|named| named.span);
@@ -436,8 +455,12 @@ pub(super) fn parent_source_pending(
         component,
         component.body.start,
         effect.span.start,
-        provided,
-        None,
+        BodyAdmits {
+            context: provided,
+            source: None,
+            hook: None,
+            handed: Some(object_declaration),
+        },
         lookup,
     ) && (render_effect
         || user_apply_flush_premises(
@@ -448,6 +471,8 @@ pub(super) fn parent_source_pending(
             BodyAdmits {
                 context: provided,
                 source: None,
+                hook: None,
+                handed: Some(object_declaration),
             },
             lookup,
         ))
@@ -525,10 +550,11 @@ fn source_name_in(
 }
 
 /// Every reference to the handed object (`props`, `ctx`) is the object of a
-/// member that is called (`props.data()`): nothing aliases it, hands it on,
+/// member that is called (`props.data()`) or is the read's own closed alias
+/// (`alias`, ADR 0511): nothing aliases it, hands it on,
 /// takes it apart or writes a member of it, so the member the read calls is
 /// the value the mount handed over.
-fn only_called_members(file: &solid_facts::FileFacts, declaration: Span) -> bool {
+fn only_called_members(file: &solid_facts::FileFacts, declaration: Span, alias: Span) -> bool {
     let ast = &file.ast;
     ast.identifiers
         .iter()
@@ -539,13 +565,430 @@ fn only_called_members(file: &solid_facts::FileFacts, declaration: Span) -> bool
         .all(|identifier| {
             ast.members.iter().any(|member| {
                 ast.peel_ts_sugar_span(member.object) == identifier.span
-                    && ast.calls.iter().any(|call| {
-                        !call.construct && ast.peel_ts_sugar_span(call.callee) == member.span
-                    })
+                    && (member.span == alias
+                        || ast.calls.iter().any(|call| {
+                            !call.construct && ast.peel_ts_sugar_span(call.callee) == member.span
+                        }))
                     && !ast
                         .assignments
                         .iter()
                         .any(|assignment| assignment.target.contains(member.span))
+            })
+        })
+}
+
+/// ADR 0511: `hook` (in `hook_file`) is an inert project hook: a function of
+/// an analyzed project file (not a dependency or a declaration file), not
+/// async or a generator, with a block body and no parameter, whose own code
+/// runs nothing but [`inert_creation`]s (each call one, every nested
+/// function such a creation's compute), throws nothing before its end
+/// ([`throws_nothing_before`]), references only its own names and the
+/// creations' callees, and has one `return`, in its straight-line flow, of
+/// an object literal whose properties are plain data properties naming its
+/// own bindings (`return { a1 };`). Its call creates those nodes under the
+/// caller's owner and returns a fresh object: nothing there reads, throws or
+/// lets a microtask run.
+pub(crate) fn inert_hook(
+    hook_file: &solid_facts::FileFacts,
+    hook: &FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &hook_file.ast;
+    let path = hook_file.path.as_str();
+    let own = |span: Span| {
+        hook.body.contains(span)
+            && crate::owners::containing_ast_function(ast, span)
+                .is_some_and(|function| function.span == hook.span)
+    };
+    let creations = ast
+        .calls
+        .iter()
+        .filter(|call| own(call.span))
+        .collect::<Vec<_>>();
+    if path.contains("/node_modules/")
+        || [".d.ts", ".d.mts", ".d.cts"]
+            .iter()
+            .any(|suffix| path.ends_with(suffix))
+        || hook.r#async
+        || hook.generator
+        || hook.expression_body
+        || !hook.parameters.is_empty()
+        || hook.rest_parameter
+        || !creations
+            .iter()
+            .all(|call| inert_creation(hook_file, call, lookup))
+    {
+        return false;
+    }
+    let computes = creations
+        .iter()
+        .filter_map(|call| call.arguments.first())
+        .map(|argument| ast.peel_ts_sugar_span(argument.span))
+        .collect::<Vec<_>>();
+    let callees = creations
+        .iter()
+        .map(|call| ast.peel_ts_sugar_span(call.callee))
+        .collect::<Vec<_>>();
+    let returns = ast
+        .returns
+        .iter()
+        .filter(|returned| own(returned.span))
+        .collect::<Vec<_>>();
+    let [returned] = returns.as_slice() else {
+        return false;
+    };
+    let Some(object) = returned.argument.map(|span| ast.peel_ts_sugar_span(span)) else {
+        return false;
+    };
+    let object_literal = returned.straight_line
+        && hook_file
+            .source_text(object)
+            .is_some_and(|text| text.starts_with('{'))
+        && ast
+            .object_properties
+            .iter()
+            .filter(|property| object.contains(property.span))
+            .all(|property| {
+                property.data
+                    && !property.computed
+                    && ast
+                        .reference_declaration(ast.peel_ts_sugar_span(property.value))
+                        .is_some_and(|declaration| hook.body.contains(declaration))
+            });
+    object_literal
+        && ast.functions.iter().all(|function| {
+            function.span == hook.span
+                || !hook.span.contains(function.span)
+                || computes.contains(&function.span)
+        })
+        && !ast.jsx_elements.iter().any(|element| own(element.span))
+        && !ast.jsx_fragments.iter().any(|fragment| own(*fragment))
+        && !ast.awaits.iter().any(|awaited| own(*awaited))
+        && throws_nothing_before(
+            hook_file,
+            hook,
+            hook.body.start,
+            hook.body.end,
+            BodyAdmits::default(),
+            lookup,
+        )
+        && ast.identifiers.iter().all(|identifier| {
+            !crate::indexes::runtime_reference(ast, identifier)
+                || !own(identifier.span)
+                || callees.contains(&identifier.span)
+                || ast
+                    .reference_declaration(identifier.span)
+                    .is_some_and(|declaration| hook.body.contains(declaration))
+        })
+}
+
+/// ADR 0511: the call in `component`'s own body, before the effect at
+/// `effect`, of the inert hook `hook` (in `hook_file`): a call with no
+/// argument whose callee resolves exactly to the hook (an identifier bound
+/// to it that nothing writes), on every completion of the body, as a
+/// `const`'s whole initializer bound to a name or taken apart by an object
+/// pattern.
+fn hook_call_in_body<'f>(
+    file: &'f solid_facts::FileFacts,
+    component: &FunctionFact,
+    effect: &CallFact,
+    hook_file: &solid_facts::FileFacts,
+    hook: &FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f CallFact> {
+    let ast = &file.ast;
+    let mut calls = ast.calls.iter().filter(|call| {
+        call.span.end <= effect.span.start
+            && crate::owners::containing_ast_function(ast, call.span)
+                .is_some_and(|function| function.span == component.span)
+            && project_callee_at_parameter(file, call, 0, lookup).is_some_and(
+                |(callee_file, callee, _)| {
+                    callee_file.path == hook_file.path && callee.span == hook.span
+                },
+            )
+    });
+    let call = calls.next()?;
+    let callee = ast.peel_ts_sugar_span(call.callee);
+    let named = hook.name.as_ref().map(|name| name.span);
+    (calls.next().is_none()
+        && !call.construct
+        && call.arguments.is_empty()
+        && !ast.members.iter().any(|member| member.span == callee)
+        && ast
+            .identifiers
+            .iter()
+            .any(|identifier| identifier.span == callee)
+        && named.is_none_or(|name| !crate::indexes::binding_written(hook_file, name))
+        && ast
+            .reference_declaration(callee)
+            .is_some_and(|declaration| !crate::indexes::binding_written(file, declaration))
+        && crate::interproc::site_on_every_completion(lookup, file, component.span, call.span)
+        && ast.bindings.iter().any(|binding| {
+            binding.immutable
+                && matches!(
+                    binding.shape,
+                    BindingShape::Identifier | BindingShape::Object
+                )
+                && binding
+                    .initializer
+                    .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call.span)
+        }))
+    .then_some(call)
+}
+
+/// ADR 0511: the source of the effect `effect`'s apply read is a `const`
+/// async memo (`binding`, `memo`) an inert project hook creates
+/// ([`inert_hook`]; `const a1 = createMemo(async () => 1); return { a1 };`),
+/// on every completion, with a compute of one primitive literal, and the
+/// component calls that hook once in its body before the effect
+/// ([`hook_call_in_body`]): the memo is created there, under the component's
+/// owner, pending until a microtask (`@solidjs/signals@2.0.0-rc.17`
+/// `dist/dev-shared.js:3640-3690`), and the exact transport carried the read
+/// to its declaration. The component takes plain parameters and runs nothing
+/// else in its body before the effect; a `createEffect` also meets ADR
+/// 0505's premises on a mount whose `render` runs first.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn hook_source_pending(
+    file: &solid_facts::FileFacts,
+    origin: Span,
+    component: &FunctionFact,
+    effect: &CallFact,
+    hook_file: &solid_facts::FileFacts,
+    binding: &BindingFact,
+    memo: &CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(hook) = crate::owners::containing_ast_function(&hook_file.ast, binding.declaration)
+    else {
+        return false;
+    };
+    if (hook_file.path == file.path && hook.span == component.span)
+        || !memo_compute_is_literal(hook_file, memo)
+        || !crate::interproc::site_on_every_completion(lookup, hook_file, hook.span, memo.span)
+        || !plain_component(component)
+        || !inert_hook(hook_file, hook, lookup)
+    {
+        return false;
+    }
+    let Some(call) = hook_call_in_body(file, component, effect, hook_file, hook, lookup) else {
+        return false;
+    };
+    if !read_through_hook_call(file, origin, call, hook_file, hook, binding) {
+        return false;
+    }
+    let admits = BodyAdmits {
+        context: None,
+        source: None,
+        hook: Some(call.span),
+        handed: None,
+    };
+    let render_effect =
+        lookup.primitive_at_call(file, effect.span) == Some(Primitive::CreateRenderEffect);
+    body_runs_nothing_between(
+        file,
+        component,
+        component.body.start,
+        effect.span.start,
+        admits,
+        lookup,
+    ) && (render_effect
+        || (user_apply_flush_premises(file, component, effect, None, admits, lookup)
+            && crate::owners::module_render_sites(lookup, file, component)
+                .iter()
+                .any(|site| render_runs_first(lookup, site.entry, site.render))))
+}
+
+/// ADR 0511: the member a call's callee names through closed local forms,
+/// a named non-computed, non-optional member `X.N` with `X` an identifier:
+/// the callee itself (`props.k()`), or an identifier bound by an immutable,
+/// never-written `const` of one name whose whole initializer is that member
+/// (`const d = props.k`), or a slot of an object pattern with no default or
+/// rest whose initializer is an object literal written there, of plain data
+/// properties with no spread or computed key, whose property for the slot
+/// holds the member (`const { d } = { d: ctx.k }`). Answers the member's
+/// span; nothing else (a tuple, a hook's result, a reassigned name) is
+/// followed.
+pub(crate) fn handed_member_alias(file: &solid_facts::FileFacts, callee: Span) -> Option<Span> {
+    let ast = &file.ast;
+    let plain_member = |span: Span| {
+        let span = ast.peel_ts_sugar_span(span);
+        let member = ast.member_at(span)?;
+        (!ast.computed_members.contains(&span)
+            && ast.optional_members.binary_search(&span).is_err()
+            && ast.identifiers.iter().any(|identifier| {
+                identifier.span == ast.peel_ts_sugar_span(member.object)
+                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            }))
+        .then_some(span)
+    };
+    let callee = ast.peel_ts_sugar_span(callee);
+    if ast.member_at(callee).is_some() {
+        return plain_member(callee);
+    }
+    if !ast
+        .identifiers
+        .iter()
+        .any(|identifier| identifier.span == callee)
+    {
+        return None;
+    }
+    let declaration = ast.reference_declaration(callee)?;
+    let binding = ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == declaration))?;
+    if !binding.immutable
+        || binding.names.len() != 1
+        || crate::indexes::binding_written(file, declaration)
+    {
+        return None;
+    }
+    let initializer = ast.peel_ts_sugar_span(binding.initializer?);
+    match binding.shape {
+        BindingShape::Identifier => plain_member(initializer),
+        BindingShape::Object => {
+            let pattern = file.source_text(binding.pattern)?;
+            if pattern.contains('=') || pattern.contains("...") {
+                return None;
+            }
+            let slot = binding
+                .object_slots
+                .iter()
+                .find(|slot| slot.local.span == declaration && slot.plain_identifier_key)?;
+            plain_member(closed_literal_slot_value(
+                file,
+                initializer,
+                slot.property.as_str(),
+            )?)
+        }
+        BindingShape::Array => None,
+    }
+}
+
+/// ADR 0511: the value of property `key` of the object literal written at
+/// `literal`, where the literal is closed (no spread), every property of it
+/// is a plain data property with a non-computed key, and `key` appears once.
+pub(crate) fn closed_literal_slot_value(
+    file: &solid_facts::FileFacts,
+    literal: Span,
+    key: &str,
+) -> Option<Span> {
+    let ast = &file.ast;
+    let shape = ast
+        .object_get_shapes
+        .iter()
+        .find(|shape| shape.span == literal)?;
+    if !shape.closed {
+        return None;
+    }
+    let own = ast
+        .object_properties
+        .iter()
+        .filter(|property| {
+            literal.contains(property.span)
+                && !ast.object_properties.iter().any(|outer| {
+                    outer.span != property.span
+                        && literal.contains(outer.span)
+                        && outer.span.contains(property.span)
+                })
+        })
+        .collect::<Vec<_>>();
+    if !own
+        .iter()
+        .all(|property| property.data && !property.computed)
+    {
+        return None;
+    }
+    let mut matching = own.iter().filter(|property| {
+        file.source_text(property.key)
+            .map(|text| text.trim_matches(['\'', '"']))
+            == Some(key)
+    });
+    let property = matching.next()?;
+    if matching.next().is_some() {
+        return None;
+    }
+    Some(property.shorthand_binding.unwrap_or(property.value))
+}
+
+/// ADR 0511 review: the read at `origin` reaches the memo through the object
+/// the body's hook call `call` returned, not another instance: its callee is
+/// `x.N` with `x` the `const` the call initializes, or `N` a slot of the
+/// object pattern the call initializes, and the hook's returned literal holds
+/// the memo (`binding`) under `N`. Before this, any call of the hook in the
+/// body stood for a read of a memo another call created (`shared.a1()` of a
+/// module-scope `useVals()`, settled long before).
+fn read_through_hook_call(
+    file: &solid_facts::FileFacts,
+    origin: Span,
+    call: &CallFact,
+    hook_file: &solid_facts::FileFacts,
+    hook: &FunctionFact,
+    binding: &BindingFact,
+) -> bool {
+    let ast = &file.ast;
+    let Some(read) = ast.call_at(origin) else {
+        return false;
+    };
+    let callee = ast.peel_ts_sugar_span(read.callee);
+    let call_binding = |declaration: Span| {
+        ast.bindings.iter().find(|candidate| {
+            candidate.immutable
+                && candidate.names.iter().any(|name| name.span == declaration)
+                && candidate
+                    .initializer
+                    .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call.span)
+        })
+    };
+    let key = if let Some(member) = ast.member_at(callee) {
+        let object = ast.peel_ts_sugar_span(member.object);
+        let named = !ast.computed_members.contains(&callee)
+            && ast.optional_members.binary_search(&callee).is_err()
+            && ast
+                .identifiers
+                .iter()
+                .any(|identifier| identifier.span == object)
+            && ast
+                .reference_declaration(object)
+                .and_then(call_binding)
+                .is_some_and(|holder| holder.shape == BindingShape::Identifier);
+        if !named {
+            return false;
+        }
+        file.source_text(member.property).map(str::to_owned)
+    } else {
+        let Some(declaration) = ast.reference_declaration(callee) else {
+            return false;
+        };
+        call_binding(declaration)
+            .filter(|holder| holder.shape == BindingShape::Object)
+            .and_then(|holder| {
+                holder
+                    .object_slots
+                    .iter()
+                    .find(|slot| slot.local.span == declaration && slot.plain_identifier_key)
+            })
+            .map(|slot| slot.property.to_string())
+    };
+    let Some(key) = key else {
+        return false;
+    };
+    let hook_ast = &hook_file.ast;
+    let memo_name = binding.names.first().map(|name| name.span);
+    hook_ast
+        .returns
+        .iter()
+        .filter(|returned| {
+            crate::owners::containing_ast_function(hook_ast, returned.span)
+                .is_some_and(|function| function.span == hook.span)
+        })
+        .filter_map(|returned| returned.argument)
+        .map(|argument| hook_ast.peel_ts_sugar_span(argument))
+        .any(|object| {
+            closed_literal_slot_value(hook_file, object, &key).is_some_and(|value| {
+                let value = hook_ast.peel_ts_sugar_span(value);
+                // A shorthand property's value is the binder's own span.
+                Some(value) == memo_name || hook_ast.reference_declaration(value) == memo_name
             })
         })
 }

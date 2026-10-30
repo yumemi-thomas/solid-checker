@@ -90,10 +90,11 @@ fn function_valued(binding: &BindingFact) -> bool {
 /// Whether a name of `binding` is a local alias (ADR 0463): a mention of it
 /// before the declarator ran throws rather than reaching the value it holds.
 fn names_local_alias(file: &FileFacts, binding: &BindingFact) -> bool {
-    binding
-        .names
-        .iter()
-        .any(|name| file.ast.local_alias_binding(name.span).is_some())
+    binding.names.iter().any(|name| {
+        file.ast.local_alias_binding(name.span).is_some()
+            // ADR 0511: an import alias likewise.
+            || crate::source_discovery::import_alias_declaration(file, name.span)
+    })
 }
 
 /// ADR 0464: a binding an array or object pattern declares with an
@@ -409,14 +410,19 @@ impl<'a> SemanticLookup<'a> {
     /// ([`solid_facts::ast::LocalAliasBindingFact`]) may run before the
     /// alias's declarator, where it throws instead of reading or calling the
     /// value it would hold. Every reference to an alias is in its own file.
+    /// ADR 0511: an import alias (`const d = a1`, `const { d } = { d: a1 }`)
+    /// is withheld the same way.
     pub(crate) fn local_alias_mention_withheld(&self, file: &FileFacts, span: Span) -> bool {
-        if file.ast.local_alias_bindings.is_empty() {
+        if file.ast.local_alias_bindings.is_empty() && file.ast.imports.is_empty() {
             return false;
         }
         let span = file.ast.peel_ts_sugar_span(span);
         file.ast
             .reference_declaration(span)
-            .is_some_and(|declaration| file.ast.local_alias_binding(declaration).is_some())
+            .is_some_and(|declaration| {
+                file.ast.local_alias_binding(declaration).is_some()
+                    || crate::source_discovery::import_alias_declaration(file, declaration)
+            })
             && self.may_precede_initialization(file.path.as_str(), span)
     }
 

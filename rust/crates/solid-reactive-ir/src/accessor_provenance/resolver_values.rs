@@ -271,7 +271,27 @@ pub(super) trait Values<'w>: World<'w> {
                 return None;
             };
             if !*transported {
-                return None;
+                // ADR 0511: a local object literal written as the
+                // initializer (`const { f } = { f: ctx.k }`) is fresh; its
+                // slot is followed where the slot's own value is transported
+                // (a local source keeps ADR 0463's alias facts).
+                let inline = bound_file.ast.peel_ts_sugar_span(binding.initializer?);
+                if path != bound_file.path.as_str() || object != inline {
+                    return None;
+                }
+                let mut through = false;
+                let value = self.member_value(
+                    bound_file,
+                    object,
+                    slot.property.as_str(),
+                    depth - 1,
+                    &mut through,
+                )?;
+                if !through {
+                    return None;
+                }
+                *transported = true;
+                return Some(value);
             }
             return self.member_value(
                 self.file(&path)?,

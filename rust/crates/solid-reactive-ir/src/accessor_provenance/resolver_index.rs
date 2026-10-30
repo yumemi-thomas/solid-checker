@@ -441,6 +441,45 @@ pub(super) fn census_rows<'w, W: World<'w>>(
         .filter(|m| !file.ast.computed_members.contains(&m.span) && callees.contains(&m.span))
         .map(|m| file.ast.peel_ts_sugar_span(m.object))
         .collect::<HashSet<_>>();
+    // ADR 0511: a Get of a named member whose value lands whole in a closed
+    // holder (a `const` of one name, a data property of an object literal,
+    // a value element of an array literal) copies the member's value and
+    // hands the object itself nowhere: `const d = ctx.k`, `{ f: ctx.k }`,
+    // `[0, ctx.k]`. The holder's own census decides the value's closure, and
+    // a named write of the member keeps its veto (`member_vetoed`).
+    let held_values = file
+        .ast
+        .bindings
+        .iter()
+        .filter(|b| b.immutable && b.shape == ast::BindingShape::Identifier && b.names.len() == 1)
+        .filter_map(|b| b.initializer)
+        .chain(
+            file.ast
+                .object_properties
+                .iter()
+                .filter(|p| p.data && !p.computed && p.shorthand_binding.is_none())
+                .map(|p| p.value),
+        )
+        .chain(file.ast.array_literal_elements.iter().flat_map(|literal| {
+            literal
+                .elements
+                .iter()
+                .filter(|element| element.kind == ast::ArrayElementKind::Value)
+                .map(|element| element.span)
+        }))
+        .map(|s| file.ast.peel_ts_sugar_span(s))
+        .collect::<HashSet<_>>();
+    let gets = file
+        .ast
+        .members
+        .iter()
+        .filter(|m| {
+            !file.ast.computed_members.contains(&m.span)
+                && !callees.contains(&m.span)
+                && held_values.contains(&m.span)
+        })
+        .map(|m| file.ast.peel_ts_sugar_span(m.object))
+        .collect::<HashSet<_>>();
     let returned = file
         .ast
         .returns
@@ -602,6 +641,7 @@ pub(super) fn census_rows<'w, W: World<'w>>(
         let uses = &mut rows.uses[index].1;
         uses.object_escaped |= written
             || !(receivers.contains(&id.span)
+                || gets.contains(&id.span)
                 || provider_values.contains(&id.span)
                 || context_returns.contains(&id.span)
                 || context_guard
@@ -617,6 +657,7 @@ pub(super) fn census_rows<'w, W: World<'w>>(
             written || !(context_reads.contains(&id.span) || context_tags.contains(&id.span));
         uses.context_value_escaped |= written
             || !(receivers.contains(&id.span)
+                || gets.contains(&id.span)
                 || callees.contains(&id.span)
                 || provider_values.contains(&id.span)
                 || context_returns.contains(&id.span)

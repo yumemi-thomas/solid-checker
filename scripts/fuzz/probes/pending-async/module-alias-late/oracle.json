@@ -1,0 +1,8 @@
+{
+  "note": "differential fuzzer, generator 2, seed 829079592",
+  "mount": [
+    "C1"
+  ],
+  "haltMarker": true,
+  "steps": []
+}

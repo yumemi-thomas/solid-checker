@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-source-layers/variants/context-alias-effect/App.tsx",
+      "start": 320,
+      "end": 326,
+      "fixes": 0
+    }
+  ]
+}

@@ -42,6 +42,10 @@ pub(super) struct FileRows {
     /// Pass 10: the symbols the file exports by a value specifier or
     /// declaration, sorted, each once.
     pub(super) exports: Vec<SymbolId>,
+    /// ADR 0511: the name of each module-scope `const` of one identifier in
+    /// an analyzed source file (not a dependency or a declaration file): an
+    /// import of it holds that `const`'s value ([`AliasRow::import`]).
+    pub(super) module_consts: Vec<Location>,
 }
 
 /// Pass 4: `createEffect(compute, apply)` whose compute returns `source`.
@@ -65,6 +69,14 @@ pub(super) struct AliasRow {
     /// (a `const` that holds exactly the `const` variable `source`), so it
     /// is the source's value for every rule, a read included.
     pub(super) exact: bool,
+    /// ADR 0511: the binding is a `const` of one name whose initializer is a
+    /// named runtime import (`const d = a1`), or a slot of an object pattern
+    /// over an inline literal of data properties whose value for the slot is
+    /// one (`const { d } = { d: a1 }`). Exact where the import resolves to a
+    /// module-scope `const` ([`FileRows::module_consts`]): an import is a
+    /// live binding of that `const`, initialized before any function the
+    /// importing module defines can run.
+    pub(super) import: bool,
     /// Each name with a symbol: (symbol, display).
     pub(super) names: Vec<(SymbolId, SymbolId)>,
 }
@@ -352,10 +364,19 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
             if exact {
                 exact_rows.insert(binding.names[0].span);
             }
+            let import = !exact
+                && binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding
+                    .initializer_identifier
+                    .as_ref()
+                    .is_some_and(|identifier| named_runtime_import(file, identifier.span));
             rows.aliases.push(AliasRow {
                 source: source.clone(),
                 immutable: binding.immutable,
                 exact,
+                import,
                 names: names.clone(),
             });
         }
@@ -386,8 +407,79 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
             source: source.clone(),
             immutable: true,
             exact: true,
+            import: false,
             names: vec![(symbol.clone(), name_of(alias.local))],
         });
+    }
+    // ADR 0511: a slot of an inline object literal holding a named runtime
+    // import (`const { d } = { d: a1 }`), the literal's other properties
+    // plain data with static keys.
+    for binding in &file.ast.bindings {
+        if !binding.immutable
+            || binding.shape != solid_facts::ast::BindingShape::Object
+            || file
+                .source_text(binding.pattern)
+                .is_none_or(|pattern| pattern.contains('=') || pattern.contains("..."))
+        {
+            continue;
+        }
+        let Some(initializer) = binding
+            .initializer
+            .map(|span| file.ast.peel_ts_sugar_span(span))
+        else {
+            continue;
+        };
+        for slot in &binding.object_slots {
+            let Some(value) = crate::execution_role::closed_literal_slot_value(
+                file,
+                initializer,
+                slot.property.as_str(),
+            ) else {
+                continue;
+            };
+            if !slot.plain_identifier_key || !named_runtime_import(file, value) {
+                continue;
+            }
+            // A value position no entity was demanded at: the import's own
+            // local name carries its symbol.
+            let source = entities.get(&location(path.clone(), value)).or_else(|| {
+                file.ast
+                    .reference_declaration(file.ast.peel_ts_sugar_span(value))
+                    .and_then(|declaration| entities.get(&location(path.clone(), declaration)))
+            });
+            let (Some(source), Some(symbol)) = (
+                source,
+                entities.get(&location(path.clone(), slot.local.span)),
+            ) else {
+                continue;
+            };
+            rows.aliases.push(AliasRow {
+                source: source.clone(),
+                immutable: true,
+                exact: false,
+                import: true,
+                names: vec![(symbol.clone(), name_of(slot.local.span))],
+            });
+        }
+    }
+    // ADR 0511: the module-scope `const`s an import can hold.
+    let analyzed = !file.path.as_str().contains("/node_modules/")
+        && ![".d.ts", ".d.mts", ".d.cts"]
+            .iter()
+            .any(|suffix| file.path.as_str().ends_with(suffix));
+    if analyzed {
+        rows.module_consts = file
+            .ast
+            .bindings
+            .iter()
+            .filter(|binding| {
+                binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.len() == 1
+                    && crate::indexes::at_module_scope(&file.ast, binding.declaration)
+            })
+            .map(|binding| location(path.clone(), binding.names[0].span))
+            .collect();
     }
     // Pass 7: props parameters of possible components.
     let statuses = file_statuses(lookup, slot, file);
@@ -769,4 +861,72 @@ pub(super) fn typed_rows(
         }
     }
     rows
+}
+
+/// ADR 0511: `span` is a reference to a named, runtime (not type-only)
+/// import binding of `file` (`import { a1 } from "./m"`).
+pub(crate) fn named_runtime_import(file: &FileFacts, span: Span) -> bool {
+    let ast = &file.ast;
+    let span = ast.peel_ts_sugar_span(span);
+    ast.identifiers.iter().any(|identifier| {
+        identifier.span == span && identifier.role == solid_facts::ast::IdentifierRole::Reference
+    }) && ast.reference_declaration(span).is_some_and(|declaration| {
+        ast.imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .any(|import| {
+                import.bindings.iter().any(|binding| {
+                    !binding.type_only
+                        && binding.kind == solid_facts::ast::ImportKind::Named
+                        && binding.imported.is_some()
+                        && binding.local.span == declaration
+                })
+            })
+    })
+}
+
+/// ADR 0511: `declaration` names an import alias ([`AliasRow::import`]): a
+/// `const` of one name initialized by a named runtime import, or a slot of an
+/// object pattern (no default or rest) over an inline closed literal whose
+/// value for the slot is one.
+pub(crate) fn import_alias_declaration(file: &FileFacts, declaration: Span) -> bool {
+    let ast = &file.ast;
+    let Some(binding) = ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+    else {
+        return false;
+    };
+    if !binding.immutable {
+        return false;
+    }
+    match binding.shape {
+        solid_facts::ast::BindingShape::Identifier => {
+            binding.names.len() == 1
+                && binding
+                    .initializer_identifier
+                    .as_ref()
+                    .is_some_and(|identifier| named_runtime_import(file, identifier.span))
+        }
+        solid_facts::ast::BindingShape::Object => {
+            let Some(initializer) = binding.initializer.map(|span| ast.peel_ts_sugar_span(span))
+            else {
+                return false;
+            };
+            file.source_text(binding.pattern)
+                .is_some_and(|pattern| !pattern.contains('=') && !pattern.contains("..."))
+                && binding.object_slots.iter().any(|slot| {
+                    slot.local.span == declaration
+                        && slot.plain_identifier_key
+                        && crate::execution_role::closed_literal_slot_value(
+                            file,
+                            initializer,
+                            slot.property.as_str(),
+                        )
+                        .is_some_and(|value| named_runtime_import(file, value))
+                })
+        }
+        solid_facts::ast::BindingShape::Array => false,
+    }
 }

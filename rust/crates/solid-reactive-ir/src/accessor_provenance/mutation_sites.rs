@@ -479,11 +479,67 @@ pub(super) fn string_code_reference(
                 )
             });
     }
+    // ADR 0511: an array pattern over a binding holding an array literal
+    // (`const pair = [0, eval]; const [, f] = pair;`) takes its slot from that
+    // literal as from one written in place, where the holder is an immutable,
+    // never-written `const` this pattern is the one reference to (nothing
+    // else can replace the array or a slot). Any other holder of a literal
+    // (a `let`, a written or shared one) may hold anything: a possible
+    // gateway. Before this, the holder's initializer counted as a fresh
+    // allocation and no element was read.
+    let literal = {
+        let initializer = file.ast.peel_ts_sugar_span(initializer);
+        if file.ast.array_literals.contains(&initializer) {
+            Some(initializer)
+        } else if binding.shape == ast::BindingShape::Array {
+            let held = file
+                .ast
+                .reference_declaration(initializer)
+                .and_then(|holder| {
+                    file.ast
+                        .bindings
+                        .iter()
+                        .find(|candidate| {
+                            candidate.shape == ast::BindingShape::Identifier
+                                && candidate.names.iter().any(|name| name.span == holder)
+                        })
+                        .map(|candidate| (holder, candidate))
+                });
+            match held {
+                Some((holder, candidate))
+                    if candidate.initializer.is_some_and(|value| {
+                        file.ast
+                            .array_literals
+                            .contains(&file.ast.peel_ts_sugar_span(value))
+                    }) =>
+                {
+                    let references = file
+                        .ast
+                        .identifiers
+                        .iter()
+                        .filter(|id| {
+                            id.role == ast::IdentifierRole::Reference
+                                && file.ast.reference_declaration(id.span) == Some(holder)
+                        })
+                        .count();
+                    if !candidate.immutable
+                        || references != 1
+                        || crate::indexes::binding_written(file, holder)
+                    {
+                        return true;
+                    }
+                    candidate
+                        .initializer
+                        .map(|value| file.ast.peel_ts_sugar_span(value))
+                }
+                _ => None,
+            }
+        } else {
+            None
+        }
+    };
     if binding.shape == ast::BindingShape::Array
-        && file
-            .ast
-            .array_literals
-            .contains(&file.ast.peel_ts_sugar_span(initializer))
+        && let Some(initializer) = literal
     {
         // No element identity is guessed. Any possible gateway in a literal
         // withholds every selected callable slot until exact value flow exists.

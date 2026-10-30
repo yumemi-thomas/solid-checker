@@ -235,7 +235,10 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   pending case (`fixtures/reactive-ir/strict-read-async-apply`). Where the
   first run is proven to meet the source pending (ADRs 0504, 0505), the read is
   [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md)'s
-  instead and is not reported here.
+  instead and is not reported here. Where neither outcome is proven (ADR
+  0509), both stay uncertifiable at the read, this rule's and that one's
+  (ADR 0511): a `<Loading>` that shows its fallback holds a user effect to the
+  reveal, where the warning fires instead.
 
 ## Why is this bad?
 

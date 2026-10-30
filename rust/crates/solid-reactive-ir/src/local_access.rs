@@ -1701,7 +1701,14 @@ impl LocalAccessContext<'_, '_> {
         if inside_known_value_function_argument(file, call.callee, self.lookup) {
             return;
         }
-        if let Some((declaration, property)) = self.exact_props_callee(file, call.callee) {
+        // ADR 0511: or a closed alias of the prop (`const d = props.k`,
+        // `const { d } = { d: props.k }`).
+        let props_callee = self.exact_props_callee(file, call.callee).or_else(|| {
+            crate::execution_role::handed_member_alias(file, call.callee)
+                .filter(|member| *member != file.ast.peel_ts_sugar_span(call.callee))
+                .and_then(|member| self.exact_props_callee(file, member))
+        });
+        if let Some((declaration, property)) = props_callee {
             if self.discover_props_call(file, call, &declaration, &property, allowed, result) {
                 return;
             }
@@ -2024,12 +2031,23 @@ impl LocalAccessContext<'_, '_> {
         // As `discover_call`: a read in a non-component function is placed
         // by the summaries of its callers, which a prop's value has none of:
         // there the read is an obligation.
-        let placed = self.props_call_placed(file, call);
+        let placed = self.props_call_placed(file, call)
+            || self.props_call_pending_in_layers(file, call, &sources);
         let mut unplaced_read = false;
+        // ADR 0511: as an own source's (`discover_call`), a read in a named
+        // local function outside the component's own code is read where the
+        // calls of that function run (`push_call_attributed_async_reads`
+        // below), not at its own site.
+        let read_by_callers = inside_non_component_function(file, call.callee, self.lookup)
+            && named_callback_execution_role(file, call.callee, self.lookup).is_none()
+            && read_in_named_local_function(file, call.callee, self.lookup);
         for source in &sources {
             if let Some(accessor) = self.accessors.get(source.as_str())
                 && read_multiplicity.is_some()
             {
+                if placed && read_by_callers && self.async_sources.contains(source.as_str()) {
+                    continue;
+                }
                 if placed {
                     self.push_accessor_read(
                         file,
@@ -2041,6 +2059,29 @@ impl LocalAccessContext<'_, '_> {
                     );
                 } else {
                     unplaced_read = true;
+                }
+            }
+        }
+        // ADR 0511: a read in a named local function the body defines
+        // (`const wrapUse = () => { props.k(); }`) is read where a call of it
+        // runs, as an own source's is.
+        if placed
+            && !alias_withheld
+            && read_in_named_local_function(file, call.callee, self.lookup)
+            && named_callback_execution_role(file, call.callee, self.lookup).is_none()
+            && !pending_accessor_probe(file, call.callee, self.lookup)
+        {
+            for source in &sources {
+                if self.async_sources.contains(source.as_str())
+                    && self.accessors.contains_key(source.as_str())
+                {
+                    self.push_call_attributed_async_reads(
+                        file,
+                        call,
+                        source.as_str(),
+                        allowed,
+                        result,
+                    );
                 }
             }
         }
@@ -2103,6 +2144,42 @@ impl LocalAccessContext<'_, '_> {
                     && self.lookup.primitive_at_call(file, outer.span).is_some()
                     && containing_ast_function(&file.ast, outer.span)
                         .is_some_and(|owner| self.lookup.function_is_component(file, owner))
+            })
+    }
+
+    /// ADR 0511: a call of a prop's value deeper than
+    /// [`Self::props_call_placed`] admits (an IIFE, a closure or a helper's
+    /// callback inside an effect's apply) is placed by the first-run proof
+    /// itself: every source a visible call site passes is an async accessor,
+    /// and ADR 0504/0510's proof climbs from the call through those in-place
+    /// layers to an apply whose first run meets each pending
+    /// ([`crate::execution_role::pending_apply_first_read`], which walks the
+    /// layers with `runs_nothing_before_in_layers`). The read then throws
+    /// `PENDING_ASYNC_UNTRACKED_READ` there; anything else stays the
+    /// obligation.
+    fn props_call_pending_in_layers(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        sources: &[SymbolId],
+    ) -> bool {
+        !sources.is_empty()
+            && sources.iter().all(|source| {
+                self.accessors
+                    .get(source.as_str())
+                    .is_some_and(|(_, declaration)| {
+                        let options = self.effective_async_options(source.as_str());
+                        self.async_sources.contains(source.as_str())
+                            && !options.declared_loading
+                            && !options.opaque
+                            && crate::execution_role::pending_apply_first_read(
+                                file,
+                                call.span,
+                                declaration,
+                                self.lookup,
+                            )
+                            .is_some()
+                    })
             })
     }
 
@@ -2721,9 +2798,10 @@ impl LocalAccessContext<'_, '_> {
                     && first
                     && !options.declared_loading
                     && !options.opaque
-                    && let Some(apply) = crate::execution_role::pending_apply_first_read(
+                    && let Some(apply) = crate::execution_role::pending_apply_first_read_from(
                         file,
                         call.span,
+                        read.span,
                         declaration,
                         self.lookup,
                     )

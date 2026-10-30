@@ -891,7 +891,10 @@ pub(crate) fn reported_locations(program: &Program) -> Vec<&Location> {
 }
 
 /// Removes SC1001 findings already owned by a more specific finding that
-/// survived rule enablement. SC5001 names the same pending async read, SC1004
+/// survived rule enablement. SC5001 names the same pending async read (a
+/// violation: the run throws before it would warn; ADR 0511: where both are
+/// uncertifiable, ADR 0509's two outcomes stand open and both stay, so a run
+/// that meets the source settled has its strict read's obligation), SC1004
 /// owns reads inside its return-shape condition, and Solid 2 lets SC1007 own
 /// the exact handler expression it reports. Calling this before enablement
 /// filtering would let a disabled owner erase an enabled strict-read finding.
@@ -904,12 +907,22 @@ pub fn suppress_findings_owned_by_enabled_rules(
         .filter(|finding| finding.id == "SC5001")
         .map(|finding| {
             (
-                finding.primary_location.path.clone(),
-                finding.primary_location.start_byte,
-                finding.primary_location.end_byte,
+                (
+                    finding.primary_location.path.clone(),
+                    finding.primary_location.start_byte,
+                    finding.primary_location.end_byte,
+                ),
+                finding.kind == "uncertifiable",
             )
         })
-        .collect::<std::collections::HashSet<_>>();
+        .fold(
+            std::collections::HashMap::<_, bool>::default(),
+            |mut pending, (site, open)| {
+                // One proven pending read at the site owns it.
+                *pending.entry(site).or_insert(true) &= open;
+                pending
+            },
+        );
     let component_conditions = findings
         .iter()
         .filter(|finding| finding.id == "SC1004")
@@ -940,7 +953,10 @@ pub fn suppress_findings_owned_by_enabled_rules(
             location.start_byte,
             location.end_byte,
         );
-        !pending_reads.contains(&exact)
+        let read_open = finding.kind == "uncertifiable";
+        pending_reads
+            .get(&exact)
+            .is_none_or(|pending_open| *pending_open && read_open)
             && !handler_reads.contains(&exact)
             && !component_conditions.iter().any(|condition| {
                 condition.path == location.path
