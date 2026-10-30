@@ -59,6 +59,7 @@
 //   typings is `type-error` and proves nothing: fix the case.
 // Native violations with no diagnostic on their line are listed as
 // `static-only`: either a false positive or a site the steps did not reach.
+import { pinnedBrowser } from "./playwright-browser.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -119,11 +120,9 @@ if (pinnedInstall) for (const [name, version] of Object.entries(compilers)) asse
 // for launch, page and close). At concurrency 8 the 735 cases took 312 s
 // against 373 s for Chrome for Testing, every verdict the same (2026-10-24).
 // --browser still takes the full Chrome for Testing.
+// The build is the one the pinned Playwright names (scripts/playwright-browser.mjs), never the newest in the cache.
 function defaultChromium() {
-  const cache = join(process.env.HOME, "Library/Caches/ms-playwright");
-  const builds = readdirSync(cache).filter((name) => /^chromium_headless_shell-\d+$/.test(name)).sort((a, b) => Number(b.split("-")[1]) - Number(a.split("-")[1]));
-  assert(builds.length, "no playwright chromium headless shell; pass --browser");
-  return join(cache, builds[0], "chrome-headless-shell-mac-arm64/chrome-headless-shell");
+  return pinnedBrowser().executable;
 }
 
 const compilerOptions = {

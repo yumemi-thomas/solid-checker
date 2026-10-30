@@ -1175,3 +1175,8 @@ The differential fuzzer's fast path runs its runner in headless Chromium, not Ha
 <a id="adr-0513"></a>
 ## ADR 0513 — The fuzzer measures recall on axes the base grids do not draw
 `--recall` grids (`mx-recall`, `lg-recall`) cross each new binding, callee form, layer, callback form, mount and file source with the base grid of every cell, and add recall-only contexts and a `LOADING_ON_OUTSIDE_HOLD` template; mutation mode pairs each misuse shape with its legal twin, checker only. Opt-in so the base grids, their seeds and baselines stay byte-identical; not in `fuzz-focus` or `fuzz-smoke` by default, since their false cleans are the open-work misses this measures. Owners: `scripts/fuzz/misuse.mjs`, `mounts.mjs`, `matrix.mjs` (`recallAxes`), `mutation.mjs`.
+
+<a id="adr-0514"></a>
+## ADR 0514 — The fuzzer's browser is the pinned Playwright's; a Linux VM where process starts are gated
+Without `--browser`, the oracle and the Chrome host run the headless shell the pinned Playwright names (`browsers.json` revision, the platform's cache and layout; `scripts/playwright-browser.mjs`) and stop when it is absent, instead of the newest build in the cache (invariant 7: a cache held Chrome 156 where Playwright 1.60.0 pins 148). `scripts/fuzz/vm.sh` runs the fuzzer in a Colima VM on a Mac whose security agents gate every process start; outcomes measured equal, 3.7x faster than the best macOS setting.
+
