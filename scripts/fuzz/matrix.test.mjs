@@ -263,3 +263,120 @@ describe("the mount axis", () => {
     }
   });
 });
+
+describe("the source axes", () => {
+  const firstOf = async (code, context, source) => {
+    const { gridShapes } = await import("./matrix.mjs");
+    return gridShapes(code, context, ["root"], [source]);
+  };
+  it("adds no shape and moves no program without --sources", async () => {
+    const { gridShapes, shapeSeed } = await import("./matrix.mjs");
+    const local = gridShapes("REACTIVE_WRITE_IN_OWNED_SCOPE", "body");
+    expect(gridShapes("REACTIVE_WRITE_IN_OWNED_SCOPE", "body", ["root"], ["local"])).toEqual(local);
+    expect(local.every((shape) => !("source" in shape))).toBe(true);
+    expect(shapeSeed(1, "REACTIVE_WRITE_IN_OWNED_SCOPE", "body", local[0])).toBe(shapeSeed(1, "REACTIVE_WRITE_IN_OWNED_SCOPE", "body", { ...local[0] }));
+  });
+  it("expands axis names and refuses an unknown source", async () => {
+    const { SOURCE_AXES, sourcesOption } = await import("./misuse.mjs");
+    expect(sourcesOption("props,module")).toEqual([...SOURCE_AXES.props, ...SOURCE_AXES.module]);
+    expect(() => sourcesOption("nowhere")).toThrow(/unknown source/);
+  });
+  it("creates a prop source's values in the exported parent and names them through props", async () => {
+    const { cellList, generateShape } = await import("./matrix.mjs");
+    const cell = cellList().find((c) => c.code === "REACTIVE_WRITE_IN_OWNED_SCOPE" && c.context === "body");
+    const [shape] = (await firstOf(cell.code, cell.context, "prop")).filter((s) => s.variant === "signal" && s.binding === "direct");
+    const { built } = generateShape({ seed: 1 }, cell, shape, 0);
+    expect(built.id).toMatch(/-s-prop$/);
+    expect(built.text).toMatch(/^function C1\(props: C1Props\)/m);
+    expect(built.text).toMatch(/^export function P1\(\) \{\n {2}const \[w1, setW1\] = createSignal\(0\);/m);
+    expect(built.text).toContain("<C1 w1={w1} setW1={setW1} />");
+    expect(built.text.split("\n")[built.sites[0].line - 1]).toContain("props.setW1(7)");
+    expect(JSON.parse(built.files["oracle.json"]).mount).toEqual(["P1"]);
+  });
+  it("prints each source in its own form", async () => {
+    const { cellList, generateShape } = await import("./matrix.mjs");
+    const forms = {
+      "prop-destructured": [/^function C1\(\{ w1, setW1 \}: C1Props\)/m, /setW1\(7\)/],
+      "prop-merge": [/const merged = merge\(\{ extra: 1 \}, props\);/, /merged\.setW1\(7\)/],
+      "prop-omit": [/const rest = omit\(props, "extra"\);/, /extra=\{1\}/],
+      "prop-spread": [/^function M1\(props: C1Props\) \{\n {2}return <C1 \{\.\.\.props\} \/>;/m, /<M1 w1=\{w1\} setW1=\{setW1\} \/>/],
+      context: [/const ValCtx = createContext<C1Vals>\(\);/, /const ctx = useContext\(ValCtx\);/, /<ValCtx value=\{\{ w1, setW1 \}\}>/],
+      "context-destructured": [/const \{ w1, setW1 \} = useContext\(ValCtx\);/],
+      "module-hook": [/const \{ w1, setW1 \} = useVals\(\);/, /import \{ useVals \} from "\.\/helpers";/],
+      "module-hook-member": [/const vals = useVals\(\);/, /vals\.setW1\(7\)/],
+    };
+    const cell = cellList().find((c) => c.code === "REACTIVE_WRITE_IN_OWNED_SCOPE" && c.context === "body");
+    for (const [source, patterns] of Object.entries(forms)) {
+      const [shape] = (await firstOf(cell.code, cell.context, source)).filter((s) => s.variant === "signal" && s.binding === "direct");
+      const { built } = generateShape({ seed: 1 }, cell, shape, 0);
+      for (const pattern of patterns) expect(built.text, source).toMatch(pattern);
+    }
+    const [moduleShape] = (await firstOf(cell.code, cell.context, "module")).filter((s) => s.variant === "signal" && s.binding === "direct");
+    const { built } = generateShape({ seed: 1 }, cell, moduleShape, 0);
+    expect(built.files["helpers.ts"]).toBe('import { createSignal } from "solid-js";\n\nexport const [w1, setW1] = createSignal(0);\n');
+    expect(built.text).toContain('import { w1, setW1 } from "./helpers";');
+    expect(JSON.parse(built.files["oracle.json"]).mount).toEqual(["C1"]);
+  });
+  it("passes a read's value as a getter prop only where the site reads it", async () => {
+    const { sourcesOf } = await import("./misuse.mjs");
+    expect(sourcesOf("STRICT_READ_UNTRACKED", "signal", "direct")).toContain("prop-value");
+    expect(sourcesOf("STRICT_READ_UNTRACKED", "signal", "alias")).not.toContain("prop-value");
+    expect(sourcesOf("REACTIVE_WRITE_IN_OWNED_SCOPE", "signal", "direct")).not.toContain("prop-value");
+    expect(sourcesOf("PENDING_ASYNC_UNTRACKED_READ", null, "direct")).toEqual(expect.arrayContaining(["async-prop", "async-value", "async-context", "async-loading", "module"]));
+    expect(sourcesOf("PENDING_ASYNC_UNTRACKED_READ", null, "direct")).not.toContain("prop");
+    expect(sourcesOf("FLUSH_IN_ACTION", null, "direct")).toEqual(["local"]);
+    const { cellList, generateShape } = await import("./matrix.mjs");
+    const cell = cellList().find((c) => c.code === "PENDING_ASYNC_UNTRACKED_READ" && c.context === "body");
+    const [shape] = (await firstOf(cell.code, cell.context, "async-value")).filter((s) => s.binding === "direct");
+    const { built } = generateShape({ seed: 1 }, cell, shape, 0);
+    expect(built.text).toContain("<C1 a1={a1()} />");
+    expect(built.text.split("\n")[built.sites[0].line - 1].trim()).toBe("props.a1;");
+    const [loading] = (await firstOf(cell.code, cell.context, "async-loading")).filter((s) => s.binding === "direct");
+    expect(generateShape({ seed: 1 }, cell, loading, 0).built.text).toMatch(/<Loading fallback=\{0\}>\n\s+<C1 a1=\{a1\} \/>\n\s+<\/Loading>/);
+  });
+});
+
+describe("combination programs", () => {
+  it("marks the cell's site primary among one or two legal uses of other codes, deterministically, with an id and seed of its own", async () => {
+    const { cellList, combined, generateShape, gridShapes, shapeSeed, siteOf } = await import("./matrix.mjs");
+    const { validate } = await import("./model.mjs");
+    const cell = cellList().find((c) => c.code === "REACTIVE_WRITE_IN_OWNED_SCOPE" && c.context === "body");
+    const [plain] = gridShapes(cell.code, cell.context);
+    const [shape] = combined([plain], true);
+    expect(shapeSeed(1, cell.code, cell.context, shape)).not.toBe(shapeSeed(1, cell.code, cell.context, plain));
+    const a = generateShape({ seed: 1 }, cell, shape, 0);
+    expect(a.built.id).toBe(`${generateShape({ seed: 1 }, cell, plain, 0).built.id}-c`);
+    expect(generateShape({ seed: 1 }, cell, shape, 0).built.text).toBe(a.built.text);
+    expect(validate(a.program)).toEqual([]);
+    const uses = a.built.sites.filter((site) => site.code);
+    expect(uses.length).toBeGreaterThanOrEqual(2);
+    expect(uses.filter((site) => site.primary)).toHaveLength(1);
+    expect(siteOf(a.built)).toMatchObject({ code: cell.code, primary: true });
+    expect(uses.filter((site) => !site.primary).every((site) => site.code !== cell.code && site.bind === "direct")).toBe(true);
+  });
+  it("judges the primary site without the claims that cover another use", async () => {
+    const { judge } = await import("./matrix.mjs");
+    const site = { line: 10, aux: [] };
+    const runtime = { diagnostics: [{ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", positions: [{ file: "App.tsx", line: 10 }] }], errors: [] };
+    const elsewhere = { rule: "no-write-in-pure-computation", kind: "violation", line: 20, endLine: 20 };
+    const input = { code: "REACTIVE_WRITE_IN_OWNED_SCOPE", site, typecheck: { ok: true }, checker: { ok: true, findings: [elsewhere] }, runtime };
+    expect(judge(input).outcome).toBe("agree");
+    const { outcome, detail } = judge({ ...input, others: [[20]] });
+    expect(outcome).toBe("false-clean");
+    expect(detail.atOthers).toEqual(["no-write-in-pure-computation@20"]);
+  });
+  it("judges every use of a legal combination and takes the worst", async () => {
+    const { judgeLegalProgram } = await import("./legal.mjs");
+    const built = { sites: [{ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", line: 5, aux: [], hit: 1, primary: true }, { code: "NO_OWNER_CLEANUP", line: 9, aux: [], hit: 2 }], plan: { clicks: [] } };
+    const runtime = { diagnostics: [], errors: [], hits: { 1: 1, 2: 1 } };
+    const clean = judgeLegalProgram({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", built, typecheck: { ok: true }, checker: { ok: true, findings: [] }, runtime });
+    expect(clean.outcome).toBe("clean");
+    expect(clean.detail.sites).toEqual(["REACTIVE_WRITE_IN_OWNED_SCOPE@5:clean", "NO_OWNER_CLEANUP@9:clean"]);
+    const fp = judgeLegalProgram({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", built, typecheck: { ok: true }, checker: { ok: true, findings: [{ rule: "missing-owner", kind: "violation", line: 9, endLine: 9 }] }, runtime });
+    expect(fp).toMatchObject({ outcome: "false-positive", detail: { at: 9, code: "NO_OWNER_CLEANUP" } });
+    // Another use provoking a code on its own lines (a `-guarded-rerun` read) does not make a use of that code elsewhere not legal.
+    const shared = { sites: [{ code: "STRICT_READ_UNTRACKED", line: 5, aux: [], hit: 1, primary: true }, { code: "PENDING_ASYNC_UNTRACKED_READ", line: 9, aux: [], hit: 2 }], plan: { clicks: [] } };
+    const rerun = { ...runtime, diagnostics: [{ code: "STRICT_READ_UNTRACKED", positions: [{ file: "App.tsx", line: 9 }] }] };
+    expect(judgeLegalProgram({ code: "STRICT_READ_UNTRACKED", built: shared, typecheck: { ok: true }, checker: { ok: true, findings: [] }, runtime: rerun }).detail.sites).toEqual(["STRICT_READ_UNTRACKED@5:clean", "PENDING_ASYNC_UNTRACKED_READ@9:clean"]);
+  });
+});

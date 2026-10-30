@@ -29,7 +29,8 @@ import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
 import { fnv, regionOf, siteOf } from "./matrix.mjs";
 import { LAYERS, LEGAL_CODES, SPEC, gridBindingsOf, legalVariantsOf } from "./misuse.mjs";
-import { mountSuffix, mountsOption } from "./matrix.mjs";
+import { axesKey, combined, mountSuffix, mountsOption, shapeAxes } from "./matrix.mjs";
+import { sourcesOption } from "./misuse.mjs";
 import { finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
@@ -46,7 +47,7 @@ const RUN_CLAIMING_RULES = ["pending-async-unsuspendable-read"];
  * Judges one legal program at its site.
  * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object, plan?: object }} input
  */
-export function judgeLegal({ code, site, typecheck: typed, checker, runtime, plan }) {
+export function judgeLegal({ code, site, typecheck: typed, checker, runtime, plan, atSite: siteScoped = false }) {
   if (typed && typed.ok === false) return { outcome: "typed-away", detail: { error: typed.errors?.[0] } };
   if (!checker?.ok) return { outcome: "harness", detail: { why: `checker: ${String(checker?.error ?? "not run").slice(0, 120)}` } };
   if (!runtime) return { outcome: "harness", detail: { why: "no runtime record" } };
@@ -59,7 +60,10 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
   const atSite = violations.filter((finding) => inLines(finding, region));
   const stray = violations.filter((finding) => !inLines(finding, region)).map((finding) => `${finding.rule}@${finding.line}`);
   const detail = { findings: relevant.filter((finding) => inLines(finding, region)).map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(stray.length ? { stray } : {}) };
-  if (events.some((event) => event.code === code)) return { outcome: "not-legal", detail: { ...detail, reported: [...new Set(events.map((event) => event.code))] } };
+  // `atSite` (a combination program): only a diagnostic on the use's own lines says that use is not legal; another use of the file
+  // may provoke the same code on purpose (a `-guarded-rerun` read is a strict read Solid reports).
+  const onSite = (event) => !siteScoped || event.positions.some((position) => (position.file === "App.tsx" || position.file === undefined) && region.includes(position.line));
+  if (events.some((event) => event.code === code && onSite(event))) return { outcome: "not-legal", detail: { ...detail, reported: [...new Set(events.map((event) => event.code))] } };
   // A run-claiming violation anywhere (a call attributed the read in a closure) whose codes the runtime never reports (ADR 0504 review).
   const claimedRuns = violations.filter((finding) => RUN_CLAIMING_RULES.includes(finding.rule) && !events.some((event) => codesForRule(finding.rule).includes(event.code)));
   if (claimedRuns.length && !disturbances(runtime, plan ?? { clicks: [] }).length) return { outcome: "false-positive", detail: { ...detail, rules: [...new Set(claimedRuns.map((finding) => finding.rule))], at: claimedRuns.map((finding) => finding.line) } };
@@ -78,17 +82,32 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
   return { outcome: "false-positive", detail: { ...detail, rules: [...new Set(contradicted.map((finding) => finding.rule))] } };
 }
 
+/** Outcomes from worst to best: a combination program takes its worst site's. */
+const WORST_FIRST = ["false-positive", "not-legal", "disturbed", "harness", "typed-away", "unexecuted", "uncertifiable", "clean"];
+
+/**
+ * Judges a legal program: at its site, or, for a combination program (`--combine`, misuse.mjs `buildCombo`), at every use, each with
+ * its own code (every use there is legal), taking the worst; `detail.sites` lists each use's outcome.
+ */
+export function judgeLegalProgram({ built, ...input }) {
+  const uses = built.sites.filter((site) => site.code);
+  if (!uses.some((site) => site.primary)) return judgeLegal({ ...input, site: siteOf(built) });
+  const verdicts = uses.map((site) => ({ site, ...judgeLegal({ ...input, code: site.code, site, atSite: true }) }));
+  const worst = verdicts.reduce((a, b) => (WORST_FIRST.indexOf(b.outcome) < WORST_FIRST.indexOf(a.outcome) ? b : a));
+  return { outcome: worst.outcome, detail: { ...worst.detail, at: worst.site.line, code: worst.site.code, sites: verdicts.map((v) => `${v.site.code}@${v.site.line}:${v.outcome}`) } };
+}
+
 /** The cells: every code with legal contexts, each legal context. */
 export function legalCells({ codes } = {}) {
   return LEGAL_CODES().filter((code) => !codes || codes.includes(code)).flatMap((code) => SPEC[code].legal.map((context) => ({ code, context })));
 }
 
 /** The legal shapes of a code (`--grid`): its legal variants x its grid bindings x the layers. */
-export const legalShapes = (code, mounts = ["root"]) => legalVariantsOf(code).flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => mounts.map((mount) => ({ variant, binding, layer, ...(mount === "root" ? {} : { mount }) })))));
+export const legalShapes = (code, mounts = ["root"], sources = ["local"], context) => legalVariantsOf(code).flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => shapeAxes(code, variant, binding, mounts, sources, context).map((axes) => ({ variant, binding, layer, ...axes })))));
 
 /** One legal program: its seed depends on the run seed and the cell and the index (random) or the shape (grid) only. */
 export function generateLegal(options, { code, context }, { index, shape }) {
-  const key = shape ? `legal/${code}/${context}/${shape.variant ?? "-"}/${shape.binding}/${shape.layer}${shape.mount ? `/${shape.mount}` : ""}` : `legal/${code}/${context}`;
+  const key = shape ? `legal/${code}/${context}/${shape.variant ?? "-"}/${shape.binding}/${shape.layer}${axesKey(shape)}` : `legal/${code}/${context}`;
   const seed = programSeed((Number(options.seed) ^ fnv(key)) >>> 0, shape ? 0 : index);
   const program = generateProgram(seed, { profile: "misuse", misusePlan: { code, context, legal: true, ...(shape ?? {}) } });
   const suffix = shape ? `${shape.variant ?? "x"}-${shape.binding}-${shape.layer.replace("+", "-")}${mountSuffix(shape)}` : String(index);
@@ -107,7 +126,7 @@ export async function runLegal(options) {
     const cells = legalCells({ codes: options.codes?.split(",") });
     const entries = [];
     for (const cell of cells) {
-      if (options.grid) legalShapes(cell.code, mountsOption(options.mounts)).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => entries.push({ cell, index, ...generateLegal(options, cell, { shape }) }));
+      if (options.grid) combined(legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources), cell.context), options.combine).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => entries.push({ cell, index, ...generateLegal(options, cell, { shape }) }));
       else for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateLegal(options, cell, { index }) });
     }
     console.error(`legal: ${cells.length} cells, ${entries.length} programs`);
@@ -131,9 +150,9 @@ export async function runLegal(options) {
       for (const { cell, program, built } of chunk) {
         const value = results.get(built.id);
         const site = siteOf(built);
-        const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : judgeLegal({ code: cell.code, site, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, plan: built.plan });
+        const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : judgeLegalProgram({ code: cell.code, built, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, plan: built.plan });
         const misuse = program.components[0].misuse;
-        rows.push({ id: built.id, seed: program.seed, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, outcome: verdict.outcome, detail: verdict.detail, site: { line: site.line, hit: site.hit, aux: site.aux } });
+        rows.push({ id: built.id, seed: program.seed, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo } : {}), outcome: verdict.outcome, detail: verdict.detail, site: { line: site.line, hit: site.hit, aux: site.aux } });
         values.set(built.id, value);
       }
       console.error(`legal: ${Math.min(at + 150, entries.length)}/${entries.length}, ${Math.round((Date.now() - started) / 1000)}s, ${JSON.stringify(tally(rows))}`);
@@ -168,7 +187,7 @@ export async function runLegal(options) {
       for (const row of pick) {
         const value = values.get(row.id);
         const record = records.get(row.id);
-        const judged = record?.checker?.ok && !record.checker.perturbed?.length ? judgeLegal({ code: row.code, site: siteOf(value.built), typecheck: { ok: true }, checker: record.checker, runtime: record.runtime, plan: value.built.plan }) : null;
+        const judged = record?.checker?.ok && !record.checker.perturbed?.length ? judgeLegalProgram({ code: row.code, built: value.built, typecheck: { ok: true }, checker: record.checker, runtime: record.runtime, plan: value.built.plan }) : null;
         if (!judged) row.chrome = { status: "chrome-inconclusive", why: record?.checker?.perturbed?.[0] ?? record?.runtime?.failure?.message ?? "no record" };
         else if (row.outcome === "false-positive") row.chrome = { status: judged.outcome === "false-positive" ? "confirmed" : "not-confirmed", outcome: judged.outcome };
         else row.chrome = { status: judged.outcome === row.outcome ? "same" : "differs", outcome: judged.outcome };
@@ -201,12 +220,12 @@ export async function runLegal(options) {
   }
 }
 
-const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2]]
+const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for] [--sources local,props,context,module,async] [--combine]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2]]
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--tsc <tsrs>] [--cache-dir <dir>] [--no-cache]`;
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["per-cell", "codes", "cache-dir", "chrome-sample", "layers", "mounts"], extraFlags: ["grid", "no-chrome-cache"] });
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["per-cell", "codes", "cache-dir", "chrome-sample", "layers", "mounts", "sources"], extraFlags: ["grid", "no-chrome-cache", "combine"] });
     for (const key of ["perCell", "chromeSample"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

@@ -13,7 +13,7 @@
 // in; a context where the call is legal (a write in a handler) is not in the list. `typedAway` codes have no template: the published
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
-  signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, storeNestedSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
+  walk, signal, storeSignal, memoSignal, actionSignal, asyncSignal, storeOptSignal, storeNestedSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
   button, child, show, forEach, use, contain,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
@@ -27,6 +27,81 @@ export const LAYERS = ["none", "closure", "helper", "iife", "closure+helper", "m
  * (`--mounts`), never drawn: a root program keeps its seed, id and text.
  */
 export const MOUNTS = ["root", "child", "show", "for"];
+
+/**
+ * Where the values the misuse uses come from (the template's `setup` signals; a context's own trigger signal stays local). `local`
+ * (every program before the source axes): the misuse component creates them. The others, grid-only (`--sources`), never drawn, so a
+ * local program keeps its seed, id and text:
+ *   props    an exported parent `P1` creates them and renders `<C1 w1={w1} setW1={setW1} />`; the component reads `props.w1`
+ *            (`prop`), destructures its parameter (`prop-destructured`), reads them through `merge({ extra: 1 }, props)` or
+ *            `omit(props, "extra")` (rc.17 has no `mergeProps`/`splitProps`), or gets them through `M1`, which spreads its props
+ *            on `<C1 {...props} />` (`prop-spread`). `prop-value` passes a read's value (`w1={w1()}`, a getter the compiled JSX
+ *            makes) and the misuse reads `props.w1`.
+ *   context  the parent provides them (`<ValCtx value={{ w1, setW1 }}>`) and the component reads `useContext(ValCtx)`, as an object
+ *            (`ctx.setW1`) or destructured.
+ *   module   `helpers.ts` creates them at module scope (`export const [w1, setW1] = createSignal(0)`), or a hook there does
+ *            (`useVals()`), destructured or as an object (`vals.setW1`).
+ *   async    the async memo of an async template, created in the parent and read in the child: passed as an accessor, as its
+ *            value (`a1={a1()}`), by context, or as an accessor under the parent's `<Loading>`.
+ * `props` and `context` take the templates whose values are not async (async values are the `async` axis's); `module` takes all.
+ */
+export const SOURCE_AXES = {
+  props: ["prop", "prop-destructured", "prop-merge", "prop-omit", "prop-spread", "prop-value"],
+  context: ["context", "context-destructured"],
+  module: ["module", "module-hook", "module-hook-member"],
+  async: ["async-prop", "async-value", "async-context", "async-loading"],
+};
+export const SOURCES = ["local", ...Object.values(SOURCE_AXES).flat()];
+/** A source whose values a parent component creates (the component is then rendered by `P1`, not exported). */
+export const parentSource = (source) => source !== "local" && !source.startsWith("module");
+/** A source that hands the component a read's value, not the accessor: only a read written as the misuse itself can use it. */
+const valueSource = (source) => source === "prop-value" || source === "async-value";
+
+/**
+ * The sources a (code, variant, binding) can take: the template must have values (`setup`); `async` sources need an async value and
+ * `props`/`context` need none; a value source needs a bare read (`w1()`) at the site and a binding that keeps the read there (an alias
+ * of `props.w1` would read it on the alias's line); a template may refuse a source in a context (`sourcesNotIn`).
+ */
+export function sourcesOf(code, variant, binding, context) {
+  const spec = SPEC[code];
+  const excluded = spec.sourcesNotIn?.[context] ?? [];
+  const sigs = spec.setup(variant, (prefix) => `${prefix}1`);
+  if (!sigs.length) return ["local"];
+  const isAsync = sigs.some((sig) => sig.kind === "async");
+  const target = spec.call({ code, variant }, sigs);
+  const bareRead = target.kind === "local" && !target.args && sigs.some((sig) => sig.name === target.name && [undefined, "memo", "async"].includes(sig.kind));
+  return SOURCES.filter((source) => {
+    if (source === "local") return true;
+    if (excluded.includes(source)) return false;
+    if (source.startsWith("async-") ? !isAsync : (!source.startsWith("module") && isAsync)) return false;
+    if (valueSource(source)) return bareRead && ["direct", "wrapper"].includes(binding);
+    return true;
+  });
+}
+
+/** `--sources a,b`: source names or axis names (`props`, `context`, `module`, `async`); default `local` only. */
+export function sourcesOption(value) {
+  const sources = (value ?? "local").split(",").flatMap((name) => SOURCE_AXES[name] ?? [name]);
+  for (const source of sources) if (!SOURCES.includes(source)) throw new Error(`--sources: unknown source ${source} (${[...Object.keys(SOURCE_AXES), ...SOURCES].join(", ")})`);
+  return [...new Set(sources)];
+}
+
+/**
+ * How the component names a value of a source: the text of the value `name` the component created it as. `props.w1` (an object
+ * the component reads), `w1` (a destructured or imported binding), and `read: "value"` for a value source (the read is `props.w1`,
+ * not a call).
+ */
+export function sourcedName(source, name) {
+  switch (source) {
+    case "prop": case "prop-spread": case "prop-value": case "async-prop": case "async-value": case "async-loading": return `props.${name}`;
+    case "prop-merge": return `merged.${name}`;
+    case "prop-omit": return `rest.${name}`;
+    case "context": case "async-context": return `ctx.${name}`;
+    case "module-hook-member": return `vals.${name}`;
+    default: return name;
+  }
+}
+export const sourcedRead = (source) => (valueSource(source) ? "value" : "call");
 
 /** Contexts where nothing owns the code that runs: a handler, a timer, a promise or microtask callback, after an await, runWithOwner(null). */
 const UNOWNED = ["handler", "timer", "then", "micro", "async", "owner-null"];
@@ -116,7 +191,9 @@ export const SPEC = {
   // The `-guarded` applies (ADR 0504 review): the read sits behind a guard that returns on the first run, which is the only run;
   // `-closure`: the guard is in a closure the apply calls. `-rerun`: the compute reads a signal a button sets to 2, so the apply runs again
   // and the guarded read executes (the source settled by then): Chrome then judges the strict read the checker reports there.
-  PENDING_ASYNC_UNTRACKED_READ: { legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
+  // A module-scope async memo is created with no owner and is still pending when a `-guarded-rerun` apply runs again (Chrome reports
+  // the read there): those two legal contexts do not take the `module` source.
+  PENDING_ASYNC_UNTRACKED_READ: { sourcesNotIn: { "effect-apply-guarded-rerun": ["module"], "render-apply-guarded-rerun": ["module"] }, legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
     contexts: ["body", "root", "effect-apply", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
   },
@@ -227,14 +304,16 @@ export function describeUse(node, signals) {
   }
   if (target.kind === "local") {
     const { name, args } = target;
+    // A value source (`prop-value`): the value is a getter on `props`, so the read is the member itself, not a call.
+    const bare = sigs.some((sig) => sig?.read === "value" && sig.name === name);
     switch (node.bind) {
       case "alias": out.preludeLines.push(`const useIt = ${name};`); out.text = `useIt(${args})`; break;
       case "destructured": out.preludeLines.push(`const { useIt } = { useIt: ${name} };`); out.text = `useIt(${args})`; break;
-      case "wrapper": out.preludeLines.push(`const wrapUse = () => { ${AUX}${name}(${args}); };`); out.text = "wrapUse()"; break;
+      case "wrapper": out.preludeLines.push(`const wrapUse = () => { ${AUX}${bare ? name : `${name}(${args})`}; };`); out.text = "wrapUse()"; break;
       case "hook": out.preludeLines.push(`const useThing = () => ({ useIt: ${name} });`, "const { useIt } = useThing();"); out.text = `useIt(${args})`; break;
       case "hook-member": out.preludeLines.push(`const useThing = () => ({ useIt: ${name} });`, "const thing = useThing();"); out.text = `thing.useIt(${args})`; break;
       case "tuple": out.preludeLines.push(`const pair = [0, ${name}] as const;`, "const [, useIt] = pair;"); out.text = `useIt(${args})`; break;
-      default: out.text = `${name}(${args})`;
+      default: out.text = bare ? name : `${name}(${args})`;
     }
     return out;
   }
@@ -329,6 +408,55 @@ function inContext(context, stmts, kit) {
  * @returns {{ sigs: object[], body: object[], view: object[], shape: string, misuse: object }}
  */
 export function buildMisuse(kit, plan = {}) {
+  return plan.combo ? buildCombo(kit, plan) : buildOne(kit, plan);
+}
+
+/**
+ * The extra uses a combination program may take: every legal (code, context) whose template prints no module-scope context line
+ * (two would declare `Ctx` twice), except the `-guarded-rerun` contexts, whose rerun is a strict read Solid reports (a defect in the file).
+ * An extra is bound directly: the other bindings' prelude names (`useIt`, `wrapUse`) are fixed.
+ */
+const extraCells = () => LEGAL_CODES().filter((code) => !SPEC[code].contextLine).flatMap((code) => SPEC[code].legal.filter((context) => !context.endsWith("-rerun")).map((context) => ({ code, context })));
+
+/**
+ * `plan.combo` (`--combine`): a combination program. The cell's site (marked `primary`, the one the grids judge as the cell's) shares
+ * its component with one or two legal uses of other codes (each its own site, in its own legal context) and, half the time, unrelated
+ * reactive code (a signal, a memo that reads it, an effect on the memo, a handler that writes the signal, the memo in the JSX). The
+ * values of the cell's site come from a source the shape takes, drawn (local, a parent's props, a context, `helpers.ts`), and the
+ * statements of the parts are interleaved. Every draw comes from the program's own seed.
+ */
+function buildCombo(kit, plan) {
+  const { rng } = kit;
+  const primary = buildOne(kit, { ...plan, combo: undefined, source: plan.source ?? "draw" });
+  const marked = primary.body.concat(primary.view).flatMap((node) => [...walk(node)]).find(({ node }) => node.k === "use");
+  marked.node.primary = true;
+  const pool = extraCells().filter((cell) => cell.code !== primary.misuse.code);
+  const extras = Array.from({ length: rng.int(1, 2) }, () => {
+    const cell = rng.pick(pool);
+    return buildOne(kit, { code: cell.code, context: cell.context, legal: true, binding: "direct", layer: rng.pick(["none", "closure", "helper", "iife"]) });
+  });
+  const parts = [primary, ...extras];
+  if (rng.chance(0.5)) {
+    const d = signal(kit.name("d"), 1, "src");
+    const m = kit.name("m");
+    parts.push({ sigs: [d], body: [decl(m, prim("memo", fn([ret(read(d.name))]))), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))],
+      view: [child(kit.name("v"), call(ref(m))), button(kit.name("b"), [expr(write(d.name, 2))])] });
+  }
+  // Interleaved: each part keeps its own order, the parts take turns in a drawn order.
+  const interleave = (lists) => {
+    const queues = lists.map((list) => [...list]).filter((list) => list.length);
+    const out = [];
+    while (queues.length) { const at = rng.int(0, queues.length - 1); out.push(queues[at].shift()); if (!queues[at].length) queues.splice(at, 1); }
+    return out;
+  };
+  const extra = extras.map((part) => `${part.misuse.code}@${part.misuse.context}`);
+  return {
+    sigs: parts.flatMap((part) => part.sigs), body: interleave(parts.map((part) => part.body)), view: interleave(parts.map((part) => part.view)),
+    shape: `${primary.shape}/combo`, misuse: { ...primary.misuse, combo: { extras: extra, decoys: parts.length > extras.length + 1 } },
+  };
+}
+
+function buildOne(kit, plan = {}) {
   const { rng } = kit;
   const code = plan.code ?? rng.pick(TEMPLATE_CODES);
   const spec = SPEC[code];
@@ -345,7 +473,15 @@ export function buildMisuse(kit, plan = {}) {
   let stmts = [expr(site)];
   for (const l of layer === "none" ? [] : layer.split("+")) stmts = applyLayer(l, stmts, kit);
   const placed = inContext(context, stmts, kit);
-  const mount = plan.mount ?? "root";
+  const source = plan.source === "draw" ? rng.pick(sourcesOf(code, variant, binding, context)) : plan.source ?? "local";
+  if (!sourcesOf(code, variant, binding, context).includes(source)) throw new Error(`${code}/${variant}/${binding} cannot take source ${source}`);
+  // A parent source renders the component from its parent, plainly; the mount axis is not crossed with it.
+  const mount = parentSource(source) ? "child" : plan.mount ?? "root";
   if (!MOUNTS.includes(mount)) throw new Error(`unknown mount ${mount}`);
-  return { sigs: [...sigs, ...(placed.sigs ?? [])], body: placed.body, view: placed.view, shape: `${code}/${context}/${binding}/${layer}${mount === "root" ? "" : `/${mount}`}`, misuse: { code, context, variant, binding, layer, mount } };
+  const sourced = source === "local" ? {} : { source, sourced: sigs.map((sig) => sig.name) };
+  return {
+    sigs: [...sigs, ...(placed.sigs ?? [])], body: placed.body, view: placed.view,
+    shape: `${code}/${context}/${binding}/${layer}${mount === "root" || source !== "local" ? "" : `/${mount}`}${source === "local" ? "" : `/${source}`}`,
+    misuse: { code, context, variant, binding, layer, mount, ...sourced },
+  };
 }
