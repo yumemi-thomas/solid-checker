@@ -226,7 +226,11 @@ const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><div
 // at once instead of after the scenario's 12 s timeout; a run that took the marker is a partial run (scripts/fuzz/chrome.mjs
 // chromeRuntime), never read as silence. The module observes the diagnostics channel and the window's error event only (listeners
 // that change nothing Solid or the page does), and it is not in the case's tsconfig, so the checker never reads it.
-const haltModule = `import { OBSERVE } from "solid-js";
+// It also keeps 41 frames on every error the page throws (the diagnostics' depth, packages/cli/scripts/feedback-read-runtime.mjs
+// `maxFrames` + 1), not Chrome's 10, of which the harness's own frames take several: the fuzzer's fast path keeps the same, so both
+// place an event at the same application frame (scripts/fuzz/runtime-diff.mjs).
+const haltModule = `Error.stackTraceLimit = 41;
+import { OBSERVE } from "solid-js";
 OBSERVE?.diagnostics.subscribe((event) => { if (event.code === "REACTIVITY_HALTED") mark(); });
 window.addEventListener("error", () => mark());
 function mark() {

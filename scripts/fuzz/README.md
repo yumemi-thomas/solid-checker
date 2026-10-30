@@ -53,6 +53,16 @@ oracle sample stratified by code, context and outcome, and exits 1 when somethin
 false positive, a contradicted legal program, a harness failure, a behaviour difference from the oracle). About 1.5 minutes cold
 for one code, under a minute when the cache holds its programs. The full grids, with the full oracle sample, run before a PR.
 
+Rediscovery (AGENTS.md): a defect found any way is closed when the grids generate its shape and the build that had it fails `make
+fuzz-focus` for its code while the fix passes. `rediscovery.json` lists each with the programs that rediscover it (or why the
+generator cannot express it); the smoke set always holds them, and `rediscovery.test.mjs` fails when a grid stops generating one.
+The ADR 0511 review's false positive is the `module-hook-shared` source (the s9 build: 6 wrong-rule programs, the fix: none); its
+first run found another, open (`docs/open-work.md`).
+
+Both runtimes keep 41 frames on every error and diagnostic (the oracle's halt module, the host's runner), so an event lands on the
+same application frame on both sides and the runtime differential counts any line difference as behaviour: there is no
+attribution-only difference to discount.
+
 After any checker change: `make fuzz-smoke`, every grid restricted to its smoke manifest (`scripts/fuzz/smoke/<grid>.json`, about 4%
 of the programs). `scripts/fuzz/smoke.mjs select --from <full run>` chooses them greedily to hold every behaviour of the run (code,
 context, outcome, the findings at the site) five times, every value of every axis and every pair of the core axes for each code, and
@@ -317,10 +327,6 @@ A plan may list `edits` (`{ selector, text }`): the user types into an input bef
 ## Known limits
 
 * The fast path runs in Chrome (ADR 0512), with the fast runner's driving, not the oracle's (`feedback run`): the runtime differential (`--runtime-diff`) measures the two against each other per stratum, and the oracle still judges candidates. With `--fast-host happy-dom`, a false positive the fast path does not produce is not looked for in Chrome.
-* The runtime differential calls a code both runtimes report, on line sets that differ, attribution: the oracle's page errors keep
-  Chrome's 10 frames, its own instrumentation frames among them, so it places some events at an outer frame. An event at a second
-  site of the same code that only one side saw reads the same way. Counting diagnostics does not separate them (a thrown code is a
-  diagnostic on one side and a page error on the other: four false alarms in 530 oracle runs); equal stack depths on both sides would.
 * One component per case, plus the parents and `helpers.ts` of the mount and source axes; no event handler passed by name (containers).
 * A program `tsrs` rejects is dropped (invariant 1), so a defect the published typings catch is out of reach by design: the matrix records such codes as `typed-away` (`MISSING_EFFECT_FN` has no template).
 * A site that never ran, or ran without landing its witness, is `inconclusive` or an unexecuted candidate, never agreement. Sites in containers that never ran, programs that throw or halt reactivity, and diagnostics Chrome cannot place on a line limit what a run can say.

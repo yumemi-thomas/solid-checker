@@ -86,12 +86,12 @@ export function attachDaemon(config, options) {
       const executor = lazyExecutor({
         tsc: config.tsc, bin: config.bin, concurrency: config.concurrency, keepWork: config.keepWork, slotRoot: checkerWorkDir(config.install, "slots"),
         env: checkerEnv({ typefacts: config.typefacts, env: Object.fromEntries(["SOLID_CHECKER_RUNTIME_RESOLVER", "SOLID_TYPEFACTS_BIN"].filter((key) => process.env[key]).map((key) => [key, process.env[key]])) }),
-        chrome: { browser: options.browser ?? defaultChromium(), install: config.fastInstall, pages: Number(options.chromeConcurrency ?? 16) },
+        chrome: { browser: options.browser ?? defaultChromium(), install: config.fastInstall, oracleInstall: config.install, pages: Number(options.chromeConcurrency ?? 16) },
       });
-      return { ...config, fastHost: "chrome", fastHostKey: chromeHostKey({ ...settings, executor: "rust" }, { fileHash, treeStat }), exec: executor, fast: executorChromeHost(executor) };
+      return { ...config, fastHost: "chrome", fastHostKey: chromeHostKey({ ...settings, executor: "rust", oracleInstall: config.install }, { fileHash, treeStat }), exec: executor, fast: executorChromeHost(executor) };
     }
     // The runtime cache keys a Chrome record by the host's own key too (cache.mjs), so it never answers for Happy DOM or another setting.
-    return { ...config, fastHost: "chrome", fastHostKey: chromeHostKey(settings, { fileHash, treeStat }),
+    return { ...config, fastHost: "chrome", fastHostKey: chromeHostKey({ ...settings, oracleInstall: config.install }, { fileHash, treeStat }),
       fast: createChromeHost({ install: config.fastInstall, oracleInstall: config.install, concurrency: Number(options.chromeConcurrency ?? 16), ...settings }) };
   }
   if (options.executor === "rust") throw new Error("--executor rust needs --fast-host chrome");

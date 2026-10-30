@@ -613,6 +613,8 @@ function sourcePrelude(component, signals, used) {
     case "context-destructured": used.add("useContext"); return [`const { ${keys()} } = useContext(ValCtx);`];
     case "module-hook": return [`const { ${keys()} } = useVals();`];
     case "module-hook-member": return ["const vals = useVals();"];
+    // Another instance, never read: the read goes through the module-scope result (`sourceDeclarations`).
+    case "module-hook-shared": return ["const mine = useVals();"];
     default: return [];
   }
 }
@@ -620,6 +622,14 @@ function sourcePrelude(component, signals, used) {
 /** The module-scope lines a source needs in App.tsx: the props type, or the context's value type and the context. */
 function sourceDeclarations(component, signals, used) {
   const { source } = component;
+  if (source === "module-hook-shared") {
+    // The module's own result of the hook. Its async memos settle before the mount: a root reads them, then the module waits for
+    // them to resolve (the probe's shape), so the component's first run meets them settled.
+    const pending = component.sourced.filter((name) => signals.get(name)?.kind === "async");
+    if (!pending.length) return ["const shared = useVals();"];
+    used.add("createRoot"); used.add("createRenderEffect");
+    return ["const shared = useVals();", "createRoot(() => {", ...pending.map((name) => `${INDENT}createRenderEffect(() => shared.${name}(), () => {});`), "});", "await new Promise((done) => setTimeout(done, 50));"];
+  }
   if (!source || source.startsWith("module")) return [];
   const fields = sourceKeys(component, signals).map(([key, type]) => `${key}: ${type}`);
   if (source === "prop-omit") fields.push("extra: number");

@@ -4,7 +4,8 @@
 //   - every behaviour the run saw: a code, context and outcome with the checker's findings at the site (rule/kind, lines dropped);
 //   - every value of every axis (context, variant, binding, layer, mount, source, a combination's extra codes and decoys) for each code,
 //     and every pair of the first six for each code: a regression confined to one wrapper, mount or source has a program here;
-//   - every program a recorded run judged a problem (false clean, wrong rule, false positive, not legal, harness).
+//   - every program a recorded run judged a problem (false clean, wrong rule, false positive, not legal, harness), and every
+//     program rediscovery.json lists for a defect found earlier.
 // The cover is greedy (the program covering most of what is still uncovered first; ties by a hash of the id, so the same run gives
 // the same set). A set is only as good as what it catches: `check` replays a full run of another checker against the reference run and
 // reports every program whose verdict moved that the set does not hold (`node scripts/fuzz/smoke.mjs check`).
@@ -33,15 +34,20 @@ export const readRows = (dir) => readFileSync(join(dir, "programs.jsonl"), "utf8
 /** The behaviour of a row: code, context, outcome, and the findings at its site without their lines. */
 export const behaviourOf = (row) => [row.code, row.context, row.outcome, [...new Set((row.detail?.findings ?? []).map((f) => String(f).replace(/@\d+$/, "")))].sort().join("+"), row.detail?.placed ?? ""].join("|");
 
-/** What a row covers (see the file comment). */
-export function featuresOf(row) {
+/** The defects found so far and the programs that rediscover them (rediscovery.json; AGENTS.md, the rediscovery rule). */
+export const REDISCOVERY = join(here, "rediscovery.json");
+export const readRediscovery = (file = REDISCOVERY) => JSON.parse(readFileSync(file, "utf8"));
+
+/** What a row covers (see the file comment); a program that rediscovers a recorded defect is its own feature, so the set holds it. */
+export function featuresOf(row, required) {
+  required = required instanceof Set ? required : new Set();
   const values = AXES.map((axis) => [axis, row[axis] ?? "-"]);
   const features = [`b:${behaviourOf(row)}`, ...values.map(([axis, value]) => `a:${row.code}|${axis}=${value}`)];
   for (let i = 0; i < values.length; i += 1) for (let j = i + 1; j < values.length; j += 1) features.push(`p:${row.code}|${values[i].join("=")}|${values[j].join("=")}`);
   // A combination's extra codes and decoys each once per code (paired with every axis value they would be most of the grid).
   for (const extra of row.combo?.extras ?? []) features.push(`a:${row.code}|extra=${extra}`);
   if (row.combo) features.push(`a:${row.code}|decoys=${Boolean(row.combo.decoys)}`);
-  if (PROBLEMS.includes(row.outcome)) features.push(`x:${row.id}`);
+  if (PROBLEMS.includes(row.outcome) || required.has(row.id)) features.push(`x:${row.id}`);
   return features;
 }
 
@@ -49,8 +55,8 @@ export function featuresOf(row) {
  * The greedy cover of `rows`' features: the chosen ids, in the order chosen. A behaviour is held by `perBehaviour` programs (as many as
  * the run has), every other feature by one.
  */
-export function cover(rows, { perBehaviour = 1 } = {}) {
-  const features = rows.map((row) => [...new Set(featuresOf(row))]);
+export function cover(rows, { perBehaviour = 1, required = new Set() } = {}) {
+  const features = rows.map((row) => [...new Set(featuresOf(row, required))]);
   const need = new Map();
   for (const list of features) for (const feature of list) need.set(feature, feature.startsWith("b:") ? Math.min(perBehaviour, (need.get(feature) ?? 0) + 1) : 1);
   const uncovered = { get size() { return remaining; } };
@@ -126,7 +132,8 @@ function select(from, out, perBehaviour) {
   mkdirSync(out, { recursive: true });
   for (const grid of gridsIn(from)) {
     const rows = readRows(join(from, grid));
-    const ids = cover(rows, { perBehaviour });
+    const required = new Set(readRediscovery().filter((entry) => entry.grid === grid).flatMap((entry) => entry.ids));
+    const ids = cover(rows, { perBehaviour, required });
     const byId = new Map(rows.map((row) => [row.id, behaviourOf(row)]));
     const table = [...new Set(ids.map((id) => byId.get(id)))].sort();
     const expected = ids.map((id) => table.indexOf(byId.get(id)));

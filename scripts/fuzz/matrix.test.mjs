@@ -219,7 +219,8 @@ describe("the grid", () => {
       const shapes = gridShapes(code);
       const keys = shapes.map((shape) => `${shape.variant}|${shape.binding}|${shape.layer}`);
       expect(new Set(keys).size).toBe(keys.length);
-      expect(shapes.length).toBe(gridVariantsOf(code).reduce((n, variant) => n + gridBindingsOf(code, variant).length * LAYERS.length, 0));
+      // A variant one source carries (`variantSources`) has no local shape.
+      expect(shapes.length).toBe(gridVariantsOf(code).filter((variant) => !SPEC[code].variantSources?.[variant]).reduce((n, variant) => n + gridBindingsOf(code, variant).length * LAYERS.length, 0));
     }
   });
 

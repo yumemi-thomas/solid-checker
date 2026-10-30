@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { GRIDS, readGrid } from "./focus.mjs";
 
 describe("readGrid", () => {
-  it("tallies the outcomes, flags what needs a look, and keeps only behaviour differences from the oracle", () => {
+  it("tallies the outcomes, flags what needs a look, and counts every difference from the oracle as behaviour", () => {
     const out = mkdtempSync(join(tmpdir(), "fuzz-focus-"));
     mkdirSync(out, { recursive: true });
     const rows = [{ id: "a", outcome: "agree" }, { id: "b", outcome: "false-clean", detail: { line: 3 } }, { id: "c", outcome: "recall-gap" }, { id: "d", outcome: "false-positive" }];
@@ -17,7 +17,7 @@ describe("readGrid", () => {
     const grid = readGrid(out);
     expect(grid.outcomes).toEqual({ agree: 1, "false-clean": 1, "recall-gap": 1, "false-positive": 1 });
     expect(grid.flagged.map((row) => row.id)).toEqual(["b", "d"]);
-    expect(grid.behaviour.map((result) => result.id)).toEqual(["y"]);
+    expect(grid.behaviour.map((result) => result.id)).toEqual(["x", "y"]);
     expect(readGrid(join(out, "missing"))).toEqual({ outcomes: {}, flagged: [], oracle: null, behaviour: [] });
   });
 
