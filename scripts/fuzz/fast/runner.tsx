@@ -51,6 +51,13 @@ async function settleHits(): Promise<boolean | null> {
   return false;
 }
 
+// The runner settles the page after a plan step with flush(). In Chrome (the oracle), the click returns and Solid flushes on its
+// own schedule, so an error the flush raises (an `onSettled` cleanup in an unowned scope, say) is an uncaught error and the page
+// goes on; the same error here is rethrown from a timer, never ends the run (it ended it before: no site was recorded).
+function settle() {
+  try { flush(); } catch (e) { setTimeout(() => { throw e; }); }
+}
+
 export async function runCase(id: string, caseDir: string, load: () => Promise<any>, outDirOverride?: string) {
   const started = performance.now();
   const outDir = (outDirOverride ?? process.env.FUZZ_FAST_OUT) as string;
@@ -114,12 +121,12 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
       for (const edit of plan.plan.edits ?? []) {
         const target = document.querySelector(edit.selector);
         if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-          target.focus(); target.value = edit.text; target.dispatchEvent(new Event('input', { bubbles: true })); await flush(); await pause(settings.pauseMs);
+          target.focus(); target.value = edit.text; target.dispatchEvent(new Event('input', { bubbles: true })); settle(); await pause(settings.pauseMs);
         } else errors.push({ phase, kind: 'plan', message: `no input ${edit.selector}`, stack: '' });
       }
       for (const buttonId of plan.plan.clicks) {
         const target = document.querySelector(`[data-act="${buttonId}"]`);
-        if (target instanceof HTMLElement) { target.click(); await flush(); await pause(settings.pauseMs); }
+        if (target instanceof HTMLElement) { target.click(); settle(); await pause(settings.pauseMs); }
         else errors.push({ phase, kind: 'plan', message: `no button ${buttonId}`, stack: '' });
       }
       await pause(settings.finalMs);

@@ -1,0 +1,8 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>solid-checker fuzz</title>
+<script>
+  // The record's handoff, created before the runner and the program can patch timers: the host awaits this promise (no polling,
+  // whose timers the runner's virtual clock would hold).
+  window.__scRecordPromise = new Promise((resolve) => { window.__scResolve = resolve; });
+</script></head>
+<body><script type="module" src="/runner.tsx"></script></body></html>

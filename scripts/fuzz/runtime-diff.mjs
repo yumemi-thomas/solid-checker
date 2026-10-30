@@ -79,7 +79,7 @@ const ran = (runtime) => Object.entries(runtime?.hits ?? {}).filter(([, n]) => n
  * The differences between a program's Happy DOM record and its Chrome record, each `{ kind, detail }`:
  *   chrome-only   a defect event Chrome reports and Happy DOM does not (a Happy DOM miss: a possible hidden false clean)
  *   happy-only    a defect event Happy DOM reports and Chrome does not (a Happy DOM invention: a possible wrong agreement)
- *   moved         a code both report, placed on other lines (where the host attributed it)
+ *   moved         a code both report, on line sets that differ (attribution: which frame each side placed an event at)
  *   hits          the sets of sites that ran differ
  *   witness       a site's witness readout differs
  *   failure       one side failed, halted or errored where the other did not, or in another phase
@@ -95,14 +95,17 @@ export function runtimeDiff(happy, chrome) {
     || [...other].some((k) => k.endsWith("@-") && codeOf(k) === codeOf(key));
   const onlyA = [...a].filter((key) => !matched(key, b));
   const onlyB = [...b].filter((key) => !matched(key, a));
-  // The same code placed on other lines on each side is one difference: where the throw was attributed, not whether it happened.
-  for (const code of new Set(onlyA.map(codeOf).filter((code) => onlyB.some((key) => codeOf(key) === code)))) {
-    const lines = (keys) => keys.filter((key) => codeOf(key) === code).map((key) => key.slice(key.lastIndexOf("@") + 1)).join(",");
-    diffs.push({ kind: "moved", detail: `${code} happy@${lines(onlyA)} chrome@${lines(onlyB)}` });
+  // A code both sides report, on lines that differ, is one `moved` difference: where the host attributed an event of it (a stack
+  // frame the other side lost to its depth limit, or chose differently), not whether it happened. Only a code one side never reports
+  // is a difference in behaviour (`happy-only`, `chrome-only`).
+  const codesA = new Set([...a].map(codeOf));
+  const codesB = new Set([...b].map(codeOf));
+  const lines = (set, code) => [...set].filter((key) => codeOf(key) === code).map((key) => key.slice(key.lastIndexOf("@") + 1)).sort().join(",");
+  for (const code of new Set([...onlyA, ...onlyB].map(codeOf).filter((code) => codesA.has(code) && codesB.has(code)))) {
+    diffs.push({ kind: "moved", detail: `${code} happy@${lines(a, code)} chrome@${lines(b, code)}` });
   }
-  const movedCodes = new Set(diffs.map((d) => d.detail.split(" ")[0]));
-  for (const key of onlyA) if (!movedCodes.has(codeOf(key))) diffs.push({ kind: "happy-only", detail: key });
-  for (const key of onlyB) if (!movedCodes.has(codeOf(key))) diffs.push({ kind: "chrome-only", detail: key });
+  for (const key of onlyA) if (!codesB.has(codeOf(key))) diffs.push({ kind: "happy-only", detail: key });
+  for (const key of onlyB) if (!codesA.has(codeOf(key))) diffs.push({ kind: "chrome-only", detail: key });
   // A ledger that one side could not read (null) is no evidence either way; the failure row speaks for it.
   if (happy.hits && chrome.hits) {
     const ra = ran(happy);
@@ -131,14 +134,20 @@ export const evidenceOf = (runtime) => ({
 /** A Chrome record the differential cannot read: the harness, not the program (retried once, then reported as `chrome-inconclusive`). */
 export const chromeUnreadable = (record) => !record?.runtime || ["harness-error"].includes(record.runtime.failure?.phase);
 
-/** The summary of a differential: programs compared, the agreeing ones, and the programs and events per kind. */
+/** Differences in behaviour: every kind but `moved` (attribution only). */
+export const BEHAVIOUR_KINDS = ["happy-only", "chrome-only", "hits", "witness", "failure", "missing"];
+
+/** The summary of a differential: programs compared, identical, differing in behaviour, differing in attribution only, and per kind. */
 export function summarize(results) {
   const byKind = {};
   for (const result of results) for (const kind of new Set(result.diffs.map((d) => d.kind))) byKind[kind] = (byKind[kind] ?? 0) + 1;
+  const behaviour = (result) => result.diffs.some((d) => BEHAVIOUR_KINDS.includes(d.kind));
   return {
     compared: results.length,
     same: results.filter((result) => result.diffs.length === 0).length,
     differ: results.filter((result) => result.diffs.length > 0).length,
+    behaviour: results.filter(behaviour).length,
+    attributionOnly: results.filter((result) => result.diffs.length > 0 && !behaviour(result)).length,
     byKind,
   };
 }

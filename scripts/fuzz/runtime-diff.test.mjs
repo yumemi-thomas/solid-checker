@@ -32,6 +32,13 @@ describe("runtimeDiff", () => {
     expect(sameCode.filter((d) => d.kind === "chrome-only" || d.kind === "happy-only")).toEqual([]);
   });
 
+  it("counts an extra line of a code both sides report as attribution, a code one side lacks as behaviour", () => {
+    const one = record({ diagnostics: [diagnostic("CONTEXT_NOT_FOUND", 18)] });
+    const two = record({ diagnostics: [diagnostic("CONTEXT_NOT_FOUND", 16), diagnostic("CONTEXT_NOT_FOUND", 18)] });
+    expect(runtimeDiff(two, one)).toEqual([{ kind: "moved", detail: "CONTEXT_NOT_FOUND happy@16,18 chrome@18" }]);
+    expect(summarize([{ diffs: runtimeDiff(two, one) }])).toMatchObject({ behaviour: 0, attributionOnly: 1 });
+  });
+
   it("matches a positionless event to its code on the other side, and drops one the same side places", () => {
     const placed = record({ diagnostics: [diagnostic("FLUSH_IN_ACTION", 6)] });
     const twice = record({ diagnostics: [diagnostic("FLUSH_IN_ACTION", 6), { code: "FLUSH_IN_ACTION", positions: [] }] });
@@ -111,6 +118,6 @@ describe("parsePerStratum and summarize", () => {
 
   it("counts the programs per kind once", () => {
     const summary = summarize([{ diffs: [] }, { diffs: [{ kind: "hits" }, { kind: "hits" }] }, { diffs: [{ kind: "chrome-only" }] }]);
-    expect(summary).toEqual({ compared: 3, same: 1, differ: 2, byKind: { hits: 1, "chrome-only": 1 } });
+    expect(summary).toEqual({ compared: 3, same: 1, differ: 2, behaviour: 2, attributionOnly: 0, byKind: { hits: 1, "chrome-only": 1 } });
   });
 });

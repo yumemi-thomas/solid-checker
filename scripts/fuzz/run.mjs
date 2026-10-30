@@ -32,12 +32,13 @@ import { withRuntimeCache } from "./cache.mjs";
 import { isSite, walk } from "./model.mjs";
 import { availableParallelism } from "node:os";
 import { createFastDaemon } from "./fast-daemon.mjs";
+import { createChromeHost } from "./chrome-host.mjs";
 import { mapPoolSettled } from "../lib/pool.mjs";
 import { cleanupEvidence } from "./disposal.mjs";
 import { containerEvidence } from "./container.mjs";
 
 const FLAGS = new Set(["confirm-with-chrome", "shrink", "keep-work", "generate-only", "control", "dead-site", "no-instrument", "no-daemon", "no-cache", "stop-on-mismatch", "no-ledger", "all-cores", "containers", "real-clock", "no-typecheck-batch", "help"]);
-const VALUES = new Set(["cache-dir", "seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch", "shrink-control", "ledger", "code", "context", "binding", "layer", "variant"]);
+const VALUES = new Set(["fast-host", "chrome-concurrency", "chrome-clock", "cache-dir", "seed", "count", "out", "profile", "install", "fast-install", "checker-bin", "typefacts", "tsc", "workers", "concurrency", "browser", "budget", "shrink-mode", "components", "shrink-jobs", "shrink-batch", "shrink-control", "ledger", "code", "context", "binding", "layer", "variant"]);
 
 export function parseArgs(argv, { extraValues = [], extraFlags = [] } = {}) {
   const options = { seed: 1, count: 20, shrinkMode: "discovery", budget: 120 };
@@ -71,6 +72,13 @@ export const defaultWorkers = (cores = availableParallelism(), { virtualClock = 
 
 /** Starts the long-lived fast host unless `--no-daemon`; the caller closes it (`config.fast?.close()`). */
 export function attachDaemon(config, options) {
+  // `--fast-host chrome` (prototype): the fast path's runner in real Chrome (chrome-host.mjs), `--chrome-concurrency` pages at a time.
+  if (options.fastHost === "chrome") {
+    // The runtime cache keys records by the fast path's sources, not by host: a prototype run keeps none (cache.mjs is a record source).
+    options.noCache = true;
+    return { ...config, fastHost: "chrome", fast: createChromeHost({ install: config.fastInstall, oracleInstall: config.install, concurrency: Number(options.chromeConcurrency ?? 16), clock: options.chromeClock ?? "virtual-time", browser: options.browser }) };
+  }
+  if (options.fastHost !== undefined && options.fastHost !== "happy-dom") throw new Error(`--fast-host takes happy-dom or chrome, not ${options.fastHost}`);
   return options.noDaemon ? config : { ...config, fast: createFastDaemon({ install: config.fastInstall, workers: config.workers, virtualClock: config.virtualClock }) };
 }
 
