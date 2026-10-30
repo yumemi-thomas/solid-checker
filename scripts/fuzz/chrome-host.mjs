@@ -282,17 +282,23 @@ export async function startViteHost({ install = DEFAULT_FAST_INSTALL } = {}) {
     cached.set("/@vite/client", { type: "text/javascript", text: `export ${injectQuery}` });
   };
   /**
-   * Stages cases (`{ id, dir, variant }`) where the pages load them: in memory, or on disk for a case that ships a package. The files
-   * are fast.mjs `stageCases`'s: App.tsx (the twin's text unless `variant` is clean), its plan and oracle files, its other modules.
+   * Stages cases (`{ id, dir, variant, files? }`) where the pages load them: in memory, or on disk for a case that ships a package.
+   * The files are fast.mjs `stageCases`'s: App.tsx (the twin's text unless `variant` is clean), its plan and oracle files, its other
+   * modules; from `files` (the case's files as built, by relative path) when given, else from `dir`.
    */
   const stage = (cases) => {
-    for (const { id, dir, variant } of cases) {
-      if (existsSync(join(dir, "node_modules"))) { stageCases(work, [{ id, dir, variant }]); continue; }
-      const files = new Map();
-      for (const file of ["App.tsx", "sites.json", "oracle.json"]) if (existsSync(join(dir, file))) files.set(file, readFileSync(join(dir, file), "utf8"));
-      for (const file of readdirSync(dir).filter((name) => /\.tsx?$/.test(name) && !name.endsWith(".d.ts") && name !== "App.tsx")) files.set(file, readFileSync(join(dir, file), "utf8"));
-      if (variant !== "clean" && existsSync(join(dir, "App.run.txt"))) files.set("App.tsx", readFileSync(join(dir, "App.run.txt"), "utf8"));
-      staged.set(id, files);
+    for (const { id, dir, variant, files: given } of cases) {
+      const files = given ?? Object.fromEntries(readdirSync(dir).filter((name) => name !== "node_modules").map((name) => [name, readFileSync(join(dir, name), "utf8")]));
+      if (Object.keys(files).some((name) => name.startsWith("node_modules/")) || (!given && existsSync(join(dir, "node_modules")))) {
+        if (!existsSync(dir)) throw new Error(`a case with a package is staged from its directory: ${dir}`);
+        stageCases(work, [{ id, dir, variant }]);
+        continue;
+      }
+      const served = new Map();
+      for (const file of ["App.tsx", "sites.json", "oracle.json"]) if (files[file] !== undefined) served.set(file, files[file]);
+      for (const file of Object.keys(files).filter((name) => /^[^/]+\.tsx?$/.test(name) && !name.endsWith(".d.ts") && name !== "App.tsx")) served.set(file, files[file]);
+      if (variant !== "clean" && files["App.run.txt"] !== undefined) served.set("App.tsx", files["App.run.txt"]);
+      staged.set(id, served);
     }
   };
   /** Forgets the cases: their staged files and modules. */

@@ -614,18 +614,19 @@ impl Chrome {
         serde_json::from_str(&mapped).map_err(|e| format!("mapped record: {e}"))
     }
 
-    fn run(self: &Arc<Self>, cases: Vec<(String, String, String)>) -> Value {
+    fn run(self: &Arc<Self>, cases: Vec<Value>) -> Value {
         let failed = |id: &str, message: String| json!({ "id": id, "failure": { "phase": "chrome-host", "message": message.chars().take(800).collect::<String>() }, "diagnostics": [], "errors": [], "witnesses": [] });
         let mut records = serde_json::Map::new();
         let mut staged = Vec::new();
         let mut stage = Vec::new();
-        for (id, dir, variant) in &cases {
-            if !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') {
-                records.insert(id.clone(), failed(id, format!("unsafe case id {id}")));
+        for case in cases {
+            let id = case["id"].as_str().unwrap_or_default().to_string();
+            if id.is_empty() || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') {
+                records.insert(id.clone(), failed(&id, format!("unsafe case id {id}")));
                 continue;
             }
-            staged.push(id.clone());
-            stage.push(json!({ "id": id, "dir": dir, "variant": variant }));
+            staged.push(id);
+            stage.push(case);
         }
         // The helper stages them where the pages load them (chrome-host.mjs `stage`: in memory, a case with a package on disk).
         if let Err(error) = http_post(&self.control, "/__sc/stage", &Value::Array(stage).to_string()) {
@@ -902,9 +903,7 @@ fn main() {
                         executor.out.emit(&json!({ "seq": seq, "error": "no Chrome in this executor" }));
                         return;
                     };
-                    let cases = request["cases"].as_array().into_iter().flatten().map(|case| {
-                        (case["id"].as_str().unwrap_or("").to_string(), case["dir"].as_str().unwrap_or("").to_string(), case["variant"].as_str().unwrap_or("run").to_string())
-                    }).collect();
+                    let cases = request["cases"].as_array().cloned().unwrap_or_default();
                     let records = chrome.run(cases);
                     executor.out.emit(&json!({ "seq": seq, "records": records }));
                 });

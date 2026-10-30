@@ -299,7 +299,8 @@ export function runtimeCached(entries, config) {
 
 /** The fast path for `cases` (`{ id, dir, variant, built }`): the cached records, and one batch for the rest (stored when the runner wrote them). */
 async function fastCached(cases, fast, options, cache) {
-  const strip = (list) => list.map(({ id, dir, variant }) => ({ id, dir, variant }));
+  // A host that stages from memory (chrome-host.mjs `stage`) takes the case's files as built; the others read `dir`.
+  const strip = (list) => list.map(({ id, dir, variant, built }) => ({ id, dir, variant, ...(built ? { files: built.files } : {}) }));
   if (!cache) return fast(strip(cases), options);
   const records = new Map();
   const missing = [];

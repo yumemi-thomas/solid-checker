@@ -90,7 +90,7 @@ export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork
 export function executorChromeHost(executor) {
   return {
     async run(cases) {
-      const answer = await (await executor).run(cases.map(({ id, dir, variant }) => ({ id, dir, variant })));
+      const answer = await (await executor).run(cases.map(({ id, dir, variant, files }) => ({ id, dir, variant, ...(files ? { files } : {}) })));
       return new Map(Object.entries(answer.records));
     },
     timings: () => ({}),

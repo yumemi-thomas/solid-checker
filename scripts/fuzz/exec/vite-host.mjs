@@ -2,7 +2,7 @@
 // in its own process so its transforms and source-map work never wait on the orchestrator's thread. It prints one line,
 // `{ base, work, control }`, once it serves; `control` answers the executor:
 //   POST /__sc/freeze        freeze the runner as transformed (after the executor's warm page loaded it)
-//   POST /__sc/stage         stage cases (a JSON array of `{ id, dir, variant }`) where the pages load them (in memory)
+//   POST /__sc/stage         stage cases (a JSON array of `{ id, dir, variant, files? }`) where the pages load them (in memory)
 //   POST /__sc/map?id=<id>   a record (JSON body) with its App.tsx positions mapped through Vite's source maps
 //   POST /__sc/done          forget the cases (a JSON array of ids)
 // The executor kills this process when its run ends and removes `work`.
