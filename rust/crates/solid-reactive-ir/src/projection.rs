@@ -1212,16 +1212,19 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                 );
             }
             // ADR 0513: a top-level `await` may settle the source before the
-            // read's first run; a settled read needs no boundary. The SSR
-            // client hole throws on the server whatever the client's timing.
+            // read runs; a settled read neither needs a boundary (SC5003) nor
+            // throws (SC5001). SC5003's `ssrSource: "client"` wording throws
+            // on the server whatever the client's timing, and an apply's
+            // first-run row carries its own proof (ADR 0510).
             if read.settle_unproven
-                && finding.id == "SC5003"
-                && !read.ssr_client_hole
-                && !read.server_rendering_unresolved
+                && ((finding.id == "SC5003"
+                    && !read.ssr_client_hole
+                    && !read.server_rendering_unresolved)
+                    || (finding.id == "SC5001" && !read.apply_first_run_pending))
             {
                 finding.kind = "uncertifiable".into();
                 finding.message = format!(
-                    "a module of this project awaits at its top level, so the source may have settled before this read first runs, and a settled read needs no boundary; if it is still pending: {}",
+                    "a module of this project awaits at its top level, so the source may have settled before this read runs, and a settled read neither throws nor needs a boundary; if it is still pending: {}",
                     finding.message
                 );
             }

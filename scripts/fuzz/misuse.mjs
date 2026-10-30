@@ -170,7 +170,7 @@ export const SPEC = {
     // `settled` is a grid variant (never drawn at random, so random programs and combinations' extras keep theirs) and a legal one.
     variants: ["signal", "memo"], gridVariants: ["settled"], legalVariants: ["signal", "memo", "settled"],
     contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
-    variantContexts: { settled: ["effect-apply", "render-apply"] }, variantSources: { settled: ["module-hook-shared"] },
+    variantContexts: { settled: ["body", "effect-apply", "root", "render-apply"] }, variantSources: { settled: ["module-hook-shared"] },
     setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : variant === "settled" ? asyncSignal(name("a")) : signal(name("r"), 3, "src")],
     call: (node, [sig]) => local(sig.name),
   },

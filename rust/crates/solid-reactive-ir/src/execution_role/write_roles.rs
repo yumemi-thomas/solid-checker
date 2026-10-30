@@ -3009,9 +3009,11 @@ pub(super) fn render_runs_first(
         && !ast.tagged_template_tags.iter().any(|tag| before(*tag))
         && !ast.jsx_elements.iter().any(|element| before(element.span))
         && !ast.jsx_fragments.iter().any(|fragment| before(*fragment))
+        // ADR 0513 review: `for await` and `await using` suspend as `await` does.
         && !ast
             .awaits
             .iter()
+            .chain(&ast.implicit_suspensions)
             .any(|awaited| before(*awaited) && crate::indexes::at_module_scope(ast, *awaited))
         && !ast.module_loads.iter().any(|load| before(load.span))
 }
