@@ -99,16 +99,21 @@ export function cover(rows, { perBehaviour = 1 } = {}) {
   return chosen;
 }
 
-/** `--ids <manifest>`: the entries the manifest names, in grid order. A name the grid no longer generates stops the run (reselect). */
-export function keepIds(entries, file, grid, seed) {
+/**
+ * `--ids <manifest>`: the entries the manifest names, in grid order. A name the grid no longer generates stops the run (reselect).
+ * `sample` (a fraction) adds that share of the grid's other entries, picked by a hash of the id and `sampleSeed`: a different few each
+ * run, so over many runs the smoke set reaches what its cover did not foresee. They have no recorded behaviour; only problems count.
+ */
+export function keepIds(entries, file, grid, seed, { sample = 0, sampleSeed = 0 } = {}) {
   const manifest = JSON.parse(readFileSync(file, "utf8"));
   if (manifest.generator !== GENERATOR_VERSION) throw new Error(`${file} was chosen under generator ${manifest.generator}, this is ${GENERATOR_VERSION}: reselect (scripts/fuzz/smoke.mjs select)`);
   // A grid's ids name its programs without the seed: another seed would compare other programs with the recorded behaviours.
   if (manifest.seed !== undefined && String(manifest.seed) !== String(seed)) throw new Error(`${file} was chosen from the grid of seed ${manifest.seed}, not ${seed}`);
   const wanted = new Set(manifest.ids);
-  const kept = entries.filter((entry) => wanted.has(entry.built.id));
-  if (kept.length !== wanted.size) throw new Error(`${file} names ${wanted.size - kept.length} programs this ${grid} grid does not generate: reselect (scripts/fuzz/smoke.mjs select)`);
-  return kept;
+  const named = entries.filter((entry) => wanted.has(entry.built.id)).length;
+  if (named !== wanted.size) throw new Error(`${file} names ${wanted.size - named} programs this ${grid} grid does not generate: reselect (scripts/fuzz/smoke.mjs select)`);
+  const sampled = (id) => sample > 0 && (fnv(`${sampleSeed}:${id}`) % 100000) < sample * 100000;
+  return entries.filter((entry) => wanted.has(entry.built.id) || sampled(entry.built.id));
 }
 
 /** The grids of a full run directory (one directory per grid, each with programs.jsonl). */

@@ -58,9 +58,13 @@ of the programs). `scripts/fuzz/smoke.mjs select --from <full run>` chooses them
 context, outcome, the findings at the site) five times, every value of every axis and every pair of the core axes for each code, and
 every program the run judged a problem; each manifest records the behaviour every program had. A smoke run fails on a problem and on
 any program whose outcome moved to a worse one (agree to recall gap, clean to uncertifiable, anything to a false clean or false
-positive), and lists the others that moved. Validation: against the reference run, the full grids of the first ADR 0511 build moved
-7,745 programs in 212 kinds of move; the set held moved programs in all six grids and 192 of the 212 kinds
-(`smoke.mjs check --reference <run> --against <run>`). After an intended change, reselect from the full run before the PR.
+positive), and lists the others that moved. Each run also takes 1.5% of every grid's other programs, picked anew by a seed the
+summary prints (`--sample`, `--sample-seed` repeats a pick): no recorded behaviour, so only problems count there, but over many runs
+it reaches what the cover did not foresee. Validation (`smoke.mjs check --reference <run> --against <run>`, full grids of three ADR
+0511 builds against the reference run): every grid where a build moved verdicts has moved programs in the set; of the kinds of move,
+the set holds 192 of 222 for the first build and 121 of 172 for a middle one (five programs per behaviour, 4.1% of the programs; ten
+per behaviour, 5.8%, holds 91% and 79%; twenty, 10.2%, 94% and 84%). The last build before the ADR's review moved nothing: the false
+positive that review found is not a shape the grids generate. After an intended change, reselect from the full run before the PR.
 
 ```sh
 export SOLID_CHECKER_NATIVE_BIN=<release solid-checker>   # a release build; debug inflates certification about 19x
@@ -313,6 +317,10 @@ A plan may list `edits` (`{ selector, text }`): the user types into an input bef
 ## Known limits
 
 * The fast path runs in Chrome (ADR 0512), with the fast runner's driving, not the oracle's (`feedback run`): the runtime differential (`--runtime-diff`) measures the two against each other per stratum, and the oracle still judges candidates. With `--fast-host happy-dom`, a false positive the fast path does not produce is not looked for in Chrome.
+* The runtime differential calls a code both runtimes report, on line sets that differ, attribution: the oracle's page errors keep
+  Chrome's 10 frames, its own instrumentation frames among them, so it places some events at an outer frame. An event at a second
+  site of the same code that only one side saw reads the same way. Counting diagnostics does not separate them (a thrown code is a
+  diagnostic on one side and a page error on the other: four false alarms in 530 oracle runs); equal stack depths on both sides would.
 * One component per case, plus the parents and `helpers.ts` of the mount and source axes; no event handler passed by name (containers).
 * A program `tsrs` rejects is dropped (invariant 1), so a defect the published typings catch is out of reach by design: the matrix records such codes as `typed-away` (`MISSING_EFFECT_FN` has no template).
 * A site that never ran, or ran without landing its witness, is `inconclusive` or an unexecuted candidate, never agreement. Sites in containers that never ran, programs that throw or halt reactivity, and diagnostics Chrome cannot place on a line limit what a run can say.
