@@ -697,7 +697,9 @@ function buildOne(kit, plan = {}) {
     if (!CALLBACK_CONTEXTS.includes(context)) throw new Error(`${context} takes no callback form`);
     nameCallback(placed, context, plan.callback, kit);
   }
-  const source = plan.source === "draw" ? rng.pick(sourcesOf(code, variant, binding, context)) : plan.source ?? "local";
+  // A drawn source (a combination program, `buildCombo`) is never a recall-only one (SOURCE_AXES.files): those are the `--recall`
+  // grids' shapes, and drawing them moved the combination grids' programs.
+  const source = plan.source === "draw" ? rng.pick(sourcesOf(code, variant, binding, context).filter((s) => !SOURCE_AXES.files.includes(s))) : plan.source ?? "local";
   if (!sourcesOf(code, variant, binding, context).includes(source)) throw new Error(`${code}/${variant}/${binding} cannot take source ${source}`);
   // A parent source renders the component from its parent, plainly; the mount axis is not crossed with it.
   const mount = parentSource(source) ? "child" : plan.mount ?? "root";
