@@ -227,6 +227,12 @@ async function prepareViaExecutor({ program, built }, { config, cache, exec, ins
   });
   const typed = clean.fresh ? settle(clean, answer.typecheck) : clean.stored;
   if (!typed.ok) return { program, built, caseDir, dir: own ? dir : null, typecheck: typed };
+  // A spot check whose fresh run gave no answer (killed, so nothing to compare) keeps the stored one; the checker, which the executor
+  // skipped after that failed check, runs now, as the JS path runs it.
+  if (!answer.checker) {
+    const again = await exec.prepare({ caseWrites: [], project: { files: checkerProjectFiles(built), ...(own ? { dir } : {}) }, twinProject: null, clean: false, twin: false, checker: { ordinary } });
+    answer.checker = again.checker;
+  }
   const checker = checkerResult(answer.checker, answer.checker.dir);
   timings.checker.ms += checker.wallMs ?? 0;
   timings.checker.n += 1;

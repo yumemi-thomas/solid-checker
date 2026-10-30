@@ -554,7 +554,7 @@ async function sweep(options, config, out) {
   if (options.grid) for (const cell of cells) combined(gridShapes(cell.code, cell.context, mounts, sources), options.combine).forEach((shape, index) => { if (layerKept(shape)) entries.push({ cell, ...generateShape(options, cell, shape, index) }); });
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
   // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
-  if (options.ids) entries = keepIds(entries, options.ids, "matrix");
+  if (options.ids) entries = keepIds(entries, options.ids, "matrix", options.seed);
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
   const started = Date.now();

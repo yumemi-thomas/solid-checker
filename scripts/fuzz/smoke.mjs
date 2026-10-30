@@ -100,9 +100,11 @@ export function cover(rows, { perBehaviour = 1 } = {}) {
 }
 
 /** `--ids <manifest>`: the entries the manifest names, in grid order. A name the grid no longer generates stops the run (reselect). */
-export function keepIds(entries, file, grid) {
+export function keepIds(entries, file, grid, seed) {
   const manifest = JSON.parse(readFileSync(file, "utf8"));
   if (manifest.generator !== GENERATOR_VERSION) throw new Error(`${file} was chosen under generator ${manifest.generator}, this is ${GENERATOR_VERSION}: reselect (scripts/fuzz/smoke.mjs select)`);
+  // A grid's ids name its programs without the seed: another seed would compare other programs with the recorded behaviours.
+  if (manifest.seed !== undefined && String(manifest.seed) !== String(seed)) throw new Error(`${file} was chosen from the grid of seed ${manifest.seed}, not ${seed}`);
   const wanted = new Set(manifest.ids);
   const kept = entries.filter((entry) => wanted.has(entry.built.id));
   if (kept.length !== wanted.size) throw new Error(`${file} names ${wanted.size - kept.length} programs this ${grid} grid does not generate: reselect (scripts/fuzz/smoke.mjs select)`);
@@ -123,7 +125,10 @@ function select(from, out, perBehaviour) {
     const byId = new Map(rows.map((row) => [row.id, behaviourOf(row)]));
     const table = [...new Set(ids.map((id) => byId.get(id)))].sort();
     const expected = ids.map((id) => table.indexOf(byId.get(id)));
-    writeFileSync(join(out, `${grid}.json`), `${JSON.stringify({ grid, generator: GENERATOR_VERSION, perBehaviour, programs: rows.length, behaviours: table, ids, expected }, null, 0)}\n`);
+    const report = ["matrix.json", "legal.json"].map((name) => join(from, grid, name)).find((path) => existsSync(path));
+    const seed = report ? JSON.parse(readFileSync(report, "utf8")).seed : undefined;
+    if (seed === undefined) throw new Error(`${join(from, grid)}: no matrix.json or legal.json to read the grid's seed from`);
+    writeFileSync(join(out, `${grid}.json`), `${JSON.stringify({ grid, generator: GENERATOR_VERSION, seed, perBehaviour, programs: rows.length, behaviours: table, ids, expected }, null, 0)}\n`);
     console.log(`${grid.padEnd(8)} ${String(ids.length).padStart(5)} of ${rows.length} programs (${new Set(rows.map(behaviourOf)).size} behaviours)`);
   }
 }
@@ -135,10 +140,11 @@ const RANK = [
 ];
 const worse = (from, to) => RANK.some((rank) => rank.includes(from) && rank.includes(to) && rank.indexOf(to) > rank.indexOf(from));
 
-/** A smoke run's programs whose behaviour moved from the manifest's: `{ worse, other }`, each `[{ id, from, to }]`. */
+/** A smoke run's programs whose behaviour moved from the manifest's: `{ worse, other, missing }` (moves `[{ id, from, to }]`, ids with no row). */
 export function movedVerdicts(manifest, rows) {
   const expected = new Map(manifest.ids.map((id, index) => [id, manifest.behaviours[manifest.expected[index]]]));
-  const moved = { worse: [], other: [] };
+  const seen = new Set(rows.map((row) => row.id));
+  const moved = { worse: [], other: [], missing: manifest.ids.filter((id) => !seen.has(id)) };
   for (const row of rows) {
     const from = expected.get(row.id);
     const to = behaviourOf(row);

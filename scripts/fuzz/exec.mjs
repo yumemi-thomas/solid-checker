@@ -14,7 +14,7 @@ const MANIFEST = join(here, "exec/Cargo.toml");
 /** The executor binary, built on first use (`cargo build --release`, a no-op when current). */
 export const EXECUTOR = join(here, "exec/target/release/fuzz-exec");
 /** The executor's sources: part of the Chrome host's record key when it runs the pages (chrome-host.mjs `chromeHostKey`). */
-export const EXECUTOR_SOURCES = ["exec/Cargo.toml", "exec/Cargo.lock", "exec/src/main.rs", "exec/vite-host.mjs"];
+export const EXECUTOR_SOURCES = ["exec.mjs", "exec/Cargo.toml", "exec/Cargo.lock", "exec/src/main.rs", "exec/vite-host.mjs"];
 
 /** Playwright's `Page.setFontFamilies` for chromium on macOS (pw:protocol of chrome-host.mjs's pages): the executor sends the same. */
 const FONT_FAMILIES = {

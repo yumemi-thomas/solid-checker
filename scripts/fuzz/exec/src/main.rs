@@ -160,7 +160,9 @@ fn typecheck_one(tsc: &str, dir: &str) -> Value {
 
 /// `typecheckBatch(dirs)`: one `tsrs -b --force`; `None` where the batch gives no answer (the caller checks each alone).
 fn typecheck_batch(tsc: &str, dirs: &[String]) -> Option<Vec<Value>> {
-    if !Path::new(tsc).exists() || dirs.is_empty() {
+    // A directory twice in one batch could not tell its two answers apart: each is checked alone.
+    let distinct: std::collections::HashSet<&String> = dirs.iter().collect();
+    if !Path::new(tsc).exists() || dirs.is_empty() || distinct.len() != dirs.len() {
         return None;
     }
     let mut command = Command::new(tsc);
@@ -853,6 +855,11 @@ impl Executor {
             let lost = || json!({ "ok": false, "errors": ["type check lost"] });
             let typecheck = clean.map(|answer| answer.recv().unwrap_or_else(|_| lost()));
             if typecheck.as_ref().is_some_and(|answer| answer["ok"] != true) {
+                // The twin's check may still be queued on the slot; the slot goes back only once it answered (else the next program on
+                // the slot could share its batch and its answer).
+                if let Some(answer) = twin {
+                    let _ = answer.recv();
+                }
                 return Ok(json!({ "typecheck": typecheck }));
             }
             let checker = match (request["checker"].as_object(), dir.as_ref()) {

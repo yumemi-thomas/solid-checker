@@ -132,7 +132,7 @@ export async function runLegal(options) {
       else for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateLegal(options, cell, { index }) });
     }
     // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
-    if (options.ids) entries = keepIds(entries, options.ids, "legal");
+    if (options.ids) entries = keepIds(entries, options.ids, "legal", options.seed);
     console.error(`legal: ${cells.length} cells, ${entries.length} programs`);
     const rows = [];
     const values = new Map();

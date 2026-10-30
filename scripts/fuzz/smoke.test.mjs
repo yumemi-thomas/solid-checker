@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { GENERATOR_VERSION } from "./generate.mjs";
-import { behaviourOf, compare, cover, featuresOf, keepIds } from "./smoke.mjs";
+import { behaviourOf, compare, cover, featuresOf, keepIds, movedVerdicts } from "./smoke.mjs";
 
 const row = (id, extra = {}) => ({ id, code: "C", context: "body", variant: "signal", binding: "direct", layer: "none", outcome: "agree", detail: { findings: ["rule/violation@3"] }, ...extra });
 
@@ -30,12 +30,13 @@ describe("the smoke cover", () => {
 
 describe("keepIds", () => {
   const entries = ["a", "b", "c"].map((id) => ({ built: { id } }));
-  const manifest = (ids, generator = GENERATOR_VERSION) => { const file = join(mkdtempSync(join(tmpdir(), "smoke-")), "g.json"); writeFileSync(file, JSON.stringify({ generator, ids })); return file; };
+  const manifest = (ids, generator = GENERATOR_VERSION, seed = 1) => { const file = join(mkdtempSync(join(tmpdir(), "smoke-")), "g.json"); writeFileSync(file, JSON.stringify({ generator, seed, ids })); return file; };
 
   it("keeps the named programs in grid order, and refuses a manifest the grid no longer matches", () => {
-    expect(keepIds(entries, manifest(["c", "a"]), "matrix").map((e) => e.built.id)).toEqual(["a", "c"]);
-    expect(() => keepIds(entries, manifest(["a", "z"]), "matrix")).toThrow(/does not generate/);
-    expect(() => keepIds(entries, manifest(["a"], GENERATOR_VERSION + 1), "matrix")).toThrow(/reselect/);
+    expect(keepIds(entries, manifest(["c", "a"]), "matrix", 1).map((e) => e.built.id)).toEqual(["a", "c"]);
+    expect(() => keepIds(entries, manifest(["a", "z"]), "matrix", 1)).toThrow(/does not generate/);
+    expect(() => keepIds(entries, manifest(["a"], GENERATOR_VERSION + 1), "matrix", 1)).toThrow(/reselect/);
+    expect(() => keepIds(entries, manifest(["a"]), "matrix", 2)).toThrow(/seed 1, not 2/);
   });
 });
 
@@ -46,5 +47,15 @@ describe("compare", () => {
     const held = compare(reference, against, ["b"]);
     expect(held).toMatchObject({ moved: 2, inSmoke: 1, moves: 1, movesCaught: 1, problems: 2, problemsInSmoke: 1, problemMovesMissed: [] });
     expect(compare(reference, against, ["a"])).toMatchObject({ movesCaught: 0, problemMovesMissed: [expect.stringContaining("false-clean")] });
+  });
+});
+
+describe("movedVerdicts", () => {
+  it("splits worse moves from the others, and names a program that gave no row", () => {
+    const manifest = { ids: ["a", "b", "c", "d"], behaviours: [behaviourOf(row("x")), behaviourOf(row("x", { outcome: "recall-gap", detail: {} }))], expected: [0, 1, 0, 0] };
+    const moved = movedVerdicts(manifest, [row("a", { outcome: "recall-gap", detail: {} }), row("b"), row("c")]);
+    expect(moved.worse.map((m) => m.id)).toEqual(["a"]);
+    expect(moved.other.map((m) => m.id)).toEqual(["b"]);
+    expect(moved.missing).toEqual(["d"]);
   });
 });

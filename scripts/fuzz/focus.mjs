@@ -102,6 +102,7 @@ function main() {
     if (options.smoke && existsSync(join(out, grid, "programs.jsonl"))) {
       const moved = movedVerdicts(JSON.parse(readFileSync(manifest, "utf8")), readRows(join(out, grid)));
       if (moved.worse.length || moved.other.length) console.log(`           moved from the manifest: ${moved.worse.length} worse, ${moved.other.length} better or changed`);
+      if (moved.missing.length) attention.push(`${grid}: ${moved.missing.length} programs of the manifest gave no row (${moved.missing.slice(0, 3).join(", ")})`);
       for (const move of moved.worse.slice(0, 10)) attention.push(`${grid}: worse ${move.id} ${move.from} -> ${move.to}`);
       if (moved.worse.length > 10) attention.push(`${grid}: ... ${moved.worse.length - 10} more worse`);
       for (const move of moved.other.slice(0, 5)) console.log(`             ${move.id} ${move.from} -> ${move.to}`);
