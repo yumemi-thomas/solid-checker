@@ -133,20 +133,6 @@ fn resolve_lexical(base: &Path, relative: &str) -> PathBuf {
     out
 }
 
-fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(to)?;
-    for entry in std::fs::read_dir(from)? {
-        let entry = entry?;
-        let target = to.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            copy_tree(&entry.path(), &target)?;
-        } else {
-            std::fs::copy(entry.path(), target)?;
-        }
-    }
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------------------------------------------------------------
 // Type checks (scripts/fuzz/typecheck.mjs: `typecheck` and `typecheckBatch`, the same answers)
 
@@ -625,44 +611,23 @@ impl Chrome {
         serde_json::from_str(&mapped).map_err(|e| format!("mapped record: {e}"))
     }
 
-    /// The cases' files where Vite serves them (fast.mjs `stageCases`, without its test files).
-    fn stage(&self, id: &str, dir: &Path, variant: &str) -> std::io::Result<()> {
-        let target = self.work.join("cases").join(id);
-        std::fs::create_dir_all(&target)?;
-        for file in ["App.tsx", "sites.json", "oracle.json"] {
-            if dir.join(file).exists() {
-                std::fs::copy(dir.join(file), target.join(file))?;
-            }
-        }
-        for entry in std::fs::read_dir(dir)? {
-            let name = entry?.file_name().to_string_lossy().into_owned();
-            if (name.ends_with(".ts") || name.ends_with(".tsx")) && !name.ends_with(".d.ts") && name != "App.tsx" {
-                std::fs::copy(dir.join(&name), target.join(&name))?;
-            }
-        }
-        if dir.join("node_modules").exists() {
-            copy_tree(&dir.join("node_modules"), &target.join("node_modules"))?;
-        }
-        if variant != "clean" && dir.join("App.run.txt").exists() {
-            std::fs::copy(dir.join("App.run.txt"), target.join("App.tsx"))?;
-        }
-        Ok(())
-    }
-
     fn run(self: &Arc<Self>, cases: Vec<(String, String, String)>) -> Value {
         let failed = |id: &str, message: String| json!({ "id": id, "failure": { "phase": "chrome-host", "message": message.chars().take(800).collect::<String>() }, "diagnostics": [], "errors": [], "witnesses": [] });
         let mut records = serde_json::Map::new();
         let mut staged = Vec::new();
+        let mut stage = Vec::new();
         for (id, dir, variant) in &cases {
             if !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') {
                 records.insert(id.clone(), failed(id, format!("unsafe case id {id}")));
                 continue;
             }
-            match self.stage(id, Path::new(dir), variant) {
-                Ok(()) => staged.push(id.clone()),
-                Err(error) => {
-                    records.insert(id.clone(), failed(id, format!("staging: {error}")));
-                }
+            staged.push(id.clone());
+            stage.push(json!({ "id": id, "dir": dir, "variant": variant }));
+        }
+        // The helper stages them where the pages load them (chrome-host.mjs `stage`: in memory, a case with a package on disk).
+        if let Err(error) = http_post(&self.control, "/__sc/stage", &Value::Array(stage).to_string()) {
+            for id in staged.drain(..) {
+                records.insert(id.clone(), failed(&id, format!("staging: {error}")));
             }
         }
         let queue = Arc::new(Mutex::new(staged.clone().into_iter()));
@@ -704,9 +669,6 @@ impl Chrome {
         }
         for (id, record) in results.lock().unwrap().drain(..) {
             records.insert(id, record);
-        }
-        for id in &staged {
-            let _ = std::fs::remove_dir_all(self.work.join("cases").join(id));
         }
         let _ = http_post(&self.control, "/__sc/done", &json!(staged).to_string());
         Value::Object(records)

@@ -118,7 +118,7 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
       for (const { id } of cases) if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new Error(`unsafe case id ${id}`);
       started ??= start();
       const host = await started;
-      stageCases(host.work, cases);
+      host.stage(cases);
       const records = new Map();
       let next = 0;
       const worker = async () => {
@@ -143,10 +143,6 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
       };
       await Promise.all(Array.from({ length: Math.min(concurrency, cases.length) }, worker));
       await host.done(cases.map(({ id }) => id));
-      for (const { id } of cases) {
-        rmSync(join(host.work, "cases", id), { recursive: true, force: true });
-      }
-      rmSync(join(host.work, "tests"), { recursive: true, force: true });
       return records;
     },
     timings: () => ({ ...timings }),
@@ -215,13 +211,54 @@ export async function startViteHost({ install = DEFAULT_FAST_INSTALL } = {}) {
       });
     },
   };
+  // The cases, served from memory (`stage`): their modules through Vite's transform as files at work/cases/<id>/ would be, their plan
+  // and oracle files as the static server would serve them. Nothing is written per case, so the grid's file churn (and every watcher
+  // of the tree it would wake) stays out of the run. A case that ships a package (its own node_modules) is staged on disk instead:
+  // Vite resolves the package from there.
+  const casesRoot = join(work, "cases");
+  const staged = new Map();
+  const stagedFile = (path) => {
+    if (!path.startsWith(`${casesRoot}/`)) return undefined;
+    const rest = path.slice(casesRoot.length + 1);
+    const slash = rest.indexOf("/");
+    return slash < 0 ? undefined : staged.get(rest.slice(0, slash))?.get(rest.slice(slash + 1));
+  };
+  // Vite's default `resolve.extensions`, tried in its order after the exact path.
+  const EXTENSIONS = ["", ".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx", ".json"];
+  const serveStaged = {
+    name: "solid-checker-fuzz-staged",
+    enforce: "pre",
+    resolveId(source, importer) {
+      const [path, query] = source.split("?");
+      const base = path.startsWith("/cases/") ? join(work, path)
+        : path.startsWith(`${casesRoot}/`) ? path
+          : importer && /^\.\.?\//.test(path) && importer.startsWith(`${casesRoot}/`) ? resolve(dirname(importer.split("?")[0]), path) : null;
+      if (!base) return null;
+      const found = EXTENSIONS.map((extension) => base + extension).find((candidate) => stagedFile(candidate) !== undefined);
+      return found === undefined ? null : found + (query ? `?${query}` : "");
+    },
+    load(id) { return stagedFile(id.split("?")[0]) ?? null; },
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const path = (request.url ?? "").split(/[?#]/)[0];
+        if (!path.startsWith("/cases/") || /\.(m?[jt]sx?)$/.test(path)) return next();
+        const text = stagedFile(join(work, decodeURIComponent(path)));
+        if (text === undefined) return next();
+        response.setHeader("Content-Type", path.endsWith(".json") ? "application/json" : "text/plain");
+        response.end(text);
+      });
+    },
+  };
   const server = await createServer({
     configFile: false, root: work, logLevel: "error", mode: "development", cacheDir: join(work, ".vite"),
-    plugins: [serveCached, solid({ hot: false, performanceTracks: false, diagnostics: false, solid: { sourceNames: { locations: true } } })],
+    plugins: [serveCached, serveStaged, solid({ hot: false, performanceTracks: false, diagnostics: false, solid: { sourceNames: { locations: true } } })],
     resolve: { conditions: ["browser", "development"], dedupe: ["solid-js", "@solidjs/signals", "@solidjs/web"] },
     // forwardConsole: off whoever launches the run (Vite 8 turns it on under a coding agent; feedback-browser.mjs says why).
     server: { host: "127.0.0.1", port: 0, hmr: false, forwardConsole: false, fs: { strict: false }, watch: null },
-    optimizeDeps: { include: ["solid-js", "@solidjs/web", "@solidjs/signals", "@solidjs/diagnostics"] },
+    // Only the Solid packages are pre-bundled, at start. Discovery stays off: a case's generated package (every one named `fz-lib`) would
+    // be bundled once and served to every later case with another `fz-lib`, and a re-optimization reloads the pages mid-run. A case's
+    // package is served from its own node_modules, its `solid-js` import resolved to the same pre-bundled instance.
+    optimizeDeps: { noDiscovery: true, include: ["solid-js", "@solidjs/web", "@solidjs/signals", "@solidjs/diagnostics"] },
   });
   dbg("server created");
   await server.listen();
@@ -244,14 +281,30 @@ export async function startViteHost({ install = DEFAULT_FAST_INSTALL } = {}) {
     if (!injectQuery) throw new Error("vite/dist/client/client.mjs no longer defines injectQuery as expected");
     cached.set("/@vite/client", { type: "text/javascript", text: `export ${injectQuery}` });
   };
-  /** Forgets the cases' modules (their directories are removed by the caller). */
+  /**
+   * Stages cases (`{ id, dir, variant }`) where the pages load them: in memory, or on disk for a case that ships a package. The files
+   * are fast.mjs `stageCases`'s: App.tsx (the twin's text unless `variant` is clean), its plan and oracle files, its other modules.
+   */
+  const stage = (cases) => {
+    for (const { id, dir, variant } of cases) {
+      if (existsSync(join(dir, "node_modules"))) { stageCases(work, [{ id, dir, variant }]); continue; }
+      const files = new Map();
+      for (const file of ["App.tsx", "sites.json", "oracle.json"]) if (existsSync(join(dir, file))) files.set(file, readFileSync(join(dir, file), "utf8"));
+      for (const file of readdirSync(dir).filter((name) => /\.tsx?$/.test(name) && !name.endsWith(".d.ts") && name !== "App.tsx")) files.set(file, readFileSync(join(dir, file), "utf8"));
+      if (variant !== "clean" && existsSync(join(dir, "App.run.txt"))) files.set("App.tsx", readFileSync(join(dir, "App.run.txt"), "utf8"));
+      staged.set(id, files);
+    }
+  };
+  /** Forgets the cases: their staged files and modules. */
   const done = async (ids) => {
     for (const id of ids) {
+      staged.delete(id);
+      rmSync(join(casesRoot, id), { recursive: true, force: true });
       const module = await server.moduleGraph.getModuleByUrl(`/cases/${id}/App.tsx`);
       if (module) server.moduleGraph.invalidateModule(module);
     }
   };
-  return { work, server, base, freeze, done, map: (id, record) => mapPositions(server, SourceMapConsumer, id, record) };
+  return { work, server, base, freeze, stage, done, map: (id, record) => mapPositions(server, SourceMapConsumer, id, record) };
 }
 
 /** Maps a record's served App.tsx positions to the source's, through the transform Vite served it with. */
