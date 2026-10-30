@@ -236,6 +236,13 @@ export async function startViteHost({ install = DEFAULT_FAST_INSTALL } = {}) {
     cached.set("/sc-runner.js", { type: "text/javascript", text: runner.code });
     cached.set("/virtual-clock.mjs", { type: "text/javascript", text: virtualClock.code });
     cached.set("/sc.html", { type: "text/html", text: readFileSync(join(work, "index.html"), "utf8").replace('src="/runner.tsx"', 'src="/sc-runner.js"') });
+    // Vite's client (`/@vite/client`), which the @solidjs/web dependency bundle imports for `injectQuery` (Vite rewrites a dynamic
+    // import with a computed path through it), is served as that function alone, Vite's own source: the page then opens no HMR
+    // WebSocket and loads no overlay (a quarter of Chrome's CPU per program; the records of 768 programs were identical).
+    const client = readFileSync(join(fromInstall.resolve("vite/package.json"), "../dist/client/client.mjs"), "utf8");
+    const injectQuery = /^function injectQuery\(url, queryToInject\) \{\n[\s\S]*?\n\}\n/m.exec(client)?.[0];
+    if (!injectQuery) throw new Error("vite/dist/client/client.mjs no longer defines injectQuery as expected");
+    cached.set("/@vite/client", { type: "text/javascript", text: `export ${injectQuery}` });
   };
   /** Forgets the cases' modules (their directories are removed by the caller). */
   const done = async (ids) => {
