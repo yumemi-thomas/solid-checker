@@ -23,14 +23,18 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache } from "./cache.mjs";
-import { codeRules, codesForRule, ignoredRules, policyOf, withholdingRules } from "./codes.mjs";
+import { codeRules, codesForRule, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { fnv } from "./rng.mjs";
 import { chromeUnreadable, evidenceOf, parseAxes, parsePerStratum, runtimeDiff, sampleStrata, stratumOf, summarize } from "./runtime-diff.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
-import { LAYERS, MISUSE_CODES, MOUNTS, SPEC, TEMPLATE_CODES, gridBindingsOf, gridVariantsOf, sourcesOf, sourcesOption } from "./misuse.mjs";
+import {
+  CALLBACK_CONTEXTS, CALLBACK_FORMS, LAYERS, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
+  gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, sourcesOf, sourcesOption,
+} from "./misuse.mjs";
+import { RECALL_MOUNTS } from "./mounts.mjs";
 import { isSite, walk } from "./model.mjs";
 import { evaluate, finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
@@ -135,14 +139,48 @@ export { fnv };
 /** A program's seed depends on the run seed, its cell and its index in the cell, so a cell's programs do not move when others are added. */
 export const cellSeed = (base, code, context, index) => programSeed((Number(base) ^ fnv(`${code}/${context}`)) >>> 0, index);
 
-export function cellList({ codes, contexts } = {}) {
+export function cellList({ codes, contexts, recall = false } = {}) {
   const cells = [];
-  for (const code of TEMPLATE_CODES) {
+  for (const code of recall ? [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES] : TEMPLATE_CODES) {
     if (codes && !codes.includes(code)) continue;
-    for (const context of SPEC[code].contexts) if (!contexts || contexts.includes(context)) cells.push({ code, context });
+    // `--recall`: the recall contexts are cells of their own (misuse.mjs `recallContexts`), after the code's base cells.
+    for (const context of [...SPEC[code].contexts, ...(recall ? recallContextsOf(code) : [])]) if (!contexts || contexts.includes(context)) cells.push({ code, context });
   }
   return cells;
 }
+
+/**
+ * `--recall`: the shapes the recall axes add to a cell, each new axis value crossed with the whole base grid (every variant, binding
+ * and layer the cell takes, mounted at the root with local values) and not with the other new axes:
+ *   bindings  each recall binding of the variant's call kind (misuse.mjs RECALL_API_BINDINGS, RECALL_VALUE_BINDINGS, CALLEE_FORMS),
+ *             at every base layer
+ *   layers    each recall layer (control flow, and the module helper's import forms), under every base binding
+ *   callback  each callback form (CALLBACK_FORMS), on every base shape of a context whose site is in a primitive's callback
+ *   mounts    each recall mount (mounts.mjs RECALL_MOUNTS), on every base shape
+ *   files     each recall source (SOURCE_AXES.files) a base shape takes
+ * A recall context (a cell only `--recall` lists) takes its base grid as well. `base` is the cell's base grid (`gridShapes`, or the
+ * legal grid's `legalShapes`); `variants` its variants.
+ */
+export function recallAxes(code, context, base, variants) {
+  const recallCell = recallContextsOf(code).includes(context);
+  const shapes = recallCell ? [...base] : [];
+  for (const variant of variants) {
+    const known = new Set(gridBindingsOf(code, variant));
+    for (const binding of recallBindingsOf(code, variant).filter((b) => !known.has(b))) for (const layer of LAYERS) shapes.push({ variant, binding, layer });
+    // A `catch` swallows a code the runtime only throws (codes.mjs thrownCodes): the try-catch layer never shows it.
+    const layers = THROWN.has(code) ? RECALL_LAYERS.filter((layer) => layer !== "try-catch") : RECALL_LAYERS;
+    for (const binding of gridBindingsOf(code, variant)) for (const layer of layers) shapes.push({ variant, binding, layer });
+  }
+  const local = base.filter((shape) => !shape.mount && !shape.source);
+  if (CALLBACK_CONTEXTS.includes(context)) for (const callback of CALLBACK_FORMS) for (const shape of local) shapes.push({ ...shape, callback });
+  for (const mount of RECALL_MOUNTS) for (const shape of local) shapes.push({ ...shape, mount });
+  for (const source of SOURCE_AXES.files) for (const shape of local) if (sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
+  return shapes;
+}
+const THROWN = new Set(thrownCodes.map(([, code]) => code));
+const variantFits = (code, context) => (variant) => context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context);
+/** The misuse grid's recall shapes of a cell (`--recall`). */
+export const recallShapes = (code, context) => recallAxes(code, context, gridShapes(code, context), gridVariantsOf(code).filter(variantFits(code, context)));
 
 /**
  * `--grid`: every shape of a cell, one program each. A shape is the variant, the binding and the layer; on the recorded matrices every
@@ -173,9 +211,9 @@ export function mountsOption(value) {
 }
 
 /** The id suffix of a shape's mount (none for the entry's own render, so a root program keeps its id). */
-export const mountSuffix = (shape) => `${shape.mount ? `-m-${shape.mount}` : ""}${shape.source ? `-s-${shape.source}` : ""}${shape.combo ? "-c" : ""}`;
+export const mountSuffix = (shape) => `${shape.mount ? `-m-${shape.mount}` : ""}${shape.source ? `-s-${shape.source}` : ""}${shape.callback ? `-cb-${shape.callback}` : ""}${shape.combo ? "-c" : ""}`;
 /** The seed key's tail of a shape's mount and source (none for a root, local program, so its seed stays). */
-export const axesKey = (shape) => `${shape.mount ? `/${shape.mount}` : ""}${shape.source ? `/s:${shape.source}` : ""}${shape.combo ? "/combo" : ""}`;
+export const axesKey = (shape) => `${shape.mount ? `/${shape.mount}` : ""}${shape.source ? `/s:${shape.source}` : ""}${shape.callback ? `/cb:${shape.callback}` : ""}${shape.combo ? "/combo" : ""}`;
 /** `--combine`: each shape's program is a combination program (misuse.mjs `buildCombo`) instead of the shape's own. */
 export const combined = (shapes, combine) => (combine ? shapes.map((shape) => ({ ...shape, combo: true })) : shapes);
 
@@ -522,6 +560,8 @@ const usage = `usage: node scripts/fuzz/matrix.mjs --out <fresh dir> [--seed N] 
   [--mounts root,child,show,for]        with --grid, also mount each program as a parent's child (misuse.mjs MOUNTS; default root)
   [--sources local,props,context,module,async]  with --grid, also take the values from a parent's props, a context, helpers.ts or an
                                         async parent (misuse.mjs SOURCES; axis or source names; default local)
+  [--recall]                            with --grid, only the recall axes' shapes (matrix.mjs recallAxes): the recall bindings, callee forms,
+                                        layers, callback forms, mounts and file sources, each across the base grid, and the recall contexts
   [--combine]                           with --grid, each shape's program is a combination: the site among one or two legal uses of
                                         other codes and unrelated reactive code, its values from a drawn source (misuse.mjs buildCombo)
   [--cache-dir <dir>] [--no-cache]      the runtime cache (type checks and fast-path records; default $TMPDIR/solid-checker-fuzz-cache)
@@ -545,13 +585,15 @@ export async function runMatrix(options) {
 }
 
 async function sweep(options, config, out) {
-  const cells = cellList({ codes: options.codes?.split(","), contexts: options.contexts?.split(",") });
+  const cells = cellList({ codes: options.codes?.split(","), contexts: options.contexts?.split(","), recall: options.recall });
   let entries = [];
   // `--layers a,b` keeps those layers' shapes (their index, and so their programs, as in the whole grid).
   const layerKept = (shape) => !options.layers || options.layers.split(",").includes(shape.layer);
   const mounts = mountsOption(options.mounts);
   const sources = sourcesOption(options.sources);
-  if (options.grid) for (const cell of cells) combined(gridShapes(cell.code, cell.context, mounts, sources), options.combine).forEach((shape, index) => { if (layerKept(shape)) entries.push({ cell, ...generateShape(options, cell, shape, index) }); });
+  // `--recall` (recallAxes): only the shapes the recall axes add; the base grids keep theirs.
+  const shapesOf = (cell) => (options.recall ? recallShapes(cell.code, cell.context) : gridShapes(cell.code, cell.context, mounts, sources));
+  if (options.grid) for (const cell of cells) combined(shapesOf(cell), options.combine).forEach((shape, index) => { if (layerKept(shape)) entries.push({ cell, ...generateShape(options, cell, shape, index) }); });
   else for (const cell of cells) for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateCell(options, cell, index) });
   // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
   if (options.ids) entries = keepIds(entries, options.ids, "matrix", options.seed);
@@ -694,7 +736,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (argv.length !== 3) throw new Error(`--gate needs <baseline.json> <current.json>\n${usage}`);
       process.exitCode = reportGate(gate(JSON.parse(readFileSync(resolve(argv[1]), "utf8")), JSON.parse(readFileSync(resolve(argv[2]), "utf8"))));
     } else {
-      const options = parseArgs(argv, { extraValues: ["ids", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata"] });
+      const options = parseArgs(argv, { extraValues: ["ids", "per-cell", "codes", "contexts", "chrome-sample", "chrome-false-clean", "chrome-other", "layers", "baseline", "checker-label", "cache-dir", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
       for (const key of ["perCell", "chromeSample", "chromeFalseClean", "chromeOther", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
       options.perCell ??= 20;
       if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

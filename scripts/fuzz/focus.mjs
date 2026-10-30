@@ -31,7 +31,13 @@ export const GRIDS = {
   "lg-base": ["legal.mjs", ...MOUNTS],
   "lg-src": ["legal.mjs", ...SOURCES],
   "lg-combo": ["legal.mjs", "--combine", ...MOUNTS],
+  // The recall axes (matrix.mjs recallAxes): asked for by name (`--grids mx-recall,lg-recall`), never by default; their false cleans
+  // are the measured known misses, not regressions.
+  "mx-recall": ["matrix.mjs", "--recall"],
+  "lg-recall": ["legal.mjs", "--recall"],
 };
+/** The grids a focus or smoke run takes when `--grids` is not given: every grid but the recall ones. */
+export const DEFAULT_GRIDS = Object.keys(GRIDS).filter((grid) => !grid.endsWith("-recall"));
 /** Outcomes that need a look: a misuse grid's and a legal grid's. */
 export const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal"];
 
@@ -56,7 +62,7 @@ export function readGrid(out) {
 function parse(argv) {
   const split = argv.indexOf("--");
   const own = split < 0 ? argv : argv.slice(0, split);
-  const options = { grids: Object.keys(GRIDS).join(","), seed: "1", runtimeDiff: "1", oracleAxes: "code,context,outcome", extra: split < 0 ? [] : argv.slice(split + 1) };
+  const options = { grids: DEFAULT_GRIDS.join(","), seed: "1", runtimeDiff: "1", oracleAxes: "code,context,outcome", extra: split < 0 ? [] : argv.slice(split + 1) };
   for (let index = 0; index < own.length; index += 2) {
     const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
     if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
@@ -82,7 +88,7 @@ function main() {
   for (const grid of options.grids.split(",")) {
     const [script, ...shape] = GRIDS[grid];
     // A grid with no cell for these codes (a code with no legal context, say) has nothing to run.
-    const cells = script === "legal.mjs" ? legalCells({ codes }) : cellList({ codes });
+    const cells = script === "legal.mjs" ? legalCells({ codes }) : cellList({ codes, recall: shape.includes("--recall") });
     if (!cells.length) { console.log(`  ${grid.padEnd(8)}    -  no cells for these codes`); continue; }
     const started = Date.now();
     const manifest = join(SMOKE_DIR, `${grid}.json`);

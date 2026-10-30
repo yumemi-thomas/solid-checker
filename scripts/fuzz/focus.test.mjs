@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { GRIDS, readGrid } from "./focus.mjs";
+import { DEFAULT_GRIDS, GRIDS, readGrid } from "./focus.mjs";
 
 describe("readGrid", () => {
   it("tallies the outcomes, flags what needs a look, and keeps only behaviour differences from the oracle", () => {
@@ -21,7 +21,8 @@ describe("readGrid", () => {
     expect(readGrid(join(out, "missing"))).toEqual({ outcomes: {}, flagged: [], oracle: null, behaviour: [] });
   });
 
-  it("runs the six grids of the full run", () => {
-    expect(Object.keys(GRIDS)).toEqual(["mx-base", "mx-src", "mx-combo", "lg-base", "lg-src", "lg-combo"]);
+  it("runs the six grids of the full run by default, the recall grids by name", () => {
+    expect(DEFAULT_GRIDS).toEqual(["mx-base", "mx-src", "mx-combo", "lg-base", "lg-src", "lg-combo"]);
+    expect(Object.keys(GRIDS)).toEqual([...DEFAULT_GRIDS, "mx-recall", "lg-recall"]);
   });
 });

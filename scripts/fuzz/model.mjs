@@ -75,6 +75,18 @@ export const flush = () => ({ k: "flush" });
 export const nul = () => ({ k: "nul" });
 /** `<span />` (a component's return: the checker reads a function that returns JSX as a component). */
 export const jsx = () => ({ k: "jsx" });
+/** `createOwner()` (the recall axes' bound owner: `const o = createOwner(); runWithOwner(o, ...)`). */
+export const createOwnerExpr = () => ({ k: "createOwner" });
+
+/**
+ * Control-flow statements (the recall axes, misuse.mjs RECALL_LAYERS and the after-await contexts): `body` runs exactly once, in the
+ * same scope and synchronously, inside a loop, a `switch`, a `try`, a label, a generator, or (the `-await` forms, async functions only)
+ * after a suspension: a loop whose `await` is written after the body, which runs on the second pass only (after it), `for await`,
+ * a `finally` after an `await`.
+ */
+export const CTL_FORMS = ["for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await"];
+export const CTL_ASYNC_FORMS = new Set(["loop-await", "for-await", "finally-await"]);
+export const ctl = (form, body) => ({ k: "ctl", form, body });
 
 /**
  * Containers (the containers dimension, container.mjs): a statement that wraps statements in a place where code is written but
@@ -107,6 +119,8 @@ export const child = (id, e) => ({ k: "child", id, e });
 export const attr = (id, e) => ({ k: "attr", id, e });
 export const show = (when, children, fallback = []) => ({ k: "show", when, children, fallback });
 export const forEach = (children) => ({ k: "for", children });
+/** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD). */
+export const loadingView = (on, children) => ({ k: "loading", on, children });
 
 export const signal = (name, init, role = "src", scope = "component") => ({
   k: "signal", name, setter: `set${name[0].toUpperCase()}${name.slice(1)}`, init, role, scope,
@@ -125,6 +139,8 @@ export const storeOptSignal = (name, init) => ({ ...signal(name, init, "probe"),
 export const storeNestedSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-nested" });
 export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
 export const actionSignal = (name, target, value) => ({ ...signal(name, 0, "src"), kind: "action", target, value });
+/** `const a = createMemo(async () => { t(); await Promise.resolve(); return 1; })`: an async memo that reads `dep`, so a write to it refetches. */
+export const asyncDepSignal = (name, dep) => ({ ...signal(name, 0, "src"), kind: "async-dep", dep });
 
 // ---------------------------------------------------------------------------
 // Generic traversal
@@ -288,6 +304,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
           break;
         }
         case "for": for (const c of item.children) checkView(c, scope); break;
+        case "loading": sigCheck(item.on, "read"); for (const c of item.children) checkView(c, scope); break;
         default: fail(`${where}: unknown view kind ${item.k}`);
       }
     }
@@ -318,6 +335,12 @@ export function validate(program, { maxNodes = 400 } = {}) {
             checkBlock(stmt.fin, scopeOf(scope, { async: scope.async }), "free");
             break;
           case "contain": checkContain(stmt, scope); break;
+          case "ctl":
+            if (!CTL_FORMS.includes(stmt.form)) fail(`${where}: unknown control form ${stmt.form}`);
+            if (CTL_ASYNC_FORMS.has(stmt.form) && !scope.async) fail(`${where}: ${stmt.form} outside an async function`);
+            // A generator's body is its own function: no await, and its own return.
+            checkBlock(stmt.body, scopeOf(scope, { async: stmt.form === "generator" ? false : scope.async }), "free");
+            break;
           default: fail(`${where}: unknown statement ${stmt.k}`);
         }
       });
@@ -350,7 +373,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
     }
 
     function fnTypeChecked(f, scope, returns, vars = []) {
-      if (f.k === "ref") return refFnChecked(f, scope, returns);
+      if (f.k === "ref" || f.k === "member") return refFnChecked(f, scope, returns);
       if (f.k !== "fn") { fail(`${where}: expected a function literal`); return T.fn(T.unknown); }
       if (f.async && returns === "voidOrFn") fail(`${where}: an async callback is not (() => void) | void`);
       const inner = scopeOf(scope, { async: f.async });
@@ -410,7 +433,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
           fail(`${where}: calling a ${callee.t}`);
           return null;
         }
-        case "getOwner": return { t: "owner" };
+        case "getOwner": case "createOwner": return { t: "owner" };
         case "nul": case "jsx": return T.unknown;
         case "flush": return T.void;
         case "set": {
@@ -457,6 +480,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
         case "untrack": case "root": return fnTypeChecked(e.fn, scope, "free").ret;
         case "owner":
           if (e.ownerArg === "owner" && !lookup(scope, "owner")) fail(`${where}: owner is not captured`);
+          if (e.ownerArg === "bound" && lookup(scope, "boundOwner")?.t !== "owner") fail(`${where}: boundOwner is not declared`);
           return fnTypeChecked(e.fn, scope, "free").ret;
         // createRoot((dispose) => ...): the callback returns what the root hands back (the disposer, here).
         case "rootd": {

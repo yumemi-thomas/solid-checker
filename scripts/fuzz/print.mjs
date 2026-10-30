@@ -15,6 +15,7 @@
 import { INSTRUMENT_PRELUDE } from "./hits.mjs";
 import { isSite, paramTsType, signalTable, walk } from "./model.mjs";
 import { AUX, MODULE, describeUse, parentSource, sourcedName, sourcedRead } from "./misuse.mjs";
+import { LATER_MOUNTS, mountParts } from "./mounts.mjs";
 import { accessOf, packageFiles } from "./package.mjs";
 
 const MARK_OPEN = "\u0001";
@@ -149,6 +150,7 @@ function render(program, instrument) {
   const signals = signalTable(program);
   const helpers = new Map((program.helpers ?? []).filter((helper) => !helper.pkg && !helper.module).map((helper) => [helper.name, helper]));
   const moduleHelpers = (program.helpers ?? []).filter((helper) => helper.module);
+  const nsHelpers = new Set(moduleHelpers.filter((helper) => helper.via === "ns").map((helper) => helper.name));
   const packageHelpers = new Map(usedPackageHelpers(program).map((helper) => [helper.name, helper]));
   // The misuse profile: what each `use` node prints and needs (imports, wrapper functions, aliases).
   const uses = new Map();
@@ -228,13 +230,16 @@ function render(program, instrument) {
   }
   function fnText(f, depth, { header } = {}) {
     const { head, body } = fnParts(f, depth, header);
+    // A named function expression (the recall axes' callback forms): `function cbNamed() { ... }`.
+    if (f.form === "named") return `${f.async ? "async " : ""}function ${f.label}${head} ${body}`;
     return `${f.async ? "async " : ""}${head} => ${body}`;
   }
   /** A block; `entry` (a hit id) plants the function-entry counter on the opening line and scopes the statements under it. */
-  function block(stmts, depth, entry = null, lead = []) {
+  function block(stmts, depth, entry = null, lead = [], tail = []) {
     const hit = entry === null ? "" : `__h(${entry});`;
-    if (!stmts.length && !lead.length) return hit ? `{ ${hit} }` : "{}";
-    const inner = () => [...lead.map((line) => `${ind(depth + 1)}${line}`), ...stmts.map((stmt) => `${ind(depth + 1)}${stmtText(stmt, depth + 1)}`)].join("\n");
+    if (!stmts.length && !lead.length && !tail.length) return hit ? `{ ${hit} }` : "{}";
+    const inner = () => [...lead.map((line) => `${ind(depth + 1)}${line}`), ...stmts.map((stmt) => `${ind(depth + 1)}${stmtText(stmt, depth + 1)}`),
+      ...tail.map((line) => `${ind(depth + 1)}${line}`)].join("\n");
     const text = entry === null ? inner() : within({ entry, inDefault: false }, inner);
     return `{${hit ? ` ${hit}` : ""}\n${text}\n${ind(depth)}}`;
   }
@@ -264,6 +269,7 @@ function render(program, instrument) {
       case "await": return "await Promise.resolve();";
       case "try": return `try ${block(stmt.body, depth)} finally ${block(stmt.fin, depth)}`;
       case "contain": return containText(stmt, depth);
+      case "ctl": return ctlText(stmt, depth);
       default: throw new Error(`cannot print statement ${stmt.k}`);
     }
   }
@@ -275,7 +281,7 @@ function render(program, instrument) {
       case "write": return siteCall(e, writeText(e));
       case "own": return siteCall(e, ownText(e, depth));
       case "use": return siteCall(e, uses.get(e).text);
-      case "ref": return packageHelpers.has(e.name) ? accessOf(packageHelpers.get(e.name)).callee : e.name;
+      case "ref": return packageHelpers.has(e.name) ? accessOf(packageHelpers.get(e.name)).callee : nsHelpers.has(e.name) ? `H.${e.name}` : e.name;
       case "member": return `${expr(e.obj, depth)}.${e.key}`;
       case "obj": return e.fields.length ? `{ ${e.fields.map((f) => {
         if (f.e.k === "ref" && f.e.name === f.key) return f.key;
@@ -288,6 +294,7 @@ function render(program, instrument) {
       case "jsx": return "<span />";
       case "set": return glue(e, () => `${signals.get(e.sig).setter}(${expr(e.e, depth)})`);
       case "getOwner": used.add("getOwner"); return glue(e, () => "getOwner()");
+      case "createOwner": used.add("createOwner"); return "createOwner()";
       case "flush": used.add("flush"); return "flush()";
       case "iife": return glue(e, () => `(${expr(e.fn, depth)})()`);
       case "iter": return glue(e, () => (e.method === "map" ? `[1].map(${expr(e.fn, depth)})[0]` : `[1].forEach(${expr(e.fn, depth)})`));
@@ -315,7 +322,7 @@ function render(program, instrument) {
     return e.via && plainCallee(e.callee) ? viaCall(callee, args, e.via) : `${callee}(${args})`;
   }
   /** An effect's apply: a function literal with the value as its parameter, or a declared name. */
-  const applyText = (apply, depth) => (apply.k === "ref" ? apply.name : fnText(apply, depth, { header: "(v)" }));
+  const applyText = (apply, depth) => (apply.k === "fn" ? fnText(apply, depth, { header: "(v)" }) : expr(apply, depth));
 
   /** A container (model.mjs CONTAINER_KINDS): statements written where they run elsewhere, later, or not at all. */
   function containText(c, depth) {
@@ -354,6 +361,27 @@ function render(program, instrument) {
     }
   }
 
+  /** A control-flow statement (model.mjs CTL_FORMS): its body runs once (twice for `loop-await`), synchronously unless the form awaits. */
+  function ctlText(c, depth) {
+    const body = (tail = []) => block(c.body, depth, null, [], tail);
+    switch (c.form) {
+      case "for": return `for (let i = 0; i < 1; i += 1) ${body()}`;
+      case "while": return `while (true) ${body(["break;"])}`;
+      case "do": return `do ${body()} while (false);`;
+      case "switch": return `switch (1 as number) {\n${ind(depth + 1)}case 1: ${block(c.body, depth + 1, null, [], ["break;"])}\n${ind(depth)}}`;
+      case "try-catch": return `try ${body()} catch {}`;
+      case "try-finally": return `try {} finally ${body()}`;
+      case "label": return `outer: ${body(["break outer;"])}`;
+      case "generator": return `(function* () ${body(["yield 1;"])})().next();`;
+      // The body is written before the loop's `await` and runs on the second pass only, after it: the back edge is the only
+      // suspension before it (a read on the first pass as well is not reported by rc.17, the source being tracked already).
+      case "loop-await": return `for (let i = 0; i < 2; i += 1) {\n${ind(depth + 1)}if (i > 0) ${block(c.body, depth + 1)}\n${ind(depth + 1)}await Promise.resolve();\n${ind(depth)}}`;
+      case "for-await": return `for await (const _x of [1]) ${body()}`;
+      case "finally-await": return `try { await Promise.resolve(); } finally ${body()}`;
+      default: throw new Error(`cannot print control form ${c.form}`);
+    }
+  }
+
   /** A write by its target's kind (model.mjs storeSignal, memoSignal, actionSignal); a plain signal is `setX(value)`. */
   function writeText(e) {
     const sig = signals.get(e.sig);
@@ -383,7 +411,7 @@ function render(program, instrument) {
       case "owner": {
         used.add("runWithOwner");
         if (e.ownerArg === "create") used.add("createOwner");
-        return `runWithOwner(${e.ownerArg === "owner" ? "owner" : e.ownerArg === "create" ? "createOwner()" : "null"}, ${f})`;
+        return `runWithOwner(${e.ownerArg === "owner" ? "owner" : e.ownerArg === "bound" ? "boundOwner" : e.ownerArg === "create" ? "createOwner()" : "null"}, ${f})`;
       }
       case "rootd": used.add("createRoot"); return `createRoot(${fnText(e.fn, depth, { header: "(dispose)" })})`;
       case "micro": return `queueMicrotask(${f})`;
@@ -391,10 +419,12 @@ function render(program, instrument) {
       case "cleanup": used.add("onCleanup"); return `onCleanup(${f})`;
       case "timer": return `setTimeout(${f}, 0)`;
       case "then": return `Promise.resolve().then(${f})`;
-      case "render": used.add("createRenderEffect"); return `createRenderEffect(${f}, ${fnText(e.apply, depth, { header: "(v)" })})`;
+      case "render": used.add("createRenderEffect"); return `createRenderEffect(${f}, ${applyText(e.apply, depth)})`;
       case "tracked": used.add("createTrackedEffect"); return `createTrackedEffect(${f})`;
       case "action": {
         used.add("action");
+        // `afterYield` (the recall contexts): the body runs after the action's first `yield`, in a later step of its transition.
+        if (e.afterYield) return `action(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ["yield Promise.resolve();"])})`;
         const { head, body } = fnParts(e.fn, depth, "()");
         return `action(function* ${head} ${body})`;
       }
@@ -427,6 +457,10 @@ function render(program, instrument) {
         used.add("For");
         return [`${ind(depth)}<For each={[1]}>`, `${ind(depth + 1)}{() => (`, `${ind(depth + 2)}<li>`,
           ...item.children.flatMap((c) => viewText(c, depth + 3)), `${ind(depth + 2)}</li>`, `${ind(depth + 1)})}`, `${ind(depth)}</For>`];
+      }
+      case "loading": {
+        used.add("Loading");
+        return [`${ind(depth)}<Loading fallback={0} on={${item.on}()}>`, ...item.children.flatMap((c) => viewText(c, depth + 1)), `${ind(depth)}</Loading>`];
       }
       default: throw new Error(`cannot print view ${item.k}`);
     }
@@ -467,6 +501,7 @@ function render(program, instrument) {
   }
   // The parents of the mount axis: each renders its child component in its own JSX.
   // A parent source (misuse.mjs SOURCES) creates the component's values in the parent and hands them on as props or by context.
+  const parentWeb = new Set();
   for (const [index, component] of program.components.filter((c) => c.mount).entries()) {
     // A module source keeps its values in helpers.ts: a parent of the mount axis then renders the component bare.
     const source = component.source && parentSource(component.source) ? component.source : undefined;
@@ -476,25 +511,32 @@ function render(program, instrument) {
     const tag = source?.includes("context") ? `<ValCtx value={{ ${keys.map(([key]) => key).join(", ")} }}>`
       : source === "async-loading" ? (used.add("Loading"), "<Loading fallback={0}>") : null;
     const wrapped = tag ? [tag, `${INDENT}${passed}`, tag.startsWith("<ValCtx") ? "</ValCtx>" : "</Loading>"] : [passed];
-    const mounted = component.mount === "show" ? (used.add("Show"), [`<Show when={true}>`, ...wrapped.map((line) => `${INDENT}${line}`), `</Show>`])
+    // The recall mounts (mounts.mjs): a parent prelude (its own signals, a `dynamic` component) and a button that mounts the child later.
+    const parts = mountParts(component.mount, wrapped, { index: index + 1, name: component.name, used, web: parentWeb });
+    const mounted = parts?.lines ?? (component.mount === "show" ? (used.add("Show"), [`<Show when={true}>`, ...wrapped.map((line) => `${INDENT}${line}`), `</Show>`])
       : component.mount === "for" ? (used.add("For"), [`<For each={[1]}>`, `${INDENT}{() => ${wrapped.join("")}}`, `</For>`])
-      : wrapped;
+      : wrapped);
     if (source === "prop-spread") out.push(`function M${index + 1}(props: ${component.name}Props) {`, `${INDENT}return <${component.name} {...props} />;`, "}", "");
     const created = source ? component.signals.filter((sig) => component.sourced.includes(sig.name)).map((sig) => `${INDENT}${signalLine(sig)}`) : [];
-    out.push(`export function P${index + 1}() {`, ...created, `${INDENT}return (`, `${INDENT}${INDENT}<div>`, ...mounted.map((line) => `${INDENT}${INDENT}${INDENT}${line}`), `${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
+    out.push(`export function P${index + 1}() {`, ...created, ...(parts?.prelude ?? []).map((line) => `${INDENT}${line}`), `${INDENT}return (`, `${INDENT}${INDENT}<div>`, ...mounted.map((line) => `${INDENT}${INDENT}${INDENT}${line}`), `${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
   // The source's types and its context, above the components that name them.
   const declared = program.components.flatMap((component) => sourceDeclarations(component, signals, used));
   if (declared.length) out.unshift(...declared, "");
   const sourcedImports = program.components.flatMap((component) => sourceImports(component, signals));
   const importNames = [...new Set([...used, ...useList.flatMap(([, described]) => described.solid)])].sort();
-  const webNames = [...new Set(useList.flatMap(([, described]) => described.web))].sort();
+  const webNames = [...new Set([...useList.flatMap(([, described]) => described.web), ...parentWeb])].sort();
   const namespaces = [...new Set(useList.flatMap(([, described]) => described.namespaces))].sort();
   const packageImports = [...new Set([...packageHelpers.values()].map((helper) => accessOf(helper).importLine))];
-  const fromHelpers = [...moduleHelpers.map((helper) => helper.name), ...sourcedImports];
+  // A module helper's import form (misuse.mjs RECALL_LAYERS): by name (the default), default, through a barrel `lib.ts` that
+  // re-exports it by name or with `export *`, or through a namespace import.
+  const fromHelpers = [...moduleHelpers.filter((helper) => !helper.via).map((helper) => helper.name), ...sourcedImports];
   if (fromHelpers.length) packageImports.push(`import { ${fromHelpers.join(", ")} } from "./helpers";`);
+  for (const helper of moduleHelpers.filter((h) => h.via)) packageImports.push(helperImportLine(helper));
+  for (const component of program.components) packageImports.push(...sourceImportLines(component, signals));
+  packageImports.push(...new Set(useList.flatMap(([, described]) => described.importLines ?? [])));
   const typeNames = [...new Set(program.components.flatMap((component) => sourceTypeNames(component, signals)))].sort();
-  const header = `import { ${importNames.join(", ")} } from "solid-js";\n${typeNames.length ? `import type { ${typeNames.join(", ")} } from "solid-js";\n` : ""}${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}${packageImports.map((line) => `${line}\n`).join("")}\n`;
+  const header = `import { ${importNames.join(", ")} } from "solid-js";\n${typeNames.length ? `import type { ${typeNames.join(", ")} } from "solid-js";\n` : ""}${webNames.length ? `import { ${webNames.join(", ")} } from "@solidjs/web";\n` : ""}${namespaces.map((module) => `import * as ${MODULE[module]} from "${module}";\n`).join("")}${[...new Set(packageImports)].map((line) => `${line}\n`).join("")}\n`;
   // Printing the body filled `used`; the header goes first, so line numbers shift by its height.
   const body = out.join("\n");
   const full = `${header}${body}`.replace(/\n+$/, "\n");
@@ -539,16 +581,33 @@ export function moduleFiles(program) {
   const signals = signalTable(program);
   const used = new Set();
   const sourced = [];
+  const extra = {};
+  const barrel = [];
   for (const component of program.components) {
     if (!component.source?.startsWith("module")) continue;
     const created = component.signals.filter((sig) => component.sourced.includes(sig.name)).map((sig) => signalText(sig, signals, used));
-    if (component.source === "module") sourced.push(created.map((line) => `export ${line}`).join("\n"));
-    else sourced.push([`export function useVals() {`, ...created.map((line) => `${INDENT}${line}`), `${INDENT}return { ${sourceKeys(component, signals).map(([key]) => key).join(", ")} };`, "}"].join("\n"));
+    const keys = sourceKeys(component, signals).map(([key]) => key);
+    const hook = (head) => [`${head} {`, ...created.map((line) => `${INDENT}${line}`), `${INDENT}return { ${keys.join(", ")} };`, "}"].join("\n");
+    if (component.source === "module" || component.source === "module-barrel") sourced.push(created.map((line) => `export ${line}`).join("\n"));
+    else if (component.source === "module-default-hook") sourced.push(hook("export default function useVals()"));
+    else sourced.push(hook("export function useVals()"));
+    if (component.source === "module-barrel") barrel.push(`export { ${keys.join(", ")} } from "./helpers";`);
   }
-  if (!moduleHelpers.length && !sourced.length) return {};
+  for (const helper of moduleHelpers) {
+    if (helper.via === "barrel") barrel.push(`export { ${helper.name} } from "./helpers";`);
+    if (helper.via === "star") barrel.push('export * from "./helpers";');
+  }
+  if (barrel.length) extra["lib.ts"] = `${[...new Set(barrel)].join("\n")}\n`;
+  // A re-exporting module of Solid's own API (misuse.mjs RECALL_API_BINDINGS `reexport`, `reexport-ns`).
+  for (const component of program.components) {
+    const seen = sourcedSignals(component, signals);
+    for (const { node } of walk(component)) if (node.k === "use") Object.assign(extra, describeUse(node, seen).files ?? {});
+  }
+  if (!moduleHelpers.length && !sourced.length) return extra;
   const head = used.size ? `import { ${[...used].sort().join(", ")} } from "solid-js";\n\n` : "";
-  const parts = [...sourced, ...moduleHelpers.map((helper) => ["export " + helperText(helper)[0], ...helperText(helper).slice(1)].join("\n"))];
-  return { "helpers.ts": `${head}${parts.join("\n\n")}\n` };
+  const exported = (helper) => { const [first, ...rest] = helperText(helper); return [`export ${helper.via === "default" ? "default " : ""}${first}`, ...rest].join("\n"); };
+  const parts = [...sourced, ...moduleHelpers.map(exported)];
+  return { ...extra, "helpers.ts": `${head}${parts.join("\n\n")}\n` };
 }
 
 /** The declaration of a signal (model.mjs signal kinds); `used` collects the imports it needs. */
@@ -558,6 +617,7 @@ function signalText(sig, signals, used) {
     case "memo": used.add("createMemo"); return `const ${sig.name} = createMemo(() => 1);`;
     case "action": used.add("action"); return `const ${sig.name} = action(function* () { ${signals.get(sig.target).setter}(${sig.value}); });`;
     case "async": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => 1);`;
+    case "async-dep": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => { ${sig.dep}(); await Promise.resolve(); return 1; });`;
     case "store-opt": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({ v: ${sig.init} });`;
     case "store-nested": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, a: { v: ${sig.init} }, items: [${sig.init}] });`;
     default: used.add("createSignal"); return `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init});`;
@@ -573,7 +633,7 @@ function signalKeys(sig) {
   if (store) return [[sig.name, store], [sig.setter, `StoreSetter<${store}>`]];
   switch (sig.kind) {
     case "memo": return [[sig.name, "SourceAccessor<number>"]];
-    case "async": return [[sig.name, "Accessor<number>"]];
+    case "async": case "async-dep": return [[sig.name, "Accessor<number>"]];
     case "action": return [[sig.name, "() => Promise<void>"]];
     default: return [[sig.name, "Accessor<number>"], [sig.setter, "Setter<number>"]];
   }
@@ -611,7 +671,7 @@ function sourcePrelude(component, signals, used) {
     case "prop-omit": used.add("omit"); return ['const rest = omit(props, "extra");'];
     case "context": case "async-context": used.add("useContext"); return ["const ctx = useContext(ValCtx);"];
     case "context-destructured": used.add("useContext"); return [`const { ${keys()} } = useContext(ValCtx);`];
-    case "module-hook": return [`const { ${keys()} } = useVals();`];
+    case "module-hook": case "module-default-hook": return [`const { ${keys()} } = useVals();`];
     case "module-hook-member": return ["const vals = useVals();"];
     default: return [];
   }
@@ -628,10 +688,27 @@ function sourceDeclarations(component, signals, used) {
   return [`type ${component.name}Vals = { ${fields.join("; ")} };`, `const ValCtx = createContext<${component.name}Vals>();`];
 }
 
-/** What App.tsx imports from `helpers.ts` for a module source. */
+/** What App.tsx imports from `helpers.ts` by name for a module source (the recall sources import through their own lines). */
 function sourceImports(component, signals) {
-  if (!component.source?.startsWith("module")) return [];
+  if (!component.source?.startsWith("module") || ["module-barrel", "module-default-hook"].includes(component.source)) return [];
   return component.source === "module" ? sourceKeys(component, signals).map(([key]) => key) : ["useVals"];
+}
+
+/** The import lines of the recall module sources: the values through the barrel `lib.ts`, or the hook as `helpers.ts`'s default. */
+function sourceImportLines(component, signals) {
+  if (component.source === "module-barrel") return [`import { ${sourceKeys(component, signals).map(([key]) => key).join(", ")} } from "./lib";`];
+  if (component.source === "module-default-hook") return ['import useVals from "./helpers";'];
+  return [];
+}
+
+/** A module helper's import line by its form (`via`): default, through the barrel `lib.ts`, or a namespace `H`. */
+function helperImportLine(helper) {
+  switch (helper.via) {
+    case "default": return `import ${helper.name} from "./helpers";`;
+    case "barrel": case "star": return `import { ${helper.name} } from "./lib";`;
+    case "ns": return 'import * as H from "./helpers";';
+    default: throw new Error(`unknown helper import form ${helper.via}`);
+  }
 }
 
 function sourceTypeNames(component, signals) {
@@ -655,6 +732,8 @@ function helperText(helper) {
 /** The ordered click plan: every button, in the order the file declares them. */
 export function drivingPlan(program) {
   const clicks = [];
+  // A parent that mounts its child later (mounts.mjs LATER_MOUNTS) does so on its button, before the child's own buttons exist.
+  program.components.filter((c) => c.mount).forEach((component, index) => { if (LATER_MOUNTS.includes(component.mount)) clicks.push(`pm${index + 1}`); });
   for (const { node } of walk(program)) if (node.k === "button") clicks.push(node.id);
   return { clicks, settleMs: 400 };
 }

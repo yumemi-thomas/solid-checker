@@ -30,7 +30,7 @@ import { hitCount } from "./hits.mjs";
 import { fnv, regionOf, runtimeDifferential, siteOf } from "./matrix.mjs";
 import { parseAxes, parsePerStratum, stratumOf } from "./runtime-diff.mjs";
 import { LAYERS, LEGAL_CODES, SPEC, gridBindingsOf, legalVariantsOf } from "./misuse.mjs";
-import { axesKey, combined, mountSuffix, mountsOption, shapeAxes } from "./matrix.mjs";
+import { axesKey, combined, mountSuffix, mountsOption, recallAxes, shapeAxes } from "./matrix.mjs";
 import { sourcesOption } from "./misuse.mjs";
 import { finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
@@ -107,6 +107,9 @@ export function legalCells({ codes } = {}) {
 /** The legal shapes of a code (`--grid`): its legal variants x its grid bindings x the layers. */
 export const legalShapes = (code, mounts = ["root"], sources = ["local"], context) => legalVariantsOf(code).flatMap((variant) => gridBindingsOf(code, variant).flatMap((binding) => LAYERS.flatMap((layer) => shapeAxes(code, variant, binding, mounts, sources, context).map((axes) => ({ variant, binding, layer, ...axes })))));
 
+/** `--recall`: the shapes the recall axes add to a legal cell (matrix.mjs `recallAxes`), on the legal grid's base shapes. */
+export const recallLegalShapes = (code, context) => recallAxes(code, context, legalShapes(code, ["root"], ["local"], context), legalVariantsOf(code));
+
 /** One legal program: its seed depends on the run seed and the cell and the index (random) or the shape (grid) only. */
 export function generateLegal(options, { code, context }, { index, shape }) {
   const key = shape ? `legal/${code}/${context}/${shape.variant ?? "-"}/${shape.binding}/${shape.layer}${axesKey(shape)}` : `legal/${code}/${context}`;
@@ -128,7 +131,8 @@ export async function runLegal(options) {
     const cells = legalCells({ codes: options.codes?.split(",") });
     let entries = [];
     for (const cell of cells) {
-      if (options.grid) combined(legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources), cell.context), options.combine).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => entries.push({ cell, index, ...generateLegal(options, cell, { shape }) }));
+      const shapes = options.recall ? recallLegalShapes(cell.code, cell.context) : legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources), cell.context);
+      if (options.grid) combined(shapes, options.combine).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => entries.push({ cell, index, ...generateLegal(options, cell, { shape }) }));
       else for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateLegal(options, cell, { index }) });
     }
     // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
@@ -227,14 +231,14 @@ export async function runLegal(options) {
   }
 }
 
-const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for] [--sources local,props,context,module,async] [--combine]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2] [--chrome-strata]]
+const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for] [--sources local,props,context,module,async] [--combine] [--recall]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2] [--chrome-strata]]
   [--chrome-concurrency N]   Chrome pages at a time (default the oracle's: at most 8)
   [--runtime-diff <N|all> [--runtime-diff-axes a,b]]   compare Happy DOM's runtime record with Chrome's on up to N programs per stratum, or all
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--tsc <tsrs>] [--cache-dir <dir>] [--no-cache]`;
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["ids", "per-cell", "codes", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata"] });
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["ids", "per-cell", "codes", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata", "recall"] });
     for (const key of ["perCell", "chromeSample", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }
