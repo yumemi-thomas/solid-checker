@@ -227,6 +227,8 @@ export function executionFiles(files) {
  */
 export function runtimeEnvironmentKey(config, { code = RECORD_SOURCES(), oracle = fileHash(join(repo, "scripts/runtime-oracle.mjs")), installed = installedKey(config) } = {}) {
   return sha256(JSON.stringify({
+    // The fast host's own key when it is not Happy DOM (chrome-host.mjs `chromeHostKey`): its sources, clock, page mode, browser.
+    ...(config.fastHostKey ? { host: config.fastHostKey } : {}),
     kind: "runtime", code, oracle, installed, virtualClock: Boolean(config.virtualClock), tsc: fileHash(config.tsc),
     fastLock: fileHash(join(config.fastInstall, "package-lock.json")), oracleLock: fileHash(join(config.install, "package-lock.json")),
   }));

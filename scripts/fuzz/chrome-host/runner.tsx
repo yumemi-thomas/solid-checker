@@ -8,7 +8,8 @@ import { OBSERVE, flush } from 'solid-js';
 import { render } from '@solidjs/web';
 import { installVirtualClock } from './virtual-clock.mjs';
 
-const params = new URLSearchParams(location.search);
+// The program and its clock are named in the URL's fragment (chrome-host.mjs), so every program loads the same cached page.
+const params = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
 const id = params.get('id') as string;
 const settings = { eventPasses: 2, pauseMs: Number(params.get('pause') ?? 60), finalMs: Number(params.get('final') ?? 150) };
 let clock: ReturnType<typeof installVirtualClock> | null = null;

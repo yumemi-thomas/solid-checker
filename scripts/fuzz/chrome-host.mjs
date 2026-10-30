@@ -5,7 +5,7 @@
 // with their App.tsx positions mapped through Vite's source maps (Chrome's Error.stack names positions in the served module).
 //
 // Same interface as fast-daemon.mjs: `run(cases)` returns `Map<id, record>`, `close()`. `--fast-host chrome` (run.mjs) selects it.
-import { existsSync, mkdirSync, readdirSync, rmSync, cpSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, cpSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -37,8 +37,21 @@ const VIRTUAL_CAP_MS = 60000;
  * spent waiting; a spent budget is granted again up to VIRTUAL_CAP_MS. `js` is the runner's JS clock (fast/virtual-clock.mjs, a
  * Node-shaped model), `real` the wall clock (as the oracle runs).
  */
-export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall = DEFAULT_ORACLE_INSTALL, concurrency = 16, clock = "virtual-time", browser: browserPath, pageTimeoutMs = 30000 } = {}) {
+/** How a worker gets a page: a fresh browser context per program, or one page it navigates to a fresh document per program. */
+export const CHROME_PAGES = ["fresh-context", "fresh-page", "reuse"];
+
+/**
+ * `pages`: `fresh-context` (default) creates a browser context per program; `fresh-page` keeps one context per worker (its HTTP
+ * cache warm) and opens a new page per program (a new renderer document and virtual-time state); `reuse` keeps one context and page per worker and
+ * navigates it to a fresh document per program (a new realm: globals, module instances, timers and listeners; the HTTP cache and
+ * the context's storage persist, which no generated program uses), and recreates them after a failure. `timings()` returns the
+ * summed milliseconds of each phase of a program's run.
+ */
+export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall = DEFAULT_ORACLE_INSTALL, concurrency = 16, clock = "virtual-time", pages = "fresh-context", browser: browserPath, pageTimeoutMs = 30000 } = {}) {
   if (!CHROME_CLOCKS.includes(clock)) throw new Error(`--chrome-clock takes ${CHROME_CLOCKS.join(", ")}, not ${clock}`);
+  if (!CHROME_PAGES.includes(pages)) throw new Error(`--chrome-pages takes ${CHROME_PAGES.join(", ")}, not ${pages}`);
+  const timings = { programs: 0, context: 0, setup: 0, navigate: 0, record: 0, map: 0, teardown: 0 };
+  const timed = async (phase, work) => { const at = performance.now(); try { return await work(); } finally { timings[phase] += performance.now() - at; } };
   let started = null;
   const start = async () => {
     const root = resolve(install);
@@ -59,9 +72,25 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
     const maps = await load("source-map-js");
     const SourceMapConsumer = maps.SourceMapConsumer ?? maps.default?.SourceMapConsumer;
     dbg("loaded tools");
+    // The page, the runner and its clock, served from memory with long-lived caching once transformed (see `cached` below): a
+    // program's navigation then fetches only its own modules, and the browser reuses the compiled scripts. Vite's client (HMR) is
+    // not loaded: nothing here is hot-replaced.
+    const cached = new Map();
+    const serveCached = {
+      name: "solid-checker-fuzz-cached",
+      configureServer(server) {
+        server.middlewares.use((request, response, next) => {
+          const body = cached.get((request.url ?? "").split(/[?#]/)[0]);
+          if (body === undefined) return next();
+          response.setHeader("Content-Type", body.type);
+          response.setHeader("Cache-Control", "max-age=31536000, immutable");
+          response.end(body.text);
+        });
+      },
+    };
     const server = await createServer({
       configFile: false, root: work, logLevel: "error", mode: "development", cacheDir: join(work, ".vite"),
-      plugins: [solid({ hot: false, performanceTracks: false, diagnostics: false, solid: { sourceNames: { locations: true } } })],
+      plugins: [serveCached, solid({ hot: false, performanceTracks: false, diagnostics: false, solid: { sourceNames: { locations: true } } })],
       resolve: { conditions: ["browser", "development"], dedupe: ["solid-js", "@solidjs/signals", "@solidjs/web"] },
       server: { host: "127.0.0.1", port: 0, hmr: false, fs: { strict: false }, watch: null },
       optimizeDeps: { include: ["solid-js", "@solidjs/web", "@solidjs/signals", "@solidjs/diagnostics"] },
@@ -75,9 +104,17 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
     dbg("playwright loaded");
     const browser = await chromium.launch({ executablePath: browserPath ?? defaultChromium(), headless: true });
     dbg("browser launched");
-    // Warm the dependency bundles and the runner once, so no case pays for them or meets Vite's dependency reload.
+    // Warm the dependency bundles and the runner once, so no case pays for them or meets Vite's dependency reload; then freeze the
+    // runner and its clock as transformed (their imports name the versioned dependency bundles, which Vite serves immutable).
     const warm = await browser.newContext();
     try { await (await warm.newPage()).goto(`${base}index.html?id=__warm`, { waitUntil: "load" }); } finally { await warm.close(); }
+    const runner = await server.transformRequest("/runner.tsx");
+    const virtualClock = await server.transformRequest("/virtual-clock.mjs");
+    if (!runner?.code || !virtualClock?.code) throw new Error("the runner did not transform");
+    if (!runner.code.includes('from "/virtual-clock.mjs"')) throw new Error("the transformed runner imports its clock from an unexpected URL");
+    cached.set("/sc-runner.js", { type: "text/javascript", text: runner.code });
+    cached.set("/virtual-clock.mjs", { type: "text/javascript", text: virtualClock.code });
+    cached.set("/sc.html", { type: "text/html", text: readFileSync(join(work, "index.html"), "utf8").replace('src="/runner.tsx"', 'src="/sc-runner.js"') });
     dbg("warmed");
     return { work, server, base, browser, SourceMapConsumer };
   };
@@ -100,38 +137,45 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
     };
   };
 
-  const runOne = async (host, id) => {
-    const context = await host.browser.newContext();
-    try {
-      const page = await context.newPage();
-      if (clock === "virtual-time") {
-        const cdp = await context.newCDPSession(page);
-        let granted = 0;
-        const grant = async () => {
-          if (granted >= VIRTUAL_CAP_MS) return;
-          granted += VIRTUAL_BUDGET_MS;
-          await cdp.send("Emulation.setVirtualTimePolicy", { policy: "pauseIfNetworkFetchesPending", budget: VIRTUAL_BUDGET_MS });
-        };
-        cdp.on("Emulation.virtualTimeBudgetExpired", () => { grant().catch(() => {}); });
-        await grant();
-      }
-      if (process.env.CHROME_HOST_DEBUG) {
-        page.on("console", (message) => dbg(`page ${id} console.${message.type()}: ${message.text().slice(0, 300)}`));
-        page.on("pageerror", (error) => dbg(`page ${id} error: ${String(error?.stack ?? error).slice(0, 600)}`));
-        page.on("requestfailed", (request) => dbg(`page ${id} request failed: ${request.url()} ${request.failure()?.errorText}`));
-      }
-      await page.goto(`${host.base}index.html?id=${encodeURIComponent(id)}&clock=${clock === "js" ? "virtual" : "real"}`, { waitUntil: "domcontentloaded", timeout: pageTimeoutMs });
-      let timer;
-      const record = await Promise.race([
-        page.evaluate(() => globalThis.__scRecordPromise),
-        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`no record within ${pageTimeoutMs} ms`)), pageTimeoutMs); }),
-      ]).finally(() => clearTimeout(timer));
-      return await mapPositions(host, id, record);
-    } catch (error) {
-      return failed(id, "chrome-host", error?.message ?? error);
-    } finally {
-      await context.close().catch(() => {});
+  /** A context and page ready to run a program: the page's virtual-time session (when used) and its budget reset. */
+  const openPage = async (host, existing = null) => {
+    const context = existing ?? await timed("context", () => host.browser.newContext());
+    const page = await timed("setup", () => context.newPage());
+    const slot = { context, page, cdp: null, granted: 0 };
+    if (clock === "virtual-time") {
+      slot.cdp = await timed("setup", () => context.newCDPSession(page));
+      slot.cdp.on("Emulation.virtualTimeBudgetExpired", () => { grant(slot).catch(() => {}); });
     }
+    if (process.env.CHROME_HOST_DEBUG) {
+      page.on("console", (message) => dbg(`console.${message.type()}: ${message.text().slice(0, 300)}`));
+      page.on("pageerror", (error) => dbg(`page error: ${String(error?.stack ?? error).slice(0, 600)}`));
+    }
+    return slot;
+  };
+  const grant = async (slot) => {
+    if (slot.done || slot.granted >= VIRTUAL_CAP_MS) return;
+    slot.granted += VIRTUAL_BUDGET_MS;
+    await slot.cdp.send("Emulation.setVirtualTimePolicy", { policy: "pauseIfNetworkFetchesPending", budget: VIRTUAL_BUDGET_MS });
+  };
+  const closePage = (slot) => timed("teardown", () => slot.context.close().catch(() => {}));
+
+  /** Runs one program on `slot` (a fresh document: navigation replaces the realm); throws when the page fails. */
+  const runOn = async (host, slot, id) => {
+    // Each program gets a fresh budget before its navigation (a reused page's last program paused virtual time when its record came).
+    if (slot.cdp) { slot.granted = 0; slot.done = false; await timed("setup", () => grant(slot)); }
+    // A unique query per run: a URL that differed from the last only in its fragment would be a same-document navigation on a reused
+    // page (no new document, no new run, the last program's record).
+    host.runs = (host.runs ?? 0) + 1;
+    await timed("navigate", () => slot.page.goto(`${host.base}sc.html?run=${host.runs}#id=${encodeURIComponent(id)}&clock=${clock === "js" ? "virtual" : "real"}`, { waitUntil: "domcontentloaded", timeout: pageTimeoutMs }));
+    let timer;
+    const record = await timed("record", () => Promise.race([
+      slot.page.evaluate(() => globalThis.__scRecordPromise),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`no record within ${pageTimeoutMs} ms`)), pageTimeoutMs); }),
+    ]).finally(() => clearTimeout(timer)));
+    // Done: stop virtual time, so the idle page does not run through budget re-grants (on a reused page that left the next
+    // navigation stalled) and no stray timer of this program runs on.
+    if (slot.cdp) { slot.done = true; await timed("setup", () => slot.cdp.send("Emulation.setVirtualTimePolicy", { policy: "pause" })); }
+    return timed("map", () => mapPositions(host, id, record));
   };
 
   return {
@@ -143,10 +187,24 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
       const records = new Map();
       let next = 0;
       const worker = async () => {
+        let slot = null;
         while (next < cases.length) {
           const { id } = cases[next++];
-          records.set(id, await runOne(host, id));
+          try {
+            slot ??= await openPage(host);
+            records.set(id, await runOn(host, slot, id));
+          } catch (error) {
+            records.set(id, failed(id, "chrome-host", error?.message ?? error));
+            if (slot) { await closePage(slot); slot = null; }
+          }
+          timings.programs += 1;
+          if (pages === "fresh-context" && slot) { await closePage(slot); slot = null; }
+          if (pages === "fresh-page" && slot) {
+            await timed("teardown", () => slot.page.close().catch(() => {}));
+            slot = await openPage(host, slot.context).catch(async () => { await closePage(slot); return null; });
+          }
         }
+        if (slot) await closePage(slot);
       };
       await Promise.all(Array.from({ length: Math.min(concurrency, cases.length) }, worker));
       for (const { id } of cases) {
@@ -157,6 +215,7 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
       rmSync(join(host.work, "tests"), { recursive: true, force: true });
       return records;
     },
+    timings: () => ({ ...timings }),
     async close() {
       if (!started) return;
       const host = await started.catch(() => null);
@@ -166,6 +225,19 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
       rmSync(host.work, { recursive: true, force: true });
     },
   };
+}
+
+/**
+ * What a Chrome host record depends on beyond the fast path's own sources (cache.mjs `runtimeEnvironmentKey`): the host and its
+ * page, runner and clock files, the clock and page mode, and the browser build (every file of its directory, as the oracle's key).
+ */
+export function chromeHostKey({ clock = "virtual-time", pages = "fresh-context", browser } = {}, { fileHash, treeStat }) {
+  const executable = browser ?? defaultChromium();
+  return JSON.stringify({
+    kind: "chrome", clock, pages,
+    sources: ["chrome-host.mjs", "chrome-host/runner.tsx", "chrome-host/index.html", "fast/virtual-clock.mjs"].map((name) => fileHash(join(here, name))),
+    browser: { path: executable, build: treeStat(dirname(executable)) },
+  });
 }
 
 /** One case's record written as fast.mjs collects them (the prototype's bench writes these for comparison). */
