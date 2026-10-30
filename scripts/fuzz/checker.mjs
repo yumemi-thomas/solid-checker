@@ -75,14 +75,24 @@ export function checkerWorkDir(install, id) {
 export function materializeForChecker(built, install, id = built.id, { twin = false } = {}) {
   const dir = checkerWorkDir(install, id);
   rmSync(dir, { recursive: true, force: true });
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "App.tsx"), twin ? built.files["App.run.txt"] : built.files["App.tsx"]);
-  const modules = projectModules(built.files);
-  for (const name of modules) writeFileSync(join(dir, name), built.files[name]);
-  writeFileSync(join(dir, "main.tsx"), mainSourceFor(built.files["oracle.json"]));
-  writeFileSync(join(dir, "tsconfig.json"), tsconfigFor(["main.tsx", "App.tsx", ...modules]));
-  installPackages(dir, built.packages);
+  for (const [name, text] of Object.entries(checkerProjectFiles(built, { twin }))) {
+    mkdirSync(dirname(join(dir, name)), { recursive: true });
+    writeFileSync(join(dir, name), text);
+  }
   return dir;
+}
+
+/** The files `materializeForChecker` writes, by path relative to the project: App.tsx (or the twin), the modules, the entry, the tsconfig, the packages. */
+export function checkerProjectFiles(built, { twin = false } = {}) {
+  const modules = projectModules(built.files);
+  const files = { "App.tsx": twin ? built.files["App.run.txt"] : built.files["App.tsx"] };
+  for (const name of modules) files[name] = built.files[name];
+  files["main.tsx"] = mainSourceFor(built.files["oracle.json"]);
+  files["tsconfig.json"] = tsconfigFor(["main.tsx", "App.tsx", ...modules]);
+  for (const [name, packageFiles] of Object.entries(built.packages ?? {})) {
+    for (const [file, text] of Object.entries(packageFiles)) files[join("node_modules", name, file)] = text;
+  }
+  return files;
 }
 
 /** Copies a case directory (App.tsx etc.) into the install's checker work area. */
@@ -116,6 +126,12 @@ const CHECKER_ARGS = ["--format", "json", "--feedback-facts", "--runtime-target"
  */
 const ORDINARY_ARGS = ["--format", "json", "--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"];
 
+/** The checker's environment: the caller's, the runtime resolver, and the producer (`typefacts`). */
+export const checkerEnv = ({ typefacts, env = process.env } = {}) => ({
+  ...env, SOLID_CHECKER_RUNTIME_RESOLVER: env.SOLID_CHECKER_RUNTIME_RESOLVER ?? RESOLVER,
+  ...(typefacts ?? env.SOLID_TYPEFACTS_BIN ? { SOLID_TYPEFACTS_BIN: typefacts ?? env.SOLID_TYPEFACTS_BIN } : {}),
+});
+
 /**
  * Runs the native checker on a materialized directory.
  * `bin` and `typefacts` set SOLID_CHECKER_NATIVE_BIN and SOLID_TYPEFACTS_BIN (the same variables the oracle needs).
@@ -130,8 +146,7 @@ export function runChecker(dir, { bin, typefacts, timeoutMs = 180000, env = proc
     const child = spawn(executable, ["--project", join(dir, "tsconfig.json"), ...(ordinary ? ORDINARY_ARGS : CHECKER_ARGS)], {
       cwd: dir, stdio: ["ignore", "pipe", "pipe"],
       env: {
-        ...env, SOLID_CHECKER_DAEMON: "0", SOLID_CHECKER_RUNTIME_RESOLVER: env.SOLID_CHECKER_RUNTIME_RESOLVER ?? RESOLVER,
-        ...(typefacts ?? env.SOLID_TYPEFACTS_BIN ? { SOLID_TYPEFACTS_BIN: typefacts ?? env.SOLID_TYPEFACTS_BIN } : {}),
+        ...checkerEnv({ typefacts, env }), SOLID_CHECKER_DAEMON: "0",
       },
     });
     let stdout = ""; let stderr = "";
@@ -141,19 +156,27 @@ export function runChecker(dir, { bin, typefacts, timeoutMs = 180000, env = proc
     child.on("error", (error) => { clearTimeout(timer); done({ ok: false, findings: [], wallMs: Date.now() - started, error: error.message }); });
     child.on("close", (status) => {
       clearTimeout(timer);
-      const wallMs = Date.now() - started;
-      // The oracle reads the native child's stdout as one JSON document; exit 0 and 1 both carry one.
-      if (status !== 0 && status !== 1) { done({ ok: false, findings: [], wallMs, exitStatus: status, error: stderr.slice(-800) || `exit ${status}` }); return; }
-      try {
-        const analysis = JSON.parse(stdout);
-        const veto = entryVeto(analysis, dir);
-        done({ ok: true, findings: parseFindings(analysis, dir), wallMs, exitStatus: status, ...(veto ? { entryVeto: veto } : {}) });
-      } catch (error) {
-        if (error instanceof UnmappedFindingsError) unmapped.push(error.message);
-        done({ ok: false, findings: [], wallMs, exitStatus: status, error: error instanceof UnmappedFindingsError ? error.message : `malformed checker output: ${error.message}` });
-      }
+      done(checkerResult({ status, stdout, stderr, wallMs: Date.now() - started }, dir));
     });
   });
+}
+
+/**
+ * A checker run's result from what it printed (`runChecker`, and the Rust executor's raw answers, exec.mjs): exit 0 and 1 carry one
+ * JSON document; anything else, or findings that map to no program file, is a failed run.
+ */
+export function checkerResult({ status, stdout, stderr = "", wallMs = 0, spawnError }, dir) {
+  if (spawnError) return { ok: false, findings: [], wallMs, error: spawnError };
+  // The oracle reads the native child's stdout as one JSON document; exit 0 and 1 both carry one.
+  if (status !== 0 && status !== 1) return { ok: false, findings: [], wallMs, exitStatus: status, error: stderr.slice(-800) || `exit ${status}` };
+  try {
+    const analysis = JSON.parse(stdout);
+    const veto = entryVeto(analysis, dir);
+    return { ok: true, findings: parseFindings(analysis, dir), wallMs, exitStatus: status, ...(veto ? { entryVeto: veto } : {}) };
+  } catch (error) {
+    if (error instanceof UnmappedFindingsError) unmapped.push(error.message);
+    return { ok: false, findings: [], wallMs, exitStatus: status, error: error instanceof UnmappedFindingsError ? error.message : `malformed checker output: ${error.message}` };
+  }
 }
 
 /**

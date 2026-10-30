@@ -11,7 +11,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { mapPoolSettled } from "../lib/pool.mjs";
 import { StaleCacheError, cacheableRecord, cacheableTypecheck, caseKey, recordDigest, typecheckDigest } from "./cache.mjs";
-import { materializeForChecker, runChecker, siteVerdicts } from "./checker.mjs";
+import { checkerProjectFiles, checkerResult, checkerWorkDir, materializeForChecker, runChecker, siteVerdicts } from "./checker.mjs";
 import { classify, runtimeEvents } from "./classify.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { runFast } from "./fast.mjs";
@@ -20,7 +20,7 @@ import { closedGrammar } from "./model.mjs";
 import { signature as findingSignature } from "./dedupe.mjs";
 import { callAtLine } from "./falseclean.mjs";
 import { registrationLines } from "./registration.mjs";
-import { createTypecheckBatcher, typecheck } from "./typecheck.mjs";
+import { createTypecheckBatcher, typecheck, typecheckBatch } from "./typecheck.mjs";
 import { judgeUnexecuted, lexicallyDeadHits } from "./unexecuted.mjs";
 
 /** A case that ships a generated package is checked as a user's run is (checker.mjs ORDINARY_ARGS): the package is read from source. */
@@ -70,8 +70,7 @@ const timed = (phase, work) => {
 export async function prepareEntries(entries, config, deps = {}) {
   // Type checks of this call share `tsrs -b` processes (as many at a time as the pool runs), unless a test injects one or the run
   // asks for one process each.
-  const { runChecker: check = runChecker, typecheck: types = config.typecheckBatch ? createTypecheckBatcher({ size: config.concurrency }) : typecheck } = deps;
-  const results = new Map();
+  const { runChecker: check = runChecker, typecheck: batched = config.typecheckBatch ? createTypecheckBatcher({ size: config.concurrency }) : typecheck } = deps;
   const { install, casesDir } = config;
   const instrument = config.instrument !== false;
   const control = instrument && Boolean(config.control);
@@ -98,19 +97,64 @@ export async function prepareEntries(entries, config, deps = {}) {
   };
   mkdirSync(casesDir, { recursive: true });
 
+  // With the Rust executor (`config.exec`, exec.mjs) step 1 is its work: every program of the call goes to it at once, and it writes,
+  // type-checks and checks them on its own threads. The checker control on the twin stays on this path.
+  if (config.exec && !control && !deps.typecheck && !deps.runChecker) {
+    const exec = await config.exec;
+    const prepared = await mapPoolSettled(entries, (entry) => prepareViaExecutor(entry, { config, cache, exec, instrument }), { concurrency: Math.max(1, entries.length) });
+    return settlePrepared(entries, prepared, config, instrument);
+  }
+
+  // 0. With batched type checks, every project of the call is written first and the type checks the cache does not answer start as one
+  // `tsrs -b` per pool slot over a share of them: a tsrs process spends most of its time reading the libraries, so a few large batches
+  // cost a fraction of the small ones step 1's pool would gather (typecheck.mjs createTypecheckBatcher). The answers are typecheckBatch's,
+  // the projects alone where a batch gives none, as the batcher's are. A test that injects `typecheck` skips this step.
+  const staged = new Map();
+  const answers = new Map();
+  if (config.typecheckBatch && !deps.typecheck) {
+    const pending = [];
+    for (const { built } of entries) {
+      const stage = {
+        caseDir: timed("materialize", () => writeCase(join(casesDir, built.id), built)),
+        dir: timed("materialize", () => materializeForChecker(built, install, built.id)),
+        twinDir: null,
+      };
+      if (!cache?.has(caseKey(built.files, "typecheck"))) pending.push(stage.dir);
+      if (instrument && !cache?.has(caseKey(built.files, "typecheck-twin"))) {
+        stage.twinDir = timed("materialize", () => materializeForChecker(built, install, `${built.id}-run`, { twin: true }));
+        pending.push(stage.twinDir);
+      }
+      staged.set(built.id, stage);
+      // The Chrome host serves its pages from this event loop (chrome-host.mjs): writing a whole call's projects in one go would stall them.
+      await new Promise((resume) => setImmediate(resume));
+    }
+    const slots = Math.max(1, Math.min(config.concurrency ?? 1, pending.length));
+    const groups = Array.from({ length: slots }, (_, slot) => pending.filter((_, index) => index % slots === slot)).filter((group) => group.length);
+    // Not awaited here: step 1's pool starts at once, and a program waits for its own batch only.
+    for (const group of groups) {
+      const batch = timed("typecheck", () => typecheckBatch(group, { tsc: config.tsc }));
+      for (const dir of group) answers.set(dir, batch.then((got) => got?.get(dir) ?? typecheck(dir, { tsc: config.tsc })));
+    }
+  }
+  const types = (dir, options) => (answers.has(dir) ? answers.get(dir) : batched(dir, options));
+
   // 1. Write the case, type-check it as the oracle compiles it, and ask the checker (on the clean text).
   const prepared = await mapPoolSettled(entries, async ({ program, built }) => {
-    const caseDir = timed("materialize", () => writeCase(join(casesDir, built.id), built));
-    const dir = timed("materialize", () => materializeForChecker(built, install, built.id));
+    const stage = staged.get(built.id);
+    const caseDir = stage?.caseDir ?? timed("materialize", () => writeCase(join(casesDir, built.id), built));
+    const dir = stage?.dir ?? timed("materialize", () => materializeForChecker(built, install, built.id));
     const typed = await remembered(built, "typecheck", () => timed("typecheck", () => types(dir, { tsc: config.tsc })), cacheableTypecheck);
-    if (!typed.ok) return { program, built, caseDir, dir, typecheck: typed };
+    if (!typed.ok) {
+      if (stage?.twinDir && !config.keepWork) rmSync(stage.twinDir, { recursive: true, force: true });
+      return { program, built, caseDir, dir, typecheck: typed };
+    }
     const ordinary = hasPackages(built);
     const checker = await timed("checker", () => check(dir, { bin: config.bin, typefacts: config.typefacts, ordinary }));
     const value = { program, built, caseDir, dir, typecheck: typed, checker };
     if (instrument) {
       // The twin's project is written only when something reads it: a type check that is not a cache hit (or is spot-checked),
       // or the twin's checker control.
-      let twinDir = null;
+      let twinDir = stage?.twinDir ?? null;
       const twin = () => (twinDir ??= timed("materialize", () => materializeForChecker(built, install, `${built.id}-run`, { twin: true })));
       value.twinTypecheck = await remembered(built, "typecheck-twin", () => timed("typecheck", () => types(twin(), { tsc: config.tsc })), cacheableTypecheck);
       if (control && checker.ok && value.twinTypecheck.ok) value.twinChecker = await timed("checker", () => check(twin(), { bin: config.bin, typefacts: config.typefacts, ordinary }));
@@ -118,7 +162,12 @@ export async function prepareEntries(entries, config, deps = {}) {
     }
     return value;
   }, { concurrency: config.concurrency });
+  return settlePrepared(entries, prepared, config, instrument);
+}
 
+/** Step 1's answers as `prepareEntries` returns them: a stale cache entry stops the run; the live ones go on. */
+function settlePrepared(entries, prepared, config, instrument) {
+  const results = new Map();
   // A stale cache entry stops the run: it is not one program's error.
   const stale = prepared.find((settled) => settled.error instanceof StaleCacheError);
   if (stale) throw stale.error;
@@ -129,9 +178,68 @@ export async function prepareEntries(entries, config, deps = {}) {
     results.set(built.id, { program, built, ...settled.value });
     const value = settled.value;
     if (value.typecheck.ok && value.checker?.ok && (!instrument || (built.neutral && value.twinTypecheck?.ok))) live.push(value);
-    if (!config.keepWork) rmSync(value.dir, { recursive: true, force: true });
+    if (!config.keepWork && value.dir) rmSync(value.dir, { recursive: true, force: true });
   }
   return { results, live };
+}
+
+/**
+ * One program's step 1 through the Rust executor: the same files, type checks (cached ones answered from the cache, the cache's spot
+ * checks run fresh), checker run and value as the JS path's.
+ */
+async function prepareViaExecutor({ program, built }, { config, cache, exec, instrument }) {
+  const { install, casesDir } = config;
+  const caseDir = join(casesDir, built.id);
+  const dir = checkerWorkDir(install, built.id);
+  const twinDir = checkerWorkDir(install, `${built.id}-run`);
+  const caseWrites = Object.entries(built.files).map(([name, text]) => [join(caseDir, name), text]);
+  // A type check from the cache, or run fresh (no entry, or a spot check of one); `settle` stores or compares as `remembered` does.
+  const cached = (part) => {
+    if (!cache) return { stored: undefined, fresh: true };
+    const stored = cache.get(caseKey(built.files, part));
+    return { part, stored, fresh: stored === undefined || cache.takeSpot("typecheck") };
+  };
+  const settle = (slot, fresh) => {
+    if (!cache) return fresh;
+    if (slot.stored !== undefined) {
+      if (cacheableTypecheck(fresh) && typecheckDigest(fresh) !== typecheckDigest(slot.stored)) {
+        cache.spotMismatches.push(built.id);
+        throw new StaleCacheError(`the runtime cache's ${slot.part} of ${built.id} differs from a fresh one (${typecheckDigest(slot.stored)} vs ${typecheckDigest(fresh)}): something its key does not cover changed. Remove ${cache.root} or pass --no-cache`);
+      }
+      return slot.stored;
+    }
+    if (cacheableTypecheck(fresh)) cache.set(caseKey(built.files, slot.part), fresh);
+    return fresh;
+  };
+  const clean = cached("typecheck");
+  const knownBad = !clean.fresh && !clean.stored.ok;
+  const twin = instrument && !knownBad ? cached("typecheck-twin") : null;
+  // The projects go to a slot pair the executor rewrites in place, unless the program ships a package (its node_modules) or the run
+  // keeps its work: those get directories of their own.
+  const ordinary = hasPackages(built);
+  const own = ordinary || config.keepWork;
+  const answer = await exec.prepare({
+    caseWrites,
+    project: knownBad ? null : { files: checkerProjectFiles(built), ...(own ? { dir } : {}) },
+    twinProject: twin?.fresh ? { files: checkerProjectFiles(built, { twin: true }), ...(own ? { dir: twinDir } : {}) } : null,
+    clean: clean.fresh, twin: Boolean(twin?.fresh),
+    checker: knownBad ? null : { ordinary },
+  });
+  const typed = clean.fresh ? settle(clean, answer.typecheck) : clean.stored;
+  if (!typed.ok) return { program, built, caseDir, dir: own ? dir : null, typecheck: typed };
+  // A spot check whose fresh run gave no answer (killed, so nothing to compare) keeps the stored one; the checker, which the executor
+  // skipped after that failed check, runs now, as the JS path runs it.
+  if (!answer.checker) {
+    const again = await exec.prepare({ caseWrites: [], project: { files: checkerProjectFiles(built), ...(own ? { dir } : {}) }, twinProject: null, clean: false, twin: false, checker: { ordinary } });
+    answer.checker = again.checker;
+  }
+  const checker = checkerResult(answer.checker, answer.checker.dir);
+  timings.checker.ms += checker.wallMs ?? 0;
+  timings.checker.n += 1;
+  // A slot's directory is the executor's, not this program's: nothing removes it.
+  const value = { program, built, caseDir, dir: own ? dir : null, typecheck: typed, checker };
+  if (instrument) value.twinTypecheck = twin.fresh ? settle(twin, answer.twinTypecheck) : twin.stored;
+  return value;
 }
 
 /** The second half of `evaluate` (steps 2 and 3) on what `prepareEntries` returned. */
@@ -197,7 +305,8 @@ export function runtimeCached(entries, config) {
 
 /** The fast path for `cases` (`{ id, dir, variant, built }`): the cached records, and one batch for the rest (stored when the runner wrote them). */
 async function fastCached(cases, fast, options, cache) {
-  const strip = (list) => list.map(({ id, dir, variant }) => ({ id, dir, variant }));
+  // A host that stages from memory (chrome-host.mjs `stage`) takes the case's files as built; the others read `dir`.
+  const strip = (list) => list.map(({ id, dir, variant, built }) => ({ id, dir, variant, ...(built ? { files: built.files } : {}) }));
   if (!cache) return fast(strip(cases), options);
   const records = new Map();
   const missing = [];

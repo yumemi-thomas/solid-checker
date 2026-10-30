@@ -44,3 +44,6 @@ export function createRng(seed) {
 
 /** The seed of the i-th program of a run that started at `base`. */
 export const programSeed = (base, index) => ((Number(base) + Math.imul(index + 1, 0x9e3779b1)) >>> 0);
+
+/** FNV-1a over a string's UTF-16 code units, as an unsigned 32-bit integer (cell and shape seeds, sample order). */
+export const fnv = (text) => { let hash = 0x811c9dc5; for (const ch of text) hash = Math.imul(hash ^ ch.charCodeAt(0), 0x01000193) >>> 0; return hash; };

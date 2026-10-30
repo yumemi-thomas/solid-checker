@@ -584,7 +584,10 @@ async function browserHalf({ projectRoot, snapshot, models, conflictingLeafModel
     })],
     resolve: { dedupe: feedbackRuntimePackages },
     optimizeDeps: { noDiscovery: false, exclude: feedbackRuntimePackages },
-    server: { host: "127.0.0.1", port: 0, fs: { allow: [root, dirname(runtimePath), dirname(dirname(runtimePath)), tools.root] } },
+    // Vite 8 turns `forwardConsole` on when its environment names a coding agent (CLAUDECODE, CODEX_THREAD_ID, ...): the page then
+    // carries a client that wraps console.error/warn and reports every uncaught error to the server. What the page runs must not
+    // depend on who launched the run.
+    server: { host: "127.0.0.1", port: 0, forwardConsole: false, fs: { allow: [root, dirname(runtimePath), dirname(dirname(runtimePath)), tools.root] } },
     customLogger: serverDiagnostics.logger, logLevel: "silent" }));
     const effectiveRoot = validateFeedbackRoot(server.config.root, runtimeOptions.appTree ?? root, root);
     validateFeedbackRequestRouting(server.config.server);

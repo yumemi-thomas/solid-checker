@@ -71,7 +71,7 @@ describe("evaluate: the instrumented twin", () => {
     });
     expect(typed.map((d) => d.split("/").at(-1))).toEqual([e.built.id, `${e.built.id}-run`]);
     expect(checked.map((d) => d.split("/").at(-1))).toEqual([e.built.id]);
-    expect(batch).toEqual([{ id: e.built.id, dir: expect.any(String), variant: "run" }]);
+    expect(batch).toEqual([{ id: e.built.id, dir: expect.any(String), variant: "run", files: e.built.files }]);
   });
 
   it("a twin that does not type-check is inconclusive, never a verdict", async () => {

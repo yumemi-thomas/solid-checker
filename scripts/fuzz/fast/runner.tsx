@@ -51,12 +51,26 @@ async function settleHits(): Promise<boolean | null> {
   return false;
 }
 
+// The runner settles the page after a plan step with flush(). In Chrome (the oracle), the click returns and Solid flushes on its
+// own schedule, so an error the flush raises (an `onSettled` cleanup in an unowned scope, say) is an uncaught error and the page
+// goes on; the same error here is rethrown from a timer, never ends the run (it ended it before: no site was recorded).
+function settle() {
+  try { flush(); } catch (e) { setTimeout(() => { throw e; }); }
+}
+
 export async function runCase(id: string, caseDir: string, load: () => Promise<any>, outDirOverride?: string) {
   const started = performance.now();
   const outDir = (outDirOverride ?? process.env.FUZZ_FAST_OUT) as string;
   const settings = { eventPasses: 2, pauseMs: Number(process.env.FUZZ_PAUSE_MS ?? 60), finalMs: Number(process.env.FUZZ_FINAL_MS ?? 150) };
   const diagnostics: any[] = [], errors: any[] = [], consoleErrors: string[] = [], disposers: (() => void)[] = [];
   let witnesses: any[] = [], failure: any = null, phase = 'import', artifactCount: number | null = null;
+  const halted: string[] = [];
+  // The oracle's halt marker (runtime-oracle.mjs `haltMarker`): once REACTIVITY_HALTED is reported or the page has an uncaught error,
+  // a plan step whose element is missing ends on the marker, and the run is a partial one.
+  const uncaught = ['window-error', 'node-uncaught', 'render'];
+  const missingStep = (selector: string) => {
+    if (diagnostics.some((d: any) => d.code === 'REACTIVITY_HALTED') || errors.some((e: any) => uncaught.includes(e.kind))) halted.push(selector);
+  };
   let hits: Record<string, number> | null = null, order: number[] = [], hitsDom: string | null = null, quiescent: boolean | null = null;
   (globalThis as any).__scHits = undefined; (globalThis as any).__scOrder = undefined;
   Error.stackTraceLimit = 80;
@@ -114,13 +128,13 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
       for (const edit of plan.plan.edits ?? []) {
         const target = document.querySelector(edit.selector);
         if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-          target.focus(); target.value = edit.text; target.dispatchEvent(new Event('input', { bubbles: true })); await flush(); await pause(settings.pauseMs);
-        } else errors.push({ phase, kind: 'plan', message: `no input ${edit.selector}`, stack: '' });
+          target.focus(); target.value = edit.text; target.dispatchEvent(new Event('input', { bubbles: true })); settle(); await pause(settings.pauseMs);
+        } else { errors.push({ phase, kind: 'plan', message: `no input ${edit.selector}`, stack: '' }); missingStep(edit.selector); }
       }
       for (const buttonId of plan.plan.clicks) {
         const target = document.querySelector(`[data-act="${buttonId}"]`);
-        if (target instanceof HTMLElement) { target.click(); await flush(); await pause(settings.pauseMs); }
-        else errors.push({ phase, kind: 'plan', message: `no button ${buttonId}`, stack: '' });
+        if (target instanceof HTMLElement) { target.click(); settle(); await pause(settings.pauseMs); }
+        else { errors.push({ phase, kind: 'plan', message: `no button ${buttonId}`, stack: '' }); missingStep(`[data-act="${buttonId}"]`); }
       }
       await pause(settings.finalMs);
       quiescent = await settleHits();
@@ -136,6 +150,8 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
       });
     }, { scenario: id, attribution: false, autoFlush: false });
     artifactCount = captured.artifact?.diagnostics?.length ?? null;
+    // As the oracle (chrome.mjs chromeRuntime): a step that ended on the halt marker is a halted step; a run with one is `halted`.
+    if (!failure && halted.length) failure = { phase: 'halted', message: `reactivity halted: ${halted.length} step(s) found no element (${halted[0]})`, stack: '' };
   } catch (e) { failure = { phase, ...describeError(e) }; }
   finally {
     clock?.restore(); clock = null;

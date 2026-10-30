@@ -27,13 +27,15 @@ import { codesForRule, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.m
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
-import { fnv, regionOf, siteOf } from "./matrix.mjs";
+import { fnv, regionOf, runtimeDifferential, siteOf } from "./matrix.mjs";
+import { parseAxes, parsePerStratum, stratumOf } from "./runtime-diff.mjs";
 import { LAYERS, LEGAL_CODES, SPEC, gridBindingsOf, legalVariantsOf } from "./misuse.mjs";
 import { axesKey, combined, mountSuffix, mountsOption, shapeAxes } from "./matrix.mjs";
 import { sourcesOption } from "./misuse.mjs";
 import { finishEntries, formatPhaseTimings, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { programSeed } from "./rng.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
+import { keepIds } from "./smoke.mjs";
 import { harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 
 export const LEGAL_OUTCOMES = ["typed-away", "harness", "not-legal", "disturbed", "false-positive", "unexecuted", "uncertifiable", "clean"];
@@ -124,11 +126,13 @@ export async function runLegal(options) {
   const config = withRuntimeCache(attachDaemon(configFrom({ ...options, profile: "misuse" }, out), options), options);
   try {
     const cells = legalCells({ codes: options.codes?.split(",") });
-    const entries = [];
+    let entries = [];
     for (const cell of cells) {
       if (options.grid) combined(legalShapes(cell.code, mountsOption(options.mounts), sourcesOption(options.sources), cell.context), options.combine).filter((shape) => !options.layers || options.layers.split(",").includes(shape.layer)).forEach((shape, index) => entries.push({ cell, index, ...generateLegal(options, cell, { shape }) }));
       else for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateLegal(options, cell, { index }) });
     }
+    // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
+    if (options.ids) entries = keepIds(entries, options.ids, "legal", options.seed);
     console.error(`legal: ${cells.length} cells, ${entries.length} programs`);
     const rows = [];
     const values = new Map();
@@ -174,7 +178,7 @@ export async function runLegal(options) {
       const pick = rows.filter((row) => {
         if (row.outcome === "false-positive") return true;
         if (!["clean", "uncertifiable", "unexecuted", "not-legal"].includes(row.outcome)) return false;
-        const key = `${row.code}|${row.context}|${row.outcome}`;
+        const key = options.chromeStrata ? stratumOf(row, parseAxes(options.runtimeDiffAxes)) : `${row.code}|${row.context}|${row.outcome}`;
         const n = sampled.get(key) ?? 0;
         if (n >= limit) return false;
         sampled.set(key, n + 1);
@@ -182,7 +186,7 @@ export async function runLegal(options) {
       });
       const cases = pick.map((row) => ({ id: row.id, dir: values.get(row.id).caseDir, sites: values.get(row.id).built.sites }));
       const chromeStarted = Date.now();
-      const records = pick.length ? await runChrome(cases, { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.concurrency, withClean: true, executionCache: browserExecutionCache(options) }) : new Map();
+      const records = pick.length ? await runChrome(cases, { out, install: config.install, bin: config.bin, typefacts: config.typefacts, browser: options.browser, concurrency: options.chromeConcurrency ?? options.concurrency, withClean: true, executionCache: browserExecutionCache(options) }) : new Map();
       console.error(`legal: Chrome confirmed ${pick.length} programs in ${Math.round((Date.now() - chromeStarted) / 1000)}s`);
       for (const row of pick) {
         const value = values.get(row.id);
@@ -194,6 +198,9 @@ export async function runLegal(options) {
         if (row.chrome.status === "confirmed") confirmed += 1;
       }
     }
+    // The runtime differential (`--runtime-diff <N|all>`, matrix.mjs `runtimeDifferential`): Happy DOM's record against Chrome's.
+    const perStratum = parsePerStratum(options.runtimeDiff);
+    if (perStratum) await runtimeDifferential(rows, values, perStratum, config, options, out, "legal");
     const checked = rows.filter((row) => row.chrome);
     const chrome = checked.length ? Object.fromEntries(["confirmed", "not-confirmed", "same", "differs", "chrome-inconclusive"].map((status) => [status, checked.filter((row) => row.chrome.status === status).length])) : null;
     const differs = checked.filter((row) => row.chrome.status === "differs").map(({ id, outcome, chrome: c }) => ({ id, fast: outcome, chrome: c.outcome }));
@@ -220,13 +227,15 @@ export async function runLegal(options) {
   }
 }
 
-const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for] [--sources local,props,context,module,async] [--combine]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2]]
+const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid [--layers a,b] [--mounts root,child,show,for] [--sources local,props,context,module,async] [--combine]] [--codes A,B] [--confirm-with-chrome [--chrome-sample 2] [--chrome-strata]]
+  [--chrome-concurrency N]   Chrome pages at a time (default the oracle's: at most 8)
+  [--runtime-diff <N|all> [--runtime-diff-axes a,b]]   compare Happy DOM's runtime record with Chrome's on up to N programs per stratum, or all
   [--checker-bin <solid-checker>] [--typefacts <solid-typefacts>] [--tsc <tsrs>] [--cache-dir <dir>] [--no-cache]`;
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["per-cell", "codes", "cache-dir", "chrome-sample", "layers", "mounts", "sources"], extraFlags: ["grid", "no-chrome-cache", "combine"] });
-    for (const key of ["perCell", "chromeSample"]) if (options[key] !== undefined) options[key] = Number(options[key]);
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["ids", "per-cell", "codes", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata"] });
+    for (const key of ["perCell", "chromeSample", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }
     else process.exitCode = await runLegal(options);

@@ -1,0 +1,16 @@
+# The differential fuzzer's executor (src/main.rs says what it does): its own workspace, outside the product's (rust/), so the
+# product gates never build it and it never builds them.
+[package]
+name = "fuzz-exec"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+serde_json = "1"
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+
+[workspace]
+
+[profile.release]
+debug = "line-tables-only"

@@ -32,7 +32,7 @@ export function chromeDiagnostics(row) {
  */
 export function chromeRuntime(row, checkpoints, sites) {
   // A row the oracle marks failed, or carrying an execution failure of its own, is a disturbed run whatever its verdict says.
-  // A step that resolved to the halt marker (emit.mjs `haltable`) found no element after REACTIVITY_HALTED: the run was cut short there,
+  // A step that resolved to the halt marker (emit.mjs `haltable`) found no element after REACTIVITY_HALTED or an uncaught error: the run was cut short there,
   // as a step that timed out cuts it short, and is a partial run (the judges never read a missing diagnostic past it as silence).
   const halted = (checkpoints ?? []).filter((checkpoint) => (checkpoint.text ?? "").trim() === HALT_TEXT);
   const failure = ["harness-error", "type-error"].includes(row.verdict) ? { phase: row.verdict, message: row.error ?? row.failure ?? row.verdict }

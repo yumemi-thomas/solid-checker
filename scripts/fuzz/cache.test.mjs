@@ -201,6 +201,9 @@ describe("EntryCache", () => {
     expect(cacheableRecord({ diagnostics: [] })).toBe(true);
     expect(cacheableRecord({ failure: { phase: "render" } })).toBe(true);
     expect(cacheableRecord({ failure: { phase: "vitest", message: "no record written" } })).toBe(false);
+    expect(cacheableRecord({ failure: { phase: "chrome-host", message: "no record within 30000 ms" } })).toBe(false);
+    expect(cacheableRecord({ failure: { phase: "halted", message: "reactivity halted" } })).toBe(true);
+    expect(cacheableRecord({ failure: { phase: "import", message: "Failed to fetch dynamically imported module" } })).toBe(false);
   });
 });
 
