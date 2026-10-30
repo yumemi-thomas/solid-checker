@@ -40,7 +40,9 @@ export const MOUNTS = ["root", "child", "show", "for"];
  *   context  the parent provides them (`<ValCtx value={{ w1, setW1 }}>`) and the component reads `useContext(ValCtx)`, as an object
  *            (`ctx.setW1`) or destructured.
  *   module   `helpers.ts` creates them at module scope (`export const [w1, setW1] = createSignal(0)`), or a hook there does
- *            (`useVals()`), destructured or as an object (`vals.setW1`).
+ *            (`useVals()`), destructured or as an object (`vals.setW1`); or App.tsx holds one module-scope result of the hook
+ *            (`shared.w1`) beside the body's own call of it (`module-hook-shared`, the ADR 0511 review's false positive: a read
+ *            through another instance), its async memos settled before the mount.
  *   async    the async memo of an async template, created in the parent and read in the child: passed as an accessor, as its
  *            value (`a1={a1()}`), by context, or as an accessor under the parent's `<Loading>`.
  * `props` and `context` take the templates whose values are not async (async values are the `async` axis's); `module` takes all.
@@ -48,10 +50,12 @@ export const MOUNTS = ["root", "child", "show", "for"];
 export const SOURCE_AXES = {
   props: ["prop", "prop-destructured", "prop-merge", "prop-omit", "prop-spread", "prop-value"],
   context: ["context", "context-destructured"],
-  module: ["module", "module-hook", "module-hook-member"],
+  module: ["module", "module-hook", "module-hook-member", "module-hook-shared"],
   async: ["async-prop", "async-value", "async-context", "async-loading"],
 };
 export const SOURCES = ["local", ...Object.values(SOURCE_AXES).flat()];
+/** Sources the grids enumerate and a random draw never takes (as `gridVariants`): random programs and combinations keep theirs. */
+export const GRID_ONLY_SOURCES = ["module-hook-shared"];
 /** A source whose values a parent component creates (the component is then rendered by `P1`, not exported). */
 export const parentSource = (source) => source !== "local" && !source.startsWith("module");
 /** A source that hands the component a read's value, not the accessor: only a read written as the misuse itself can use it. */
@@ -70,7 +74,12 @@ export function sourcesOf(code, variant, binding, context) {
   const isAsync = sigs.some((sig) => sig.kind === "async");
   const target = spec.call({ code, variant }, sigs);
   const bareRead = target.kind === "local" && !target.args && sigs.some((sig) => sig.name === target.name && [undefined, "memo", "async"].includes(sig.kind));
+  // A variant one source carries (`variantSources`): the settled async memo is read through the module-scope hook result only.
+  const only = spec.variantSources?.[variant];
   return SOURCES.filter((source) => {
+    if (only) return only.includes(source);
+    // Its async memos settle before the mount, which takes an async template's code away (the `settled` variant is that case).
+    if (source === "module-hook-shared" && isAsync) return false;
     if (source === "local") return true;
     if (excluded.includes(source)) return false;
     if (source.startsWith("async-") ? !isAsync : (!source.startsWith("module") && isAsync)) return false;
@@ -98,6 +107,7 @@ export function sourcedName(source, name) {
     case "prop-omit": return `rest.${name}`;
     case "context": case "async-context": return `ctx.${name}`;
     case "module-hook-member": return `vals.${name}`;
+    case "module-hook-shared": return `shared.${name}`;
     default: return name;
   }
 }
@@ -154,9 +164,14 @@ export const SPEC = {
       return node.variant === "delete" ? `delete ${object}.v` : node.variant === "nested-assign" ? `${object}.a.v = 7` : node.variant === "nested-push" ? `${object}.items.push(1)` : `${object}.v = 7`;
     }),
   },
+  // `settled`: an async memo read after it settled (ADR 0511 review: probe pending-async/hook-shared-instance, rc.17 warns this code in an
+  // apply, no pending throw), through the module-scope hook result beside the body's own call.
   STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "untrack"],
-    variants: ["signal", "memo"], contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
-    setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : signal(name("r"), 3, "src")],
+    // `settled` is a grid variant (never drawn at random, so random programs and combinations' extras keep theirs) and a legal one.
+    variants: ["signal", "memo"], gridVariants: ["settled"], legalVariants: ["signal", "memo", "settled"],
+    contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
+    variantContexts: { settled: ["effect-apply", "render-apply"] }, variantSources: { settled: ["module-hook-shared"] },
+    setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : variant === "settled" ? asyncSignal(name("a")) : signal(name("r"), 3, "src")],
     call: (node, [sig]) => local(sig.name),
   },
   NO_OWNER_CLEANUP: { legal: ["body", "memo", "effect-compute", "render-compute", "root"], contexts: UNOWNED, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
@@ -465,7 +480,8 @@ function buildOne(kit, plan = {}) {
   const contexts = plan.legal ? spec.legal ?? [] : spec.contexts;
   const context = plan.context ?? rng.pick(contexts);
   if (!contexts.includes(context)) throw new Error(`${code} has no ${plan.legal ? "legal " : ""}${context} context`);
-  const variant = "variant" in plan && plan.variant !== undefined ? plan.variant : rng.pick(plan.legal ? legalVariantsOf(code) : variantsOf(code));
+  // A variant one source carries (`variantSources`) is the grid's, never drawn: every random draw sees the variants it saw before.
+  const variant = "variant" in plan && plan.variant !== undefined ? plan.variant : rng.pick((plan.legal ? legalVariantsOf(code) : variantsOf(code)).filter((v) => !spec.variantSources?.[v]));
   const binding = plan.binding ?? rng.pick(bindingsOf(code, variant));
   const layer = plan.layer ?? rng.weighted([[5, "none"], [3, "closure"], [2, "helper"], [1, "iife"], [1, "closure+helper"]]);
   const sigs = spec.setup(variant, kit.name);
@@ -473,7 +489,7 @@ function buildOne(kit, plan = {}) {
   let stmts = [expr(site)];
   for (const l of layer === "none" ? [] : layer.split("+")) stmts = applyLayer(l, stmts, kit);
   const placed = inContext(context, stmts, kit);
-  const source = plan.source === "draw" ? rng.pick(sourcesOf(code, variant, binding, context)) : plan.source ?? "local";
+  const source = plan.source === "draw" ? rng.pick(sourcesOf(code, variant, binding, context).filter((s) => !GRID_ONLY_SOURCES.includes(s))) : plan.source ?? "local";
   if (!sourcesOf(code, variant, binding, context).includes(source)) throw new Error(`${code}/${variant}/${binding} cannot take source ${source}`);
   // A parent source renders the component from its parent, plainly; the mount axis is not crossed with it.
   const mount = parentSource(source) ? "child" : plan.mount ?? "root";

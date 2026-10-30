@@ -160,7 +160,7 @@ export const gridShapes = (code, context, mounts = ["root"], sources = ["local"]
 export function shapeAxes(code, variant, binding, mounts, sources, context) {
   const takes = sourcesOf(code, variant, binding, context);
   return [
-    ...(sources.includes("local") ? mounts.map((mount) => (mount === "root" ? {} : { mount })) : []),
+    ...(sources.includes("local") && takes.includes("local") ? mounts.map((mount) => (mount === "root" ? {} : { mount })) : []),
     ...sources.filter((source) => source !== "local" && takes.includes(source)).map((source) => ({ source })),
   ];
 }

@@ -6,6 +6,7 @@ Case ids name directories under `fixtures/runtime-oracle/`; each `oracle.json` `
 
 ## 1. Known open detections
 
+- A false positive, open (found by the fuzzer's `module-hook-shared` source, oracle `static-only`): `async-outside-loading-boundary` is proven on a module-scope async memo that settled before the mount (a root reads it, then the module awaits) when a render effect's compute reads it; rc.17 reports nothing. `scripts/fuzz/rediscovery.json` lists its 50 legal programs.
 - A block-bodied or imported hook, a hook result read any other way than a static member, and a literal holder read any other way are not followed to the primitive (ADRs 0480-0482 cover destructured slots, member calls and member store roots). On rc.0-rc.6 the readonly-root exemption trusts the declared type, so a hook or alias annotated with a non-readonly type (`(): { state: { v: number } } => ({ state })`) erases TS2540 and the root write is a false clean (also for `const s2: { v: number } = state`). A store imported from another module and aliased (`const a = shared`) is not seen as a store at all.
 Defects the runtime reports and the checker does not. Each is a missing violation, not a false positive; the named rule should claim it. Codes are the runtime's.
 
