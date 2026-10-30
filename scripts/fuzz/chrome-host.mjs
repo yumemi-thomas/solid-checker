@@ -10,6 +10,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_FAST_INSTALL, installedVersions, pinnedProblems, stageCases } from "./fast.mjs";
+import { EXECUTOR_SOURCES } from "./exec.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ORACLE_INSTALL = join(here, "../runtime-oracle-install");
@@ -54,52 +55,7 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
   const timed = async (phase, work) => { const at = performance.now(); try { return await work(); } finally { timings[phase] += performance.now() - at; } };
   let started = null;
   const start = async () => {
-    const root = resolve(install);
-    const problems = pinnedProblems(installedVersions(root));
-    if (problems.length) throw new Error(`the Chrome host needs the pinned install (${root}): ${problems.join("; ")}`);
-    const work = join(root, ".solid-checker-fuzz-chrome", `host-${Date.now()}-${process.pid}`);
-    mkdirSync(join(work, "cases"), { recursive: true });
-    cpSync(join(here, "chrome-host/runner.tsx"), join(work, "runner.tsx"));
-    cpSync(join(here, "chrome-host/index.html"), join(work, "index.html"));
-    cpSync(join(here, "fast/virtual-clock.mjs"), join(work, "virtual-clock.mjs"));
-    const fromInstall = createRequire(join(root, "package.json"));
-    const load = async (name) => import(pathToFileURL(fromInstall.resolve(name)).href);
-    const { createServer } = await load("vite");
-    // An ES module's default, or a CommonJS module's (one level deeper through a dynamic import of its file).
-    const plugin = await load("@solidjs/vite-plugin");
-    const solid = [plugin.default, plugin.default?.default, plugin.solid].find((value) => typeof value === "function");
-    if (!solid) throw new Error("@solidjs/vite-plugin exports no plugin function");
-    const maps = await load("source-map-js");
-    const SourceMapConsumer = maps.SourceMapConsumer ?? maps.default?.SourceMapConsumer;
-    dbg("loaded tools");
-    // The page, the runner and its clock, served from memory with long-lived caching once transformed (see `cached` below): a
-    // program's navigation then fetches only its own modules, and the browser reuses the compiled scripts. Vite's client (HMR) is
-    // not loaded: nothing here is hot-replaced.
-    const cached = new Map();
-    const serveCached = {
-      name: "solid-checker-fuzz-cached",
-      configureServer(server) {
-        server.middlewares.use((request, response, next) => {
-          const body = cached.get((request.url ?? "").split(/[?#]/)[0]);
-          if (body === undefined) return next();
-          response.setHeader("Content-Type", body.type);
-          response.setHeader("Cache-Control", "max-age=31536000, immutable");
-          response.end(body.text);
-        });
-      },
-    };
-    const server = await createServer({
-      configFile: false, root: work, logLevel: "error", mode: "development", cacheDir: join(work, ".vite"),
-      plugins: [serveCached, solid({ hot: false, performanceTracks: false, diagnostics: false, solid: { sourceNames: { locations: true } } })],
-      resolve: { conditions: ["browser", "development"], dedupe: ["solid-js", "@solidjs/signals", "@solidjs/web"] },
-      // forwardConsole: off whoever launches the run (Vite 8 turns it on under a coding agent; feedback-browser.mjs says why).
-      server: { host: "127.0.0.1", port: 0, hmr: false, forwardConsole: false, fs: { strict: false }, watch: null },
-      optimizeDeps: { include: ["solid-js", "@solidjs/web", "@solidjs/signals", "@solidjs/diagnostics"] },
-    });
-    dbg("server created");
-    await server.listen();
-    dbg("listening");
-    const base = server.resolvedUrls.local[0];
+    const vite = await startViteHost({ install });
     const playwright = await import(pathToFileURL(createRequire(join(resolve(oracleInstall), "package.json")).resolve("playwright-core")).href);
     const chromium = playwright.chromium ?? playwright.default?.chromium;
     dbg("playwright loaded");
@@ -108,46 +64,12 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
     const browser = await chromium.launch({ executablePath: browserPath ?? defaultChromium(), headless: true, args: ["--in-process-gpu"] });
     dbg("browser launched");
     // Warm the dependency bundles and the runner once, so no case pays for them or meets Vite's dependency reload; then freeze the
-    // runner and its clock as transformed (their imports name the versioned dependency bundles, which Vite serves immutable).
+    // runner and its clock as transformed.
     const warm = await browser.newContext();
-    try { await (await warm.newPage()).goto(`${base}index.html?id=__warm`, { waitUntil: "load" }); } finally { await warm.close(); }
-    const runner = await server.transformRequest("/runner.tsx");
-    const virtualClock = await server.transformRequest("/virtual-clock.mjs");
-    if (!runner?.code || !virtualClock?.code) throw new Error("the runner did not transform");
-    if (!runner.code.includes('from "/virtual-clock.mjs"')) throw new Error("the transformed runner imports its clock from an unexpected URL");
-    cached.set("/sc-runner.js", { type: "text/javascript", text: runner.code });
-    cached.set("/virtual-clock.mjs", { type: "text/javascript", text: virtualClock.code });
-    cached.set("/sc.html", { type: "text/html", text: readFileSync(join(work, "index.html"), "utf8").replace('src="/runner.tsx"', 'src="/sc-runner.js"') });
+    try { await (await warm.newPage()).goto(`${vite.base}index.html?id=__warm`, { waitUntil: "load" }); } finally { await warm.close(); }
+    await vite.freeze();
     dbg("warmed");
-    return { work, server, base, browser, SourceMapConsumer };
-  };
-
-  /** Maps a record's served App.tsx positions to the source's, through the transform Vite served it with. */
-  const mapPositions = async (host, id, record) => {
-    const url = `/cases/${id}/App.tsx`;
-    const module = await host.server.moduleGraph.getModuleByUrl(url);
-    const map = module?.transformResult?.map ?? (await host.server.transformRequest(url))?.map;
-    if (!map?.mappings) return record;
-    const consumer = new host.SourceMapConsumer(map);
-    // A frame at a column the map leaves unmapped (a compiled `insert(...)` call) takes the next mapping on the same served line; a
-    // frame on a served line with none is dropped, never passed through as an App.tsx line (it names the served module, not the source).
-    const byLine = new Map();
-    consumer.eachMapping((m) => {
-      if (m.originalLine == null) return;
-      if (!byLine.has(m.generatedLine)) byLine.set(m.generatedLine, []);
-      byLine.get(m.generatedLine).push(m);
-    }, null, host.SourceMapConsumer.GENERATED_ORDER);
-    const original = (positions) => (positions ?? []).flatMap((p) => {
-      const column = Math.max(0, p.column - 1);
-      const line = byLine.get(p.line) ?? [];
-      const at = line.findLast((m) => m.generatedColumn <= column) ?? line.find((m) => m.generatedColumn > column);
-      return at ? [{ file: "App.tsx", line: at.originalLine, column: at.originalColumn + 1 }] : [];
-    });
-    return {
-      ...record,
-      diagnostics: (record.diagnostics ?? []).map((d) => ({ ...d, positions: original(d.positions) })),
-      errors: (record.errors ?? []).map((e) => ({ ...e, positions: original(e.positions) })),
-    };
+    return { ...vite, browser };
   };
 
   /** A context and page ready to run a program: the page's virtual-time session (when used) and its budget reset. */
@@ -188,7 +110,7 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
     // Done: stop virtual time, so the idle page does not run through budget re-grants (on a reused page that left the next
     // navigation stalled) and no stray timer of this program runs on.
     if (slot.cdp) { slot.done = true; await timed("setup", () => slot.cdp.send("Emulation.setVirtualTimePolicy", { policy: "pause" })); }
-    return timed("map", () => mapPositions(host, id, record));
+    return timed("map", () => host.map(id, record));
   };
 
   return {
@@ -220,10 +142,9 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
         if (slot) await closePage(slot);
       };
       await Promise.all(Array.from({ length: Math.min(concurrency, cases.length) }, worker));
+      await host.done(cases.map(({ id }) => id));
       for (const { id } of cases) {
         rmSync(join(host.work, "cases", id), { recursive: true, force: true });
-        const module = await host.server.moduleGraph.getModuleByUrl(`/cases/${id}/App.tsx`);
-        if (module) host.server.moduleGraph.invalidateModule(module);
       }
       rmSync(join(host.work, "tests"), { recursive: true, force: true });
       return records;
@@ -244,14 +165,112 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
  * What a Chrome host record depends on beyond the fast path's own sources (cache.mjs `runtimeEnvironmentKey`): the host and its
  * page, runner and clock files, the clock and page mode, and the browser build (every file of its directory, as the oracle's key).
  */
-export function chromeHostKey({ clock = "virtual-time", pages = "fresh-context", browser } = {}, { fileHash, treeStat }) {
+export function chromeHostKey({ clock = "virtual-time", pages = "fresh-context", browser, executor } = {}, { fileHash, treeStat }) {
   const executable = browser ?? defaultChromium();
   return JSON.stringify({
-    kind: "chrome", clock, pages,
-    sources: ["chrome-host.mjs", "chrome-host/runner.tsx", "chrome-host/index.html", "fast/virtual-clock.mjs"].map((name) => fileHash(join(here, name))),
+    kind: "chrome", clock, pages, ...(executor ? { executor } : {}),
+    sources: ["chrome-host.mjs", "chrome-host/runner.tsx", "chrome-host/index.html", "fast/virtual-clock.mjs", ...(executor === "rust" ? EXECUTOR_SOURCES : [])].map((name) => fileHash(join(here, name))),
     browser: { path: executable, build: treeStat(dirname(executable)) },
   });
 }
 
 /** One case's record written as fast.mjs collects them (the prototype's bench writes these for comparison). */
 export const writeRecord = (out, record) => { mkdirSync(out, { recursive: true }); writeFileSync(join(out, `${record.id}.json`), JSON.stringify(record)); };
+
+/**
+ * The Chrome host's Vite dev server (the Solid plugin with the fast path's options) over a fresh work directory: `{ work, server, base,
+ * freeze(), done(ids), map(id, record) }`. Used by `createChromeHost` and by the Rust executor's helper (exec/vite-host.mjs).
+ */
+export async function startViteHost({ install = DEFAULT_FAST_INSTALL } = {}) {
+  const root = resolve(install);
+  const problems = pinnedProblems(installedVersions(root));
+  if (problems.length) throw new Error(`the Chrome host needs the pinned install (${root}): ${problems.join("; ")}`);
+  const work = join(root, ".solid-checker-fuzz-chrome", `host-${Date.now()}-${process.pid}`);
+  mkdirSync(join(work, "cases"), { recursive: true });
+  cpSync(join(here, "chrome-host/runner.tsx"), join(work, "runner.tsx"));
+  cpSync(join(here, "chrome-host/index.html"), join(work, "index.html"));
+  cpSync(join(here, "fast/virtual-clock.mjs"), join(work, "virtual-clock.mjs"));
+  const fromInstall = createRequire(join(root, "package.json"));
+  const load = async (name) => import(pathToFileURL(fromInstall.resolve(name)).href);
+  const { createServer } = await load("vite");
+  // An ES module's default, or a CommonJS module's (one level deeper through a dynamic import of its file).
+  const plugin = await load("@solidjs/vite-plugin");
+  const solid = [plugin.default, plugin.default?.default, plugin.solid].find((value) => typeof value === "function");
+  if (!solid) throw new Error("@solidjs/vite-plugin exports no plugin function");
+  const maps = await load("source-map-js");
+  const SourceMapConsumer = maps.SourceMapConsumer ?? maps.default?.SourceMapConsumer;
+  dbg("loaded tools");
+  // The page, the runner and its clock, served from memory with long-lived caching once transformed (`freeze`): a program's
+  // navigation then fetches only its own modules, and the browser reuses the compiled scripts.
+  const cached = new Map();
+  const serveCached = {
+    name: "solid-checker-fuzz-cached",
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const body = cached.get((request.url ?? "").split(/[?#]/)[0]);
+        if (body === undefined) return next();
+        response.setHeader("Content-Type", body.type);
+        response.setHeader("Cache-Control", "max-age=31536000, immutable");
+        response.end(body.text);
+      });
+    },
+  };
+  const server = await createServer({
+    configFile: false, root: work, logLevel: "error", mode: "development", cacheDir: join(work, ".vite"),
+    plugins: [serveCached, solid({ hot: false, performanceTracks: false, diagnostics: false, solid: { sourceNames: { locations: true } } })],
+    resolve: { conditions: ["browser", "development"], dedupe: ["solid-js", "@solidjs/signals", "@solidjs/web"] },
+    // forwardConsole: off whoever launches the run (Vite 8 turns it on under a coding agent; feedback-browser.mjs says why).
+    server: { host: "127.0.0.1", port: 0, hmr: false, forwardConsole: false, fs: { strict: false }, watch: null },
+    optimizeDeps: { include: ["solid-js", "@solidjs/web", "@solidjs/signals", "@solidjs/diagnostics"] },
+  });
+  dbg("server created");
+  await server.listen();
+  dbg("listening");
+  const base = server.resolvedUrls.local[0];
+  // Freezes the page, the runner and its clock as transformed, once a page has loaded them (the dependency bundles are then warm).
+  const freeze = async () => {
+    const runner = await server.transformRequest("/runner.tsx");
+    const virtualClock = await server.transformRequest("/virtual-clock.mjs");
+    if (!runner?.code || !virtualClock?.code) throw new Error("the runner did not transform");
+    if (!runner.code.includes('from "/virtual-clock.mjs"')) throw new Error("the transformed runner imports its clock from an unexpected URL");
+    cached.set("/sc-runner.js", { type: "text/javascript", text: runner.code });
+    cached.set("/virtual-clock.mjs", { type: "text/javascript", text: virtualClock.code });
+    cached.set("/sc.html", { type: "text/html", text: readFileSync(join(work, "index.html"), "utf8").replace('src="/runner.tsx"', 'src="/sc-runner.js"') });
+  };
+  /** Forgets the cases' modules (their directories are removed by the caller). */
+  const done = async (ids) => {
+    for (const id of ids) {
+      const module = await server.moduleGraph.getModuleByUrl(`/cases/${id}/App.tsx`);
+      if (module) server.moduleGraph.invalidateModule(module);
+    }
+  };
+  return { work, server, base, freeze, done, map: (id, record) => mapPositions(server, SourceMapConsumer, id, record) };
+}
+
+/** Maps a record's served App.tsx positions to the source's, through the transform Vite served it with. */
+export async function mapPositions(server, SourceMapConsumer, id, record) {
+  const url = `/cases/${id}/App.tsx`;
+  const module = await server.moduleGraph.getModuleByUrl(url);
+  const map = module?.transformResult?.map ?? (await server.transformRequest(url))?.map;
+  if (!map?.mappings) return record;
+  const consumer = new SourceMapConsumer(map);
+  // A frame at a column the map leaves unmapped (a compiled `insert(...)` call) takes the next mapping on the same served line; a
+  // frame on a served line with none is dropped, never passed through as an App.tsx line (it names the served module, not the source).
+  const byLine = new Map();
+  consumer.eachMapping((m) => {
+    if (m.originalLine == null) return;
+    if (!byLine.has(m.generatedLine)) byLine.set(m.generatedLine, []);
+    byLine.get(m.generatedLine).push(m);
+  }, null, SourceMapConsumer.GENERATED_ORDER);
+  const original = (positions) => (positions ?? []).flatMap((p) => {
+    const column = Math.max(0, p.column - 1);
+    const line = byLine.get(p.line) ?? [];
+    const at = line.findLast((m) => m.generatedColumn <= column) ?? line.find((m) => m.generatedColumn > column);
+    return at ? [{ file: "App.tsx", line: at.originalLine, column: at.originalColumn + 1 }] : [];
+  });
+  return {
+    ...record,
+    diagnostics: (record.diagnostics ?? []).map((d) => ({ ...d, positions: original(d.positions) })),
+    errors: (record.errors ?? []).map((e) => ({ ...e, positions: original(e.positions) })),
+  };
+}
