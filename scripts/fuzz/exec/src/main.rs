@@ -2,7 +2,8 @@
 //!
 //! The JS pipeline (scripts/fuzz/exec.mjs) generates programs and judges them; this process writes their projects, type-checks them
 //! (`tsrs -b` batches), runs the checker, and runs the fast path's page
-//! (chrome-host/runner.tsx) in Chrome over the DevTools protocol, with the browser switches and page setup Playwright uses
+//! (chrome-host/runner.tsx) in Chrome over the DevTools protocol, with the browser switches and page setup Playwright uses (less its
+//! two observing domains, `open_page`)
 //! (chrome-host.mjs is the reference: its records and this executor's must be identical). A Node helper (vite-host.mjs) serves the
 //! pages with Vite and the Solid plugin, as the oracle compiles them, and maps a record's stack positions through Vite's source maps.
 //!
@@ -535,8 +536,9 @@ impl Chrome {
         cdp.call(s, "Page.enable", json!({}))?;
         let frame = cdp.call(s, "Page.getFrameTree", json!({}))?["frameTree"]["frame"]["id"].as_str().ok_or("no frame id")?.to_string();
         cdp.call(s, "Page.setLifecycleEventsEnabled", json!({ "enabled": true }))?;
-        cdp.call(s, "Runtime.enable", json!({}))?;
-        cdp.call(s, "Network.enable", json!({}))?;
+        // Playwright also enables Runtime and Network here, to report console messages and requests. They only observe (Chrome then
+        // serializes an event per request and console call, its stack captured), the runner reads neither, and the records of 1,536
+        // programs were identical without them; the page is 7% faster.
         cdp.call(s, "Emulation.setFocusEmulationEnabled", json!({ "enabled": true }))?;
         let window = cdp.call(None, "Browser.getWindowForTarget", json!({ "targetId": target }))?["windowId"].clone();
         cdp.call(None, "Browser.setWindowBounds", json!({ "windowId": window, "bounds": { "width": 1280, "height": 720 } }))?;
