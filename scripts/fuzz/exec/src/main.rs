@@ -8,7 +8,8 @@
 //!
 //! Protocol: one JSON object per line on stdin, one per line on stdout, matched by `seq`.
 //!   init     the tools, the concurrency, and (optional) the Chrome settings; answers `ready`
-//!   prepare  files to write, the projects to type-check, the checker run; answers the type checks and the checker's raw output
+//!   prepare  the case's files, its clean and twin projects (in a fixed slot pair, or given directories), the type checks and the
+//!            checker run; answers the type checks and the checker's raw output
 //!   run      cases to run in Chrome; answers their records by id
 //! Parsing the checker's output and every verdict stay in JS: this process returns what the tools printed.
 
@@ -678,8 +679,64 @@ impl Chrome {
 // ---------------------------------------------------------------------------------------------------------------------------------
 // The protocol loop
 
+/// The fixed project directories a program's step 1 borrows (a clean and a twin project): rewritten in place per program instead of
+/// created and removed, so a grid's file churn is a few rewritten files per program.
+struct Slots {
+    free: Mutex<Vec<(PathBuf, PathBuf)>>,
+    ready: Condvar,
+}
+impl Slots {
+    fn take(&self) -> (PathBuf, PathBuf) {
+        let mut free = self.free.lock().unwrap();
+        loop {
+            if let Some(pair) = free.pop() {
+                return pair;
+            }
+            free = self.ready.wait(free).unwrap();
+        }
+    }
+    fn give(&self, pair: (PathBuf, PathBuf)) {
+        self.free.lock().unwrap().push(pair);
+        self.ready.notify_one();
+    }
+}
+
+/// Makes `dir` hold exactly `files` (top-level names): other entries removed, a changed file rewritten in place, an equal one untouched.
+fn sync_files(dir: &Path, files: &serde_json::Map<String, Value>) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        if !files.contains_key(&*entry.file_name().to_string_lossy()) {
+            if entry.file_type()?.is_dir() {
+                std::fs::remove_dir_all(entry.path())?;
+            } else {
+                std::fs::remove_file(entry.path())?;
+            }
+        }
+    }
+    for (name, text) in files {
+        let text = text.as_str().unwrap_or_default();
+        let target = dir.join(name);
+        if std::fs::read(&target).is_ok_and(|current| current == text.as_bytes()) {
+            continue;
+        }
+        std::fs::write(&target, text)?;
+    }
+    Ok(())
+}
+
+/// Writes `files` (paths relative to `dir`, nested ones too) into a fresh `dir`.
+fn write_project(dir: &Path, files: &serde_json::Map<String, Value>) -> Res<()> {
+    let _ = std::fs::remove_dir_all(dir);
+    for (name, text) in files {
+        write_file(&dir.join(name).to_string_lossy(), text.as_str().unwrap_or_default())?;
+    }
+    Ok(())
+}
+
 struct Executor {
     out: Arc<Out>,
+    slots: Slots,
     batcher: Arc<Batcher>,
     checker: Arc<Checker>,
     checks: Arc<Semaphore>,
@@ -697,12 +754,18 @@ impl Executor {
         batcher.start(tsc.clone(), batch, Duration::from_millis(15), Arc::new(Semaphore::new(concurrency)));
         let env = request.get("env").and_then(Value::as_object).map(|env| env.iter().filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string()))).collect()).unwrap_or_default();
         let checker = Arc::new(Checker { bin: text("checkerBin")?, env });
+        let slot_root = PathBuf::from(text("slotRoot")?);
+        let slots = Slots {
+            free: Mutex::new((0..concurrency * 2).map(|slot| (slot_root.join(format!("slot-{slot}")), slot_root.join(format!("slot-{slot}-run")))).collect()),
+            ready: Condvar::new(),
+        };
         let chrome = match request.get("chrome") {
             Some(settings) if !settings.is_null() => Some(Arc::new(Chrome::start(settings)?)),
             _ => None,
         };
         Ok(Executor {
             out,
+            slots,
             batcher,
             checker,
             checks: Arc::new(Semaphore::new(concurrency)),
@@ -714,38 +777,77 @@ impl Executor {
     /// One program's step 1 (pipeline.mjs `prepareEntries`): its files, its type checks, the checker on the clean text.
     fn prepare(&self, request: &Value) -> Value {
         let seq = request["seq"].clone();
-        for pair in request["writes"].as_array().into_iter().flatten() {
+        match self.prepare_projects(request) {
+            Ok(answer) => {
+                let mut answer = answer;
+                answer["seq"] = seq;
+                answer
+            }
+            Err(error) => json!({ "seq": seq, "error": error }),
+        }
+    }
+
+    fn prepare_projects(&self, request: &Value) -> Res<Value> {
+        for pair in request["caseWrites"].as_array().into_iter().flatten() {
             if let (Some(path), Some(text)) = (pair[0].as_str(), pair[1].as_str()) {
-                if let Err(error) = write_file(path, text) {
-                    return json!({ "seq": seq, "error": error });
-                }
+                write_file(path, text)?;
             }
         }
-        let clean = request["clean"].as_str().map(|dir| self.batcher.submit(dir.to_string()));
-        let twin = request["twin"].as_str().map(|dir| self.batcher.submit(dir.to_string()));
-        let remove = |request: &Value| {
-            if !self.keep_work {
-                for dir in request["remove"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+        let project = request["project"].as_object();
+        let twin_project = request["twinProject"].as_object();
+        // A project with a directory of its own (a program that ships a package, or `--keep-work`) is written fresh there and removed
+        // after; the others borrow a slot pair.
+        let slotted = project.is_some_and(|p| p.get("dir").is_none()) || twin_project.is_some_and(|p| p.get("dir").is_none());
+        let slot = slotted.then(|| self.slots.take());
+        let result = (|| -> Res<Value> {
+            let place = |project: &serde_json::Map<String, Value>, slot_dir: Option<&PathBuf>| -> Res<PathBuf> {
+                let files = project.get("files").and_then(Value::as_object).ok_or("project without files")?;
+                match project.get("dir").and_then(Value::as_str) {
+                    Some(dir) => {
+                        write_project(Path::new(dir), files)?;
+                        Ok(PathBuf::from(dir))
+                    }
+                    None => {
+                        let dir = slot_dir.ok_or("no slot")?;
+                        sync_files(dir, files).map_err(|e| format!("slot {}: {e}", dir.display()))?;
+                        Ok(dir.clone())
+                    }
+                }
+            };
+            let dir = project.map(|p| place(p, slot.as_ref().map(|s| &s.0))).transpose()?;
+            let twin_dir = twin_project.map(|p| place(p, slot.as_ref().map(|s| &s.1))).transpose()?;
+            let string = |path: &PathBuf| path.to_string_lossy().into_owned();
+            let clean = (request["clean"] == true).then(|| dir.as_ref().map(|dir| self.batcher.submit(string(dir)))).flatten();
+            let twin = (request["twin"] == true).then(|| twin_dir.as_ref().map(|dir| self.batcher.submit(string(dir)))).flatten();
+            let lost = || json!({ "ok": false, "errors": ["type check lost"] });
+            let typecheck = clean.map(|answer| answer.recv().unwrap_or_else(|_| lost()));
+            if typecheck.as_ref().is_some_and(|answer| answer["ok"] != true) {
+                return Ok(json!({ "typecheck": typecheck }));
+            }
+            let checker = match (request["checker"].as_object(), dir.as_ref()) {
+                (Some(check), Some(dir)) => {
+                    let ordinary = check.get("ordinary").and_then(Value::as_bool).unwrap_or(false);
+                    self.checks.acquire();
+                    let answer = self.checker.run(&string(dir), ordinary);
+                    self.checks.release();
+                    Some(answer)
+                }
+                _ => None,
+            };
+            let twin_typecheck = twin.map(|answer| answer.recv().unwrap_or_else(|_| lost()));
+            Ok(json!({ "typecheck": typecheck, "twinTypecheck": twin_typecheck, "checker": checker }))
+        })();
+        if let Some(slot) = slot {
+            self.slots.give(slot);
+        }
+        if !self.keep_work {
+            for project in [project, twin_project].into_iter().flatten() {
+                if let Some(dir) = project.get("dir").and_then(Value::as_str) {
                     let _ = std::fs::remove_dir_all(dir);
                 }
             }
-        };
-        let typecheck = clean.map(|answer| answer.recv().unwrap_or(json!({ "ok": false, "errors": ["type check lost"] })));
-        if typecheck.as_ref().is_some_and(|answer| answer["ok"] != true) {
-            remove(request);
-            return json!({ "seq": seq, "typecheck": typecheck });
         }
-        let checker = request["checker"].as_object().map(|check| {
-            let dir = check["dir"].as_str().unwrap_or_default();
-            let ordinary = check.get("ordinary").and_then(Value::as_bool).unwrap_or(false);
-            self.checks.acquire();
-            let answer = self.checker.run(dir, ordinary);
-            self.checks.release();
-            answer
-        });
-        let twin_typecheck = twin.map(|answer| answer.recv().unwrap_or(json!({ "ok": false, "errors": ["type check lost"] })));
-        remove(request);
-        json!({ "seq": seq, "typecheck": typecheck, "twinTypecheck": twin_typecheck, "checker": checker })
+        result
     }
 }
 
@@ -840,6 +942,22 @@ mod tests {
         assert!(batch_answers(&dirs(), "../c/App.tsx(1,1): error TS1: x", Some(2), false).is_none(), "a file of no project");
         assert!(batch_answers(&dirs(), "App.tsx(x,1): error TS1: x", Some(2), false).is_none(), "an unparsable position");
         assert_eq!(batch_answers(&dirs(), "", Some(0), false).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn a_slot_holds_exactly_the_program_files_and_keeps_an_equal_file_untouched() {
+        let dir = std::env::temp_dir().join(format!("fuzz-exec-slot-test-{}", std::process::id()));
+        let files = |pairs: &[(&str, &str)]| pairs.iter().map(|(name, text)| (name.to_string(), json!(text))).collect::<serde_json::Map<_, _>>();
+        sync_files(&dir, &files(&[("App.tsx", "a"), ("helpers.ts", "h"), ("main.tsx", "m")])).unwrap();
+        std::fs::write(dir.join("tsconfig.tsbuildinfo"), "stale").unwrap();
+        let main = std::fs::metadata(dir.join("main.tsx")).unwrap().modified().unwrap();
+        sync_files(&dir, &files(&[("App.tsx", "b"), ("main.tsx", "m")])).unwrap();
+        let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        names.sort();
+        assert_eq!(names, ["App.tsx", "main.tsx"]);
+        assert_eq!(std::fs::read_to_string(dir.join("App.tsx")).unwrap(), "b");
+        assert_eq!(std::fs::metadata(dir.join("main.tsx")).unwrap().modified().unwrap(), main);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

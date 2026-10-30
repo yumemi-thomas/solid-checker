@@ -178,7 +178,7 @@ function settlePrepared(entries, prepared, config, instrument) {
     results.set(built.id, { program, built, ...settled.value });
     const value = settled.value;
     if (value.typecheck.ok && value.checker?.ok && (!instrument || (built.neutral && value.twinTypecheck?.ok))) live.push(value);
-    if (!config.keepWork) rmSync(value.dir, { recursive: true, force: true });
+    if (!config.keepWork && value.dir) rmSync(value.dir, { recursive: true, force: true });
   }
   return { results, live };
 }
@@ -192,7 +192,7 @@ async function prepareViaExecutor({ program, built }, { config, cache, exec, ins
   const caseDir = join(casesDir, built.id);
   const dir = checkerWorkDir(install, built.id);
   const twinDir = checkerWorkDir(install, `${built.id}-run`);
-  const writes = Object.entries(built.files).map(([name, text]) => [join(caseDir, name), text]);
+  const caseWrites = Object.entries(built.files).map(([name, text]) => [join(caseDir, name), text]);
   // A type check from the cache, or run fresh (no entry, or a spot check of one); `settle` stores or compares as `remembered` does.
   const cached = (part) => {
     if (!cache) return { stored: undefined, fresh: true };
@@ -214,20 +214,24 @@ async function prepareViaExecutor({ program, built }, { config, cache, exec, ins
   const clean = cached("typecheck");
   const knownBad = !clean.fresh && !clean.stored.ok;
   const twin = instrument && !knownBad ? cached("typecheck-twin") : null;
-  if (!knownBad) for (const [name, text] of Object.entries(checkerProjectFiles(built))) writes.push([join(dir, name), text]);
-  if (twin?.fresh) for (const [name, text] of Object.entries(checkerProjectFiles(built, { twin: true }))) writes.push([join(twinDir, name), text]);
+  // The projects go to a slot pair the executor rewrites in place, unless the program ships a package (its node_modules) or the run
+  // keeps its work: those get directories of their own.
   const ordinary = hasPackages(built);
+  const own = ordinary || config.keepWork;
   const answer = await exec.prepare({
-    writes, clean: clean.fresh ? dir : null, twin: twin?.fresh ? twinDir : null,
-    checker: knownBad ? null : { dir, ordinary },
-    remove: config.keepWork ? [] : [dir, twinDir],
+    caseWrites,
+    project: knownBad ? null : { files: checkerProjectFiles(built), ...(own ? { dir } : {}) },
+    twinProject: twin?.fresh ? { files: checkerProjectFiles(built, { twin: true }), ...(own ? { dir: twinDir } : {}) } : null,
+    clean: clean.fresh, twin: Boolean(twin?.fresh),
+    checker: knownBad ? null : { ordinary },
   });
   const typed = clean.fresh ? settle(clean, answer.typecheck) : clean.stored;
-  if (!typed.ok) return { program, built, caseDir, dir, typecheck: typed };
+  if (!typed.ok) return { program, built, caseDir, dir: own ? dir : null, typecheck: typed };
   const checker = checkerResult(answer.checker, answer.checker.dir);
   timings.checker.ms += checker.wallMs ?? 0;
   timings.checker.n += 1;
-  const value = { program, built, caseDir, dir, typecheck: typed, checker };
+  // A slot's directory is the executor's, not this program's: nothing removes it.
+  const value = { program, built, caseDir, dir: own ? dir : null, typecheck: typed, checker };
   if (instrument) value.twinTypecheck = twin.fresh ? settle(twin, answer.twinTypecheck) : twin.stored;
   return value;
 }

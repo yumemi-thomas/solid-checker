@@ -26,7 +26,7 @@ import { applyLedgerToResults, falseCleanStream } from "./falseclean-run.mjs";
 import { LEDGER_PATH, loadLedger } from "./falseclean.mjs";
 import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
-import { assertFindingsMapped, checkerEnv, keepWorkNamespace } from "./checker.mjs";
+import { assertFindingsMapped, checkerEnv, checkerWorkDir, keepWorkNamespace } from "./checker.mjs";
 import { requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
 import { fileHash, treeStat, withRuntimeCache } from "./cache.mjs";
 import { isSite, walk } from "./model.mjs";
@@ -82,7 +82,7 @@ export function attachDaemon(config, options) {
       // way only: a reused page per worker, on Chrome's virtual time.
       if (options.chromePages !== "reuse" || settings.clock !== "virtual-time") throw new Error("--executor rust runs --chrome-pages reuse on --chrome-clock virtual-time only");
       const executor = createExecutor({
-        tsc: config.tsc, bin: config.bin, concurrency: config.concurrency, keepWork: config.keepWork,
+        tsc: config.tsc, bin: config.bin, concurrency: config.concurrency, keepWork: config.keepWork, slotRoot: checkerWorkDir(config.install, "slots"),
         env: checkerEnv({ typefacts: config.typefacts, env: Object.fromEntries(["SOLID_CHECKER_RUNTIME_RESOLVER", "SOLID_TYPEFACTS_BIN"].filter((key) => process.env[key]).map((key) => [key, process.env[key]])) }),
         chrome: { browser: options.browser ?? defaultChromium(), install: config.fastInstall, pages: Number(options.chromeConcurrency ?? 16) },
       });

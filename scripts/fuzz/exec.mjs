@@ -36,7 +36,7 @@ function build() {
  * Starts the executor. `chrome` (optional): `{ browser, install, pages }` runs the pages too. Returns `{ prepare(job), run(cases),
  * close() }`; `prepare` and `run` answer as exec/src/main.rs says.
  */
-export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork = false, chrome = null }) {
+export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork = false, slotRoot, chrome = null }) {
   build();
   const child = spawn(EXECUTOR, [], { stdio: ["pipe", "pipe", "inherit"] });
   const pending = new Map();
@@ -62,7 +62,7 @@ export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork
   });
   const send = (message) => child.stdin.write(`${JSON.stringify(message)}\n`);
   send({
-    op: "init", tsc, checkerBin: bin, env, concurrency, keepWork,
+    op: "init", tsc, checkerBin: bin, env, concurrency, keepWork, slotRoot,
     chrome: chrome && { node: process.execPath, viteHost: join(here, "exec/vite-host.mjs"), browser: chrome.browser, install: chrome.install, pages: chrome.pages ?? 16, fontFamilies: FONT_FAMILIES },
   });
   await readiness;
