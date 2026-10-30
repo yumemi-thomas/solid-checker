@@ -606,6 +606,10 @@ async function runCase(id) {
   const result = await run(process.execPath, [join(repo, "packages/cli/bin/solid-checker.mjs"), "feedback", "run",
     "--project", join(dir, "tsconfig.json"), "--scenario", join(dir, "scenario.json"),
     "--browser", browser, "--tooling", tooling, "--native-bin", process.env.SOLID_CHECKER_NATIVE_BIN,
+    // The application's own stacks: the development source instrumentation wraps each analysed call in a `withOperation` arrow,
+    // frames no application has, which move an uncaught error's mapped site (an outer frame of a `for` row's CONTEXT_NOT_FOUND).
+    // The oracle reads none of its output (scope counts, read lineage).
+    "--source-instrumentation", "off",
     ...(options.cache === "off" ? [] : ["--execution-cache", resolve(options.cache)])], dir);
   const wallMs = Date.now() - started;
   let report = null;

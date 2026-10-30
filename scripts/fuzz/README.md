@@ -57,11 +57,14 @@ Rediscovery (AGENTS.md): a defect found any way is closed when the grids generat
 fuzz-focus` for its code while the fix passes. `rediscovery.json` lists each with the programs that rediscover it (or why the
 generator cannot express it); the smoke set always holds them, and `rediscovery.test.mjs` fails when a grid stops generating one.
 The ADR 0511 review's false positive is the `module-hook-shared` source (the s9 build: 6 wrong-rule programs, the fix: none); its
-first run found another, open (`docs/open-work.md`).
+first run found another, fixed by ADR 0513 with a third the review of that fix found (the `settled` variant's body and root reads).
 
 Both runtimes keep 41 frames on every error and diagnostic (the oracle's halt module, the host's runner), so an event lands on the
 same application frame on both sides and the runtime differential counts any line difference as behaviour: there is no
-attribution-only difference to discount.
+attribution-only difference to discount. The oracle runs `feedback run --source-instrumentation off`: the development source
+instrumentation wraps each analysed call in a `withOperation` arrow, frames no application has, which moved the mapped site of an
+uncaught error (a `for` row's CONTEXT_NOT_FOUND: 8 of 4,340 sampled records before; the oracle reads none of that instrumentation's
+output).
 
 After any checker change: `make fuzz-smoke`, every grid restricted to its smoke manifest (`scripts/fuzz/smoke/<grid>.json`, about 4%
 of the programs). `scripts/fuzz/smoke.mjs select --from <full run>` chooses them greedily to hold every behaviour of the run (code,
