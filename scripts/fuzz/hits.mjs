@@ -14,7 +14,7 @@
 
 export const PRELUDE_MARK = "// __sc_hits__\n";
 export const HITS_SELECTOR = "#sc-hits";
-/** The oracle's halt marker (scripts/runtime-oracle.mjs `haltMarker`): appended outside #root once Solid reports REACTIVITY_HALTED. */
+/** The oracle's halt marker (scripts/runtime-oracle.mjs `haltMarker`): appended outside #root once Solid reports REACTIVITY_HALTED or the page has an uncaught error. */
 export const HALT_SELECTOR = "#sc-halted";
 export const HALT_TEXT = "sc-halted";
 /**

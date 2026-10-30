@@ -126,9 +126,19 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
     const map = module?.transformResult?.map ?? (await host.server.transformRequest(url))?.map;
     if (!map?.mappings) return record;
     const consumer = new host.SourceMapConsumer(map);
-    const original = (positions) => (positions ?? []).map((p) => {
-      const at = consumer.originalPositionFor({ line: p.line, column: Math.max(0, p.column - 1) });
-      return at.line == null ? p : { file: "App.tsx", line: at.line, column: (at.column ?? 0) + 1 };
+    // A frame at a column the map leaves unmapped (a compiled `insert(...)` call) takes the next mapping on the same served line; a
+    // frame on a served line with none is dropped, never passed through as an App.tsx line (it names the served module, not the source).
+    const byLine = new Map();
+    consumer.eachMapping((m) => {
+      if (m.originalLine == null) return;
+      if (!byLine.has(m.generatedLine)) byLine.set(m.generatedLine, []);
+      byLine.get(m.generatedLine).push(m);
+    }, null, host.SourceMapConsumer.GENERATED_ORDER);
+    const original = (positions) => (positions ?? []).flatMap((p) => {
+      const column = Math.max(0, p.column - 1);
+      const line = byLine.get(p.line) ?? [];
+      const at = line.findLast((m) => m.generatedColumn <= column) ?? line.find((m) => m.generatedColumn > column);
+      return at ? [{ file: "App.tsx", line: at.originalLine, column: at.originalColumn + 1 }] : [];
     });
     return {
       ...record,

@@ -63,6 +63,13 @@ async function runCase() {
   const started = performance.now();
   const diagnostics: any[] = [], errors: any[] = [], consoleErrors: string[] = [], disposers: (() => void)[] = [];
   let witnesses: any[] = [], failure: any = null, phase = 'import', artifactCount: number | null = null;
+  const halted: string[] = [];
+  // The oracle's halt marker (runtime-oracle.mjs `haltMarker`): once REACTIVITY_HALTED is reported or the page has an uncaught error,
+  // a plan step whose element is missing ends on the marker, and the run is a partial one.
+  const uncaught = ['window-error'];
+  const missingStep = (selector: string) => {
+    if (diagnostics.some((d: any) => d.code === 'REACTIVITY_HALTED') || errors.some((e: any) => uncaught.includes(e.kind))) halted.push(selector);
+  };
   let hits: Record<string, number> | null = null, order: number[] = [], hitsDom: string | null = null, quiescent: boolean | null = null;
   // The oracle's stack depths: a page error keeps Chrome's default (10 frames), and a diagnostic's stack is captured with 40
   // (packages/cli/scripts/feedback-read-runtime.mjs `maxFrames`), so an application frame below either depth is lost the same way.
@@ -123,12 +130,12 @@ async function runCase() {
         const target = document.querySelector(edit.selector);
         if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
           target.focus(); target.value = edit.text; target.dispatchEvent(new Event('input', { bubbles: true })); settle(); await pause(settings.pauseMs);
-        } else errors.push({ phase, kind: 'plan', message: `no input ${edit.selector}`, stack: '' });
+        } else { errors.push({ phase, kind: 'plan', message: `no input ${edit.selector}`, stack: '' }); missingStep(edit.selector); }
       }
       for (const buttonId of plan.plan.clicks) {
         const target = document.querySelector(`[data-act="${buttonId}"]`);
         if (target instanceof HTMLElement) { target.click(); settle(); await pause(settings.pauseMs); }
-        else errors.push({ phase, kind: 'plan', message: `no button ${buttonId}`, stack: '' });
+        else { errors.push({ phase, kind: 'plan', message: `no button ${buttonId}`, stack: '' }); missingStep(`[data-act="${buttonId}"]`); }
       }
       await pause(settings.finalMs);
       quiescent = await settleHits();
@@ -144,6 +151,8 @@ async function runCase() {
       });
     }, { scenario: id, attribution: false, autoFlush: false });
     artifactCount = captured.artifact?.diagnostics?.length ?? null;
+    // As the oracle (chrome.mjs chromeRuntime): a step that ended on the halt marker is a halted step; a run with one is `halted`.
+    if (!failure && halted.length) failure = { phase: 'halted', message: `reactivity halted: ${halted.length} step(s) found no element (${halted[0]})`, stack: '' };
   } catch (e) { failure = { phase, ...describeError(e) }; }
   finally {
     clock?.restore(); clock = null;
