@@ -71,8 +71,9 @@ async function runCase() {
     if (diagnostics.some((d: any) => d.code === 'REACTIVITY_HALTED') || errors.some((e: any) => uncaught.includes(e.kind))) halted.push(selector);
   };
   let hits: Record<string, number> | null = null, order: number[] = [], hitsDom: string | null = null, quiescent: boolean | null = null;
-  // The oracle's stack depths: a page error keeps Chrome's default (10 frames), and a diagnostic's stack is captured with 40
-  // (packages/cli/scripts/feedback-read-runtime.mjs `maxFrames`), so an application frame below either depth is lost the same way.
+  // The oracle's stack depths: 41 frames for a page error (its halt module, scripts/runtime-oracle.mjs) and for a diagnostic
+  // (packages/cli/scripts/feedback-read-runtime.mjs `maxFrames` + 1), so both place an event at the same application frame.
+  Error.stackTraceLimit = 41;
   const onError = (event: ErrorEvent) => {
     // Chrome's ErrorEvent.message reads "Uncaught Error: <message>"; the error's own message is what Happy DOM and the oracle record.
     errors.push({ phase, kind: 'window-error', message: String(event.error?.message ?? event.message), stack: String(event.error?.stack ?? '') });

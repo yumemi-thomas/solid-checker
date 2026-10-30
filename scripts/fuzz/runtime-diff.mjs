@@ -79,7 +79,8 @@ const ran = (runtime) => Object.entries(runtime?.hits ?? {}).filter(([, n]) => n
  * The differences between a program's Happy DOM record and its Chrome record, each `{ kind, detail }`:
  *   chrome-only   a defect event Chrome reports and Happy DOM does not (a Happy DOM miss: a possible hidden false clean)
  *   happy-only    a defect event Happy DOM reports and Chrome does not (a Happy DOM invention: a possible wrong agreement)
- *   moved         a code both report, on line sets that differ (attribution: which frame each side placed an event at)
+ *   moved         a code both report, on line sets that differ: an event at a site one side never placed one at (both keep 41
+ *                 frames, so the same event lands on the same application frame; ADR 0512)
  *   hits          the sets of sites that ran differ
  *   witness       a site's witness readout differs
  *   failure       one side failed, halted or errored where the other did not, or in another phase
@@ -95,9 +96,9 @@ export function runtimeDiff(happy, chrome) {
     || [...other].some((k) => k.endsWith("@-") && codeOf(k) === codeOf(key));
   const onlyA = [...a].filter((key) => !matched(key, b));
   const onlyB = [...b].filter((key) => !matched(key, a));
-  // A code both sides report, on lines that differ, is one `moved` difference: where the host attributed an event of it (a stack
-  // frame the other side lost to its depth limit, or chose differently), not whether it happened. Only a code one side never reports
-  // is a difference in behaviour (`happy-only`, `chrome-only`).
+  // A code both sides report, on lines that differ, is one `moved` difference. With equal stack depths an event lands on the same
+  // frame on both sides, so a line one side lacks is an event that side did not see there: behaviour, as a code one side never
+  // reports is (`happy-only`, `chrome-only`).
   const codesA = new Set([...a].map(codeOf));
   const codesB = new Set([...b].map(codeOf));
   const lines = (set, code) => [...set].filter((key) => codeOf(key) === code).map((key) => key.slice(key.lastIndexOf("@") + 1)).sort().join(",");
@@ -134,8 +135,8 @@ export const evidenceOf = (runtime) => ({
 /** A Chrome record the differential cannot read: the harness, not the program (retried once, then reported as `chrome-inconclusive`). */
 export const chromeUnreadable = (record) => !record?.runtime || ["harness-error"].includes(record.runtime.failure?.phase);
 
-/** Differences in behaviour: every kind but `moved` (attribution only). */
-export const BEHAVIOUR_KINDS = ["happy-only", "chrome-only", "hits", "witness", "failure", "missing"];
+/** Differences in behaviour: every kind, `moved` included (no difference is attribution only since both sides keep 41 frames). */
+export const BEHAVIOUR_KINDS = ["happy-only", "chrome-only", "moved", "hits", "witness", "failure", "missing"];
 
 /** The summary of a differential: programs compared, identical, differing in behaviour, differing in attribution only, and per kind. */
 export function summarize(results) {

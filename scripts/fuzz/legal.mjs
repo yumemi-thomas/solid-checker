@@ -132,7 +132,7 @@ export async function runLegal(options) {
       else for (let index = 0; index < options.perCell; index += 1) entries.push({ cell, index, ...generateLegal(options, cell, { index }) });
     }
     // `--ids <manifest>` (smoke.mjs): the programs it names, as the whole grid generates them.
-    if (options.ids) entries = keepIds(entries, options.ids, "legal", options.seed);
+    if (options.ids) entries = keepIds(entries, options.ids, "legal", options.seed, { sample: Number(options.idsSample ?? 0), sampleSeed: options.idsSampleSeed ?? 0 });
     console.error(`legal: ${cells.length} cells, ${entries.length} programs`);
     const rows = [];
     const values = new Map();
@@ -234,7 +234,7 @@ const usage = `usage: node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = parseArgs(process.argv.slice(2), { extraValues: ["ids", "per-cell", "codes", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata"] });
+    const options = parseArgs(process.argv.slice(2), { extraValues: ["ids", "ids-sample", "ids-sample-seed", "per-cell", "codes", "cache-dir", "chrome-sample", "layers", "mounts", "sources", "runtime-diff", "runtime-diff-axes", "chrome-concurrency"], extraFlags: ["grid", "no-chrome-cache", "combine", "chrome-strata"] });
     for (const key of ["perCell", "chromeSample", "chromeConcurrency"]) if (options[key] !== undefined) options[key] = Number(options[key]);
     options.perCell ??= 10;
     if (options.help || !options.out) { console.error(usage); process.exitCode = options.help ? 0 : 2; }

@@ -53,14 +53,31 @@ oracle sample stratified by code, context and outcome, and exits 1 when somethin
 false positive, a contradicted legal program, a harness failure, a behaviour difference from the oracle). About 1.5 minutes cold
 for one code, under a minute when the cache holds its programs. The full grids, with the full oracle sample, run before a PR.
 
+Rediscovery (AGENTS.md): a defect found any way is closed when the grids generate its shape and the build that had it fails `make
+fuzz-focus` for its code while the fix passes. `rediscovery.json` lists each with the programs that rediscover it (or why the
+generator cannot express it); the smoke set always holds them, and `rediscovery.test.mjs` fails when a grid stops generating one.
+The ADR 0511 review's false positive is the `module-hook-shared` source (the s9 build: 6 wrong-rule programs, the fix: none); its
+first run found another, fixed by ADR 0513 with a third the review of that fix found (the `settled` variant's body and root reads).
+
+Both runtimes keep 41 frames on every error and diagnostic (the oracle's halt module, the host's runner), so an event lands on the
+same application frame on both sides and the runtime differential counts any line difference as behaviour: there is no
+attribution-only difference to discount. The oracle runs `feedback run --source-instrumentation off`: the development source
+instrumentation wraps each analysed call in a `withOperation` arrow, frames no application has, which moved the mapped site of an
+uncaught error (a `for` row's CONTEXT_NOT_FOUND: 8 of 4,340 sampled records before; the oracle reads none of that instrumentation's
+output).
+
 After any checker change: `make fuzz-smoke`, every grid restricted to its smoke manifest (`scripts/fuzz/smoke/<grid>.json`, about 4%
 of the programs). `scripts/fuzz/smoke.mjs select --from <full run>` chooses them greedily to hold every behaviour of the run (code,
 context, outcome, the findings at the site) five times, every value of every axis and every pair of the core axes for each code, and
 every program the run judged a problem; each manifest records the behaviour every program had. A smoke run fails on a problem and on
 any program whose outcome moved to a worse one (agree to recall gap, clean to uncertifiable, anything to a false clean or false
-positive), and lists the others that moved. Validation: against the reference run, the full grids of the first ADR 0511 build moved
-7,745 programs in 212 kinds of move; the set held moved programs in all six grids and 192 of the 212 kinds
-(`smoke.mjs check --reference <run> --against <run>`). After an intended change, reselect from the full run before the PR.
+positive), and lists the others that moved. Each run also takes 1.5% of every grid's other programs, picked anew by a seed the
+summary prints (`--sample`, `--sample-seed` repeats a pick): no recorded behaviour, so only problems count there, but over many runs
+it reaches what the cover did not foresee. Validation (`smoke.mjs check --reference <run> --against <run>`, full grids of three ADR
+0511 builds against the reference run): every grid where a build moved verdicts has moved programs in the set; of the kinds of move,
+the set holds 192 of 222 for the first build and 121 of 172 for a middle one (five programs per behaviour, 4.1% of the programs; ten
+per behaviour, 5.8%, holds 91% and 79%; twenty, 10.2%, 94% and 84%). The last build before the ADR's review moved nothing: the false
+positive that review found is not a shape the grids generate. After an intended change, reselect from the full run before the PR.
 
 ```sh
 export SOLID_CHECKER_NATIVE_BIN=<release solid-checker>   # a release build; debug inflates certification about 19x

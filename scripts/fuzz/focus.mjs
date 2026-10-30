@@ -7,8 +7,9 @@
 //
 //   node scripts/fuzz/focus.mjs --codes A,B --checker-bin <solid-checker-rust> --typefacts <solid-typefacts>
 //     [--grids mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo] [--seed 1] [--out <dir>] [--runtime-diff <per stratum>]
-//     [--oracle-axes code,context,outcome] [--smoke] [-- <grid args>]
-// `--smoke` (`make fuzz-smoke`): every code, each grid restricted to its smoke manifest (smoke.mjs, scripts/fuzz/smoke/<grid>.json).
+//     [--oracle-axes code,context,outcome] [--smoke [--sample 0.015] [--sample-seed <n>]] [-- <grid args>]
+// `--smoke` (`make fuzz-smoke`): every code, each grid restricted to its smoke manifest (smoke.mjs, scripts/fuzz/smoke/<grid>.json),
+// plus `--sample` of its other programs picked anew each run (`--sample-seed` repeats a run's pick; the summary prints it).
 // The loop's oracle sample is stratified by code, context and outcome (every outcome of every context in real Chrome); the full run's
 // by code, context, source, mount and outcome (runtime-diff.mjs DEFAULT_DIFF_AXES), many more programs. `--oracle-axes` picks.
 import { spawnSync } from "node:child_process";
@@ -19,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { legalCells } from "./legal.mjs";
 import { cellList } from "./matrix.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
+import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MOUNTS = ["--mounts", "root,child,show,for"];
@@ -49,18 +51,18 @@ export function readGrid(out) {
   }
   const diff = join(out, "runtime-diff.json");
   const oracle = existsSync(diff) ? JSON.parse(readFileSync(diff, "utf8")) : null;
-  const behaviour = (oracle?.differing ?? []).filter((result) => result.diffs.some((d) => d.kind !== "moved"));
+  const behaviour = (oracle?.differing ?? []).filter((result) => result.diffs.some((d) => BEHAVIOUR_KINDS.includes(d.kind)));
   return { outcomes, flagged, oracle: oracle?.summary ?? null, behaviour };
 }
 
 function parse(argv) {
   const split = argv.indexOf("--");
   const own = split < 0 ? argv : argv.slice(0, split);
-  const options = { grids: Object.keys(GRIDS).join(","), seed: "1", runtimeDiff: "1", oracleAxes: "code,context,outcome", extra: split < 0 ? [] : argv.slice(split + 1) };
+  const options = { grids: Object.keys(GRIDS).join(","), seed: "1", runtimeDiff: "1", oracleAxes: "code,context,outcome", sample: "0.015", sampleSeed: String(Date.now() % 1000000007), extra: split < 0 ? [] : argv.slice(split + 1) };
   for (let index = 0; index < own.length; index += 2) {
     const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
     if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
-    if (!["codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "checkerBin", "typefacts"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
+    if (!["codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
     options[key] = own[index + 1];
   }
   if (!options.codes) throw new Error("focus.mjs: --codes A,B (the codes the change touches)");
@@ -76,7 +78,7 @@ function main() {
   const oracle = options.runtimeDiff === "0" ? [] : ["--runtime-diff", options.runtimeDiff, "--runtime-diff-axes", options.oracleAxes];
   const host = ["--all-cores", "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...oracle];
   const attention = [];
-  console.log(`fuzz-${options.smoke ? "smoke" : "focus"}: codes ${options.codes}; output ${out}`);
+  console.log(`fuzz-${options.smoke ? "smoke" : "focus"}: codes ${options.codes}; output ${out}${options.smoke ? `; sample ${options.sample} of the other programs, seed ${options.sampleSeed} (--sample-seed ${options.sampleSeed} repeats it)` : ""}`);
   // `--codes all`: every code (the full grids); `--runtime-diff 0`: no oracle sample.
   const codes = options.codes === "all" ? undefined : options.codes.split(",");
   for (const grid of options.grids.split(",")) {
@@ -87,7 +89,7 @@ function main() {
     const started = Date.now();
     const manifest = join(SMOKE_DIR, `${grid}.json`);
     if (options.smoke && !existsSync(manifest)) { attention.push(`${grid}: no smoke manifest ${manifest} (smoke.mjs select)`); continue; }
-    const select = [...(codes ? ["--codes", codes.join(",")] : []), ...(options.smoke ? ["--ids", manifest] : [])];
+    const select = [...(codes ? ["--codes", codes.join(",")] : []), ...(options.smoke ? ["--ids", manifest, "--ids-sample", options.sample, "--ids-sample-seed", options.sampleSeed] : [])];
     const run = spawnSync(process.execPath, [join(here, script), "--seed", options.seed, "--grid", ...shape, ...select, "--out", join(out, grid), ...tools, ...host, ...options.extra], { encoding: "utf8", maxBuffer: 1 << 30 });
     const seconds = Math.round((Date.now() - started) / 1000);
     const { outcomes, flagged, oracle, behaviour } = readGrid(join(out, grid));
@@ -97,7 +99,7 @@ function main() {
     if (run.status !== 0) attention.push(`${grid}: exited ${run.status} (${join(out, grid)}.log): ${String(run.stderr || run.stdout).trim().split("\n").slice(-3).join(" | ").slice(0, 400)}`);
     for (const row of flagged.slice(0, 10)) attention.push(`${grid}: ${row.outcome} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
     if (flagged.length > 10) attention.push(`${grid}: ... ${flagged.length - 10} more (${join(out, grid, "programs.jsonl")})`);
-    for (const result of behaviour.slice(0, 10)) attention.push(`${grid}: oracle differs ${result.id} ${result.diffs.filter((d) => d.kind !== "moved").map((d) => `${d.kind} ${d.detail}`).join("; ").slice(0, 200)}`);
+    for (const result of behaviour.slice(0, 10)) attention.push(`${grid}: oracle differs ${result.id} ${result.diffs.map((d) => `${d.kind} ${d.detail}`).join("; ").slice(0, 200)}`);
     // A smoke run: every program whose behaviour moved from the manifest's; a move to a worse outcome needs a look.
     if (options.smoke && existsSync(join(out, grid, "programs.jsonl"))) {
       const moved = movedVerdicts(JSON.parse(readFileSync(manifest, "utf8")), readRows(join(out, grid)));

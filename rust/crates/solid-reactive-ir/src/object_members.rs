@@ -212,6 +212,15 @@ impl ModuleCensus {
         self.unknown_load
     }
 
+    /// ADR 0513: whether some project module has a top-level `await`, or a
+    /// load the census cannot see may run one. Its checkpoint can settle a
+    /// node created before it (a module-scope async memo, a hook's instance)
+    /// by the time the mount reads it, and which nodes it settles depends on
+    /// timing the analysis does not see.
+    pub(crate) fn may_settle_before_mount(&self) -> bool {
+        self.unknown_load || !self.async_modules.is_empty()
+    }
+
     /// Whether `from` statically imports `to`, directly or through re-exports.
     pub(crate) fn statically_imports(&self, from: &str, to: &str) -> bool {
         let mut seen = HashSet::<&str>::default();

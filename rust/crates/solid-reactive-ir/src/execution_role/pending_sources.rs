@@ -161,7 +161,11 @@ pub(crate) fn module_scope_only_creates(
         && !ast.jsx_elements.iter().any(|element| scope(element.span))
         && !ast.jsx_fragments.iter().any(|fragment| scope(*fragment))
         && !ast.classes.iter().any(|class| scope(class.span))
-        && !ast.awaits.iter().any(|awaited| scope(*awaited))
+        && !ast
+            .awaits
+            .iter()
+            .chain(&ast.implicit_suspensions)
+            .any(|awaited| scope(*awaited))
         && !ast
             .throw_statements
             .iter()

@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/pending-source-first-run/variants/module-render-read/App.tsx",
+      "start": 142,
+      "end": 150,
+      "fixes": 0
+    }
+  ]
+}

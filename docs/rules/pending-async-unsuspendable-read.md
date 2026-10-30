@@ -47,6 +47,11 @@ scope or leaves pending values unhandled. Such results are uncertifiable and
 their wording identifies the open callback context. Exact cross-file and
 namespace helpers that invoke the parameter directly retain the violation.
 
+Where a project module awaits at its top level (or a load is unseen), a read
+outside an effect apply's first run is uncertifiable: the await may let the
+source settle first (a root read it), and a settled read does not throw
+(ADR 0513). Premise: no installed dependency awaits at its top level.
+
 Native `isPending(() => accessor())` suppresses the strict pending-accessor
 safeguard, so it has no `SC5001` error. From `@solidjs/signals` rc.17 so does
 `latest(() => accessor())`: both reads go to `verdictValue` before the throw

@@ -63,7 +63,7 @@ export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork
   const send = (message) => child.stdin.write(`${JSON.stringify(message)}\n`);
   send({
     op: "init", tsc, checkerBin: bin, env, concurrency, keepWork, slotRoot,
-    chrome: chrome && { node: process.execPath, viteHost: join(here, "exec/vite-host.mjs"), browser: chrome.browser, install: chrome.install, pages: chrome.pages ?? 16, fontFamilies: FONT_FAMILIES },
+    chrome: chrome && { node: process.execPath, viteHost: join(here, "exec/vite-host.mjs"), browser: chrome.browser, install: chrome.install, oracleInstall: chrome.oracleInstall, pages: chrome.pages ?? 16, fontFamilies: FONT_FAMILIES },
   });
   await readiness;
   const request = (message) => {

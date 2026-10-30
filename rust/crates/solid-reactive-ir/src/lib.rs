@@ -1260,6 +1260,11 @@ pub struct AsyncRead {
     /// missing-boundary findings are uncertifiable then, not proven.
     #[serde(default, skip_serializing_if = "is_false")]
     pub mount_unresolved: bool,
+    /// ADR 0513: a top-level `await` in the project (or a load the census
+    /// cannot see) may settle the source before the read's first run, so the
+    /// missing-boundary finding is uncertifiable, never proven.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub settle_unproven: bool,
     /// The read is a project function call in rendered JSX whose callee's
     /// interprocedural summary reads the async source (ADR 0462): a wrapper,
     /// a local closure, a callback a helper calls. The summary does not prove
