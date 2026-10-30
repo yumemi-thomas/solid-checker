@@ -33,7 +33,7 @@ import { isSite, walk } from "./model.mjs";
 import { availableParallelism } from "node:os";
 import { createFastDaemon } from "./fast-daemon.mjs";
 import { chromeHostKey, createChromeHost, defaultChromium } from "./chrome-host.mjs";
-import { createExecutor, executorChromeHost } from "./exec.mjs";
+import { executorChromeHost, lazyExecutor } from "./exec.mjs";
 import { mapPoolSettled } from "../lib/pool.mjs";
 import { cleanupEvidence } from "./disposal.mjs";
 import { containerEvidence } from "./container.mjs";
@@ -73,20 +73,21 @@ export const defaultWorkers = (cores = availableParallelism(), { virtualClock = 
 
 /** Starts the long-lived fast host unless `--no-daemon`; the caller closes it (`config.fast?.close()`). */
 export function attachDaemon(config, options) {
-  // `--fast-host chrome` (prototype): the fast path's runner in real Chrome (chrome-host.mjs), `--chrome-concurrency` pages at a time.
+  // The fast path's runner in real Chrome (chrome-host.mjs) by default: a reused page per worker on Chrome's virtual time,
+  // `--chrome-concurrency` pages at a time, the work around it in the Rust executor. `--fast-host happy-dom`: the Vitest daemon.
   if (options.executor !== undefined && !["node", "rust"].includes(options.executor)) throw new Error(`--executor takes node or rust, not ${options.executor}`);
-  if (options.fastHost === "chrome") {
-    const settings = { clock: options.chromeClock ?? "virtual-time", pages: options.chromePages ?? "fresh-context", browser: options.browser };
-    if (options.executor === "rust") {
-      // The Rust executor (exec.mjs): the projects, type checks, checker runs and pages off this process's thread. It runs the pages one
-      // way only: a reused page per worker, on Chrome's virtual time.
-      if (options.chromePages !== "reuse" || settings.clock !== "virtual-time") throw new Error("--executor rust runs --chrome-pages reuse on --chrome-clock virtual-time only");
-      const executor = createExecutor({
+  if ((options.fastHost ?? "chrome") === "chrome") {
+    const settings = { clock: options.chromeClock ?? "virtual-time", pages: options.chromePages ?? "reuse", browser: options.browser };
+    // The executor runs the pages one way only (a reused page, virtual time); another page or clock mode keeps the JS path.
+    const executor = options.executor ?? (settings.pages === "reuse" && settings.clock === "virtual-time" ? "rust" : "node");
+    if (executor === "rust") {
+      // The Rust executor (exec.mjs): the projects, type checks, checker runs and pages off this process's thread.
+      if (settings.pages !== "reuse" || settings.clock !== "virtual-time") throw new Error("--executor rust runs --chrome-pages reuse on --chrome-clock virtual-time only");
+      const executor = lazyExecutor({
         tsc: config.tsc, bin: config.bin, concurrency: config.concurrency, keepWork: config.keepWork, slotRoot: checkerWorkDir(config.install, "slots"),
         env: checkerEnv({ typefacts: config.typefacts, env: Object.fromEntries(["SOLID_CHECKER_RUNTIME_RESOLVER", "SOLID_TYPEFACTS_BIN"].filter((key) => process.env[key]).map((key) => [key, process.env[key]])) }),
         chrome: { browser: options.browser ?? defaultChromium(), install: config.fastInstall, pages: Number(options.chromeConcurrency ?? 16) },
       });
-      executor.catch(() => {});
       return { ...config, fastHost: "chrome", fastHostKey: chromeHostKey({ ...settings, executor: "rust" }, { fileHash, treeStat }), exec: executor, fast: executorChromeHost(executor) };
     }
     // The runtime cache keys a Chrome record by the host's own key too (cache.mjs), so it never answers for Happy DOM or another setting.
@@ -171,7 +172,9 @@ const usage = `usage: node scripts/fuzz/run.mjs --out <fresh dir> [--seed N] [--
   [--real-clock]      the fast path waits on the wall clock (the default is the virtual clock, fast/virtual-clock.mjs); Chrome always uses its own
   [--no-daemon]       one Vitest process per batch instead of the long-lived fast host
   [--no-typecheck-batch]  one tsrs process per type check instead of one tsrs -b per batch
-  [--executor node|rust]  rust: the projects, type checks, checker runs and pages in the Rust executor (exec.mjs; needs --fast-host chrome --chrome-pages reuse)
+  [--fast-host chrome|happy-dom]  the fast path's runtime (default chrome: real Chrome, the oracle's browser; happy-dom: the Vitest daemon)
+  [--chrome-pages reuse|fresh-page|fresh-context] [--chrome-clock virtual-time|js|real]  (defaults reuse, virtual-time)
+  [--executor node|rust]  rust (the default with Chrome's defaults): projects, type checks, checker runs and pages in the Rust executor (exec.mjs)
   [--cache-dir <dir>] [--no-cache]   the runtime cache: type checks and fast-path records by case files (cache.mjs; default $TMPDIR/solid-checker-fuzz-cache)
   [--no-instrument]   run the clean text with no hit ledger (the baseline of the neutrality regression)
   [--generate-only]   write and type-check the programs, run nothing else

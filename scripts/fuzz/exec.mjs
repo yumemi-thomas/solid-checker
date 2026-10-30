@@ -86,7 +86,19 @@ export async function createExecutor({ tsc, bin, env = {}, concurrency, keepWork
   };
 }
 
-/** The Chrome host's interface (`run(cases)`, `timings()`, `close()`) over an executor that runs the pages. */
+/**
+ * An executor started on first use: a thenable (`await` it for the executor) that spawns nothing until awaited, as the other fast hosts
+ * start on their first batch; a run that never evaluates a program (`--generate-only`) never starts one. `started` says whether it did.
+ */
+export function lazyExecutor(options) {
+  let started = null;
+  return {
+    get started() { return started !== null; },
+    then(resolve, reject) { started ??= createExecutor(options); return started.then(resolve, reject); },
+  };
+}
+
+/** The Chrome host's interface (`run(cases)`, `timings()`, `close()`) over an executor that runs the pages (`lazyExecutor`). */
 export function executorChromeHost(executor) {
   return {
     async run(cases) {
@@ -94,6 +106,6 @@ export function executorChromeHost(executor) {
       return new Map(Object.entries(answer.records));
     },
     timings: () => ({}),
-    async close() { await (await executor).close(); },
+    async close() { if (executor.started !== false) await (await executor).close(); },
   };
 }
