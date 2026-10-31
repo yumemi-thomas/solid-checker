@@ -526,7 +526,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             file.ast.implicit_suspensions.iter().any(|suspension| {
                 ast_function.body.contains(*suspension)
                     && written_directly_in(&file.ast, ast_function, *suspension)
-            })
+            }) || loop_suspension_start(file, ast_function).is_some()
         })
     }
 
@@ -772,7 +772,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         file: &'f FileFacts,
         function: &'f FunctionFact,
     ) {
-        let Some(boundary) = file
+        let implicit = file
             .ast
             .implicit_suspensions
             .iter()
@@ -781,6 +781,15 @@ impl<'f, 'a> Reach<'f, 'a> {
                     && written_directly_in(&file.ast, function, **suspension)
             })
             .map(|suspension| suspension.end)
+            .min();
+        // ADR 0516: a loop holding an own `await` suspends on its back edge,
+        // so code written anywhere in it (before the `await` too) may run after
+        // a suspension on a later pass, as may everything after the loop: from
+        // the loop's start every read is an obligation (the first pass's reads
+        // before the `await` are dependencies, ADR 0195, never violations).
+        let Some(boundary) = implicit
+            .into_iter()
+            .chain(loop_suspension_start(file, function))
             .min()
         else {
             return;
@@ -845,9 +854,18 @@ impl<'f, 'a> Reach<'f, 'a> {
                 .function_at(file.ast.peel_ts_sugar_span(call.callee))
             && function.kind != FunctionKind::Declaration
             && function.method_name.is_none()
-            && !function.generator
+            && (!function.generator
+                || crate::owners::generator_iterator_used(file, function)
+                    .is_some_and(|created| created.span == call.span))
         {
+            // ADR 0516: calling a generator runs none of its body; stepping
+            // the iterator it returns runs it on this stack, which nothing
+            // follows: its reads are obligations.
+            let mark = draft.static_defects.len();
             self.report_prefix(draft, walk, file, function, depth);
+            if function.generator {
+                mark_uncertain(draft, mark);
+            }
             return;
         }
         // `runWithOwner(owner, fn)` runs `fn` at once with `owner` as the
@@ -1132,17 +1150,48 @@ impl<'f, 'a> Reach<'f, 'a> {
         call: &CallFact,
     ) {
         let ctx = self.ctx;
-        let Some(symbol) = call_accessor_symbol(ctx, file, call) else {
-            return;
-        };
         let key = (
             file.path.to_string(),
             u64::from(call.callee.start),
             u64::from(call.callee.end),
         );
+        let symbol = call_accessor_symbol(ctx, file, call);
+        // ADR 0516: as on the dominance path (ADR 0509), a callee that is a
+        // value a caller supplied (a prop, a context or hook member) may be an
+        // accessor: after an implicit suspension its read is an obligation too.
+        let handed = |walk: &mut Walk<'_>, draft: &mut ProgramDraft| {
+            if symbol.is_none_or(|symbol| {
+                !ctx.setters.contains_key(symbol) && !ctx.actions.contains_key(symbol)
+            }) && crate::local_access::handed_value(
+                &crate::local_access::HandedTables {
+                    lookup: ctx.semantic_lookup,
+                    entities: ctx.entities,
+                    prop_sources: ctx.prop_sources,
+                    source_kinds: ctx.source_kinds,
+                    accessors: ctx.accessors,
+                    setters: ctx.setters,
+                    actions: ctx.actions,
+                    props_reactivity: ctx.props_reactivity,
+                },
+                file,
+                call.callee,
+                crate::local_access::HANDED_DEPTH,
+            ) && walk.reported.insert(key.clone())
+            {
+                let mut obligation = typed_after_await_obligation(file, call.callee);
+                obligation.analysis_context = "handed-read-after-await".to_owned();
+                draft.push_defect(obligation);
+            }
+        };
+        let Some(symbol) = symbol else {
+            handed(walk, draft);
+            return;
+        };
         let Some((name, _)) = ctx.accessors.get(symbol) else {
-            if typed_unknown(ctx, symbol) && walk.reported.insert(key) {
+            if typed_unknown(ctx, symbol) && walk.reported.insert(key.clone()) {
                 draft.push_defect(typed_after_await_obligation(file, call.callee));
+            } else {
+                handed(walk, draft);
             }
             return;
         };
@@ -1990,4 +2039,22 @@ impl<'f, 'a> Reach<'f, 'a> {
                 .is_some_and(|argument| self.pending_promise(helper_file, argument, depth + 1))
         })
     }
+}
+
+/// ADR 0516: the start of the earliest loop written directly in `function`
+/// that holds an `await` written directly in `function`: a back edge that
+/// suspends (the dominance facts model an `await` by what follows it, not
+/// what runs again after it).
+fn loop_suspension_start(file: &FileFacts, function: &FunctionFact) -> Option<u32> {
+    file.ast
+        .loop_statements
+        .iter()
+        .filter(|lp| function.body.contains(**lp) && written_directly_in(&file.ast, function, **lp))
+        .filter(|lp| {
+            file.ast.awaits.iter().any(|awaited| {
+                lp.contains(*awaited) && written_directly_in(&file.ast, function, *awaited)
+            })
+        })
+        .map(|lp| lp.start)
+        .min()
 }

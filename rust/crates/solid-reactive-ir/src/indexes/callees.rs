@@ -938,8 +938,15 @@ pub(crate) fn function_value_is_current_in(
             .as_ref()
             .is_some_and(|name| !binding_written(file, name.span));
     }
+    // ADR 0516: a `let` nothing writes holds its initializer as a `const`
+    // does (a `var` may be redeclared and is not this).
     file.ast.bindings.iter().any(|binding| {
-        binding.immutable
+        (binding.immutable
+            || (binding.runtime_let
+                && binding
+                    .names
+                    .first()
+                    .is_some_and(|name| !binding_written(file, name.span))))
             && binding.shape == solid_facts::ast::BindingShape::Identifier
             && binding.initializer.is_some_and(|initializer| {
                 file.ast.peel_ts_sugar_span(initializer) == function.span

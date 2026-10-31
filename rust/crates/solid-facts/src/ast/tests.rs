@@ -3035,7 +3035,7 @@ async function* body(items: AsyncIterable<number>, inner: () => AsyncGenerator<n
 /// Facts schema 78: a `const` destructuring slot of a namespace import binding
 /// names one export; every other form names nothing.
 #[test]
-fn namespace_member_bindings_record_only_exact_const_slots_of_an_import_namespace() {
+fn namespace_member_bindings_record_only_exact_unwritten_slots_of_an_import_namespace() {
     let source = concat!(
         "import * as S from \"solid-js\";\n",
         "import type * as T from \"solid-js\";\n",
@@ -3066,6 +3066,12 @@ fn namespace_member_bindings_record_only_exact_const_slots_of_an_import_namespac
         "const { onSettled: w } = notNs as any;\n",
         "let S4 = S;\n",
         "const { onCleanup: x } = S4;\n",
+        // ADR 0516: a pattern inside a pattern over a literal holding the namespace once.
+        "const { inner: { onCleanup: y } } = { inner: S };\n",
+        "const { inner: { onCleanup: z } } = { inner: S, other: 1, ...{} };\n",
+        // ADR 0516 (schema 87): a `let` slot is kept only while nothing writes it.
+        "let { onCleanup: written } = S;\n",
+        "written = () => {};\n",
     );
     let facts = extract("namespace.ts", source).unwrap();
     let text = |span: Span| &source[span.start as usize..span.end as usize];
@@ -3081,11 +3087,17 @@ fn namespace_member_bindings_record_only_exact_const_slots_of_an_import_namespac
             ("b", "flush", "S"),
             ("createMemo", "createMemo", "S"),
             ("g", "createEffect", "S"),
+            // ADR 0516: an unwritten `let`, and the exported slots.
+            ("h", "onSettled", "S"),
             ("l", "useContext", "S"),
+            ("o", "onCleanup", "S"),
+            ("p", "onCleanup", "S"),
+            ("q", "onCleanup", "S"),
             ("r", "onCleanup", "S"),
             ("t", "onCleanup", "S"),
             ("u", "onCleanup", "S"),
             ("v", "onCleanup", "S"),
+            ("y", "onCleanup", "S"),
         ]
     );
     let local = facts.namespace_member_bindings[0].local;
@@ -3283,6 +3295,11 @@ fn local_alias_bindings_record_only_exact_const_copies_of_a_const_variable() {
         "const condDiff = Math.random() ? r : fromLet;\n",
         "const withDefault = ((x: () => number = r) => x)(r);\n",
         "const nested = Math.random() ? ((x: () => number) => x)(r) : a;\n",
+        // ADR 0516: a getter returning a `const`, and a default over a literal without the key.
+        "const { viaGetter } = { get viaGetter() { return r; } };\n",
+        "const { viaGetterWork } = { get viaGetterWork() { work(); return r; } };\n",
+        "const { viaDefault = r } = {} as { viaDefault?: () => number };\n",
+        "const { viaDefaultPresent = r } = { viaDefaultPresent: fromLet };\n",
     );
     let facts = extract("alias.ts", source).unwrap();
     let text = |span: Span| &source[span.start as usize..span.end as usize];
@@ -3302,11 +3319,16 @@ fn local_alias_bindings_record_only_exact_const_copies_of_a_const_variable() {
             ("d", r),
             ("e", r),
             ("g", r),
+            // ADR 0516: a `return <expression>;` getter no longer refuses the
+            // literal; reading the data slot `l` never runs the getter `m`.
+            ("l", r),
             ("w", r),
             ("x", c),
             // ADR 0515: a conditional of one variable in both arms, an inline identity arrow on it.
             ("cond", r),
             ("ident", r),
+            ("viaGetter", r),
+            ("viaDefault", r),
         ]
     );
     let local = facts.local_alias_bindings[0].local;
@@ -3397,7 +3419,9 @@ fn lists_the_operands_a_composite_callee_may_evaluate_to() {
                   declare const f: () => void, h: () => void;\n\
                   declare const o: { m(): void };\n\
                   declare function g(): () => void;\n\
-                  (c ? f : h)(); (f && h)(); (f || h)(); (f ?? o.m)(); (g(), (f as any))(); (c ? g() : f)(); f(); (f)();\n";
+                  (c ? f : h)(); (f && h)(); (f || h)(); (f ?? o.m)(); (g(), (f as any))(); (c ? g() : f)(); f(); (f)();\n\
+                  let slot: (() => void) | undefined;\n\
+                  (slot ||= h)();\n";
     let facts = extract("/project/App.ts", source).unwrap();
     let text = |span: Span| &source[span.start as usize..span.end as usize];
     let answers = facts
@@ -3430,6 +3454,19 @@ fn lists_the_operands_a_composite_callee_may_evaluate_to() {
             (vec!["g()", "f"], vec!["f"]),
             (vec![], vec![]),
             (vec![], vec![]),
+            // ADR 0516: a logical assignment may yield the target's old value or its right operand.
+            (vec!["slot", "h"], vec!["slot", "h"]),
         ]
+    );
+    // ADR 0516: only a callee that always yields one of its operands is total.
+    let total = facts
+        .calls
+        .iter()
+        .filter(|call| text(call.span) != "g()")
+        .map(|call| facts.composite_callee_total(call.callee))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        total,
+        [true, false, true, true, true, true, false, false, false]
     );
 }

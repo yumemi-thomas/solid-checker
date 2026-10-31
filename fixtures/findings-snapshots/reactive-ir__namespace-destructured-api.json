@@ -87,8 +87,48 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
-      "start": 4234,
-      "end": 4245,
+      "start": 3666,
+      "end": 3685,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
+      "start": 4149,
+      "end": 4164,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
+      "start": 4180,
+      "end": 4196,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
+      "start": 4212,
+      "end": 4226,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
+      "start": 4462,
+      "end": 4473,
       "fixes": 0
     }
   ]

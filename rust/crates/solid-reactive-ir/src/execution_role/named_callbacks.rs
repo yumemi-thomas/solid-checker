@@ -552,6 +552,20 @@ pub(crate) fn named_expression_binding<'f>(
     }
 }
 
+/// ADR 0516: whether the innermost function around `span` is named at a
+/// tracked position (a memo's compute, an effect's tracked compute), where a
+/// read tracks: the read is legal there whatever else names the function.
+pub(crate) fn named_at_tracked_position(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    containing_ast_function(&file.ast, span).is_some_and(|function| {
+        let role = lookup.named_callback_roles(file).get(function.span);
+        role.tracked || role.effect_compute
+    })
+}
+
 /// Whether `span` is in a function nested in a named callback (not in the
 /// callback's own body): code [`named_callback_execution_role`] places as
 /// deferred unless the in-place layers between them place it at a call in the

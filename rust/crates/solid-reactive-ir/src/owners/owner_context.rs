@@ -934,11 +934,20 @@ pub(crate) fn fresh_stack_scheduler_edges(
                     | solid_facts::ast::ArgumentValueKind::AsyncFunction
                     | solid_facts::ast::ArgumentValueKind::Identifier
             )
+            // ADR 0516: an object literal's member that names one function.
+            || (!argument.spread
+                && lookup
+                    .object_member_function(file, file.ast.peel_ts_sugar_span(argument.span))
+                    .is_some())
         })
         .filter(|(index, argument)| {
+            let exact_member = lookup
+                .object_member_function(file, file.ast.peel_ts_sugar_span(argument.span))
+                .is_some();
             let callability = lookup
                 .entity_at(file.path.as_str(), argument.span)
-                .and_then(|entity| entity.callability);
+                .and_then(|entity| entity.callability)
+                .or_else(|| exact_member.then_some(typefacts::Callability::Callable));
             crate::runtime_semantics::argument_behavior(resolved, callability, *index).map_or_else(
                 // ADR 0438: a reviewed test runner invokes a registered callback
                 // from its own scheduler.
@@ -949,9 +958,15 @@ pub(crate) fn fresh_stack_scheduler_edges(
                 crate::runtime_semantics::RuntimeArgumentBehavior::runs_on_fresh_stack,
             )
         })
-        .map(|(argument, _)| OwnerCallbackEdge {
+        .map(|(argument, value)| OwnerCallbackEdge {
             argument,
-            kind: callback_owner_edge_kind(owner),
+            // ADR 0516: a generator the scheduler calls runs none of its
+            // body there, so nothing is proven about its owner.
+            kind: if crate::owners::argument_may_be_generator(file, value.span, lookup) {
+                OwnerEdgeKind::MayBeUnowned
+            } else {
+                callback_owner_edge_kind(owner)
+            },
             source_path: file.path.to_string(),
             source: call.span,
         })

@@ -993,7 +993,7 @@ fn local_member_dispatch_requires_only_tracked_exact_callers() {
                 && row["analysisContext"] == "parameter-member-target-unresolved"
         })
         .collect::<Vec<_>>();
-    assert_eq!(rows.len(), 10, "{rows:#?}");
+    assert_eq!(rows.len(), 9, "{rows:#?}");
     for (name, occurrence, unresolved) in [
         ("DirectTracked", 0, false),
         ("LocalTracked", 0, false),
@@ -1008,7 +1008,8 @@ fn local_member_dispatch_requires_only_tracked_exact_callers() {
         ("ShadowedHelper", 0, true),
         ("ShadowedHelper", 1, false),
         ("WrappedCallee", 0, false),
-        ("MutableHelper", 0, true),
+        // ADR 0516: a `let` nothing reassigns holds its helper, resolved.
+        ("MutableHelper", 0, false),
         ("StoredCaller", 0, true),
         ("GetterDefaultCaller", 0, true),
         ("JsxDefaultCaller", 0, true),

@@ -571,9 +571,12 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             }
             None
         };
+        // ADR 0516: an exported namespace slot is kept. Its `const` (or
+        // unwritten `let`) holds the export wherever it is read; a mention in
+        // an importing module is that module's import binding, which names
+        // nothing here and stays unresolved there.
         let mut namespace_member_bindings = std::mem::take(&mut self.namespace_member_candidates)
             .into_iter()
-            .filter(|(local, _, _)| !exported.contains(local))
             .filter_map(|(local, namespace, key)| {
                 Some(NamespaceMemberBindingFact {
                     local,

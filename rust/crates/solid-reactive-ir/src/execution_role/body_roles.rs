@@ -977,7 +977,7 @@ pub(crate) fn inside_component_element_children(file: &solid_facts::FileFacts, s
 /// `await` (`if (c) await p`, `x ??= await p`) is not an implicit suspension;
 /// [`may_follow_own_await`] covers it (ADR 0354). The loop's iterated operand
 /// is evaluated before the first suspension.
-pub(super) fn follows_any_suspension(file: &solid_facts::FileFacts, span: Span) -> bool {
+pub(crate) fn follows_any_suspension(file: &solid_facts::FileFacts, span: Span) -> bool {
     let Some(function) = containing_ast_function(&file.ast, span) else {
         return false;
     };

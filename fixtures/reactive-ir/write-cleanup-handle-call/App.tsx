@@ -243,7 +243,7 @@ export function HandleByNameInMemo() {
   });
   return <div>{m() + v()}</div>;
 }
-// Uncertifiable: a `let` may hold another function at the registration.
+// ADR 0516: a `let` nothing reassigns holds its function as a `const` does: a violation.
 export function HandleByNameMutable() {
   const [v, setV] = createSignal(0);
   const m = createMemo(() => {

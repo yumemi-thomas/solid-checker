@@ -290,7 +290,7 @@ impl StaticApiContext<'_> {
             // position proof below is the language's.
             if let Some(kind) = kind
                 && dialect.throws_inside_action_step(kind)
-                && let Some(body) = action_step_body(file, call, self)
+                && let Some((body, stepped)) = action_step_body(file, call.span, self)
             {
                 result.violations.push(StaticViolation {
                     id: "SC2006".into(),
@@ -302,7 +302,7 @@ impl StaticApiContext<'_> {
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
-                    uncertain: false,
+                    uncertain: stepped,
                 });
             }
             // SC2008: a flush() that only ever runs on a user effect's apply
@@ -359,7 +359,7 @@ impl StaticApiContext<'_> {
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
-                    uncertain: false,
+                    uncertain: origin.mixed,
                 });
             }
             // SC6002 (ADR 0483): a computation or root created with no owner
@@ -439,7 +439,7 @@ impl StaticApiContext<'_> {
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
-                    uncertain: earlier_call,
+                    uncertain: earlier_call || origin.mixed,
                 });
             }
             let Some(kind @ (Primitive::Refresh | Primitive::Affects)) = kind else {
@@ -930,9 +930,96 @@ fn static_source_promise(
 ///   before it, and no loop around it may contain a suspension that a later
 ///   iteration would pass first. A call after a suspension that a later
 ///   `yield` re-enters a step for is not claimed.
+///
+/// ADR 0516: a call in a sync generator called in place in that body
+/// (`(function* () { flush(); })().next()`) runs inside the step where its
+/// iterator is stepped there, which nothing follows: it is claimed as an
+/// obligation (the `bool`), never a violation.
 fn action_step_body(
     file: &FileFacts,
-    call: &solid_facts::ast::CallFact,
+    site: Span,
+    context: &StaticApiContext<'_>,
+) -> Option<(&'static str, bool)> {
+    if let Some(body) = action_step_body_at(file, site, context) {
+        return Some((body, false));
+    }
+    action_step_body_through(file, site, context, 4)
+}
+
+/// ADR 0516: the layers [`action_step_body_at`] does not cross, as an
+/// obligation: a sync generator called in place (its body runs where its
+/// iterator is stepped), and a named function some exact call of which runs
+/// in a step (other calls may run elsewhere, and the proof is lexical).
+fn action_step_body_through(
+    file: &FileFacts,
+    site: Span,
+    context: &StaticApiContext<'_>,
+    depth: usize,
+) -> Option<(&'static str, bool)> {
+    if depth == 0 {
+        return None;
+    }
+    let at = match crate::execution_role::climb_in_place_layers(file, site, context.lookup) {
+        Some(climb) if !climb.in_list && climb.suspended.is_none() => climb.at,
+        Some(_) => return None,
+        None => site,
+    };
+    let function = crate::owners::owning_function(&file.ast, at)
+        .filter(|function| function.body.contains(at) && function.method_name.is_none())?;
+    if file
+        .ast
+        .arguments_containing(function.span)
+        .any(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+        })
+    {
+        return None;
+    }
+    let mut calls = Vec::new();
+    if function.generator {
+        if function.r#async {
+            return None;
+        }
+        calls.extend(
+            crate::owners::generator_iterator_used(file, function).map(|call| (file, call.span)),
+        );
+    } else if !function.r#async
+        && crate::owners::function_binding_name(file, function).is_some()
+        && context.lookup.function_value_is_current(file, function)
+    {
+        for (caller, callee) in context
+            .lookup
+            .function_call_sites(file.path.as_str(), function.span)
+        {
+            let Some(call) = caller.ast.calls.iter().find(|call| {
+                !call.construct && caller.ast.peel_ts_sugar_span(call.callee) == callee
+            }) else {
+                continue;
+            };
+            let exact =
+                crate::execution_role::project_callee_at_parameter(caller, call, 0, context.lookup)
+                    .is_some_and(|(callee_file, target, exact)| {
+                        exact
+                            && callee_file.path.as_str() == file.path.as_str()
+                            && target.span == function.span
+                    });
+            if exact {
+                calls.push((caller, call.span));
+            }
+        }
+    }
+    calls.into_iter().find_map(|(caller, call)| {
+        action_step_body_at(caller, call, context)
+            .or_else(|| {
+                action_step_body_through(caller, call, context, depth - 1).map(|(body, _)| body)
+            })
+            .map(|body| (body, true))
+    })
+}
+
+fn action_step_body_at(
+    file: &FileFacts,
+    site: Span,
     context: &StaticApiContext<'_>,
 ) -> Option<&'static str> {
     // ADR 0478: a call in function layers that run in place inside the body
@@ -943,10 +1030,10 @@ fn action_step_body(
     // omitted, and a site after an await in its layer runs on a later task:
     // neither is claimed. One in-place run proves the throw, so a helper that
     // also hands its callback on still counts.
-    let at = match crate::execution_role::climb_in_place_layers(file, call.span, context.lookup) {
+    let at = match crate::execution_role::climb_in_place_layers(file, site, context.lookup) {
         Some(climb) if !climb.in_list && climb.suspended.is_none() => climb.at,
         Some(_) => return None,
-        None => call.span,
+        None => site,
     };
     let (container, index) = file
         .ast

@@ -81,6 +81,10 @@ pub(crate) struct EffectPhaseOrigin {
     /// helper's own body before it calls its parameter, so one that may run
     /// before the span does.
     pub(crate) earlier_call: bool,
+    /// ADR 0516: some run of the code is in the effect phase and some other
+    /// run (another call site, a use the walk does not follow) is not proven
+    /// to be: the claim is an obligation, not a violation.
+    pub(crate) mixed: bool,
 }
 
 /// The effect call whose apply callback provably runs the code at `span`
@@ -129,6 +133,7 @@ fn walk_to_effect_phase(
         budget: BUDGET,
         earlier: false,
         from: None,
+        stepped: false,
     };
     // The instance the flush call's own import loads, followed through
     // re-exports to the file that imports the package; unresolved is no proof.
@@ -158,6 +163,9 @@ struct Walk<'l, 'a> {
     earlier: bool,
     /// The layer the walk just left, whose own calls are the path's.
     from: Option<Span>,
+    /// ADR 0516: the path crosses a generator called in place, whose body
+    /// runs only where its iterator is stepped: any origin is mixed.
+    stepped: bool,
 }
 
 impl<'l, 'a> Walk<'l, 'a> {
@@ -178,10 +186,21 @@ impl<'l, 'a> Walk<'l, 'a> {
         if !written_directly_in(&file.ast, literal, span) {
             return None;
         }
-        // Calling a generator runs none of its body; a method or accessor is
-        // reached through a receiver this walk does not resolve.
-        if literal.generator || literal.method_name.is_some() {
+        // A method or accessor is reached through a receiver this walk does
+        // not resolve. Calling a generator runs none of its body; stepping
+        // its iterator runs it (ADR 0516), so one called in place keeps the
+        // path, never as a proof.
+        if literal.method_name.is_some() {
             return None;
+        }
+        if literal.generator {
+            if literal.r#async || argument_position(file, literal).is_some() {
+                return None;
+            }
+            let call = crate::owners::generator_iterator_used(file, literal)?;
+            self.stepped = true;
+            self.from = Some(literal.span);
+            return self.layer(file, call.span, helper_calls);
         }
         if literal.r#async && !runs_before_first_suspension(file, literal, span) {
             return None;
@@ -269,6 +288,7 @@ impl<'l, 'a> Walk<'l, 'a> {
                         helper_calls,
                         apply: call.arguments[index].span,
                         earlier_call: self.earlier,
+                        mixed: self.stepped,
                     });
             }
             if self.owner_preserving && primitive != solid_dialect::Primitive::Untrack {
@@ -547,7 +567,46 @@ impl<'l, 'a> Walk<'l, 'a> {
         let path = file.path.as_str();
         let symbol = self.lookup.entities().at(path, binding.span)?;
         let sites = self.lookup.function_call_sites(path, literal.span);
-        if sites.is_empty() {
+        // ADR 0516: a reference that is the whole argument at a primitive's
+        // effect-phase position (`createEffect(c, apply)`) runs the function in
+        // that phase, as the same literal written there does.
+        let dialect = self.lookup.dialect;
+        let mut positions = Vec::new();
+        for reference in self.lookup.symbol_references(symbol.as_str()) {
+            if reference.path.as_ref() != path {
+                continue;
+            }
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
+                continue;
+            };
+            let at = Span::new(start, end);
+            if let Some((call, index)) = file.ast.arguments_containing(at).find(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == at
+            }) && let Some(primitive) = self.lookup.primitive_at_call(file, call.span)
+                && dialect.callback_runs_in_effect_phase(primitive, index)
+                && !call
+                    .arguments
+                    .iter()
+                    .take(index + 1)
+                    .any(|argument| argument.spread)
+                && self.same_package_instance(file, call)
+            {
+                positions.push((
+                    at,
+                    EffectPhaseOrigin {
+                        path: file.path.to_string(),
+                        helper_calls,
+                        apply: call.arguments[index].span,
+                        earlier_call: self.earlier,
+                        mixed: false,
+                    },
+                ));
+            }
+        }
+        if sites.is_empty() && positions.is_empty() {
             return None;
         }
         let accounted: HashSet<(String, u32, u32)> = self
@@ -566,17 +625,21 @@ impl<'l, 'a> Walk<'l, 'a> {
                 let declaration = reference.path.as_ref() == path
                     && start == binding.span.start
                     && end == binding.span.end;
-                !declaration && !accounted.contains(&(reference.path.to_string(), start, end))
+                let position = reference.path.as_ref() == path
+                    && positions
+                        .iter()
+                        .any(|(at, _)| at.start == start && at.end == end);
+                !declaration
+                    && !position
+                    && !accounted.contains(&(reference.path.to_string(), start, end))
             });
-        if escapes {
-            return None;
-        }
         let key = (file.path.to_string(), literal.span);
         if !self.visiting.insert(key.clone()) {
             return None;
         }
-        let mut found: Option<EffectPhaseOrigin> = None;
-        let mut every = true;
+        let mut found: Option<EffectPhaseOrigin> =
+            positions.into_iter().map(|(_, origin)| origin).next();
+        let mut every = !escapes;
         for (caller, callee) in sites {
             if self.budget == 0 {
                 every = false;
@@ -616,12 +679,16 @@ impl<'l, 'a> Walk<'l, 'a> {
                 }
                 None => {
                     every = false;
-                    break;
                 }
             }
         }
         self.visiting.remove(&key);
-        if every { found } else { None }
+        // ADR 0516: one proven effect-phase run with other runs the walk did
+        // not prove is an obligation; no proven run at all stays silent.
+        found.map(|origin| EffectPhaseOrigin {
+            mixed: origin.mixed || !every,
+            ..origin
+        })
     }
 }
 

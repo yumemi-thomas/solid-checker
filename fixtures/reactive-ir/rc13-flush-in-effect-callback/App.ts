@@ -23,7 +23,7 @@ import { flush as signalsFlush } from "@solidjs/signals";
 import { commitFromOtherFile } from "./commit";
 
 // ADR 0459: a `const` destructuring of the namespace binds the export itself;
-// a `let` one may be reassigned, so it binds nothing this proof names.
+// ADR 0516: so does a `let` one nothing writes.
 const { flush: destructuredFlush } = Solid;
 let { flush: reassignableFlush } = Solid;
 
@@ -63,7 +63,7 @@ createRoot(() => {
     destructuredFlush();
   });
 
-  // Negative: the `let` slot names nothing.
+  // ADR 0516: the unwritten `let` slot is the export.
   createEffect(value, () => {
     reassignableFlush();
   });
@@ -176,8 +176,8 @@ createRoot(() => {
     void loadThenSettle();
   });
 
-  // Negative: a helper also called from a handler may flush outside the
-  // effect, so one call from an effect proves nothing.
+  // Uncertifiable (ADR 0516): a helper also called from a handler may flush
+  // outside the effect, so one call from an effect proves no violation.
   function sharedHelper(): void {
     flush();
   }
@@ -298,7 +298,7 @@ createRoot(() => {
     api.commitMember();
   });
 
-  // Negative: a helper an effect calls and an alias also reaches.
+  // Uncertifiable (ADR 0516): a helper an effect calls and an alias also reaches.
   function aliasedHelper(): void {
     flush();
   }
@@ -308,7 +308,7 @@ createRoot(() => {
     aliasedHelper();
   });
 
-  // Negative: a helper called from the apply and from the module body.
+  // Uncertifiable (ADR 0516): a helper called from the apply and from the module body.
   function moduleAndEffect(): void {
     flush();
   }
@@ -329,7 +329,7 @@ createRoot(() => {
     stored.push(() => flush());
   });
 
-  // Negative: an apply named rather than written is not placed here.
+  // ADR 0516: an apply named rather than written runs in the same phase.
   function namedApply(): void {
     flush();
   }

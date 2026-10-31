@@ -151,6 +151,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/write-detached-owner-helper/node_modules/**
 !fixtures/reactive-ir/write-cleanup-handle-call/node_modules/
 !fixtures/reactive-ir/write-cleanup-handle-call/node_modules/**
+!fixtures/reactive-ir/dispatch-and-copies/node_modules/
+!fixtures/reactive-ir/dispatch-and-copies/node_modules/**
 !fixtures/reactive-ir/write-render-apply-row-layers/node_modules/
 !fixtures/reactive-ir/write-render-apply-row-layers/node_modules/**
 !fixtures/reactive-ir/dead-code-sites/node_modules/

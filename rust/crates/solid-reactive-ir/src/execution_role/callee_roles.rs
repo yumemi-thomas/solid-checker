@@ -446,6 +446,50 @@ pub(super) fn semantic_role_before_awaits(
                 None => role,
             };
         }
+        // ADR 0516: the climb stops at a generator, whose body runs when its
+        // iterator is stepped, not when it is created: no deferral is proven.
+        // One stepped at its own call (`(function* () { … })().next()`) runs
+        // there, some of it or none, so a role that reports nothing at that
+        // call is its role; anything else is unplaced. A generator that is
+        // itself the primitive's callback (`action(function* () { … })`) is
+        // that callback, placed as it was.
+        if let Some(function) =
+            crate::owners::containing_ast_function(&file.ast, span).filter(|function| {
+                function.generator
+                    && !allowed.iter().any(|region| {
+                        file.ast.peel_ts_sugar_span(*region) == function.span
+                            || *region == function.span
+                    })
+            })
+        {
+            // An async generator's body past an `await` runs on a later task.
+            if let Some(created) = crate::owners::generator_iterator_used(file, function)
+                .filter(|_| !function.r#async)
+                .filter(|created| crate::owners::iterator_stepped_at(file, created.span))
+            {
+                let role = semantic_execution_role_within(
+                    file,
+                    created.span,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    classifying,
+                );
+                // A write's or an action's rule decides more than the role (a
+                // render apply's first run, the owner of an `untrack` body):
+                // only an event handler's role is passed through for them.
+                let legal = if classifying.contains(&write_classification_marker()) {
+                    role == ExecutionRole::EventCallback
+                } else {
+                    !role.reports_untracked_read() && !role.reports_unplaced()
+                };
+                if legal {
+                    return role;
+                }
+            }
+            return ExecutionRole::Unknown;
+        }
         return ExecutionRole::DeferredCallback;
     }
     if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, dialect) {

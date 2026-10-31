@@ -232,13 +232,13 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
-      "start": 5125,
-      "end": 5137,
+      "start": 5124,
+      "end": 5141,
       "fixes": 0
     },
     {

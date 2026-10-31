@@ -1646,6 +1646,85 @@ impl LocalAccessContext<'_, '_> {
         result
     }
 
+    /// Whether `span` names a known setter, accessor or action.
+    fn reactive_symbol(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: solid_facts::core::Span,
+    ) -> bool {
+        self.lookup.callee_symbol(file, span).is_some_and(|symbol| {
+            self.setters.contains_key(symbol)
+                || self.actions.contains_key(symbol)
+                || self.accessors.contains_key(symbol)
+        })
+    }
+
+    /// ADR 0516: the reference `f` of a `Function.prototype` dispatch callee
+    /// (`f.call`, `f.apply`, or a call `f.bind(…)`, non-computed members)
+    /// when `f` is a known setter, accessor or action.
+    fn dispatch_target(
+        &self,
+        file: &solid_facts::FileFacts,
+        callee: solid_facts::core::Span,
+    ) -> Option<solid_facts::core::Span> {
+        let ast = &file.ast;
+        let callee = ast.peel_ts_sugar_span(callee);
+        let member_of = |span: solid_facts::core::Span, names: &[&str]| {
+            ast.member_at(span)
+                .filter(|member| {
+                    ast.computed_members.binary_search(&member.span).is_err()
+                        && file
+                            .source_text(member.property)
+                            .is_some_and(|property| names.contains(&property))
+                })
+                .map(|member| ast.peel_ts_sugar_span(member.object))
+        };
+        member_of(callee, &["call", "apply"])
+            .or_else(|| {
+                ast.call_at(callee)
+                    .and_then(|inner| member_of(ast.peel_ts_sugar_span(inner.callee), &["bind"]))
+            })
+            .filter(|object| self.reactive_symbol(file, *object))
+    }
+
+    /// ADR 0516: whether a dispatch invokes its function whenever the call
+    /// runs. `f.call(…)` with no spread at the receiver's place, and
+    /// `f.bind(…)(…)`, do; `f.apply(t, x)` does where `x` is absent, `null`,
+    /// `undefined` or an array literal (another value may throw first).
+    fn dispatch_invokes(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        let ast = &file.ast;
+        let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) else {
+            return true;
+        };
+        match file.source_text(member.property) {
+            Some("call") => !call
+                .arguments
+                .first()
+                .is_some_and(|argument| argument.spread),
+            Some("apply") => {
+                !call
+                    .arguments
+                    .iter()
+                    .take(2)
+                    .any(|argument| argument.spread)
+                    && call.arguments.get(1).is_none_or(|argument| {
+                        matches!(
+                            argument.value,
+                            solid_facts::ast::ArgumentValueKind::Null
+                                | solid_facts::ast::ArgumentValueKind::Undefined
+                        ) || ast
+                            .array_literal_at(ast.peel_ts_sugar_span(argument.span))
+                            .is_some()
+                    })
+            }
+            _ => false,
+        }
+    }
+
     /// ADR 0468: a comma, conditional or logical callee (`(c && setX)(1)`)
     /// resolves to no symbol, so the call has no row; when an identifier it
     /// may evaluate to is a local setter, action or accessor, the call may
@@ -1693,9 +1772,120 @@ impl LocalAccessContext<'_, '_> {
         result: &mut LocalAccessResult,
         seen: &mut HashSet<(Arc<str>, u64, u64)>,
     ) {
-        let callee = location(file.path.shared(), call.callee);
-        let Some(symbol) = self.lookup.callee_symbol(file, call.callee) else {
+        // ADR 0516: `f.call(…)`, `f.apply(…)` and `f.bind(…)(…)` invoke `f`
+        // through `Function.prototype`. With `f` a known setter, accessor or
+        // action the call is `f`'s, judged as `f(…)` at this call
+        // ([`Self::discover_call_as`]: `f` names the symbol, the written call
+        // places it); where `f` may not be invoked (`dispatch_invokes`), an
+        // obligation, never silence. In an event handler a write, an action
+        // call and a read are all legal, so there is nothing to owe.
+        if let Some(target) = self.dispatch_target(file, call.callee) {
+            if self.dispatch_invokes(file, call) {
+                self.discover_call_as(file, call, target, allowed, result, seen);
+                return;
+            }
+            if semantic_execution_role(
+                file,
+                call.callee,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            ) == ExecutionRole::EventCallback
+            {
+                return;
+            }
+            result.dispatch_obligations.push(crate::StaticDefect {
+                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: file
+                        .source_text(call.callee)
+                        .unwrap_or("this callee")
+                        .to_owned(),
+                    member: None,
+                },
+                location: location(file.path.shared(), call.callee),
+                analysis_context: "function-prototype-callee-unresolved".to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            });
+            return;
+        }
+        if self.lookup.callee_symbol(file, call.callee).is_none() {
+            let reactive = file
+                .ast
+                .composite_callee_references(call.callee)
+                .into_iter()
+                .filter(|operand| self.reactive_symbol(file, *operand))
+                .collect::<Vec<_>>();
+            let operands = file.ast.composite_callee_operands(call.callee);
+            let one_symbol = reactive.iter().all(|operand| {
+                self.lookup.callee_symbol(file, *operand)
+                    == reactive
+                        .first()
+                        .and_then(|first| self.lookup.callee_symbol(file, *first))
+            });
+            // ADR 0516: a composite callee that always yields one of its
+            // operands, all naming one reactive function, is that function's
+            // call here.
+            if !reactive.is_empty()
+                && reactive.len() == operands.len()
+                && one_symbol
+                && file.ast.composite_callee_total(call.callee)
+            {
+                self.discover_call_as(file, call, reactive[0], allowed, result, seen);
+                return;
+            }
+            // Otherwise no finding is proven, but a clean is: every reactive
+            // operand's call here reports nothing. In an async function, also
+            // through layers inside it, the after-await rule, which this probe
+            // does not ask, may report the direct read.
+            if !reactive.is_empty()
+                && !file
+                    .ast
+                    .functions
+                    .iter()
+                    .any(|function| function.r#async && function.body.contains(call.span))
+            {
+                let mut scratch = LocalAccessResult::default();
+                let mut scratch_seen = seen.clone();
+                for operand in &reactive {
+                    self.discover_call_as(
+                        file,
+                        call,
+                        *operand,
+                        allowed,
+                        &mut scratch,
+                        &mut scratch_seen,
+                    );
+                }
+                if finding_free(&scratch) {
+                    seen.extend(scratch_seen);
+                    append_local_access_result_owned(result, scratch);
+                    return;
+                }
+            }
             self.push_composite_callee_obligation(file, call, result);
+            return;
+        }
+        self.discover_call_as(file, call, call.callee, allowed, result, seen);
+    }
+
+    /// [`Self::discover_call`] for the call `call` invoking the function the
+    /// reference `target` names: `call.callee` itself, a dispatch's `f`, a
+    /// composite callee's operand (ADR 0516). `target` decides the symbol and
+    /// its mention; the written call decides reachability and placement.
+    fn discover_call_as(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        target: solid_facts::core::Span,
+        allowed: &[solid_facts::core::Span],
+        result: &mut LocalAccessResult,
+        seen: &mut HashSet<(Arc<str>, u64, u64)>,
+    ) {
+        let callee = location(file.path.shared(), call.callee);
+        let mention = location(file.path.shared(), target);
+        let Some(symbol) = self.lookup.callee_symbol(file, target) else {
             return;
         };
         if inside_known_value_function_argument(file, call.callee, self.lookup) {
@@ -1765,7 +1955,7 @@ impl LocalAccessContext<'_, '_> {
         // ADR 0463: a mention of a local alias that may run before the
         // alias's declarator throws there instead of reaching the value, so
         // nothing places what it does: every claim about it is unplaced.
-        let alias_withheld = self.lookup.local_alias_mention_withheld(file, call.callee);
+        let alias_withheld = self.lookup.local_alias_mention_withheld(file, target);
         let execution = if alias_withheld {
             ExecutionRole::Unknown
         } else {
@@ -1827,15 +2017,44 @@ impl LocalAccessContext<'_, '_> {
                         || enclosing_render_function(file, call.callee, self.lookup))))
             .then_some(1)
         }) else {
+            // ADR 0516: a known accessor read in a function that reaches a
+            // place the analysis does not follow (a primitive position the
+            // role index does not admit, an alias, an object literal slot)
+            // may run there: an obligation, never silence. The reachable-call
+            // index and the role proofs above answer only for the calls and
+            // positions they model; "no row" is not "never runs".
+            if let Some(accessor) = self.accessors.get(symbol)
+                && !crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup)
+                && function_escapes_unfollowed(file, call.callee, self.lookup)
+                && seen.insert((mention.path.clone(), mention.start_byte, mention.end_byte))
+            {
+                self.push_accessor_read(
+                    file,
+                    call,
+                    symbol,
+                    accessor,
+                    ExecutionRole::Unknown,
+                    result,
+                );
+            }
             return;
         };
-        let key = (callee.path.clone(), callee.start_byte, callee.end_byte);
+        let key = (mention.path.clone(), mention.start_byte, mention.end_byte);
         if let Some(accessor) = self.accessors.get(symbol)
             && (!inside_non_component_function(file, call.callee, self.lookup)
                 || named_callback_execution_role(file, call.callee, self.lookup).is_some())
             && seen.insert(key.clone())
         {
             self.push_accessor_read(file, call, symbol, accessor, execution, result);
+        } else if let Some(accessor) = self.accessors.get(symbol)
+            && !crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup)
+            && function_escapes_unfollowed(file, call.callee, self.lookup)
+            && seen.insert(key.clone())
+        {
+            // ADR 0516: a function no named role places, handed where the
+            // analysis does not follow: the read is placed nowhere, so it is
+            // an obligation (as at the unreached arm above).
+            self.push_accessor_read(file, call, symbol, accessor, ExecutionRole::Unknown, result);
         }
         // ADR 0294: a typed candidate read where an accessor read would be
         // reported. Its type is the only evidence that it reads reactive
@@ -3718,6 +3937,24 @@ pub(crate) fn append_local_access_result(
         .extend(source.dispatch_obligations.iter().cloned());
 }
 
+/// ADR 0516: whether a result reports nothing: no row a rule reports
+/// (`projection.rs`'s predicates, without its exemptions) and no obligation
+/// (the strict-read and write/action counts are metrics, not findings).
+fn finding_free(result: &LocalAccessResult) -> bool {
+    result
+        .reads
+        .iter()
+        .all(|read| !read.execution.reports_untracked_read() && !read.execution.reports_unplaced())
+        && result.writes.iter().all(|write| {
+            !write.execution.reports_disallowed_write() && !write.execution.reports_unplaced()
+        })
+        && result.action_invocations.iter().all(|action| {
+            !action.execution.reports_disallowed_write() && !action.execution.reports_unplaced()
+        })
+        && result.async_reads.is_empty()
+        && result.dispatch_obligations.is_empty()
+}
+
 pub(crate) fn append_local_access_result_owned(
     target: &mut LocalAccessResult,
     source: LocalAccessResult,
@@ -4049,4 +4286,124 @@ fn read_in_named_local_function(
                     && lookup.primitive_at_call(file, call.span).is_some()
             })
         && !lookup.function_may_be_component(file, function)
+}
+
+/// ADR 0516: whether the innermost function around `span` is handed somewhere
+/// the reachable-call index and the role proofs do not follow: its binding (or
+/// the binding of a named function expression, ADR 0515) is referenced as the
+/// whole argument at a Solid primitive's position, as the initializer of
+/// another binding (`const alias = f`), or as a property value of an object
+/// literal; or the function itself is such a property value. A JSX attribute,
+/// an argument of a non-primitive call and a call of the binding are not
+/// counted: those keep the placement the other arms give.
+fn function_escapes_unfollowed(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    crate::owners::containing_ast_function(&file.ast, span)
+        .is_some_and(|function| function_handed_unfollowed(file, function, lookup))
+}
+
+/// The escape test of [`function_escapes_unfollowed`] for `function` itself.
+fn function_handed_unfollowed(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_facts::core::Span;
+    let ast = &file.ast;
+    let path = file.path.as_str();
+    // A call's whole argument (under transparent TypeScript wrappers).
+    let whole_argument = |at: Span| {
+        ast.arguments_containing(at)
+            .any(|(call, index)| ast.peel_ts_sugar_span(call.arguments[index].span) == at)
+    };
+    let references = |name: Span| -> Vec<Span> {
+        lookup
+            .entities()
+            .exact(&location(file.path.shared(), name))
+            .map(|symbol| {
+                lookup
+                    .symbol_references(symbol.as_str())
+                    .iter()
+                    .filter(|reference| reference.path.as_ref() == path)
+                    .filter_map(|reference| {
+                        Some(Span::new(
+                            u32::try_from(reference.start_byte).ok()?,
+                            u32::try_from(reference.end_byte).ok()?,
+                        ))
+                    })
+                    .filter(|at| *at != name)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    // A value written in an object literal bound to one `const` (`const box =
+    // { cb: f }`), whose slot is read and handed on as a call's whole
+    // argument (`setTimeout(box.cb)`): the call runs it where nothing follows.
+    let slot_handed = |value: Span| {
+        let Some(property) = ast
+            .object_properties
+            .iter()
+            .find(|property| ast.peel_ts_sugar_span(property.value) == value)
+        else {
+            return false;
+        };
+        let Some(key) = file.source_text(property.key) else {
+            return false;
+        };
+        ast.bindings
+            .iter()
+            .filter(|binding| {
+                binding.immutable
+                    && binding
+                        .initializer
+                        .is_some_and(|initializer| initializer.contains(property.span))
+            })
+            .any(|binding| {
+                let [holder] = binding.names.as_slice() else {
+                    return false;
+                };
+                references(holder.span).into_iter().any(|object| {
+                    ast.members.iter().any(|member| {
+                        member.object == object
+                            && file.source_text(member.property) == Some(key)
+                            && whole_argument(member.span)
+                    })
+                })
+            })
+    };
+    if slot_handed(function.span) {
+        return true;
+    }
+    // A named function expression is held by its `const` (its own name is
+    // scoped inside it); any other function by its binding.
+    let named_expression =
+        function.kind == solid_facts::ast::FunctionKind::Expression && function.name.is_some();
+    let name = if named_expression {
+        crate::execution_role::named_expression_binding(file, function, lookup)
+    } else {
+        crate::owners::function_binding_name(file, function)
+    };
+    let Some(name) = name else {
+        return false;
+    };
+    references(name.span).into_iter().any(|at| {
+        // The binding itself as a call's whole argument: a primitive position
+        // (reads: the role index admits only some), or any call for a named
+        // function expression, whose binding resolves to no function in the
+        // callee and scheduler indexes (`function_for_symbol`).
+        let handed = whole_argument(at)
+            && (named_expression
+                || (ast.arguments_containing(at).any(|(call, index)| {
+                        ast.peel_ts_sugar_span(call.arguments[index].span) == at && lookup.primitive_at_call(file, call.span).is_some()
+                    })));
+        // An exact copy (`const alias = f`) handed on as a call's whole argument.
+        let alias_handed = ast.bindings.iter().any(|binding| {
+            binding.initializer_identifier.as_ref().is_some_and(|identifier| identifier.span == at)
+                && matches!(binding.names.as_slice(), [alias] if references(alias.span).into_iter().any(whole_argument))
+        });
+        handed || alias_handed || slot_handed(at)
+    })
 }

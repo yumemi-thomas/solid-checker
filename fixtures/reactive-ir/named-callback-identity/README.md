@@ -12,6 +12,9 @@ No SC1001:
 
 - `AliasCompute` (line 27), `AliasMemo` (line 38): a copy as an effect's tracked compute or a memo's compute, where a read tracks.
 - `NamedExpressionCompute` (line 69): the same binding as a tracked compute.
+
+Uncertifiable, never SC1001 (ADR 0516: a function handed through a copy no callback edge follows has unplaced reads, a cost on these two):
+
 - `AliasUsedBeforeInitialized` (line 81): the copy is handed to the effect from a nested function called before the copy's declarator runs, which throws a ReferenceError (no read); a copy names its function only when every reference to it follows its declarator in the declarator's own function.
 - `LetSourceApply` (line 49): a copy of a `let`, which is not an alias fact; here the `let` was reassigned before the copy, so the apply holds the empty function and no read runs.
 

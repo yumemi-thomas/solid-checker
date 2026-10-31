@@ -1724,6 +1724,27 @@ fn write_role_walk(
             unknown
         };
     }
+    // ADR 0516: the permissive role a named position gives is that
+    // position's alone. A binding that may hold another function proves
+    // nothing about this one; and where the same literal written inline is
+    // adjusted to its call site -- a render effect's apply, whose first run is
+    // unproven (ADR 0460), and an untracked callback, which runs at the call
+    // (ADR 0466) -- a function named at several positions has no one call
+    // site to adjust to. Neither is a legal write.
+    if named.is_some() && !nested {
+        let role = lookup.named_callback_roles(file).get(function.span);
+        let several = lookup
+            .named_callback_roles(file)
+            .positions(function.span)
+            .len()
+            > 1;
+        let adjusted_inline = role.untracked_callback
+            || role.effect_apply_primitive.single() == Some(Primitive::CreateRenderEffect)
+            || matches!(role.effect_apply_primitive, EffectApplyPrimitive::Several);
+        if !current || (several && adjusted_inline) {
+            return unknown;
+        }
+    }
     let key = (file.path.to_string(), function.span);
     if !visiting.insert(key.clone()) {
         return unknown;

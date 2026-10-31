@@ -63,8 +63,9 @@ pub struct AstFacts {
     /// (`import S = Other.Name`) loads no module and is not recorded.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub import_equals: Vec<ImportEqualsFact>,
-    /// Every `const` object-destructuring slot that reads one member of a
-    /// runtime namespace import binding (facts schema 78), sorted by local:
+    /// Every `const` (or unwritten `let`) object-destructuring slot that reads
+    /// one member of a runtime namespace import binding (facts schema 78, 87),
+    /// sorted by local:
     /// `const { onCleanup: cleanup } = Solid` given `import * as Solid`.
     /// See [`NamespaceMemberBindingFact`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1179,15 +1180,15 @@ pub struct TypeImportFact {
 /// The binder decides the initializer (an identifier, under transparent
 /// TypeScript wrappers, that resolves to an `import * as S` binding of a
 /// value import), so a shadowing local `S` is not this. Recorded only for a
-/// non-ambient `const` and a slot whose key is static (an identifier or a
-/// string literal, cooked) and whose value is a bare binding identifier: a
-/// computed key, a default value, a rest element, a nested pattern, and a
-/// `let` or `var` are absent, and so is a slot the module exports (`export
-/// const { … } = S`, `export { local }`, `export default local`, `export =
-/// local`), so no other module imports the binding itself: every reference
-/// to `local` is in this file. Only a direct export of the binding is
-/// excluded; its value may still escape (`export default { local }`, an
-/// argument, a store), and such a slot is recorded. Absence is not a fact
+/// non-ambient `const`, or a `let` nothing writes or redeclares (facts schema
+/// 87, ADR 0516), and a slot whose key is static (an identifier or a string
+/// literal, cooked) and whose value is a bare binding identifier: a computed
+/// key, a default value, a rest element and a `var` are absent. A pattern
+/// nested over an object literal the declarator consumes (`const { i: { k:
+/// local } } = { i: S }`) is recorded (ADR 0516). Since schema 87 a slot the
+/// module exports is recorded too: it holds the export wherever it is read,
+/// and a mention in an importing module is that module's import binding, not
+/// this declaration. Absence is not a fact
 /// about the slot. A read of `local` before the declarator ran throws;
 /// whether one may is the consumer's question.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1964,21 +1965,48 @@ impl AstFacts {
     /// member, a call or a function names its value through other facts.
     #[must_use]
     pub fn composite_callee_operands(&self, callee: Span) -> Vec<Span> {
+        self.composite_callee_walk(callee).0
+    }
+
+    /// ADR 0516: whether a composite callee always evaluates to one of
+    /// [`Self::composite_callee_operands`]: no `&&` (whose falsy left is the
+    /// value, and no function is) and no assignment that reads its target
+    /// (`||=`, `&&=`, `??=`: the old value is not an operand named here).
+    /// `false` for a callee that is not composite.
+    #[must_use]
+    pub fn composite_callee_total(&self, callee: Span) -> bool {
+        let (operands, total) = self.composite_callee_walk(callee);
+        total && !operands.is_empty()
+    }
+
+    fn composite_callee_walk(&self, callee: Span) -> (Vec<Span>, bool) {
         let sequence_tail = |span: Span| {
             self.sequences
                 .iter()
                 .find(|sequence| sequence.span == span)
                 .map(|sequence| sequence.tail)
         };
+        // ADR 0516: an assignment callee (`(slot ||= f)()`, `(slot = f)()`
+        // where ADR 0515's peel does not apply) evaluates to its right operand,
+        // or, for an assignment that reads its target (`||=`, `&&=`, `??=`),
+        // possibly to the target's old value. The expression spans from the
+        // target's start to the value's end.
+        let assignment_at = |span: Span| {
+            self.assignments.iter().find(|assignment| {
+                assignment.target.start == span.start && assignment.value_span.end == span.end
+            })
+        };
         let root = self.peel_ts_sugar_span(callee);
         if sequence_tail(root).is_none()
             && self.conditional_at(root).is_none()
             && self.logical_at(root).is_none()
+            && assignment_at(root).is_none()
         {
-            return Vec::new();
+            return (Vec::new(), false);
         }
         let mut pending = vec![root];
         let mut operands = Vec::new();
+        let mut total = true;
         while let Some(span) = pending.pop() {
             let span = self.peel_ts_sugar_span(span);
             if let Some(tail) = sequence_tail(span) {
@@ -1986,17 +2014,25 @@ impl AstFacts {
             } else if let Some(conditional) = self.conditional_at(span) {
                 pending.extend([conditional.consequent, conditional.alternate]);
             } else if let Some(logical) = self.logical_at(span) {
-                if logical.operator != LogicalOperatorKind::And {
+                if logical.operator == LogicalOperatorKind::And {
+                    total = false;
+                } else {
                     pending.push(logical.left);
                 }
                 pending.push(logical.right);
+            } else if let Some(assignment) = assignment_at(span) {
+                if assignment.reads_target {
+                    total = false;
+                    pending.push(assignment.target);
+                }
+                pending.push(assignment.value_span);
             } else {
                 operands.push(span);
             }
         }
         operands.sort_unstable();
         operands.dedup();
-        operands
+        (operands, total)
     }
 
     /// The operands of [`Self::composite_callee_operands`] that are identifier

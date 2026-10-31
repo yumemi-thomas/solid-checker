@@ -36,6 +36,18 @@ export const generated = (function* () {
   yield 1;
 })();
 
+// Uncertifiable (ADR 0516): stepping the iterator in place runs the body here,
+// which no call edge follows.
+export const stepped = (function* () {
+  createEffect(count, () => {});
+  yield 1;
+})().next();
+
+// Negative (ADR 0516): an iterator a statement discards runs none of the body.
+(function* () {
+  createEffect(count, () => {});
+})();
+
 // Negative: an async IIFE in a component body runs the code before its first
 // `await` inside the call, under the component's owner.
 export function AsyncOwned() {

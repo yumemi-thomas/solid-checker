@@ -24,11 +24,31 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/named-callback-identity/App.tsx",
+      "start": 1005,
+      "end": 1012,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/named-callback-identity/App.tsx",
       "start": 1227,
       "end": 1234,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/named-callback-identity/App.tsx",
+      "start": 1668,
+      "end": 1675,
       "fixes": 0
     }
   ]

@@ -93,6 +93,17 @@ pub(super) fn owner_node(
         {
             seed_context |= OWNER_CONTEXT_UNOWNED;
         }
+        // ADR 0516: a generator's body runs when its iterator is stepped,
+        // under whatever owner the step runs in. One called in place whose
+        // iterator escapes (kept, handed on, exported) may be stepped
+        // anywhere, under any owner; one stepped at the call has that call's
+        // edge (`owner_discovery`).
+        crate::indexes::ComponentStatus::No
+            if super::generator_iterator_used(file, function)
+                .is_some_and(|call| !super::iterator_stepped_at(file, call.span)) =>
+        {
+            seed_context |= OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED;
+        }
         crate::indexes::ComponentStatus::No => {}
     }
     OwnerNode {
