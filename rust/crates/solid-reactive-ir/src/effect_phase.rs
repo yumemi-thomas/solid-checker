@@ -558,87 +558,156 @@ impl<'l, 'a> Walk<'l, 'a> {
         literal: &FunctionFact,
         helper_calls: usize,
     ) -> Option<EffectPhaseOrigin> {
-        let binding = function_binding_name(file, literal)?;
-        if !self.lookup.function_value_is_current(file, literal)
-            || exported(self.lookup, file, literal)
-        {
+        if exported(self.lookup, file, literal) {
             return None;
         }
         let path = file.path.as_str();
-        let symbol = self.lookup.entities().at(path, binding.span)?;
-        let sites = self.lookup.function_call_sites(path, literal.span);
-        // ADR 0516: a reference that is the whole argument at a primitive's
-        // effect-phase position (`createEffect(c, apply)`) runs the function in
-        // that phase, as the same literal written there does.
         let dialect = self.lookup.dialect;
-        let mut positions = Vec::new();
-        for reference in self.lookup.symbol_references(symbol.as_str()) {
-            if reference.path.as_ref() != path {
-                continue;
-            }
-            let (Ok(start), Ok(end)) = (
-                u32::try_from(reference.start_byte),
-                u32::try_from(reference.end_byte),
-            ) else {
-                continue;
-            };
-            let at = Span::new(start, end);
-            if let Some((call, index)) = file.ast.arguments_containing(at).find(|(call, index)| {
+        // ADR 0516: a reference at a primitive's effect-phase position
+        // (`createEffect(c, apply)`) runs the function in that phase, as the
+        // same literal written there does.
+        let effect_position = |walk: &mut Self, at: Span| -> Option<EffectPhaseOrigin> {
+            let (call, index) = file.ast.arguments_containing(at).find(|(call, index)| {
                 file.ast.peel_ts_sugar_span(call.arguments[*index].span) == at
-            }) && let Some(primitive) = self.lookup.primitive_at_call(file, call.span)
-                && dialect.callback_runs_in_effect_phase(primitive, index)
+            })?;
+            let primitive = walk.lookup.primitive_at_call(file, call.span)?;
+            (dialect.callback_runs_in_effect_phase(primitive, index)
                 && !call
                     .arguments
                     .iter()
                     .take(index + 1)
                     .any(|argument| argument.spread)
-                && self.same_package_instance(file, call)
-            {
-                positions.push((
-                    at,
-                    EffectPhaseOrigin {
-                        path: file.path.to_string(),
-                        helper_calls,
-                        apply: call.arguments[index].span,
-                        earlier_call: self.earlier,
-                        mixed: false,
-                    },
-                ));
+                && walk.same_package_instance(file, call))
+            .then(|| EffectPhaseOrigin {
+                path: file.path.to_string(),
+                helper_calls,
+                apply: call.arguments[index].span,
+                earlier_call: walk.earlier,
+                mixed: false,
+            })
+        };
+        let references_of = |symbol: &str| -> Vec<(String, Span)> {
+            self.lookup
+                .symbol_references(symbol)
+                .iter()
+                .map(|reference| {
+                    let start = u32::try_from(reference.start_byte).unwrap_or(u32::MAX);
+                    let end = u32::try_from(reference.end_byte).unwrap_or(u32::MAX);
+                    (reference.path.to_string(), Span::new(start, end))
+                })
+                .collect()
+        };
+        let mut positions = Vec::new();
+        let mut escapes = false;
+        // ADR 0516: an object literal's member that names the function
+        // exactly (ADR 0358's receiver closure) is read only as a callee, a
+        // handler or a whole argument: each read is a position or a run the
+        // walk does not follow.
+        // A property's symbol may name another object's property of the same
+        // type, so a function written as a data property is followed through
+        // its receiver alone.
+        let slot = file.ast.object_properties.iter().any(|property| {
+            property.data && file.ast.peel_ts_sugar_span(property.value) == literal.span
+        });
+        let binding = (!slot)
+            .then(|| {
+                super::execution_role::named_expression_binding(file, literal, self.lookup)
+                    .or_else(|| function_binding_name(file, literal))
+            })
+            .flatten();
+        let Some(binding) = binding else {
+            for member in &file.ast.members {
+                if self
+                    .lookup
+                    .object_member_function(file, member.span)
+                    .is_none_or(|(target, function)| {
+                        target.path.as_str() != path || function.span != literal.span
+                    })
+                {
+                    continue;
+                }
+                match effect_position(self, member.span) {
+                    Some(origin) => positions.push(origin),
+                    None => escapes = true,
+                }
             }
-        }
-        if sites.is_empty() && positions.is_empty() {
+            return positions
+                .into_iter()
+                .next()
+                .map(|origin| EffectPhaseOrigin {
+                    mixed: escapes,
+                    ..origin
+                });
+        };
+        if !self.lookup.function_value_is_current(file, literal) {
             return None;
         }
+        let symbol = self.lookup.entities().at(path, binding.span)?.clone();
+        let sites = self.lookup.function_call_sites(path, literal.span);
         let accounted: HashSet<(String, u32, u32)> = self
             .lookup
             .function_call_site_references(path, literal.span)
             .into_iter()
             .map(|(caller, callee)| (caller.path.to_string(), callee.start, callee.end))
             .collect();
-        let escapes = self
-            .lookup
-            .symbol_references(symbol.as_str())
-            .iter()
-            .any(|reference| {
-                let start = u32::try_from(reference.start_byte).unwrap_or(u32::MAX);
-                let end = u32::try_from(reference.end_byte).unwrap_or(u32::MAX);
-                let declaration = reference.path.as_ref() == path
-                    && start == binding.span.start
-                    && end == binding.span.end;
-                let position = reference.path.as_ref() == path
-                    && positions
-                        .iter()
-                        .any(|(at, _)| at.start == start && at.end == end);
-                !declaration
-                    && !position
-                    && !accounted.contains(&(reference.path.to_string(), start, end))
-            });
+        // ADR 0516: the binding's `const` copies (ADR 0463's alias facts,
+        // followed transitively) hold the function too: each of their
+        // references is a position, or a run the walk does not follow.
+        let mut names = vec![(binding.span, symbol, true)];
+        let mut index = 0;
+        while index < names.len() && names.len() < 9 {
+            let (declaration, symbol, primary) = names[index].clone();
+            index += 1;
+            for (reference_path, at) in references_of(symbol.as_str()) {
+                let same_file = reference_path == path;
+                if same_file && at == declaration {
+                    continue;
+                }
+                let alias = same_file
+                    .then(|| {
+                        file.ast.bindings.iter().find(|candidate| {
+                            candidate
+                                .initializer_identifier
+                                .as_ref()
+                                .is_some_and(|identifier| identifier.span == at)
+                        })
+                    })
+                    .flatten()
+                    .and_then(|candidate| match candidate.names.as_slice() {
+                        [alias]
+                            if file
+                                .ast
+                                .local_alias_binding(alias.span)
+                                .is_some_and(|fact| fact.source == declaration) =>
+                        {
+                            Some(alias.span)
+                        }
+                        _ => None,
+                    });
+                if let Some(alias) = alias
+                    && let Some(alias_symbol) = self.lookup.entities().at(path, alias)
+                {
+                    names.push((alias, alias_symbol.clone(), false));
+                    continue;
+                }
+                if same_file && let Some(origin) = effect_position(self, at) {
+                    positions.push(origin);
+                    continue;
+                }
+                // A call site the call graph enumerates is followed below.
+                if !(primary && accounted.contains(&(reference_path, at.start, at.end))) {
+                    escapes = true;
+                }
+            }
+        }
+        if sites.is_empty() && positions.is_empty() {
+            return None;
+        }
         let key = (file.path.to_string(), literal.span);
         if !self.visiting.insert(key.clone()) {
             return None;
         }
-        let mut found: Option<EffectPhaseOrigin> =
-            positions.into_iter().map(|(_, origin)| origin).next();
+        let mut found: Option<EffectPhaseOrigin> = positions.into_iter().next();
         let mut every = !escapes;
         for (caller, callee) in sites {
             if self.budget == 0 {

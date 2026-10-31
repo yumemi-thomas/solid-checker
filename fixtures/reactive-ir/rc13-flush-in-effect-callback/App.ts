@@ -335,6 +335,40 @@ createRoot(() => {
   }
   createEffect(value, namedApply);
 
+  // ADR 0516 (effect phase by value): an apply named by a `const` copy, by a
+  // named function expression's binding, and by an object literal's slot.
+  const copiedApply = (): void => {
+    flush();
+  };
+  const applyCopy = copiedApply;
+  createEffect(value, applyCopy);
+  const expressionApply = function step(): void {
+    flush();
+  };
+  createEffect(value, expressionApply);
+  const applyBox = {
+    apply: (): void => {
+      flush();
+    },
+  };
+  createEffect(value, applyBox.apply);
+
+  // Uncertifiable (ADR 0516): the copy and the slot also run outside the
+  // effect phase (called from the root body), so the claim is not universal.
+  const sharedApply = (): void => {
+    flush();
+  };
+  const sharedCopy = sharedApply;
+  createEffect(value, sharedCopy);
+  sharedCopy();
+  const sharedBox = {
+    apply: (): void => {
+      flush();
+    },
+  };
+  createEffect(value, sharedBox.apply);
+  sharedBox.apply();
+
   // Negative: the bundle form's `effect` is the same phase, but its position is
   // not one this proof places.
   createEffect(value, {
