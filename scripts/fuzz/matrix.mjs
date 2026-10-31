@@ -171,6 +171,9 @@ export function recallAxes(code, context, base, variants) {
   const recallCell = recallContextsOf(code).includes(context);
   const shapes = recallCell ? [...base] : [];
   for (const variant of variants) {
+    // A variant one source carries (`variantSources`, the settled async memo) is crossed on that source by the base grid; the recall
+    // axes are written on the local source, which it cannot take.
+    if (SPEC[code].variantSources?.[variant]) continue;
     const known = new Set(gridBindingsOf(code, variant));
     for (const binding of recallBindingsOf(code, variant).filter((b) => !known.has(b))) for (const layer of LAYERS) shapes.push({ variant, binding, layer });
     // A `catch` swallows a code the runtime only throws (codes.mjs thrownCodes): the try-catch layer never shows it.

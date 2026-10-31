@@ -3,7 +3,7 @@ import { legalCells, recallLegalShapes, generateLegal } from "./legal.mjs";
 import { cellList, generateShape, gridShapes, recallShapes, shapeSeed } from "./matrix.mjs";
 import {
   CALLBACK_CONTEXTS, CALLBACK_FORMS, CALLEE_FORMS, RECALL_API_BINDINGS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, RECALL_VALUE_BINDINGS, SOURCE_AXES,
-  TEMPLATE_CODES, recallContextsOf,
+  SPEC, TEMPLATE_CODES, recallContextsOf,
 } from "./misuse.mjs";
 import { RECALL_MOUNTS, mountParts } from "./mounts.mjs";
 import { legalPartner, pairOutcome, siteAnswer } from "./mutation.mjs";
@@ -144,5 +144,16 @@ describe("mutation mode", () => {
     expect(pairOutcome(none, none)).toEqual({ outcome: "static-miss", certified: true });
     expect(pairOutcome(answer([finding("missing-owner", "uncertifiable", 3)]), none)).toEqual({ outcome: "static-miss", certified: false });
     expect(pairOutcome(none, answer([finding("flush-in-effect-callback", "violation")])).outcome).toBe("legal-flagged");
+  });
+});
+
+describe("the recall axes and one-source variants", () => {
+  it("never cross a variant one source carries (the settled async memo) with the local source", () => {
+    for (const cell of cellList({ recall: true })) {
+      const carried = SPEC[cell.code].variantSources ?? {};
+      for (const shape of recallShapes(cell.code, cell.context)) {
+        if (carried[shape.variant]) expect(carried[shape.variant]).toContain(shape.source);
+      }
+    }
   });
 });
