@@ -75,7 +75,6 @@ describe("every axis value crosses the base grid", () => {
 });
 
 describe("printed forms", () => {
-  const text = (code, context, shape) => generateShape({ seed: 1 }, { code, context }, { variant: null, binding: "direct", layer: "none", ...shape }, 0).built.files;
   it("a recall API binding, a value binding and a callee form", () => {
     expect(text("FLUSH_IN_EFFECT_CALLBACK", "effect-apply", { binding: "ns-held" })["App.tsx"]).toContain("const { flush: flushN } = S2;");
     const reexport = text("FLUSH_IN_EFFECT_CALLBACK", "effect-apply", { binding: "reexport" });
@@ -109,6 +108,21 @@ describe("printed forms", () => {
       if (["dynamic", "portal"].includes(mount)) expect(web.size, mount).toBe(1);
     }
     expect(mountParts("show", ["<C1 />"], { index: 1, name: "C1", used: new Set(), web: new Set() })).toBeNull();
+  });
+});
+
+const text = (code, context, shape) => generateShape({ seed: 1 }, { code, context }, { variant: null, binding: "direct", layer: "none", ...shape }, 0).built.files;
+
+describe("shapes rc.17 cannot observe or tsc rejects", () => {
+  it("no dynamic() mount for a body's strict-read or pending read, which dynamic() leaves unlabelled", () => {
+    for (const code of ["STRICT_READ_UNTRACKED", "PENDING_ASYNC_UNTRACKED_READ"]) {
+      for (const context of ["body", "root"]) expect(recallShapes(code, context).filter((shape) => shape.mount === "dynamic"), `${code}/${context}`).toEqual([]);
+      expect(recallShapes(code, "effect-apply").some((shape) => shape.mount === "dynamic"), code).toBe(true);
+    }
+  });
+  it("a typed `.call` spelling for flush and useContext", () => {
+    expect(text("FLUSH_IN_EFFECT_CALLBACK", "effect-apply", { binding: "call" })["App.tsx"]).toContain("flush.call<null, [], void>(null)");
+    expect(text("CONTEXT_NOT_FOUND", "body", { binding: "call" })["App.tsx"]).toMatch(/useContext\.call<null, \[typeof \w+\], unknown>\(null, \w+\)/);
   });
 });
 

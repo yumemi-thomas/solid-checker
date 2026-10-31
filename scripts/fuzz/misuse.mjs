@@ -164,6 +164,12 @@ export const RECALL_LAYERS = [...CONTROL_LAYERS, ...FILE_LAYERS];
  */
 export const RECALL_API_BINDINGS = ["ns-nested", "ns-default", "ns-rest", "ns-let", "ns-exported", "ns-held", "ns-member", "reexport", "reexport-ns"];
 export const RECALL_VALUE_BINDINGS = ["let-alias", "var-alias", "cond-alias", "identity", "spread-literal", "computed-key", "getter", "literal-member", "default-slot", "nested", "array-slot"];
+/**
+ * Type arguments a `.call` spelling needs to type-check under `strict`: `CallableFunction.call` infers from the last overload
+ * (`flush<T>(fn: () => T)`) and loses a generic (`useContext`'s `Context<T>`, invariant). The runtime call is unchanged.
+ */
+const callTypeArguments = (name, args) => (name === "flush" ? "<null, [], void>" : name === "useContext" ? `<null, [typeof ${args}], unknown>` : "");
+
 export const CALLEE_FORMS = ["bind", "call", "extracted", "assign-callee", "or-assign"];
 
 /** An API call: `name` from `module`; `args` is the argument text; `locals` when the arguments name component-scope variables. */
@@ -373,7 +379,7 @@ export function describeUse(node, signals) {
       case "reexport": out.importLines = [`import { ${name} as ${local} } from "./solid-api";`]; out.files = { "solid-api.ts": `export { ${name} } from "${module}";\n` }; out.text = wrap(local); break;
       case "reexport-ns": out.importLines = ['import * as R from "./solid-api";']; out.files = { "solid-api.ts": `export * from "${module}";\n` }; out.text = wrap(`R.${name}`); break;
       case "bind": importsOf(module).push(name); out.text = `${name}.bind(null)(${args})`; break;
-      case "call": importsOf(module).push(name); out.text = `${name}.call(null${args ? `, ${args}` : ""})`; break;
+      case "call": importsOf(module).push(name); out.text = `${name}.call${callTypeArguments(name, args)}(null${args ? `, ${args}` : ""})`; break;
       case "extracted": importsOf(module).push(name); out.moduleLines.push(`const ${name}Box = { m: ${name} };`, `const ${local} = ${name}Box.m;`); out.text = wrap(local); break;
       case "assign-callee": importsOf(module).push(name); out.moduleLines.push(`let ${name}Slot: typeof ${name} | undefined;`); out.text = `(${name}Slot = ${name})(${args})`; break;
       case "or-assign": importsOf(module).push(name); out.moduleLines.push(`let ${name}Slot: typeof ${name} | undefined;`); out.text = `(${name}Slot ||= ${name})(${args})`; break;
@@ -403,7 +409,7 @@ export function describeUse(node, signals) {
       case "hook-member": out.preludeLines.push(`const useThing = () => ({ useIt: ${name} });`, "const thing = useThing();"); out.text = `thing.useIt(${args})`; break;
       case "tuple": out.preludeLines.push(`const pair = [0, ${name}] as const;`, "const [, useIt] = pair;"); out.text = `useIt(${args})`; break;
       case "bind": out.text = `${name}.bind(null)(${args})`; break;
-      case "call": out.text = `${name}.call(null${args ? `, ${args}` : ""})`; break;
+      case "call": out.text = `${name}.call${callTypeArguments(name, args)}(null${args ? `, ${args}` : ""})`; break;
       case "extracted": out.preludeLines.push(`const box = { m: ${name} };`, "const useIt = box.m;"); out.text = `useIt(${args})`; break;
       case "assign-callee": out.preludeLines.push(`let slot: typeof ${name} | undefined;`); out.text = `(slot = ${name})(${args})`; break;
       case "or-assign": out.preludeLines.push(`let slot: typeof ${name} | undefined;`); out.text = `(slot ||= ${name})(${args})`; break;

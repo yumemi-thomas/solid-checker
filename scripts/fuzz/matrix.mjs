@@ -23,7 +23,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache } from "./cache.mjs";
-import { codeRules, codesForRule, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
+import { codeOfThrown, codeRules, codesForRule, ignoredRules, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { runtimeEvents } from "./classify.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { fnv } from "./rng.mjs";
@@ -70,8 +70,14 @@ export function judge({ code, site, typecheck: typed, checker, runtime, others =
     const tag = /^\[([A-Z][A-Z_]+)\]/.exec(String(error.message ?? ""));
     return tag ? [{ code: tag[1], source: "thrown", positions: error.positions ?? [] }] : [];
   });
+  // A thrown code an `<Errored>` boundary caught: the boundary logs it (`console.error(err())`, solid-js rc.17 `solid.dev.js:1647-1652`)
+  // instead of rethrowing it, with no position, so it judges as unplaced.
+  const loggedTags = (runtime.consoleErrors ?? []).flatMap((text) => {
+    const logged = codeOfThrown(String(text).replace(/^Error: /, ""));
+    return logged ? [{ code: logged, source: "thrown", positions: [] }] : [];
+  });
   const known = runtimeEvents(runtime);
-  const events = [...known, ...thrownTags.filter((tag) => !known.some((event) => event.code === tag.code && event.source === "thrown"))].filter((event) => event.code === code);
+  const events = [...known, ...[...thrownTags, ...loggedTags].filter((tag) => !known.some((event) => event.code === tag.code && event.source === "thrown"))].filter((event) => event.code === code);
   const attributed = (event) => event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined);
   const atSite = events.filter((event) => attributed(event).some((position) => region.includes(position.line)));
   // A diagnostic with no authored position at all (or, for a placeless code, any position): Solid spoke and the harness cannot say
@@ -173,11 +179,15 @@ export function recallAxes(code, context, base, variants) {
   }
   const local = base.filter((shape) => !shape.mount && !shape.source);
   if (CALLBACK_CONTEXTS.includes(context)) for (const callback of CALLBACK_FORMS) for (const shape of local) shapes.push({ ...shape, callback });
-  for (const mount of RECALL_MOUNTS) for (const shape of local) shapes.push({ ...shape, mount });
+  // `dynamic()` renders a component with an unlabelled `untrack` (solid-js rc.17 `dynamicCore`, `solid.dev.js:1444-1527`), so a body's
+  // strict-read window never opens there: rc.17 is silent on a stale body read, and a pending one re-runs the body without end.
+  const bodyLabelled = BODY_LABEL.has(code) && ["body", "root"].includes(context);
+  for (const mount of RECALL_MOUNTS) if (!(mount === "dynamic" && bodyLabelled)) for (const shape of local) shapes.push({ ...shape, mount });
   for (const source of SOURCE_AXES.files) for (const shape of local) if (sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
   return shapes;
 }
 const THROWN = new Set(thrownCodes.map(([, code]) => code));
+const BODY_LABEL = new Set(["STRICT_READ_UNTRACKED", "PENDING_ASYNC_UNTRACKED_READ"]);
 const variantFits = (code, context) => (variant) => context === undefined || !SPEC[code].variantContexts?.[variant] || SPEC[code].variantContexts[variant].includes(context);
 /** The misuse grid's recall shapes of a cell (`--recall`). */
 export const recallShapes = (code, context) => recallAxes(code, context, gridShapes(code, context), gridVariantsOf(code).filter(variantFits(code, context)));
