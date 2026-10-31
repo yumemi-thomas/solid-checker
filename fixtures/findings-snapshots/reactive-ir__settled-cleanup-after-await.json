@@ -20,6 +20,36 @@
       "start": 679,
       "end": 693,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
+      "start": 1226,
+      "end": 1240,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
+      "start": 1508,
+      "end": 1522,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
+      "start": 2079,
+      "end": 2093,
+      "fixes": 0
     }
   ]
 }

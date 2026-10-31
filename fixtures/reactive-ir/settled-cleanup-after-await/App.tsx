@@ -36,3 +36,53 @@ export function NoCleanupAfterAwait() {
   void run();
   return null;
 }
+
+// Uncertifiable (ADR 0516): a later iteration of a loop that awaits runs the
+// call after the await, with no owner; the first runs it before.
+export function LoopAwait() {
+  const run = async () => {
+    for (let i = 0; i < 2; i += 1) {
+      onSettled(() => () => {});
+      await pause();
+    }
+  };
+  void run();
+  return null;
+}
+
+// Uncertifiable (ADR 0516): after an await that may be skipped.
+export function SkippableAwait(props: { wait: boolean }) {
+  const run = async () => {
+    if (props.wait) await pause();
+    onSettled(() => () => {});
+  };
+  void run();
+  return null;
+}
+
+// Clean: the loop's callback returns no cleanup.
+export function NoCleanupLoop() {
+  const run = async () => {
+    for (let i = 0; i < 2; i += 1) {
+      onSettled(() => {});
+      await pause();
+    }
+  };
+  void run();
+  return null;
+}
+
+// Uncertifiable (ADR 0516, the fuzzer's shape): the registration runs only on
+// a later iteration, after the loop's await; silent before.
+export function LoopAwaitLater() {
+  const run = async () => {
+    for (let i = 0; i < 2; i += 1) {
+      if (i > 0) {
+        onSettled(() => () => {});
+      }
+      await pause();
+    }
+  };
+  run();
+  return <div />;
+}

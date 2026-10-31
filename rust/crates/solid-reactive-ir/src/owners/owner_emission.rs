@@ -180,9 +180,17 @@ pub(super) fn emit_file(
             || (continuation_placed
                 && (starts.contains(&u64::from(candidate.operation_span.start))
                     || climbed_after_await(candidate.operation_span)));
-        let possible_continuation = (!after_await && continuation_placed)
-            .then(|| possible_await_continuation_context(file, candidate.operation_span, context))
-            .flatten();
+        // ADR 0516: a settled cleanup's `onSettled` call that may follow an
+        // await (a later loop iteration, a skippable await) may run with no
+        // owner: its possible continuation is the call's, not the callback's.
+        let possible_site = if continuation_placed {
+            Some(candidate.operation_span)
+        } else {
+            settled_call.map(|call| call.span)
+        };
+        let possible_continuation = possible_site
+            .filter(|_| !after_await)
+            .and_then(|site| possible_await_continuation_context(file, site, context));
         let context = if after_await {
             await_continuation_context(context)
         } else {
