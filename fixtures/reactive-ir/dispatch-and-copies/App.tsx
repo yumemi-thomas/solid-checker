@@ -1,4 +1,4 @@
-import { action, createMemo, createRoot, createSignal, onCleanup } from "solid-js";
+import { action, createMemo, createRoot, createSignal, createTrackedEffect, onCleanup } from "solid-js";
 
 // Violation (ADR 0516): a `const` copy of a callback is that callback.
 export function CopyInTimer() {
@@ -98,4 +98,27 @@ export function PrototypeDefault() {
     return 0;
   });
   return <p>{v()}</p>;
+}
+
+// Violation (slice 1b): a leaf callback handed by name (here a `const` copy)
+// runs in the leaf scope, where a pending async read cannot suspend.
+export function LeafByCopy() {
+  const pending = createMemo(async () => 1);
+  const track = () => {
+    pending();
+  };
+  const copy = track;
+  createTrackedEffect(copy);
+  return <div />;
+}
+
+// Not the leaf's: the same callback also runs from a handler.
+export function LeafCopyAlsoClicked() {
+  const pending = createMemo(async () => 1);
+  const track = () => {
+    pending();
+  };
+  const copy = track;
+  createTrackedEffect(copy);
+  return <button onClick={copy} />;
 }

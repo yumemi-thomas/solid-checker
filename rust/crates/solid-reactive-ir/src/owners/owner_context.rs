@@ -1074,6 +1074,62 @@ pub(crate) fn containing_leaf_owner(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> Option<String> {
+    lexical_leaf_owner(file, span, entities, symbol_names, lookup)
+        .or_else(|| named_leaf_owner(file, span, entities, symbol_names, lookup))
+}
+
+/// ADR 0516: the leaf owner a callback handed by name (`onSettled(cb)`, a
+/// copy, a slot) runs under: the function around `span`, or the function
+/// the in-place climb from `span` lands in, whose every value position is a
+/// leaf slot of one owner, with no other use.
+fn named_leaf_owner(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<String> {
+    let direct = crate::owners::containing_body_function(&file.ast, span)?;
+    let climbed = crate::execution_role::climb_in_place_layers(file, span, lookup)
+        .filter(|climb| !climb.in_list && climb.suspended.is_none())
+        .and_then(|climb| crate::owners::containing_body_function(&file.ast, climb.at));
+    [Some(direct), climbed]
+        .into_iter()
+        .flatten()
+        .find_map(|function| {
+            let (positions, other) = crate::owners::exact_value_positions(file, function, lookup)?;
+            if other || positions.is_empty() {
+                return None;
+            }
+            let mut owners = positions.iter().map(|(call_span, index)| {
+                let call = file.ast.calls.iter().find(|call| call.span == *call_span)?;
+                let owner = crate::call_primitive_name_cached(
+                    lookup,
+                    file,
+                    call,
+                    entities,
+                    symbol_names,
+                    lookup.dialect,
+                )?;
+                let primitive = owner.primitive()?;
+                (callback_owner_at_call(file, call, primitive, *index, lookup)
+                    == Some(solid_dialect::CallbackOwner::Leaf))
+                .then(|| owner.to_string())
+            });
+            let first = owners.next()??;
+            owners
+                .all(|owner| owner.as_deref() == Some(first.as_str()))
+                .then_some(first)
+        })
+}
+
+fn lexical_leaf_owner(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<String> {
     file.ast
         .arguments_containing(span)
         .find_map(|(call, index)| {

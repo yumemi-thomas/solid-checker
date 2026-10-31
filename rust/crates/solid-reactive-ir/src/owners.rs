@@ -265,6 +265,118 @@ pub(crate) fn exact_function_argument(
         .then(|| (file.path.to_string(), function.span))
 }
 
+/// ADR 0516: every place the value of `function` is handed whole to a call,
+/// as `(call span, argument index)`, and whether anything else uses it (a
+/// call, a store, an export, a reference this cannot classify). The value is
+/// named by its binding (a named function expression's outer `const`, ADR
+/// 0515), that binding's `const` copies (alias facts, transitively), or,
+/// for a function written as an object literal's data property, the member
+/// reads ADR 0358's receiver closure resolves to it. `None` where no name
+/// reaches the function exactly.
+pub(crate) fn exact_value_positions(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &crate::SemanticLookup<'_>,
+) -> Option<(Vec<(Span, usize)>, bool)> {
+    let ast = &file.ast;
+    let path = file.path.as_str();
+    let whole_argument = |at: Span| {
+        ast.arguments_containing(at)
+            .find(|(call, index)| {
+                !call.construct
+                    && !call.arguments[*index].spread
+                    && ast.peel_ts_sugar_span(call.arguments[*index].span) == at
+            })
+            .map(|(call, index)| (call.span, index))
+    };
+    let mut positions = Vec::new();
+    let mut other = false;
+    let slot = ast
+        .object_properties
+        .iter()
+        .any(|property| property.data && ast.peel_ts_sugar_span(property.value) == function.span);
+    if slot {
+        let mut any = false;
+        for member in &ast.members {
+            if lookup
+                .object_member_function(file, member.span)
+                .is_none_or(|(target, found)| {
+                    target.path.as_str() != path || found.span != function.span
+                })
+            {
+                continue;
+            }
+            any = true;
+            match whole_argument(member.span) {
+                Some(position) => positions.push(position),
+                None => other = true,
+            }
+        }
+        return any.then_some((positions, other));
+    }
+    if !lookup.function_value_is_current(file, function)
+        || crate::execution_role::module_exports(file, function, lookup)
+    {
+        return None;
+    }
+    let binding = crate::execution_role::named_expression_binding(file, function, lookup)
+        .or_else(|| function_binding_name(file, function))?;
+    let symbol = lookup.entities().at(path, binding.span)?.clone();
+    let mut names = vec![(binding.span, symbol)];
+    let mut index = 0;
+    while index < names.len() && names.len() < 9 {
+        let (declaration, symbol) = names[index].clone();
+        index += 1;
+        for reference in lookup.symbol_references(symbol.as_str()) {
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
+                other = true;
+                continue;
+            };
+            let at = Span::new(start, end);
+            if reference.path.as_ref() != path {
+                other = true;
+                continue;
+            }
+            if at == declaration {
+                continue;
+            }
+            let alias = ast
+                .bindings
+                .iter()
+                .find(|candidate| {
+                    candidate
+                        .initializer_identifier
+                        .as_ref()
+                        .is_some_and(|identifier| identifier.span == at)
+                })
+                .and_then(|candidate| match candidate.names.as_slice() {
+                    [alias]
+                        if ast
+                            .local_alias_binding(alias.span)
+                            .is_some_and(|fact| fact.source == declaration) =>
+                    {
+                        Some(alias.span)
+                    }
+                    _ => None,
+                });
+            if let Some(alias) = alias
+                && let Some(alias_symbol) = lookup.entities().at(path, alias)
+            {
+                names.push((alias, alias_symbol.clone()));
+                continue;
+            }
+            match whole_argument(at) {
+                Some(position) => positions.push(position),
+                None => other = true,
+            }
+        }
+    }
+    Some((positions, other))
+}
+
 /// ADR 0516: whether the argument may name a generator function: written
 /// there, an object literal's member, a `const` copy or function expression,
 /// or the function its symbol declares. Calling one runs none of its body.
