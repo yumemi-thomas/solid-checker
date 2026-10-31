@@ -457,6 +457,8 @@ pub(crate) struct OwnerRequirementStatus {
     pub(crate) conditional_owner: bool,
     pub(crate) later_run_unowned: bool,
     pub(crate) component_uncertain: bool,
+    /// ADR 0517: a provider-free read the census found in an open program.
+    pub(crate) provider_open: bool,
     /// The operation runs after an `await` ([`AwaitContinuations`]).
     pub(crate) after_await: bool,
     pub(crate) report: bool,

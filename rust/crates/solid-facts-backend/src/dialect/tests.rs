@@ -103,6 +103,7 @@ fn catalog_prose_program() -> Program {
             component_uncertain: false,
             after_await: false,
             missing_jsx_census: false,
+            provider_open: false,
             through_dependency: None,
             report: true,
         }],

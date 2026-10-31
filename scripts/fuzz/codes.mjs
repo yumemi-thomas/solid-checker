@@ -54,6 +54,9 @@ export const codePolicy = {
   UNTIL_IN_REACTIVE_SCOPE: claimed(["no-await-primitive-in-tracked-scope"], "error"),
   FLUSH_IN_ACTION: claimed(["flush-in-action"], "error"),
   FLUSH_IN_EFFECT_CALLBACK: claimed(["flush-in-effect-callback"], "warn"),
+  // ADR 0517: SC5006 records an obligation for a `<Loading on>` whose hold it cannot prove its own; it never claims a violation,
+  // so a runtime diagnostic it covers is a recall gap, never agree.
+  LOADING_ON_OUTSIDE_HOLD: claimed(["loading-on-outside-hold"], "warn"),
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: claimed(["leaf-owner-forbidden-call"], "error"),
   DYNAMIC_STATIC_PROMISE: claimed(["static-dynamic-async-source"], "error"),
 
@@ -62,7 +65,6 @@ export const codePolicy = {
   RUN_WITH_DISPOSED_OWNER: unclaimed("warn", "decided not to build: docs/open-work.md, `runWithOwner` with a disposed owner"),
   ASYNC_STORE_SETTER: unclaimed("error"),
   UNCOMMITTED_INPUT_OVERWRITTEN: unclaimed("warn", "decided not to build: docs/open-work.md, `UNCOMMITTED_INPUT_OVERWRITTEN`"),
-  LOADING_ON_OUTSIDE_HOLD: unclaimed("warn"),
 
   // The engine's reaction to an earlier failure.
   REACTIVITY_HALTED: consequence("error"),
@@ -152,10 +154,10 @@ export const sameDefectFamily = (a, b) => defectFamilies.some((family) => family
  * the diagnostic (Chrome lists it as unattributed; the fast path's frames are the mount's, not the read's). They are judged by file,
  * as the matrix does (`placeless` in misuse.mjs), never by line. `ASYNC_OUTSIDE_LOADING_BOUNDARY` is reported "located at the first
  * pending effect's owner path" once per mount. Every other claimed code is reported at its call with the caller's stack
- * (checked in the pinned `@solidjs/signals` dev dist); `LOADING_ON_OUTSIDE_HOLD` is flush-time too but no rule claims it, so a line
- * never decided its verdict.
+ * (checked in the pinned `@solidjs/signals` dev dist). `LOADING_ON_OUTSIDE_HOLD` is reported from the boundary's notification in the
+ * flush too (ADR 0517).
  */
-export const placelessCodes = ["ASYNC_OUTSIDE_LOADING_BOUNDARY"];
+export const placelessCodes = ["ASYNC_OUTSIDE_LOADING_BOUNDARY", "LOADING_ON_OUTSIDE_HOLD"];
 export const isPlacelessCode = (code) => placelessCodes.includes(code);
 
 /** Findings of these rules cover any runtime diagnostic at their site (the checker withheld an answer). */

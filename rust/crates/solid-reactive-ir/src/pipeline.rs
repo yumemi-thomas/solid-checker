@@ -667,6 +667,10 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut draft.static_defects,
     );
     let mut program = draft.into_program(factory_instances);
+    // ADR 0517: a `<Loading on>` whose hold is not proven its own.
+    let holds =
+        crate::loading_hold::loading_on_outside_hold_obligations(facts, &program, semantic_lookup);
+    program.static_violations.extend(holds);
     // ADR 0458: after every producer and gate, over the rows that may be
     // reported, while the lookup's memos are still open.
     program.unreached_sites =

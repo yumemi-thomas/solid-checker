@@ -452,6 +452,7 @@ pub(crate) fn push_owner_requirement(
             conditional_owner: status.conditional_owner,
             later_run_unowned: status.later_run_unowned,
             component_uncertain: status.component_uncertain,
+            provider_open: status.provider_open,
             after_await: status.after_await,
             missing_jsx_census,
             through_dependency: None,

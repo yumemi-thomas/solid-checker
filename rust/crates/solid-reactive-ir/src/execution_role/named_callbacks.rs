@@ -19,6 +19,13 @@ pub(crate) struct NamedCallbackRoles {
     /// for ([`super::write_roles`]); a position that only names the function
     /// (an unproven callback slot, a result-access one) is not.
     pub(super) positions: HashMap<Span, Vec<Span>>,
+    /// ADR 0517: the functions a callback position that runs in its call's
+    /// own window (`createRoot(init)`, `runWithOwner(o, run)`) names by its
+    /// binding, with that call and argument index when it is the function's
+    /// sole entry (`by_name_position`), or `None` when another entry may run
+    /// it. Such a position admits no role of its own (ADR 0323), so
+    /// [`inherits_callback_role`] answers from the call.
+    pub(super) inherits: HashMap<Span, Option<(Span, usize)>>,
 }
 
 /// The classification a named callback's positions support, in the order
@@ -324,6 +331,24 @@ pub(crate) fn named_callback_roles(
             if named.is_empty() {
                 continue;
             }
+            // ADR 0517: a position whose mention may run before the binding's
+            // declarator (`const early = () => createMemo(write); early();
+            // const write = ...`) throws a `ReferenceError` there instead of
+            // handing the function over, which `tsc` does not report. The
+            // function may run at the position or not at all, so its role is
+            // unknown, as a result-access position's is.
+            let path = file.path.as_str();
+            if named_spans
+                .iter()
+                .any(|(_, position)| lookup.may_precede_initialization(path, *position))
+            {
+                for candidate in &named {
+                    let entry = roles.entry(index.functions[*candidate]);
+                    entry.admitted = true;
+                    entry.result_access = true;
+                }
+                continue;
+            }
             if let Some((_primitive, _result_slot)) = returned_primitive {
                 let execution =
                     returned_callback_execution_at_call(file, call, argument_index, lookup);
@@ -364,6 +389,26 @@ pub(crate) fn named_callback_roles(
             // ADR 0323: a callback that runs in its call's own window has no
             // role of its own: it follows the call (the flow walk's `Call`).
             let inherits = dialect.callback_inherits_calling_window(primitive, argument_index);
+            if inherits && proven {
+                for candidate in index.identity_at(file, entities, argument.span) {
+                    let function = index.functions[*candidate];
+                    let sole = file
+                        .ast
+                        .function_at(function)
+                        .and_then(|fact| super::write_roles::by_name_position(file, fact, lookup))
+                        .filter(|position| {
+                            position.sole
+                                && position.call.span == call.span
+                                && position.index == argument_index
+                        })
+                        .map(|_| (call.span, argument_index));
+                    roles
+                        .inherits
+                        .entry(function)
+                        .and_modify(|entry| *entry = None)
+                        .or_insert(sole);
+                }
+            }
             let untracked =
                 !inherits && dialect.reports_untracked_reads_at(primitive, argument_index, count);
             // The role describes the phase if invoked. ADR 0302 gates every
@@ -587,6 +632,9 @@ pub(crate) fn named_callback_execution_role(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
+    if let Some(role) = inherits_callback_role(file, span, lookup) {
+        return Some(role);
+    }
     let roles = lookup.named_callback_roles(file);
     let callback = named_callback_containing(file, span, lookup)?;
     // ADR 0331: a callback position is one entry of the function. A function
@@ -700,4 +748,113 @@ pub(crate) fn direct_callback_runs(
             .functions_within(argument)
             .max_by_key(|function| function.span.end - function.span.start)
             .is_none_or(|callback| crate::owners::owned_by_body(&file.ast, callback, span))
+}
+
+/// ADR 0517: the role of code in a function named at a position that runs it
+/// in its call's own window ([`NamedCallbackRoles::inherits`]). At the sole
+/// proven position it is the inline callback's at that call (ADR 0323,
+/// [`super::callee_roles::inheriting_call_role`]), JSX the callback writes
+/// keeping the compiler's role (ADR 0470); at any other it is unknown, never
+/// silence. Code in a layer the callback runs in place (an IIFE, a closure
+/// called once, a helper's callback) climbs to that layer's call in the
+/// callback's body first; a layer that does not run in place answers nothing
+/// here.
+fn inherits_callback_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    let roles = lookup.named_callback_roles(file);
+    if roles.inherits.is_empty() {
+        return None;
+    }
+    let callback = file
+        .ast
+        .functions_body_containing(span)
+        .find(|function| roles.inherits.contains_key(&function.span))?;
+    // An async or generator callback runs its body past its first suspension
+    // on another stack, which the call's role does not describe; it keeps the
+    // paths it had (ADR 0516's after-await obligations among them).
+    if callback.r#async || callback.generator {
+        return None;
+    }
+    if lookup.function_component_status(file, callback) != ComponentStatus::No {
+        return None;
+    }
+    // JSX written anywhere in the callback, a layer's included, takes the
+    // compiler's role at the read itself (ADR 0470).
+    if let Some(role) = super::callee_roles::own_jsx_compiler_role(file, span) {
+        return Some(role);
+    }
+    let owner = containing_ast_function(&file.ast, span)?;
+    if owner.span != callback.span {
+        let climb = super::write_roles::climb_in_place_layers(file, span, lookup)?;
+        if crate::owners::containing_body_function(&file.ast, climb.at)
+            .map(|function| function.span)
+            != Some(callback.span)
+        {
+            return None;
+        }
+        // A library callback may run zero times (ADR 0493 review): the read
+        // is not proven to run at the layer's call.
+        if super::write_roles::climb_crosses_library_callback(file, span, climb.at, lookup) {
+            return Some(ExecutionRole::Unknown);
+        }
+        if climb.in_list {
+            return Some(ExecutionRole::Unknown);
+        }
+        // The layers' own awaits are the climb's; the layer's call in the
+        // callback's body may follow one of the callback's.
+        let at = climb.at;
+        if climb.suspended == Some(true)
+            || follows_unconditional_await(file, at)
+            || follows_dominating_await(file, at)
+            || follows_try_head_await(file, at, lookup)
+        {
+            return Some(ExecutionRole::Unreported);
+        }
+        if climb.suspended.is_some()
+            || follows_any_suspension(file, at)
+            || may_follow_own_await(file, at)
+        {
+            return Some(ExecutionRole::Unknown);
+        }
+        return inherits_callback_role(file, at, lookup);
+    }
+    let Some((call_span, index)) = roles.inherits.get(&callback.span).copied().flatten() else {
+        return Some(ExecutionRole::Unknown);
+    };
+    let call = file.ast.calls.iter().find(|call| call.span == call_span)?;
+    let primitive = lookup.primitive_at_call(file, call.span)?;
+    let clears_tracking = lookup
+        .dialect
+        .callback_clears_tracking_in_calling_window(primitive, index)
+        .then(|| super::callee_roles::tracked_region_within(file, callback.span, span));
+    // The call's role may be asked from inside this very callback (a function
+    // named at its own `createRoot`, or a cycle of two): a callback already
+    // being placed on this thread has no placement to give.
+    let key = (file.path.to_string(), callback.span);
+    if !INHERITS_PLACING.with(|placing| placing.borrow_mut().insert(key.clone())) {
+        return Some(ExecutionRole::Unknown);
+    }
+    let allowed = super::allowed_callback_spans(file, lookup);
+    let mut classifying = HashSet::default();
+    let role = super::callee_roles::inheriting_call_role(
+        file,
+        call,
+        clears_tracking,
+        &allowed,
+        lookup.entities(),
+        lookup.symbol_names(),
+        lookup,
+        &mut classifying,
+    );
+    INHERITS_PLACING.with(|placing| placing.borrow_mut().remove(&key));
+    Some(role)
+}
+
+thread_local! {
+    /// The callbacks [`inherits_callback_role`] is placing on this thread.
+    static INHERITS_PLACING: std::cell::RefCell<std::collections::HashSet<(String, Span)>> =
+        std::cell::RefCell::new(std::collections::HashSet::new());
 }

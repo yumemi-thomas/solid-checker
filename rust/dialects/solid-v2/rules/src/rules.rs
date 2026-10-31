@@ -33,6 +33,7 @@ pub enum Rule {
     MissingContextProvider,
     PendingAsyncUnsuspendableRead,
     AsyncOutsideLoadingBoundary,
+    LoadingOnOutsideHold,
     PrimitiveInDirectiveApplication,
     PrimitiveInEffectCallback,
     MissingEffectFunction,
@@ -81,7 +82,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 35] = [
+    pub const ALL: [Self; 36] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -102,6 +103,7 @@ impl Rule {
         Self::MissingContextProvider,
         Self::PendingAsyncUnsuspendableRead,
         Self::AsyncOutsideLoadingBoundary,
+        Self::LoadingOnOutsideHold,
         Self::PrimitiveInDirectiveApplication,
         Self::PrimitiveInEffectCallback,
         Self::MissingEffectFunction,
@@ -212,6 +214,10 @@ impl Rule {
             Self::AsyncOutsideLoadingBoundary => {
                 ("SC5003", "async-outside-loading-boundary", "warning", false)
             }
+            // ADR 0517: rc.17's dev build warns LOADING_ON_OUTSIDE_HOLD. Only
+            // ever an obligation so far: the warning needs runtime state the
+            // facts do not carry.
+            Self::LoadingOnOutsideHold => ("SC5006", "loading-on-outside-hold", "warning", false),
             // The apply callback runs with no owner (`@solidjs/web` rc.0's
             // `ref()` is `runWithOwner(null, ...)`), so an owner-attaching
             // primitive created there is the SC4001-family defect: a real,
@@ -415,6 +421,7 @@ mod tests {
             ("SC2005", "no-await-primitive-in-tracked-scope"),
             ("SC2006", "flush-in-action"),
             ("SC2008", "flush-in-effect-callback"),
+            ("SC5006", "loading-on-outside-hold"),
             ("SC6002", "primitive-in-effect-callback"),
             ("SC2007", "static-dynamic-async-source"),
             ("SC7002", "sync-computation-received-async"),

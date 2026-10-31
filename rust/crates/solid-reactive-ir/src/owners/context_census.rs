@@ -15,7 +15,8 @@ use typefacts::Location;
 
 /// The project contexts, created with no default, that no provider can supply.
 ///
-/// Empty unless the program is closed. A namespace import or export, `export *`,
+/// In an open program the same census runs, and what it finds is an
+/// obligation rather than a proof (ADR 0517). A namespace import or export, `export *`,
 /// or module load (`require`, `import()`) reaches the exports of the module it
 /// names without naming them in the reading file, so it closes the census for
 /// every context that module exports. A context no export publishes is reachable
@@ -31,10 +32,10 @@ pub(crate) fn provider_free_contexts(
     lookup: &SemanticLookup<'_>,
     symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> HashSet<Location> {
+    // ADR 0517: an open program is censused too. What the census finds
+    // provider-free there may still be provided by code the analysis does not
+    // see, so the read is an obligation (`owner_emission`), not silence.
     let mut free = HashSet::default();
-    if !lookup.program_closed {
-        return free;
-    }
     let entities = lookup.entities();
     // Candidates: `const Ctx = createContext()` with no argument, an exact,
     // unwritten identifier binding (ADR 0352). Dependency source is not the

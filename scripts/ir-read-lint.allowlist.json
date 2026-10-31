@@ -138,7 +138,7 @@
   },
   "rust/crates/solid-reactive-ir/src/indexes/initialization.rs": {
     "facts.files": 6,
-    "file_by_path": 2,
+    "file_by_path": 3,
     "hashmap-iteration": 2
   },
   "rust/crates/solid-reactive-ir/src/indexes/intrinsics.rs": {
@@ -211,6 +211,9 @@
     "file_by_path": 1,
     "typescript-table": 1,
     "hashmap-iteration": 2
+  },
+  "rust/crates/solid-reactive-ir/src/loading_hold.rs": {
+    "facts.files": 1
   },
   "rust/crates/solid-reactive-ir/src/local_access.rs": {
     "facts.files": 3,
@@ -313,6 +316,7 @@
     "facts.files": 1
   },
   "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs": {
+    "facts.files": 1,
     "files()": 3,
     "typescript-table": 3
   },

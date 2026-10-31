@@ -102,7 +102,7 @@ describe("the policy table", () => {
     }
   });
   it("classifies the ones the proposal lists", () => {
-    expect(Object.values(codePolicy).filter((policy) => policy.disposition === "defect-claimed")).toHaveLength(24);
+    expect(Object.values(codePolicy).filter((policy) => policy.disposition === "defect-claimed")).toHaveLength(25);
     // SC5001 claims the leaf-owner pending read (docs/rules/pending-async-unsuspendable-read.md).
     expect(policyOf("PENDING_ASYNC_FORBIDDEN_SCOPE")).toMatchObject({ disposition: "defect-claimed", rules: ["pending-async-unsuspendable-read"], severity: "warn" });
     // Solid documents a boundary-less async mount as legal (SPEC-ASYNC-SEMANTICS A6): advisory, still claimed by SC5003 as a warning.
@@ -110,7 +110,9 @@ describe("the policy table", () => {
     expect(isDefectCode("ASYNC_OUTSIDE_LOADING_BOUNDARY")).toBe(false);
     // SC6002 claims the thrown effect-callback creation (ADR 0483).
     expect(policyOf("PRIMITIVE_IN_EFFECT_CALLBACK")).toMatchObject({ disposition: "defect-claimed", rules: ["primitive-in-effect-callback"] });
-    for (const code of ["RUN_WITH_DISPOSED_OWNER", "ASYNC_STORE_SETTER", "UNCOMMITTED_INPUT_OVERWRITTEN", "LOADING_ON_OUTSIDE_HOLD"]) {
+    // SC5006 claims it, as an obligation only (ADR 0517).
+    expect(policyOf("LOADING_ON_OUTSIDE_HOLD")).toMatchObject({ disposition: "defect-claimed", rules: ["loading-on-outside-hold"] });
+    for (const code of ["RUN_WITH_DISPOSED_OWNER", "ASYNC_STORE_SETTER", "UNCOMMITTED_INPUT_OVERWRITTEN"]) {
       expect(policyOf(code).disposition, code).toBe("defect-unclaimed");
       expect(isDefectCode(code), code).toBe(true);
     }

@@ -309,3 +309,5 @@ This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#
 - [no-destructure](no-destructure.md) — the destructuring special case
 - [reactive-read-after-await](reactive-read-after-await.md) — reads that lose tracking at an `await`
 - [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) — the async variant, which throws
+
+A read in a callback named at its sole `createRoot`/`runWithOwner` position, or in a layer that callback runs in place, is placed at the call as the inline callback is; any other entry is an obligation (ADR 0517). So is a read through `r.call(…)` or `r.bind(…)()` in a closure the body calls, and a read written after a mention that may precede its declarator.

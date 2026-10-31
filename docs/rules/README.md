@@ -101,6 +101,7 @@ retired identities load as no-ops through `RETIRED_RULES`, both in
 | SC4002 | [missing-context-provider](missing-context-provider.md) | error | on |
 | SC5001 | [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) | error | on |
 | SC5003 | [async-outside-loading-boundary](async-outside-loading-boundary.md) | warning | on |
+| SC5006 | [loading-on-outside-hold](loading-on-outside-hold.md) | warning | on |
 | SC6001 | [primitive-in-directive-application](primitive-in-directive-application.md) | warning | on |
 | SC6002 | [primitive-in-effect-callback](primitive-in-effect-callback.md) | error | on |
 | SC7001 | [missing-effect-function](missing-effect-function.md) | error | on |

@@ -2,6 +2,16 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/primitive-prop-argument.tsx",
+      "start": 624,
+      "end": 634,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",

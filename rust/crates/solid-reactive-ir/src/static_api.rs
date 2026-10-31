@@ -323,13 +323,7 @@ impl StaticApiContext<'_> {
             if let Some(kind) = kind
                 && self.client_build
                 && dialect.warns_inside_effect_phase(kind)
-                && let Some(root) = self
-                    .lookup
-                    .resolved_callee_call(file, call.callee)
-                    .and_then(|resolved| resolved.declaration.as_ref())
-                    .and_then(|declaration| {
-                        crate::effect_phase::package_root(declaration.location.path.as_ref())
-                    })
+                && let Some(root) = self.lookup.callee_package_root(file, call.callee)
                 && let Some(origin) = crate::effect_phase::effect_phase_origin(
                     file,
                     call.span,
@@ -383,13 +377,7 @@ impl StaticApiContext<'_> {
                             )
                     }),
                 )
-                && let Some(root) = self
-                    .lookup
-                    .resolved_callee_call(file, call.callee)
-                    .and_then(|resolved| resolved.declaration.as_ref())
-                    .and_then(|declaration| {
-                        crate::effect_phase::package_root(declaration.location.path.as_ref())
-                    })
+                && let Some(root) = self.lookup.callee_package_root(file, call.callee)
                 && let Some(origin) = crate::effect_phase::ownerless_effect_phase_origin(
                     file,
                     call.span,
@@ -733,6 +721,18 @@ fn resolve_tracked_scope(
             )
         });
     }
+    // ADR 0517: the climbed call runs in the body of a function a tracked
+    // position names by its binding (`createMemo(compute)`, ADR 0516's
+    // `named_at_tracked_position`), which holds that function now: every run
+    // of it there has the memo's observer active.
+    if let Some(function) = crate::owners::containing_body_function(&file.ast, at)
+        && context.lookup.function_component_status(file, function)
+            == crate::indexes::ComponentStatus::No
+        && crate::execution_role::named_at_tracked_position(file, at, context.lookup)
+        && context.lookup.function_value_is_current(file, function)
+    {
+        return Some("the tracked compute callback named by its binding".to_owned());
+    }
     let in_tracked_region = file
         .compiler
         .tracked_regions
@@ -771,6 +771,22 @@ fn resolve_scope_unplaced(
     use crate::ExecutionRole;
     if resolve_tracked_scope(file, call, allowed, context).is_some() {
         return false;
+    }
+    // ADR 0517: a library callback on the way (`[1].forEach`) may run zero
+    // times, so `resolve_tracked_scope` does not climb it; when the layers
+    // beyond it reach a compute a tracked position names by its binding, the
+    // call runs under that observer whenever it runs: an obligation.
+    if let Some(climb) =
+        crate::execution_role::climb_in_place_layers(file, call.span, context.lookup)
+        && !climb.in_list
+        && climb.suspended.is_none()
+        && crate::owners::containing_body_function(&file.ast, climb.at).is_some_and(|function| {
+            context.lookup.function_component_status(file, function)
+                == crate::indexes::ComponentStatus::No
+                && crate::execution_role::named_at_tracked_position(file, climb.at, context.lookup)
+        })
+    {
+        return true;
     }
     let judged_by_primitive = file
         .ast

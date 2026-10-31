@@ -2536,6 +2536,13 @@ impl Dialect for Solid2 {
         self.flush_in_effect_callback && primitive == Primitive::Flush
     }
 
+    /// Every carried release has `<Loading on>`'s re-arm, and the warning is
+    /// only ever an obligation here, so the answer is the boundary's on all of
+    /// them (rc.17 `@solidjs/signals` `dist/dev.js`, `reportOutsideHold`).
+    fn boundary_on_may_hold_outside(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::Loading
+    }
+
     /// `@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:3947-3957`
     /// (`assertNotInEffectCallback`: `inEffectCallback && context === null`
     /// throws `PRIMITIVE_IN_EFFECT_CALLBACK`) is called by `createOwner`

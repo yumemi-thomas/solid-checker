@@ -189,6 +189,39 @@ pub(super) fn direct_reference_contributions(
             });
             continue;
         }
+        // ADR 0517: a call that invokes the source through
+        // `Function.prototype` (`r.call(null)`, `r.bind(null)()`) or a
+        // composite callee that may evaluate to it (`(slot ||= r)()`) reads
+        // it at that call, as `local_access` judges it where it is written
+        // (ADR 0516). A summary without the row made the function's caller
+        // silent. Only the forms ADR 0516 proves invoke `r` on every run are
+        // decided rows; the others are undecided, an obligation at callers.
+        if let Some((call, decided)) = dispatched_reference_call(file, reference_span) {
+            contributions.push(DirectReferenceContribution {
+                owner,
+                read: SummaryRead {
+                    transported: false,
+                    symbol: source.symbol.clone(),
+                    display: source.display.clone(),
+                    kind: Some(
+                        match source_kinds.get(source.symbol.as_str()) {
+                            Some(ReactiveSourceKind::Store) => "store-path",
+                            Some(ReactiveSourceKind::Accessor) | None => "accessor",
+                        }
+                        .into(),
+                    ),
+                    declaration: source.declaration.clone(),
+                    origin: location(file.path.shared(), call.span),
+                    origin_context: nodes[owner].name.clone().unwrap_or_default(),
+                    owner: nodes[owner].symbol.clone(),
+                    local: !site_on_every_completion(lookup, file, nodes[owner].span, call.span),
+                    conditional: false,
+                    undecided: !decided,
+                },
+                unique: false,
+            });
+            continue;
+        }
         if source_kinds.get(source.symbol.as_str()) == Some(&ReactiveSourceKind::Store) {
             contributions.extend(
                 file.ast
@@ -241,6 +274,50 @@ pub(super) fn direct_reference_contributions(
         }
     }
     contributions
+}
+
+/// The call that invokes the function `reference` names without `reference`
+/// being its callee (ADR 0517): `f.call(…)` and `f.bind(…)(…)` (decided, as
+/// `local_access`'s `dispatch_invokes` decides them: a `call` with no spread
+/// at the receiver's place, any `bind`), `f.apply(…)` (undecided: another
+/// argument may throw first), and a comma, conditional, logical or
+/// assignment callee that may evaluate to it (undecided).
+fn dispatched_reference_call(
+    file: &solid_facts::FileFacts,
+    reference: Span,
+) -> Option<(&solid_facts::ast::CallFact, bool)> {
+    let ast = &file.ast;
+    let member_object = |span: Span, name: &str| {
+        ast.member_at(span)
+            .filter(|member| {
+                ast.computed_members.binary_search(&member.span).is_err()
+                    && file.source_text(member.property) == Some(name)
+            })
+            .map(|member| ast.peel_ts_sugar_span(member.object))
+    };
+    ast.calls.iter().find_map(|call| {
+        let callee = ast.peel_ts_sugar_span(call.callee);
+        if member_object(callee, "call") == Some(reference) {
+            return Some((
+                call,
+                !call
+                    .arguments
+                    .first()
+                    .is_some_and(|argument| argument.spread),
+            ));
+        }
+        if member_object(callee, "apply") == Some(reference) {
+            return Some((call, false));
+        }
+        if ast.call_at(callee).is_some_and(|inner| {
+            member_object(ast.peel_ts_sugar_span(inner.callee), "bind") == Some(reference)
+        }) {
+            return Some((call, true));
+        }
+        ast.composite_callee_references(call.callee)
+            .contains(&reference)
+            .then_some((call, false))
+    })
 }
 
 /// Review round 1 of ADR 0294: an undecided row for each call, in a summary

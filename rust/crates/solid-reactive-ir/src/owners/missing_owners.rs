@@ -402,6 +402,7 @@ pub(crate) fn attribute_dependency_requirements(
                 conditional_owner: requirement.conditional_owner,
                 later_run_unowned: requirement.later_run_unowned,
                 component_uncertain: requirement.component_uncertain,
+                provider_open: requirement.provider_open,
                 after_await: false,
                 report: true,
             },

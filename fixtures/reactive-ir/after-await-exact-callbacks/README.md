@@ -1,0 +1,5 @@
+# after-await-exact-callbacks
+
+**Claim (ADR 0517).** The after-await rule (`reactive-read-after-await`, SC1002) finds its async computation through ADR 0516's exact function argument: the binding of a named function expression (`const compute = async function named() {}`, whose own symbol is the inner name) and an object literal's member (`createMemo(box.compute)`) name the compute as an inline one does. A comma, conditional, logical or assignment callee the producer's after-await calls never list (`(slot = r)()`) is found in the function's own body: a total one whose operands all name one accessor, after a dominating await, is a read; any other is an obligation.
+
+`App.tsx`: `NamedExpression`, `ObjectSlot`, `AssignedCallee` are violations (rc.17 in Chrome: `UNTRACKED_READ_AFTER_AWAIT`); `OrAssignedCallee`, `ObjectSlotForAwait` (a `for await` body; `ObjectSlotForAwaitLayers` through a closure and a wrapper: the producer lists no fact for an object literal's member, so every read after the first suspension is an obligation), `AssignedCalleeLoop` (a later pass) and `AssignedCalleeFinally` are uncertifiable; `ReadBeforeAwait` is clean.

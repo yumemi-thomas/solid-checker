@@ -272,6 +272,7 @@ const codeRules = {
   UNTIL_IN_REACTIVE_SCOPE: ["no-await-primitive-in-tracked-scope"],
   FLUSH_IN_ACTION: ["flush-in-action"],
   FLUSH_IN_EFFECT_CALLBACK: ["flush-in-effect-callback"],
+  LOADING_ON_OUTSIDE_HOLD: ["loading-on-outside-hold"],
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: ["leaf-owner-forbidden-call"],
   DYNAMIC_STATIC_PROMISE: ["static-dynamic-async-source"],
 };

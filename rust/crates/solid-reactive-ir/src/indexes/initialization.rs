@@ -196,6 +196,34 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
+    /// Whether a mention not proven to follow its binding's declarator is
+    /// written before `span` in the function that runs `span` (or both at
+    /// module level): when it runs first and throws, the code at `span` does
+    /// not run at all (`[1].forEach(() => { late(); count(); })`), so what a
+    /// rule claims there is not proven either (ADR 0517). Only a mention
+    /// written before its binding's declarator in this file: one written
+    /// after it is unordered when the proof cannot place the function's run
+    /// (a handler a test dispatches), which is no sign it runs early. A
+    /// hoisted function called above the declarator whose body names it
+    /// later in the text is not covered (`docs/open-work.md`).
+    pub(crate) fn unordered_mention_precedes_in_function(&self, path: &str, span: Span) -> bool {
+        let Some((_, unordered)) = self.uninitialized_references().get(path) else {
+            return false;
+        };
+        let Some(file) = self.file_by_path(path) else {
+            return !unordered.is_empty();
+        };
+        let runner = executing_function(&file.ast, span).map(|function| function.span);
+        unordered.iter().any(|&mention| {
+            mention.end <= span.start
+                && executing_function(&file.ast, mention).map(|function| function.span) == runner
+                && file
+                    .ast
+                    .reference_declaration(mention)
+                    .is_some_and(|declaration| declaration.start >= mention.end)
+        })
+    }
+
     /// Every withheld mention, by path. Bound into the cross-file proof
     /// digest: another module's imports decide a mention here.
     fn uninitialized_references(&self) -> &Withheld {
@@ -923,10 +951,9 @@ pub(crate) fn early_mention_report_sites(
         ) else {
             return false;
         };
-        lookup.mention_may_precede_initialization_within(
-            location.path.as_ref(),
-            Span::new(start, end),
-        )
+        let span = Span::new(start, end);
+        lookup.mention_may_precede_initialization_within(location.path.as_ref(), span)
+            || lookup.unordered_mention_precedes_in_function(location.path.as_ref(), span)
     };
     let mut sites = crate::projection::reported_locations(program)
         .into_iter()

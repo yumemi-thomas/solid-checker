@@ -368,3 +368,5 @@ using it on application state reintroduces the feedback loops this rule prevents
 ## Related
 
 - [action-called-in-owned-scope](action-called-in-owned-scope.md) — the same constraint for actions
+
+A write in a layer of a callback named by its binding is judged at that callback's positions (ADR 0517); several `untrack` positions with no rejecting one are an obligation.

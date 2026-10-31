@@ -274,7 +274,7 @@ export const SPEC = {
     call: (node) => (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
   },
   // rc.17 signals dev.js: a `<Loading on>` re-armed by a write while a source it waits on is also read outside it (the fallback can
-  // never show). Unclaimed: measured for "never quieter than Solid". The site is the outside read; the diagnostic is raised from the
+  // never show). SC5006 claims it as an obligation only (ADR 0517). The site is the outside read; the diagnostic is raised from the
   // boundary's notification (no authored frame is guaranteed), so it is judged by file. Recall grids only (`recallOnly`).
   LOADING_ON_OUTSIDE_HOLD: { recallOnly: true, placeless: true,
     contexts: [], recallContexts: ["loading-on-outside"], bindings: ["direct", "alias", "wrapper"],

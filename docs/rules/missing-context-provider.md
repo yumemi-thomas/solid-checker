@@ -14,7 +14,8 @@ can provide the context:
 
 - The program is closed: its boundary is declared closed, or its manifest
   publishes nothing. An open program can be given a provider by code the
-  analysis cannot see, so it makes no claim.
+  analysis cannot see, so a read the same census finds no provider for there
+  is an uncertifiable obligation, never a violation (ADR 0517).
 - The context is a project binding, `const Ctx = createContext()` with no
   argument, that is never written.
 - No `<Ctx value={…}>` element names the binding, and no other reference to it

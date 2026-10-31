@@ -310,11 +310,15 @@ pub(super) fn emit_file(
             || cleanup_return_uncertain
             || candidate.in_parameter_list
             || returned_unplaced;
+        // ADR 0517: in an open program a provider outside the analyzed code
+        // may supply the context; the census proves only what it sees.
+        let provider_open = provider && !inputs.lookup.program_closed;
         let uncertain = runtime_uncertain
             || conditional_owner
             || later_run_unowned
             || caller_uncertain
-            || component_uncertain;
+            || component_uncertain
+            || provider_open;
         push_owner_requirement(
             &mut emission.requirements,
             &mut seen,
@@ -328,6 +332,7 @@ pub(super) fn emit_file(
                 conditional_owner,
                 later_run_unowned,
                 component_uncertain,
+                provider_open,
                 after_await,
                 // A cleanup in a leaf that is not owned is reported; in an
                 // owned leaf it is SC3001's claim (ADR 0347 amendment).

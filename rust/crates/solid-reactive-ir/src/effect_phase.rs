@@ -343,9 +343,7 @@ impl<'l, 'a> Walk<'l, 'a> {
             && (self.owner_preserving
                 || self
                     .lookup
-                    .resolved_callee_call(file, call.callee)
-                    .and_then(|resolved| resolved.declaration.as_ref())
-                    .and_then(|declaration| package_root(declaration.location.path.as_ref()))
+                    .callee_package_root(file, call.callee)
                     .is_some_and(|root| root == self.package_root))
     }
 

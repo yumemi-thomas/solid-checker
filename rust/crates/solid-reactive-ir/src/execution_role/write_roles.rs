@@ -1741,7 +1741,26 @@ fn write_role_walk(
         let adjusted_inline = role.untracked_callback
             || role.effect_apply_primitive.single() == Some(Primitive::CreateRenderEffect)
             || matches!(role.effect_apply_primitive, EffectApplyPrimitive::Several);
-        if !current || (several && adjusted_inline) {
+        // ADR 0517: an owner-keeping position (`untrack(cb)`) gives a read
+        // fact, not a write one: the write there is as legal as the call,
+        // which only `named_callback_write_role` judges, for rejections. With
+        // several such positions and no rejection found, nothing proved the
+        // write legal.
+        let owner_keeping =
+            primitive_positions(file, function, lookup)
+                .into_iter()
+                .any(|(primitive, _)| {
+                    lookup
+                        .dialect
+                        .callback_preserves_owner_write_context(primitive)
+                });
+        let distinct = lookup
+            .named_callback_roles(file)
+            .positions(function.span)
+            .iter()
+            .collect::<HashSet<_>>()
+            .len();
+        if !current || (several && adjusted_inline) || (distinct > 1 && owner_keeping) {
             return unknown;
         }
     }

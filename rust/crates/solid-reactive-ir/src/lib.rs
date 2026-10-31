@@ -60,6 +60,7 @@ mod indexes;
 mod interproc;
 mod late_chunks;
 mod literal_member_slots;
+mod loading_hold;
 pub(crate) mod local_access;
 mod name_matcher;
 mod owners;
@@ -1151,6 +1152,11 @@ pub struct OwnerRequirement {
     /// reports an uncertifiable proof obligation rather than a violation.
     #[serde(default, skip_serializing_if = "is_false")]
     pub missing_jsx_census: bool,
+    /// ADR 0517: a context read the provider census finds no provider for in
+    /// an open program: code the analysis does not see may render one, so
+    /// the read is an obligation, never a proven `ContextNotFoundError`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub provider_open: bool,
     /// ADR 0290: the operation is inside a package analyzed as source
     /// (ADR 0284), at this location, and this requirement stands at the
     /// project's call that runs it there, under the call's owner context.
@@ -2276,6 +2282,30 @@ fn referenced_primitive(
             .get(format!("{namespace}::{property}").as_str())
             .map(|name| PrimitiveName::from_symbol(name, dialect)),
     )
+    .or_else(|| namespace_member_primitive(file, member.span, entities, symbol_names, dialect))
+}
+
+/// ADR 0517: a static member of a namespace import of a project module
+/// (`import * as S from "./solid"`, where `./solid` re-exports Solid by
+/// `export *` or by name) names what its property's symbol does: the
+/// binder resolves `S.createSignal` through the re-export to the primitive's
+/// declaration, as it resolves a named import from the same module. A
+/// namespace of a dialect module keeps its `{namespace}::{name}` key
+/// ([`symbols::add_solid_import_names`]); only the property's exact symbol
+/// is read, never its spelling.
+fn namespace_member_primitive(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<PrimitiveName> {
+    let property = indexes::callee_world::namespace_member_property(file, span)?;
+    let symbol = entities.at(file.path.as_str(), property)?;
+    symbol_names
+        .get(symbol)
+        .map(|name| PrimitiveName::from_symbol(name, dialect))
+        .filter(|name| name.primitive().is_some())
 }
 
 /// The primitive one concrete call denotes: [`primitive_name`] for its callee,
@@ -2380,7 +2410,8 @@ fn call_primitive_name(
         entities,
         symbol_names,
         dialect,
-    )?;
+    )
+    .or_else(|| namespace_member_primitive(file, call.callee, entities, symbol_names, dialect))?;
     // A whole member span may carry its receiver's symbol, so
     // `createEffect.bind(x)` and `createEffect.call(this, …)` resolve to the
     // primitive while calling a method of it, with other arguments in other
