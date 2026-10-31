@@ -413,6 +413,7 @@ export const developmentFeedbackHelp = `Development feedback (experimental)
   solid-checker feedback run --project <tsconfig.json> --scenario <scenario.json>
     --browser <chromium-path> [--tooling <directory>] [--compare-project <tsconfig.json>]
     [--root <directory>] [--config <file>] [--execution-cache <directory>]
+    [--source-instrumentation on|off]
 
 Returns native checker findings and separately labeled recorded observations.
 Read observations are information; they do not prove a stale result.
@@ -421,12 +422,19 @@ Scenarios may contain interactions without assertions or comparison projects.
 The manifest command creates a capture template before application execution.
 --execution-cache reuses the browser half of a run whose inputs, development models
 and recorded runtime inputs are unchanged; findings always come from this run.
+--source-instrumentation off leaves the application's source as written: no
+candidate-scope counts or read lineage, and no wrapper frames on its stacks.
 A solution-style tsconfig (references only) is expanded to its referenced projects.
 --native-timeout (default 600 s, 0 = no limit; also ${NATIVE_TIMEOUT_ENV}) bounds each
 native analysis; --native-bin selects the native checker (also SOLID_CHECKER_NATIVE_BIN).
 Use a release build: a debug build is roughly 19x slower. SOLID_CHECKER_TIMINGS=1 adds
 the native per-phase timings to the report.
 `;
+
+function sourceInstrumentationOption(value = "on") {
+  assert(["on", "off"].includes(value), "--source-instrumentation takes on or off");
+  return value === "on";
+}
 
 export async function developmentFeedback(args) {
   if (!args.length || args.includes("--help") || args.includes("-h")) {
@@ -438,7 +446,7 @@ export async function developmentFeedback(args) {
   const options = new Map();
   for (let index = 0; index < args.length; index++) {
     const name = args[index];
-    assert((live ? ["--project", "--scenario", "--browser", "--tooling", "--compare-project", "--root", "--config", "--native-timeout", "--native-bin", "--execution-cache"]
+    assert((live ? ["--project", "--scenario", "--browser", "--tooling", "--compare-project", "--root", "--config", "--native-timeout", "--native-bin", "--execution-cache", "--source-instrumentation"]
       : ["--project", "--capture", "--native-timeout", "--native-bin"]).includes(name), `Unknown feedback option ${name}`);
     assert(args[index + 1] && !args[index + 1].startsWith("--"), `${name} requires a value`);
     assert(!options.has(name), `Duplicate feedback option ${name}`);
@@ -462,7 +470,8 @@ export async function developmentFeedback(args) {
       const { runBrowserFeedback } = await import("./feedback-browser.mjs");
       const result = await runBrowserFeedback({ project, scenarioPath: options.get("--scenario"),
         browserPath: options.get("--browser"), toolingRoot: options.get("--tooling"), comparisonProject: options.get("--compare-project"),
-        root: options.get("--root"), config: options.get("--config"), executionCacheDirectory: options.get("--execution-cache") });
+        root: options.get("--root"), config: options.get("--config"), executionCacheDirectory: options.get("--execution-cache"),
+        sourceInstrumentation: sourceInstrumentationOption(options.get("--source-instrumentation")) });
       process.stdout.write(JSON.stringify(result, null, 2) + "\n"); process.exitCode = result.nativeExitCode; return;
     }
     const result = manifest ? captureTemplate(feedbackSnapshot(project))

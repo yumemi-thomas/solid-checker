@@ -64,6 +64,13 @@ and docs/decisions.md (live decisions by ADR number).
   it silently becomes a no-op).
 - Search code first: `rg SYMBOL rust packages scripts`. `.ignore` hides
   snapshots and fixture node_modules; use `rg --no-ignore` when you need them.
+- A defect found any way (review, oracle, probe, user) is closed only when the
+  fuzzer generates its shape and rediscovers it: the build that had it fails
+  `make fuzz-focus CODES=<code>`, the fix passes, and
+  `scripts/fuzz/rediscovery.json` lists it (or says why the generator cannot
+  express it). Its programs stay in the smoke set.
+- Remove a measurement artifact where it arises (equal stack depths, clocks,
+  inputs on both sides); never classify it away.
 
 ## Checks
 

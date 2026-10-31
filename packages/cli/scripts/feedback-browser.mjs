@@ -565,6 +565,8 @@ async function browserHalf({ projectRoot, snapshot, models, conflictingLeafModel
       name: "solid-checker-development-source", enforce: "pre",
       transform(code, id) {
         const path = id.split("?")[0], model = models.get(path);
+        // `--source-instrumentation off` (the runtime oracle): no `withOperation` wrapper frames on the application's stacks.
+        if (runtimeOptions.sourceInstrumentation === false) return null;
         if (!model || snapshot.typingErrors || !model.functions.length) return null;
         const result = instrumentFeedbackSource(code, path, model, "/@fs" + runtimePath);
         coverage.sourceInstrumentation.push({ path, ...result.counts });
@@ -781,11 +783,13 @@ export function selectFeedbackModels(rows) {
   return { models, conflictingLeafModels };
 }
 
-export async function runBrowserFeedback({ project, scenarioPath, browserPath, toolingRoot, comparisonProject, root, config, executionCacheDirectory }) {
+export async function runBrowserFeedback({ project, scenarioPath, browserPath, toolingRoot, comparisonProject, root, config, executionCacheDirectory, sourceInstrumentation = true }) {
   const scenarioPin = { path: realpathSync(resolve(scenarioPath)), sha256: hash(readFileSync(scenarioPath)) };
   const scenario = validateFeedbackScenario(JSON.parse(readFileSync(scenarioPin.path, "utf8")));
   const responses = loadSuppliedResponses(scenario, scenarioPin.path);
   const runtimeOptions = validateFeedbackRuntimeOptions(project, { root, config });
+  // Part of the execution cache's key through `runtimeOptions`.
+  if (!sourceInstrumentation) runtimeOptions.sourceInstrumentation = false;
   assert(!comparisonProject || (!root && !config), "Explicit --root/--config with --compare-project needs separate app inputs; run each app separately");
   // The tooling loads up front even when every browser half is reused: loading
   // it only on a miss saved ~0.2 s a case but left about one hit in 80 unable

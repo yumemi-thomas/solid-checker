@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/pending-source-first-run/variants/module-render-await/App.tsx",
+      "start": 142,
+      "end": 150,
+      "fixes": 0
+    }
+  ]
+}

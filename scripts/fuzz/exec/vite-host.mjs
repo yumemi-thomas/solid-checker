@@ -10,7 +10,7 @@ import http from "node:http";
 import { startViteHost } from "../chrome-host.mjs";
 
 const settings = JSON.parse(process.argv[2] ?? "{}");
-const vite = await startViteHost({ install: settings.install });
+const vite = await startViteHost({ install: settings.install, oracleInstall: settings.oracleInstall });
 
 const routes = {
   "/__sc/freeze": async () => { await vite.freeze(); return {}; },

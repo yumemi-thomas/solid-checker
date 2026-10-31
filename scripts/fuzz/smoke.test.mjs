@@ -37,6 +37,14 @@ describe("keepIds", () => {
     expect(() => keepIds(entries, manifest(["a", "z"]), "matrix", 1)).toThrow(/does not generate/);
     expect(() => keepIds(entries, manifest(["a"], GENERATOR_VERSION + 1), "matrix", 1)).toThrow(/reselect/);
     expect(() => keepIds(entries, manifest(["a"]), "matrix", 2)).toThrow(/seed 1, not 2/);
+    const many = Array.from({ length: 2000 }, (_, i) => ({ built: { id: `p${i}` } }));
+    const file = manifest(["p0"]);
+    const pick = (sampleSeed) => keepIds(many, file, "matrix", 1, { sample: 0.05, sampleSeed }).map((e) => e.built.id);
+    expect(pick(7)).toEqual(pick(7));
+    expect(pick(7)).toContain("p0");
+    expect(pick(7).length).toBeGreaterThan(50);
+    expect(pick(7).length).toBeLessThan(160);
+    expect(pick(8)).not.toEqual(pick(7));
   });
 });
 
