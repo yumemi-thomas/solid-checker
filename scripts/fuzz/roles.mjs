@@ -8,7 +8,7 @@
 //
 // A grid directory's log is `<grid dir>.roles.jsonl`, else `<grid dir>.roles/` (or `--log <file|dir>` for a single grid). The arm inventory is read from the source:
 // every `role_arm!("id", ...)` and `arm_id!("id")` under execution_role/ and owners/.
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -43,20 +43,59 @@ export function programOf(path) {
   return match ? { program: match[1], file: match[2] } : { program: null, file: path ?? null };
 }
 
-/** Every decision line of a log file or directory (`roles-<pid>.jsonl` files), parsed; malformed lines are counted, not thrown. */
-export function readRoleLog(path) {
-  if (!existsSync(path)) return { lines: [], malformed: 0, missing: true };
-  const files = statSync(path).isDirectory() ? readdirSync(path).filter((name) => name.endsWith(".jsonl")).sort().map((name) => join(path, name)) : [path];
-  const lines = [];
-  let malformed = 0;
-  for (const file of files) {
-    for (const text of readFileSync(file, "utf8").split("\n")) {
-      if (!text) continue;
-      try { lines.push(JSON.parse(text)); } catch { malformed += 1; }
+/** The files of a log path: the file itself, or a directory's `roles-<pid>.jsonl` files. */
+const logFiles = (path) => (statSync(path).isDirectory() ? readdirSync(path).filter((name) => name.endsWith(".jsonl")).sort().map((name) => join(path, name)) : [path]);
+
+/**
+ * Every decision line of a log path, parsed, read in 8 MiB chunks: a recall grid's log passes V8's string limit (512 MiB, full-7),
+ * so no file is held whole. Malformed lines are counted in `counter.malformed`, not thrown.
+ */
+export function* roleLogLines(path, counter = { malformed: 0 }) {
+  const chunk = Buffer.alloc(8 << 20);
+  for (const file of logFiles(path)) {
+    const fd = openSync(file, "r");
+    let rest = "";
+    try {
+      for (let read; (read = readSync(fd, chunk, 0, chunk.length, null)) > 0;) {
+        const parts = (rest + chunk.toString("utf8", 0, read)).split("\n");
+        rest = parts.pop();
+        for (const text of parts) {
+          if (!text) continue;
+          let line;
+          try { line = JSON.parse(text); } catch { counter.malformed += 1; continue; }
+          yield line;
+        }
+      }
+      if (rest) {
+        let line;
+        try { line = JSON.parse(rest); } catch { counter.malformed += 1; line = null; }
+        if (line) yield line;
+      }
+    } finally {
+      closeSync(fd);
     }
   }
-  return { lines, malformed, missing: false };
 }
+
+/** Every decision line of a log file or directory, parsed into an array (small logs and tests; grids fold `roleLogLines`). */
+export function readRoleLog(path) {
+  if (!existsSync(path)) return { lines: [], malformed: 0, missing: true };
+  const counter = { malformed: 0 };
+  const lines = [...roleLogLines(path, counter)];
+  return { lines, malformed: counter.malformed, missing: false };
+}
+
+/** A decision's key as one number (two FNV-1a halves, 53 bits): millions of keys fit a Set where their strings would not. */
+const keyHash = (text) => {
+  let a = 0x811c9dc5;
+  let b = 0x01000193;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193) >>> 0;
+    b = Math.imul(b ^ c, 0x5bd1e995) >>> 0;
+  }
+  return (b & 0x1fffff) * 0x100000000 + a;
+};
 
 /** Outcomes a judged program counts as a finding of the slice: a recall miss or a false positive (either grid). */
 export const FINDING_OUTCOMES = ["false-clean", "wrong-rule", "false-positive"];
@@ -87,13 +126,14 @@ export function foldDecisions(lines, inventory) {
     }
     const { program, file } = programOf(line.f);
     const key = `${program}\0${line.k}\0${line.rule ?? ""}\0${file}\0${line.s}\0${line.e}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const hashed = keyHash(key);
+    if (seen.has(hashed)) continue;
+    seen.add(hashed);
     decisions += 1;
     for (const id of line.arms ?? []) {
       const arm = slot(id);
       arm.passed += 1;
-      if (program) arm.programs.add(program);
+      if (program) arm.programs.add(keyHash(program));
     }
     if (line.arm) {
       const arm = slot(line.arm);
@@ -164,20 +204,26 @@ export const gridLog = (dir) => (existsSync(`${dir}.roles.jsonl`) || !existsSync
 
 /** Folds grid directories (their `programs.jsonl` and logs, `gridLog` or `logs[i]`) into one report. */
 export function foldGrids(dirs, { logs = [], inventory = armInventory(), against = null } = {}) {
-  const lines = [];
   const rows = [];
-  let malformed = 0;
-  const sources = [];
-  dirs.forEach((dir, index) => {
+  const counter = { malformed: 0 };
+  const sources = dirs.map((dir, index) => {
     const log = logs[index] ?? gridLog(dir);
-    const read = readRoleLog(log);
-    if (read.missing) throw new Error(`roles.mjs: no role log at ${log} (run the grid with SOLID_CHECKER_IR_ROLE_LOG=${log})`);
-    lines.push(...read.lines);
-    malformed += read.malformed;
-    rows.push(...readRows(dir));
-    sources.push({ grid: dir, log, decisions: read.lines.length });
+    if (!existsSync(log)) throw new Error(`roles.mjs: no role log at ${log} (run the grid with SOLID_CHECKER_IR_ROLE_LOG=${log})`);
+    for (const row of readRows(dir)) rows.push(row);
+    return { grid: dir, log, decisions: 0 };
   });
-  return foldRoles({ lines, rows, inventory, against, malformed, sources });
+  // The lines are streamed into the fold, never collected: a source's count is the lines read from it.
+  function* lines() {
+    for (const source of sources) {
+      for (const line of roleLogLines(source.log, counter)) {
+        source.decisions += 1;
+        yield line;
+      }
+    }
+  }
+  const report = foldRoles({ lines: lines(), rows, inventory, against, malformed: 0, sources });
+  report.malformed = counter.malformed;
+  return report;
 }
 
 /** One line for a person: the three numbers and the arm coverage. */
