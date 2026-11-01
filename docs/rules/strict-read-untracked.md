@@ -127,6 +127,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   await in a nested closure belongs to that closure. A destructuring default
   runs after the value it destructures, so it follows that value's await. A
   helper called at such a site is uncertifiable at the call.
+- **Named hand-offs (ADR 0531).** Resolved synchronous standard-library carriers,
+  template tags and Function.call/apply place a named reader at the carrier's
+  role. Other hand-offs are obligations; reviewed fresh-stack callbacks stay legal.
 - **A read no fact places is uncertifiable.** Code in a component's element
   children, in a helper with no resolved caller, or in a closure a tracked
   scope only stores has no execution role; a read there is reported as

@@ -413,6 +413,45 @@ fn discover_reachability_file(
                     }
                 }
             }
+            // ADR 0531: a function handed by name to a standard-library call
+            // that invokes its argument (`[1].forEach(f)`, `new Promise(f)`,
+            // `Reflect.apply(f, …)`; a scheduler too, since reaching says
+            // nothing about when) runs when the call does. A function nested
+            // in a reached body is reached already; this reaches a module-level
+            // or imported one. The fact is the compiler-selected declaration's,
+            // never the callee's spelling.
+            if primitive.is_none()
+                && let Some(resolved) = lookup.resolved_callee_call(file, call.callee)
+            {
+                use crate::runtime_semantics::{RuntimeArgumentBehavior, argument_behavior};
+                for (index, argument) in call.arguments.iter().enumerate() {
+                    if argument.value != solid_facts::ast::ArgumentValueKind::Identifier
+                        || argument.spread
+                        || withheld(argument.span)
+                    {
+                        continue;
+                    }
+                    let callability = lookup
+                        .entity_at(file.path.as_str(), argument.span)
+                        .and_then(|entity| entity.callability);
+                    if !matches!(
+                        argument_behavior(resolved, callability, index),
+                        Some(
+                            RuntimeArgumentBehavior::InlineCallback
+                                | RuntimeArgumentBehavior::DeferredCallback
+                                | RuntimeArgumentBehavior::FreshStackCallback
+                        )
+                    ) {
+                        continue;
+                    }
+                    if let Some(symbol) = entities.value_symbol(file, argument.span) {
+                        edges.push(ReachabilityEdge {
+                            owner,
+                            target: ReachabilityTarget::Symbol(symbol.clone()),
+                        });
+                    }
+                }
+            }
             for property in call
                 .arguments
                 .iter()
@@ -466,6 +505,25 @@ fn discover_reachability_file(
                 })
                 .collect::<Vec<_>>();
             edges.extend(added);
+        }
+    }
+    // ADR 0531: a tagged template calls its tag where it is written.
+    for template in &file.ast.tagged_templates {
+        if lookup.may_precede_initialization(file.path.as_str(), template.tag) {
+            continue;
+        }
+        let Some(symbol) = entities.value_symbol(file, template.tag) else {
+            continue;
+        };
+        edges.push(ReachabilityEdge {
+            owner: body_owner(template.tag),
+            target: ReachabilityTarget::Symbol(symbol.clone()),
+        });
+        if let Some(listed) = list_owner(template.tag) {
+            edges.push(ReachabilityEdge {
+                owner: Some(listed),
+                target: ReachabilityTarget::Symbol(symbol.clone()),
+            });
         }
     }
     // A function created in a function's body (or parameter list) is reached

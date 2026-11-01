@@ -257,6 +257,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/object-member-import/source.ts",
+      "start": 623,
+      "end": 630,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/object-member-import/source.ts",
       "start": 718,
       "end": 725,
       "fixes": 0

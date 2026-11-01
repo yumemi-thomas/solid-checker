@@ -137,6 +137,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/named-inheriting-callback/Root.tsx",
+      "start": 1928,
+      "end": 1931,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/named-inheriting-callback/Root.tsx",
+      "start": 2129,
+      "end": 2132,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/named-inheriting-callback/Root.tsx",
       "start": 2698,
       "end": 2701,
       "fixes": 0

@@ -662,6 +662,11 @@ fn timing_behavior(
         "JSON.stringify" if call.kind == CallKind::Call && argument == 1 && callable => {
             Some(RuntimeArgumentBehavior::InlineCallback)
         }
+        // ECMA-262 `JSON.parse` steps 9-10: a callable reviver is applied by
+        // InternalizeJSONProperty before the call returns.
+        "JSON.parse" if call.kind == CallKind::Call && argument == 1 && callable => {
+            Some(RuntimeArgumentBehavior::InlineCallback)
+        }
         "Reflect.apply" if call.kind == CallKind::Call && argument == 0 => {
             Some(RuntimeArgumentBehavior::InlineCallback)
         }

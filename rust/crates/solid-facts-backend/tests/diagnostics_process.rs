@@ -1823,7 +1823,7 @@ fn pending_callback_reads_preserve_callee_invocation_uncertainty() {
         return;
     };
     let pending = findings_for_rule(&findings, "pending-async-unsuspendable-read");
-    assert_eq!(pending.len(), 7, "{pending:#?}");
+    assert_eq!(pending.len(), 8, "{pending:#?}");
     assert_eq!(
         pending
             .iter()
@@ -1836,7 +1836,12 @@ fn pending_callback_reads_preserve_callee_invocation_uncertainty() {
         .iter()
         .filter(|finding| finding["kind"] == "uncertifiable")
         .collect::<Vec<_>>();
-    assert_eq!(open.len(), 3, "{pending:#?}");
+    // ADR 0531: a named reader stored in a member also keeps an obligation.
+    assert_eq!(open.len(), 4, "{pending:#?}");
+    assert!(
+        open.iter()
+            .any(|finding| finding["primaryLocation"]["line"] == 56)
+    );
     assert!(
         open.iter().all(|finding| {
             finding["message"].as_str().is_some_and(|message| {

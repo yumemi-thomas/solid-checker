@@ -817,7 +817,9 @@ fn async_read_reported(read: &crate::AsyncRead) -> bool {
     if read.async_provenance
         && (read.leaf_owner.is_some()
             || read.execution == crate::ExecutionRole::ModuleInitialization
-            || read.execution == crate::ExecutionRole::UntrackedRendering)
+            || read.execution == crate::ExecutionRole::UntrackedRendering
+            || (read.execution == crate::ExecutionRole::Unknown
+                && read.invocation_context_unproven))
     {
         return true;
     }
